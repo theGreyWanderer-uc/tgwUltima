@@ -1,4 +1,4 @@
-### Magic Foci Shape & Frame Reference for U8E
+## Magic Foci Shape & Frame Reference for U8E
 
 ### Shape 1058 0x422 - Theurgy Focus
 

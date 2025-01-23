@@ -1,4 +1,4 @@
-### Sound Effect Reference - ULTIMA VII
+## Sound Effect Reference - ULTIMA VII
 
 | SFX ID | Used By                                                                                               |
 |--------|-------------------------------------------------------------------------------------------------------|
