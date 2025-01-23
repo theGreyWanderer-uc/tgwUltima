@@ -9,8 +9,9 @@ I'm learning to code and thought I was going to start with something fun and sim
 ---
 
 ### 📝 **Acknowledgments**
-- A huge thank you to the **[Ultima]** community and to the **[UDIC]** for keeping this classic alive.
+- A huge thank you to the **Ultima** community and to the **UDIC** for keeping this classic alive.
 - Special thanks to the 🌐 [**EXULT Team**](https://github.com/exult) for their great work without which makes all of this impossible.
+- Of course very special thank you to **Richard Garriott** and **Origin Systems** for all of their creativity in the creation of the Ultima Saga.
 
 ---
 
