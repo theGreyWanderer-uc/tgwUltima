@@ -10,7 +10,7 @@ I'm learning to code and thought I was going to start with something fun and sim
 
 ### 📝 **Acknowledgments**
 - A huge thank you to the **[Ultima]** community and to the **[UDIC]** for keeping this classic alive.
-- Special thanks to the 🌐 [**EXULT Team**](https://github.com/exult) for their great work without which makes all of this possible.
+- Special thanks to the 🌐 [**EXULT Team**](https://github.com/exult) for their great work without which makes all of this impossible.
 
 ---
 
