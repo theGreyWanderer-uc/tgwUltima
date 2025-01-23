@@ -1,19 +1,20 @@
-#  🧙‍♂️ [theGreyWanderer's Ultima] 🧙‍♂️
+#  ◄◄◄ theGreyWanderer's Ultima ►►► 
 
-Welcome! I'm learning to code and thought I was going to start with something fun and simple. I got it 50% correct!
-
-## 🌍 **Stay Connected**
+## 🧙‍♂️ Welcome!
+I'm learning to code and thought I was going to start with something fun and simple. Well... I only got it 50% correct!
+<br><br>
+### 🌍 **Stay Connected**
 - **Discord** (I can be found on the UDIC Discord Server)
 
 ---
 
-## 📝 **Acknowledgments**
+### 📝 **Acknowledgments**
 - A huge thank you to the **[Ultima]** community and to the **[UDIC]** for keeping this classic alive.
 - Special thanks to the 🌐 [**EXULT Team**](https://github.com/exult) for their great work without which makes all of this possible.
 
 ---
 
-## 📜 **Important Note**:  
+### 📜 **Important Note**:  
 **Ultima VII** (Copyright 1993) ⛓️
 
 To use this fan-made content, you **must** own a copy of the original 🌐 [**Ultima VII: The Black Gate**](https://www.gog.com/en/game/ultima_7_complete)
