@@ -24,6 +24,6 @@ To use this fan-made content, you **must** own a copy of the original 🌐 [**Ul
 
 This project is strictly for fans who want to enhance their **Ultima VII** adventure. Please respect the intellectual property of **Origin Systems** and ensure you have the original game in your collection. 🎮
 
-This project is not affiliated with **Electronic Arts/ORIGN**. All rights to the original game remain with the developers, and this project is a fan tribute intended for personal use for those people who own Ultima VII
+This project is not affiliated with **Electronic Arts**. All rights to Ultima VIII remain with Electronic Arts. Please respect the intellectual property of Electronic Arts and ensure you have the original game in your collection. 🎮
 
 ---
