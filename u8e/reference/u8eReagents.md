@@ -1,6 +1,8 @@
-### Reagent Shape & Frame Reference for U8E
+## Reagent Shape & Frame Reference for U8E
 
-| Item                    | ID  |
+### Shape 1089 0x441 - U8E Reagents
+
+| Frame Name                    | Frame ID  |
 |-------------------------|-----|
 | Eye of Newt              | 0   |
 | Bat wing                 | 1   |
