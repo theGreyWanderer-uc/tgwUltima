@@ -1,4 +1,4 @@
-void theurgyHealingTouch object#(0x422) () {
+void theurgyHealingTouch object#() () {
 
 var quality = UI_get_item_quality(item);
 var frame = UI_get_item_frame(item);

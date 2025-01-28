@@ -2,7 +2,7 @@ void theurgyFoci shape#(1058) ()
 {
     if (event == DOUBLECLICK){
 		UI_error_message("Attempted Double Click of Shape 1058");
-		
+
 		UI_error_message("Attempt to close gumps");
 		UI_close_gumps();
 		UI_error_message("Gumps should be closed");
@@ -26,12 +26,26 @@ void theurgyFoci shape#(1058) ()
 			AVATAR->theurgyHealingTouch();
 			UI_error_message("Spell Execution Finished");
 		}
+		
 		else if (theurgyFrame == 2)  //theurgyRestoration
 		{
 			UI_error_message("Frame 2 Detected - Spell Execution Start");
 			AVATAR->theurgyRestoration();
 			UI_error_message("Spell Execution Finished");
 		}
-		
+
+		else if (theurgyFrame == 4)  //theurgyReveal
+		{
+			UI_error_message("Frame 4 Detected - Spell Execution Start");
+			AVATAR->theurgyReveal();
+			UI_error_message("Spell Execution Finished");
+		}
+
+		else if (theurgyFrame == 8)  //theurgyDivination
+		{
+			UI_error_message("Frame 8 Detected - Spell Execution Start");
+			AVATAR->theurgyDivination();
+			UI_error_message("Spell Execution Finished");
+		}		
 	}
 }
