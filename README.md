@@ -23,8 +23,6 @@ To use this fan-made content, you **must** own a copy of the original 🌐 [**Ul
 
 (Optional) If you have the **add-ons** too, you can enjoy even more of the experience!
 
-This project is strictly for fans who want to enhance their **Ultima VII** adventure. Please respect the intellectual property of **Electronic Arts** and ensure you have the original game in your collection. 🎮
-
-This project is not affiliated with **Electronic Arts**. All rights to Ultima VIII remain with Electronic Arts. Please respect the intellectual property of Electronic Arts and ensure you have the original game in your collection. 🎮
+This project is strictly for fans who want to enhance their **Ultima VII** adventure and is in no way affiliated with **Electronic Arts**. All rights to Ultima VIII remain with Electronic Arts.. Please respect the intellectual property of **Electronic Arts** and ensure you have the original game in your collection. 🎮
 
 ---
