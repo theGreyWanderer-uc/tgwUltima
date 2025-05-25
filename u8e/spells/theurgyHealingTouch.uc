@@ -1,19 +1,15 @@
-void theurgyHealingTouch object#() () {
+//theurgyHealingTouch.uc
 
-var quality = UI_get_item_quality(item);
-var frame = UI_get_item_frame(item);
+void theurgyHealingTouch object#() () {
 
 UI_error_message("theurgyHealingTouch executing");
 
 var caster = getOuterContainer(item);
 var curMana = caster->get_npc_prop(MANA);
 UI_error_message("curMana proc eval using -caster->get_npc_prop(MANA)- eval before checking:" + curMana); 
-var curMana2 = get_npc_prop(MANA);
-UI_error_message("curMana2 proc eval using -get_npc_prop(MANA)- eval before checking:" + curMana2); 
-    
-	if (curMana2 < 5)
+
+	if (curMana < 5)
 	{
-		var curMana = get_npc_prop(MANA);
 		item_say("@Not enough mana...@");
 		var curManaMessage = "curMana proc eval using -get_npc_prop- while failing check:" + curMana;
 		UI_error_message(curManaMessage);
@@ -27,7 +23,7 @@ UI_error_message("curMana2 proc eval using -get_npc_prop(MANA)- eval before chec
 		if (target->is_npc())
 		{
 			UI_error_message("target is NPC");
-			var dir = direction_from(target);
+			var dir = UI_find_direction(caster, target);
 			var str = target->get_npc_prop(STRENGTH);
 			var hps = target->get_npc_prop(HEALTH);
 			var maxheal = str - hps;
@@ -39,15 +35,14 @@ UI_error_message("curMana2 proc eval using -get_npc_prop(MANA)- eval before chec
 					return;
 				}
 
-				item->set_npc_prop(MANA, -5);
+				caster->set_npc_prop(MANA, -5);
 				UI_error_message("Subtract 5 from mana pool");
 				
 				UI_error_message("Begin Animation and Effects");
-				if (hps <= str)
-				{
-					item_say("@Mani@");
+
+				item_say("@Mani@");
 					
-					script item
+					script caster
 					{
 						nohalt;
 						face dir;
@@ -67,7 +62,7 @@ UI_error_message("curMana2 proc eval using -get_npc_prop(MANA)- eval before chec
 					
 					target->set_npc_prop(HEALTH, healquant);
 					UI_error_message("Attempted to heal target for: " + healquant);
-				}
+				
 		} else {
 			UI_error_message("Attempted to heal an invalid target.");
 			item_say("@I cannot heal that!@");

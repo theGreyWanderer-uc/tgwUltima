@@ -1,4 +1,8 @@
-void theurgyFoci shape#(1058) ()  
+//theurgyFoci.uc
+//handle Theurgy Spell Foci Double Clicks
+
+void theurgyFoci shape#(1058) ()
+
 {
     if (event == DOUBLECLICK){
 		UI_error_message("Attempted Double Click of Shape 1058");
@@ -17,13 +21,12 @@ void theurgyFoci shape#(1058) ()
 		var caster = getOuterContainer(item);
 		UI_error_message("caster variable getOuterContainer(item) content:" + caster); 		
 		var curMana = caster->get_npc_prop(MANA);
-		UI_error_message("curMana function eval using -caster->get_npc_prop(MANA)- eval before running proc:" + curMana); 
-
+		UI_error_message("curMana function eval using -caster->get_npc_prop(MANA)- eval before running proc: " + curMana); 
 
 		if (theurgyFrame == 0)  //theurgyHealingTouch
 		{
 			UI_error_message("Frame 0 Detected - Spell Execution Start");
-			AVATAR->theurgyHealingTouch();
+			item->theurgyHealingTouch();
 			UI_error_message("Spell Execution Finished");
 		}
 		
@@ -41,11 +44,36 @@ void theurgyFoci shape#(1058) ()
 			UI_error_message("Spell Execution Finished");
 		}
 
+		else if (theurgyFrame == 6)  //theurgyFadeFromSight
+		{
+			UI_error_message("Frame 6 Detected - Spell Execution Start");
+			AVATAR->theurgyFadeFromSight();
+			UI_error_message("Spell Execution Finished");
+		}		
+
 		else if (theurgyFrame == 8)  //theurgyDivination
 		{
 			UI_error_message("Frame 8 Detected - Spell Execution Start");
 			AVATAR->theurgyDivination();
 			UI_error_message("Spell Execution Finished");
 		}		
+
+		else if (theurgyFrame == 14)  //theurgyAirWalk
+		{
+			UI_error_message("Frame 14 Detected - Spell Execution Start");
+			AVATAR->theurgyAirWalk();
+			UI_error_message("Spell Execution Finished");
+		}
+
+		else if (theurgyFrame == 15)  //theurgyObjectDebugger
+		{
+			UI_error_message("Frame 15 Detected - Spell Execution Start");
+			var caster = getOuterContainer(item);
+        	caster->theurgyObjectDebugger();
+			UI_error_message("Spell Execution Finished");
+		}
+
+
+
 	}
 }
