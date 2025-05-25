@@ -1,4 +1,4 @@
-//theurgyFadeFromSight.uc
+//theurgyAirWalk.uc
 
 //function to compute absolute value - testing
 var abs(var num)
