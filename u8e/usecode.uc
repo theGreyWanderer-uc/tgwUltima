@@ -12,11 +12,13 @@
 
 #include "headers/constants.uc"	    		//standard constant definitions
 
-#include "headers/constants2.uc"	        //needed these also which include spell visual effects - added Jan 27th 2026 - theGreyWanderer
+#include "headers/constants2.uc"	        //needed these also which include spell visual effects - added Jan 27th 2025 - theGreyWanderer
 
 #include "headers/functions.uc"
 
 #include "headers/si_externals.uc"			//extern declarations for SI functions
+
+#include "headers/si_structs.uc"			//extern declarations for SI functions
 
 #include "headers/global_flags.uc"
 
@@ -35,12 +37,13 @@
 
 #include "npcs.uc"	
 
-
-
-//MONSTERS
+//COMMON STUFF
+#include "common/u8eCommonFunctions.uc"      //u8e common functions - added May 25th 2025 - theGreyWanderer
 
 //SPELL STUFF
-#include "spells/u8eSpellFunctions.uc"      //probably dont need all old spell functions so created new one - added Jan 27th 2026 - theGreyWanderer
+#include "spells/tossBottle.uc"
+
+#include "spells/u8eSpellFunctions.uc"      //probably dont need all old spell functions so created new one - added Jan 27th 2025 - theGreyWanderer
 
 #include "spells/theurgyHealingTouch.uc"
 
@@ -48,9 +51,15 @@
 
 #include "spells/theurgyReveal.uc"
 
+#include "spells/theurgyFadeFromSight.uc"
+
 #include "spells/theurgyDivination.uc"
 
-#include "spells/theurgyFoci.uc"
+#include "spells/theurgyAirWalk.uc"
+
+#include "spells/theurgyObjectDebugger.uc"
+
+#include "spells/theurgyFoci.uc" //ensure this is after all theurgy usecode
 
 //ucc -o usecode usecode.uc
 
