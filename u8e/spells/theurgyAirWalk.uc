@@ -274,9 +274,7 @@ void theurgyAirWalk object#() ()
     }
     else
     {
-        goto EndFunction:
         UI_error_message("Failed to create JUMP1 NPC!");
-        EndFunction:
         return;
     }
 
