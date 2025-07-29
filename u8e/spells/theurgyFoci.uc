@@ -4,6 +4,8 @@
 void theurgyFoci shape#(1058) ()
 
 {
+			UI_error_message("------------------------------------");
+
     if (event == DOUBLECLICK){
 		UI_error_message("Attempted Double Click of Shape 1058");
 
@@ -58,6 +60,14 @@ void theurgyFoci shape#(1058) ()
 			UI_error_message("Spell Execution Finished");
 		}		
 
+		else if (theurgyFrame == 12)  //theurgyAerialServant
+		{
+
+			UI_error_message("Frame 12 Detected - Spell Execution Start");
+			caster->theurgyAerialServant();
+			UI_error_message("Spell Execution Finished");
+		}
+
 		else if (theurgyFrame == 14)  //theurgyAirWalk
 		{
 			UI_error_message("Frame 14 Detected - Spell Execution Start");
@@ -76,4 +86,5 @@ void theurgyFoci shape#(1058) ()
 
 
 	}
+			UI_error_message("------------------------------------");
 }

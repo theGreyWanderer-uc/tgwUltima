@@ -1,6 +1,6 @@
 //theurgyAirWalk.uc
 
-//function to compute absolute value - testing
+//function to compute absolute value - still testing
 var abs(var num)
 {
     if (num < 0)
@@ -13,7 +13,7 @@ var abs(var num)
 void vanishAvatar object#() ()
 {
     UI_error_message("vanishAvatar called");
-    item->set_item_flag(22); //SI_DONT_RENDER - vanish
+    item->set_item_flag(22); //set flag SI_DONT_RENDER - vanish
     UI_error_message("AVATAR vanished!");
 }
 
@@ -21,7 +21,7 @@ void vanishAvatar object#() ()
 void reappearAvatar object#() ()
 {
     UI_error_message("reappearAvatar called");
-    item->clear_item_flag(22); //clear SI_DONT_RENDER - reappear
+    item->clear_item_flag(22); //clear flag SI_DONT_RENDER - reappear
     UI_error_message("AVATAR reappeared!");
 }
 
@@ -38,7 +38,7 @@ void teleportAndReappear object#() ()
         for (obj in nearby)
         {
             if (obj->get_item_shape() == 247 && 
-                obj->get_item_flag(22) && 
+                obj->get_item_flag(22) &&
                 obj->get_item_flag(18))
             {
                 marker = obj;
@@ -57,6 +57,9 @@ void teleportAndReappear object#() ()
         UI_move_object(caster, [target_x, target_y, target_z], false);
         UI_error_message("Caster teleported to: x=" + target_x + ", y=" + target_y + ", z=" + target_z);
 
+        caster->reappearAvatar(); //reappear the caster
+        UI_remove_item(marker); //cleanup the marker jump npc
+
         //tp party with caster
         var party = UI_get_party_list();
         var offsets = [[0,1], [1,0], [0,-1], [-1,0], [1,1], [1,-1], [-1,1], [-1,-1]];
@@ -74,8 +77,6 @@ void teleportAndReappear object#() ()
             }
         }
 
-        caster->reappearAvatar(); //reappear the caster
-        UI_remove_item(marker); //cleanup the marker jump npc
     }
     else
     {
@@ -132,7 +133,7 @@ void launchAvatarWrapper object#() ()
         var dy = abs(target_y - start_y);
         UI_error_message("dy: " + dy);
         
-        var distance = dx + dy;
+        var distance = dx + dy; //not overly accurate for diag distance - fix later
         UI_error_message("distance: " + distance);
         
         var speed = 5;
@@ -205,6 +206,7 @@ void theurgyAirWalk object#() ()
         UI_error_message("Air Walk canceled or invalid target!");
         return;
     }
+
     var target_obj = target[1]; // obj
     var target_x = target[2];   // x
     var target_y = target[3];   // y
@@ -214,11 +216,20 @@ void theurgyAirWalk object#() ()
     UI_error_message("Target pos (x,y,z): " + target_x + "," + target_y + "," + target_z);
     UI_error_message("Calc direction: " + target_dir);
     
+    UI_error_message("Checking destination");
+    // Check if the destination is reachable
+    if (!UI_can_avatar_reach_pos([target_x, target_y, target_z]))
+    {
+        UI_error_message("Destination is not reachable");
+        return;
+    }
+    UI_error_message("Destination reachable");
+
     //create new NPC "JUMP1" with shape 247 to use as target marker
     var marker = UI_create_new_object(247);
     if (marker)
     {
-        marker->set_item_flag(22); //SI_DONT_RENDER - don't show the new NPC
+        marker->set_item_flag(22); //set flag SI_DONT_RENDER - don't show the new NPC
         //marker->set_item_flag(18); //remember to re-check this with detection
         
         //move NPC to target coordinates
@@ -263,7 +274,9 @@ void theurgyAirWalk object#() ()
     }
     else
     {
+        goto EndFunction:
         UI_error_message("Failed to create JUMP1 NPC!");
+        EndFunction:
         return;
     }
 
