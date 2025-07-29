@@ -12,17 +12,25 @@
 
 #include "headers/constants.uc"	    		//standard constant definitions
 
-#include "headers/constants2.uc"	        //needed these also which include spell visual effects - added Jan 27th 2025 - theGreyWanderer
-
 #include "headers/functions.uc"
 
 #include "headers/si_externals.uc"			//extern declarations for SI functions
 
-#include "headers/si_structs.uc"			//extern declarations for SI functions
+#include "headers/u8e_structs.uc"			//extern declarations for SI functions
 
 #include "headers/global_flags.uc"
 
+#include "headers/u8e_Shapes.uc"
+
+#include "headers/u8e_gflags.uc"
+
 #include "headers/u8_npcs.uc"
+
+#include "headers/u8e_sprites.uc"
+
+#include "headers/u8e_constants.uc"
+
+#include "headers/u8e_functions.uc"
 
 
 
@@ -33,18 +41,15 @@
 
 #include "utility/time_function.uc"
 
+#include "utility/paganCalendar.uc"
+
+//#include "utility/smoke.uc" //testing
+
 #include "utility/training_functions.uc"
 
 #include "npcs.uc"	
 
-//COMMON STUFF
-#include "common/u8eCommonFunctions.uc"      //u8e common functions - added May 25th 2025 - theGreyWanderer
-
 //SPELL STUFF
-#include "spells/tossBottle.uc"
-
-#include "spells/u8eSpellFunctions.uc"      //probably dont need all old spell functions so created new one - added Jan 27th 2025 - theGreyWanderer
-
 #include "spells/theurgyHealingTouch.uc"
 
 #include "spells/theurgyRestoration.uc"
@@ -55,11 +60,15 @@
 
 #include "spells/theurgyDivination.uc"
 
+#include "spells/theurgyAerialServant.uc"
+
 #include "spells/theurgyAirWalk.uc"
 
 #include "spells/theurgyObjectDebugger.uc"
 
-#include "spells/theurgyFoci.uc" //ensure this is after all theurgy usecode
+#include "spells/theurgyFoci.uc" //ensure this is after all theurgy includes
+
+#include "spells/necromancyKeyCaretaker.uc"
 
 //ucc -o usecode usecode.uc
 
