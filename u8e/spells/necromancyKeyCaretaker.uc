@@ -1,7 +1,4 @@
 // necromancyKeyCaretaker.uc
-// Handle Necromancy Talisman creation via Key of the Caretaker
-// Modified to support creating multiple talismans based on complete reagent sets
-// Fixed invalid 'or' syntax in reagent counting logic
 
 void necromancyKeyCaretaker shape#(937) () {
     UI_error_message("------------------------------------");
@@ -10,19 +7,19 @@ void necromancyKeyCaretaker shape#(937) () {
     if (event == DOUBLECLICK) {
         UI_error_message("Double-click event triggered for Key of the Caretaker.");
 
-        // Set test spell flag to learned
+        // TESTING REMOVE BEFORE RELEASE
         if (!gflags[LEARNED_DEATH_SPEAK_SPELL]) {
             gflags[LEARNED_DEATH_SPEAK_SPELL] = true;
         }
 
-        // Check the frame of the Key of the Caretaker
+        // check the frame
         var necromancyFrame = UI_get_item_frame(item);
         UI_error_message("Key of the Caretaker frame: " + necromancyFrame);
 
         if (necromancyFrame == 0) {
             UI_error_message("Frame 0 detected - proceeding.");
 
-            // Prompt the player to select a container
+            // get container
             var selected = UI_click_on_item();
             UI_error_message("Selected item: " + selected[1]);
 
@@ -36,20 +33,20 @@ void necromancyKeyCaretaker shape#(937) () {
                 UI_error_message("Valid container selected: SHAPE_BAG.");
                 var container = selected[1];
 
-                // Get all items and reagents in the container
+                // get contents of selected container
                 var all_items = container->get_cont_items(SHAPE_ANY, QUALITY_ANY, FRAME_ANY);
                 var reagents = container->get_cont_items(SHAPE_U8E_REAGENT, QUALITY_ANY, FRAME_ANY);
                 UI_error_message("Total items in container: " + UI_get_array_size(all_items));
                 UI_error_message("Reagents in container: " + UI_get_array_size(reagents));
 
-                // Ensure the container contains only reagents
+                // we only want regs in there
                 if (UI_get_array_size(all_items) != UI_get_array_size(reagents)) {
                     UI_error_message("Container contains non-reagent items.");
                     UI_item_say(AVATAR, "Nay, it would prove vain.");
                 } else {
                     UI_error_message("Container contains only reagents.");
 
-                    // Map reagent frames to names for debugging
+                    // debug
                     var reagent_names = [];
                     reagent_names[FRAME_NECROMANCY_DIRT] = "Dirt";
                     reagent_names[FRAME_NECROMANCY_BLACKMOOR] = "Blackmoor";
@@ -59,7 +56,7 @@ void necromancyKeyCaretaker shape#(937) () {
                     reagent_names[FRAME_NECROMANCY_BLOOD] = "Blood";
                     reagent_names[FRAME_NECROMANCY_DEADMANELBOW] = "Dead Man's Elbow";
 
-                    // Collect reagent frames and their counts
+                    // get reagent frames and their counts
                     var frame_counts = [];
                     for (reagent in reagents) {
                         var frame = reagent->get_item_frame();
@@ -79,7 +76,7 @@ void necromancyKeyCaretaker shape#(937) () {
                     }
                     UI_error_message("All reagent frames collected: [" + frames_str + "]");
 
-                    // Map spell indices to names for debugging
+                    // debug map spell indices to names
                     var spell_names = [
                         "Death Speak",
                         "Mask of Death",
@@ -92,7 +89,7 @@ void necromancyKeyCaretaker shape#(937) () {
                         "Call Quake"
                     ];
 
-                    // Define spell data
+                    // spells
                     var spell_flags = [
                         LEARNED_DEATH_SPEAK_SPELL,
                         LEARNED_MASK_OF_DEATH_SPELL,
@@ -117,7 +114,7 @@ void necromancyKeyCaretaker shape#(937) () {
                         FRAME_NECROMANCY_CALLQUAKE
                     ];
 
-                    // Define words of power for each spell
+                    // spell wop
                     var words_of_power = [
                         "Kal Wis Corp",      // Death Speak
                         "Quas Corp",         // Mask of Death
@@ -130,7 +127,7 @@ void necromancyKeyCaretaker shape#(937) () {
                         "Kal Vas Ylem Por"   // Call Quake
                     ];
 
-                    // Define required reagents for each spell
+                    // reg requirements
                     var spell_requirements = [];
                     spell_requirements[1] = [FRAME_NECROMANCY_BLOOD, FRAME_NECROMANCY_BONES];
                     spell_requirements[2] = [FRAME_NECROMANCY_WOOD, FRAME_NECROMANCY_EXECUTIONHOOD];
@@ -142,7 +139,7 @@ void necromancyKeyCaretaker shape#(937) () {
                     spell_requirements[8] = [FRAME_NECROMANCY_BLOOD, FRAME_NECROMANCY_BLACKMOOR];
                     spell_requirements[9] = [FRAME_NECROMANCY_DIRT, FRAME_NECROMANCY_BONES, FRAME_NECROMANCY_WOOD, FRAME_NECROMANCY_BLACKMOOR];
 
-                    // Find matching spells and count sets
+                    // match spells / sets
                     UI_error_message("Starting spell matching process.");
                     var matched_spell = -1;
                     var set_counts = [];
@@ -168,8 +165,8 @@ void necromancyKeyCaretaker shape#(937) () {
                         }
                         UI_error_message("Required reagents for " + spell_names[i] + ": [" + req_names_str + "] (count: " + req_count + ")");
 
-                        // Count how many complete sets are available
-                        var min_sets = 9999; // Large number to find minimum
+                        // check and count total complete sets
+                        var min_sets = 99; // large number to find minimum
                         for (frame in req) {
                             var available = frame_counts[frame];
                             if (!available) {
@@ -197,7 +194,7 @@ void necromancyKeyCaretaker shape#(937) () {
                         UI_error_message("No spell matched.");
                     }
 
-                    // Process the matched spell
+                    // create
                     if (matched_spell != -1) {
                         var flag = spell_flags[matched_spell];
                         UI_error_message("Checking spell flag for " + spell_names[matched_spell] + " (" + flag + "): " + gflags[flag]);
@@ -206,7 +203,7 @@ void necromancyKeyCaretaker shape#(937) () {
                             var talisman_count = set_counts[matched_spell];
                             var req = spell_requirements[matched_spell];
 
-                            // Remove reagents for each set
+                            // burn regs
                             var k = 1;
                             while (k <= talisman_count) {
                                 for (frame in req) {
@@ -221,7 +218,7 @@ void necromancyKeyCaretaker shape#(937) () {
                                 k = k + 1;
                             }
 
-                            // Create talismans
+                            // talisman creation
                             k = 1;
                             while (k <= talisman_count) {
                                 var talisman_frame = talisman_frames[matched_spell];
@@ -256,7 +253,7 @@ void necromancyKeyCaretaker shape#(937) () {
     } else {
         UI_error_message("Invalid event: " + event);
     }
-    // Unset test spell flag from learned
+    // TESTING REMOVE BEFORE RELEASE
     if (gflags[LEARNED_DEATH_SPEAK_SPELL]) {
         gflags[LEARNED_DEATH_SPEAK_SPELL] = false;
     }
