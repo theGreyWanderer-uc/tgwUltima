@@ -1,3 +1,0 @@
-const int SHAPE_AERIAL_SERVANT = 702;
-const int SHAPE_U8E_TALISMAN = 1087;
-const int SHAPE_U8E_REAGENT = 1089;
