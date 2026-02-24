@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic Container Gumps - System Architecture</title>
+    <style>
+        :root {
+            /* Golden Hour Theme */
+            --light-bg: #faf8f3;
+            --light-fg: #4a403a;
+            --light-border: #e8ddd4;
+            --light-card: #fefdf9;
+            --light-accent: #f4a900;
+            --light-soft: #f5f1eb;
+            
+            --dark-bg: #3d3530;
+            --dark-fg: #faf8f3;
+            --dark-border: #5a4f48;
+            --dark-card: #4a403a;
+            --dark-accent: #f4a900;
+            --dark-soft: #524840;
+            
+            --color-mustard: #f4a900;
+            --color-terracotta: #c1666b;
+            --color-beige: #d4b896;
+        }
+        
+        @media (prefers-color-scheme: dark) {
+            :root {
+                color-scheme: dark;
+            }
+        }
+        
+        @media (prefers-color-scheme: light) {
+            :root {
+                color-scheme: light;
+            }
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        html {
+            scroll-behavior: smooth;
+        }
+        
+        body {
+            font-family: FreeSans, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--light-bg);
+            color: var(--light-fg);
+            line-height: 1.6;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        
+        @media (prefers-color-scheme: dark) {
+            body {
+                background-color: var(--dark-bg);
+                color: var(--dark-fg);
+            }
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        header {
+            margin-bottom: 4rem;
+            border-bottom: 2px solid var(--light-border);
+            padding-bottom: 2rem;
+        }
+        
+        @media (prefers-color-scheme: dark) {
+            header {
+                border-bottom-color: var(--dark-border);
+            }
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, var(--color-mustard), var(--color-terracotta));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .subtitle {
+            font-size: 1.125rem;
+            opacity: 0.8;
+            margin-top: 0.5rem;
+        }
+        
+        h2 {
+            font-size: 1.875rem;
+            font-weight: 600;
+            margin-top: 3rem;
+            margin-bottom: 1.5rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 3px solid var(--color-terracotta);
+        }
+        
+        h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+            color: var(--color-mustard);
+        }
+        
+        section {
+            margin-bottom: 3rem;
+        }
+        
+        .diagram-section {
+            background-color: var(--light-card);
+            border: 1px solid var(--light-border);
+            border-radius: 8px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            overflow-x: auto;
+        }
+        
+        @media (prefers-color-scheme: dark) {
+            .diagram-section {
+                background-color: var(--dark-card);
+                border-color: var(--dark-border);
+            }
+        }
+        
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            margin: 1rem 0;
+        }
+        
+        svg {
+            max-width: 100%;
+            height: auto;
+        }
+        
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin: 2rem 0;
+        }
+        
+        .card {
+            background-color: var(--light-soft);
+            border: 1px solid var(--light-border);
+            border-radius: 8px;
+            padding: 1.5rem;
+        }
+        
+        @media (prefers-color-scheme: dark) {
+            .card {
+                background-color: var(--dark-soft);
+                border-color: var(--dark-border);
+            }
+        }
+        
+        .card h3 {
+            margin-top: 0;
+            color: var(--color-mustard);
+        }
+        
+        .card p {
+            opacity: 0.9;
+            margin-bottom: 0.75rem;
+        }
+        
+        .flag {
+            font-family: 'Courier New', monospace;
+            background-color: var(--light-bg);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+        
+        @media (prefers-color-scheme: dark) {
+            .flag {
+                background-color: var(--dark-soft);
+            }
+        }
+        
+        .flow-list {
+            margin: 1.5rem 0;
+        }
+        
+        .flow-item {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            padding: 1rem;
+            background-color: var(--light-soft);
+            border-left: 4px solid var(--color-mustard);
+            border-radius: 4px;
+        }
+        
+        @media (prefers-color-scheme: dark) {
+            .flow-item {
+                background-color: var(--dark-soft);
+                border-left-color: var(--color-terracotta);
+            }
+        }
+        
+        .flow-step {
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 2rem;
+            height: 2rem;
+            background: linear-gradient(135deg, var(--color-mustard), var(--color-terracotta));
+            color: white;
+            border-radius: 50%;
+            font-weight: 600;
+            font-size: 0.75rem;
+        }
+        
+        .flow-content {
+            flex: 1;
+        }
+        
+        .flow-content strong {
+            display: block;
+            margin-bottom: 0.25rem;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.5rem 0;
+        }
+        
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--light-border);
+        }
+        
+        @media (prefers-color-scheme: dark) {
+            th, td {
+                border-bottom-color: var(--dark-border);
+            }
+        }
+        
+        th {
+            background-color: var(--light-soft);
+            font-weight: 600;
+            color: var(--color-mustard);
+        }
+        
+        @media (prefers-color-scheme: dark) {
+            th {
+                background-color: var(--dark-soft);
+            }
+        }
+        
+        tr:hover {
+            background-color: var(--light-soft);
+        }
+        
+        @media (prefers-color-scheme: dark) {
+            tr:hover {
+                background-color: var(--dark-soft);
+            }
+        }
+        
+        code {
+            font-family: 'Courier New', monospace;
+            background-color: var(--light-bg);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        
+        @media (prefers-color-scheme: dark) {
+            code {
+                background-color: var(--dark-soft);
+            }
+        }
+        
+        pre {
+            background-color: var(--light-bg);
+            border: 1px solid var(--light-border);
+            border-radius: 8px;
+            padding: 1rem;
+            overflow-x: auto;
+            margin: 1rem 0;
+        }
+        
+        @media (prefers-color-scheme: dark) {
+            pre {
+                background-color: var(--dark-soft);
+                border-color: var(--dark-border);
+            }
+        }
+        
+        pre code {
+            background: none;
+            padding: 0;
+        }
+        
+        .highlight {
+            background-color: rgba(244, 169, 0, 0.15);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+        }
+        
+        footer {
+            margin-top: 4rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--light-border);
+            text-align: center;
+            opacity: 0.7;
+            font-size: 0.875rem;
+        }
+        
+        @media (prefers-color-scheme: dark) {
+            footer {
+                border-top-color: var(--dark-border);
+            }
+        }
+        
+        .nav-toc {
+            position: sticky;
+            top: 2rem;
+            background-color: var(--light-card);
+            border: 1px solid var(--light-border);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        @media (prefers-color-scheme: dark) {
+            .nav-toc {
+                background-color: var(--dark-card);
+                border-color: var(--dark-border);
+            }
+        }
+        
+        .nav-toc h4 {
+            font-size: 0.875rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 1rem;
+            color: var(--color-mustard);
+        }
+        
+        .nav-toc a {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: inherit;
+            text-decoration: none;
+            font-size: 0.9rem;
+            opacity: 0.8;
+            transition: opacity 0.2s;
+        }
+        
+        .nav-toc a:hover {
+            opacity: 1;
+        }
+        
+        @media (max-width: 768px) {
+            .nav-toc {
+                position: static;
+                background-color: var(--light-soft);
+            }
+            
+            @media (prefers-color-scheme: dark) {
+                .nav-toc {
+                    background-color: var(--dark-soft);
+                }
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Dynamic Container Gumps</h1>
+            <p class="subtitle">A comprehensive guide to Exult's advanced container gump system with snap zones and debug visualization</p>
+        </header>
+        
+        <div class="grid-2">
+            <nav class="nav-toc">
+                <h4>Contents</h4>
+                <a href="#overview">Overview</a>
+                <a href="#initialization">Initialization</a>
+                <a href="#snap-zones">Snap Zones</a>
+                <a href="#debug-visualization">Debug Visualization</a>
+                <a href="#item-drop-flow">Item Drop Flow</a>
+                <a href="#configuration">Configuration</a>
+                <a href="#key-features">Key Features</a>
+            </nav>
+            
+            <div>
+                <h3 style="margin-top: 0;">Quick Facts</h3>
+                <div class="card" style="margin-top: 0;">
+                    <p><strong>Location:</strong> <code>gumps/Dynamic_container_gump.{h,cc}</code></p>
+                    <p><strong>Configuration:</strong> <code>gump_info.txt</code></p>
+                    <p><strong>Extends:</strong> <code>Container_gump</code></p>
+                    <p><strong>Key Methods:</strong> <code>paint()</code>, <code>add()</code>, <code>find_snap_zone()</code></p>
+                </div>
+            </div>
+        </div>
+        
+        <section id="overview">
+            <h2>Overview</h2>
+            <p>
+                <span class="highlight">Dynamic Container Gumps</span> provide an advanced container display system for Exult that extends the standard <code>Container_gump</code> class. This system enables:
+            </p>
+            <ul style="margin: 1rem 0 1rem 2rem; line-height: 1.8;">
+                <li><strong>Snap Zone Support:</strong> Guided item placement for ritual containers and complex item arrangements</li>
+                <li><strong>Debug Visualization:</strong> Visual tools for designers to verify placement zones and container boundaries</li>
+                <li><strong>Automatic Selection:</strong> Gump Manager automatically uses Dynamic_container_gump when configuration is detected</li>
+                <li><strong>Backward Compatibility:</strong> Standard containers without configuration continue using existing Container_gump</li>
+            </ul>
+            
+            <div class="diagram-section">
+                <h3 style="margin-top: 0;">System Architecture</h3>
+                <div class="mermaid">
+                    graph TB
+                        A["Gump Manager<br/>add_gump()"] -->|Checks gump_info.txt| B{"Has container_area<br/>config?"}
+                        B -->|Yes| C["Create Dynamic_container_gump"]
+                        B -->|No| D["Create Standard<br/>Container_gump"]
+                        
+                        C --> E["Load from gump_info.txt"]
+                        E -->|container_area| F["Container Boundaries<br/>& Dimensions"]
+                        E -->|snap_zones| G["Snap Zone<br/>Definitions"]
+                        E -->|debug_flags| H["Debug Visualization<br/>Settings"]
+                        
+                        C -.->|Extends| AO["Container_gump"]
+                        AO -.->|Extends| AP["Gump"]
+                        
+                        style C fill:#10b981,stroke:#059669,color:#fff
+                        style F fill:#06b6d4,stroke:#0d9488,color:#fff
+                        style G fill:#f43f5e,stroke:#be123c,color:#fff
+                        style H fill:#6366f1,stroke:#4f46e5,color:#fff
+                </div>
+            </div>
+        </section>
+        
+        <section id="initialization">
+            <h2>Initialization Process</h2>
+            <p>When a container gump is created, the Gump Manager performs configuration detection and initialization:</p>
+            
+            <div class="flow-list">
+                <div class="flow-item">
+                    <div class="flow-step">1</div>
+                    <div class="flow-content">
+                        <strong>Configuration Check</strong>
+                        <div>Gump Manager checks if the gump shape has <code>container_area</code> configuration in <code>gump_info.txt</code></div>
+                    </div>
+                </div>
+                
+                <div class="flow-item">
+                    <div class="flow-step">2</div>
+                    <div class="flow-content">
+                        <strong>Gump Selection</strong>
+                        <div>If configuration exists, <code>Dynamic_container_gump</code> is instantiated; otherwise uses standard <code>Container_gump</code></div>
+                    </div>
+                </div>
+                
+                <div class="flow-item">
+                    <div class="flow-step">3</div>
+                    <div class="flow-content">
+                        <strong>Load Container Area</strong>
+                        <div>Reads <code>container_area</code> section to set object placement boundaries and dimensions</div>
+                    </div>
+                </div>
+                
+                <div class="flow-item">
+                    <div class="flow-step">4</div>
+                    <div class="flow-content">
+                        <strong>Load Snap Zones</strong>
+                        <div>Parses all snap zone definitions for this gump shape from <code>snap_zones</code> section</div>
+                    </div>
+                </div>
+                
+                <div class="flow-item">
+                    <div class="flow-step">5</div>
+                    <div class="flow-content">
+                        <strong>Initialize Debug Settings</strong>
+                        <div>Reads debug flags bitmask to determine which visualization features to enable</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <section id="snap-zones">
+            <h2>Snap Zones System</h2>
+            <p>
+                Snap zones enable <span class="highlight">guided item placement</span> within containers. This is essential for complex rituals or arrangements where items must be positioned at specific locations (similar to Ultima 8's sorcery system).
+            </p>
+            
+            <h3>How Snap Zones Work</h3>
+            <ol style="margin: 1rem 0 1rem 2rem; line-height: 1.8;">
+                <li>Multiple zones are defined within a container, each with boundaries and a target snap position</li>
+                <li>When an item is dropped, the system determines which zone contains the drop position</li>
+                <li>If a zone is found, the item automatically snaps to that zone's target coordinates</li>
+                <li>If multiple zones overlap, zone resolution uses priority and geometric algorithms</li>
+                <li>Items without a matching zone remain at their drop position</li>
+            </ol>
+            
+            <div class="diagram-section">
+                <h3 style="margin-top: 0;">Snap Zone Resolution Algorithm</h3>
+                <div class="mermaid">
+                    graph TD
+                        A["User drops item<br/>at position x,y"] --> B["find_snap_zone<br/>converts to relative coords"]
+                        B --> C{"Zones contain<br/>this point?"}
+                        C -->|No zones| D["Place at drop position"]
+                        C -->|Single zone| E["Use that zone"]
+                        C -->|Multiple zones| F{"Equal<br/>priority?"}
+                        F -->|Different priority| G["Use highest priority"]
+                        F -->|Equal priority| H["Axis-aligned split<br/>geometric resolution"]
+                        G --> E
+                        H --> E
+                        E --> I["Snap to zone's<br/>target position"]
+                        D --> J["set_shape_pos"]
+                        I --> J
+                        J --> K["Mark gump dirty<br/>Schedule redraw"]
+                        
+                        style A fill:#f43f5e,stroke:#be123c,color:#fff
+                        style E fill:#10b981,stroke:#059669,color:#fff
+                        style J fill:#06b6d4,stroke:#0d9488,color:#fff
+                </div>
+            </div>
+            
+            <h3>Zone Configuration Format</h3>
+            <p>Snap zones are defined in <code>gump_info.txt</code> under the <code>snap_zones</code> section:</p>
+            <pre><code>%%section snap_zones
+# Format: :shape/zone_id/zone_x/zone_y/zone_w/zone_h/snap_x/snap_y/priority/zone_type
+:111/pz_candle/20/0/20/20/25/5/1/candle
+:111/locus/55/55/20/20/65/65/3/focus
+:111/component1/0/55/20/20/5/65/2/component
+%%endsection</code></pre>
+            
+            <div class="grid-2">
+                <div class="card">
+                    <h3 style="margin-top: 0;">Zone Properties</h3>
+                    <table style="margin: 0;">
+                        <tr>
+                            <th>Property</th>
+                            <th>Description</th>
+                        </tr>
+                        <tr>
+                            <td><code>zone_id</code></td>
+                            <td>Unique identifier for this zone</td>
+                        </tr>
+                        <tr>
+                            <td><code>zone_x/y</code></td>
+                            <td>Top-left corner of zone (relative to container)</td>
+                        </tr>
+                        <tr>
+                            <td><code>zone_w/h</code></td>
+                            <td>Width and height of zone boundary</td>
+                        </tr>
+                        <tr>
+                            <td><code>snap_x/y</code></td>
+                            <td>Target position where item snaps</td>
+                        </tr>
+                        <tr>
+                            <td><code>priority</code></td>
+                            <td>Resolution priority (higher = more important)</td>
+                        </tr>
+                        <tr>
+                            <td><code>zone_type</code></td>
+                            <td>Zone category identifier</td>
+                        </tr>
+                    </table>
+                </div>
+                
+                <div class="card">
+                    <h3 style="margin-top: 0;">Priority Resolution</h3>
+                    <p>When items are dropped in overlapping zones:</p>
+                    <ul style="margin: 1rem 0; padding-left: 1.5rem;">
+                        <li><strong>Different priorities:</strong> Highest priority zone wins</li>
+                        <li><strong>Equal priorities:</strong> Axis-aligned geometric split determines ownership</li>
+                    </ul>
+                    <p style="margin-top: 1rem; opacity: 0.8; font-size: 0.9em;">This hybrid approach ensures predictable behavior while allowing complex zone layouts.</p>
+                </div>
+            </div>
+        </section>
+        
+        <section id="debug-visualization">
+            <h2>Debug Visualization</h2>
+            <p>Debug features help designers verify container setup and zone placement. They're controlled by an 8-bit bitmask in the <code>container_area</code> configuration.</p>
+            
+            <h3>Debug Flags Reference</h3>
+            <table style="margin: 1rem 0;">
+                <tr>
+                    <th>Flag Name</th>
+                    <th>Hex Value</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><code>GUMP_DEBUG_BORDER</code></td>
+                    <td><span class="flag">0x01</span></td>
+                    <td>Draw container area border</td>
+                </tr>
+                <tr>
+                    <td><code>GUMP_DEBUG_GRID_MAJOR</code></td>
+                    <td><span class="flag">0x02</span></td>
+                    <td>Draw major grid lines (10px spacing)</td>
+                </tr>
+                <tr>
+                    <td><code>GUMP_DEBUG_GRID_MINOR</code></td>
+                    <td><span class="flag">0x04</span></td>
+                    <td>Draw minor grid lines (5px offset)</td>
+                </tr>
+                <tr>
+                    <td><code>GUMP_DEBUG_SNAP_BORDER</code></td>
+                    <td><span class="flag">0x08</span></td>
+                    <td>Draw snap zone boundaries</td>
+                </tr>
+                <tr>
+                    <td><code>GUMP_DEBUG_SNAP_CROSS</code></td>
+                    <td><span class="flag">0x10</span></td>
+                    <td>Draw snap zone target crosshairs</td>
+                </tr>
+                <tr>
+                    <td><code>GUMP_DEBUG_CONSOLE</code></td>
+                    <td><span class="flag">0x20</span></td>
+                    <td>Log debug messages to console</td>
+                </tr>
+                <tr>
+                    <td><code>GUMP_DEBUG_ALL</code></td>
+                    <td><span class="flag">0x3F</span></td>
+                    <td>Enable all debug features</td>
+                </tr>
+            </table>
+            
+            <h3>Configuration Examples</h3>
+            <div style="margin: 1.5rem 0;">
+                <p style="margin-bottom: 0.5rem;"><strong>Development (all debug enabled):</strong></p>
+                <pre><code>%%section container_area
+:111/30/20/130/130/63    # 63 = 0x3F (all flags)
+%%endsection</code></pre>
+            </div>
+            
+            <div style="margin: 1.5rem 0;">
+                <p style="margin-bottom: 0.5rem;"><strong>Production (no debug):</strong></p>
+                <pre><code>%%section container_area
+:111/30/20/130/130/0     # 0 = no debug features
+%%endsection</code></pre>
+            </div>
+            
+            <div style="margin: 1.5rem 0;">
+                <p style="margin-bottom: 0.5rem;"><strong>Selective debugging (border + grid only):</strong></p>
+                <pre><code>%%section container_area
+:111/30/20/130/130/3     # 3 = 0x01 | 0x02 (border + grid)
+%%endsection</code></pre>
+            </div>
+        </section>
+        
+        <section id="item-drop-flow">
+            <h2>Item Drop / Add Flow</h2>
+            <p>This is the complete sequence when a user drops an item into a dynamic container or when an item is added programmatically:</p>
+            
+            <div class="diagram-section">
+                <div class="mermaid">
+                    graph TD
+                        A["Item dropped by user<br/>or add() called"] --> B["add method invoked<br/>with position"]
+                        B --> C{"Container has<br/>snap zones?"}
+                        
+                        C -->|No snap zones| D["Place at drop position"]
+                        
+                        C -->|Has snap zones| E["find_snap_zone<br/>rel_x, rel_y"]
+                        E --> F["Check if position<br/>is in any zone"]
+                        F --> G{"Zone found?"}
+                        
+                        G -->|No zone at position| D
+                        G -->|One zone found| H["Use that zone"]
+                        G -->|Multiple zones| I["Resolve by priority<br/>& geometry"]
+                        
+                        I --> H
+                        H --> J["Get snap zone's<br/>target coordinates"]
+                        
+                        D --> K["set_shape_pos<br/>new_x, new_y"]
+                        J --> K
+                        
+                        K --> L["Validate position<br/>fits in container"]
+                        L --> M["Mark gump dirty"]
+                        M --> N["Schedule redraw"]
+                        N --> O["Item appears at<br/>new position"]
+                        
+                        style A fill:#f43f5e,stroke:#be123c,color:#fff
+                        style H fill:#10b981,stroke:#059669,color:#fff
+                        style K fill:#06b6d4,stroke:#0d9488,color:#fff
+                        style O fill:#f59e0b,stroke:#d97706,color:#fff
+                </div>
+            </div>
+        </section>
+        
+        <section id="configuration">
+            <h2>Configuration System</h2>
+            <p>All Dynamic Container Gump configuration is stored in <code>gump_info.txt</code>, which already exists in Exult. This choice ensures:</p>
+            <ul style="margin: 1rem 0 1rem 2rem; line-height: 1.8;">
+                <li>✓ Infrastructure already established and tested</li>
+                <li>✓ File parsing system already in place</li>
+                <li>✓ Consistent with Exult's naming conventions (<code>*_info.txt</code>)</li>
+                <li>✓ No new file handling or dependencies required</li>
+            </ul>
+            
+            <h3>Full Configuration Template</h3>
+            <pre><code>%%section container_area
+# Format: :shape/x/y/width/height/debug_flags
+# shape = gump shape number from gumps.vga
+# x, y = offset of container area from gump top-left
+# width, height = dimensions of container area
+# debug_flags = bitmask of Gump_debug_flags (0 for production)
+
+:111/30/20/130/130/0              # Standard container
+:250/25/25/150/150/15             # With grid lines (0x01 | 0x02)
+:350/20/20/160/160/63             # Full debug (all flags)
+%%endsection
+
+%%section snap_zones
+# Format: :shape/zone_id/zone_x/zone_y/zone_w/zone_h/snap_x/snap_y/priority/zone_type
+
+# Example: Ritual container with multiple snap zones
+:111/north/40/5/30/30/55/15/3/cardinal_point
+:111/east/85/40/30/30/95/55/3/cardinal_point
+:111/south/40/85/30/30/55/95/3/cardinal_point
+:111/west/5/40/30/30/15/55/3/cardinal_point
+:111/center/50/50/30/30/65/65/1/focus_area
+%%endsection</code></pre>
+            
+            <h3>Integration Points</h3>
+            <div class="grid-2">
+                <div class="card">
+                    <h3 style="margin-top: 0;">File Paths</h3>
+                    <p><strong>Main config:</strong></p>
+                    <p style="font-family: monospace; font-size: 0.9em; opacity: 0.9;">data/gump_info.txt</p>
+                    <p style="margin-top: 1rem;"><strong>Patch override:</strong></p>
+                    <p style="font-family: monospace; font-size: 0.9em; opacity: 0.9;">patch/gump_info.txt</p>
+                </div>
+                
+                <div class="card">
+                    <h3 style="margin-top: 0;">Parser Function</h3>
+                    <p><strong>Location:</strong></p>
+                    <p style="font-family: monospace; font-size: 0.9em; opacity: 0.9;">gumps/Gump_manager.cc</p>
+                    <p style="margin-top: 1rem;"><strong>Function:</strong></p>
+                    <p style="font-family: monospace; font-size: 0.9em; opacity: 0.9;">Read_Gumpinf_text_data_file()</p>
+                </div>
+            </div>
+        </section>
+        
+        <section id="key-features">
+            <h2>Key Features & Implementation</h2>
+            
+            <h3>1. Automatic Gump Selection</h3>
+            <p>The <code>Gump_manager</code> automatically instantiates <code>Dynamic_container_gump</code> when configuration is detected.</p>
+            <pre><code>// In Gump_manager.cc, add_gump() function
+if (Dynamic_container_gump::has_config(shapenum)) {
+    auto* dgump = new Dynamic_container_gump(cont, px, py, shapenum, false);
+    // ... initialize and return
+}</code></pre>
+            
+            <h3>2. Method Overrides</h3>
+            <div class="grid-2">
+                <div class="card">
+                    <h3 style="margin-top: 0;">add()</h3>
+                    <p>Implements snap zone logic and extensive debug logging for item placement.</p>
+                </div>
+                
+                <div class="card">
+                    <h3 style="margin-top: 0;">paint()</h3>
+                    <p>Adds debug grid overlay visualization on top of standard rendering.</p>
+                </div>
+                
+                <div class="card">
+                    <h3 style="margin-top: 0;">find_snap_zone()</h3>
+                    <p>Finds the best snap zone for a given relative position using priority and geometry.</p>
+                </div>
+                
+                <div class="card">
+                    <h3 style="margin-top: 0;">clone()</h3>
+                    <p>Enables proper gump cloning with configuration inheritance.</p>
+                </div>
+            </div>
+            
+            <h3>3. Class Hierarchy</h3>
+            <div class="diagram-section">
+                <div class="mermaid">
+                    graph BT
+                        A["Dynamic_container_gump"]
+                        B["Container_gump"]
+                        C["Gump"]
+                        
+                        A -->|extends| B
+                        B -->|extends| C
+                        
+                        style A fill:#10b981,stroke:#059669,color:#fff
+                        style B fill:#06b6d4,stroke:#0d9488,color:#fff
+                        style C fill:#6366f1,stroke:#4f46e5,color:#fff
+                </div>
+            </div>
+            
+            <h3>4. Design Philosophy</h3>
+            <p>All changes follow Exult's design patterns:</p>
+            <ul style="margin: 1rem 0 1rem 2rem; line-height: 1.8;">
+                <li><strong>Lightweight:</strong> Minimal code additions, maximum reuse of existing systems</li>
+                <li><strong>Extensible:</strong> Uses inheritance rather than parallel alternatives</li>
+                <li><strong>Backward Compatible:</strong> Containers without configuration unchanged</li>
+                <li><strong>Consistent:</strong> Follows existing Exult API patterns (<code>get_owner()</code>, <code>find_gump()</code>, etc.)</li>
+            </ul>
+        </section>
+        
+        <section id="usecode-integration">
+            <h2>Usecode Integration</h2>
+            <p>Two new intrinsic functions enable programmatic access to item positions within containers:</p>
+            
+            <div class="grid-2">
+                <div class="card">
+                    <h3 style="margin-top: 0;">get_item_gump_position()</h3>
+                    <p><strong>Returns:</strong> <code>[x, y]</code> array with item's gump coordinates</p>
+                    <p><strong>Returns empty array if:</strong> Item invalid, not in container, or gump not open</p>
+                    <pre><code>var pos = UI_get_item_gump_position(item);
+if (pos) {
+    var x = pos[0];
+    var y = pos[1];
+}</code></pre>
+                </div>
+                
+                <div class="card">
+                    <h3 style="margin-top: 0;">set_item_gump_position()</h3>
+                    <p><strong>Returns:</strong> <code>1</code> on success, <code>0</code> on failure</p>
+                    <p><strong>Fails if:</strong> Invalid item, not in container, gump not open, or negative coords</p>
+                    <pre><code>var success = UI_set_item_gump_position(
+    item, 65, 65
+);</code></pre>
+                </div>
+            </div>
+            
+            <h3>Intrinsic Registration</h3>
+            <table>
+                <tr>
+                    <th>Function</th>
+                    <th>BG Index</th>
+                    <th>SI Index</th>
+                    <th>Location</th>
+                </tr>
+                <tr>
+                    <td><code>get_item_gump_position</code></td>
+                    <td>0xdd</td>
+                    <td>0xde</td>
+                    <td>usecode/bgintrinsics.h<br/>usecode/siintrinsics.h</td>
+                </tr>
+                <tr>
+                    <td><code>set_item_gump_position</code></td>
+                    <td>0xde</td>
+                    <td>0xdf</td>
+                    <td>usecode/bgintrinsics.h<br/>usecode/siintrinsics.h</td>
+                </tr>
+            </table>
+        </section>
+        
+        <footer>
+            <p>Dynamic Container Gumps Documentation | Exult gumpUpdates Branch | Generated 2026</p>
+        </footer>
+    </div>
+    
+    <script>
+        mermaid.initialize({ 
+            startOnLoad: true,
+            theme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default',
+            flowchart: { useMaxWidth: true }
+        });
+        
+        // Handle theme changes
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+            location.reload();
+        });
+    </script>
+</body>
+</html>
