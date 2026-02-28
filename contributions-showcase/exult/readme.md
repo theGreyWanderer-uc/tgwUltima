@@ -25,12 +25,5 @@ I designed and implemented a **complete dynamic container gump system** with sna
 - Automatic gump type selection based on config
 - Full documentation added: [`docs/dynamic_gumps.md`](https://github.com/exult/exult/blob/master/docs/dynamic_gumps.md)
 
-### Demo Videos
-**Normal usage**  
-<video src="videos/testDynamicContainer.mp4" controls width="720"></video>
-
-**Debug visualization mode**  
-<video src="videos/testDynamicContainerDebug.mp4" controls width="720"></video>
-
 **Full repo**: https://github.com/exult/exult  
 **Why it matters**: This is a brand-new system that I hope other contributors are already excited to build on.
