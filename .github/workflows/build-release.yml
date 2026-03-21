@@ -140,7 +140,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: "GIMP Plugin ${{ github.ref_name }}"
-          generate_release_notes: true
+          body_path: gimp-plugin-u8/CHANGELOG.md
           files: release-assets/u8shp.exe
 
   # ── Release: Titan-Ultima ──────────────────────────────────────────
@@ -162,5 +162,5 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: "Titan-Ultima ${{ github.ref_name }}"
-          generate_release_notes: true
+          body_path: titan-ultima/CHANGELOG.md
           files: release-assets/*
