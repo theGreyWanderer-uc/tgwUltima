@@ -1,1 +1,23 @@
-.\github\skills
+# VS Code / GitHub
+.github/skills
+
+# Python virtual environment
+.venv/
+venv/
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# C build artifacts (gimp-plugin-u8)
+*.o
+*.a
+
+# GIMP plugin binary output
+gimp-plugin-u8/artifacts/
+
+# OS files
+.DS_Store
+Thumbs.db
