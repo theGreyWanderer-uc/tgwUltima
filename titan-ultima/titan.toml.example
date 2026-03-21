@@ -1,0 +1,49 @@
+# titan.toml.example — copy this file to titan.toml and edit base + language.
+#
+# Auto-detected locations (in order):
+#   ./titan.toml                      (current working directory)
+#   ~/.config/titan/config.toml       (Linux / macOS)
+#   %APPDATA%\titan\config.toml       (Windows)
+#
+# Run `titan setup` to generate this file interactively.
+
+[game]
+# GOG Galaxy (Windows):    C:/Program Files (x86)/GOG Galaxy/Games/Ultima 8
+# GOG Offline (Windows):    C:/GOG Games/Ultima 8
+# GOG (Linux):              ~/GOG Games/Ultima 8
+# Legacy EA/Origin:         C:/Program Files/EA Games/Ultima 8 Gold Edition
+base     = "C:/Program Files (x86)/GOG Galaxy/Games/Ultima 8"  # ← change to match your install
+language = "ENGLISH"     # ← FRENCH, GERMAN, etc.  |  leave empty ("") for flat mode
+
+# Flat mode (language = ""):
+#   All STATIC files are expected directly inside base/.
+#   Useful when you copy the files to your working directory.
+
+[paths]
+# These names are relative → auto-expanded to <base>/<language>/STATIC/<name>
+fixed     = "FIXED.DAT"
+palette   = "U8PAL.PAL"
+typeflag  = "TYPEFLAG.DAT"
+gumpage   = "GUMPAGE.DAT"
+xformpal  = "XFORMPAL.DAT"
+ecredits  = "ECREDITS.DAT"
+quotes    = "QUOTES.DAT"
+
+u8shapes  = "U8SHAPES.FLX"
+u8fonts   = "U8FONTS.FLX"
+u8gumps   = "U8GUMPS.FLX"
+
+# Pre-extracted directories — relative to wherever you run titan.
+# Run `titan flex-extract U8SHAPES.FLX -o shapes/` and
+#      `titan flex-extract GLOB.FLX     -o globs/`  once to populate them.
+shapes    = "shapes/"
+globs     = "globs/"
+
+# Live / dynamic objects — from a game save or Pentagram/ScummVM.
+# Relative names are expanded to <base>/cloud_saves/SAVEGAME/<name>  (GOG layout).
+# Absolute paths (e.g. from Pentagram) are used as-is.
+nonfixed  = "U8SAVE.000"
+
+# Pentagram / ScummVM examples (absolute path, unchanged):
+# nonfixed = "C:/Users/<you>/AppData/Roaming/Pentagram/u8-save/U8SAVE.000"  # Windows
+# nonfixed = "~/Library/Application Support/Pentagram/u8-save/U8SAVE.000"   # macOS

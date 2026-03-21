@@ -1,0 +1,28 @@
+# Game data files (copyrighted — never commit)
+*.DAT
+*.FLX
+*.SHP
+*.SKF
+*.PAL
+
+# Extracted / working directories
+shapes/
+globs/
+map_renders/
+test_output/
+u7data/
+u8data/
+u8data/tests/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+*.whl
+
+# Environment
+.venv/
+venv/
