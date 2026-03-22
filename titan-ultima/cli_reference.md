@@ -102,9 +102,11 @@ Records are written as `NNNN_NAME.<ext>` when the archive contains an
 embedded name table (SOUND.FLX, MUSIC.FLX), or `NNNN.<ext>` otherwise.
 `NNNN` is the zero-padded record index, `NAME` is the sanitised name
 (up to 32 characters), and `<ext>` is inferred from the archive name
-(`.shp`, `.dat`, `.raw`, `.xmi`, etc.).
+or detected per-record (`.shp`, `.dat`, `.raw`, `.xmi`, `.txt`, etc.).
+Speech FLX archives (`E44.FLX`, `G289.FLX`, etc.) contain a text
+transcript in record 0 (`.txt`) and Sonarc audio in remaining records (`.raw`).
 
-A companion `NNNN_NAME.txt` metadata sidecar is written alongside each
+A companion `NNNN_NAME.meta.txt` metadata sidecar is written alongside each
 record with the source archive, record index, name, byte size, content
 type, hex header preview, and format-specific details (Sonarc sample rate,
 XMIDI FORM size, shape frame count).
@@ -118,8 +120,9 @@ Empty records are skipped and counted separately.
 ```bash
 titan flex-extract U8SHAPES.FLX -o shapes/
 titan flex-extract GLOB.FLX     -o globs/
-titan flex-extract MUSIC.FLX    -o music_xmi/   # → 0001_intro.xmi, 0001_intro.txt, ...
-titan flex-extract SOUND.FLX    -o sound_raw/   # → 0001_ARMHIT1A.raw, 0001_ARMHIT1A.txt, ...
+titan flex-extract MUSIC.FLX    -o music_xmi/   # → 0001_intro.xmi, 0001_intro.meta.txt, ...
+titan flex-extract SOUND.FLX    -o sound_raw/   # → 0001_ARMHIT1A.raw, 0001_ARMHIT1A.meta.txt, ...
+titan flex-extract E44.FLX      -o e44/         # → 0000.txt (transcript), 0001.raw, ...
 ```
 
 ---

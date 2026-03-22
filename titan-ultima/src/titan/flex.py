@@ -43,6 +43,7 @@ __all__ = [
 ]
 
 import os
+import re
 import struct
 import sys
 from pathlib import Path
@@ -98,12 +99,16 @@ KNOWN_FLEX_FILES: dict[str, dict] = {
                        "content": "shape"},
 }
 
+# Regex matching speech FLX filenames: single letter + NPC id, e.g. E44.FLX, G289.FLX
+_SPEECH_FLEX_RE = re.compile(r"^[A-Z]\d+\.FLX$", re.IGNORECASE)
+
 # Extension mapping for extracted records based on content type
 CONTENT_EXT_MAP: dict[str, str] = {
     "shape":   ".shp",
     "audio":   ".raw",
     "xmidi":   ".xmi",
     "usecode": ".uc",
+    "text":    ".txt",
     "data":    ".dat",
     "unknown": ".bin",
 }
@@ -294,17 +299,28 @@ class FlexArchive:
             return
 
         # --- Fixed 8-byte ASCII name table (SOUND.FLX, etc.) -----------
-        if self._is_ascii_nul_data(rec0) and len(rec0) >= 8 and len(rec0) % 8 == 0:
+        # Guard: name-table entries are identifiers (no spaces).
+        # Speech FLX files store dialogue text in record 0 which is also
+        # ASCII+NUL and divisible by 8, but contains spaces/punctuation.
+        if (self._is_name_table_data(rec0)
+                and len(rec0) >= 8 and len(rec0) % 8 == 0):
             self._parse_fixed_name_table(rec0, entry_size=8)
             return
 
     @staticmethod
-    def _is_ascii_nul_data(data: bytes) -> bool:
-        """Return True if *data* consists only of printable ASCII + NUL."""
+    def _is_name_table_data(data: bytes) -> bool:
+        """Return True if *data* looks like a fixed-width name table.
+
+        Entries must consist only of printable ASCII (``!``..``~``) and NUL
+        padding.  Space characters (``0x20``) are rejected since real name
+        entries are short identifiers, not prose — this prevents dialogue
+        transcripts (speech FLX record 0) from being mis-detected.
+        """
         for b in data:
             if b == 0:
                 continue
-            if b < 0x20 or b > 0x7E:
+            # 0x21 '!' through 0x7E '~' — printable ASCII excluding space
+            if b < 0x21 or b > 0x7E:
                 return False
         return True
 
@@ -403,8 +419,8 @@ class FlexArchive:
     def _write_record_metadata(outdir: str, stem: str,
                                 index: int, name: str,
                                 record: bytes, flex_name: str) -> None:
-        """Write a ``.txt`` sidecar with record metadata."""
-        meta_path = os.path.join(outdir, f"{stem}.txt")
+        """Write a ``.meta.txt`` sidecar with record metadata."""
+        meta_path = os.path.join(outdir, f"{stem}.meta.txt")
         content_type = detect_record_type(record)
         lines = [
             f"Flex source:    {flex_name or '(unknown)'}",
@@ -508,7 +524,7 @@ class FlexArchive:
 
         Files should be named with a numeric index (e.g., 0000.bin, 0001.shp,
         or 0001_ARMHIT1A.raw).  The leading digits determine record position.
-        Gaps are filled with empty records.  Companion ``.txt`` metadata
+        Gaps are filled with empty records.  Companion ``.meta.txt`` metadata
         files are ignored.
         """
         archive = cls()
@@ -518,18 +534,22 @@ class FlexArchive:
         if not dirpath_p.is_dir():
             raise FileNotFoundError(f"Directory not found: {dirpath_p}")
 
-        # Discover files with numeric prefix (skip .txt metadata sidecars)
+        # Discover files with numeric prefix (skip .meta.txt sidecars)
         indexed_files: dict[int, Path] = {}
         for entry in sorted(dirpath_p.iterdir()):
-            if entry.is_file() and entry.suffix.lower() != ".txt":
-                stem = entry.stem
-                # Accept "0001" or "0001_ARMHIT1A" — extract leading digits
-                num_part = stem.split("_", 1)[0]
-                try:
-                    idx = int(num_part)
-                    indexed_files[idx] = entry
-                except ValueError:
-                    continue
+            if not entry.is_file():
+                continue
+            # Skip metadata sidecars (NNNN.meta.txt / NNNN_NAME.meta.txt)
+            if entry.name.endswith(".meta.txt"):
+                continue
+            stem = entry.stem
+            # Accept "0001" or "0001_ARMHIT1A" — extract leading digits
+            num_part = stem.split("_", 1)[0]
+            try:
+                idx = int(num_part)
+                indexed_files[idx] = entry
+            except ValueError:
+                continue
 
         if not indexed_files:
             print(f"WARNING: No numerically named files found in {dirpath_p}",
@@ -588,6 +608,19 @@ class FlexArchive:
 # CONTENT-TYPE DETECTION HELPERS
 # ============================================================================
 
+def _is_plain_text(data: bytes) -> bool:
+    """Return True if *data* is plausible plain ASCII text.
+
+    Accepts printable ASCII (0x20..0x7E), TAB, CR, LF, and trailing NULs.
+    """
+    for b in data:
+        if b == 0 or b == 0x09 or b == 0x0A or b == 0x0D:
+            continue
+        if b < 0x20 or b > 0x7E:
+            return False
+    return True
+
+
 def detect_record_type(data: bytes) -> str:
     """
     Attempt to identify the content type of a raw Flex record.
@@ -618,6 +651,10 @@ def detect_record_type(data: bytes) -> str:
         if srate in (11111, 22222, 11025, 22050):
             return "audio"
 
+    # Plain text: all printable ASCII, NUL, CR, LF
+    if len(data) >= 8 and _is_plain_text(data):
+        return "text"
+
     return "unknown"
 
 
@@ -626,8 +663,16 @@ def get_extension_for_flex(flex_name: str, record_data: bytes) -> str:
     Determine the best file extension for an extracted record.
 
     Uses the Flex filename for context and falls back to content detection.
+    Speech FLX files (``E44.FLX``, ``G289.FLX``, etc.) contain mixed
+    content — a text transcript in record 0 and Sonarc audio thereafter —
+    so they always use per-record content detection.
     """
     base = os.path.basename(flex_name).upper()
+
+    # Speech FLX: mixed content, always detect per-record
+    if _SPEECH_FLEX_RE.match(base):
+        content_type = detect_record_type(record_data)
+        return CONTENT_EXT_MAP.get(content_type, ".bin")
 
     # Check if we know this flex
     if base in KNOWN_FLEX_FILES:

@@ -10,6 +10,33 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ---
 
+## [0.5.3] — 2026-03-22
+
+### Added
+
+- **Speech FLX support** — `FlexArchive` now correctly handles per-NPC
+  digital speech archives (`E44.FLX`, `E80.FLX`, `G289.FLX`, etc.). Record 0
+  contains a dialogue transcript extracted as `.txt`; remaining records are
+  Sonarc-compressed audio at 11,111 Hz extracted as `.raw`.  
+  File naming: `[A-Z]\d+.FLX` — language letter + NPC ID.  Nine English
+  speech files ship with the Speech Pack add-on disks (NPCs 44, 80, 109,
+  129, 289, 385, 433, 597, 666).
+- **Text content detection** — `detect_record_type()` now returns `"text"`
+  for plain-ASCII records, with `.txt` extension mapping.
+
+### Fixed
+
+- **Name-table false positive** — the fixed 8-byte name-table heuristic now
+  rejects data containing space characters, preventing dialogue transcripts
+  (speech FLX record 0) from being mis-detected as name tables.
+- **Sidecar filename collision** — metadata sidecars renamed from `.txt` to
+  `.meta.txt` to avoid overwriting records whose data is also `.txt`
+  (speech transcripts).
+- **`from_directory()` rebuild** — sidecar skip logic updated for
+  `.meta.txt`; real `.txt` data files are no longer excluded.
+
+---
+
 ## [0.5.2] — 2026-03-22
 
 ### Fixed
