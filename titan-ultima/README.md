@@ -16,10 +16,10 @@ isometric world maps.
 
 | Category | Capability |
 |----------|-----------|
-| **Archives** | Read, list, extract, create, and patch Flex (`.flx`) archives; auto-detect embedded name tables (SOUND.FLX, MUSIC.FLX) for human-readable filenames and per-record `.txt` metadata sidecars |
+| **Archives** | Read, list, extract, create, and patch Flex (`.flx`) archives; auto-detect embedded name tables (SOUND.FLX, MUSIC.FLX) for human-readable filenames and per-record `.meta.txt` metadata sidecars |
 | **Shapes** | Decode RLE-compressed sprite frames to PNG; re-import edited PNGs |
 | **Palette** | Export the VGA 6-bit palette as a colour swatch |
-| **Sound** | Decode Sonarc-compressed audio (`.raw`) to WAV; extracted files named from SOUND.FLX name table (e.g. `0007_TELEPORT.raw`) |
+| **Sound** | Decode Sonarc-compressed audio (`.raw`) to WAV; extracted files named from SOUND.FLX name table (e.g. `0007_TELEPORT.raw`); speech FLX archives (`E44.FLX`, `E80.FLX`, …) extract dialogue transcripts + Sonarc audio |
 | **Music** | Convert XMIDI (`.xmi`) to standard MIDI |
 | **Maps** | Render full isometric or top-down world maps from `FIXED.DAT` + GLOBs with engine-accurate dependency-graph depth sorting; merge live NPCs and items from save files; filter by all 16 TYPEFLAG bits (fixed, solid, sea, land, occl, bag, damaging, noisy, draw, ignore, roof, transl, editor, explode, unk46, unk47) |
 | **Type data** | Decode `TYPEFLAG.DAT` shape physics/flag metadata |
@@ -105,6 +105,12 @@ titan music-batch music_xmi/ -o music_midi/
 # (records auto-named from name table: 0001_ARMHIT1A.raw, 0007_TELEPORT.raw, ...)
 titan flex-extract SOUND.FLX -o sound_raw/
 titan sound-batch sound_raw/ -o sound_wav/
+
+# Extract speech audio (one FLX per NPC — E=English, G=German, etc.)
+# record 0 = dialogue transcript (.txt), records 1+ = Sonarc audio (.raw)
+titan flex-extract E44.FLX  -o speech_e44/
+titan flex-extract E80.FLX  -o speech_e80/
+titan sound-batch speech_e44/ -o speech_e44_wav/
 
 # Export all shapes to PNG
 titan shape-batch shapes/ -p U8PAL.PAL -o shapes_png/
@@ -224,7 +230,7 @@ nonfixed_bytes = save.get_data("NONFIXED.DAT")
 | Flex archive | `titan.flex` | `*.FLX` |
 | Shape sprites | `titan.shape` | `U8SHAPES.FLX` → `.shp` |
 | VGA palette | `titan.palette` | `U8PAL.PAL` |
-| Sonarc audio | `titan.sound` | `SOUND.FLX` → `.raw` |
+| Sonarc audio | `titan.sound` | `SOUND.FLX` → `.raw`; `E*.FLX` / `G*.FLX` → speech `.raw` + `.txt` |
 | XMIDI music | `titan.music` | `MUSIC.FLX` → `.xmi` |
 | World map (static) | `titan.map` | `FIXED.DAT`, `GLOB.FLX` |
 | World map (dynamic) | `titan.map` | `NONFIXED.DAT` / `U8SAVE.000` |
