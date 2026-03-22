@@ -270,16 +270,29 @@ def cmd_flex_extract(args: SimpleNamespace) -> int:
             continue
 
         ext = get_extension_for_flex(flex_name, record)
-        out_filename = f"{i:04d}{ext}"
-        out_path = os.path.join(outdir, out_filename)
+        name = archive.get_record_name(i)
+        safe = FlexArchive._safe_filename(name) if name else ""
 
+        if safe:
+            stem = f"{i:04d}_{safe}"
+        else:
+            stem = f"{i:04d}"
+
+        out_path = os.path.join(outdir, f"{stem}{ext}")
         with open(out_path, "wb") as f:
             f.write(record)
+
+        # Write companion metadata file
+        archive._write_record_metadata(outdir, stem, i, name, record, flex_name)
+
         extracted += 1
 
     print(f"Extracted {extracted} records from {flex_name} -> {outdir.rstrip('/\\')}/")
     if skipped > 0:
         print(f"  ({skipped} empty records skipped)")
+    named_count = sum(1 for n in archive.record_names if n)
+    if named_count > 0:
+        print(f"  ({named_count} records have names from embedded name table)")
 
     # Write a manifest file for reconstruction
     manifest_path = os.path.join(outdir, "_manifest.txt")
@@ -290,13 +303,16 @@ def cmd_flex_extract(args: SimpleNamespace) -> int:
         mf.write(f"# Comment: {archive.comment}\n")
         mf.write(f"# Unknown field: 0x{archive.unknown_field:08X}\n")
         mf.write("#\n")
-        mf.write("# Index | Size | Filename\n")
+        mf.write("# Index | Size | Filename | Name\n")
         for i, record in enumerate(archive.records):
+            rec_name = archive.get_record_name(i)
             if record:
                 ext = get_extension_for_flex(flex_name, record)
-                mf.write(f"{i}|{len(record)}|{i:04d}{ext}\n")
+                safe = FlexArchive._safe_filename(rec_name) if rec_name else ""
+                stem = f"{i:04d}_{safe}" if safe else f"{i:04d}"
+                mf.write(f"{i}|{len(record)}|{stem}{ext}|{rec_name}\n")
             else:
-                mf.write(f"{i}|0|\n")
+                mf.write(f"{i}|0||{rec_name}\n")
 
     print(f"  Manifest written: {manifest_path}")
     return 0

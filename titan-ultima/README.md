@@ -16,10 +16,10 @@ isometric world maps.
 
 | Category | Capability |
 |----------|-----------|
-| **Archives** | Read, list, extract, create, and patch Flex (`.flx`) archives |
+| **Archives** | Read, list, extract, create, and patch Flex (`.flx`) archives; auto-detect embedded name tables (SOUND.FLX, MUSIC.FLX) for human-readable filenames and per-record `.txt` metadata sidecars |
 | **Shapes** | Decode RLE-compressed sprite frames to PNG; re-import edited PNGs |
 | **Palette** | Export the VGA 6-bit palette as a colour swatch |
-| **Sound** | Decode Sonarc-compressed audio (`.raw`) to WAV |
+| **Sound** | Decode Sonarc-compressed audio (`.raw`) to WAV; extracted files named from SOUND.FLX name table (e.g. `0007_TELEPORT.raw`) |
 | **Music** | Convert XMIDI (`.xmi`) to standard MIDI |
 | **Maps** | Render full isometric or top-down world maps from `FIXED.DAT` + GLOBs with engine-accurate dependency-graph depth sorting; merge live NPCs and items from save files; filter by all 16 TYPEFLAG bits (fixed, solid, sea, land, occl, bag, damaging, noisy, draw, ignore, roof, transl, editor, explode, unk46, unk47) |
 | **Type data** | Decode `TYPEFLAG.DAT` shape physics/flag metadata |
@@ -97,10 +97,12 @@ titan map-render \
 
 ```bash
 # Convert XMIDI music to standard MIDI
+# (records auto-named from playlist: 0001_intro.xmi, 0002_docks.xmi, ...)
 titan flex-extract MUSIC.FLX -o music_xmi/
 titan music-batch music_xmi/ -o music_midi/
 
 # Decode Sonarc sound effects to WAV
+# (records auto-named from name table: 0001_ARMHIT1A.raw, 0007_TELEPORT.raw, ...)
 titan flex-extract SOUND.FLX -o sound_raw/
 titan sound-batch sound_raw/ -o sound_wav/
 
@@ -315,6 +317,17 @@ installs, common manual redirects such as `C:\ULTIMA8`).
 - Pillow ≥ 10.0
 - Typer ≥ 0.15
 - tomli ≥ 2.0 *(Python < 3.11 only — for `titan.toml` support)*
+
+---
+
+## Credits
+
+TITAN uses the following excellent open-source tools:
+
+- **[LeRF](https://github.com/ddlee-cn/LeRF-PyTorch)** (Jiacheng Li, Chang Chen, et al.)  
+  - *Learning Steerable Function for Efficient Image Resampling* (CVPR 2023)  
+  - *LeRF: Learning Resampling Function for Adaptive and Efficient Image Interpolation* (IEEE T-PAMI 2025)  
+  Adaptive downscaling and geometric transforms (rotation/skew for birdseye view) are powered by LeRF's official LUTs and NumPy implementation.
 
 ---
 

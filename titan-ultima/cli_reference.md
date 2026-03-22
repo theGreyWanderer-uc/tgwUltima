@@ -98,9 +98,18 @@ titan flex-extract <file> [-o DIR]
 | `file` | Path to the `.flx` archive |
 | `-o DIR`, `--output DIR` | Output directory (default: `./<flexname>/`) |
 
-Records are written as `NNNN.<ext>` where `NNNN` is the zero-padded index and
-`<ext>` is inferred from the archive name (`.shp`, `.dat`, `.raw`, `.xmi`,
-etc.). A `_manifest.txt` is written alongside for round-trip reconstruction
+Records are written as `NNNN_NAME.<ext>` when the archive contains an
+embedded name table (SOUND.FLX, MUSIC.FLX), or `NNNN.<ext>` otherwise.
+`NNNN` is the zero-padded record index, `NAME` is the sanitised name
+(up to 32 characters), and `<ext>` is inferred from the archive name
+(`.shp`, `.dat`, `.raw`, `.xmi`, etc.).
+
+A companion `NNNN_NAME.txt` metadata sidecar is written alongside each
+record with the source archive, record index, name, byte size, content
+type, hex header preview, and format-specific details (Sonarc sample rate,
+XMIDI FORM size, shape frame count).
+
+A `_manifest.txt` is written alongside for round-trip reconstruction
 with `flex-create`.
 
 Empty records are skipped and counted separately.
@@ -109,8 +118,8 @@ Empty records are skipped and counted separately.
 ```bash
 titan flex-extract U8SHAPES.FLX -o shapes/
 titan flex-extract GLOB.FLX     -o globs/
-titan flex-extract MUSIC.FLX    -o music_xmi/
-titan flex-extract SOUND.FLX    -o sound_raw/
+titan flex-extract MUSIC.FLX    -o music_xmi/   # → 0001_intro.xmi, 0001_intro.txt, ...
+titan flex-extract SOUND.FLX    -o sound_raw/   # → 0001_ARMHIT1A.raw, 0001_ARMHIT1A.txt, ...
 ```
 
 ---

@@ -32,6 +32,7 @@ __all__ = [
     "FLEX_TABLE_OFFSET",
     "FLEX_RECORD_ENTRY_SIZE",
     "FLEX_FILL_BYTE",
+    "FLEX_NAME_MAX_LEN",
     "KNOWN_FLEX_FILES",
     "CONTENT_EXT_MAP",
     # Classes
@@ -71,6 +72,7 @@ FLEX_FILESIZE_OFFSET: int = 0x5C     # uint32 total file size
 FLEX_TABLE_OFFSET: int = 0x80        # Start of the offset/size table
 FLEX_RECORD_ENTRY_SIZE: int = 8      # Each record entry: 4 bytes offset + 4 bytes size
 FLEX_FILL_BYTE: int = 0x1A           # Sentinel/fill byte used in header
+FLEX_NAME_MAX_LEN: int = 32          # Max characters used from name table for filenames
 
 # Known Flex file names and their typical content descriptions.
 KNOWN_FLEX_FILES: dict[str, dict] = {
@@ -134,6 +136,7 @@ class FlexArchive:
     def __init__(self) -> None:
         self.comment: str = ""
         self.records: list[bytes] = []
+        self.record_names: list[str] = []
         self.unknown_field: int = 1
         self._source_path: Optional[str] = None
 
@@ -226,6 +229,7 @@ class FlexArchive:
                 # Empty/null record — preserve index position
                 archive.records.append(b"")
 
+        archive._parse_name_table(flex_name=os.path.basename(filepath))
         return archive
 
     @classmethod
@@ -252,6 +256,7 @@ class FlexArchive:
                 archive.records.append(record_data)
             else:
                 archive.records.append(b"")
+        archive._parse_name_table()
         return archive
 
     def get_record(self, index: int) -> bytes:
@@ -261,16 +266,112 @@ class FlexArchive:
         raise IndexError(f"Record index {index} out of range (0..{len(self.records) - 1})")
 
     # ------------------------------------------------------------------
+    # Name-table parsing
+    # ------------------------------------------------------------------
+
+    def _parse_name_table(self, flex_name: str = "") -> None:
+        """
+        Detect and parse a name table from record 0, populating
+        :attr:`record_names` with one entry per record.
+
+        Recognised formats:
+
+        * **SOUND.FLX style** — record 0 is pure ASCII with fixed 8-byte
+          entries (each name padded with NUL).  Names map to records 1..N.
+        * **MUSIC.FLX style** — record 0 is a text playlist where each
+          non-comment line starts with a filename.  Names map to records 1..N.
+        """
+        self.record_names = [""] * len(self.records)
+        if not self.records or not self.records[0]:
+            return
+
+        rec0 = self.records[0]
+        upper = flex_name.upper()
+
+        # --- MUSIC.FLX: text playlist ----------------------------------
+        if upper == "MUSIC.FLX":
+            self._parse_music_playlist(rec0)
+            return
+
+        # --- Fixed 8-byte ASCII name table (SOUND.FLX, etc.) -----------
+        if self._is_ascii_nul_data(rec0) and len(rec0) >= 8 and len(rec0) % 8 == 0:
+            self._parse_fixed_name_table(rec0, entry_size=8)
+            return
+
+    @staticmethod
+    def _is_ascii_nul_data(data: bytes) -> bool:
+        """Return True if *data* consists only of printable ASCII + NUL."""
+        for b in data:
+            if b == 0:
+                continue
+            if b < 0x20 or b > 0x7E:
+                return False
+        return True
+
+    def _parse_fixed_name_table(self, rec0: bytes, entry_size: int) -> None:
+        """Parse a fixed-width name table from record 0.
+
+        Names at index *i* are assigned to ``record_names[i + 1]`` because
+        record 0 holds the table itself.
+        """
+        num_entries = len(rec0) // entry_size
+        for i in range(num_entries):
+            raw = rec0[i * entry_size:(i + 1) * entry_size]
+            name = raw.rstrip(b"\x00").decode("ascii", errors="replace")
+            rec_idx = i + 1
+            if rec_idx < len(self.record_names):
+                self.record_names[rec_idx] = name
+
+    def _parse_music_playlist(self, rec0: bytes) -> None:
+        """Parse MUSIC.FLX's text playlist from record 0.
+
+        Each line before the first ``#`` marker provides a track filename
+        (e.g. ``intro.xmi 1 10 5``).  The stem is used as the record name.
+        """
+        text = rec0.decode("ascii", errors="replace")
+        lines = text.replace("\r\n", "\n").split("\n")
+        rec_idx = 1
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                break
+            parts = line.split()
+            if parts:
+                # Strip extension to get a clean name
+                stem = Path(parts[0]).stem
+                if rec_idx < len(self.record_names):
+                    self.record_names[rec_idx] = stem
+                rec_idx += 1
+
+    def get_record_name(self, index: int) -> str:
+        """Return the name for a record, or empty string if none."""
+        if 0 <= index < len(self.record_names):
+            return self.record_names[index]
+        return ""
+
+    # ------------------------------------------------------------------
     # Convenience extraction
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _safe_filename(name: str, max_len: int = FLEX_NAME_MAX_LEN) -> str:
+        """Sanitise a name-table entry for use as a filename stem.
+
+        Truncates to *max_len* characters and strips anything that is
+        not alphanumeric, hyphen, underscore, or dot.
+        """
+        # Keep only filesystem-safe characters
+        cleaned = "".join(c for c in name if c.isalnum() or c in "-_.")
+        return cleaned[:max_len]
 
     def extract_all(self, outdir: str, *, flex_name: str = "") -> int:
         """
         Extract all non-empty records to *outdir*, returning the count.
 
-        Files are named ``NNNN<ext>`` where the extension is determined by
-        content detection.  A ``_manifest.txt`` is also written for
-        round-trip reconstruction via :meth:`from_directory`.
+        When the archive contains a name table, each file is named
+        ``NNNN_NAME<ext>`` and a companion ``NNNN_NAME.txt`` metadata
+        file is written alongside it.  Falls back to ``NNNN<ext>`` when
+        no name is available.
         """
         os.makedirs(outdir, exist_ok=True)
         extracted = 0
@@ -278,11 +379,57 @@ class FlexArchive:
             if not record:
                 continue
             ext = get_extension_for_flex(flex_name, record)
-            out_path = os.path.join(outdir, f"{i:04d}{ext}")
+            name = self.get_record_name(i)
+            safe = self._safe_filename(name) if name else ""
+
+            if safe:
+                stem = f"{i:04d}_{safe}"
+            else:
+                stem = f"{i:04d}"
+
+            out_path = os.path.join(outdir, f"{stem}{ext}")
             with open(out_path, "wb") as f:
                 f.write(record)
+
+            # Write companion metadata file
+            self._write_record_metadata(
+                outdir, stem, i, name, record, flex_name
+            )
+
             extracted += 1
         return extracted
+
+    @staticmethod
+    def _write_record_metadata(outdir: str, stem: str,
+                                index: int, name: str,
+                                record: bytes, flex_name: str) -> None:
+        """Write a ``.txt`` sidecar with record metadata."""
+        meta_path = os.path.join(outdir, f"{stem}.txt")
+        content_type = detect_record_type(record)
+        lines = [
+            f"Flex source:    {flex_name or '(unknown)'}",
+            f"Record index:   {index}",
+            f"Record name:    {name or '(none)'}",
+            f"Record size:    {len(record):,} bytes",
+            f"Content type:   {content_type}",
+            f"Header preview: {record[:16].hex(' ')}",
+        ]
+
+        # Content-specific details
+        if content_type == "audio" and len(record) >= 0x24:
+            total_len = struct.unpack_from("<I", record, 0)[0]
+            sample_rate = struct.unpack_from("<H", record, 4)[0]
+            lines.append(f"Sonarc length:  {total_len} samples")
+            lines.append(f"Sample rate:    {sample_rate} Hz")
+        elif content_type == "xmidi" and len(record) >= 8:
+            form_size = struct.unpack_from(">I", record, 4)[0]
+            lines.append(f"FORM size:      {form_size}")
+        elif content_type == "shape" and len(record) >= 6:
+            frame_count = struct.unpack_from("<H", record, 4)[0]
+            lines.append(f"Frame count:    {frame_count}")
+
+        with open(meta_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
 
     # ------------------------------------------------------------------
     # Writing / Reconstruction
@@ -359,8 +506,10 @@ class FlexArchive:
         """
         Build a Flex archive from numbered files in a directory.
 
-        Files should be named with a numeric index (e.g., 0000.bin, 0001.shp).
-        The index determines record position. Gaps are filled with empty records.
+        Files should be named with a numeric index (e.g., 0000.bin, 0001.shp,
+        or 0001_ARMHIT1A.raw).  The leading digits determine record position.
+        Gaps are filled with empty records.  Companion ``.txt`` metadata
+        files are ignored.
         """
         archive = cls()
         archive.comment = comment or f"Rebuilt by TITAN v{TITAN_VERSION}"
@@ -369,16 +518,17 @@ class FlexArchive:
         if not dirpath_p.is_dir():
             raise FileNotFoundError(f"Directory not found: {dirpath_p}")
 
-        # Discover files with numeric stems
+        # Discover files with numeric prefix (skip .txt metadata sidecars)
         indexed_files: dict[int, Path] = {}
         for entry in sorted(dirpath_p.iterdir()):
-            if entry.is_file():
+            if entry.is_file() and entry.suffix.lower() != ".txt":
                 stem = entry.stem
+                # Accept "0001" or "0001_ARMHIT1A" — extract leading digits
+                num_part = stem.split("_", 1)[0]
                 try:
-                    idx = int(stem)
+                    idx = int(num_part)
                     indexed_files[idx] = entry
                 except ValueError:
-                    # Skip files whose stem isn't a pure integer
                     continue
 
         if not indexed_files:
@@ -404,12 +554,14 @@ class FlexArchive:
         """Return a human-readable summary of the archive."""
         non_empty = sum(1 for r in self.records if r)
         total_data = sum(len(r) for r in self.records)
+        named = sum(1 for n in self.record_names if n)
         lines = [
             "Flex Archive Summary",
             f"  Source:        {self._source_path or '(in-memory)'}",
             f"  Comment:       {self.comment!r}",
             f"  Record count:  {len(self.records)}",
             f"  Non-empty:     {non_empty}",
+            f"  Named records: {named}",
             f"  Total data:    {total_data:,} bytes",
             f"  Unknown field: 0x{self.unknown_field:08X}",
         ]
@@ -417,16 +569,18 @@ class FlexArchive:
 
     def record_table(self) -> str:
         """Return a formatted table of all records."""
-        lines = [f"{'Index':>6}  {'Size':>12}  {'Preview'}"]
-        lines.append("-" * 50)
+        lines = [f"{'Index':>6}  {'Name':<12}  {'Size':>12}  {'Preview'}"]
+        lines.append("-" * 65)
         for i, record in enumerate(self.records):
+            name = self.get_record_name(i)
+            name_col = name[:12] if name else ""
             if record:
                 preview = record[:16].hex(" ")
                 if len(record) > 16:
                     preview += " ..."
-                lines.append(f"{i:>6}  {len(record):>12,}  {preview}")
+                lines.append(f"{i:>6}  {name_col:<12}  {len(record):>12,}  {preview}")
             else:
-                lines.append(f"{i:>6}  {'(empty)':>12}")
+                lines.append(f"{i:>6}  {name_col:<12}  {'(empty)':>12}")
         return "\n".join(lines)
 
 
