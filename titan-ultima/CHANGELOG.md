@@ -10,6 +10,16 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ---
 
+## [0.5.1] — 2026-03-22
+
+### Fixed
+
+- **CI** — fix GitHub Actions workflow: remove duplicate push-to-main trigger,
+  switch PyPI publishing from API token to Trusted Publishers (OIDC), add
+  verbose logging for upload diagnostics.
+
+---
+
 ## [0.5.0] — 2026-03-22
 
 ### Added
