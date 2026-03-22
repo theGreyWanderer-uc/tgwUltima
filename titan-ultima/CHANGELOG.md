@@ -10,6 +10,35 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ---
 
+## [0.5.0] — 2026-03-22
+
+### Added
+
+- **FLX name tables** — `FlexArchive` auto-detects and parses embedded name
+  tables in record 0 of Flex archives.  SOUND.FLX (fixed 8-byte ASCII entries)
+  and MUSIC.FLX (text playlist) are recognised; other archives fall back to
+  index-only naming.
+- **Named file extraction** — `flex-extract` now writes files as
+  `NNNN_NAME.<ext>` (e.g. `0007_TELEPORT.raw`, `0001_intro.xmi`) when a name
+  table is present, instead of plain `NNNN.<ext>`.
+- **Metadata sidecars** — each extracted record gets a companion `.txt` file
+  with the source archive, record index, name, byte size, content type, hex
+  header preview, and format-specific details (Sonarc sample rate / length,
+  XMIDI FORM size, shape frame count).
+- **`flex-list` names** — `flex-list` output now includes a Name column for
+  archives with embedded name tables.
+- **`summary()` / `record_table()`** — library methods report named record
+  counts and display names alongside indices.
+
+### Changed
+
+- **Manifest format** — `_manifest.txt` now has four columns
+  (`Index | Size | Filename | Name`) for round-trip rebuilds.
+- **`from_directory()` rebuild** — `flex-create` / `from_directory` correctly
+  parses `NNNN_NAME.<ext>` stems and skips `.txt` sidecars.
+
+---
+
 ## [0.4.0] — 2026-03-20
 
 First public release.
