@@ -58,6 +58,9 @@ path = "src/titan/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/titan"]
+# Exclude luts from package auto-discovery (non-Python data) to prevent
+# hatchling from adding .npy files twice. Re-include via force-include.
+exclude = ["src/titan/adaptive_resample/luts"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "src/titan/adaptive_resample/luts" = "titan/adaptive_resample/luts"

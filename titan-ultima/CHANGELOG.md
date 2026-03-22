@@ -10,6 +10,17 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ---
 
+## [0.5.2] — 2026-03-22
+
+### Fixed
+
+- **Build** — fix duplicate `.npy` LUT files in wheel (hatchling was
+  double-including `adaptive_resample/luts/` via both package auto-discovery
+  and shared-data inclusion; resolved with explicit `exclude` + `force-include`
+  in `pyproject.toml`). PyPI rejected the wheel due to duplicate ZIP entries.
+
+---
+
 ## [0.5.1] — 2026-03-22
 
 ### Fixed
