@@ -50,7 +50,7 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/theGreyWanderer-uc/tgwUltima"
 Repository = "https://github.com/theGreyWanderer-uc/tgwUltima"
-Changelog = "https://github.com/theGreyWanderer-uc/tgwUltima/blob/titan/titan-ultima/CHANGELOG.md"
+Changelog = "https://github.com/theGreyWanderer-uc/tgwUltima/blob/main/titan-ultima/CHANGELOG.md"
 "Bug Tracker" = "https://github.com/theGreyWanderer-uc/tgwUltima/issues"
 
 [tool.hatch.version]
