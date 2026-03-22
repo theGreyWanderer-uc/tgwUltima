@@ -2,11 +2,6 @@ name: Build & Release
 
 on:
   push:
-    branches: [main]
-    paths:
-      - 'gimp-plugin-u8/**'
-      - 'titan-ultima/**'
-      - '.github/workflows/build-release.yml'
     tags:
       - 'gimp/v*'
       - 'titan/v*'
@@ -15,6 +10,7 @@ on:
     paths:
       - 'gimp-plugin-u8/**'
       - 'titan-ultima/**'
+      - '.github/workflows/build-release.yml'
   workflow_dispatch:
 
 permissions:
@@ -164,3 +160,9 @@ jobs:
           name: "Titan-Ultima ${{ github.ref_name }}"
           body_path: titan-ultima/CHANGELOG.md
           files: release-assets/*
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          packages-dir: release-assets/
