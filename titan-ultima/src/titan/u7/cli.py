@@ -1011,11 +1011,13 @@ def map_render_cmd(
     ] = None,
     grid: Annotated[
         bool,
-        typer.Option("--grid/--no-grid", help="Overlay chunk grid"),
+        typer.Option("--grid/--no-grid",
+                     help="Overlay chunk grid (blue) and superchunk "
+                          "borders (red) with coordinate labels"),
     ] = False,
     grid_size: Annotated[
         int,
-        typer.Option("--grid-size", help="Grid line width"),
+        typer.Option("--grid-size", help="Grid line width in pixels"),
     ] = 1,
     full: Annotated[
         bool,
@@ -1076,11 +1078,13 @@ def map_sample_cmd(
     ] = 4,
     grid: Annotated[
         bool,
-        typer.Option("--grid/--no-grid", help="Overlay superchunk grid"),
+        typer.Option("--grid/--no-grid",
+                     help="Overlay chunk grid (blue, scale<=2) and "
+                          "superchunk grid (red) with coordinate labels"),
     ] = False,
     grid_size: Annotated[
         int,
-        typer.Option("--grid-size", help="Grid line width"),
+        typer.Option("--grid-size", help="Grid line width in pixels"),
     ] = 1,
     superchunks: Annotated[
         Optional[list[int]],

@@ -519,6 +519,8 @@ class U7MapRenderer:
         for ty in range(C_TILES_PER_CHUNK):
             for tx in range(C_TILES_PER_CHUNK):
                 s, f = terrain[ty * C_TILES_PER_CHUNK + tx]
+                if s == 12 and f == 0:
+                    continue  # void tile
                 if _is_flat(s):
                     return (s, f)
 
@@ -1394,7 +1396,8 @@ class U7MapSampler:
             Tiles per output pixel. 1 = full resolution (3072×3072),
             4 = 768×768, 8 = 384×384.
         grid:
-            Overlay superchunk grid.
+            Overlay chunk (blue) and superchunk (red) grid lines
+            with coordinate labels.
         grid_size:
             Grid line width.
         exclude_shapes:
@@ -1418,6 +1421,11 @@ class U7MapSampler:
         shapes_vga = renderer.shapes_vga
 
         def _tile_color(shnum: int, frnum: int) -> tuple[int, int, int] | None:
+            # Shape 18 frame 16 is a near-black fortress floor tile
+            # (rgb 8,8,8). Remap to frame 0 (stone grey) so castles
+            # don't render as black voids on the minimap.
+            if shnum == 18 and frnum == 16:
+                frnum = 0
             key = (shnum, frnum)
             if key in tile_color_cache:
                 return tile_color_cache[key]
@@ -1467,6 +1475,10 @@ class U7MapSampler:
         if schunks is None:
             schunks = list(range(C_NUM_SCHUNKS * C_NUM_SCHUNKS))
 
+        # RLE terrain shapes (>= FIRST_OBJ_SHAPE) are handled by
+        # sampling a nearby flat tile for correct ground colour —
+        # matching render_superchunk's nearby-flat fill logic.
+
         for sc in schunks:
             scx = C_CHUNKS_PER_SCHUNK * (sc % C_NUM_SCHUNKS)
             scy = C_CHUNKS_PER_SCHUNK * (sc // C_NUM_SCHUNKS)
@@ -1495,44 +1507,96 @@ class U7MapSampler:
                             if px >= out_w or py >= out_h:
                                 continue
 
+                            # RLE terrain and void tile (shape 12 frame 0):
+                            # fill with nearby flat tile colour.
+                            # Shape 12/0 is a palette-cycling void used as
+                            # filler under mountain sprites; its static
+                            # sample is a misleading blue.
+                            if shnum >= FIRST_OBJ_SHAPE or (
+                                    shnum == 12 and frnum == 0):
+                                flat = renderer._find_nearby_flat(
+                                    terrain, tilex, tiley)
+                                if flat:
+                                    color = _tile_color(flat[0], flat[1])
+                                    if color is not None:
+                                        out[py, px] = color
+                                continue
+
                             color = _tile_color(shnum, frnum)
                             if color is not None:
                                 out[py, px] = color
 
-        # Also sample IFIX objects (higher Z paints on top)
-        for sc in schunks:
-            ifix_name = f"U7IFIX{sc:02X}"
-            ifix_path = os.path.join(renderer.static_dir, ifix_name)
-            objects = U7MapRenderer.parse_ifix(ifix_path, sc)
-
-            # Sort by Z so higher objects overwrite lower
-            objects.sort(key=lambda o: o.tz)
-
-            for obj in objects:
-                if obj.shape in exclude:
-                    continue
-                px = obj.tx // scale
-                py = obj.ty // scale
-                if px >= out_w or py >= out_h:
-                    continue
-
-                color = _tile_color(obj.shape, obj.frame)
-                if color is not None:
-                    out[py, px] = color
+        # Note: IFIX objects are NOT overlaid here.  Unlike the full
+        # renderer (render_superchunk / render_region), which paints
+        # complete sprites with proper depth sorting, the sampler maps
+        # each shape to a single centre-pixel colour.  For large sprites
+        # like mountain walls (shapes 180–183, 64×64 px) this produces
+        # a meaningless lavender/purple dot instead of useful ground
+        # colour.  The terrain's nearby-flat fill already provides the
+        # correct minimap colour for RLE terrain tiles.
 
         img = Image.fromarray(out, mode="RGB")
 
         if grid:
             draw = ImageDraw.Draw(img)
-            grid_rgb = (100, 100, 255)
-            schunk_tiles = C_CHUNKS_PER_SCHUNK * C_TILES_PER_CHUNK
+            chunk_rgb = (0, 120, 255)
+            sc_rgb = (255, 40, 40)
+
+            chunk_px = C_TILES_PER_CHUNK // scale  # pixels per chunk
+            schunk_px = C_CHUNKS_PER_SCHUNK * chunk_px  # pixels per SC
+
+            # --- Chunk grid (blue) — only when spacing >= 8 px ---
+            if chunk_px >= 8:
+                try:
+                    font_size = max(7, min(chunk_px // 3, 11))
+                    chunk_font = ImageFont.truetype("arial.ttf", font_size)
+                except OSError:
+                    chunk_font = ImageFont.load_default()
+
+                for i in range(C_NUM_CHUNKS + 1):
+                    pos = i * chunk_px
+                    if 0 <= pos < img.width:
+                        draw.line([(pos, 0), (pos, img.height - 1)],
+                                  fill=chunk_rgb, width=grid_size)
+                    if 0 <= pos < img.height:
+                        draw.line([(0, pos), (img.width - 1, pos)],
+                                  fill=chunk_rgb, width=grid_size)
+
+                # Chunk coordinate labels
+                if chunk_px >= 12:
+                    for cy_i in range(C_NUM_CHUNKS):
+                        for cx_i in range(C_NUM_CHUNKS):
+                            lx = cx_i * chunk_px + 1
+                            ly = cy_i * chunk_px + 1
+                            if lx < img.width and ly < img.height:
+                                draw.text((lx, ly), f"{cx_i},{cy_i}",
+                                          fill=chunk_rgb, font=chunk_font)
+
+            # --- Superchunk grid (red) ---
+            try:
+                sc_font_size = max(8, min(schunk_px // 4, 18))
+                sc_font = ImageFont.truetype("arial.ttf", sc_font_size)
+            except OSError:
+                sc_font = ImageFont.load_default()
+
+            sc_line_w = max(grid_size, 2)
             for i in range(C_NUM_SCHUNKS + 1):
-                pos = (i * schunk_tiles) // scale
+                pos = i * schunk_px
                 if 0 <= pos < img.width:
                     draw.line([(pos, 0), (pos, img.height - 1)],
-                              fill=grid_rgb, width=grid_size)
+                              fill=sc_rgb, width=sc_line_w)
                 if 0 <= pos < img.height:
                     draw.line([(0, pos), (img.width - 1, pos)],
-                              fill=grid_rgb, width=grid_size)
+                              fill=sc_rgb, width=sc_line_w)
+
+            # Superchunk number labels
+            for scy_i in range(C_NUM_SCHUNKS):
+                for scx_i in range(C_NUM_SCHUNKS):
+                    sc_num = scy_i * C_NUM_SCHUNKS + scx_i
+                    lx = scx_i * schunk_px + 2
+                    ly = scy_i * schunk_px + 2
+                    if lx < img.width and ly < img.height:
+                        draw.text((lx, ly), f"SC {sc_num}",
+                                  fill=sc_rgb, font=sc_font)
 
         return img

@@ -1009,7 +1009,7 @@ titan u7 map-render <static> [--superchunk N | --cx0 X0 --cy0 Y0 --cx1 X1 --cy1 
 | `-o FILE`, `--output FILE` | Output PNG path (default: auto-named) |
 | `--view VIEW` | Projection view: `classic` (45° lift, default), `flat` (no lift), `steep` (exaggerated lift) |
 | `--gamedat DIR` | Path to `gamedat/` directory to include IREG dynamic objects |
-| `--grid / --no-grid` | Overlay chunk grid lines (default: off). Blue chunk grid with coordinate labels; red superchunk boundaries with SC number labels |
+| `--grid / --no-grid` | Overlay grid lines (default: off). Blue lines for chunk boundaries (16×16 tiles each, coords e.g. `80,96`) with coordinate labels; red lines for superchunk boundaries (16×16 chunks each) with SC number labels |
 | `--grid-size N` | Grid line width in pixels (default: 1) |
 | `--exclude FLAG` | Exclude shapes by TFA flag. Repeatable. Choices: `no_solid`, `no_water`, `no_animated`, `no_sfx`, `no_transparent`, `no_translucent`, `no_door`, `no_barge`, `no_light`, `no_poisonous`, `no_strange_movement`, `no_building` |
 
@@ -1051,7 +1051,9 @@ titan u7 map-render STATIC/ --full -o u7_world.png
 
 Render a colour-sampled U7 world minimap. Samples the centre pixel of
 each tile (or group of tiles at the given scale) and paints IFIX objects
-on top sorted by Z order. Much faster than full rendering.
+on top sorted by Z order. RLE terrain shapes (mountains, etc.) are
+promoted to overlay objects with a nearby-flat fill for correct ground
+coverage. Much faster than full rendering.
 
 ```
 titan u7 map-sample <static> [-p PAL] [-o FILE] [--scale N]
@@ -1064,21 +1066,29 @@ titan u7 map-sample <static> [-p PAL] [-o FILE] [--scale N]
 | `-p FILE`, `--palette FILE` | Path to `PALETTES.FLX` (default: `STATIC/PALETTES.FLX`) |
 | `-o FILE`, `--output FILE` | Output PNG path (default: auto-named) |
 | `--scale N` | Tiles per output pixel: `1` = full 3072×3072, `4` = 768×768, `8` = 384×384 (default: 4) |
-| `--grid / --no-grid` | Overlay superchunk grid lines (default: off) |
-| `--grid-size N` | Grid line width (default: 1) |
-| `--sc N` | Only sample these superchunks (repeatable) |
+| `--grid / --no-grid` | Overlay grid lines (default: off). Blue chunk grid (only when scale ≤ 2, i.e. chunk spacing ≥ 8 px) with chunk coordinate labels; red superchunk grid with SC number labels. Matches `u7 map-render --grid` colours |
+| `--grid-size N` | Grid line width in pixels (default: 1) |
+| `--sc N` | Only sample these superchunks (repeatable). Superchunks are 0–143 (12×12 grid, each containing 16×16 chunks) |
 | `--exclude FLAG` | Exclude shapes by TFA flag (repeatable) |
+
+> **Grid detail vs scale:** At the default `--scale 4` the minimap is
+> 768×768 px. Each superchunk maps to 64×64 px — large enough for SC
+> labels. Chunk grid lines (each chunk = 4 px at scale 4) are too dense
+> to be useful, so they appear only at `--scale 1` or `--scale 2`.
 
 **Examples**
 ```bash
 # Default 768×768 minimap of the whole world
 titan u7 map-sample STATIC/ -o minimap.png
 
-# Smaller 384×384 thumbnail with superchunk grid
+# 384×384 thumbnail with superchunk grid overlay
 titan u7 map-sample STATIC/ --scale 8 --grid -o minimap_grid.png
 
-# Full resolution (3072×3072) minimap
-titan u7 map-sample STATIC/ --scale 1 -o minimap_full.png
+# Full resolution (3072×3072) with chunk + superchunk grid
+titan u7 map-sample STATIC/ --scale 1 --grid -o minimap_full.png
+
+# Medium resolution with chunk grid visible
+titan u7 map-sample STATIC/ --scale 2 --grid -o minimap_s2.png
 ```
 
 ---
