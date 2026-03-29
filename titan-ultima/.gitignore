@@ -13,6 +13,7 @@ test_output/
 u7data/
 u8data/
 u8data/tests/
+tests/
 
 # Python
 __pycache__/
@@ -22,6 +23,9 @@ __pycache__/
 dist/
 build/
 *.whl
+
+# Pre-refactor backups
+_orig_backup/
 
 # Environment
 .venv/
