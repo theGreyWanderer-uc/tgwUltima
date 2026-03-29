@@ -5,13 +5,13 @@ build-backend = "hatchling.build"
 [project]
 name = "titan-ultima"
 dynamic = ["version"]
-description = "TITAN – Tool for Interpreting and Transforming Archival Nodes. CLI and library for Ultima 8: Pagan file formats."
+description = "TITAN – Tool for Interpreting and Transforming Archival Nodes. CLI and library for Ultima file formats (U8: Pagan, U7: Black Gate & Serpent Isle)."
 readme = {file = "README.md", content-type = "text/markdown"}
 requires-python = ">=3.9"
 license = { text = "MIT" }
 authors = [{ name = "theGreyWanderer", email = "196163911+theGreyWanderer-uc@users.noreply.github.com" }]
 keywords = [
-    "ultima8", "u8", "pagan", "ultima-pagan",
+    "ultima", "ultima8", "ultima7", "u8", "u7", "pagan", "black-gate", "serpent-isle",
     "game-modding", "mod-tools", "asset-extraction", "file-formats",
     "flex", "shapes", "xmidi",
     "cli", "batch-processing",
@@ -58,12 +58,13 @@ path = "src/titan/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/titan"]
-# Exclude luts from package auto-discovery (non-Python data) to prevent
-# hatchling from adding .npy files twice. Re-include via force-include.
-exclude = ["src/titan/adaptive_resample/luts"]
+# Exclude luts and bundled fonts from package auto-discovery (non-Python data)
+# to prevent hatchling from adding binary files twice. Re-include via force-include.
+exclude = ["src/titan/adaptive_resample/luts", "src/titan/fonts/bundled"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "src/titan/adaptive_resample/luts" = "titan/adaptive_resample/luts"
+"src/titan/fonts/bundled" = "titan/fonts/bundled"
 
 [project.scripts]
 titan = "titan.cli:main"

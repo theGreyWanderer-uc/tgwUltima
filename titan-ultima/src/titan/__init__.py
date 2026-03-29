@@ -1,13 +1,14 @@
 """
 TITAN -- Tool for Interpreting and Transforming Archival Nodes.
 
-A Python toolkit for working with Ultima 8: Pagan file formats.
+A Python toolkit for working with Ultima file formats (U8, U7).
 
 Library usage::
 
     from titan.flex import FlexArchive
     from titan.palette import U8Palette
-    from titan.shape import U8Shape
+    from titan.u8.shape import U8Shape    # canonical U8 import path
+    from titan.shape import U8Shape       # backward-compat shim (also works)
 
     archive = FlexArchive.from_file("U8SHAPES.FLX")
     archive.extract_all("shapes/")
@@ -23,30 +24,43 @@ from __future__ import annotations
 # (flex.py imports TITAN_VERSION from ._version, which has no cycle).
 from ._version import TITAN_VERSION, __version__
 
+# Shared / game-agnostic modules
 from .flex import FlexArchive, detect_record_type, get_extension_for_flex
 from .palette import U8Palette
-from .shape import U8Shape
-from .sound import SonarcDecoder
 from .music import XMIDIConverter
-from .save import U8SaveArchive
-from .typeflag import U8TypeFlags
-from .map import U8MapRenderer, U8MapSampler
-from .credits import decrypt_credit_text
-from .xformpal import U8_XFORM_PALETTE
+
+# U8-specific modules (canonical paths are titan.u8.*)
+from .u8.shape import U8Shape
+from .u8.sound import SonarcDecoder
+from .u8.save import U8SaveArchive
+from .u8.typeflag import U8TypeFlags
+from .u8.map import U8MapRenderer, U8MapSampler
+from .u8.credits import decrypt_credit_text
+from .u8.xformpal import U8_XFORM_PALETTE
+
+# U7-specific modules (canonical paths are titan.u7.*)
+from .u7.shape import U7Shape
+from .u7.palette import U7Palette
+from .u7.sound import VocDecoder
 
 __all__ = [
     "TITAN_VERSION",
     "__version__",
-    # Core classes
+    # Shared
     "FlexArchive",
     "U8Palette",
+    "XMIDIConverter",
+    # U8
     "U8Shape",
     "SonarcDecoder",
-    "XMIDIConverter",
     "U8SaveArchive",
     "U8TypeFlags",
     "U8MapRenderer",
     "U8MapSampler",
+    # U7
+    "U7Shape",
+    "U7Palette",
+    "VocDecoder",
     # Helpers
     "detect_record_type",
     "get_extension_for_flex",

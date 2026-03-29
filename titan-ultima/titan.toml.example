@@ -1,4 +1,4 @@
-# titan.toml.example — copy this file to titan.toml and edit base + language.
+# titan.toml.example — copy this file to titan.toml and edit paths.
 #
 # Auto-detected locations (in order):
 #   ./titan.toml                      (current working directory)
@@ -6,12 +6,23 @@
 #   %APPDATA%\titan\config.toml       (Windows)
 #
 # Run `titan setup` to generate this file interactively.
+#
+# ─── FORMAT ──────────────────────────────────────────────────────
+# Legacy flat format ([game] + [paths]) is still supported and is
+# treated as an Ultima 8 configuration.  The new multi-game format
+# uses [u8.game] / [u8.paths], [u7bg.game] / [u7bg.paths], etc.
+# Both formats are shown below.
+
+
+# ═══════════════════════════════════════════════════════════════════
+# LEGACY FORMAT (Ultima 8 only) — still fully supported
+# ═══════════════════════════════════════════════════════════════════
 
 [game]
 # GOG Galaxy (Windows):    C:/Program Files (x86)/GOG Galaxy/Games/Ultima 8
-# GOG Offline (Windows):    C:/GOG Games/Ultima 8
-# GOG (Linux):              ~/GOG Games/Ultima 8
-# Legacy EA/Origin:         C:/Program Files/EA Games/Ultima 8 Gold Edition
+# GOG Offline (Windows):   C:/GOG Games/Ultima 8
+# GOG (Linux):             ~/GOG Games/Ultima 8
+# Legacy EA/Origin:        C:/Program Files/EA Games/Ultima 8 Gold Edition
 base     = "C:/Program Files (x86)/GOG Galaxy/Games/Ultima 8"  # ← change to match your install
 language = "ENGLISH"     # ← FRENCH, GERMAN, etc.  |  leave empty ("") for flat mode
 
@@ -47,3 +58,37 @@ nonfixed  = "U8SAVE.000"
 # Pentagram / ScummVM examples (absolute path, unchanged):
 # nonfixed = "C:/Users/<you>/AppData/Roaming/Pentagram/u8-save/U8SAVE.000"  # Windows
 # nonfixed = "~/Library/Application Support/Pentagram/u8-save/U8SAVE.000"   # macOS
+
+
+# ═══════════════════════════════════════════════════════════════════
+# NEW MULTI-GAME FORMAT (uncomment to use)
+# ═══════════════════════════════════════════════════════════════════
+#
+# When the [u8] section is present it takes precedence; the legacy
+# [game]/[paths] sections above serve as fallback for backward compat.
+#
+# [u8.game]
+# base     = "C:/Program Files (x86)/GOG Galaxy/Games/Ultima 8"
+# language = "ENGLISH"
+#
+# [u8.paths]
+# fixed    = "FIXED.DAT"
+# palette  = "U8PAL.PAL"
+# typeflag = "TYPEFLAG.DAT"
+# shapes   = "shapes/"
+# globs    = "globs/"
+# nonfixed = "U8SAVE.000"
+#
+# [u7bg.game]
+# base     = "C:/Program Files (x86)/GOG Galaxy/Games/Ultima 7"
+# variant  = "blackgate"
+#
+# [u7bg.paths]
+# static   = "STATIC/"
+#
+# [u7si.game]
+# base     = "C:/Program Files (x86)/GOG Galaxy/Games/Ultima 7 Serpent Isle"
+# variant  = "serpentisle"
+#
+# [u7si.paths]
+# static   = "STATIC/"

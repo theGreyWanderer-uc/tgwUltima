@@ -21,3 +21,9 @@ gimp-plugin-u8/artifacts/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Exult
+exult/
+
+# Reference
+.github/reference/
