@@ -10,6 +10,28 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ---
 
+## [0.6.1]
+
+### Fixed
+
+- **`map-sample` RLE terrain** — colour-sampled minimap now uses nearby-flat
+  fill for RLE terrain shapes, matching the classic renderer. Eliminates
+  misleading centre-pixel colours from large sprites.
+- **`map-sample` IFIX overlay removed** — fixed stray coloured specs and
+  lavender/purple dots caused by sampling single pixels from mountain wall
+  and small IFIX object sprites.
+- **`map-sample` void tile halo** — shape 12 frame 0 (palette-cycling void)
+  no longer bleeds bright blue around mountains and buildings; also fixed
+  `_find_nearby_flat()` whole-chunk fallback to skip the void tile.
+- **`map-sample` fortress floor** — remap shape 18 frame 16 (near-black
+  indoor floor) to frame 0 (stone grey) so castle interiors are visible.
+- **`map-sample` grid overlay** — dual-tier grid: blue chunk grid (scale ≤ 2)
+  with coordinate labels + red superchunk grid with SC number labels.
+- **CLI help** — `--grid` descriptions for `map-render` and `map-sample` now
+  correctly describe chunk vs superchunk grid behaviour.
+
+---
+
 ## [0.6.0]
 
 ### Added — Ultima 7 support
