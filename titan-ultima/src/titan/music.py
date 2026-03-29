@@ -2,7 +2,8 @@
 XMIDI to Standard MIDI converter.
 
 Provides :class:`XMIDIConverter` for converting XMIDI (Extended MIDI, Miles
-Sound System / AIL) to Standard MIDI Format 0.
+Sound System / AIL) to Standard MIDI Format 0 (single-track) or Format 1
+(multi-track).
 
 Example::
 
@@ -27,11 +28,15 @@ from typing import Optional
 
 class XMIDIConverter:
     """
-    Convert XMIDI (Extended MIDI) format to Standard MIDI Format 0.
+    Convert XMIDI (Extended MIDI) format to Standard MIDI Format 0 or 1.
 
     XMIDI is an IFF-based format used by Miles Sound System / AIL.
-    Structure: FORM/XDIR header, then FORM/XMID containing
-    TIMB (timbres), EVNT (event data).
+    Two layouts exist:
+
+    * **Single-track** (``FORM XMID``) — one ``TIMB`` + one ``EVNT``.
+      Converted to MIDI Format 0.
+    * **Multi-track** (``FORM XDIR`` → ``CAT  XMID`` → N×``FORM XMID``) —
+      each ``FORM XMID`` holds its own ``EVNT``.  Converted to MIDI Format 1.
 
     Key differences from standard MIDI:
 
@@ -48,39 +53,96 @@ class XMIDIConverter:
     @classmethod
     def convert(cls, xmidi_data: bytes) -> Optional[bytes]:
         """
-        Convert XMIDI to Standard MIDI Format 0.
+        Convert XMIDI to Standard MIDI (Format 0 for one track, Format 1 for
+        multiple tracks).
+
+        Walks the IFF tree to locate every ``EVNT`` chunk inside a
+        ``FORM XMID`` container.  Single-track files produce Format 0;
+        multi-track files (``FORM XDIR`` / ``CAT  XMID``) produce Format 1.
 
         Returns standard MIDI bytes or ``None`` on failure.
         """
-        # Find EVNT chunk
-        evnt_offset = cls._find_chunk(xmidi_data, b"EVNT")
-        if evnt_offset is None:
+        evnt_chunks = cls._collect_xmid_evnts(xmidi_data)
+        if not evnt_chunks:
             return None
 
-        evnt_len = struct.unpack_from(">I", xmidi_data, evnt_offset + 4)[0]
-        evnt_data = xmidi_data[evnt_offset + 8:evnt_offset + 8 + evnt_len]
+        tracks = []
+        for evnt_data in evnt_chunks:
+            track = cls._convert_evnt_to_track(evnt_data)
+            if track:
+                tracks.append(track)
 
-        # Convert EVNT to standard MIDI track
-        midi_track = cls._convert_evnt_to_track(evnt_data)
-        if midi_track is None:
+        if not tracks:
             return None
 
-        # Build standard MIDI file
-        return cls._build_midi_file(midi_track)
+        if len(tracks) == 1:
+            return cls._build_midi_file(tracks[0])
+        return cls._build_midi_file_format1(tracks)
+
+    # ------------------------------------------------------------------
+    # IFF tree walker
+    # ------------------------------------------------------------------
 
     @classmethod
-    def _find_chunk(cls, data: bytes, chunk_id: bytes) -> Optional[int]:
-        """Find a chunk by 4-byte ID in IFF data."""
-        pos = 0
-        while True:
-            idx = data.find(chunk_id, pos)
-            if idx < 0 or idx + 8 > len(data):
-                return None
-            # Validate: the 4-byte big-endian size should be reasonable
-            chunk_len = struct.unpack_from(">I", data, idx + 4)[0]
-            if chunk_len <= len(data) - idx - 8:
-                return idx
-            pos = idx + 1
+    def _collect_xmid_evnts(cls, data: bytes) -> list[bytes]:
+        """Return a list of raw EVNT payloads from all FORM XMID containers."""
+        evnts: list[bytes] = []
+        cls._walk_iff(data, 0, len(data), evnts)
+        return evnts
+
+    @classmethod
+    def _walk_iff(
+        cls,
+        data: bytes,
+        start: int,
+        end: int,
+        evnts: list[bytes],
+    ) -> None:
+        """Recursively walk IFF chunks and collect EVNT from FORM XMID."""
+        pos = start
+        while pos + 8 <= min(end, len(data)):
+            cid = data[pos:pos + 4]
+            clen = struct.unpack_from(">I", data, pos + 4)[0]
+            chunk_end = pos + 8 + clen
+            if chunk_end > len(data):
+                break
+
+            if cid == b"FORM":
+                sub_type = data[pos + 8:pos + 12]
+                if sub_type == b"XMID":
+                    # Leaf: find the EVNT within this FORM XMID
+                    evnt_pos = cls._find_chunk_in_range(
+                        data, b"EVNT", pos + 12, chunk_end
+                    )
+                    if evnt_pos is not None:
+                        evnt_len = struct.unpack_from(">I", data, evnt_pos + 4)[0]
+                        evnts.append(data[evnt_pos + 8:evnt_pos + 8 + evnt_len])
+                else:
+                    # FORM XDIR (or other) — recurse into body
+                    cls._walk_iff(data, pos + 12, chunk_end, evnts)
+            elif cid in (b"CAT ", b"LIST"):
+                # Container — recurse past the 4-byte sub-type
+                cls._walk_iff(data, pos + 12, chunk_end, evnts)
+
+            # IFF chunks are 2-byte aligned
+            pos = chunk_end + (clen & 1)
+
+    @classmethod
+    def _find_chunk_in_range(
+        cls,
+        data: bytes,
+        chunk_id: bytes,
+        start: int,
+        end: int,
+    ) -> Optional[int]:
+        """Find the first IFF chunk with *chunk_id* within [start, end)."""
+        pos = start
+        while pos + 8 <= min(end, len(data)):
+            cid = data[pos:pos + 4]
+            clen = struct.unpack_from(">I", data, pos + 4)[0]
+            if cid == chunk_id:
+                return pos
+            pos += 8 + clen + (clen & 1)
         return None
 
     @classmethod
@@ -264,6 +326,25 @@ class XMIDIConverter:
         out.extend(b"MTrk")
         out.extend(struct.pack(">I", len(track_data)))
         out.extend(track_data)
+
+        return bytes(out)
+
+    @classmethod
+    def _build_midi_file_format1(cls, tracks: list[bytes]) -> bytes:
+        """Build a Standard MIDI Format 1 file with multiple tracks."""
+        out = bytearray()
+
+        # MThd header
+        out.extend(b"MThd")
+        out.extend(struct.pack(">I", 6))
+        out.extend(struct.pack(">H", 1))                  # Format 1
+        out.extend(struct.pack(">H", len(tracks)))        # N tracks
+        out.extend(struct.pack(">H", cls.XMIDI_PPQN))
+
+        for track_data in tracks:
+            out.extend(b"MTrk")
+            out.extend(struct.pack(">I", len(track_data)))
+            out.extend(track_data)
 
         return bytes(out)
 

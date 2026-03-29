@@ -10,80 +10,108 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ---
 
+## [0.6.0]
+
+### Added — Ultima 7 support
+
+- **Multi-game architecture** — game-specific commands live under `titan u8`
+  and `titan u7` sub-apps; shared commands remain at root.
+- **U7 shapes** — read/write U7 RLE shapes and VGA Flex archives
+  (`SHAPES.VGA`, `FACES.VGA`, etc.). `U7Shape.to_bytes()` / `.save()` for
+  round-trip encoding. New commands: `shape-export`, `shape-batch`.
+- **U7 palettes** — 12-palette `PALETTES.FLX` support. New: `palette-export`.
+- **U7 music** — Flex-based XMIDI extraction (`ADLIBMUS.DAT`, `MT32MUS.DAT`,
+  etc.) and standalone `.xmi` conversion. Multi-track XMIDI now produces
+  MIDI Format 1. New: `u7 music-export`, `u8 music-export`.
+- **U7 sound** — Creative Voice (.voc) decoder with ADPCM support; batch
+  speech export from `U7SPEECH.SPC`. New: `voc-export`, `speech-export`,
+  `u8 sound-export-all`.
+- **U7 map rendering** — parallel oblique projection (classic / flat / steep),
+  IFIX + optional IREG objects, dependency-DAG depth sorting, TFA flag
+  filtering, `--full` world render, colour-sampled minimap.
+  New: `map-render`, `map-sample`.
+- **U7 type flags** — `TFA.DAT`, `SHPDIMS.DAT`, `WGTVOL.DAT`, `OCCLUDE.DAT`
+  parser with animation nibbles, shape class enum, and `build_exclude_set()`.
+  New: `typeflag-dump` (summary / detail / csv).
+- **U7 savegame reader** — Exult `.sav` (ZIP & FLEX), global flags, save
+  metadata, NPC stats, schedules. New: `save-list`, `save-extract`,
+  `gflag-dump`, `save-info`, `save-npcs`, `save-schedules`.
+- **Multi-game config** — `titan.toml` now supports `[u7bg.*]` / `[u7si.*]`
+  sections alongside the existing `[u8.*]` / legacy `[game]` format.
+- **Enhanced grid overlays** — chunk coordinate labels and superchunk
+  boundary lines for both U7 and U8 map commands.
+
+### Added — U7 font creation
+
+- **Font wizard** — new `titan u7 font-create` interactive wizard builds
+  Exult-compatible font shapes from TrueType sources. Steps: game/archive
+  selection, slot picking (11 BG/SI stock presets), TTF source, render
+  method, dimensions, palette, preview, and output (`.shp` or Flex patch).
+  Non-interactive batch mode via `--config recipe.toml`.
+- **Font rendering pipeline** — `titan.fonts` package: FreeType mono/grayscale
+  renderer, palette LUT mapper (7 built-in LUTs), glyph-to-shape encoder.
+- **Hollow gradient rendering** — stroke outline + vertical gradient fill with
+  morphological erosion; 30 built-in gradient presets (from U7 palette and
+  [uiGradients](https://uigradients.com)) with ANSI colour swatch display.
+  Hex-to-palette resolver maps any CSS gradient to nearest game indices.
+- **Bundled TTFs** — six fonts: dosVga437-win, Ophidean Runes, Britannian
+  Runes I/II/II Sans Serif, and Gargish. See [FONTS_CREDITS.md](FONTS_CREDITS.md).
+- **Exult integration** — parses `exult.cfg` for game paths and font config;
+  scans game directories for `*font*.vga` archives; shows live slot tables
+  from actual Flex data; resolves mod patch directories for archive patching.
+- **Exult Studio preview** — auto-fills frame 65 (the hardcoded thumbnail
+  frame) with a representative glyph for non-standard layouts (Gargish,
+  Runic, Serpentine).
+
+### Changed
+
+- **CLI restructure** — U8 commands moved under `titan u8 <cmd>` with
+  deprecated root-level aliases. Modules relocated to `titan.u8.*` with
+  backward-compatible shims.
+
+### Fixed
+
+- U7 palette 6-bit→8-bit scaling no longer fooled by garbage at index 255.
+- `map-render` hex superchunk input (`--sc 0x55`) now accepted.
+- RLE terrain tiles promoted to depth-sorted objects with correct anchoring;
+  eliminates black strips between multi-tile terrain.
+- Dependency-DAG uses actual pixel bounds for overlap (fixes tall sprites
+  rendering on top of roofs).
+- Cross-superchunk depth ordering uses a single global pass (fixes
+  furniture visible through rooftops at boundaries).
+
+### Known issues
+
+- U7 MIDI export doesn't sound 100% yet — some tracks may have timing or
+  instrument mapping differences compared to the original game playback.
+
+---
+
 ## [0.5.3] — 2026-03-22
 
 ### Added
 
-- **Speech FLX support** — `FlexArchive` now correctly handles per-NPC
-  digital speech archives (`E44.FLX`, `E80.FLX`, `G289.FLX`, etc.). Record 0
-  contains a dialogue transcript extracted as `.txt`; remaining records are
-  Sonarc-compressed audio at 11,111 Hz extracted as `.raw`.  
-  File naming: `[A-Z]\d+.FLX` — language letter + NPC ID.  Nine English
-  speech files ship with the Speech Pack add-on disks (NPCs 44, 80, 109,
-  129, 289, 385, 433, 597, 666).
-- **Text content detection** — `detect_record_type()` now returns `"text"`
-  for plain-ASCII records, with `.txt` extension mapping.
-
-### Fixed
-
-- **Name-table false positive** — the fixed 8-byte name-table heuristic now
-  rejects data containing space characters, preventing dialogue transcripts
-  (speech FLX record 0) from being mis-detected as name tables.
-- **Sidecar filename collision** — metadata sidecars renamed from `.txt` to
-  `.meta.txt` to avoid overwriting records whose data is also `.txt`
-  (speech transcripts).
-- **`from_directory()` rebuild** — sidecar skip logic updated for
-  `.meta.txt`; real `.txt` data files are no longer excluded.
-
----
-
-## [0.5.2] — 2026-03-22
-
-### Fixed
-
-- **Build** — fix duplicate `.npy` LUT files in wheel (hatchling was
-  double-including `adaptive_resample/luts/` via both package auto-discovery
-  and shared-data inclusion; resolved with explicit `exclude` + `force-include`
-  in `pyproject.toml`). PyPI rejected the wheel due to duplicate ZIP entries.
-
----
-
-## [0.5.1] — 2026-03-22
-
-### Fixed
-
-- **CI** — fix GitHub Actions workflow: remove duplicate push-to-main trigger,
-  switch PyPI publishing from API token to Trusted Publishers (OIDC), add
-  verbose logging for upload diagnostics.
-
----
-
-## [0.5.0] — 2026-03-22
-
-### Added
-
-- **FLX name tables** — `FlexArchive` auto-detects and parses embedded name
-  tables in record 0 of Flex archives.  SOUND.FLX (fixed 8-byte ASCII entries)
-  and MUSIC.FLX (text playlist) are recognised; other archives fall back to
-  index-only naming.
-- **Named file extraction** — `flex-extract` now writes files as
-  `NNNN_NAME.<ext>` (e.g. `0007_TELEPORT.raw`, `0001_intro.xmi`) when a name
-  table is present, instead of plain `NNNN.<ext>`.
-- **Metadata sidecars** — each extracted record gets a companion `.txt` file
-  with the source archive, record index, name, byte size, content type, hex
-  header preview, and format-specific details (Sonarc sample rate / length,
-  XMIDI FORM size, shape frame count).
-- **`flex-list` names** — `flex-list` output now includes a Name column for
-  archives with embedded name tables.
-- **`summary()` / `record_table()`** — library methods report named record
-  counts and display names alongside indices.
+- **FLX name tables** — auto-detect and parse embedded name tables
+  (`SOUND.FLX`, `MUSIC.FLX`); named file extraction (`NNNN_NAME.<ext>`);
+  metadata sidecars (`.meta.txt`); `flex-list` Name column; library
+  `summary()` / `record_table()` methods.
+- **Speech FLX** — per-NPC speech archives (`E44.FLX`, etc.) with dialogue
+  transcript extraction and Sonarc audio at 11,111 Hz.
+- **Text content detection** — `detect_record_type()` returns `"text"` for
+  plain-ASCII records.
 
 ### Changed
 
-- **Manifest format** — `_manifest.txt` now has four columns
-  (`Index | Size | Filename | Name`) for round-trip rebuilds.
-- **`from_directory()` rebuild** — `flex-create` / `from_directory` correctly
-  parses `NNNN_NAME.<ext>` stems and skips `.txt` sidecars.
+- Manifest format expanded to four columns for round-trip rebuilds.
+
+### Fixed
+
+- Name-table heuristic rejects space characters (prevents speech transcript
+  false positives).
+- Sidecar extension changed `.txt` → `.meta.txt` to avoid overwriting data.
+- `from_directory()` rebuild updated for `.meta.txt` sidecars.
+- Build: fix duplicate `.npy` LUT files in wheel (hatchling config).
+- CI: Trusted Publishers (OIDC) for PyPI; remove duplicate trigger.
 
 ---
 
@@ -93,32 +121,18 @@ First public release.
 
 ### Added
 
-- **CLI** — 26 Typer-based commands (`titan <command>`) covering Flex archives,
-  shapes, palette, Sonarc audio, XMIDI music, world maps, saves, credits,
-  type-flag data, gump layout, colour transforms, and unknown code offsets.
-- **Map renderer** — full isometric and bird's-eye map rendering with
-  engine-accurate dependency-graph depth sorting; six projection views
-  (`iso_classic`, `iso_high`, `iso_low`, `iso_north`, `iso_south`,
-  `birdseye`).
-- **16 TYPEFLAG filter flags** — `--no-fixed`, `--no-solid`, `--no-sea`,
-  `--no-land`, `--no-occl`, `--no-bag`, `--no-damaging`, `--no-noisy`,
-  `--no-draw`, `--no-ignore`, `--no-roof`, `--no-transl`, `--no-editor`,
-  `--no-explode`, `--no-unk46`, `--no-unk47`.
-- **Live-object merge** — overlay NPCs and items from `U8SAVE.000` /
-  `NONFIXED.DAT` onto the static map.
-- **Shape round-trip** — export RLE sprite frames to PNG, edit externally,
-  re-import to `.shp`.
-- **Configuration** — `titan.toml` config file with auto-path resolution;
-  `titan setup` interactive wizard; `titan config` inspector.
-- **Library API** — every CLI capability exposed as importable Python modules
-  (`titan.flex`, `titan.shape`, `titan.map`, `titan.palette`, `titan.sound`,
-  `titan.music`, `titan.save`, `titan.credits`, `titan.typeflag`,
-  `titan.xformpal`).
-- **PEP 561** — `py.typed` marker for downstream type checking.
+- **CLI** — 26 Typer-based commands covering Flex archives, shapes, palette,
+  Sonarc audio, XMIDI music, world maps, saves, credits, type-flag data,
+  gump layout, colour transforms.
+- **U8 map renderer** — isometric and bird's-eye views with dependency-graph
+  depth sorting, 16 TYPEFLAG filter flags, live-object merge from saves.
+- **Shape round-trip** — export RLE frames to PNG, edit, re-import.
+- **Configuration** — `titan.toml` with auto-path resolution; `titan setup`
+  wizard; `titan config` inspector.
+- **Library API** — all CLI capabilities as importable Python modules.
+- **PEP 561** — `py.typed` marker for type checking.
 
 ---
 
 _Versioning note: this project started at 0.4.0 to reflect the amount of
-functionality present at first release. Future releases will increment
-normally from here (0.4.1 for patches, 0.5.0 for features, 1.0.0 when the
-API is considered stable)._
+functionality present at first release._
