@@ -1,0 +1,730 @@
+{
+  "profile": "si_zones",
+  "description": "Serpent Isle location zones from Func0993 geometry, with labels per Func0646 (In Wis)",
+  "game": "u7-si",
+  "id_source": "Func0993/Func0994",
+  "label_source": "Func0646",
+  "bounds": "inclusive-world-tiles",
+  "zones": [
+    {
+      "id": 0,
+      "name": "Monitor Town",
+      "rects": [
+        {
+          "tx0": 1711,
+          "ty0": 1341,
+          "tx1": 1854,
+          "ty1": 1454,
+          "color": "#00BFFF",
+          "label": "ID00 Monitor Town C1"
+        },
+        {
+          "tx0": 2444,
+          "ty0": 29,
+          "tx1": 2530,
+          "ty1": 125,
+          "color": "#FF4500",
+          "label": "ID00 Monitor Town C2"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Sleeping Bull Inn",
+      "rects": [
+        {
+          "tx0": 2245,
+          "ty0": 930,
+          "tx1": 2557,
+          "ty1": 1277,
+          "color": "#7CFC00",
+          "label": "ID02 Sleeping Bull Inn C1"
+        },
+        {
+          "tx0": 2593,
+          "ty0": 1025,
+          "tx1": 2814,
+          "ty1": 1246,
+          "color": "#FFD700",
+          "label": "ID02 Sleeping Bull Inn C2"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Fawn",
+      "rects": [
+        {
+          "tx0": 859,
+          "ty0": 1534,
+          "tx1": 1186,
+          "ty1": 2006,
+          "color": "#FF1493",
+          "label": "ID03 Fawn C1"
+        },
+        {
+          "tx0": 2753,
+          "ty0": 193,
+          "tx1": 2766,
+          "ty1": 222,
+          "color": "#00FA9A",
+          "label": "ID03 Fawn C2"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Furnace/Silverseed Complex",
+      "rects": [
+        {
+          "tx0": 1153,
+          "ty0": 2561,
+          "tx1": 1406,
+          "ty1": 2734,
+          "color": "#8A2BE2",
+          "label": "ID04 Furnace/Silverseed Complex C1"
+        },
+        {
+          "tx0": 1409,
+          "ty0": 2417,
+          "tx1": 1998,
+          "ty1": 2750,
+          "color": "#FF6347",
+          "label": "ID04 Furnace/Silverseed Complex C2"
+        },
+        {
+          "tx0": 1937,
+          "ty0": 2737,
+          "tx1": 2027,
+          "ty1": 2811,
+          "color": "#1E90FF",
+          "label": "ID04 Furnace/Silverseed Complex C3"
+        },
+        {
+          "tx0": 2849,
+          "ty0": 1809,
+          "tx1": 3038,
+          "ty1": 1979,
+          "color": "#ADFF2F",
+          "label": "ID04 Furnace/Silverseed Complex C4"
+        },
+        {
+          "tx0": 14,
+          "ty0": 1568,
+          "tx1": 170,
+          "ty1": 1658,
+          "color": "#FF69B4",
+          "label": "ID04 Furnace/Silverseed Complex C5"
+        },
+        {
+          "tx0": 2574,
+          "ty0": 95,
+          "tx1": 2622,
+          "ty1": 126,
+          "color": "#00CED1",
+          "label": "ID04 Furnace/Silverseed Complex C6"
+        },
+        {
+          "tx0": 2612,
+          "ty0": 160,
+          "tx1": 2654,
+          "ty1": 174,
+          "color": "#DC143C",
+          "label": "ID04 Furnace/Silverseed Complex C7"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Northern Settlement",
+      "rects": [
+        {
+          "tx0": 1329,
+          "ty0": 530,
+          "tx1": 1599,
+          "ty1": 879,
+          "color": "#40E0D0",
+          "label": "ID05 Northern Settlement C1"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "name": "Gorlab/Central Swamp",
+      "rects": [
+        {
+          "tx0": 1105,
+          "ty0": 1217,
+          "tx1": 1694,
+          "ty1": 1374,
+          "color": "#FF8C00",
+          "label": "ID07 Gorlab/Central Swamp C1"
+        },
+        {
+          "tx0": 561,
+          "ty0": 1601,
+          "tx1": 799,
+          "ty1": 1714,
+          "color": "#6A5ACD",
+          "label": "ID07 Gorlab/Central Swamp C2"
+        },
+        {
+          "tx0": 1531,
+          "ty0": 1021,
+          "tx1": 1775,
+          "ty1": 1214,
+          "color": "#7FFF00",
+          "label": "ID07 Gorlab/Central Swamp C3"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "name": "Northern Wilderness (default ty<1024)",
+      "rects": [
+        {
+          "tx0": 0,
+          "ty0": 0,
+          "tx1": 3071,
+          "ty1": 1023,
+          "color": "#20B2AA",
+          "label": "ID08 Northern Wilderness (default ty<1024) C1"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "name": "Sleeping Bull Area 2",
+      "rects": [
+        {
+          "tx0": 1169,
+          "ty0": 2145,
+          "tx1": 1327,
+          "ty1": 2287,
+          "color": "#FF00FF",
+          "label": "ID09 Sleeping Bull Area 2 C1"
+        },
+        {
+          "tx0": 2801,
+          "ty0": 193,
+          "tx1": 2814,
+          "ty1": 222,
+          "color": "#00FF7F",
+          "label": "ID09 Sleeping Bull Area 2 C2"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "name": "Northwestern Area",
+      "rects": [
+        {
+          "tx0": 113,
+          "ty0": 801,
+          "tx1": 559,
+          "ty1": 1039,
+          "color": "#FFB6C1",
+          "label": "ID10 Northwestern Area C1"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "name": "Spinebreaker",
+      "rects": [
+        {
+          "tx0": 1921,
+          "ty0": 1265,
+          "tx1": 2127,
+          "ty1": 1392,
+          "color": "#87CEEB",
+          "label": "ID11 Spinebreaker C1"
+        },
+        {
+          "tx0": 2001,
+          "ty0": 1091,
+          "tx1": 2175,
+          "ty1": 1269,
+          "color": "#FFA500",
+          "label": "ID11 Spinebreaker C2"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "name": "Western Coast",
+      "rects": [
+        {
+          "tx0": 785,
+          "ty0": 2049,
+          "tx1": 1023,
+          "ty1": 2279,
+          "color": "#00FFFF",
+          "label": "ID12 Western Coast C1"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "name": "Monitor",
+      "rects": [
+        {
+          "tx0": 673,
+          "ty0": 2433,
+          "tx1": 1135,
+          "ty1": 2799,
+          "color": "#98FB98",
+          "label": "ID13 Monitor C1"
+        },
+        {
+          "tx0": 2847,
+          "ty0": 175,
+          "tx1": 2863,
+          "ty1": 208,
+          "color": "#FF7F50",
+          "label": "ID13 Monitor C2"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "name": "Moonshade",
+      "rects": [
+        {
+          "tx0": 2101,
+          "ty0": 1724,
+          "tx1": 2493,
+          "ty1": 2125,
+          "color": "#BA55D3",
+          "label": "ID14 Moonshade C1"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "name": "Moonshade Outskirts / Mountains of Freedom",
+      "rects": [
+        {
+          "tx0": 2017,
+          "ty0": 1409,
+          "tx1": 2255,
+          "ty1": 1679,
+          "color": "#32CD32",
+          "label": "ID15 Moonshade Outskirts / Mountains of Freedom C1"
+        },
+        {
+          "tx0": 2161,
+          "ty0": 1313,
+          "tx1": 2319,
+          "ty1": 1503,
+          "color": "#FFA07A",
+          "label": "ID15 Moonshade Outskirts / Mountains of Freedom C2"
+        },
+        {
+          "tx0": 2241,
+          "ty0": 1313,
+          "tx1": 2591,
+          "ty1": 1424,
+          "color": "#87CEFA",
+          "label": "ID15 Moonshade Outskirts / Mountains of Freedom C3"
+        },
+        {
+          "tx0": 2401,
+          "ty0": 1425,
+          "tx1": 2655,
+          "ty1": 1615,
+          "color": "#DA70D6",
+          "label": "ID15 Moonshade Outskirts / Mountains of Freedom C4"
+        },
+        {
+          "tx0": 2545,
+          "ty0": 1601,
+          "tx1": 2655,
+          "ty1": 1743,
+          "color": "#00FF00",
+          "label": "ID15 Moonshade Outskirts / Mountains of Freedom C5"
+        },
+        {
+          "tx0": 2481,
+          "ty0": 1697,
+          "tx1": 2575,
+          "ty1": 1807,
+          "color": "#00BFFF",
+          "label": "ID15 Moonshade Outskirts / Mountains of Freedom C6"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "name": "Central Area",
+      "rects": [
+        {
+          "tx0": 1801,
+          "ty0": 949,
+          "tx1": 1977,
+          "ty1": 1107,
+          "color": "#FF4500",
+          "label": "ID16 Central Area C1"
+        },
+        {
+          "tx0": 2964,
+          "ty0": 68,
+          "tx1": 3051,
+          "ty1": 235,
+          "color": "#7CFC00",
+          "label": "ID16 Central Area C2"
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "name": "Unnamed Subregion 17",
+      "rects": [
+        {
+          "tx0": 1761,
+          "ty0": 593,
+          "tx1": 1838,
+          "ty1": 686,
+          "color": "#FFD700",
+          "label": "ID17 Unnamed Subregion 17 C1"
+        },
+        {
+          "tx0": 2817,
+          "ty0": 81,
+          "tx1": 2958,
+          "ty1": 126,
+          "color": "#00BFFF",
+          "label": "ID17 Unnamed Subregion 17 C2"
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "name": "Unnamed Subregion 18",
+      "rects": [
+        {
+          "tx0": 1409,
+          "ty0": 913,
+          "tx1": 1470,
+          "ty1": 1006,
+          "color": "#FF4500",
+          "label": "ID18 Unnamed Subregion 18 C1"
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "name": "Unnamed Subregion 19",
+      "rects": [
+        {
+          "tx0": 2241,
+          "ty0": 289,
+          "tx1": 2366,
+          "ty1": 334,
+          "color": "#7CFC00",
+          "label": "ID19 Unnamed Subregion 19 C1"
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "name": "Unnamed Subregion 20",
+      "rects": [
+        {
+          "tx0": 2225,
+          "ty0": 785,
+          "tx1": 2302,
+          "ty1": 862,
+          "color": "#FFD700",
+          "label": "ID20 Unnamed Subregion 20 C1"
+        },
+        {
+          "tx0": 2465,
+          "ty0": 769,
+          "tx1": 2814,
+          "ty1": 910,
+          "color": "#FF1493",
+          "label": "ID20 Unnamed Subregion 20 C2"
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "name": "Unnamed Subregion 21",
+      "rects": [
+        {
+          "tx0": 1361,
+          "ty0": 465,
+          "tx1": 1423,
+          "ty1": 527,
+          "color": "#00FA9A",
+          "label": "ID21 Unnamed Subregion 21 C1"
+        },
+        {
+          "tx0": 2704,
+          "ty0": 80,
+          "tx1": 2783,
+          "ty1": 159,
+          "color": "#8A2BE2",
+          "label": "ID21 Unnamed Subregion 21 C2"
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "name": "Unnamed Subregion 22",
+      "rects": [
+        {
+          "tx0": 1473,
+          "ty0": 477,
+          "tx1": 1783,
+          "ty1": 565,
+          "color": "#FF6347",
+          "label": "ID22 Unnamed Subregion 22 C1"
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "name": "Skullcrusher Mountains Complex",
+      "rects": [
+        {
+          "tx0": 929,
+          "ty0": 977,
+          "tx1": 1102,
+          "ty1": 1326,
+          "color": "#1E90FF",
+          "label": "ID23 Skullcrusher Mountains Complex C1"
+        },
+        {
+          "tx0": 1105,
+          "ty0": 1009,
+          "tx1": 1390,
+          "ty1": 1182,
+          "color": "#ADFF2F",
+          "label": "ID23 Skullcrusher Mountains Complex C2"
+        },
+        {
+          "tx0": 1185,
+          "ty0": 625,
+          "tx1": 1294,
+          "ty1": 1022,
+          "color": "#FF69B4",
+          "label": "ID23 Skullcrusher Mountains Complex C3"
+        },
+        {
+          "tx0": 1105,
+          "ty0": 609,
+          "tx1": 1230,
+          "ty1": 766,
+          "color": "#00CED1",
+          "label": "ID23 Skullcrusher Mountains Complex C4"
+        },
+        {
+          "tx0": 2833,
+          "ty0": 2049,
+          "tx1": 3071,
+          "ty1": 2287,
+          "color": "#DC143C",
+          "label": "ID23 Skullcrusher Mountains Complex C5 P1"
+        },
+        {
+          "tx0": 0,
+          "ty0": 2049,
+          "tx1": 239,
+          "ty1": 2287,
+          "color": "#40E0D0",
+          "label": "ID23 Skullcrusher Mountains Complex C5 P2"
+        },
+        {
+          "tx0": 1,
+          "ty0": 1793,
+          "tx1": 191,
+          "ty1": 2047,
+          "color": "#FF8C00",
+          "label": "ID23 Skullcrusher Mountains Complex C6"
+        }
+      ]
+    },
+    {
+      "id": 24,
+      "name": "Unnamed Complex 24",
+      "rects": [
+        {
+          "tx0": 1841,
+          "ty0": 521,
+          "tx1": 2397,
+          "ty1": 759,
+          "color": "#6A5ACD",
+          "label": "ID24 Unnamed Complex 24 C1"
+        },
+        {
+          "tx0": 2175,
+          "ty0": 361,
+          "tx1": 2397,
+          "ty1": 519,
+          "color": "#7FFF00",
+          "label": "ID24 Unnamed Complex 24 C2"
+        }
+      ]
+    },
+    {
+      "id": 25,
+      "name": "Northern Ice",
+      "rects": [
+        {
+          "tx0": 1281,
+          "ty0": 1,
+          "tx1": 2029,
+          "ty1": 399,
+          "color": "#20B2AA",
+          "label": "ID25 Northern Ice C1"
+        }
+      ]
+    },
+    {
+      "id": 26,
+      "name": "Unnamed Subregion 26",
+      "rects": [
+        {
+          "tx0": 1345,
+          "ty0": 1409,
+          "tx1": 1519,
+          "ty1": 1647,
+          "color": "#FF00FF",
+          "label": "ID26 Unnamed Subregion 26 C1"
+        },
+        {
+          "tx0": 1521,
+          "ty0": 1371,
+          "tx1": 1769,
+          "ty1": 1599,
+          "color": "#00FF7F",
+          "label": "ID26 Unnamed Subregion 26 C2"
+        }
+      ]
+    },
+    {
+      "id": 27,
+      "name": "Unnamed Subregion 27",
+      "rects": [
+        {
+          "tx0": 529,
+          "ty0": 2385,
+          "tx1": 719,
+          "ty1": 2735,
+          "color": "#FFB6C1",
+          "label": "ID27 Unnamed Subregion 27 C1"
+        }
+      ]
+    },
+    {
+      "id": 28,
+      "name": "Unnamed Subregion 28",
+      "rects": [
+        {
+          "tx0": 601,
+          "ty0": 1151,
+          "tx1": 779,
+          "ty1": 1479,
+          "color": "#87CEEB",
+          "label": "ID28 Unnamed Subregion 28 C1"
+        }
+      ]
+    },
+    {
+      "id": 29,
+      "name": "Unnamed Subregion 29",
+      "rects": [
+        {
+          "tx0": 891,
+          "ty0": 831,
+          "tx1": 1159,
+          "ty1": 889,
+          "color": "#FFA500",
+          "label": "ID29 Unnamed Subregion 29 C1"
+        }
+      ]
+    },
+    {
+      "id": 30,
+      "name": "Unnamed Subregion 30",
+      "rects": [
+        {
+          "tx0": 304,
+          "ty0": 1840,
+          "tx1": 478,
+          "ty1": 1983,
+          "color": "#00FFFF",
+          "label": "ID30 Unnamed Subregion 30 C1"
+        }
+      ]
+    },
+    {
+      "id": 31,
+      "name": "Edge-Wrapping Region",
+      "rects": [
+        {
+          "tx0": 2811,
+          "ty0": 1025,
+          "tx1": 3070,
+          "ty1": 1535,
+          "color": "#98FB98",
+          "label": "ID31 Edge-Wrapping Region C1"
+        },
+        {
+          "tx0": 1,
+          "ty0": 1026,
+          "tx1": 254,
+          "ty1": 1534,
+          "color": "#FF7F50",
+          "label": "ID31 Edge-Wrapping Region C2"
+        }
+      ]
+    },
+    {
+      "id": 32,
+      "name": "Southern Macro-Region",
+      "rects": [
+        {
+          "tx0": 1,
+          "ty0": 2816,
+          "tx1": 2303,
+          "ty1": 3071,
+          "color": "#BA55D3",
+          "label": "ID32 Southern Macro-Region C1"
+        },
+        {
+          "tx0": 2304,
+          "ty0": 2560,
+          "tx1": 3071,
+          "ty1": 3071,
+          "color": "#32CD32",
+          "label": "ID32 Southern Macro-Region C2"
+        },
+        {
+          "tx0": 2928,
+          "ty0": 2496,
+          "tx1": 3071,
+          "ty1": 2559,
+          "color": "#FFA07A",
+          "label": "ID32 Southern Macro-Region C3"
+        }
+      ]
+    },
+    {
+      "id": 33,
+      "name": "Unnamed Subregion 33",
+      "rects": [
+        {
+          "tx0": 2304,
+          "ty0": 2560,
+          "tx1": 2559,
+          "ty1": 2815,
+          "color": "#87CEFA",
+          "label": "ID33 Unnamed Subregion 33 C1"
+        }
+      ]
+    }
+  ]
+}

@@ -10,6 +10,46 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ---
 
+## [0.6.2]
+
+### Added
+
+- **`u7 map-render` tile-rectangle highlights** — new repeatable
+  `--highlight-tile-rect tx0,ty0,tx1,ty1,#RRGGBB[AA]` option overlays
+  world-tile rectangle bounds on rendered maps. Each rectangle can have
+  its own colour code, with optional alpha channel (`#RRGGBBAA`).
+- **Highlight stroke control** — new `--highlight-width` option controls
+  rectangle outline thickness in pixels.
+- **Highlight visibility controls** — `--highlight-fill-alpha` adds a
+  configurable semi-transparent fill, `--highlight-lift` applies projected
+  lift to overlays, and `--highlight-labels` draws per-rectangle coordinate
+  labels (`tx0,ty0,tx1,ty1`) for easier map annotation.
+- **Custom highlight labels** — `--highlight-tile-rect` now accepts optional
+  custom label text (`...,#RRGGBB,label`). Highlight text is centered in each
+  rectangle both horizontally and vertically.
+- **Default highlight fill** — fill defaults to `128` (50% opacity), so
+  underlying terrain and objects remain visible.
+- **RGBA composited highlight fill** — rectangle fill is rendered through an
+  overlay layer and composited onto the map for proper translucent blending.
+- **Larger overlay text** — highlight coordinate/custom label text size is
+  now tripled for readability on full-world renders.
+- **Zone profiles for `u7 map-render`** — new `--zone-profile` option loads
+  canonical rectangle sets from packaged JSON data (`si_zones`,
+  `bg_zones`) and renders them through the existing highlight path.
+- **Zone ID filtering** — new repeatable `--zone-id` option selects specific
+  zones from a profile; `--all-zones` includes every zone.
+- **Overlay composition retained** — profile-based zones and manual
+  `--highlight-tile-rect` overlays can be used together in the same render.
+
+### Fixed
+
+- **U7 music export sound compatibility** — added a dedicated General MIDI
+  conversion mode to `u7 music-export` (`--target gm`) to address SC-55/
+  SC-88 playback issues from MT-32-oriented track data. The conversion path
+  now applies GM-friendly patch remapping while preserving MIDI timing.
+
+---
+
 ## [0.6.1]
 
 ### Fixed

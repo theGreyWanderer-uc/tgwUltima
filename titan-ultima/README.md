@@ -23,7 +23,7 @@ sound effects to full isometric world maps.
 | **Palette** | Export the VGA 6-bit palette as a colour swatch |
 | **Sound** | One-step Sonarc audio export from `SOUND.FLX` to WAV (`u8 sound-export-all`); single-file decode (`u8 sound-export`); speech FLX archives (`E44.FLX`, `E80.FLX`, …) extract dialogue transcripts + Sonarc audio; Creative Voice (.voc) decoder for U7 speech (`INTROSND.DAT`, `U7SPEECH.SPC`) |
 | **Music** | One-step XMIDI→MIDI export from Flex archives (`u8 music-export`, `u7 music-export`); multi-track XMIDI support (MIDI Format 1) |
-| **Maps** | **U8:** Render full isometric or top-down world maps from `FIXED.DAT` + GLOBs with engine-accurate dependency-graph depth sorting; merge live NPCs and items from save files; filter by all 16 TYPEFLAG bits; chunk coordinate grid overlay. **U7:** Render parallel-oblique world maps from `U7MAP` + `U7CHUNKS` + `SHAPES.VGA` with IFIX fixed objects and optional IREG dynamic objects; classic/flat/steep projection views; sprite-accurate dependency-DAG depth sorting; RLE terrain promotion with nearby-flat fill; colour-sampled world minimap (`map-sample`); `--full` world render; filter by TFA flags; chunk + superchunk grid overlay with coordinate labels |
+| **Maps** | **U8:** Render full isometric or top-down world maps from `FIXED.DAT` + GLOBs with engine-accurate dependency-graph depth sorting; merge live NPCs and items from save files; filter by all 16 TYPEFLAG bits; chunk coordinate grid overlay. **U7:** Render parallel-oblique world maps from `U7MAP` + `U7CHUNKS` + `SHAPES.VGA` with IFIX fixed objects and optional IREG dynamic objects; classic/flat/steep projection views; sprite-accurate dependency-DAG depth sorting; RLE terrain promotion with nearby-flat fill; colour-sampled world minimap (`map-sample`); `--full` world render; filter by TFA flags; chunk + superchunk grid overlay with coordinate labels; world-tile rectangle highlights with per-rectangle hex colours |
 | **Type data** | **U8:** Decode `TYPEFLAG.DAT` shape physics/flag metadata. **U7:** Parse `TFA.DAT` flag array + `SHPDIMS.DAT` + `WGTVOL.DAT` |
 | **Gumps** | Dump `GUMPAGE.DAT` container UI layout |
 | **Credits** | Decrypt XOR-encoded `ECREDITS.DAT` / `QUOTES.DAT` |
@@ -92,6 +92,10 @@ titan u7 palette-export PALETTES.FLX -o palettes/
 titan u7 music-export MT32MUS.DAT -o music/
 titan u7 music-export ENDSCORE.XMI -o music/
 
+# Export U7 music rewritten for General MIDI devices (SC-55/SC-88)
+# Writes .MID files, strips MT-32 SysEx, and injects GM reset
+titan u7 music-export MT32MUS.DAT --target gm -o music_gm/
+
 # Decode the Guardian's intro speech (VOC → WAV)
 titan u7 voc-export INTROSND.DAT -o speech/
 
@@ -103,6 +107,27 @@ titan u7 map-render STATIC/ --sc 0x55 -o britain.png
 
 # Render the entire world map
 titan u7 map-render STATIC/ --full -o u7_world.png
+
+# Highlight world-tile rectangles with per-rectangle hex colours
+titan u7 map-render STATIC/ --full \
+  --highlight-tile-rect "2054,1698,2589,2386,#00BFFF,Moonshade" \
+  --highlight-tile-rect "895,1604,1172,1959,#FF6B35,Fawn" \
+  --highlight-tile-rect "670,2430,1134,2799,#7CFC00,Monitor" \
+  --highlight-width 4 \
+  --highlight-fill-alpha 128 \
+  --highlight-lift 8 \
+  --highlight-labels \
+  -o u7_world_marked.png
+
+# Use built-in zone profiles (can be combined with manual highlights)
+titan u7 map-render STATIC/ --full \
+  --zone-profile si_zones \
+  --zone-id 3 --zone-id 13 --zone-id 14 \
+  --highlight-tile-rect "2054,1698,2589,2386,#FFFFFF,Check" \
+  -o u7_si_zones_subset.png
+
+# Render all zones from a profile
+titan u7 map-render STATIC/ --full --zone-profile bg_zones --all-zones -o u7_bg_regions.png
 
 # Remove building-class shapes (roofs, windows, mountain tops)
 titan u7 map-render STATIC/ --sc 85 --exclude no_building -o britain_no_roofs.png
