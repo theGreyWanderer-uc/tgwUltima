@@ -13,7 +13,7 @@ import os
 import sys
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Annotated, Optional
+from typing import Annotated, Literal, Optional
 
 import typer
 
@@ -219,23 +219,27 @@ def cmd_music_export(args: SimpleNamespace) -> int:
 
     outdir = args.output or f"{Path(filepath).stem}_midi"
     os.makedirs(outdir, exist_ok=True)
+    target = (args.target or "mt32").lower()
 
     # Check if this is a standalone XMIDI file (e.g. ENDSCORE.XMI)
     with open(filepath, "rb") as f:
         magic = f.read(4)
 
     if magic == b"FORM":
-        ok = convert_xmidi_file(filepath, outdir)
+        ok = convert_xmidi_file(filepath, outdir, target=target)
         if ok:
-            print(f"Converted XMIDI to MIDI in {outdir}/")
+            flavor = "General MIDI" if target == "gm" else "MT-32 MIDI"
+            print(f"Converted XMIDI to {flavor} in {outdir}/")
             return 0
         else:
             print("ERROR: Failed to convert XMIDI file", file=sys.stderr)
             return 1
 
     # Otherwise treat as a Flex archive containing MIDI / XMIDI records
-    count = extract_music(filepath, outdir)
-    print(f"Extracted {count} music track(s) to {outdir}/")
+    count = extract_music(filepath, outdir, target=target)
+    ext = ".MID"
+    flavor = "General MIDI" if target == "gm" else "MT-32 MIDI"
+    print(f"Extracted {count} {flavor} track(s) as {ext} to {outdir}/")
     return 0
 
 
@@ -432,6 +436,15 @@ def music_export_cmd(
     file: Annotated[str, typer.Argument(
         help="Path to a U7 music archive (ADLIBMUS.DAT, MT32MUS.DAT) "
              "or standalone XMIDI file (ENDSCORE.XMI)")],
+    target: Annotated[
+        Literal["mt32", "gm"],
+        typer.Option(
+            "--target",
+              help="Export target: original MT-32 MIDI (.MID) or "
+                  "General MIDI rewrite (.MID)",
+            case_sensitive=False,
+        ),
+    ] = "mt32",
     output: Annotated[
         Optional[str],
         typer.Option("-o", "--output", help="Output directory"),
@@ -439,7 +452,7 @@ def music_export_cmd(
 ) -> None:
     """Extract U7 music tracks from a Flex archive to MIDI files."""
     raise SystemExit(cmd_music_export(SimpleNamespace(
-        file=file, output=output,
+        file=file, output=output, target=target,
     )))
 
 
@@ -480,9 +493,55 @@ def speech_export_cmd(
 # CMD_* IMPLEMENTATION FUNCTIONS — MAP
 # ============================================================================
 
+def _parse_hex_rgba(color: str) -> tuple[int, int, int, int]:
+    """Parse #RRGGBB or #RRGGBBAA into RGBA tuple."""
+    txt = color.strip()
+    if txt.startswith("#"):
+        txt = txt[1:]
+
+    if len(txt) not in (6, 8):
+        raise ValueError(
+            f"Color '{color}' must be #RRGGBB or #RRGGBBAA.")
+
+    try:
+        r = int(txt[0:2], 16)
+        g = int(txt[2:4], 16)
+        b = int(txt[4:6], 16)
+        a = int(txt[6:8], 16) if len(txt) == 8 else 255
+    except ValueError as exc:
+        raise ValueError(
+            f"Color '{color}' is not valid hex.") from exc
+
+    return (r, g, b, a)
+
+
+def _parse_highlight_tile_rect(
+    value: str,
+) -> tuple[int, int, int, int, tuple[int, int, int, int], str]:
+    """Parse tx0,ty0,tx1,ty1,#RRGGBB[AA][,label] into a typed tuple."""
+    parts = [p.strip() for p in value.split(",", 5)]
+    if len(parts) not in (5, 6):
+        raise ValueError(
+            "Expected 'tx0,ty0,tx1,ty1,#RRGGBB[,label]' "
+            "(or #RRGGBBAA).")
+
+    try:
+        tx0 = int(parts[0], 10)
+        ty0 = int(parts[1], 10)
+        tx1 = int(parts[2], 10)
+        ty1 = int(parts[3], 10)
+    except ValueError as exc:
+        raise ValueError(
+            f"Tile coordinates must be integers in '{value}'.") from exc
+
+    rgba = _parse_hex_rgba(parts[4])
+    default_label = f"{tx0},{ty0},{tx1},{ty1}"
+    label = parts[5] if len(parts) == 6 and parts[5] else default_label
+    return (tx0, ty0, tx1, ty1, rgba, label)
+
 def cmd_map_render(args: SimpleNamespace) -> int:
     """Render a U7 map region (superchunk, chunk range, or full world) to PNG."""
-    from titan.u7.map import U7MapRenderer
+    from titan.u7.map import U7MapRenderer, U7TileRectOverlay
     from titan.u7.palette import U7Palette
     from titan.u7.typeflag import U7TypeFlags
 
@@ -527,6 +586,24 @@ def cmd_map_render(args: SimpleNamespace) -> int:
               f"{len(exclude)} shapes excluded")
 
     gamedat = getattr(args, "gamedat", None)
+    overlay_tuples = getattr(args, "highlight_rects", None) or []
+    overlays = [
+        U7TileRectOverlay(
+            tx0=tx0,
+            ty0=ty0,
+            tx1=tx1,
+            ty1=ty1,
+            color=color,
+            label=label,
+        )
+        for tx0, ty0, tx1, ty1, color, label in overlay_tuples
+    ]
+    highlight_width = max(1, int(getattr(args, "highlight_width", 3) or 3))
+    highlight_lift = int(getattr(args, "highlight_lift", 0) or 0)
+    highlight_fill_alpha = max(
+        0, min(255, int(getattr(args, "highlight_fill_alpha", 128) or 128)))
+    highlight_labels = bool(getattr(args, "highlight_labels", True))
+    ml = getattr(args, "max_lift", None)
 
     if args.superchunk is not None:
         sc = args.superchunk
@@ -545,8 +622,14 @@ def cmd_map_render(args: SimpleNamespace) -> int:
             view=view,
             include_ireg=gamedat,
             exclude_shapes=exclude,
+            max_lift=ml,
             grid=args.grid,
             grid_size=args.grid_size,
+            highlight_rects=overlays,
+            highlight_width=highlight_width,
+            highlight_lift=highlight_lift,
+            highlight_fill_alpha=highlight_fill_alpha,
+            highlight_labels=highlight_labels,
         )
 
         out_path = args.output or f"u7_sc{sc:02X}_{view}.png"
@@ -564,8 +647,14 @@ def cmd_map_render(args: SimpleNamespace) -> int:
             view=view,
             gamedat_dir=gamedat,
             exclude_shapes=exclude,
+            max_lift=ml,
             grid=args.grid,
             grid_size=args.grid_size,
+            highlight_rects=overlays,
+            highlight_width=highlight_width,
+            highlight_lift=highlight_lift,
+            highlight_fill_alpha=highlight_fill_alpha,
+            highlight_labels=highlight_labels,
         )
 
         out_path = args.output or f"u7_c{cx0}-{cy0}_c{cx1}-{cy1}_{view}.png"
@@ -1031,6 +1120,81 @@ def map_render_cmd(
                      help=f"Exclude shapes by TFA flag. "
                           f"Repeatable. Choices: {', '.join(_EXCLUDE_FLAG_CHOICES)}"),
     ] = None,
+    max_lift: Annotated[
+        Optional[int],
+        typer.Option("--max-lift",
+                     help="Maximum object lift (tz) to render (0-15). "
+                          "Objects above this lift are hidden."),
+    ] = None,
+    highlight_tile_rect: Annotated[
+        Optional[list[str]],
+        typer.Option(
+            "--highlight-tile-rect",
+            "--hrect",
+            help=(
+                "Highlight tile rectangle (repeatable): "
+                "tx0,ty0,tx1,ty1,#RRGGBB[,label] or #RRGGBBAA[,label]"
+            ),
+        ),
+    ] = None,
+    highlight_width: Annotated[
+        int,
+        typer.Option(
+            "--highlight-width",
+            help="Highlight outline width in pixels",
+        ),
+    ] = 3,
+    highlight_lift: Annotated[
+        int,
+        typer.Option(
+            "--highlight-lift",
+            help="Projection lift value for highlighted rectangles",
+        ),
+    ] = 0,
+    highlight_fill_alpha: Annotated[
+        int,
+        typer.Option(
+            "--highlight-fill-alpha",
+            help="Highlight fill alpha (0-255)",
+        ),
+    ] = 128,
+    highlight_labels: Annotated[
+        bool,
+        typer.Option(
+            "--highlight-labels/--no-highlight-labels",
+            help="Draw labels on highlighted rectangles",
+        ),
+    ] = True,
+    zone_profile: Annotated[
+        Optional[str],
+        typer.Option(
+            "--zone-profile",
+            help=(
+                "Load named zone profile overlay data and convert it to "
+                "highlight rectangles (e.g. si_zones, bg_zones)"
+            ),
+        ),
+    ] = None,
+    zone_id: Annotated[
+        Optional[list[str]],
+        typer.Option(
+            "--zone-id",
+            help=(
+                "Zone ID to include from --zone-profile. Repeatable. "
+                "Examples: --zone-id 3 --zone-id 13 or --zone-id A"
+            ),
+        ),
+    ] = None,
+    all_zones: Annotated[
+        bool,
+        typer.Option(
+            "--all-zones",
+            help=(
+                "Include all zones from --zone-profile. "
+                "Default behavior when no --zone-id is supplied"
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Render a U7 map region (superchunk, chunk range, or full world) to PNG."""
     if full:
@@ -1048,13 +1212,53 @@ def map_render_cmd(
             print(f"ERROR: --superchunk '{superchunk}' is not a valid integer.",
                   file=sys.stderr)
             raise SystemExit(1)
+
+    parsed_highlights: list[tuple[int, int, int, int, tuple[int, int, int, int], str]] = []
+    if highlight_tile_rect:
+        for raw in highlight_tile_rect:
+            try:
+                parsed_highlights.append(_parse_highlight_tile_rect(raw))
+            except ValueError as exc:
+                print(f"ERROR: --highlight-tile-rect '{raw}': {exc}",
+                      file=sys.stderr)
+                raise SystemExit(1)
+
+    if zone_profile is None and (zone_id or all_zones):
+        print("ERROR: --zone-id/--all-zones requires --zone-profile.",
+              file=sys.stderr)
+        raise SystemExit(1)
+
+    if zone_profile:
+        from titan.u7.zones import (
+            U7ZoneProfileError,
+            build_zone_highlight_rects,
+        )
+
+        try:
+            profile_rects = build_zone_highlight_rects(
+                zone_profile,
+                zone_ids=zone_id,
+                include_all=all_zones,
+            )
+        except U7ZoneProfileError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            raise SystemExit(1)
+
+        parsed_highlights.extend(profile_rects)
+        print(f"Zone profile '{zone_profile}' -> {len(profile_rects)} rectangle(s)")
+
     raise SystemExit(cmd_map_render(SimpleNamespace(
         static=static, superchunk=sc_int,
         chunk_x0=chunk_x0 or 0, chunk_y0=chunk_y0 or 0,
         chunk_x1=chunk_x1, chunk_y1=chunk_y1,
         palette=palette, output=output, view=view,
         gamedat=gamedat, grid=grid, grid_size=grid_size,
-        exclude_flags=exclude,
+        exclude_flags=exclude, max_lift=max_lift,
+        highlight_rects=parsed_highlights,
+        highlight_width=highlight_width,
+        highlight_lift=highlight_lift,
+        highlight_fill_alpha=highlight_fill_alpha,
+        highlight_labels=highlight_labels,
     )))
 
 

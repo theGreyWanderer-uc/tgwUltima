@@ -894,17 +894,19 @@ Handles both archives of standard MIDI (`ADLIBMUS.DAT`, `MT32MUS.DAT`,
 `INTROADM.DAT`, `INTRORDM.DAT`) and standalone XMIDI files (`ENDSCORE.XMI`).
 
 ```
-titan u7 music-export <file> [-o DIR]
+titan u7 music-export <file> [--target mt32|gm] [-o DIR]
 ```
 
 | Argument | Description |
 |----------|-------------|
 | `file` | Path to a U7 music archive or XMIDI file |
+| `--target mt32|gm` | Output style: MT-32 (`.MID`, default) or General MIDI rewrite (`.MID`) |
 | `-o DIR`, `--output DIR` | Output directory (default: `<name>_midi/`) |
 
-U7 music archives contain standard MIDI (`.mid`) tracks — no XMIDI
-conversion is needed for the bulk of the soundtrack. `ENDSCORE.XMI` is
-the sole XMIDI file, which is automatically converted.
+U7 music archives contain standard MIDI tracks. By default Titan preserves
+them as `.MID` (MT-32 oriented). With `--target gm`, Titan rewrites for
+General MIDI playback (SC-55/SC-88 style), removes source SysEx, injects
+GM reset, and writes `.MID` files.
 
 **Examples**
 ```bash
@@ -916,6 +918,9 @@ titan u7 music-export ADLIBMUS.DAT -o music_adlib/
 
 # Convert the endgame XMIDI score to MIDI
 titan u7 music-export ENDSCORE.XMI -o endscore/
+
+# Export MT-32 archive rewritten for General MIDI synths
+titan u7 music-export MT32MUS.DAT --target gm -o music_gm/
 
 # Extract intro music
 titan u7 music-export INTRORDM.DAT -o intro_mt32/
@@ -997,6 +1002,10 @@ nearby-flat fill for seamless ground coverage.
 titan u7 map-render <static> [--superchunk N | --cx0 X0 --cy0 Y0 --cx1 X1 --cy1 Y1 | --full]
                               [-p PAL] [-o FILE] [--view VIEW]
                               [--gamedat DIR] [--grid] [--exclude FLAG ...]
+                              [--zone-profile NAME] [--zone-id ID ...] [--all-zones]
+                              [--highlight-tile-rect TX0,TY0,TX1,TY1,#RRGGBB[,LABEL] ...]
+                              [--highlight-width N] [--highlight-lift N]
+                              [--highlight-fill-alpha N] [--highlight-labels]
 ```
 
 | Argument | Description |
@@ -1012,6 +1021,14 @@ titan u7 map-render <static> [--superchunk N | --cx0 X0 --cy0 Y0 --cx1 X1 --cy1 
 | `--grid / --no-grid` | Overlay grid lines (default: off). Blue lines for chunk boundaries (16×16 tiles each, coords e.g. `80,96`) with coordinate labels; red lines for superchunk boundaries (16×16 chunks each) with SC number labels |
 | `--grid-size N` | Grid line width in pixels (default: 1) |
 | `--exclude FLAG` | Exclude shapes by TFA flag. Repeatable. Choices: `no_solid`, `no_water`, `no_animated`, `no_sfx`, `no_transparent`, `no_translucent`, `no_door`, `no_barge`, `no_light`, `no_poisonous`, `no_strange_movement`, `no_building` |
+| `--zone-profile NAME` | Load canonical zone data and convert it to highlight rectangles. Current built-ins: `si_zones`, `bg_zones` |
+| `--zone-id ID` | Include only selected zone IDs from `--zone-profile`. Repeatable. Accepts numeric IDs (e.g. `3`, `13`) and symbolic IDs where applicable (e.g. `A`) |
+| `--all-zones` | Include every zone from `--zone-profile`. Also the default when `--zone-profile` is set and no `--zone-id` is provided |
+| `--highlight-tile-rect TX0,TY0,TX1,TY1,#RRGGBB[,LABEL]` | Outline a world-tile rectangle (inclusive bounds). Repeatable; each rectangle can use its own colour and optional custom label text. Also accepts `#RRGGBBAA` |
+| `--highlight-width N` | Highlight rectangle outline width in pixels (default: 3) |
+| `--highlight-lift N` | Projection lift for highlight rectangles (default: 0). Useful in `classic`/`steep` views when you want overlays shifted with lift |
+| `--highlight-fill-alpha N` | Highlight fill alpha (0–255, default: 128 = 50%). Set `0` for outline-only |
+| `--highlight-labels / --no-highlight-labels` | Draw labels on highlighted rectangles (default: on). Uses custom `LABEL` when provided, else `tx0,ty0,tx1,ty1` |
 
 > **U7 and roof tiles:** U7's `TFA.DAT` does not have a dedicated roof flag
 > (unlike U8's `TYPEFLAG.DAT`).  Use `--exclude no_building` to remove all
@@ -1043,6 +1060,28 @@ titan u7 map-render STATIC/ --sc 85 --gamedat gamedat/ --view classic
 
 # Render the entire world map
 titan u7 map-render STATIC/ --full -o u7_world.png
+
+# Highlight three world-tile regions with per-rectangle colour
+titan u7 map-render STATIC/ --full \
+   --highlight-tile-rect "2054,1698,2589,2386,#00BFFF,Moonshade" \
+   --highlight-tile-rect "895,1604,1172,1959,#FF6B35,Fawn" \
+   --highlight-tile-rect "670,2430,1134,2799,#7CFC00,Monitor" \
+   --highlight-width 4 \
+   --highlight-fill-alpha 128 \
+   --highlight-lift 8 \
+   --highlight-labels \
+   -o u7_world_highlighted.png
+
+# Load SI zone profile and render only selected IDs
+titan u7 map-render STATIC/ --full \
+   --zone-profile si_zones \
+   --zone-id 3 --zone-id 13 --zone-id 14 \
+   -o u7_si_zone_ids_03_13_14.png
+
+# Load all BG guard-region zones from profile
+titan u7 map-render STATIC/ --full \
+   --zone-profile bg_zones --all-zones \
+   -o u7_bg_guard_regions.png
 ```
 
 ---

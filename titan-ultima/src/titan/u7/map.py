@@ -46,7 +46,7 @@ Example::
 
 from __future__ import annotations
 
-__all__ = ["U7MapRenderer", "U7MapSampler"]
+__all__ = ["U7MapObject", "U7TileRectOverlay", "U7MapRenderer", "U7MapSampler"]
 
 import os
 import struct
@@ -71,6 +71,11 @@ C_NUM_SCHUNKS = 12              # superchunks per dimension
 C_NUM_CHUNKS = C_NUM_SCHUNKS * C_CHUNKS_PER_SCHUNK  # 192
 C_NUM_TILES = C_TILES_PER_CHUNK * C_NUM_CHUNKS       # 3072
 C_CHUNK_BYTES_V1 = C_TILES_PER_CHUNK * C_TILES_PER_CHUNK * 2  # 512
+C_CHUNK_BYTES_V2 = C_TILES_PER_CHUNK * C_TILES_PER_CHUNK * 3  # 768
+
+# Exult V2 extended chunks header (10 bytes)
+_V2_CHUNKS_MAGIC = b"\xFF\xFF\xFF\xFF" b"exlt" b"\x00\x00"
+_V2_CHUNKS_HDR_SIZE = 10
 
 # ---------------------------------------------------------------------------
 # Translucency — Exult xform blending (hardcoded fallback from shapeid.cc)
@@ -148,6 +153,29 @@ class U7MapObject:
     # Screen coordinates (set during projection)
     screen_x: int = 0
     screen_y: int = 0
+
+
+@dataclass(frozen=True)
+class U7TileRectOverlay:
+    """World-tile rectangle overlay for map rendering.
+
+    Coordinates are absolute world tile coordinates (0-3071) and inclusive.
+    """
+
+    tx0: int
+    ty0: int
+    tx1: int
+    ty1: int
+    color: tuple[int, int, int, int]
+    label: str | None = None
+
+    def normalized(self) -> "U7TileRectOverlay":
+        """Return a copy with ordered tile bounds."""
+        nx0 = min(self.tx0, self.tx1)
+        ny0 = min(self.ty0, self.ty1)
+        nx1 = max(self.tx0, self.tx1)
+        ny1 = max(self.ty0, self.ty1)
+        return U7TileRectOverlay(nx0, ny0, nx1, ny1, self.color, self.label)
 
 
 class U7MapRenderer:
@@ -265,6 +293,10 @@ class U7MapRenderer:
         """
         Parse U7CHUNKS terrain definitions.
 
+        Supports both V1 (original, 2 bytes/tile: 10-bit shape + 5-bit
+        frame) and Exult V2 (3 bytes/tile with 10-byte header: 16-bit
+        shape + 8-bit frame).
+
         Returns a list of terrains, each being 256 ``(shape, frame)``
         tuples for the 16×16 tiles (row-major: ``[tiley * 16 + tilex]``).
         """
@@ -272,21 +304,38 @@ class U7MapRenderer:
         with open(path, "rb") as f:
             data = f.read()
 
-        num_terrains = len(data) // C_CHUNK_BYTES_V1
+        # Detect Exult V2 extended format
+        is_v2 = (len(data) >= _V2_CHUNKS_HDR_SIZE
+                 and data[:_V2_CHUNKS_HDR_SIZE] == _V2_CHUNKS_MAGIC)
+
+        if is_v2:
+            payload = data[_V2_CHUNKS_HDR_SIZE:]
+            chunk_bytes = C_CHUNK_BYTES_V2
+            tile_bytes = 3
+        else:
+            payload = data
+            chunk_bytes = C_CHUNK_BYTES_V1
+            tile_bytes = 2
+
+        num_terrains = len(payload) // chunk_bytes
         terrains: list[list[tuple[int, int]]] = []
 
         for t in range(num_terrains):
-            base = t * C_CHUNK_BYTES_V1
+            base = t * chunk_bytes
             tiles: list[tuple[int, int]] = []
             for i in range(C_TILES_PER_CHUNK * C_TILES_PER_CHUNK):
-                off = base + i * 2
-                if off + 2 > len(data):
+                off = base + i * tile_bytes
+                if off + tile_bytes > len(payload):
                     tiles.append((0, 0))
                     continue
-                b0 = data[off]
-                b1 = data[off + 1]
-                shnum = b0 + 256 * (b1 & 0x03)  # 10-bit shape
-                frnum = (b1 >> 2) & 0x1F          # 5-bit frame
+                if is_v2:
+                    shnum = payload[off] + 256 * payload[off + 1]  # 16-bit shape
+                    frnum = payload[off + 2]                        # 8-bit frame
+                else:
+                    b0 = payload[off]
+                    b1 = payload[off + 1]
+                    shnum = b0 + 256 * (b1 & 0x03)  # 10-bit shape
+                    frnum = (b1 >> 2) & 0x1F          # 5-bit frame
                 tiles.append((shnum, frnum))
             terrains.append(tiles)
 
@@ -613,6 +662,106 @@ class U7MapRenderer:
         obj.screen_x = proj["sx"](obj.tx, obj.ty, obj.tz)
         obj.screen_y = proj["sy"](obj.tx, obj.ty, obj.tz)
 
+    @staticmethod
+    def _draw_tile_rect_overlays(
+        canvas: Image.Image,
+        overlays: list[U7TileRectOverlay],
+        *,
+        sx_fn,
+        sy_fn,
+        origin_sx: int,
+        origin_sy: int,
+        pad: int,
+        canvas_w: int,
+        canvas_h: int,
+        width: int,
+        lift: int,
+        fill_alpha: int,
+        show_labels: bool,
+    ) -> None:
+        """Draw tile-aligned rectangle overlays in screen space.
+
+        The overlay is drawn into a transparent layer then composited over
+        the rendered map so fill alpha blends with terrain/sprites.
+        """
+        if not overlays:
+            return
+
+        overlay = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(overlay)
+
+        max_tile = C_NUM_TILES - 1
+        line_w = max(1, width)
+        clamped_fill_alpha = max(0, min(255, fill_alpha))
+        try:
+            font = ImageFont.truetype("arial.ttf", 108)
+        except OSError:
+            font = ImageFont.load_default()
+
+        for raw in overlays:
+            rect = raw.normalized()
+
+            tx0 = max(0, min(rect.tx0, max_tile))
+            ty0 = max(0, min(rect.ty0, max_tile))
+            tx1 = max(0, min(rect.tx1, max_tile))
+            ty1 = max(0, min(rect.ty1, max_tile))
+
+            if tx0 > tx1 or ty0 > ty1:
+                continue
+
+            x0 = sx_fn(tx0, ty0, lift) - origin_sx + pad
+            y0 = sy_fn(tx0, ty0, lift) - origin_sy + pad
+            # Inclusive tile rect: bottom-right is the SE edge of (tx1, ty1).
+            x1 = sx_fn(tx1 + 1, ty1 + 1, lift) - origin_sx + pad - 1
+            y1 = sy_fn(tx1 + 1, ty1 + 1, lift) - origin_sy + pad - 1
+
+            if x1 < 0 or y1 < 0 or x0 >= canvas_w or y0 >= canvas_h:
+                continue
+
+            cr, cg, cb, ca = rect.color
+            fill_col = (cr, cg, cb, min(ca, clamped_fill_alpha))
+            if clamped_fill_alpha > 0:
+                draw.rectangle([(x0, y0), (x1, y1)], fill=fill_col)
+            draw.rectangle([(x0, y0), (x1, y1)], outline=rect.color, width=line_w)
+
+            if show_labels:
+                coord_label = f"{tx0},{ty0},{tx1},{ty1}"
+                center_label = rect.label or coord_label
+
+                # Draw coordinate label near the top-left of the rectangle.
+                coord_x = x0 + 8
+                coord_y = y0 + 8
+                coord_bbox = draw.textbbox((coord_x, coord_y), coord_label, font=font)
+                if coord_bbox is not None:
+                    draw.rectangle(
+                        [(coord_bbox[0] - 4, coord_bbox[1] - 2),
+                         (coord_bbox[2] + 4, coord_bbox[3] + 2)],
+                        fill=(0, 0, 0, 180),
+                    )
+                draw.text((coord_x, coord_y), coord_label, fill=rect.color, font=font)
+
+                # Draw the main label centered in the rectangle.
+                bbox0 = draw.textbbox((0, 0), center_label, font=font)
+                text_w = max(1, bbox0[2] - bbox0[0])
+                text_h = max(1, bbox0[3] - bbox0[1])
+
+                rect_w = max(1, x1 - x0 + 1)
+                rect_h = max(1, y1 - y0 + 1)
+                text_x = x0 + (rect_w - text_w) // 2
+                text_y = y0 + (rect_h - text_h) // 2
+
+                # Ensure text remains visible against varied terrain colours.
+                bbox = draw.textbbox((text_x, text_y), center_label, font=font)
+                if bbox is not None:
+                    bg = (0, 0, 0, 180)
+                    draw.rectangle(
+                        [(bbox[0] - 2, bbox[1] - 1), (bbox[2] + 2, bbox[3] + 1)],
+                        fill=bg,
+                    )
+                draw.text((text_x, text_y), center_label, fill=rect.color, font=font)
+
+        canvas.alpha_composite(overlay)
+
     # ------------------------------------------------------------------
     # Depth sort (Exult-style)
     # ------------------------------------------------------------------
@@ -800,9 +949,15 @@ class U7MapRenderer:
         view: str = "classic",
         include_ireg: str | None = None,
         exclude_shapes: set[int] | None = None,
+        max_lift: int | None = None,
         background: tuple[int, int, int, int] = (0, 0, 0, 255),
         grid: bool = False,
         grid_size: int = 1,
+        highlight_rects: list[U7TileRectOverlay] | None = None,
+        highlight_width: int = 3,
+        highlight_lift: int = 0,
+        highlight_fill_alpha: int = 128,
+        highlight_labels: bool = True,
     ) -> Image.Image:
         """
         Render a single superchunk (256×256 tiles) to an RGBA image.
@@ -819,12 +974,25 @@ class U7MapRenderer:
             Path to gamedat directory for IREG objects.
         exclude_shapes:
             Set of shape numbers to skip.
+        max_lift:
+            Maximum object lift (tz) to render.  Objects above this
+            lift are discarded.  ``None`` (default) renders all lifts.
         background:
             Background RGBA colour.
         grid:
             Overlay chunk grid lines.
         grid_size:
             Grid line width.
+        highlight_rects:
+            Optional list of world-tile rectangles to outline.
+        highlight_width:
+            Outline width in pixels for highlighted rectangles.
+        highlight_lift:
+            Lift level for projection of highlighted rectangles.
+        highlight_fill_alpha:
+            Fill alpha for highlighted rectangles (0-255).
+        highlight_labels:
+            Draw text labels for highlighted rectangles.
 
         Returns
         -------
@@ -835,6 +1003,8 @@ class U7MapRenderer:
             include_ireg=include_ireg,
             exclude_shapes=exclude_shapes,
         )
+        if max_lift is not None:
+            objects = [o for o in objects if o.tz <= max_lift]
         proj = self.PROJECTIONS.get(view, self.PROJECTIONS[self.DEFAULT_VIEW])
         sx_fn = proj["sx"]
         sy_fn = proj["sy"]
@@ -1025,6 +1195,23 @@ class U7MapRenderer:
             draw.text((sx0 + 4, sy0 + 14), f"SC {schunk}",
                       fill=sc_rgba, font=sc_font)
 
+        if highlight_rects:
+            self._draw_tile_rect_overlays(
+            canvas,
+                highlight_rects,
+                sx_fn=sx_fn,
+                sy_fn=sy_fn,
+                origin_sx=origin_sx,
+                origin_sy=origin_sy,
+                pad=pad,
+                canvas_w=canvas_w,
+                canvas_h=canvas_h,
+                width=highlight_width,
+                lift=highlight_lift,
+                fill_alpha=highlight_fill_alpha,
+                show_labels=highlight_labels,
+            )
+
         return canvas
 
     # ------------------------------------------------------------------
@@ -1042,9 +1229,15 @@ class U7MapRenderer:
         view: str = "classic",
         gamedat_dir: str | None = None,
         exclude_shapes: set[int] | None = None,
+        max_lift: int | None = None,
         background: tuple[int, int, int, int] = (0, 0, 0, 255),
         grid: bool = False,
         grid_size: int = 1,
+        highlight_rects: list[U7TileRectOverlay] | None = None,
+        highlight_width: int = 3,
+        highlight_lift: int = 0,
+        highlight_fill_alpha: int = 128,
+        highlight_labels: bool = True,
     ) -> Image.Image:
         """
         Render a rectangular region of chunks to an RGBA image.
@@ -1063,12 +1256,25 @@ class U7MapRenderer:
             Path to gamedat directory for IREG objects.
         exclude_shapes:
             Set of shape numbers to skip.
+        max_lift:
+            Maximum object lift (tz) to render.  Objects above this
+            lift are discarded.  ``None`` (default) renders all lifts.
         background:
             Background RGBA colour.
         grid:
             Overlay chunk grid lines.
         grid_size:
             Grid line width.
+        highlight_rects:
+            Optional list of world-tile rectangles to outline.
+        highlight_width:
+            Outline width in pixels for highlighted rectangles.
+        highlight_lift:
+            Lift level for projection of highlighted rectangles.
+        highlight_fill_alpha:
+            Fill alpha for highlighted rectangles (0-255).
+        highlight_labels:
+            Draw text labels for highlighted rectangles.
 
         Returns
         -------
@@ -1192,6 +1398,8 @@ class U7MapRenderer:
             self.project(obj, view)
         all_objects.extend(rle_terrain_objs)
 
+        _lift_ok = (lambda tz: True) if max_lift is None else (lambda tz: tz <= max_lift)
+
         for sc in sorted(needed_schunks):
             ifix_name = f"U7IFIX{sc:02X}"
             ifix_path = os.path.join(self.static_dir, ifix_name)
@@ -1201,7 +1409,8 @@ class U7MapRenderer:
                 obj_cy = obj.ty // C_TILES_PER_CHUNK
                 if (chunk_x0 <= obj_cx <= chunk_x1 and
                         chunk_y0 <= obj_cy <= chunk_y1 and
-                        obj.shape not in exclude):
+                        obj.shape not in exclude and
+                        _lift_ok(obj.tz)):
                     self.project(obj, view)
                     all_objects.append(obj)
 
@@ -1214,7 +1423,8 @@ class U7MapRenderer:
                     obj_cy = obj.ty // C_TILES_PER_CHUNK
                     if (chunk_x0 <= obj_cx <= chunk_x1 and
                             chunk_y0 <= obj_cy <= chunk_y1 and
-                            obj.shape not in exclude):
+                            obj.shape not in exclude and
+                            _lift_ok(obj.tz)):
                         self.project(obj, view)
                         all_objects.append(obj)
 
@@ -1330,6 +1540,23 @@ class U7MapRenderer:
                     ly = (max(sc_cy, chunk_y0) - chunk_y0) * chunk_px + pad + 14
                     draw.text((lx, ly), f"SC {sc_num}",
                               fill=sc_rgba, font=sc_font)
+
+        if highlight_rects:
+            self._draw_tile_rect_overlays(
+            canvas,
+                highlight_rects,
+                sx_fn=sx_fn,
+                sy_fn=sy_fn,
+                origin_sx=origin_sx,
+                origin_sy=origin_sy,
+                pad=pad,
+                canvas_w=canvas_w,
+                canvas_h=canvas_h,
+                width=highlight_width,
+                lift=highlight_lift,
+                fill_alpha=highlight_fill_alpha,
+                show_labels=highlight_labels,
+            )
 
         return canvas
 

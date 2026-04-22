@@ -65,6 +65,7 @@ exclude = ["src/titan/adaptive_resample/luts", "src/titan/fonts/bundled"]
 [tool.hatch.build.targets.wheel.force-include]
 "src/titan/adaptive_resample/luts" = "titan/adaptive_resample/luts"
 "src/titan/fonts/bundled" = "titan/fonts/bundled"
+"src/titan/u7/zone_profiles" = "titan/u7/zone_profiles"
 
 [project.scripts]
 titan = "titan.cli:main"
