@@ -1,0 +1,58 @@
+{
+  "profile": "bg_zones",
+  "description": "Black Gate region boxes from verified Func08F9 call sites (093E/0625 arrest-related, 060E non-guard)",
+  "game": "u7-bg",
+  "id_source": "Func08F9 call sites in Func093E/Func0625/Func060E",
+  "label_source": "converted BG usecode naming (isAvatarInTrinsic) + function provenance",
+  "bounds": "inclusive-world-tiles",
+  "zones": [
+    {
+      "id": "A",
+      "name": "Func093E isAvatarInTrinsic Jurisdiction Check",
+      "z_min": 0,
+      "z_max": 15,
+      "rects": [
+        {
+          "tx0": 912,
+          "ty0": 2064,
+          "tx1": 1104,
+          "ty1": 2352,
+          "color": "#00BFFF",
+          "label": "Region A: Func093E isAvatarInTrinsic Jurisdiction Check (z:0-15)"
+        }
+      ]
+    },
+    {
+      "id": "B",
+      "name": "Func0625 Inner Trinsic Arrest Box",
+      "z_min": 0,
+      "z_max": 0,
+      "rects": [
+        {
+          "tx0": 379,
+          "ty0": 273,
+          "tx1": 440,
+          "ty1": 307,
+          "color": "#FF4500",
+          "label": "Region B: Func0625 Inner Trinsic Arrest Box (z:0-0)"
+        }
+      ]
+    },
+    {
+      "id": "C",
+      "name": "Func060E Resurrect-Flow Box (Non-Guard)",
+      "z_min": 0,
+      "z_max": 0,
+      "rects": [
+        {
+          "tx0": 753,
+          "ty0": 1595,
+          "tx1": 899,
+          "ty1": 1791,
+          "color": "#7CFC00",
+          "label": "Region C: Func060E Resurrect-Flow Box (Non-Guard) (z:0-0)"
+        }
+      ]
+    }
+  ]
+}
