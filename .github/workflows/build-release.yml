@@ -159,11 +159,37 @@ jobs:
           name: u8shp-windows-x64
           path: release-assets
 
+      - name: Build release notes from matching changelog section
+        env:
+          TAG_VERSION: ${{ github.ref_name }}
+        run: |
+          python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          tag = os.environ["TAG_VERSION"]
+          version = tag.removeprefix("gimp/v")
+          changelog_path = Path("gimp-plugin-u8/CHANGELOG.md")
+          output_path = Path("gimp-plugin-u8/.release-notes.md")
+          text = changelog_path.read_text(encoding="utf-8")
+
+          header_pattern = re.compile(rf"^##\s+\[{re.escape(version)}\](?:\s+—\s+.*)?\s*$", re.M)
+          match = header_pattern.search(text)
+          if not match:
+            raise SystemExit(f"Unable to find changelog section for version {version} in {changelog_path}")
+
+          next_match = re.search(r"^##\s+\[", text[match.end():], re.M)
+          end = match.end() + next_match.start() if next_match else len(text)
+          section = text[match.start():end].strip() + "\n"
+          output_path.write_text(section, encoding="utf-8")
+          PY
+
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
           name: "GIMP Plugin ${{ github.ref_name }}"
-          body_path: gimp-plugin-u8/CHANGELOG.md
+          body_path: gimp-plugin-u8/.release-notes.md
           files: release-assets/u8shp.exe
 
   # ── Release: Titan-Ultima ──────────────────────────────────────────
@@ -184,11 +210,37 @@ jobs:
           name: titan-ultima-dist
           path: release-assets
 
+      - name: Build release notes from matching changelog section
+        env:
+          TAG_VERSION: ${{ github.ref_name }}
+        run: |
+          python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          tag = os.environ["TAG_VERSION"]
+          version = tag.removeprefix("titan/v")
+          changelog_path = Path("titan-ultima/CHANGELOG.md")
+          output_path = Path("titan-ultima/.release-notes.md")
+          text = changelog_path.read_text(encoding="utf-8")
+
+          header_pattern = re.compile(rf"^##\s+\[{re.escape(version)}\](?:\s+—\s+.*)?\s*$", re.M)
+          match = header_pattern.search(text)
+          if not match:
+            raise SystemExit(f"Unable to find changelog section for version {version} in {changelog_path}")
+
+          next_match = re.search(r"^##\s+\[", text[match.end():], re.M)
+          end = match.end() + next_match.start() if next_match else len(text)
+          section = text[match.start():end].strip() + "\n"
+          output_path.write_text(section, encoding="utf-8")
+          PY
+
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
           name: "Titan-Ultima ${{ github.ref_name }}"
-          body_path: titan-ultima/CHANGELOG.md
+          body_path: titan-ultima/.release-notes.md
           files: release-assets/*
 
       - name: Publish to PyPI
