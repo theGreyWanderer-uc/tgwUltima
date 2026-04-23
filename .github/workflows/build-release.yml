@@ -20,6 +20,37 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  # ── Pre-release checks (fail fast) ─────────────────────────────────
+  pre-release-checks:
+    name: Pre-release Checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Validate Titan tag/version alignment
+        if: startsWith(github.ref, 'refs/tags/titan/v')
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#titan/v}"
+          PKG_VERSION=$(python - <<'PY'
+from pathlib import Path
+import re
+
+text = Path("titan-ultima/src/titan/_version.py").read_text(encoding="utf-8")
+match = re.search(r'^__version__\s*=\s*["\']([^"\']+)["\']', text, re.M)
+if not match:
+    raise SystemExit("Unable to find __version__ in titan-ultima/src/titan/_version.py")
+print(match.group(1))
+PY
+)
+
+          echo "Tag version: ${TAG_VERSION}"
+          echo "Package version: ${PKG_VERSION}"
+
+          if [ "${TAG_VERSION}" != "${PKG_VERSION}" ]; then
+            echo "ERROR: Tag titan/v${TAG_VERSION} does not match package version ${PKG_VERSION}."
+            exit 1
+          fi
+
   # ── GIMP 3 plugin (Windows / MSYS2 MinGW64) ────────────────────────
   # GIMP 3, GEGL, and Babl are not yet in the MSYS2 remote repos, so we
   # bundle a minimal SDK (headers + import libs) in gimp3-sdk.tar.gz and
@@ -88,6 +119,7 @@ jobs:
   # ── Titan-Ultima Python package ─────────────────────────────────────
   build-titan:
     name: Build Titan-Ultima Python Package
+    needs: [pre-release-checks]
     if: >-
       !startsWith(github.ref, 'refs/tags/')
       || startsWith(github.ref, 'refs/tags/titan/v')
@@ -169,3 +201,4 @@ jobs:
         with:
           verbose: true
           packages-dir: release-assets/
+          skip-existing: true
