@@ -4,6 +4,7 @@ import type { NPCFile } from './types';
 
 export function NPCSidebar() {
   const { interactiveNpcs, selectedNpc, npcSearchQuery, viewFilter, setNpcSearch, setViewFilter, selectNpc } = useWorldState();
+  const isBaseBook = (n: NPCFile) => n.npc === 'BASEBOOK';
 
   const isNpc = (n: NPCFile) => n.hasDialogue;
   const isObject = (n: NPCFile) => !n.hasDialogue && (Object.values(n.functions).some(f => f.type === 'look' || f.type === 'shop'));
@@ -19,6 +20,14 @@ export function NPCSidebar() {
     ? byCategory.filter(n => n.npc.toLowerCase().includes(npcSearchQuery.toLowerCase()))
     : byCategory;
 
+  const sortedFiltered = viewFilter === 'object'
+    ? [...filtered].sort((a, b) => {
+      if (isBaseBook(a) && !isBaseBook(b)) return -1;
+      if (!isBaseBook(a) && isBaseBook(b)) return 1;
+      return a.npc.localeCompare(b.npc);
+    })
+    : filtered;
+
   const npcCount = interactiveNpcs.filter(isNpc).length;
   const objCount = interactiveNpcs.filter(isObject).length;
   const utilCount = interactiveNpcs.filter(isUtil).length;
@@ -29,7 +38,7 @@ export function NPCSidebar() {
     <aside className="sidebar">
       <div className="sidebar-header">
         <h2>{viewLabel}</h2>
-        <span className="badge">{filtered.length}</span>
+        <span className="badge">{sortedFiltered.length}</span>
       </div>
       <div className="filter-toggle" role="group" aria-label="Sidebar category filters">
         <button
@@ -71,7 +80,7 @@ export function NPCSidebar() {
         onChange={e => setNpcSearch(e.target.value)}
       />
       <div className="npc-list">
-        {filtered.map(npc => (
+        {sortedFiltered.map(npc => (
           <NPCRow
             key={npc.npc}
             npc={npc}
@@ -80,7 +89,7 @@ export function NPCSidebar() {
             viewFilter={viewFilter}
           />
         ))}
-        {filtered.length === 0 && (
+        {sortedFiltered.length === 0 && (
           <div className="empty-state">No {viewLabel.toLowerCase()} match your search</div>
         )}
       </div>
@@ -104,22 +113,27 @@ function NPCRow({
   const hasShop = !!findShopFunction(npc);
   const hasBehavior = Object.values(npc.functions).some(f => f.type === 'behavior');
   const hasUtility = Object.values(npc.functions).some(f => f.type === 'utility');
+  const isBaseBook = npc.npc === 'BASEBOOK';
 
   const tags: string[] = [];
   if (hasTalk) tags.push('talk');
   if (hasLook) tags.push('look');
   if (hasShop) tags.push('shop');
+  if (isBaseBook) tags.push('library');
   if (viewFilter === 'util' && hasBehavior) tags.push('behavior');
   if (viewFilter === 'util' && hasUtility) tags.push('utility');
 
   return (
     <button
-      className={`npc-row ${selected ? 'selected' : ''}`}
+      className={`npc-row ${selected ? 'selected' : ''} ${isBaseBook ? 'npc-row-book' : ''}`}
       onClick={() => onSelect(npc)}
     >
-      <span className="npc-name">{npc.npc}</span>
+      <span className="npc-name">
+        {isBaseBook && <span className="npc-leading-icon" aria-hidden="true">📖</span>}
+        {npc.npc}
+      </span>
       <span className="npc-tags">
-        {tags.map(t => <span key={t} className="tag">{t}</span>)}
+        {tags.map(t => <span key={t} className={`tag ${t === 'library' ? 'tag-book' : ''}`}>{t}</span>)}
       </span>
     </button>
   );

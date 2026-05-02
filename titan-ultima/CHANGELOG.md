@@ -23,6 +23,11 @@ This project uses [Semantic Versioning](https://semver.org/):
   - `titan dialogue prepare` to generate runtime dialogue artifacts
   - `titan dialogue validate` to verify required outputs
   - `titan dialogue launch` to start the local dialogue web viewer
+- **Dialogue web theme system updates** — added runtime theme switching with
+  Palettes, preview swatches, tokenized CSS theme
+  contract improvements (`--bg-main`, `--font-heading`, `--text-soft`), and
+  readability/UX polish for Look/Book surfaces (including clearer book-first
+  discoverability for `BASEBOOK` in the Objects list).
 
 ---
 

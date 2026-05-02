@@ -18,6 +18,7 @@ import typer
 from titan._config import get_config
 from titan.dialogue.pipeline.build_data import build_data
 from titan.dialogue.pipeline.extract_ast import main as extract_ast_main
+from titan.dialogue.pipeline.extract_books import main as extract_books_main
 from titan.dialogue.pipeline.lint_json import run_lint
 from titan.dialogue.pipeline.run_fold import FoldRunError, get_effective_fold_path, run_fold
 
@@ -211,6 +212,19 @@ def _run_prepare(
 
     _ok("AST extraction complete")
 
+    typer.echo("Starting book extraction...")
+    books_rc = extract_books_main([
+        "--fold-dir",
+        str(dirs.fold),
+        "--out",
+        str(dirs.json / "books.json"),
+    ])
+    if books_rc != 0:
+        _bad(f"Book extraction failed with exit code {books_rc}")
+        return books_rc
+
+    _ok("Book extraction complete")
+
     typer.echo("Copying JSON files and writing manifests...")
 
     build_rc = build_data(dirs.json, dirs.web_data)
@@ -246,6 +260,7 @@ def _has_prepared_artifacts(runtime_root: Path) -> bool:
 
 def _validate_pipeline_outputs(runtime_root: Path, expected_classes: int, run_content_lint: bool) -> int:
     dirs = _runtime_dirs(runtime_root)
+    pipeline_resources = _dialogue_root() / "pipeline" / "resources"
     websrc_data = _dialogue_root() / "websrc" / "public" / "data"
     websrc_meta = _dialogue_root() / "websrc" / "public" / "meta"
     errors = 0
@@ -282,6 +297,13 @@ def _validate_pipeline_outputs(runtime_root: Path, expected_classes: int, run_co
         else:
             _ok(f"JSON class files: {json_count}/{expected_classes}")
 
+    for ini_name in ("u8weapons.ini", "u8armour.ini"):
+        ini_path = pipeline_resources / ini_name
+        if not ini_path.is_file():
+            _bad(f"Required pipeline resource missing: {ini_path}")
+        else:
+            _ok(f"Pipeline resource: {ini_path}")
+
     manifest_path = dirs.web_data / "manifest.json"
     if not manifest_path.is_file():
         _bad(f"Runtime manifest missing: {manifest_path}")
@@ -312,6 +334,12 @@ def _validate_pipeline_outputs(runtime_root: Path, expected_classes: int, run_co
     else:
         _ok(f"Runtime flag metadata: {runtime_flag_meta}")
 
+    runtime_books = dirs.web_data / "books.json"
+    if not runtime_books.is_file():
+        _bad(f"Runtime books data missing: {runtime_books}")
+    else:
+        _ok(f"Runtime books data: {runtime_books}")
+
     websrc_manifest = websrc_data / "manifest.json"
     if not websrc_manifest.is_file():
         _bad(f"Websrc manifest missing (for npx vite): {websrc_manifest}")
@@ -323,6 +351,12 @@ def _validate_pipeline_outputs(runtime_root: Path, expected_classes: int, run_co
         _bad(f"Websrc flag metadata missing (for npx vite): {websrc_flag_meta}")
     else:
         _ok(f"Websrc flag metadata: {websrc_flag_meta}")
+
+    websrc_books = websrc_data / "books.json"
+    if not websrc_books.is_file():
+        _bad(f"Websrc books data missing (for npx vite): {websrc_books}")
+    else:
+        _ok(f"Websrc books data: {websrc_books}")
 
     if not websrc_meta.is_dir():
         _bad(f"Websrc meta directory missing (required for dialogue launch): {websrc_meta}")

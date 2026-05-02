@@ -28,6 +28,13 @@ def build_data(json_src: Path, data_dst: Path) -> int:
         print(f"ERROR: No JSON files found in {json_src}")
         return 1
 
+    manifest_files = [
+        name for name in files if name.startswith("U8P_") and name.endswith(".json")
+    ]
+    if not manifest_files:
+        print(f"ERROR: No class JSON files found in {json_src}")
+        return 1
+
     for fname in files:
         shutil.copy2(json_src / fname, data_dst / fname)
 
@@ -39,11 +46,11 @@ def build_data(json_src: Path, data_dst: Path) -> int:
     shutil.copy2(flag_metadata_src, data_dst / FLAG_METADATA_FILENAME)
 
     manifest_path = data_dst / "manifest.json"
-    manifest_path.write_text(json.dumps(files, indent=2), encoding="utf-8")
+    manifest_path.write_text(json.dumps(manifest_files, indent=2), encoding="utf-8")
 
     print(f"Copied {len(files)} JSON files to {data_dst}")
     print(f"Copied {FLAG_METADATA_FILENAME} to {data_dst}")
-    print(f"Wrote {manifest_path}")
+    print(f"Wrote {manifest_path} ({len(manifest_files)} class entries)")
     return 0
 
 

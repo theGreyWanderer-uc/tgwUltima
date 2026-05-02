@@ -42,14 +42,10 @@ def load_item_data(repo_root, classes_csv=None):
     overlay_to_weapons = {}  # overlay_shape → [{name, style}, ...]
 
     # Load usecode_classes.csv for class name -> shape ID mapping.
-    classes_candidates = []
-    if classes_csv:
-        classes_candidates.append(classes_csv)
-    classes_candidates += [
-        os.path.join(repo_root, 'src', 'titan', 'dialogue', 'reference', 'usecode_classes.csv'),
-        os.path.join(repo_root, '.github', 'reference', 'usecode_classes.csv'),
-    ]
-    chosen_classes_csv = next((p for p in classes_candidates if p and os.path.isfile(p)), None)
+    default_classes_csv = os.path.join(repo_root, 'src', 'titan', 'dialogue', 'pipeline', 'resources', 'usecode_classes.csv')
+    chosen_classes_csv = classes_csv if classes_csv and os.path.isfile(classes_csv) else (
+        default_classes_csv if os.path.isfile(default_classes_csv) else None
+    )
     if chosen_classes_csv:
         with open(chosen_classes_csv, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
@@ -60,8 +56,9 @@ def load_item_data(repo_root, classes_csv=None):
                     pass
 
     # Load u8weapons.ini
-    weapons_ini = os.path.join(repo_root, 'data', 'u8weapons.ini')
-    if os.path.isfile(weapons_ini):
+    weapons_ini = os.path.join(repo_root, 'src', 'titan', 'dialogue', 'pipeline', 'resources', 'u8weapons.ini')
+    weapons_ini = weapons_ini if os.path.isfile(weapons_ini) else None
+    if weapons_ini:
         _parse_item_ini(weapons_ini, shape_to_weapon, 'weapon')
         # Build overlay_shape → weapons mapping
         for sid, wdata in shape_to_weapon.items():
@@ -74,9 +71,17 @@ def load_item_data(repo_root, classes_csv=None):
                 })
 
     # Load u8armour.ini
-    armour_ini = os.path.join(repo_root, 'data', 'u8armour.ini')
-    if os.path.isfile(armour_ini):
+    armour_ini = os.path.join(repo_root, 'src', 'titan', 'dialogue', 'pipeline', 'resources', 'u8armour.ini')
+    armour_ini = armour_ini if os.path.isfile(armour_ini) else None
+    if armour_ini:
         _parse_item_ini(armour_ini, shape_to_armour, 'armour')
+
+    if not chosen_classes_csv:
+        print("WARN: usecode_classes.csv not found in src/titan/dialogue/pipeline/resources; itemProperties mapping will be incomplete.")
+    if not weapons_ini:
+        print("WARN: u8weapons.ini not found in src/titan/dialogue/pipeline/resources; weapon/overlay itemProperties will be missing.")
+    if not armour_ini:
+        print("WARN: u8armour.ini not found in src/titan/dialogue/pipeline/resources; armour itemProperties will be missing.")
 
     return shape_to_weapon, shape_to_armour, class_to_shape, overlay_to_weapons
 
