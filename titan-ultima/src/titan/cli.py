@@ -454,22 +454,37 @@ def cmd_config(args: SimpleNamespace) -> int:
         return 0
 
     config = load_config(str(path))
-    game   = config.get("game", {})
-    paths  = config.get("paths", {})
+
+    def _print_kv_section(title: str, section: dict, check_exists: bool = False) -> None:
+        if not section:
+            return
+        print()
+        print(title)
+        for k, v in section.items():
+            if check_exists:
+                exists = Path(str(v)).exists() if v else False
+                flag = "OK" if exists else "NOT FOUND"
+                print(f"  {k:<12} = {v!r}  [{flag}]")
+            else:
+                print(f"  {k:<12} = {v!r}")
 
     print(f"Active config: {path.absolute()}")
-    if game:
-        print()
-        print("[game]")
-        for k, v in game.items():
-            print(f"  {k:<12} = {v!r}")
-    if paths:
-        print()
-        print("[paths]  (after base expansion)")
-        for k, v in sorted(paths.items()):
-            exists = Path(str(v)).exists() if v else False
-            flag = "OK" if exists else "NOT FOUND"
-            print(f"  {k:<12} = {v!r}  [{flag}]")
+
+    u8 = config.get("u8", {})
+    u7bg = config.get("u7bg", {})
+    u7si = config.get("u7si", {})
+    if any((u8, u7bg, u7si)):
+        _print_kv_section("[u8.game]", u8.get("game", {}))
+        _print_kv_section("[u8.paths]", u8.get("paths", {}), check_exists=True)
+        _print_kv_section("[u7bg.game]", u7bg.get("game", {}))
+        _print_kv_section("[u7bg.paths]", u7bg.get("paths", {}), check_exists=True)
+        _print_kv_section("[u7si.game]", u7si.get("game", {}))
+        _print_kv_section("[u7si.paths]", u7si.get("paths", {}), check_exists=True)
+    else:
+        game = config.get("game", {})
+        paths = config.get("paths", {})
+        _print_kv_section("[game]", game)
+        _print_kv_section("[paths]  (after base expansion)", paths, check_exists=True)
     return 0
 
 
@@ -477,30 +492,112 @@ def cmd_setup(args: SimpleNamespace) -> int:
     """Interactive first-time setup wizard \u2014 creates titan.toml."""
     print("TITAN Setup Wizard")
     print("=" * 55)
-    print("This will create titan.toml for Ultima 8: Pagan.\n")
+    print("This will create titan.toml for Ultima 8 and Ultima 7 installs.\n")
 
     # -- Auto-detect standard install locations --------------------
     candidates: list[Path] = []
+
+    def _add_candidate(path: Path) -> None:
+        if path not in candidates:
+            candidates.append(path)
+
+    def _is_u8_folder_name(name: str) -> bool:
+        lowered = name.lower()
+        if "ultima" not in lowered:
+            return False
+        # Avoid nearby U7/SI installs when dynamically scanning launcher roots.
+        if "serpent" in lowered:
+            return False
+        if "ultima 7" in lowered or "ultima7" in lowered:
+            return False
+        return any(token in lowered for token in ("ultima 8", "ultima8", "viii", "pagan"))
+
+    def _is_u7_folder_name(name: str) -> bool:
+        lowered = name.lower()
+        if "ultima" not in lowered:
+            return False
+        return any(token in lowered for token in ("ultima 7", "ultima7", "black gate", "serpent"))
+
+    def _looks_like_u7_root(path: Path) -> bool:
+        static_candidates = [
+            path / "STATIC",
+            path / "ULTIMA7" / "STATIC",
+            path / "SERPENT" / "STATIC",
+        ]
+        return any(static.is_dir() for static in static_candidates)
     # Windows: GOG Galaxy client (most common current install)
     for drive in "CDEFG":
-        candidates.append(Path(f"{drive}:\\Program Files (x86)\\GOG Galaxy\\Games\\Ultima 8"))
+        _add_candidate(Path(f"{drive}:\\Program Files (x86)\\GOG Galaxy\\Games\\Ultima 8"))
     # Windows: GOG Offline Installer + common manual redirects
     for drive in "CDEFG":
-        candidates += [
+        for path in [
             Path(f"{drive}:\\GOG Games\\Ultima 8"),
             Path(f"{drive}:\\ULTIMA8"),
             Path(f"{drive}:\\ultima8"),
-        ]
+        ]:
+            _add_candidate(path)
     # Windows: Legacy EA/Origin disc installs
-    candidates += [
+    for path in [
         Path(r"C:\Program Files\EA Games\Ultima 8 Gold Edition"),
         Path(r"C:\Program Files (x86)\Origin Games\Ultima 8 Gold Edition"),
+    ]:
+        _add_candidate(path)
+
+    # Linux: direct known paths
+    _add_candidate(Path.home() / "GOG Games" / "Ultima 8")
+    _add_candidate(Path.home() / "Games" / "Heroic" / "Ultima 8")
+
+    # Linux: dynamic launcher roots (discover all Ultima-* folders)
+    linux_roots = [
+        Path.home() / "GOG Games",
+        Path.home() / "Games" / "Heroic",
     ]
-    # Linux: GOG Galaxy client + Offline Installer (same default path)
-    candidates.append(Path.home() / "GOG Games" / "Ultima 8")
+    for root in linux_roots:
+        if not root.is_dir():
+            continue
+        try:
+            for item in root.iterdir():
+                if item.is_dir() and _is_u8_folder_name(item.name):
+                    _add_candidate(item)
+        except PermissionError:
+            continue
+
+    # U7 auto-detection candidates.
+    u7_candidates: list[Path] = []
+
+    def _add_u7_candidate(path: Path) -> None:
+        if path not in u7_candidates:
+            u7_candidates.append(path)
+
+    for drive in "CDEFG":
+        for path in [
+            Path(f"{drive}:\\GOG Games\\Ultima VII"),
+            Path(f"{drive}:\\GOG Games\\Ultima VII - Complete"),
+            Path(f"{drive}:\\ULTIMA7"),
+            Path(f"{drive}:\\SERPENT"),
+        ]:
+            _add_u7_candidate(path)
+
+    for path in [
+        Path.home() / "GOG Games" / "Ultima VII",
+        Path.home() / "Games" / "Heroic" / "Ultima 7",
+        Path.home() / "Games" / "Heroic" / "Ultima 7 - Serpent Isle",
+    ]:
+        _add_u7_candidate(path)
+
+    for root in linux_roots:
+        if not root.is_dir():
+            continue
+        try:
+            for item in root.iterdir():
+                if item.is_dir() and _is_u7_folder_name(item.name):
+                    _add_u7_candidate(item)
+        except PermissionError:
+            continue
 
     detected_base: Optional[Path] = None
     detected_lang = "ENGLISH"
+    detected_u8: list[tuple[Path, str]] = []
 
     print("Searching for Ultima 8 installation...")
     for base in candidates:
@@ -512,14 +609,15 @@ def cmd_setup(args: SimpleNamespace) -> int:
                     continue
                 static = item / "STATIC"
                 if static.exists() and (static / "FIXED.DAT").exists():
-                    detected_base = base
-                    detected_lang = item.name
-                    print(f"  Found: {base}  (language: {detected_lang})")
+                    detected_u8.append((base, item.name))
                     break
         except PermissionError:
             continue
-        if detected_base:
-            break
+
+    if detected_u8:
+        detected_base, detected_lang = detected_u8[0]
+        for base, lang_name in detected_u8:
+            print(f"  Found: {base}  (language: {lang_name})")
 
     if not detected_base:
         print("  No standard installation found.")
@@ -536,6 +634,32 @@ def cmd_setup(args: SimpleNamespace) -> int:
     lang = input(lang_prompt).strip()
     if lang == "":
         lang = default_lang  # keep detected; empty string IS flat mode only if nothing detected
+
+    # -- U7 install detection (BG + SI) ---------------------------
+    detected_u7bg: Optional[Path] = None
+    detected_u7si: Optional[Path] = None
+    print("\nSearching for Ultima 7 installations...")
+    for base in u7_candidates:
+        if not base.exists() or not _looks_like_u7_root(base):
+            continue
+        lowered = base.name.lower()
+        if "serpent" in lowered:
+            if detected_u7si is None:
+                detected_u7si = base
+                print(f"  Found Serpent Isle: {base}")
+        else:
+            if detected_u7bg is None:
+                detected_u7bg = base
+                print(f"  Found Black Gate:   {base}")
+
+    bg_default = str(detected_u7bg) if detected_u7bg else ""
+    si_default = str(detected_u7si) if detected_u7si else ""
+
+    u7bg_input = input(f"Ultima VII Black Gate base [{bg_default or 'optional'}]: ").strip()
+    u7si_input = input(f"Ultima VII Serpent Isle base [{si_default or 'optional'}]: ").strip()
+
+    u7bg_base = (u7bg_input or bg_default).replace("\\", "/")
+    u7si_base = (u7si_input or si_default).replace("\\", "/")
 
     # -- Third-party engine save detection -------------------------
     appdata = os.getenv("APPDATA")
@@ -564,11 +688,11 @@ def cmd_setup(args: SimpleNamespace) -> int:
 
     lines = [
         "# titan.toml \u2014 created by `titan setup`",
-        "[game]",
+        "[u8.game]",
         f'base     = "{base_toml}"',
         f'language = "{lang}"',
         "",
-        "[paths]",
+        "[u8.paths]",
         'fixed     = "FIXED.DAT"',
         'palette   = "U8PAL.PAL"',
         'typeflag  = "TYPEFLAG.DAT"',
@@ -591,6 +715,32 @@ def cmd_setup(args: SimpleNamespace) -> int:
         lines.append(f'nonfixed  = "{nonfixed_value}"  # absolute (third-party engine)')
     else:
         lines.append(f'nonfixed  = "{nonfixed_value}"')
+
+    if u7bg_base:
+        lines += [
+            "",
+            "[u7bg.game]",
+            f'base     = "{u7bg_base}"',
+            'variant  = "blackgate"',
+            "",
+            "[u7bg.paths]",
+            'static   = "STATIC/"',
+            'shapes   = "STATIC/SHAPES.VGA"',
+            'palette  = "STATIC/PALETTES.FLX"',
+        ]
+
+    if u7si_base:
+        lines += [
+            "",
+            "[u7si.game]",
+            f'base     = "{u7si_base}"',
+            'variant  = "serpentisle"',
+            "",
+            "[u7si.paths]",
+            'static   = "STATIC/"',
+            'shapes   = "STATIC/SHAPES.VGA"',
+            'palette  = "STATIC/PALETTES.FLX"',
+        ]
 
     toml_path = Path.cwd() / "titan.toml"
     toml_path.write_text("\n".join(lines) + "\n", encoding="utf-8")

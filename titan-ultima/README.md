@@ -45,21 +45,27 @@ Requires Python 3.9+, NumPy ≥ 1.24, Pillow ≥ 10.0, Typer ≥ 0.15.
 
 ### Option A — first-time wizard (recommended)
 
-Run the interactive setup wizard once. It auto-detects your Ultima 8
-installation, handles Pentagram/ScummVM save paths, writes `titan.toml`, and
-optionally extracts the shape and glob archives for you.
+Run the interactive setup wizard once. It auto-detects Ultima 8 plus
+Ultima 7 (Black Gate / Serpent Isle) install locations, handles
+Pentagram/ScummVM save paths for U8, writes `titan.toml`, and optionally
+extracts the U8 shape and glob archives for you.
 
 ```bash
 titan setup
 ```
 
-After setup, U8 map commands need no path arguments at all:
+After setup, U8 commands need no path arguments, and U7 map/typeflag/save-npcs
+can use config defaults via `--game bg|si`:
 
 ```bash
 titan u8 map-render -m 5               # renders map_005_iso_classic.png
 titan u8 map-render -m 0 --no-roof     # roof tiles removed
 titan u8 map-render -m 39 --no-editor --no-ignore   # player-accurate
 titan u8 map-render-all --maps 0 5 39 --views iso_classic iso_high
+
+# U7 defaults from titan.toml
+titan u7 map-render --game bg --sc 85 -o britain_bg.png
+titan u7 typeflag-dump --game si -f csv -o tfa_si.csv
 ```
 
 ### Option B — manual setup (no config file)
@@ -217,13 +223,15 @@ Use `titan --config /other/path.toml <command>` to override.
 
 ### Format
 
+`titan setup` now writes the multi-game format by default. Legacy
+`[game]`/`[paths]` is still supported for backward compatibility.
+
 ```toml
-[game]
+[u8.game]
 base     = "C:/ultima8"   # root of your Ultima 8 install
 language = "ENGLISH"      # ENGLISH, FRENCH, GERMAN, etc.
-                          # leave "" for flat mode (files directly in base/)
 
-[paths]
+[u8.paths]
 # Relative paths are auto-expanded to <base>/<language>/STATIC/<name>
 fixed     = "FIXED.DAT"
 palette   = "U8PAL.PAL"
@@ -233,9 +241,27 @@ typeflag  = "TYPEFLAG.DAT"
 shapes    = "shapes/"
 globs     = "globs/"
 
-# Live objects — relative expands to <base>/<language>/SAVEGAME/<name>
+# Live objects — relative expands to <base>/cloud_saves/SAVEGAME/<name>
 # Absolute paths (e.g. Pentagram/ScummVM) are used unchanged
 nonfixed  = "U8SAVE.000"
+
+[u7bg.game]
+base     = "C:/GOG Games/Ultima VII/ULTIMA7"
+variant  = "blackgate"
+
+[u7bg.paths]
+static   = "STATIC/"
+shapes   = "STATIC/SHAPES.VGA"
+palette  = "STATIC/PALETTES.FLX"
+
+[u7si.game]
+base     = "C:/GOG Games/Ultima VII/SERPENT"
+variant  = "serpentisle"
+
+[u7si.paths]
+static   = "STATIC/"
+shapes   = "STATIC/SHAPES.VGA"
+palette  = "STATIC/PALETTES.FLX"
 ```
 
 A fully annotated template is available in
@@ -379,7 +405,7 @@ the default install locations are:
 | Windows | Ultima 8 (GOG Galaxy) | `C:\Program Files (x86)\GOG Galaxy\Games\Ultima 8` |
 | Windows | Ultima 8 (GOG Offline) | `C:\GOG Games\Ultima 8` |
 | Windows | Ultima 7 (GOG) | `C:\GOG Games\Ultima VII\ULTIMA7` (BG), `C:\GOG Games\Ultima VII\SERPENT` (SI) |
-| Linux | GOG | `~/GOG Games/Ultima 8`, `~/GOG Games/Ultima VII` |
+| Linux | GOG / Heroic | `~/GOG Games/Ultima 8`, `~/GOG Games/Ultima VII`, `~/Games/Heroic/Ultima 8`, `~/Games/Heroic/Ultima 7`, `~/Games/Heroic/Ultima 7 - Serpent Isle` |
 
 `titan setup` auto-detects these paths and others (legacy EA/Origin disc
 installs, common manual redirects such as `C:\ULTIMA8`).

@@ -64,17 +64,29 @@ def _resolve_usecode_path(usecode: Optional[Path]) -> Path:
         return Path(str(paths["usecode"]))
 
     base = game.get("base")
-    language = game.get("language")
+    language = game.get("language") or "ENGLISH"
     if base:
-        static_dir = Path(base)
+        base_dir = Path(base)
+        candidates: list[Path] = []
+
+        # Standard U8 layout: <base>/<language>/USECODE/EUSECODE.FLX
         if language:
-            static_dir = static_dir / str(language) / "STATIC"
-        candidate = static_dir / "EUSECODE.FLX"
-        if candidate.exists():
-            return candidate
+            lang_dir = base_dir / str(language)
+            candidates.append(lang_dir / "USECODE" / "EUSECODE.FLX")
+            # Compatibility fallback for non-standard flat language layouts.
+            candidates.append(lang_dir / "EUSECODE.FLX")
+
+        # Additional fallback layouts.
+        candidates.append(base_dir / "USECODE" / "EUSECODE.FLX")
+        candidates.append(base_dir / "EUSECODE.FLX")
+
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate
 
     raise typer.BadParameter(
-        "Unable to detect EUSECODE.FLX. Provide --usecode or set config game.base/language."
+        "Unable to detect EUSECODE.FLX. Provide --usecode, set paths.usecode, or set config game.base/language "
+        "so Titan can resolve <base>/<language>/USECODE/EUSECODE.FLX."
     )
 
 

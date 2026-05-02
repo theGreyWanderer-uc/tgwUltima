@@ -999,18 +999,20 @@ tiles (mountains, etc.) are promoted to depth-sorted objects with a
 nearby-flat fill for seamless ground coverage.
 
 ```
-titan u7 map-render <static> [--superchunk N | --cx0 X0 --cy0 Y0 --cx1 X1 --cy1 Y1 | --full]
-                              [-p PAL] [-o FILE] [--view VIEW]
-                              [--gamedat DIR] [--grid] [--exclude FLAG ...]
-                              [--zone-profile NAME] [--zone-id ID ...] [--all-zones]
-                              [--highlight-tile-rect TX0,TY0,TX1,TY1,#RRGGBB[,LABEL] ...]
-                              [--highlight-width N] [--highlight-lift N]
-                              [--highlight-fill-alpha N] [--highlight-labels]
+titan u7 map-render [static] [--game bg|si]
+                    [--superchunk N | --cx0 X0 --cy0 Y0 --cx1 X1 --cy1 Y1 | --full]
+                    [-p PAL] [-o FILE] [--view VIEW]
+                    [--gamedat DIR] [--grid] [--exclude FLAG ...]
+                    [--zone-profile NAME] [--zone-id ID ...] [--all-zones]
+                    [--highlight-tile-rect TX0,TY0,TX1,TY1,#RRGGBB[,LABEL] ...]
+                    [--highlight-width N] [--highlight-lift N]
+                    [--highlight-fill-alpha N] [--highlight-labels]
 ```
 
 | Argument | Description |
 |----------|-------------|
-| `static` | Path to `STATIC/` directory containing `U7MAP`, `U7CHUNKS`, `U7IFIX*`, `SHAPES.VGA`, `TFA.DAT` |
+| `static` | Optional path to `STATIC/` directory containing `U7MAP`, `U7CHUNKS`, `U7IFIX*`, `SHAPES.VGA`, `TFA.DAT`. If omitted, resolved from `titan.toml` (`[u7bg.paths]` / `[u7si.paths]`) |
+| `--game bg|si` | Select which config section to use when resolving defaults (`bg` = `[u7bg.*]`, `si` = `[u7si.*]`) |
 | `--superchunk N`, `--sc N` | Superchunk number 0–143 (hex ok, e.g. `0x55`). Renders a 16×16 chunk region |
 | `--cx0`, `--cy0`, `--cx1`, `--cy1` | Chunk-level bounding box (0–191). Alternative to `--superchunk` |
 | `--full` | Render the entire world map (shorthand for `--cx0 0 --cy0 0 --cx1 191 --cy1 191`) |
@@ -1039,9 +1041,18 @@ titan u7 map-render <static> [--superchunk N | --cx0 X0 --cy0 Y0 --cx1 X1 --cy1 
 
 **Examples**
 ```bash
+# Use config defaults for Black Gate (no STATIC path required)
+titan u7 map-render --game bg --sc 85 -o britain_bg.png
+
+# Use config defaults for Serpent Isle
+titan u7 map-render --game si --superchunk 0x55 -o moonshade_si.png
+
 # Render superchunk 85 / 0x55 (Britain area) — decimal and hex both work
 titan u7 map-render STATIC/ --superchunk 0x55 -o britain.png
 titan u7 map-render STATIC/ --sc 85 -o britain.png
+
+# Override config with explicit STATIC + palette
+titan u7 map-render STATIC/ --game si --palette STATIC/PALETTES.FLX --sc 85
 
 # Render a chunk range with grid overlay
 titan u7 map-render STATIC/ --cx0 56 --cy0 80 --cx1 63 --cy1 87 --grid
@@ -1095,13 +1106,14 @@ promoted to overlay objects with a nearby-flat fill for correct ground
 coverage. Much faster than full rendering.
 
 ```
-titan u7 map-sample <static> [-p PAL] [-o FILE] [--scale N]
-                              [--grid] [--sc N ...] [--exclude FLAG ...]
+titan u7 map-sample [static] [--game bg|si] [-p PAL] [-o FILE] [--scale N]
+                    [--grid] [--sc N ...] [--exclude FLAG ...]
 ```
 
 | Argument | Description |
 |----------|-------------|
-| `static` | Path to `STATIC/` directory |
+| `static` | Optional path to `STATIC/` directory (default from `[u7bg.paths]` / `[u7si.paths]`) |
+| `--game bg|si` | Select config section for default STATIC/palette lookup |
 | `-p FILE`, `--palette FILE` | Path to `PALETTES.FLX` (default: `STATIC/PALETTES.FLX`) |
 | `-o FILE`, `--output FILE` | Output PNG path (default: auto-named) |
 | `--scale N` | Tiles per output pixel: `1` = full 3072×3072, `4` = 768×768, `8` = 384×384 (default: 4) |
@@ -1117,6 +1129,9 @@ titan u7 map-sample <static> [-p PAL] [-o FILE] [--scale N]
 
 **Examples**
 ```bash
+# Use config defaults (BG)
+titan u7 map-sample --game bg -o minimap_bg.png
+
 # Default 768×768 minimap of the whole world
 titan u7 map-sample STATIC/ -o minimap.png
 
@@ -1128,6 +1143,9 @@ titan u7 map-sample STATIC/ --scale 1 --grid -o minimap_full.png
 
 # Medium resolution with chunk grid visible
 titan u7 map-sample STATIC/ --scale 2 --grid -o minimap_s2.png
+
+# Override config with explicit STATIC path
+titan u7 map-sample /games/u7si/STATIC --game si --scale 8 -o minimap_si.png
 ```
 
 ---
@@ -1154,17 +1172,21 @@ Three output formats:
 > Run `typeflag-dump` on each game's `STATIC/` to compare.
 
 ```
-titan u7 typeflag-dump <static> [-o FILE] [-f FORMAT]
+titan u7 typeflag-dump [static] [--game bg|si] [-o FILE] [-f FORMAT]
 ```
 
 | Argument | Description |
 |----------|-------------|
-| `static` | Path to `STATIC/` directory containing `TFA.DAT` |
+| `static` | Optional path to `STATIC/` directory containing `TFA.DAT` (default from `[u7bg.paths]` / `[u7si.paths]`) |
+| `--game bg|si` | Select config section for default STATIC lookup |
 | `-o FILE`, `--output FILE` | Write dump to this file |
 | `-f FORMAT`, `--format FORMAT` | Output format: `summary` (default), `detail`, `csv` |
 
 **Examples**
 ```bash
+# Use config defaults for BG
+titan u7 typeflag-dump --game bg
+
 # Print statistics summary to terminal
 titan u7 typeflag-dump STATIC/
 
@@ -1177,6 +1199,9 @@ titan u7 typeflag-dump STATIC/ -f csv -o tfa_data.csv
 # Compare Black Gate vs Serpent Isle
 titan u7 typeflag-dump "C:/GOG Games/Ultima VII/ULTIMA7/STATIC" -f csv -o tfa_bg.csv
 titan u7 typeflag-dump "C:/GOG Games/Ultima VII/SERPENT/STATIC" -f csv -o tfa_si.csv
+
+# Use config defaults for SI
+titan u7 typeflag-dump --game si -f csv -o tfa_si.csv
 ```
 
 ---
@@ -1308,10 +1333,12 @@ fixed-header fields: name, shape, position, health, strength, dexterity,
 intelligence, combat, magic, mana, experience, food, schedule type,
 alignment, attack mode, and status flags.
 
-IREG inventory sections are skipped.  For reliable container nesting
-detection, pass `--static` pointing to the game's STATIC directory so
-TFA.DAT can identify container shapes (class 6).  Without `--static`,
-a heuristic treats all 12-byte IREG entries with type ≠ 0 as containers.
+IREG inventory sections are skipped. For reliable container nesting
+detection, TITAN loads `TFA.DAT` from `--static` (or from `titan.toml`
+`[u7bg.paths]` / `[u7si.paths]` when `--static` is omitted) so it can
+identify container shapes (class 6). If neither is available, it falls
+back to a heuristic that treats 12-byte IREG entries with type ≠ 0 as
+containers.
 
 Three output formats:
 - **summary** (default) — counts: total, named, in-party, alive
@@ -1319,21 +1346,28 @@ Three output formats:
 - **csv** — full machine-readable CSV
 
 ```
-titan u7 save-npcs <file> [--static DIR] [-o FILE] [-f FORMAT]
+titan u7 save-npcs <file> [--game bg|si] [--static DIR] [-o FILE] [-f FORMAT]
 ```
 
 | Argument | Description |
 |----------|-------------|
 | `file` | Exult `.sav` file |
-| `--static DIR` | Path to STATIC directory (for TFA container detection) |
+| `--game bg|si` | Select config section for default STATIC lookup (`bg` default) |
+| `--static DIR` | Override STATIC directory (for TFA container detection) |
 | `-o FILE`, `--output FILE` | Write dump to this file |
 | `-f FORMAT`, `--format FORMAT` | Output format: `summary` (default), `detail`, `csv` |
 
 **Examples**
 ```bash
+# Use config default STATIC from [u7bg.paths]
+titan u7 save-npcs exult00bg.sav --game bg
+
 titan u7 save-npcs exult00bg.sav
 titan u7 save-npcs exult00bg.sav --static "C:/U7BG/STATIC" -f detail
 titan u7 save-npcs exult00bg.sav -f csv -o bg_npcs.csv
+
+# Use SI config default STATIC
+titan u7 save-npcs exult01si.sav --game si -f detail
 ```
 
 ---
@@ -1540,16 +1574,16 @@ titan setup
 ```
 
 No arguments. Prompts:
-1. **Game base path** — auto-detected from common GOG/Origin/disc locations;
-   defaults to current directory if nothing found.
-2. **Language folder** — `ENGLISH`, `FRENCH`, `GERMAN`, etc. Leave empty for
-   flat mode (files directly in `base/`).
-3. **Third-party engine saves** — if a save is found at a known engine location
-   (e.g. `%APPDATA%\Pentagram\u8-save\U8SAVE.000` on Windows or
-   `~/Library/Application Support/Pentagram/u8-save/U8SAVE.000` on macOS),
-   offers to use it as the `nonfixed` source.
-4. **Extract now?** — runs `titan flex-extract` for `U8SHAPES.FLX` and
+1. **Ultima 8 base path** — auto-detected from common GOG/EA/Heroic locations.
+2. **Ultima 8 language folder** — `ENGLISH`, `FRENCH`, `GERMAN`, etc.
+3. **Ultima 7 Black Gate base** — auto-detected when possible; optional.
+4. **Ultima 7 Serpent Isle base** — auto-detected when possible; optional.
+5. **Third-party engine save** — if found, can be used as U8 `nonfixed`.
+6. **Extract now?** — runs `titan flex-extract` for `U8SHAPES.FLX` and
    `GLOB.FLX` if `Y`.
+
+The wizard writes multi-game sections by default: `[u8.*]`, `[u7bg.*]`, and
+`[u7si.*]` (when U7 paths are provided).
 
 After setup, U8 map commands require no path flags:
 ```bash
@@ -1574,9 +1608,8 @@ titan --config FILE config
 
 Without `--edit`, prints:
 - Config file path
-- `[game]` section values
-- `[paths]` section with all relative paths expanded and each marked `[OK]` or
-  `[NOT FOUND]`
+- Multi-game sections when present: `[u8.*]`, `[u7bg.*]`, `[u7si.*]`
+- Legacy `[game]`/`[paths]` only when using legacy config format
 
 **Examples**
 ```bash
@@ -1627,15 +1660,19 @@ nonfixed  = "U8SAVE.000"
 
 [u7bg.game]
 base     = "C:/GOG Games/Ultima VII/ULTIMA7"
+variant  = "blackgate"
 
 [u7bg.paths]
+static   = "STATIC/"
 shapes   = "STATIC/SHAPES.VGA"
 palette  = "STATIC/PALETTES.FLX"
 
 [u7si.game]
 base     = "C:/GOG Games/Ultima VII/SERPENT"
+variant  = "serpentisle"
 
 [u7si.paths]
+static   = "STATIC/"
 shapes   = "STATIC/SHAPES.VGA"
 palette  = "STATIC/PALETTES.FLX"
 ```
@@ -1656,6 +1693,7 @@ Override with `titan --config /path/to/other.toml <command>`.
 |----------|-----------|
 | STATIC file (relative) | `<base>/<language>/STATIC/<name>` |
 | SAVEGAME file (relative) | `<base>/cloud_saves/SAVEGAME/<name>` |
+| U7 path (relative) | `<u7*.game.base>/<u7*.paths value>` |
 | Any absolute path | Used unchanged |
 | `shapes`, `globs` | Relative to current working directory |
 | Flat mode (`language = ""`) | STATIC and SAVEGAME expand directly to `<base>/` |
