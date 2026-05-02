@@ -55,6 +55,29 @@ def get_effective_fold_path(usecode_path: Path) -> Path:
     return _resolve_fold_exe(usecode_path)
 
 
+def _ensure_executable_if_bundled(fold_exe: Path, bundled_fold: Path) -> None:
+    """Ensure bundled Linux fold has executable bits set.
+
+    Some deployment paths can drop mode bits even when Git tracks them.
+    """
+    if os.name == "nt" or fold_exe != bundled_fold:
+        return
+    if os.access(fold_exe, os.X_OK):
+        return
+    try:
+        current_mode = fold_exe.stat().st_mode
+        fold_exe.chmod(current_mode | 0o111)
+    except OSError as exc:
+        raise FoldRunError(
+            f"Bundled fold is not executable and chmod failed: {fold_exe}. "
+            f"Run: chmod +x {fold_exe}"
+        ) from exc
+    if not os.access(fold_exe, os.X_OK):
+        raise FoldRunError(
+            f"Bundled fold is not executable: {fold_exe}. Run: chmod +x {fold_exe}"
+        )
+
+
 def _resolve_optional_meta(
     usecode_path: Path,
     symbols_path: Path | None,
@@ -111,6 +134,7 @@ def run_fold(
 
     if not fold_exe.is_file():
         raise FoldRunError(f"Bundled fold executable not found: {fold_exe}")
+    _ensure_executable_if_bundled(fold_exe, bundled_fold)
     if fold_dll and fold_exe == bundled_fold and not fold_dll.is_file():
         raise FoldRunError(f"Bundled fold dependency not found: {fold_dll}")
     if not usecode_path.is_file():
