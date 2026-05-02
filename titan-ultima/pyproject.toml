@@ -63,6 +63,7 @@ packages = ["src/titan"]
 exclude = [
     "src/titan/adaptive_resample/luts",
     "src/titan/fonts/bundled",
+    "src/titan/dialogue/pipeline/resources",
     "src/titan/dialogue/webbundle",
 ]
 
