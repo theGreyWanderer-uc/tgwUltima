@@ -170,7 +170,14 @@ def run_fold(
             hex_id,
             *common,
         ]
-        class_proc = subprocess.run(class_cmd, capture_output=True, text=True, timeout=30)
+        class_proc = subprocess.run(
+            class_cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=30,
+        )
         if class_proc.returncode != 0:
             continue
 
