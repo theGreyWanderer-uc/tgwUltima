@@ -67,6 +67,7 @@ exclude = [
     "src/titan/adaptive_resample/luts",
     "src/titan/fonts/bundled",
     "src/titan/dialogue/pipeline/resources",
+    "src/titan/dialogue/websrc",
     "src/titan/dialogue/webbundle",
 ]
 
@@ -74,6 +75,7 @@ exclude = [
 "src/titan/adaptive_resample/luts" = "titan/adaptive_resample/luts"
 "src/titan/fonts/bundled" = "titan/fonts/bundled"
 "src/titan/dialogue/pipeline/resources" = "titan/dialogue/pipeline/resources"
+"src/titan/dialogue/websrc/public/meta" = "titan/dialogue/websrc/public/meta"
 "src/titan/dialogue/webbundle" = "titan/dialogue/webbundle"
 
 [tool.hatch.build.targets.sdist]
@@ -88,8 +90,6 @@ exclude = [
     "build/**",
     "dist/**",
     "**/node_modules/**",
-    "src/titan/dialogue/websrc",
-    "src/titan/dialogue/websrc/**",
 ]
 
 [project.scripts]
