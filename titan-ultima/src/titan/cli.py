@@ -190,7 +190,8 @@ def cmd_flex_extract(args: SimpleNamespace) -> int:
 
         extracted += 1
 
-    print(f"Extracted {extracted} records from {flex_name} -> {outdir.rstrip('/\\')}/")
+    outdir_display = outdir.rstrip("/\\") + "/"
+    print(f"Extracted {extracted} records from {flex_name} -> {outdir_display}")
     if skipped > 0:
         print(f"  ({skipped} empty records skipped)")
     named_count = sum(1 for n in archive.record_names if n)
