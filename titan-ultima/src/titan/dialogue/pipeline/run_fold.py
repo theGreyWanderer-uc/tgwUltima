@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import csv
+import os
 import subprocess
+import sys
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -12,22 +14,45 @@ class FoldRunError(RuntimeError):
     """Raised when fold execution fails."""
 
 
+def _bundled_fold_subdir() -> str:
+    if os.name == "nt":
+        return "windows-x64"
+    if sys.platform.startswith("linux"):
+        return "linux-x64"
+    raise FoldRunError(f"Unsupported platform for bundled fold binary: {sys.platform}")
+
+
+def _platform_local_fold_names() -> tuple[str, ...]:
+    if os.name == "nt":
+        return ("fold.exe", "fold")
+    return ("fold", "fold.exe")
+
+
 def get_bundled_fold_path() -> Path:
-    """Return the bundled fold executable path (Windows)."""
-    return Path(__file__).resolve().parents[1] / "tools" / "fold" / "windows-x64" / "fold.exe"
+    """Return the bundled fold executable path for the current platform."""
+    binary_name = "fold.exe" if os.name == "nt" else "fold"
+    return Path(__file__).resolve().parents[1] / "tools" / "fold" / _bundled_fold_subdir() / binary_name
 
 
-def get_bundled_fold_dll_path() -> Path:
-    """Return the bundled libwinpthread DLL path (Windows)."""
+def get_bundled_fold_dll_path() -> Path | None:
+    """Return the bundled Windows DLL dependency path, or None on non-Windows."""
+    if os.name != "nt":
+        return None
     return Path(__file__).resolve().parents[1] / "tools" / "fold" / "windows-x64" / "libwinpthread-1.dll"
 
 
 def _resolve_fold_exe(usecode_path: Path) -> Path:
-    """Prefer colocated fold.exe near EUSECODE, then fallback to bundled binary."""
-    local_fold = usecode_path.parent / "fold.exe"
-    if local_fold.is_file():
-        return local_fold
+    """Prefer colocated fold near EUSECODE, then fallback to bundled binary."""
+    for local_name in _platform_local_fold_names():
+        local_fold = usecode_path.parent / local_name
+        if local_fold.is_file():
+            return local_fold
     return get_bundled_fold_path()
+
+
+def get_effective_fold_path(usecode_path: Path) -> Path:
+    """Return the fold executable path that will be used for this EUSECODE path."""
+    return _resolve_fold_exe(usecode_path)
 
 
 def _resolve_optional_meta(
@@ -86,7 +111,7 @@ def run_fold(
 
     if not fold_exe.is_file():
         raise FoldRunError(f"Bundled fold executable not found: {fold_exe}")
-    if fold_exe == bundled_fold and not fold_dll.is_file():
+    if fold_dll and fold_exe == bundled_fold and not fold_dll.is_file():
         raise FoldRunError(f"Bundled fold dependency not found: {fold_dll}")
     if not usecode_path.is_file():
         raise FoldRunError(f"EUSECODE file not found: {usecode_path}")

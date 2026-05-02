@@ -19,7 +19,7 @@ from titan._config import get_config
 from titan.dialogue.pipeline.build_data import build_data
 from titan.dialogue.pipeline.extract_ast import main as extract_ast_main
 from titan.dialogue.pipeline.lint_json import run_lint
-from titan.dialogue.pipeline.run_fold import FoldRunError, run_fold
+from titan.dialogue.pipeline.run_fold import FoldRunError, get_effective_fold_path, run_fold
 
 
 dialogue_app = typer.Typer(
@@ -164,6 +164,7 @@ def _run_prepare(
         f"symbols={symbol_rows} rows ({global_symbols} globals), "
         f"classes={class_rows} rows"
     )
+    typer.echo(f"Using fold binary: {get_effective_fold_path(usecode)}")
     typer.echo("Starting fold extraction...")
 
     try:
