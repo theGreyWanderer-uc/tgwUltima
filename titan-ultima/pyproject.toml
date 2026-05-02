@@ -60,12 +60,17 @@ path = "src/titan/_version.py"
 packages = ["src/titan"]
 # Exclude luts and bundled fonts from package auto-discovery (non-Python data)
 # to prevent hatchling from adding binary files twice. Re-include via force-include.
-exclude = ["src/titan/adaptive_resample/luts", "src/titan/fonts/bundled"]
+exclude = [
+    "src/titan/adaptive_resample/luts",
+    "src/titan/fonts/bundled",
+    "src/titan/dialogue/webbundle",
+]
 
 [tool.hatch.build.targets.wheel.force-include]
 "src/titan/adaptive_resample/luts" = "titan/adaptive_resample/luts"
 "src/titan/fonts/bundled" = "titan/fonts/bundled"
 "src/titan/dialogue/pipeline/resources" = "titan/dialogue/pipeline/resources"
+"src/titan/dialogue/webbundle" = "titan/dialogue/webbundle"
 
 [project.scripts]
 titan = "titan.cli:main"

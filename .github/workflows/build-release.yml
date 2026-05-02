@@ -127,6 +127,23 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+
+      - name: Build dialogue web bundle
+        working-directory: titan-ultima/src/titan/dialogue/websrc
+        run: |
+          npm ci
+          npm run build
+          mkdir -p ../webbundle
+          rm -rf ../webbundle/*
+          cp -r dist/* ../webbundle/
+
+      - name: Verify bundled shell
+        run: test -f titan-ultima/src/titan/dialogue/webbundle/index.html
+
       - name: Install build tools
         run: pip install build
 
@@ -137,6 +154,32 @@ jobs:
       - name: List build output
         working-directory: titan-ultima
         run: ls -la dist/
+
+      - name: Verify wheel has no duplicate entries
+        working-directory: titan-ultima
+        run: |
+          python - <<'PY'
+          import zipfile
+          from collections import Counter
+          from pathlib import Path
+
+          wheels = sorted(Path("dist").glob("*.whl"))
+          if not wheels:
+            raise SystemExit("No wheel file found in dist/")
+
+          wheel = wheels[0]
+          with zipfile.ZipFile(wheel) as zf:
+            names = [i.filename for i in zf.infolist()]
+
+          dupes = [name for name, count in Counter(names).items() if count > 1]
+          if dupes:
+            print("Duplicate wheel entries found:")
+            for name in dupes:
+              print(f"  {name}")
+            raise SystemExit(1)
+
+          print(f"No duplicate entries in {wheel.name}")
+          PY
 
       - name: Upload package artifacts
         uses: actions/upload-artifact@v6
