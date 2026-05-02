@@ -75,6 +75,10 @@ exclude = [
 
 [tool.hatch.build.targets.sdist]
 exclude = [
+    ".venv",
+    ".venv/**",
+    ".venv-*/**",
+    "venv/**",
     "src/titan/dialogue/websrc",
     "src/titan/dialogue/websrc/**",
 ]
