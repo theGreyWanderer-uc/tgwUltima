@@ -413,8 +413,9 @@ def cmd_music_batch(args: SimpleNamespace) -> int:
             print(f"  WARNING: Failed {xmi_file}: {e}", file=sys.stderr)
             failed += 1
 
-    print(f"Batch convert complete: {converted} MIDIs created, "
-          f"{failed} skipped -> {outdir.rstrip('/\\')}/")
+        outdir_display = outdir.rstrip("/\\") + "/"
+        print(f"Batch convert complete: {converted} MIDIs created, "
+            f"{failed} skipped -> {outdir_display}")
     return 0
 
 

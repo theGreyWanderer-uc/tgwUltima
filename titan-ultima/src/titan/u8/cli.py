@@ -121,8 +121,9 @@ def cmd_shape_export(args: SimpleNamespace) -> int:
         img.save(out_path)
         saved += 1
 
-    print(f"Exported {saved} frames from {os.path.basename(filepath)} "
-          f"({len(shape.frames)} total) -> {outdir.rstrip('/\\')}/")
+        outdir_display = outdir.rstrip("/\\") + "/"
+        print(f"Exported {saved} frames from {os.path.basename(filepath)} "
+            f"({len(shape.frames)} total) -> {outdir_display}")
     return 0
 
 
@@ -175,8 +176,9 @@ def cmd_shape_batch(args: SimpleNamespace) -> int:
         except Exception as e:
             print(f"  WARNING: Failed {shp_file}: {e}", file=sys.stderr)
 
-    print(f"Batch export complete: {total_frames} frames from "
-          f"{total_shapes} shapes -> {outdir.rstrip('/\\')}/")
+        outdir_display = outdir.rstrip("/\\") + "/"
+        print(f"Batch export complete: {total_frames} frames from "
+            f"{total_shapes} shapes -> {outdir_display}")
     return 0
 
 
@@ -453,8 +455,9 @@ def cmd_sound_batch(args: SimpleNamespace) -> int:
             print(f"  WARNING: Failed {raw_file}: {e}", file=sys.stderr)
             failed += 1
 
-    print(f"Batch decode complete: {decoded} WAVs created, "
-          f"{failed} skipped -> {outdir.rstrip('/\\')}/")
+        outdir_display = outdir.rstrip("/\\") + "/"
+        print(f"Batch decode complete: {decoded} WAVs created, "
+            f"{failed} skipped -> {outdir_display}")
     return 0
 
 
@@ -711,8 +714,9 @@ def cmd_unkcoff_dump(args: SimpleNamespace) -> int:
         off = val & 0xFFFF
         if i == 0:
             note = "magic / version / total size?"
-            lines.append(f"{i:>6}  0x{val:08X}      {'\u2014':>8}      "
-                         f"{'\u2014':>8}  {note}")
+            em_dash = "-"
+            lines.append(f"{i:>6}  0x{val:08X}      {em_dash:>8}      "
+                         f"{em_dash:>8}  {note}")
         else:
             note = ""
             lines.append(f"{i:>6}  0x{val:08X}    0x{seg:04X}    "
@@ -793,7 +797,8 @@ def cmd_save_extract(args: SimpleNamespace) -> int:
               file=sys.stderr)
         return 1
 
-    print(f"\nExtracted {extracted} file(s) -> {outdir.rstrip('/\\')}/")
+    outdir_display = outdir.rstrip("/\\") + "/"
+    print(f"\nExtracted {extracted} file(s) -> {outdir_display}")
     return 0
 
 
