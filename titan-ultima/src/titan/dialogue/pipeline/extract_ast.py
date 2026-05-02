@@ -6,6 +6,7 @@ import os
 import re
 import sys
 import csv
+from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -41,11 +42,23 @@ def load_item_data(repo_root, classes_csv=None):
     class_to_shape = {}
     overlay_to_weapons = {}  # overlay_shape → [{name, style}, ...]
 
+    module_resources = Path(__file__).resolve().parent / 'resources'
+    repo_resources = Path(repo_root) / 'src' / 'titan' / 'dialogue' / 'pipeline' / 'resources'
+    resource_dirs = []
+    for candidate in (module_resources, repo_resources):
+        if candidate not in resource_dirs:
+            resource_dirs.append(candidate)
+
+    def _find_resource_file(name):
+        for resource_dir in resource_dirs:
+            candidate = resource_dir / name
+            if candidate.is_file():
+                return str(candidate)
+        return None
+
     # Load usecode_classes.csv for class name -> shape ID mapping.
-    default_classes_csv = os.path.join(repo_root, 'src', 'titan', 'dialogue', 'pipeline', 'resources', 'usecode_classes.csv')
-    chosen_classes_csv = classes_csv if classes_csv and os.path.isfile(classes_csv) else (
-        default_classes_csv if os.path.isfile(default_classes_csv) else None
-    )
+    default_classes_csv = _find_resource_file('usecode_classes.csv')
+    chosen_classes_csv = classes_csv if classes_csv and os.path.isfile(classes_csv) else default_classes_csv
     if chosen_classes_csv:
         with open(chosen_classes_csv, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
@@ -56,8 +69,7 @@ def load_item_data(repo_root, classes_csv=None):
                     pass
 
     # Load u8weapons.ini
-    weapons_ini = os.path.join(repo_root, 'src', 'titan', 'dialogue', 'pipeline', 'resources', 'u8weapons.ini')
-    weapons_ini = weapons_ini if os.path.isfile(weapons_ini) else None
+    weapons_ini = _find_resource_file('u8weapons.ini')
     if weapons_ini:
         _parse_item_ini(weapons_ini, shape_to_weapon, 'weapon')
         # Build overlay_shape → weapons mapping
@@ -71,17 +83,17 @@ def load_item_data(repo_root, classes_csv=None):
                 })
 
     # Load u8armour.ini
-    armour_ini = os.path.join(repo_root, 'src', 'titan', 'dialogue', 'pipeline', 'resources', 'u8armour.ini')
-    armour_ini = armour_ini if os.path.isfile(armour_ini) else None
+    armour_ini = _find_resource_file('u8armour.ini')
     if armour_ini:
         _parse_item_ini(armour_ini, shape_to_armour, 'armour')
 
+    searched_dirs = ', '.join(str(d) for d in resource_dirs)
     if not chosen_classes_csv:
-        print("WARN: usecode_classes.csv not found in src/titan/dialogue/pipeline/resources; itemProperties mapping will be incomplete.")
+        print(f"WARN: usecode_classes.csv not found in any resource dir ({searched_dirs}); itemProperties mapping will be incomplete.")
     if not weapons_ini:
-        print("WARN: u8weapons.ini not found in src/titan/dialogue/pipeline/resources; weapon/overlay itemProperties will be missing.")
+        print(f"WARN: u8weapons.ini not found in any resource dir ({searched_dirs}); weapon/overlay itemProperties will be missing.")
     if not armour_ini:
-        print("WARN: u8armour.ini not found in src/titan/dialogue/pipeline/resources; armour itemProperties will be missing.")
+        print(f"WARN: u8armour.ini not found in any resource dir ({searched_dirs}); armour itemProperties will be missing.")
 
     return shape_to_weapon, shape_to_armour, class_to_shape, overlay_to_weapons
 

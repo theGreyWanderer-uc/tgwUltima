@@ -297,6 +297,38 @@ def _validate_pipeline_outputs(runtime_root: Path, expected_classes: int, run_co
         else:
             _ok(f"JSON class files: {json_count}/{expected_classes}")
 
+        item_props_total = 0
+        item_props_weapon = 0
+        item_props_armour = 0
+        item_props_overlay = 0
+        for class_json in dirs.json.glob("U8P_*.json"):
+            try:
+                payload = json.loads(class_json.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            item_props = payload.get("itemProperties") if isinstance(payload, dict) else None
+            if not isinstance(item_props, dict):
+                continue
+            item_props_total += 1
+            if "weapon" in item_props:
+                item_props_weapon += 1
+            if "armour" in item_props:
+                item_props_armour += 1
+            if "overlay" in item_props:
+                item_props_overlay += 1
+
+        if item_props_total == 0:
+            _bad(
+                "No itemProperties found in generated class JSON output. "
+                "This usually means weapon/armour INI resources were not consumed during extraction."
+            )
+        else:
+            _ok(
+                "Extracted itemProperties classes: "
+                f"total={item_props_total} weapon={item_props_weapon} "
+                f"armour={item_props_armour} overlay={item_props_overlay}"
+            )
+
     for ini_name in ("u8weapons.ini", "u8armour.ini"):
         ini_path = pipeline_resources / ini_name
         if not ini_path.is_file():
