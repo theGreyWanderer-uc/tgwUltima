@@ -1,0 +1,261 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_GRENADE.json",
+  "file": "U8P_GRENADE",
+  "behavior_summary": [
+    "Provides the in-game behavior for a grenade-like item: examining it shows either a 'lit' or normal description depending on its animation frame, using it primes or immediately activates it depending on an internal counter, and being hit while 'lit' can fling the grenade and start its fuse.",
+    "The 'lit' visual/state is encoded in the item's sprite frame: frame % 4 == 0 is treated as the lit/active state and alters description and reaction to hits.",
+    "GRENADE::use either advances or updates the frame and starts a timed fuse sequence (spawned helper FREE::1C19) when a countdown local (BP-02h) is positive, or spawns an immediate activation handler (METHOD::0676) when the counter is zero.",
+    "GRENADE::gotHit computes randomized throw velocities (urandom + FREE::1A96 -> Item::hurl) and, if the grenade is lit and not already marked via Item::getQ/Q->setQ, starts the grenade's fuse by spawning GRENADE::use.",
+    "GRENADE::hit is a simpler hit callback: if lit and not already primed (Item::getQ == 0) it marks the grenade (Item::setQ) and spawns METHOD::0676 to handle activation."
+  ],
+  "notable_control_flow": [
+    "U8P_GRENADE::GRENADE::look: reads Item::getFrame and uses (frame % 4 == 0) to branch between two Item::bark description strings.",
+    "U8P_GRENADE::GRENADE::use: initializes BP-02h = 6 and branches on that counter; when nonzero it adjusts the frame (Item::setFrame) and schedules repeated timer ticks via FREE::1C19; when zero it spawns METHOD::0676 for immediate activation.",
+    "U8P_GRENADE::GRENADE::gotHit: only proceeds when the incoming-hit flag/param (second arg) is zero; if grenade is lit it builds randomized velocities and calls Item::hurl, then uses Item::getQ to avoid duplicate priming before calling Item::setQ and spawning U8P_GRENADE::GRENADE::use.",
+    "U8P_GRENADE::GRENADE::hit: if lit and getQ() == 0 it sets Q=1 to mark the grenade and spawns METHOD::0676; otherwise returns without action."
+  ],
+  "open_questions": [
+    "Exact semantics of FREE::2A56 called from U8P_GRENADE::look with mask 0x0200: does it query a visibility/owner flag or toggle an info bit? (inferred from call pattern)",
+    "Precise purpose of FREE::1A96: it appears to transform urandom output into signed/scale components for throwing velocities, but the transform semantics are not explicit.",
+    "Concrete effects of METHOD::0676 and FREE::1C19: these are inferred as an activation/explosion handler and a timed/fuse tick spawner respectively, but the exact behaviors and side effects are unknown.",
+    "Exact meaning and bit-encoding of the hit second argument tested by gotHit (why the code only runs when that parameter is zero).",
+    "Whether Item::Q is used elsewhere as a general 'primed' flag across other scripts, and whether clearing Q is handled by the spawned METHOD::0676 or other routines."
+  ],
+  "main_function": {
+    "name": "U8P_GRENADE::look",
+    "execution_form": "process",
+    "purpose": "Provide the textual description when a player/actor examines the grenade; detect 'lit' visual state by reading the item's frame and pick either 'lit flask of oil ' or 'flask of oil ' accordingly.",
+    "entry_conditions": [
+      "Event 0: invoked when an actor looks at / examines the grenade item (examine/inspect trigger)"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_GRENADE::look",
+      "kind": "main",
+      "role": "Examine handler that reads Item::getFrame, queries a mask via FREE::2A56, and calls Item::bark with either a lit or normal description.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_GRENADE::use",
+      "kind": "helper",
+      "role": "Handle using/activating the grenade: manage a local countdown (BP-02h), update sprite frame (Item::setFrame), and either spawn a timed fuse (FREE::1C19) or spawn immediate activation (METHOD::0676).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_GRENADE::gotHit",
+      "kind": "helper",
+      "role": "Respond to the grenade being hit: if incoming-hit param allows and grenade is lit, compute random throw velocities and call Item::hurl; then mark primed state via Item::setQ and spawn U8P_GRENADE::GRENADE::use if not already primed.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_GRENADE::hit",
+      "kind": "helper",
+      "role": "Simpler hit callback: if grenade is lit and not already primed, set Q and spawn METHOD::0676 to handle activation/explosion.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::getFrame",
+      "kind": "extern",
+      "role": "Engine accessor that returns the sprite/animation frame used to determine visual/state (used to detect 'lit').",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::setFrame",
+      "kind": "extern",
+      "role": "Engine mutator to change the item's sprite/frame (used when priming/ticking the fuse).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Display a short message/description to a player/process; used by U8P_GRENADE::look to show item description strings.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::hurl",
+      "kind": "extern",
+      "role": "Physics/action helper to throw/hurl an item with given velocity parameters.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getQ",
+      "kind": "extern",
+      "role": "Read a small per-item quantity/state used here as a primed/guard flag.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::setQ",
+      "kind": "extern",
+      "role": "Set the small per-item quantity/state used to mark the grenade as primed/handled.",
+      "confidence": "medium"
+    },
+    {
+      "name": "FREE::2A56",
+      "kind": "extern",
+      "role": "Engine helper called with mask 0x0200 and the item; likely checks or toggles an item/process property before displaying description.",
+      "confidence": "low"
+    },
+    {
+      "name": "FREE::1C19",
+      "kind": "extern",
+      "role": "Spawned with (pid, 0x0A, 0) to schedule timed/fuse ticks; appears to be a timer/spawn helper.",
+      "confidence": "medium"
+    },
+    {
+      "name": "METHOD::0676",
+      "kind": "extern",
+      "role": "Spawned when grenade activates; likely handles explosion/impact behavior or final activation resolution.",
+      "confidence": "low"
+    },
+    {
+      "name": "urandom",
+      "kind": "extern",
+      "role": "Random number generator used to produce throw velocity components.",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::1A96",
+      "kind": "extern",
+      "role": "Transform/random-scaling helper used to convert urandom outputs and constants into signed/scaled offsets for Item::hurl.",
+      "confidence": "low"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_GRENADE::gotHit",
+        "callee": "U8P_GRENADE::use",
+        "purpose": "When grenade is hit while lit and not already primed, spawn/use the same use routine to start the timed fuse sequence.",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_GRENADE::look",
+        "callee": "Item::getFrame",
+        "purpose": "Read the item's current frame to determine whether it is 'lit' (frame % 4 == 0).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GRENADE::look",
+        "callee": "FREE::2A56",
+        "purpose": "Call with mask 0x0200 and the item before barking description; likely a query or property toggle used for description context.",
+        "confidence": "low"
+      },
+      {
+        "caller": "U8P_GRENADE::look",
+        "callee": "Item::bark",
+        "purpose": "Emit the appropriate description string to the inspecting process/player ('lit flask of oil ' vs 'flask of oil ').",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GRENADE::use",
+        "callee": "Item::getFrame",
+        "purpose": "Read the frame to compute the next frame/state when priming or advancing animation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GRENADE::use",
+        "callee": "Item::setFrame",
+        "purpose": "Update the item's frame to reflect priming/tick progress of the fuse/animation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GRENADE::use",
+        "callee": "FREE::1C19",
+        "purpose": "Spawn/schedule a timed helper (pid, 0x0A, 0) to implement fuse ticks or delayed actions.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GRENADE::use",
+        "callee": "METHOD::0676",
+        "purpose": "When the countdown reaches zero, spawn the activation/explosion handler to resolve the grenade effect immediately.",
+        "confidence": "low"
+      },
+      {
+        "caller": "U8P_GRENADE::gotHit",
+        "callee": "Item::getFrame",
+        "purpose": "Check if grenade is lit (frame % 4 == 0) before reacting to the hit.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GRENADE::gotHit",
+        "callee": "urandom",
+        "purpose": "Generate random numbers used to compute throw/hurl velocity components.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GRENADE::gotHit",
+        "callee": "FREE::1A96",
+        "purpose": "Transform/scale random values into signed velocity offsets for Item::hurl.",
+        "confidence": "low"
+      },
+      {
+        "caller": "U8P_GRENADE::gotHit",
+        "callee": "Item::hurl",
+        "purpose": "Throw/hurl the grenade with computed randomized velocities when it is struck and lit.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GRENADE::gotHit",
+        "callee": "Item::getQ",
+        "purpose": "Check whether the grenade has already been primed/marked to avoid duplicate spawns.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GRENADE::gotHit",
+        "callee": "Item::setQ",
+        "purpose": "Mark the grenade (Q=1) as primed/handled before spawning the use/fuse sequence.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GRENADE::hit",
+        "callee": "Item::getFrame",
+        "purpose": "Check lit-state before responding to a hit.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GRENADE::hit",
+        "callee": "Item::getQ",
+        "purpose": "Avoid duplicate priming/handling by checking Q before taking action.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GRENADE::hit",
+        "callee": "Item::setQ",
+        "purpose": "Mark the grenade as primed (Q=1) so future hits don't re-trigger activation.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GRENADE::hit",
+        "callee": "METHOD::0676",
+        "purpose": "Spawn the activation/explosion handler when a lit grenade is hit and not yet primed.",
+        "confidence": "low"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_GRENADE::GRENADE::look",
+    "behavior_summary_one_liner": "Provides the in-game behavior for a grenade-like item: examining it shows either a 'lit' or normal description depending on its animation frame, using it primes or immediately activates it depending on an internal counter, and being hit while 'lit' can fling the grenade and start its fuse.",
+    "external_call_count": 17,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

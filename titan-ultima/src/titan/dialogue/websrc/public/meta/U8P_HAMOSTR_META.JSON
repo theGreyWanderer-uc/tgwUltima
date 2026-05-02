@@ -1,0 +1,76 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_HAMOSTR.json",
+  "file": "U8P_HAMOSTR",
+  "behavior_summary": [
+    "When an actor inspects (looks at) the HAMOSTR object, the script prepares display/context state, then asks the item to present a short visible name string 'Bone Crusher ' to the viewer via Item::bark.",
+    "The viewer/process identifier is forwarded to the bark call. After the bark, temporary stack/return bookkeeping is performed and the script suspends/returns without modifying global flags or persistent game state."
+  ],
+  "notable_control_flow": [
+    "Entry on Event 0 (U8P_HAMOSTR::look) for U8P_HAMOSTR::look.",
+    "Set-up operations run to adjust object info/processing state (inferred 'set info' and 'process exclude' behavior) to prepare presentation context.",
+    "Construct/push the literal string 'Bone Crusher ' and push a pointer to the item/process plus the viewer PID, then call Item::bark.",
+    "After Item::bark returns, the script frees the temporary string and performs return/stack bookkeeping (push retval, implies/pop), then suspends and returns.",
+    "No global flags are read or written by this handler."
+  ],
+  "open_questions": [
+    "Exact identity and layout of the pushed item/process pointer passed to Item::bark (inferred from typical Usecode conventions) — confidence: medium.",
+    "Precise meaning and semantic effect of the 'set info' argument used during setup (e.g. specific info id and whether it sets visual state or processing exclusion) — confidence: low.",
+    "Whether the implies/pop sequence has any gameplay-visible side-effect here or is purely internal bookkeeping — confidence: medium."
+  ],
+  "main_function": {
+    "name": "U8P_HAMOSTR::look",
+    "execution_form": "process",
+    "purpose": "Handle the U8P_HAMOSTR::look/examine event for the HAMOSTR item by presenting its visible name to the inspecting actor and preparing transient presentation context.",
+    "entry_conditions": [
+      "Event 0 (U8P_HAMOSTR::look) — invoked when a player or actor examines/inspects the HAMOSTR object"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_HAMOSTR::look",
+      "kind": "main",
+      "role": "Event handler for the object's U8P_HAMOSTR::look/examine behavior; prepares context and triggers a short text presentation.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine used to display/emit a short text string (the item's visible name/message) to a target process/viewer.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_HAMOSTR::look",
+        "callee": "Item::bark",
+        "purpose": "Present the visible name string 'Bone Crusher ' to the viewer/process that looked at the item.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "HAMOSTR::look",
+    "behavior_summary_one_liner": "When an actor inspects (looks at) the HAMOSTR object, the script prepares display/context state, then asks the item to present a short visible name string 'Bone Crusher ' to the viewer via Item::bark.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

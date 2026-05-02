@@ -1,0 +1,778 @@
+type,id,name
+intrinsic,0x0000,process target()
+intrinsic,0x0001,Item::getNext()
+intrinsic,0x0002,Item::touch()
+intrinsic,0x0003,word Item::getX()
+intrinsic,0x0004,word Item::getY()
+intrinsic,0x0005,word Item::getZ()
+intrinsic,0x0006,word Item::getCX()
+intrinsic,0x0007,word Item::getCY()
+intrinsic,0x0008,word Item::getCZ()
+intrinsic,0x0009,word Item::getGumpX()
+intrinsic,0x000A,word Item::getGumpY()
+intrinsic,0x000B,"void Item::setGumpXY(word x, word y)"
+intrinsic,0x000C,Item::getPoint(WorldPoint*)
+intrinsic,0x000D,uword Item::getType()
+intrinsic,0x000E,void Item::setType(uword type)
+intrinsic,0x000F,uword Item::getFrame()
+intrinsic,0x0010,void Item::setFrame(uword frame)
+intrinsic,0x0011,uword Item::getQuality()
+intrinsic,0x0012,uword Item::getUnkEggType()
+intrinsic,0x0013,uword Item::getQuantity()
+intrinsic,0x0014,Item::getContents()
+intrinsic,0x0015,Item::getContainer()
+intrinsic,0x0016,Item::getRootContainer()
+intrinsic,0x0017,uword Item::getGlobNum()
+intrinsic,0x0018,void Item::setGlobNum(uword)
+intrinsic,0x0019,uword Item::getQ()
+intrinsic,0x001A,void Item::setQ(uword)
+intrinsic,0x001B,void Item::setQuality(word value)
+intrinsic,0x001C,void Item::setUnkEggType(word value)
+intrinsic,0x001D,void Item::setQuantity(word value)
+intrinsic,0x001E,word Item::getFamily()
+intrinsic,0x001F,bool Item::getTypeFlag(word bit)
+intrinsic,0x0020,word Item::getStatus()
+intrinsic,0x0021,void Item::orStatus(word mask)
+intrinsic,0x0022,void Item::andStatus(word mask)
+intrinsic,0x0023,"Item::getFootpad(word*, word*, word*)"
+intrinsic,0x0024,Item::touches(uword)
+intrinsic,0x0025,Item::overlaps(uword)
+intrinsic,0x0026,Item::overlapsXY(uword)
+intrinsic,0x0027,Item::isOn(uword)
+intrinsic,0x0028,Item::isCompletelyOn(uword)
+intrinsic,0x0029,Item::isAbove(uword)
+intrinsic,0x002A,Item::isUnder(uword)
+intrinsic,0x002B,Item::ascend(word)
+intrinsic,0x002C,Item::getWeight()
+intrinsic,0x002D,Item::getWeightIncludingContents()
+intrinsic,0x002E,Item::getSurfaceWeight()
+intrinsic,0x002F,Item::getVolume()
+intrinsic,0x0030,Item::getCapacity()
+intrinsic,0x0031,"Item::legal_create(uword, uword, uword, uword, uword)"
+intrinsic,0x0032,"Item::create(uword, uword)"
+intrinsic,0x0033,"Item::legal_create(uword, uword, WorldPoint*)"
+intrinsic,0x0034,"Item::legal_create(uword, uword, uword, word)"
+intrinsic,0x0035,Item::push()
+intrinsic,0x0036,"Item::pop(uword, uword, ubyte)"
+intrinsic,0x0037,Item::pop(uword)
+intrinsic,0x0038,Item::pop()
+intrinsic,0x0039,Item::popToEnd(uword)
+intrinsic,0x003A,Item::destroy()
+intrinsic,0x003B,Item::removeContents()
+intrinsic,0x003C,Item::destroyContents()
+intrinsic,0x003D,Item::isExplosive()
+intrinsic,0x003E,"Item::move(uword, uword, ubyte)"
+intrinsic,0x003F,Item::move(WorldPoint*)
+intrinsic,0x0040,"Item::legal_move(WorldPoint*, uword, uword)"
+intrinsic,0x0041,"Item::legal_move(uword*, uword)"
+intrinsic,0x0042,Item::isNpc()
+intrinsic,0x0043,Item::isInNpc()
+intrinsic,0x0044,"process Item::hurl(word, word, word, word)"
+intrinsic,0x0045,"Item::shoot(WorldPoint*, word, word)"
+intrinsic,0x0046,Item::fall()
+intrinsic,0x0047,Item::grab()
+intrinsic,0x0048,"Item::findTarget(word, word)"
+intrinsic,0x0049,process Item::bark(char* str)
+intrinsic,0x004A,strptr process Item::ask(uword slist)
+intrinsic,0x004B,"word Item::getSliderInput(word min, word max, word step)"
+intrinsic,0x004C,Item::openGump(word)
+intrinsic,0x004D,Item::closeGump()
+intrinsic,0x004E,Item::isGumpOpen()
+intrinsic,0x004F,Item::getNpcArray()
+intrinsic,0x0050,Item::getMapArray()
+intrinsic,0x0051,Item::setNpcArray(word)
+intrinsic,0x0052,Item::setMapArray(word)
+intrinsic,0x0053,"Item::receiveHit(uword, byte, word, uword)"
+intrinsic,0x0054,Item::explode()
+intrinsic,0x0055,"Item::canReach(uword, word)"
+intrinsic,0x0056,Item::getRange(uword)
+intrinsic,0x0057,"Item::getRange(uword, uword, uword)"
+intrinsic,0x0058,"Item::getDirToCoords(uword, uword)"
+intrinsic,0x0059,"Item::getDirFromCoords(uword, uword)"
+intrinsic,0x005A,Item::getDirToItem(uword)
+intrinsic,0x005B,Item::getDirFromItem(uword)
+intrinsic,0x005C,process Item::look()
+intrinsic,0x005D,process Item::use()
+intrinsic,0x005E,process Item::anim()
+intrinsic,0x005F,process Item::cachein()
+intrinsic,0x0060,"Item::hit(uword, word)"
+intrinsic,0x0061,"process Item::gotHit(uword, word)"
+intrinsic,0x0062,process Item::release()
+intrinsic,0x0063,process Item::equip()
+intrinsic,0x0064,process Item::unequip()
+intrinsic,0x0065,process Item::combine()
+intrinsic,0x0066,process Item::calledFromAnim()
+intrinsic,0x0067,process Item::enterFastArea()
+intrinsic,0x0068,process Item::leaveFastArea()
+intrinsic,0x0069,process Item::cast(uword)
+intrinsic,0x006A,process Item::justMoved()
+intrinsic,0x006B,process Item::AvatarStoleSomething(uword)
+intrinsic,0x006C,process Item::animGetHit(uword)
+intrinsic,0x006D,process Item::guardianBark(word)
+intrinsic,0x006E,process Book::read(char*)
+intrinsic,0x006F,process Scroll::read(char*)
+intrinsic,0x0070,"process Grave::read(word,char*)"
+intrinsic,0x0071,"process Plaque::read(word,char*)"
+intrinsic,0x0072,Egg::getEggXRange()
+intrinsic,0x0073,Egg::getEggYRange()
+intrinsic,0x0074,Egg::setEggXRange(uword)
+intrinsic,0x0075,Egg::setEggYRange(uword)
+intrinsic,0x0076,Egg::getEggId()
+intrinsic,0x0077,Egg::setEggId(uword)
+intrinsic,0x0078,Egg::hatch()
+intrinsic,0x0079,MonsterEgg::hatch()
+intrinsic,0x007A,MonsterEgg::getMonId()
+intrinsic,0x007B,MonsterEgg::getActivity()
+intrinsic,0x007C,MonsterEgg::getShapeType()
+intrinsic,0x007D,MonsterEgg::setMonId(word)
+intrinsic,0x007E,MonsterEgg::setActivity(word)
+intrinsic,0x007F,MonsterEgg::setShapeType(word)
+intrinsic,0x0080,Npc::isBusy()
+intrinsic,0x0081,Npc::areEnemiesNear()
+intrinsic,0x0082,Npc::isInCombat()
+intrinsic,0x0083,Npc::setInCombat()
+intrinsic,0x0084,Npc::clrInCombat()
+intrinsic,0x0085,Npc::setTarget(uword)
+intrinsic,0x0086,Npc::getTarget()
+intrinsic,0x0087,Npc::setAlignment(ubyte)
+intrinsic,0x0088,Npc::getAlignment()
+intrinsic,0x0089,Npc::setEnemyAlignment(ubyte)
+intrinsic,0x008A,Npc::getEnemyAlignment()
+intrinsic,0x008B,Npc::isEnemy(uword)
+intrinsic,0x008C,Npc::isDead()
+intrinsic,0x008D,Npc::setDead()
+intrinsic,0x008E,Npc::clrDead()
+intrinsic,0x008F,Npc::isImmortal()
+intrinsic,0x0090,Npc::setImmortal()
+intrinsic,0x0091,Npc::clrImmortal()
+intrinsic,0x0092,Npc::isWithstandDeath()
+intrinsic,0x0093,Npc::setWithstandDeath()
+intrinsic,0x0094,Npc::clrWithstandDeath()
+intrinsic,0x0095,Npc::isFeignDeath()
+intrinsic,0x0096,Npc::setFeignDeath()
+intrinsic,0x0097,Npc::clrFeignDeath()
+intrinsic,0x0098,Npc::freeEquip(uword)
+intrinsic,0x0099,Npc::clearEquip()
+intrinsic,0x009A,Npc::getNpcSlot()
+intrinsic,0x009B,Npc::freeNpcSlot()
+intrinsic,0x009C,Npc::getDir()
+intrinsic,0x009D,Npc::getMap()
+intrinsic,0x009E,"Npc::teleport(uword, uword, ubyte, ubyte)"
+intrinsic,0x009F,"process Npc::doAnim(AnimSet, word, word, ubyte)"
+intrinsic,0x00A0,Npc::getLastAnimSet()
+intrinsic,0x00A1,"process Npc::pathfind(uword, uword, uword, uword)"
+intrinsic,0x00A2,"process Npc::pathfind(uword, uword)"
+intrinsic,0x00A3,byte Npc::getStr()
+intrinsic,0x00A4,byte Npc::getInt()
+intrinsic,0x00A5,byte Npc::getDex()
+intrinsic,0x00A6,ubyte Npc::getHp()
+intrinsic,0x00A7,word Npc::getMana()
+intrinsic,0x00A8,void Npc::setStr(byte str)
+intrinsic,0x00A9,void Npc::setInt(byte int)
+intrinsic,0x00AA,void Npc::setDex(byte dex)
+intrinsic,0x00AB,void Npc::setHp(ubyte hp)
+intrinsic,0x00AC,void Npc::setMana(word mana)
+intrinsic,0x00AD,"Npc::create(uword, uword)"
+intrinsic,0x00AE,process Npc::cSetActivity(Activity)
+intrinsic,0x00AF,Npc::setAirWalkEnabled(ubyte)
+intrinsic,0x00B0,Npc::getAirWalkEnabled()
+intrinsic,0x00B1,Npc::schedule(ulong)
+intrinsic,0x00B2,Npc::getEquip(word)
+intrinsic,0x00B3,"Npc::setEquip(word, uword)"
+intrinsic,0x00B4,closeAllGumps()
+intrinsic,0x00B5,"process Camera::scrollTo(uword, uword, ubyte, word)"
+intrinsic,0x00B6,urandom(word)
+intrinsic,0x00B7,"rndRange(word,word)"
+intrinsic,0x00B8,castGrantPeaceSpell()
+intrinsic,0x00B9,numToStr(uword)
+intrinsic,0x00BA,strToNum(char*)
+intrinsic,0x00BB,playMusic(byte)
+intrinsic,0x00BC,getName()
+intrinsic,0x00BD,"igniteChaos(uword, uword, ubyte)"
+intrinsic,0x00BE,Camera::setCenterOn(uword)
+intrinsic,0x00BF,"Camera::move_to(uword, uword, ubyte, word)"
+intrinsic,0x00C0,"Camera::move_rel(word, word, word)"
+intrinsic,0x00C1,Camera::set_roof(word)
+intrinsic,0x00C2,Camera::roof()
+intrinsic,0x00C3,Camera::getX()
+intrinsic,0x00C4,Camera::getY()
+intrinsic,0x00C5,Camera::getZ()
+intrinsic,0x00C6,Camera::startQuake(word)
+intrinsic,0x00C7,Camera::stopQuake()
+intrinsic,0x00C8,Camera::invertScreen(ubyte)
+intrinsic,0x00C9,U8MousePointer::getDir()
+intrinsic,0x00CA,"Kernel::getNumProcesses(uword, ProcessType)"
+intrinsic,0x00CB,"Kernel::resetRef(uword, ProcessType)"
+intrinsic,0x00CC,"process teleportToEgg(word, word, ubyte)"
+intrinsic,0x00CD,"resetRef(uword, uword)"
+intrinsic,0x00CE,"setRef(uword, uword, uword)"
+intrinsic,0x00CF,getAvatarInStasis()
+intrinsic,0x00D0,setAvatarInStasis(word)
+intrinsic,0x00D1,getEtherealTop()
+intrinsic,0x00D2,getCurrentTimerTick()
+intrinsic,0x00D3,"canGetThere(uword, uword, uword)"
+intrinsic,0x00D4,"canExistAt(uword, uword, uword, uword, ubyte, uword, word)"
+intrinsic,0x00D5,"createSprite(word, word, word, word, word, word, uword, uword, ubyte)"
+intrinsic,0x00D6,"createSprite(word, word, word, word, uword, uword, ubyte)"
+intrinsic,0x00D7,word getFamilyOfType(uword type)
+intrinsic,0x00D8,TimeInGameHours()
+intrinsic,0x00D9,TimeInMinutes()
+intrinsic,0x00DA,TimeInSeconds()
+intrinsic,0x00DB,SetTimeInGameHours(word)
+intrinsic,0x00DC,SetTimeInMinutes(long)
+intrinsic,0x00DD,SetTimeInSeconds(long)
+intrinsic,0x00DE,process FadeToBlack()
+intrinsic,0x00DF,process FadeFromBlack()
+intrinsic,0x00E0,"process FadeToPalette(word, word)"
+intrinsic,0x00E1,process LightningBolt()
+intrinsic,0x00E2,process FadeToWhite()
+intrinsic,0x00E3,process FadeFromWhite()
+intrinsic,0x00E4,playEndgame()
+intrinsic,0x00E5,FeedAvatar(word)
+intrinsic,0x00E6,AccumulateStrength(word)
+intrinsic,0x00E7,AccumulateIntelligence(word)
+intrinsic,0x00E8,AccumulateDexterity(word)
+intrinsic,0x00E9,ClrAvatarInCombat()
+intrinsic,0x00EA,SetAvatarInCombat()
+intrinsic,0x00EB,IsAvatarInCombat()
+intrinsic,0x00EC,playSFX(word)
+intrinsic,0x00ED,"playSFX(word, ubyte)"
+intrinsic,0x00EE,"playSFX(word, word, uword)"
+intrinsic,0x00EF,playAmbientSFX(word)
+intrinsic,0x00F0,"playAmbientSFX(word, word)"
+intrinsic,0x00F1,"playAmbientSFX(word, word, uword)"
+intrinsic,0x00F2,isSFXPlaying(word)
+intrinsic,0x00F3,"setVolumeSFX(word, word)"
+intrinsic,0x00F4,stopSFX(word)
+intrinsic,0x00F5,"stopSFX(word, uword)"
+intrinsic,0x00F6,"soundInit(word, word, word)"
+intrinsic,0x00F7,soundDeInit()
+intrinsic,0x00F8,musicStop()
+intrinsic,0x00F9,musicSlowStop()
+intrinsic,0x00FA,musicPlay(word)
+intrinsic,0x00FB,"TonysBalls(word, word, uword, uword, uword)"
+intrinsic,0x00FC,AvatarCanCheat()
+intrinsic,0x00FD,MakeAvatarACheater()
+intrinsic,0x00FE,isGameRunning()
+global,0x0000,startedConvo
+global,0x0001,doneDefault
+global,0x0002,jumpedAhead
+global,0x0003,baneWarned
+global,0x0005,berenWarned
+global,0x0007,startedQuestions
+global,0x0008,finishedQuestions
+global,0x0009,reStartedFall
+global,0x000A,doneKeepFallEnd
+global,0x000B,devonHeardLurker
+global,0x000C,devonComplained
+global,0x000D,doneFallEnd
+global,0x000E,neverSinks
+global,0x000F,somebodyTalking
+global,0x0010,getUp
+global,0x0011,justTeleported
+global,0x0012,postEarthQuake
+global,0x0013,guardsCalled
+global,0x0024,gettingDrunk
+global,0x0027,hearTruthActive
+global,0x0028,avatarEndure
+global,0x0029,avatarArmor
+global,0x002A,deathSpeakCast
+global,0x002B,lithosHis
+global,0x002C,lithosMet
+global,0x002D,pyrosHis
+global,0x0032,titansHis
+global,0x0033,nowCaretaker
+global,0x0036,hydrosFree
+global,0x0038,pyrosFree
+global,0x0039,hasTongue
+global,0x003A,hasBreath
+global,0x003C,hasHeart
+global,0x003D,needBreath
+global,0x003F,needTear
+global,0x0040,needHeart
+global,0x0041,deadWalk
+global,0x0042,blackLoreSeen
+global,0x0043,mythranSaidBlackLore
+global,0x0044,readMagBook
+global,0x0045,talkedToDeadDudes
+global,0x0046,sawCentralTenebraeTeleporter
+global,0x0047,sawPlateauTeleporter
+global,0x0048,sawUpperCatacombsTeleporter
+global,0x0049,sawMountainKingTeleporter
+global,0x004A,sawArgentrockIsleTeleporter
+global,0x004B,sawCarthaxLakeTeleporter
+global,0x004C,sawDaemonsCragTeleporter
+global,0x004D,ancientOnesMet
+global,0x004E,getPowerAO
+global,0x004F,metKhumash
+global,0x0050,gotObTip
+global,0x0051,hanoiBusy
+global,0x0052,hanoiStairDown
+global,0x0055,hanoiStairBlocked
+global,0x0057,devonsPower
+global,0x0058,devonInRule
+global,0x005A,devonJailed
+global,0x005B,toranDead
+global,0x005C,helpDevon
+global,0x005D,refusedDevon
+global,0x005E,talkedAboutToran
+global,0x005F,benticCacked
+global,0x0060,metDevonInJail
+global,0x0061,barmaidForNow
+global,0x0062,avatarTooCheap
+global,0x0063,secondexecution
+global,0x0064,guardEWMet
+global,0x0067,interrogEW
+global,0x0068,askedAboutEWRoad
+global,0x0069,DevonHitWater
+global,0x006B,passedTests
+global,0x006E,stratosName
+global,0x006F,stratosMet
+global,0x0070,stratosTakenBreath
+global,0x0071,fociReturned
+global,0x0072,hasXavierFoci
+global,0x0073,spokeAboutTorwinS
+global,0x0074,spokeAboutTorwinX
+global,0x0076,torwinGottaJump
+global,0x0077,levitateAvatar
+global,0x0078,passedWisdomTest
+global,0x0079,attemptedWisdomTest
+global,0x007A,readyForTests
+global,0x007B,attemptedCenteredTest
+global,0x007C,passedCenteredTest
+global,0x007D,spokeOfTests
+global,0x007E,breakWind
+global,0x0080,hasOwnFoci
+global,0x0081,attemptedThirdTest
+global,0x0082,passedThirdTest
+global,0x0083,solvedMystery
+global,0x0085,permissionToAirWalk
+global,0x0089,toldThurgists
+global,0x008A,spokenAboutBreath
+global,0x008B,focusMissing
+global,0x008C,hasRing
+global,0x008D,rewardMe
+global,0x008E,avatarTookRock
+global,0x008F,betrayedDisciple
+global,0x0090,acolyteKilled
+global,0x0092,goToInnerSanctum
+global,0x0093,gotTheSymbols
+global,0x0094,tonguing
+global,0x0095,sponsorTest
+global,0x0096,spellsCast
+global,0x0098,spell1
+global,0x0099,spell2
+global,0x009A,spell3
+global,0x009B,keyOfTheAcolyte
+global,0x009D,inDaemonScene
+global,0x009E,afterDaemonScene
+global,0x009F,avatarMasterSorcerer
+global,0x00A2,screwUps
+global,0x00A4,blastFirst
+global,0x00A5,thisIsIt
+global,0x00A6,doChannel
+global,0x00A7,cardasMet
+global,0x00A8,cardasName
+global,0x00A9,cardasJob
+global,0x00AA,cardasAvaName
+global,0x00AB,daemosMet
+global,0x00AC,daemosName
+global,0x00AD,daemosJob
+global,0x00AE,daemosAvaName
+global,0x00AF,kothiusMet
+global,0x00B0,kothiusName
+global,0x00B1,kothiusJob
+global,0x00B2,kothiusAvaName
+global,0x00B3,mentarMet
+global,0x00B4,mentarName
+global,0x00B5,mentarJob
+global,0x00B6,mentarAvaName
+global,0x00B7,tallonMet
+global,0x00B8,tallonName
+global,0x00B9,tallonJob
+global,0x00BA,tallonAvaName
+global,0x00BB,emricholMet
+global,0x00BC,emricholName
+global,0x00BD,emricholJob
+global,0x00BE,emricholAvaName
+global,0x00BF,lothianDead
+global,0x00C0,mythranNec
+global,0x00C1,vividosMet
+global,0x00C2,vividosSchedule
+global,0x00C4,ceremonySoon
+global,0x00C5,haveDagger
+global,0x00C6,vivTold
+global,0x00C7,toldReagents
+global,0x00C8,haveReagents
+global,0x00C9,haveReagentsDone
+global,0x00CB,metNec1
+global,0x00CC,metNec2
+global,0x00CD,metNec3
+global,0x00CE,metNec4
+global,0x00CF,metNec5
+global,0x00D0,metNec6
+global,0x00D2,gotTheKey
+global,0x00D3,lothInterred
+global,0x00D4,toldSticks
+global,0x00D5,metGwillim
+global,0x00D6,toldDagger
+global,0x00D7,isApprentice
+global,0x00D8,toldDaggerDone
+global,0x00D9,lithosMetDone
+global,0x00DA,magicWallDone
+global,0x00DB,vividosPissed
+global,0x00DC,askToDo
+global,0x00DE,openBirth
+global,0x00DF,saidBirth
+global,0x00E0,readGravestone
+global,0x00E2,metHydros
+global,0x00E3,hydrosPissed
+global,0x00E4,hydrosBegged
+global,0x00E5,leaving
+global,0x00E6,rainStorm
+global,0x00E7,rainStormActive
+global,0x00E8,fireStorm
+global,0x00E9,fireStormActive
+global,0x00EA,shroomPaletteEffectsActive
+global,0x00EB,stormsActive
+global,0x00EC,arcadionMet
+global,0x00ED,arcadionName
+global,0x00EE,arcadionJob
+global,0x00EF,arcadionAvaName
+global,0x00F2,arcadionMetBefore
+global,0x00F6,corinthPissed
+global,0x00F7,corinthRealPissed
+global,0x00F8,corinthMet
+global,0x00F9,corinthToldGhost
+global,0x00FA,corinthSchedule
+global,0x00FC,devonName
+global,0x00FD,devonJob
+global,0x00FF,devonSaidBentic
+global,0x0100,devonMentionedTear
+global,0x0101,devonMet
+global,0x0102,gwillimPissed
+global,0x0103,gwillimSchedule
+global,0x0106,kilandraMet
+global,0x0107,kilandraName
+global,0x0108,kilandraJob
+global,0x0109,kilandraPissed
+global,0x010A,askedFirstTime
+global,0x010B,askedSecondTime
+global,0x010C,toldAboutKey
+global,0x010F,korickMet
+global,0x0110,korickPissed
+global,0x0111,korickRealPissed
+global,0x0112,korickSchedule
+global,0x0115,mordeaMet
+global,0x0116,mordeaName
+global,0x0117,mordeaJob
+global,0x0119,mordeaPissed
+global,0x011A,mordeaDead
+global,0x011D,mordeaSchedule
+global,0x0120,mythranMet
+global,0x0121,mythranName
+global,0x0122,mythranJob
+global,0x0125,mythranAvaName
+global,0x0126,mythSticks
+global,0x0127,mythDoneLeave
+global,0x0128,mythGuard
+global,0x0129,paganLore
+global,0x012A,mythMagic
+global,0x012B,mythranScrolls
+global,0x012C,mythReagents
+global,0x012D,wantsScrolls
+global,0x012E,wantsSpells
+global,0x012F,wantsReagents
+global,0x0130,gotBlast
+global,0x0131,gotShower
+global,0x0132,gotSummon
+global,0x0133,gotDestruction
+global,0x0134,gotDevastation
+global,0x0135,lockSpellSpeech
+global,0x0136,usedRecall
+global,0x0137,orlokMet
+global,0x0138,orlokName
+global,0x0139,orlokJob
+global,0x013C,orlokAvaName
+global,0x013D,orlokPoison
+global,0x013E,orlokDrink
+global,0x013F,orlokTales
+global,0x0140,orlokTab
+global,0x0146,toldGhostStory
+global,0x0147,toldOfTreasure
+global,0x0148,benticStoryTold
+global,0x014B,haveAnother
+global,0x014C,cost
+global,0x0150,shaanaMet
+global,0x0151,shaanaName
+global,0x0152,shaanaJob
+global,0x0153,shaanaMad
+global,0x0156,sawShaana
+global,0x0157,shaanaSchedule
+global,0x0159,tarnaMet
+global,0x015A,tarnaName
+global,0x015B,tarnaJob
+global,0x015C,tarnaAvaName
+global,0x015D,tarnaTenebraed
+global,0x015E,malchirMet
+global,0x0160,malchirName
+global,0x0161,malchirJob
+global,0x0162,malchirMad
+global,0x0164,malchirAvaName
+global,0x0165,MalchirTest
+global,0x0168,vardionMet
+global,0x0169,vardionName
+global,0x016A,vardionJob
+global,0x016B,vardionMad
+global,0x016D,vardionAvaName
+global,0x016E,vardionHome
+global,0x0171,vardionGroveled
+global,0x0172,vardionEnclave
+global,0x0173,vardionOffer
+global,0x0176,vardionRefused
+global,0x0177,vardionJoined
+global,0x0178,vardionDolt
+global,0x0179,vardionFool
+global,0x017A,vardionStupid
+global,0x017B,vardionFalse
+global,0x017D,baneMet
+global,0x017E,baneName
+global,0x017F,baneJob
+global,0x0180,baneMad
+global,0x0182,baneAvaName
+global,0x0183,baneOffer
+global,0x0184,baneHasAsked
+global,0x0185,baneJoined
+global,0x0186,baneFool
+global,0x0187,baneIdiot
+global,0x0188,baneMoron
+global,0x0189,baneFalse
+global,0x018B,baneGroveled
+global,0x018C,berenMet
+global,0x018E,berenName
+global,0x018F,berenJob
+global,0x0190,berenMad
+global,0x0192,berenAvaName
+global,0x0193,berenGroveled
+global,0x0194,tickedOff
+global,0x0196,berenSchedule
+global,0x0199,gorgrondMet
+global,0x019B,gorgrondName
+global,0x019C,gorgrondJob
+global,0x019D,gorgrondMad
+global,0x019F,gorgrondAvaName
+global,0x01A0,gorgrondDung
+global,0x01A1,ticked
+global,0x01A3,gorgrondGroveled
+global,0x01A4,friendBane
+global,0x01A5,askedFriend
+global,0x01A6,xavierMet
+global,0x01A7,xavierName
+global,0x01A8,xavierJob
+global,0x01AA,xavierJustHealed
+global,0x01AB,spokeAboutTests
+global,0x01AC,xavierSitting
+global,0x01AD,xavierSchedule
+global,0x01AF,xavierPissed
+global,0x01B0,askedAboutArgent
+global,0x01B1,cyrrusMet
+global,0x01B2,cyrrusName
+global,0x01B3,cyrrusJob
+global,0x01B5,cyrrusJustHealed
+global,0x01B6,cyrrusSchedule
+global,0x01B8,torwinMet
+global,0x01B9,torwinName
+global,0x01BA,torwinJob
+global,0x01BB,torwinPissed
+global,0x01BC,torwinJumped
+global,0x01BE,torwinSchedule
+global,0x01C0,stellosMet
+global,0x01C1,stellosName
+global,0x01C2,stellosJob
+global,0x01C3,stellosSchedule
+global,0x01C5,stellosJustHealed
+global,0x01C7,spokenAboutFoci
+global,0x01C8,spokeAboutRing
+global,0x01C9,silverMineKeyGiven
+global,0x01CA,madeToraxForTest
+global,0x01CB,salkindMet
+global,0x01CC,salkindName
+global,0x01CD,salkindJob
+global,0x01CE,salkindPissed
+global,0x01D1,SalkindSchedule
+global,0x01D3,benticMet
+global,0x01D4,benticName
+global,0x01D5,benticJob
+global,0x01D6,benticSaidMythran
+global,0x01D7,mentionedPagan
+global,0x01D8,haveAvaName
+global,0x01D9,benticGivenBook
+global,0x01DA,darionMet
+global,0x01DB,darionName
+global,0x01DC,darionJob
+global,0x01DD,darionSchedule
+global,0x01E1,spokeAboutJenna
+global,0x01E3,darionGhostStory
+global,0x01E4,askedAboutSell
+global,0x01E5,hasAvaName
+global,0x01E6,AvatarTookHit
+global,0x01E7,DarionTookHit
+global,0x01E8,DarionTraining
+global,0x01E9,jennaMet
+global,0x01EA,jennaName
+global,0x01EB,jennaJob
+global,0x01EC,jennaPissed
+global,0x01ED,havAvaName
+global,0x01EE,jennaGhostStory
+global,0x01EF,sendJennaToLunch
+global,0x01F0,rhianMet
+global,0x01F1,rhianName
+global,0x01F2,rhianJob
+global,0x01F3,rhianSchedule
+global,0x01F5,rhianMoveCheck
+global,0x01F7,askedAboutTears
+global,0x01F8,askedAboutSon
+global,0x01FA,rhianSitting
+global,0x01FB,rhianKneeling
+global,0x01FC,rhiangrieving
+global,0x01FD,toldOfTorwinDeath
+global,0x0200,stolenOnce
+global,0x0201,askedClothes
+global,0x0202,askedGems
+global,0x0203,araminaMet
+global,0x0204,araminaName
+global,0x0205,araminaJob
+global,0x0207,araminaSchedule
+global,0x0209,guard1met
+global,0x020A,guard1job
+global,0x020B,guard1pissed
+global,0x020C,guard1town
+global,0x020E,guard2Met
+global,0x020F,guard2GaveDirections
+global,0x0210,guard2Pissed
+global,0x0211,guard3Met
+global,0x0212,guard3Pissed
+global,0x0213,guard4Met
+global,0x0214,guard4Pissed
+global,0x0215,guard4Thanked
+global,0x0216,guard5Met
+global,0x0217,guard5Pissed
+global,0x0218,guard5Thanked
+global,0x0219,guard6Met
+global,0x021A,guard6Pissed
+global,0x021B,guard6Thanked
+global,0x021C,guard7Met
+global,0x021D,guard7Pissed
+global,0x021E,guard7Thanked
+global,0x021F,guard8Met
+global,0x0220,guard8Pissed
+global,0x0221,guard8Thanked
+global,0x0222,guard9Met
+global,0x0223,guard9Pissed
+global,0x0224,guard9Thanked
+global,0x0225,whatDrink
+global,0x022D,butthead
+global,0x022F,alreadyHitLightBeam
+global,0x0230,alreadyHitLightningZapper
+global,0x0231,leverTest0
+global,0x0232,leverTest1
+global,0x0233,leverTest2
+global,0x0234,leverTest3
+global,0x0235,leverTest4
+global,0x0236,leverTest5
+global,0x0238,leverTestDone
+global,0x0239,etherstone
+global,0x023A,firestone
+global,0x023B,waterstone
+global,0x023C,airstone
+global,0x023D,earthstone
+global,0x023E,yojustchill
+global,0x0243,zealanHis
+global,0x0244,makePlatformAppear
+global,0x0245,gorgrondWarned
+global,0x0247,gwillimToldDoor
+global,0x0248,mythGaveStuff
+global,0x0249,knowAboutReagents
+global,0x024A,didReagents
+global,0x024B,heardScrollJust
+global,0x024C,pyrosQuitPlayingAround
+global,0x024D,shaanaBored
+global,0x024E,saidOrlok
+global,0x024F,vardionWarned
+# User-defined function names: function,classID:offset,name
+# FREE (0x0581) utility functions
+function,0x0581:0x28E5,getHourOfDay
+function,0x0581:0x28F9,getTimeOfDayPeriod
+function,0x0581:0x290E,advanceGameHoursByHour
+function,0x0581:0x294C,advanceGameHoursByPeriod
+function,0x0581:0x1A85,randomInRange0
+function,0x0581:0x1A96,randomInRange
+function,0x0581:0x1AD0,askYesNo
+function,0x0581:0x1C52,absValue
+function,0x0581:0x1CE3,maxDelta3D
+function,0x0581:0x1D62,getDistanceBetween
+function,0x0581:0x17D0,isWithinRange
+function,0x0581:0x1C6D,cameraFollowAvatar
+function,0x0581:0x2A56,resetRef
+function,0x0581:0x0895,splitOneFromStack
+function,0x0581:0x2411,changeItemType
+function,0x0581:0x24A7,createItemsAtLocation
+function,0x0581:0x1EE2,equipItem
+function,0x0581:0x20B8,findNearbyItems
+function,0x0581:0x36E7,closeAllGumps
+function,0x0581:0x3695,moveToEndOfList
+function,0x0581:0x1E6A,getDistanceInTiles
+function,0x0581:0x29B4,getListLength
+function,0x0581:0x3650,prependToList
+function,0x0581:0x3674,concatLists
+function,0x0581:0x2879,updateStackFrame
+function,0x0581:0x28C7,setItemFrame
+function,0x0581:0x3552,getWeaponBaseFrame
+function,0x0581:0x25F0,createItemAtSpot
+# METHOD (0x057C) NPC behavior functions
+function,0x057C:0x0080,receiveHitWrapper
+function,0x057C:0x0094,getDirToCoordsWrapper
+function,0x057C:0x0113,toggleStatusFlag
+function,0x057C:0x087D,barkAndWait
+function,0x057C:0x10FF,getWeaponDirFromFrame
+function,0x057C:0x1090,endConversation
+function,0x057C:0x0BCF,beginConversation
+function,0x057C:0x0E4F,beginConversationNoMap
+function,0x057C:0x0610,reverseAnimFrame
+function,0x057C:0x08E5,barkIfNotBusy
+function,0x057C:0x0AC6,npcIdleWander
+function,0x057C:0x0A3E,checkConversationRange
+function,0x057C:0x12CE,checkConversationRangeAlt
+function,0x057C:0x1220,getNpcSocialGroup
+function,0x057C:0x1525,pathfindToItemByFrame
+# PENT (0x007C) pentagram functions
+function,0x007C:0x0F4B,isPentagramPieceForSlot
+function,0x007C:0x1179,pentagramSFXLoop
+# DOOR_NS (0x0044) door functions
+function,0x0044:0x08B4,useDoor
+function,0x0044:0x016C,calculateDoorSwing
+function,0x0044:0x00D0,checkDoorLocked
+# CALGUARD (0x058B) guard functions
+function,0x058B:0x0080,guardRespondToCrime
+# SPELCMBT (0x0574) spell combat functions
+function,0x0574:0x084D,combatSpellLoop
+# SORCERER (0x0575) sorcerer functions
+function,0x0575:0x258C,sorcererDetectPlayer
+function,0x0575:0x25D2,sorcererResetActivity
+# SLIDER (0x0576) slider mechanism functions
+function,0x0576:0x0080,activateSlider
+function,0x0576:0x01A1,deactivateSlider
+# FIRESPEL (0x0583) fire spell functions
+function,0x0583:0x1F4F,playFireSpellSFX
+# COLLAPSE (0x020D) collapse animation
+function,0x020D:0x029D,collapseAnimation
+# ETHRSPEL (0x0585) ethereal spell functions
+function,0x0585:0x01CE,castEtherealTravel
+# PYROS (0x006D) Pyros NPC functions
+function,0x006D:0x00B8,pyrosBarkAndTransform
+function,0x006D:0x17FE,pyrosTransformForward
+function,0x006D:0x1914,pyrosTransformReverse
+# LITHOS (0x01B1) Lithos NPC functions
+function,0x01B1:0x0D3C,lithosAnimSequence
+# MORDEA (0x0407) Mordea NPC functions
+function,0x0407:0x19F4,mordeaGetAnnoyed

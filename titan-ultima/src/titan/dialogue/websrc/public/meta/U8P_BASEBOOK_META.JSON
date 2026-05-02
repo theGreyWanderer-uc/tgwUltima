@@ -1,0 +1,86 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_BASEBOOK.json",
+  "file": "U8P_BASEBOOK",
+  "behavior_summary": [
+    "BASEBOOK::look is invoked when an actor (player or NPC) examines a book item and presents a human-readable title/description for that book.",
+    "The routine reads the inspected Item's numeric 'quality' field (used as a book subtype/ID) and maps many discrete quality values to literal title/description strings.",
+    "For the matched quality value the code calls the item’s display routine (Item::bark) with the selected string, directed at the examining actor (pid).",
+    "Behavior is descriptive/display-only in the observed excerpt: no global flags are read or written and no game state changes occur."
+  ],
+  "notable_control_flow": [
+    "Repeated read of the item's quality via Item::getQuality followed by a large switch/mapping on that returned value to choose the message string.",
+    "After selecting a string the function pushes pid and the string and calls Item::bark to show the message to the viewer.",
+    "There is an implied default/unmatched path (no observed state change) if the item's quality does not match any listed case."
+  ],
+  "open_questions": [
+    "What is the exhaustive list of quality values handled and the exact strings for each (the disassembly excerpt lists many but full table coverage is unknown)?",
+    "How are unknown/unsupported quality values handled at runtime (silent/no-op, generic label, or a fallback string)?",
+    "Are the book titles localized or stored externally (strings appear literal here but may be keys to a localization table)?"
+  ],
+  "main_function": {
+    "name": "U8P_BASEBOOK::look",
+    "execution_form": "process",
+    "purpose": "When an actor inspects a BASEBOOK item, determine the book's subtype from the item's quality field and present an appropriate title/description by invoking the item's bark/display routine directed at the inspecting actor.",
+    "entry_conditions": [
+      "Event 0 'U8P_BASEBOOK::look' — invoked when an actor examines or 'looks' at a BASEBOOK item (the inspect/U8P_BASEBOOK::look event)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_BASEBOOK::look",
+      "kind": "main",
+      "role": "Handle the 'U8P_BASEBOOK::look' (examine) event for BASEBOOK items: map item quality to a title/description and call Item::bark to display it.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getQuality",
+      "kind": "extern",
+      "role": "Engine/item interface used to read the numeric 'quality' field from the inspected item; used as the selector for the mapping.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item interface to present/display a string message to a target process/actor; used here to show the selected title to pid.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_BASEBOOK::look",
+        "callee": "Item::getQuality",
+        "purpose": "Obtain the inspected item's numeric quality/subtype which selects which title/description to display.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BASEBOOK::look",
+        "callee": "Item::bark",
+        "purpose": "Display the chosen title/description string to the inspecting actor (pid) by making the item 'speak' the string.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "display"
+  ],
+  "quick_facts": {
+    "main_function": "BASEBOOK::look",
+    "behavior_summary_one_liner": "BASEBOOK::look is invoked when an actor (player or NPC) examines a book item and presents a human-readable title/description for that book.",
+    "external_call_count": 2,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

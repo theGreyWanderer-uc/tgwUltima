@@ -1,0 +1,120 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_BOOKEGG.json",
+  "file": "U8P_BOOKEGG",
+  "behavior_summary": [
+    "U8P_BOOKEGG::enterFastArea is a trigger handler that runs when an actor (typically the player/avatar) enters an egg object's fast/trigger area.",
+    "On entry it checks the egg instance's stored ID (Egg::getEggId) and also reads a global flag global[005F 01] (named benticCacked in the scout notes). If these checks indicate the egg has already been processed or the global guard is set, the handler returns without action.",
+    "If the egg is not already processed and the guard allows it, the handler marks the egg as processed by calling Egg::setEggId(this, 1).",
+    "After marking the egg, it creates an item (Item::create with id 0x025F) into a local output slot and then spawns/places that created item into the world/inventory using Item::pop with parameters (0x125F, 0x0EFF, 0x10), consuming the created handle."
+  ],
+  "notable_control_flow": [
+    "Entry: called on U8P_BOOKEGG::enterFastArea (area trigger).",
+    "Guard check: uses Egg::getEggId result combined with a read of global[005F 01] to decide whether to early-return. The exact boolean combination is inferred (see open questions).",
+    "One-shot behavior: when not skipped, the handler sets the egg's ID to 1 (Egg::setEggId) before creating and popping the item, preventing repetition on subsequent triggers."
+  ],
+  "open_questions": [
+    "What is the exact boolean logic combining Egg::getEggId() and global[005F 01] (benticCacked) that causes an early return? The disassembly shows both are consulted but the precise combination (AND/OR/negation) is not explicit.",
+    "What concrete in-game item does id 0x025F correspond to (what the egg spawns)?",
+    "What are the semantic meanings of the Item::pop parameters (0x125F, 0x0EFF, 0x10) in terms of destination, flags, or quantity?",
+    "Is global[005F 01] (benticCacked) a broad, persistent quest flag or a local-region guard used only to suppress repeated spawns? The code reads it but does not write it here."
+  ],
+  "main_function": {
+    "name": "U8P_BOOKEGG::enterFastArea",
+    "execution_form": "process",
+    "purpose": "Handle an actor entering the egg object's trigger area: guard against repeated processing, mark the egg as processed, and spawn/give the egg's item reward.",
+    "entry_conditions": [
+      "Called by the engine when an actor enters the egg's fast/trigger area (U8P_BOOKEGG::enterFastArea event).",
+      "Runs only if the egg's stored ID and the global guard (global[005F 01]) indicate the egg should be processed (inferred condition)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_BOOKEGG::enterFastArea",
+      "kind": "main",
+      "role": "Area-entry handler for the egg trigger which enforces a one-shot spawn and performs spawn logic.",
+      "confidence": "high"
+    },
+    {
+      "name": "Egg::getEggId",
+      "kind": "extern",
+      "role": "Query the egg object's stored ID/state to determine whether it has already been processed.",
+      "confidence": "high"
+    },
+    {
+      "name": "Egg::setEggId",
+      "kind": "extern",
+      "role": "Set the egg object's ID/state (used here to mark it processed with value 1).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::create",
+      "kind": "extern",
+      "role": "Create/allocate an item instance and return a handle/address into a provided local output slot.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::pop",
+      "kind": "extern",
+      "role": "Spawn/place/pop the previously created item into the world or inventory using provided parameters/flags.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_BOOKEGG::enterFastArea",
+        "callee": "Egg::getEggId",
+        "purpose": "Read the egg instance's stored ID/state to decide whether spawning should be skipped.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BOOKEGG::enterFastArea",
+        "callee": "Egg::setEggId",
+        "purpose": "Mark the egg as processed by setting its ID to 1 to prevent repeat spawns.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BOOKEGG::enterFastArea",
+        "callee": "Item::create",
+        "purpose": "Allocate/create the item instance to be spawned (called with item id 0x025F; handle written to local BP-02h).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BOOKEGG::enterFastArea",
+        "callee": "Item::pop",
+        "purpose": "Spawn/place the created item into the game world or the player's inventory (called with 0x125F, 0x0EFF, 0x10 and the created-item handle).",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "global[005F 01] (benticCacked)",
+        "likely_effect": "Acts as a guard/flag consulted to suppress or gate the egg's spawn behavior; if set it contributes to skipping processing.",
+        "confidence": "medium"
+      }
+    ],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "guard",
+    "spawn",
+    "one-shot"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_BOOKEGG::enterFastArea",
+    "behavior_summary_one_liner": "U8P_BOOKEGG::enterFastArea is a trigger handler that runs when an actor (typically the player/avatar) enters an egg object's fast/trigger area.",
+    "external_call_count": 4,
+    "flag_read_count": 1,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

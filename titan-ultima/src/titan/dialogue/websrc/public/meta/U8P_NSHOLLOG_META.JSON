@@ -1,0 +1,76 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_NSHOLLOG.json",
+  "file": "U8P_NSHOLLOG",
+  "behavior_summary": [
+    "U8P_NSHOLLOG::look handles the player 'U8P_NSHOLLOG::look' interaction for a hollow log object: it prepares a short description string \"hollow log \", asks the item/process to 'bark' that string (causing the description to be shown), and then concludes the interaction.",
+    "The routine receives an item pointer (item_ptr) as its parameter, uses that pointer as the target for the display call, and then performs a short implies/pop sequence before suspending/returning — indicating the interaction is complete and control is yielded back to the engine.",
+    "There are opcodes in the disassembly that appear to set per-item/process state (set info and process-exclude) before calling Item::bark; this likely configures the object for the display/interaction context but is an inferred behavior."
+  ],
+  "notable_control_flow": [
+    "On entry (Look event) construct literal string \"hollow log \".",
+    "Call Item::bark with the item pointer and the constructed string to show the description.",
+    "Capture Item::bark return value, use it in an implies/pop pattern, then suspend/return to end the event handler.",
+    "Disassembly shows preceding opcodes that appear to set item/process info and exclude the object from processing; this likely precedes the bark and guards against duplicate processing while the bark runs."
+  ],
+  "open_questions": [
+    "Does Item::bark target the player process (viewer) or the item process itself for delivering the message in this context?",
+    "Exactly which item/process info field(s) are set by the observed 'set info' opcode(s), and what are the side effects of the 'process exclude' opcode in runtime terms?",
+    "What does the implies/pop sequence's result control at the engine level (interrupt propagation, return value semantics, or visual timing)?"
+  ],
+  "main_function": {
+    "name": "U8P_NSHOLLOG::look",
+    "execution_form": "process",
+    "purpose": "Respond to the Look verb for a hollow log by producing/displaying the short item description and ending the interaction.",
+    "entry_conditions": [
+      "Triggered by the Look event (Event 0) when an actor/player inspects the hollow log object."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_NSHOLLOG::look",
+      "kind": "main",
+      "role": "Handle the 'U8P_NSHOLLOG::look' interaction for the hollow log: build and present the object's short description then conclude the event.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine invoked to display or emit a short single-line message/label for an item/process.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_NSHOLLOG::look",
+        "callee": "Item::bark",
+        "purpose": "Display the short description string \"hollow log \" to the appropriate recipient (viewer/process).",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "display",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "NSHOLLOG::look",
+    "behavior_summary_one_liner": "U8P_NSHOLLOG::look handles the player 'U8P_NSHOLLOG::look' interaction for a hollow log object: it prepares a short description string \"hollow log \", asks the item/process to 'bark' that string (causing the description to be shown), and then concludes the interaction.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

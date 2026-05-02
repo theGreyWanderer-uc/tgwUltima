@@ -1,0 +1,77 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_BRIBOOK2.json",
+  "file": "U8P_BRIBOOK2",
+  "behavior_summary": [
+    "When the player activates/reads the book item, the script records small metadata on the book object (a flag value '1' and the player's pid) and then presents a long quest/flare text to the player.",
+    "The long text (a quest/warning about 'the Slayer' and a twin who will lead the quest) is pushed/allocated and passed to the engine Book::read routine together with the book object pointer.",
+    "After calling Book::read, the script frees the temporary string/pointer, inspects the return value from Book::read (consumes it via an implies/pop pattern), and then suspends the script until the read interaction completes."
+  ],
+  "notable_control_flow": [
+    "Entry: triggered by a read/activate event for this book item (process execution form).",
+    "Set object info on the book: push small constant 1 and the player's pid, then store these as book metadata before presenting text.",
+    "Push the long static quest string, convert it to a pointer, and call external Book::read(book_object_ptr, text_ptr).",
+    "Free the temporary string/pointer returned by the push, evaluate Book::read's return value, consume that boolean/result, then suspend the script until the reading interaction completes."
+  ],
+  "open_questions": [
+    "What is the exact meaning/semantic of the info key written to the book object (the '1' value and associated pid)? (inferred from set-info use)",
+    "What precise return semantics does Book::read provide (boolean/acknowledgement, or richer status)? The script consumes it but only uses it to drive suspension flow.",
+    "Are there any global quest flags or external state changes triggered by reading this book beyond the object info write? None are observed in the disassembly.",
+    "Does the book presentation spawn other processes or trigger follow-up quest logic elsewhere, or is that handled purely by Book::read and the player's subsequent actions?"
+  ],
+  "main_function": {
+    "name": "U8P_BRIBOOK2::0080",
+    "execution_form": "process",
+    "purpose": "Prepare and present a long quest/dialog text for a book item: set book metadata, hand the long string to Book::read to display to the player, then suspend until the read interaction completes.",
+    "entry_conditions": [
+      "Invoked when the player/actor activates or 'reads' the specific book item (inferred event trigger)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_BRIBOOK2::0080",
+      "kind": "main",
+      "role": "Handle the book read/activate event: set per-book info and present long dialog text via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "Book::read",
+      "kind": "extern",
+      "role": "Engine/UI routine that displays or otherwise processes the supplied book text for the given book object and returns an interaction status/acknowledgement.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_BRIBOOK2::0080",
+        "callee": "Book::read",
+        "purpose": "Present the prepared long book text to the player for reading/interaction; returns a value used by the script to determine flow (then script suspends).",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "dialog",
+    "suspend",
+    "book"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_BRIBOOK2::BRIBOOK2::0080",
+    "behavior_summary_one_liner": "When the player activates/reads the book item, the script records small metadata on the book object (a flag value '1' and the player's pid) and then presents a long quest/flare text to the player.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

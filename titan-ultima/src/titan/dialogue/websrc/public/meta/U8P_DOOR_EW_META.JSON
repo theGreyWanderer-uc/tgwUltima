@@ -1,0 +1,131 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_DOOR_EW.json",
+  "file": "U8P_DOOR_EW",
+  "behavior_summary": [
+    "This script implements event handlers for an east-west door that perform minimal local logic and delegate actual gameplay behavior to shared DOOR_NS routines.",
+    "On U8P_DOOR_EW::look (examine), the script prepares a per-door info/context, marks the door/process excluded from generic processing, and spawns DOOR_NS::00D0 to run the examine behavior.",
+    "On use (activate/open), the script prepares the same per-door info/context, pushes an action flag (0x01) to indicate the specific use action, marks the door excluded, and spawns DOOR_NS::08B4 to perform the open/activate behavior.",
+    "On gotHit, the script prepares per-door info/context, passes the hit parameter through, marks the door excluded, and spawns DOOR_NS::0C82 to resolve hit/damage effects (sound, damage, breakage, etc.).",
+    "Returned values from the spawned DOOR_NS routines are captured into a local temp and returned by the handler."
+  ],
+  "notable_control_flow": [
+    "Each event handler follows the same control flow: push info id + info-pointer + door object -> call set info -> call process exclude -> optionally push event-specific args -> spawn the appropriate DOOR_NS routine -> store spawn retval and return it.",
+    "Handlers do not contain local decision logic for door state changes; they delegate to shared DOOR_NS code, making this script a thin adaptor that supplies per-instance metadata and flags.",
+    "The 'use' handler inserts an explicit byte (0x01) before spawning, indicating mode/flag dispatch to the shared handler."
+  ],
+  "open_questions": [
+    "What exact fields and meanings exist in the indirect info/metadata structure the script pushes (the pointer pushed via the indirect 02h push)?",
+    "What exact behaviors DOOR_NS::00D0, DOOR_NS::08B4 and DOOR_NS::0C82 perform (sound, animation, locking, health/durability handling)?",
+    "What is the precise effect of process exclude in the engine for door objects (prevents generic stepping, visibility changes, registration differences)?"
+  ],
+  "main_function": {
+    "name": "U8P_DOOR_EW::look",
+    "execution_form": "process",
+    "purpose": "Prepare per-door metadata and delegate the examine/U8P_DOOR_EW::look event to a shared DOOR_NS handler (DOOR_NS::00D0).",
+    "entry_conditions": [
+      "Event 0: an actor (usually the player) looks at or examines the door (trigger region/inspect action)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_DOOR_EW::look",
+      "kind": "main",
+      "role": "Examine/inspect handler that sets up door-specific metadata and delegates to DOOR_NS::00D0.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DOOR_EW::use",
+      "kind": "helper",
+      "role": "Use/activate handler that sets up metadata, pushes an action flag (0x01), and delegates to DOOR_NS::08B4.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DOOR_EW::gotHit",
+      "kind": "helper",
+      "role": "Hit/damage handler that forwards the hit value and metadata to DOOR_NS::0C82 for damage resolution.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_DOOR_EW::look",
+        "callee": "U8P_DOOR_EW::set info",
+        "purpose": "Populate per-door metadata/context (info id 0x0208 and the indirect info-pointer) before delegation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DOOR_EW::look",
+        "callee": "U8P_DOOR_EW::process exclude",
+        "purpose": "Mark this door/process excluded from some generic engine processing prior to spawning the shared handler.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DOOR_EW::look",
+        "callee": "spawn DOOR_NS::00D0",
+        "purpose": "Delegate the examine/U8P_DOOR_EW::look behavior to shared DOOR_NS logic, passing the door object and prepared info/context.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DOOR_EW::use",
+        "callee": "U8P_DOOR_EW::set info",
+        "purpose": "Populate per-door metadata/context (info id 0x0207 and the indirect info-pointer) for use handling.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DOOR_EW::use",
+        "callee": "U8P_DOOR_EW::process exclude",
+        "purpose": "Exclude the door/process from generic processing prior to spawning the use handler.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DOOR_EW::use",
+        "callee": "spawn DOOR_NS::08B4",
+        "purpose": "Delegate the use/open behavior to DOOR_NS::08B4, passing an action flag (0x01), the door object, and prepared metadata.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DOOR_EW::gotHit",
+        "callee": "U8P_DOOR_EW::set info",
+        "purpose": "Populate per-door metadata/context (info id 0x020C and the indirect info-pointer) before resolving the hit.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DOOR_EW::gotHit",
+        "callee": "U8P_DOOR_EW::process exclude",
+        "purpose": "Exclude the door/process from generic processing prior to delegating hit resolution.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DOOR_EW::gotHit",
+        "callee": "spawn DOOR_NS::0C82",
+        "purpose": "Delegate hit/damage resolution to shared DOOR_NS code, passing the hit value and prepared metadata.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "delegation",
+    "metadata",
+    "exclusion"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_DOOR_EW::look",
+    "behavior_summary_one_liner": "This script implements event handlers for an east-west door that perform minimal local logic and delegate actual gameplay behavior to shared DOOR_NS routines.",
+    "external_call_count": 9,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_HAY.json",
+  "file": "U8P_HAY",
+  "behavior_summary": [
+    "Handles the 'U8P_HAY::look' (examine) event for a hay item: marks an info id for the item and emits a short one-line description 'hay ' to the observing process/player.",
+    "Writes an info identifier (0x0208) for the item (used to record which info line was provided), then uses a process-exclude step before delivering the description to avoid duplicate processing.",
+    "Calls Item::bark with the observing process id, the literal string 'hay ', and the item/context pointer; frees the temporary string and returns an implied success value based on the bark return."
+  ],
+  "notable_control_flow": [
+    "Entry on U8P_HAY::look event -> push info id 0x0208 and item/context pointer -> set info (writes info 0x0208) -> process-exclude (guard to prevent repeat handling) -> construct literal 'hay ' -> call Item::bark(pid, 'hay ', item) -> free temporary string -> use bark retval to form implied return -> suspend/return.",
+    "No other global state is modified by this handler aside from the item info write described above."
+  ],
+  "open_questions": [
+    "Exact semantic meaning of info id 0x0208 (what UI/info panel or internal state it corresponds to).",
+    "Precise identity and ordering of pushed parameters: which pushed value is the observing process/player id (pid) vs. the item/context pointer (BP+06h) — inferred but not explicit.",
+    "Whether the process-exclude step is strictly preventing duplicate barks, preventing concurrent processing, or serves another engine-level purpose.",
+    "Whether the return value from Item::bark is used by callers beyond this implied success (broader calling convention for 'implies' result)."
+  ],
+  "main_function": {
+    "name": "U8P_HAY::look",
+    "execution_form": "process",
+    "purpose": "Respond to a U8P_HAY::look/examine event on a hay item by recording which info line was provided (info id 0x0208) and displaying the brief description 'hay ' to the observing process/player via Item::bark.",
+    "entry_conditions": [
+      "Event 0 (U8P_HAY::look) — triggered when an actor/player looks at or inspects the hay object."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_HAY::look",
+      "kind": "main",
+      "role": "Handle the U8P_HAY::look/examine event for the hay item; set info and display a short description.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine used to emit/display a short text message from the item to a target process/player.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_HAY::look",
+        "callee": "Item::bark",
+        "purpose": "Display a one-line description 'hay ' to the observing process/player (parameters appear to be pid, char* 'hay ', and the item/context pointer).",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": [
+      {
+        "name": "info 0x0208",
+        "likely_effect": "Marks which info/description line has been provided for this item instance (used by UI or engine to track that this description was shown).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "description",
+    "process-exclude"
+  ],
+  "quick_facts": {
+    "main_function": "HAY::look",
+    "behavior_summary_one_liner": "Handles the 'U8P_HAY::look' (examine) event for a hay item: marks an info id for the item and emits a short one-line description 'hay ' to the observing process/player.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 1
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

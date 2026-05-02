@@ -1,0 +1,105 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_MELBOOK.json",
+  "file": "U8P_MELBOOK",
+  "behavior_summary": [
+    "Provides the text content for in-game books/journals and invokes the shared Book::read routine so a player process reads the text.",
+    "Each exposed routine constructs a large literal string (the book text), passes a pointer to that string plus the object/context pointer and the reader pid to Book::read, then frees the temporary string and returns Book::read's result.",
+    "These functions are triggered by player interactions with book objects (e.g., 'read book') and solely drive UI/text display; they do not modify global game flags in the observed excerpt."
+  ],
+  "notable_control_flow": [
+    "Construct literal string -> convert to pointer -> push object/context ([BP+06h]) and pid -> call process Book::read(char*)",
+    "After Book::read returns, free the constructed string, adjust stack, push the Book::read return value and return it to the caller (suspend/ret).",
+    "Multiple sibling helper functions follow the same pattern but supply different long text payloads."
+  ],
+  "open_questions": [
+    "Exactly how the large literal string is allocated/constructed in VM memory prior to passing to Book::read (engine helper or literal table) — allocation call is not explicit in the excerpt.",
+    "Which concrete object type(s) map to the object/context pointer at [BP+06h] (item instance, UI window, or process wrapper) — inferred but not explicit.",
+    "Whether any side-effects occur inside Book::read (e.g., advancing a book-read quest stage) beyond display; Book::read's internal behavior is external to this script."
+  ],
+  "main_function": {
+    "name": "U8P_MELBOOK::0080",
+    "execution_form": "process",
+    "purpose": "Supply the specific long journal text (Robin Dudley entry) to the engine's Book::read routine so the player reads the book, then free the temporary string and return the reader result.",
+    "entry_conditions": [
+      "Invoked when a player/actor interacts with or 'reads' the corresponding in-game book object (inferred).",
+      "May be invoked by a script trigger that supplies the object/context pointer at [BP+06h]."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_MELBOOK::0080",
+      "kind": "main",
+      "role": "Constructs the 'Robin Dudley' journal text and calls Book::read to present it to the reader; frees temporary string and returns Book::read's result.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MELBOOK::06B1",
+      "kind": "helper",
+      "role": "Constructs a different long article (about gold) and invokes Book::read with the same calling pattern as the main function.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MELBOOK::0CEF",
+      "kind": "helper",
+      "role": "Constructs another long story/romance text ('My Rival, My Love - Part I') and invokes Book::read; follows the same lifecycle (build, call, free, return).",
+      "confidence": "high"
+    },
+    {
+      "name": "Book::read",
+      "kind": "extern",
+      "role": "Engine-provided process that takes a char* text (and contextual args) and displays/pages it for the player; returns a result propagated by the callers.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_MELBOOK::0080",
+        "callee": "Book::read",
+        "purpose": "Present the constructed book text to the player process (text paging/display); caller supplies text pointer, object/context pointer and pid.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MELBOOK::06B1",
+        "callee": "Book::read",
+        "purpose": "Present a different article text about gold to the player using the same display routine.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MELBOOK::0CEF",
+        "callee": "Book::read",
+        "purpose": "Present the romance/story text to the player using the shared book reader.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MELBOOK::0080",
+        "callee": "FREE::free",
+        "purpose": "Free the temporary/constructed string after Book::read returns (inferred deallocation step).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "display"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_MELBOOK::MELBOOK::0080",
+    "behavior_summary_one_liner": "Provides the text content for in-game books/journals and invokes the shared Book::read routine so a player process reads the text.",
+    "external_call_count": 4,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

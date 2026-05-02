@@ -1,0 +1,81 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_JUG.json",
+  "file": "U8P_JUG",
+  "behavior_summary": [
+    "U8P_JUG::look responds to the in-game 'U8P_JUG::look' (examine) event for a Jug object by constructing the short label string \"jug \" and asking the item system to display/emit that text to the inspecting process/environment.",
+    "Before emitting the text the handler writes item-related state (a 'set info' and a 'process exclude' mark) on the object; this is likely to prepare or protect the item while its bark/display completes.",
+    "The handler frees the temporary message buffer after calling the bark routine, inspects the call's return value with an implication-style test, then suspends/yields. No persistent global game-state is written by this script (aside from the item info/process exclusion inferred above)."
+  ],
+  "notable_control_flow": [
+    "Entry is event-driven: the function runs on the object's 'U8P_JUG::look' trigger (an examine/inspect event).",
+    "The function pushes the invoker/context pointer and the constructed message, calls Item::bark, then processes the bark return via an 'implies' test and pops the result into a temp before issuing a suspend (yield).",
+    "There is a short-lived lifecycle within the function: set item flags -> call bark -> free message -> evaluate return -> suspend -> return."
+  ],
+  "open_questions": [
+    "What exact semantics and scope do the 'set info' and 'process exclude' writes have (which info id and whether they persist beyond the call)?",
+    "Is the [BP+06h] stack parameter strictly the player/process PID invoking the U8P_JUG::look, or can it be other context PIDs (inferred as 'invoker_pid')?",
+    "What precise value/meaning does Item::bark return in this engine and how should the subsequent 'implies' test be interpreted for control flow?",
+    "Does the suspend indicate asynchronous display or engine scheduling semantics that affect caller behavior?"
+  ],
+  "main_function": {
+    "name": "U8P_JUG::look",
+    "execution_form": "process",
+    "purpose": "Handle the Jug object's 'U8P_JUG::look' (examine) event by preparing the object and instructing the item system to display the short label \"jug \".",
+    "entry_conditions": [
+      "Triggered when a process/actor inspects or looks at the Jug object (the object's 'U8P_JUG::look' event)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_JUG::look",
+      "kind": "main",
+      "role": "Event handler for the Jug object's 'U8P_JUG::look' event: set item flags, construct and emit the label string via Item::bark, then suspend/return.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_JUG::look",
+        "callee": "Item::bark",
+        "purpose": "Emit/display a short text message associated with the item (here the literal \"jug \") to the invoking process/environment.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": [
+      {
+        "name": "info",
+        "likely_effect": "Marks or updates a piece of item state/info before performing the bark/display (inferred from a 'set info' opcode immediately before the display call).",
+        "confidence": "medium"
+      },
+      {
+        "name": "process exclude",
+        "likely_effect": "Temporarily excludes the object from some class of processing/AI while the bark/display is performed (inferred from a 'process exclude' opcode near the call).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "label",
+    "cleanup",
+    "suspend"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_JUG::look",
+    "behavior_summary_one_liner": "U8P_JUG::look responds to the in-game 'U8P_JUG::look' (examine) event for a Jug object by constructing the short label string \"jug \" and asking the item system to display/emit that text to the inspecting process/environment.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 2
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

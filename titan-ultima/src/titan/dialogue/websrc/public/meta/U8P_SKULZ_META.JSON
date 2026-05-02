@@ -1,0 +1,101 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_SKULZ.json",
+  "file": "U8P_SKULZ",
+  "behavior_summary": [
+    "SKULZ::look handles the 'U8P_SKULZ::look' (examine) event for a skull item. When invoked it marks the item with an info flag, modifies the process handling for that item, and makes the item 'bark' the label text \"skull \" to the player.",
+    "The handler uses a usecode 'set info' primitive (constant 0x0208) against the target process, then calls a 'process exclude' primitive on the same target, then calls Item::bark with the literal string \"skull \".",
+    "The return value from Item::bark is combined with an implication/opcode and then the script suspends/returns. Overall effect: the skull is annotated as examined/changed and presents its short description to the player."
+  ],
+  "notable_control_flow": [
+    "Entry: Event 0 (U8P_SKULZ::look/examine) triggers SKULZ::look.",
+    "Ordered operations: set info (0x0208) on target -> process exclude on target -> Item::bark(target, \"skull \") -> use bark return value with 'implies' -> suspend/return.",
+    "No global flags are written by this script; effects are local to the item/process and its visible output to the player.",
+    "The function executes as a process-level handler (it acts on a passed process/pid rather than as a pure pure function)."
+  ],
+  "open_questions": [
+    "Exact game semantics of the info flag 0x0208: it appears to mark the item as examined or set descriptive metadata, but its precise meaning is not certain.",
+    "Precise effect of 'process exclude' on the target process: likely prevents further automatic processing or re-triggering but the exact engine behavior is inferred.",
+    "How Item::bark's return value and the subsequent 'implies' opcode affect game flow: it appears to influence whether the U8P_SKULZ::look action is considered handled or whether further logic should run.",
+    "Whether any memory/temporary string cleanup beyond the observed free is required or occurs elsewhere (string lifetime is inferred)."
+  ],
+  "main_function": {
+    "name": "U8P_SKULZ::look",
+    "execution_form": "process",
+    "purpose": "Handle the player's 'U8P_SKULZ::look' (examine) action on a skull item: annotate the item/process with an info flag, exclude/modify its processing, and display the short label \"skull \" to the player.",
+    "entry_conditions": [
+      "Event 0 — triggered when the avatar (or actor) looks at / examines the skull item (area/interaction U8P_SKULZ::look event)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_SKULZ::look",
+      "kind": "main",
+      "role": "Handle the U8P_SKULZ::look/examine event for the skull item; orchestrates info-setting, process exclusion, and text output.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine that emits/displays a short text string for an item/process (used to present 'skull ').",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_SKULZ::set info (usecode primitive)",
+      "kind": "extern",
+      "role": "Engine primitive to set metadata/info flags on a process/item (called with 0x0208).",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_SKULZ::process exclude (usecode primitive)",
+      "kind": "extern",
+      "role": "Engine primitive that alters processing for a process (likely excludes it from further automatic processing or re-triggers).",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_SKULZ::look",
+        "callee": "U8P_SKULZ::set info (usecode primitive)",
+        "purpose": "Apply info flag 0x0208 to the target process/item — inferred to mark the skull as examined or to set descriptive metadata.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_SKULZ::look",
+        "callee": "U8P_SKULZ::process exclude (usecode primitive)",
+        "purpose": "Modify the target process so it is excluded from some kinds of subsequent processing (likely to prevent re-triggering or to change behavior after being examined).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_SKULZ::look",
+        "callee": "Item::bark",
+        "purpose": "Have the skull item emit/display the short label text \"skull \" to the player/process that looked at it.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "SKULZ::look",
+    "behavior_summary_one_liner": "SKULZ::look handles the 'U8P_SKULZ::look' (examine) event for a skull item. When invoked it marks the item with an info flag, modifies the process handling for that item, and makes the item 'bark' the label text \"skull \" to the player.",
+    "external_call_count": 3,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

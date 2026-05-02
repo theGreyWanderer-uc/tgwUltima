@@ -1,0 +1,126 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_FIREPLNS.json",
+  "file": "U8P_FIREPLNS",
+  "behavior_summary": [
+    "Provides examination (U8P_FIREPLNS::look) behavior and ambient-sound handling for a fireplace world object.",
+    "U8P_FIREPLNS::look runs when an actor examines the fireplace: it sets object info/process-exclude flags and calls Item::bark to emit the short label \"fireplace \".",
+    "U8P_FIREPLNS::enterFastArea runs when an actor enters the fireplace's fast-area: it sets the same info/process-exclude flags and starts an ambient fireplace sound (playAmbientSFX) using an inferred sound id 0x0086 and an inferred volume/type 0x32.",
+    "U8P_FIREPLNS::leaveFastArea runs when an actor leaves that area: it sets the flags and stops the same ambient sound (stopSFX) using the same inferred sound id.",
+    "Most parameter roles (caller PID/object pointer, area identifier, sound id, volume) are inferred from push/call sequences; the script's gameplay effect is to label the object when looked at and to start/stop an ambient crackle sound as the actor moves into/out of the fireplace area."
+  ],
+  "notable_control_flow": [
+    "Event-driven: three distinct handlers mapped to game events — U8P_FIREPLNS::look (examine), enterFastArea (area entry), leaveFastArea (area exit).",
+    "Each handler writes the same 'info' and 'process exclude' flags before performing its main action (bark/startSFX/stopSFX).",
+    "FIREPLNS::look calls Item::bark and then uses the bark return value (retval) in an implies/pop sequence before suspending/returning; the bark return is observed to influence a short control sequence.",
+    "enterFastArea starts an ambient SFX and leaveFastArea stops it, using a consistent sound identifier so the start/stop pair correspond to the same effect."
+  ],
+  "open_questions": [
+    "Exact meaning and bit semantics of the 'info' and 'process exclude' writes: what info id is set and which object (caller vs. fireplace instance) is targeted?",
+    "Precise parameter ordering and types for playAmbientSFX and stopSFX calls are inferred from pushes; the exact ABI in this engine context is not fully proven.",
+    "Whether sound id 0x0086 and uword 0x32 are the canonical sound identifier and volume/type respectively (these constants are inferred from pushes and not named).",
+    "Whether the PID pushed to Item::bark is the player's process id or the fireplace object process id (inferred as a process/object pointer but not explicitly typed)."
+  ],
+  "main_function": {
+    "name": "U8P_FIREPLNS::look",
+    "execution_form": "process",
+    "purpose": "Handle the player's 'U8P_FIREPLNS::look' (examine) action on the fireplace: set contextual info/exclusion and display the short object label via Item::bark.",
+    "entry_conditions": [
+      "Event 0 (examine/U8P_FIREPLNS::look) — invoked when an actor looks at or inspects the fireplace object."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_FIREPLNS::look",
+      "kind": "main",
+      "role": "Examine/U8P_FIREPLNS::look event handler that displays the fireplace label and sets object processing flags.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FIREPLNS::enterFastArea",
+      "kind": "helper",
+      "role": "Area-entry handler: set info/process-exclude and start the fireplace ambient SFX (playAmbientSFX).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FIREPLNS::leaveFastArea",
+      "kind": "helper",
+      "role": "Area-exit handler: set info/process-exclude and stop the fireplace ambient SFX (stopSFX).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine-provided routine used to emit/display a short text string associated with an item/object.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FIREPLNS::playAmbientSFX",
+      "kind": "extern",
+      "role": "Engine-provided routine to start an ambient sound effect tied to an area/object.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_FIREPLNS::stopSFX",
+      "kind": "extern",
+      "role": "Engine-provided routine to stop an ambient sound effect previously started.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_FIREPLNS::look",
+        "callee": "Item::bark",
+        "purpose": "Display the short label/description \"fireplace \" to the examining process/player.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIREPLNS::enterFastArea",
+        "callee": "U8P_FIREPLNS::playAmbientSFX",
+        "purpose": "Begin an ambient fireplace sound when an actor enters the fireplace area (inferred sound id 0x0086, inferred volume/type 0x32).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FIREPLNS::leaveFastArea",
+        "callee": "U8P_FIREPLNS::stopSFX",
+        "purpose": "Stop the ambient fireplace sound when the actor leaves the area (matches the inferred sound id used on enter).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": [
+      {
+        "name": "info",
+        "likely_effect": "Marks the object/interaction with a contextual info flag (used before barking or SFX operations).",
+        "confidence": "high"
+      },
+      {
+        "name": "process exclude",
+        "likely_effect": "Exclude the object or process from normal processing (prevents reentrance or duplicate handling while the action runs).",
+        "confidence": "high"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_FIREPLNS::look",
+    "behavior_summary_one_liner": "Provides examination (U8P_FIREPLNS::look) behavior and ambient-sound handling for a fireplace world object.",
+    "external_call_count": 3,
+    "flag_read_count": 0,
+    "flag_write_count": 2
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

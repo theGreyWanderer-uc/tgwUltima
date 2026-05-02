@@ -1,0 +1,260 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_SCROLL2.json",
+  "file": "U8P_SCROLL2",
+  "behavior_summary": [
+    "U8P_SCROLL2::0080 (SCROLL2::0080) is the on-use handler for a 'Scroll of Dispelling Magical Portals'. When a player reads the scroll it displays the scroll text, places the avatar in a short stasis, plays a sequence of visual and audio effects, then scans nearby world tiles/items for portal-like objects (doors, sealed walls, or items marked by quality/frame values).",
+    "For each candidate target the routine inspects item 'quality' and 'frame/shape' to decide if it is a sealed/portal object. If conditions indicate a dispellable portal it clears specific quality bits (Item::setQuality), spawns/dispatches a door/unseal routine (DOOR_NS::08B4) and plays temporary marker animations/sfx via helper spawns. If a target requires an additional component the script barks a failure message and shows a small effect.",
+    "If no matching targets are found the script barks an appropriate failure message ('Hmmmm... Nothing found.' or similar). Helper functions implement short-lived animated effect items and a separate pair of scroll behaviors for chest-trap detection/destruction (U8P_SCROLL2::0520 / U8P_SCROLL2::07F1 with U8P_SCROLL2::0755 as an inspector)."
+  ],
+  "notable_control_flow": [
+    "Start: perform initialization/delay (FREE::36E7) → show scroll text (process Scroll::read) → put avatar in stasis (setAvatarInStasis).",
+    "Animation phase: spawn several visual helpers oriented to caster (Npc::getDir → METHOD::15E7, FREE::1C19, FREE::29D8) and play sfx (playSFX) before scanning the area.",
+    "Scan phase: iterate nearby area/item slots (using a local item handle [BP-02h]) and for each candidate call item inspection logic (Item::getQuality, Item::getFrame, shape/frame tests).",
+    "Action on match: clear or modify item quality (Item::setQuality), spawn unseal/open routine (DOOR_NS::08B4), create temporary marker effects (Item::create, Item::pop), animate them (U8P_SCROLL2::042D / U8P_SCROLL2::047E) and then destroy markers (Item::destroy).",
+    "Failure reporting: if candidate needs another item/component bark via process Item::bark; if no candidates found bark an overall failure message. Return after clean up/animations complete."
+  ],
+  "open_questions": [
+    "Exact bitmask values in Item::getQuality / Item::setQuality that identify 'portal' / 'sealed' / 'trap' states — code checks are present but mask semantics are inferred.",
+    "Precise shape/frame identifiers used to recognize each portal-like object or trap marker (the disassembly indicates comparisons but exact constants were not documented).",
+    "Area scanning radius and exact slots/items considered 'nearby' (loop indices and map geometry are inferred from iteration patterns but not fully specified).",
+    "Whether certain candidate types require a consumable component (the script barks about missing components) — the exact component identity and inventory interaction is not explicit."
+  ],
+  "main_function": {
+    "name": "U8P_SCROLL2::0080 (SCROLL2::0080)",
+    "execution_form": "process",
+    "purpose": "Handle the player's use/reading of the Scroll of Dispelling Magical Portals: present the scroll text and animation, then detect and attempt to dispel/unseal nearby portal-like objects with visual/audio feedback and failure messages when appropriate.",
+    "entry_conditions": [
+      "Invoked when the player reads/uses the dispelling scroll (Scroll::read event handler / item-use).",
+      "Triggered as an in-world process tied to the scroll item (pid and item pointer passed in)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_SCROLL2::0080 (SCROLL2::0080)",
+      "kind": "main",
+      "role": "Primary on-use handler for the dispelling scroll; coordinates UI, stasis, effects, scanning, target modification and feedback.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_SCROLL2::042D",
+      "kind": "helper",
+      "role": "Animate a temporary effect item by advancing its frame index in a short loop with delays between frames.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_SCROLL2::047E",
+      "kind": "helper",
+      "role": "Spawn a single visual/audio marker near a target (create/pop an item, playSFX, step frames, destroy) used when a portal is found or dispelled.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_SCROLL2::0520",
+      "kind": "helper",
+      "role": "Behavior for a separate scroll variant: detection of trapped chests. Shows text/stasis/effects then scans for chests and dispatches inspectors (U8P_SCROLL2::0755).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_SCROLL2::0755",
+      "kind": "helper",
+      "role": "Inspect a chest/item for traps and, if found, create a temporary marker and return a small result indicating detection.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_SCROLL2::07F1",
+      "kind": "helper",
+      "role": "Behavior for a destruction scroll variant: attempts to remove/destroy traps in nearby chests, providing feedback if none or no traps found.",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::36E7",
+      "kind": "extern",
+      "role": "Initialization/delay helper called at scroll start.",
+      "confidence": "high"
+    },
+    {
+      "name": "DOOR_NS::08B4",
+      "kind": "extern",
+      "role": "Spawned routine used to open/unseal a north-south door or door-like object after quality bits are cleared.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_SCROLL2::0080 (SCROLL2::0080)",
+        "callee": "U8P_SCROLL2::042D",
+        "purpose": "Animate temporary marker/effect frames associated with dispel animations.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SCROLL2::0080 (SCROLL2::0080)",
+        "callee": "U8P_SCROLL2::047E",
+        "purpose": "Create and play a one-shot visual/audio marker near a candidate target when discovered or dispelled.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SCROLL2::0520",
+        "callee": "U8P_SCROLL2::0755",
+        "purpose": "For each chest found, dispatch an inspector to check for traps and optionally spawn markers.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SCROLL2::07F1",
+        "callee": "U8P_SCROLL2::0755",
+        "purpose": "Use common inspection logic when trying to destroy traps in chests (re-uses detection internals).",
+        "confidence": "high"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_SCROLL2::0080 (SCROLL2::0080)",
+        "callee": "FREE::36E7",
+        "purpose": "Initial short delay/synchronization at scroll use start (likely open/read animation staging).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SCROLL2::0080 (SCROLL2::0080)",
+        "callee": "process Scroll::read",
+        "purpose": "Display the scroll text/description to the player and record the read action.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SCROLL2::0080 (SCROLL2::0080)",
+        "callee": "U8P_SCROLL2::setAvatarInStasis",
+        "purpose": "Temporarily prevent the avatar from acting/moving during the scroll animation/effects.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SCROLL2::0080 (SCROLL2::0080)",
+        "callee": "Npc::getDir",
+        "purpose": "Obtain caster facing direction to orient spawned visual effects (METHOD::15E7).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SCROLL2::0080 (SCROLL2::0080)",
+        "callee": "METHOD::15E7",
+        "purpose": "Spawn oriented visual effects as part of the reading animation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SCROLL2::0080 (SCROLL2::0080)",
+        "callee": "FREE::1C19",
+        "purpose": "Spawned helper used repeatedly as a timed delay between animation frames or effect lifecycles.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SCROLL2::0080 (SCROLL2::0080)",
+        "callee": "FREE::29D8",
+        "purpose": "Another short-lived visual helper spawned during the animation sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SCROLL2::0080 (SCROLL2::0080)",
+        "callee": "U8P_SCROLL2::playSFX",
+        "purpose": "Play sound effects tied to detection/dispelling and marker animations.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SCROLL2::0080 (SCROLL2::0080)",
+        "callee": "Item::getQuality",
+        "purpose": "Read the target item's quality/flags to determine if it is sealed/portal/trapped.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SCROLL2::0080 (SCROLL2::0080)",
+        "callee": "Item::setQuality",
+        "purpose": "Clear or update quality/flag bits to mark a portal as dispelled/unsealed.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SCROLL2::0080 (SCROLL2::0080)",
+        "callee": "DOOR_NS::08B4",
+        "purpose": "Invoke door/unseal logic to open a north-south door after clearing quality flags.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SCROLL2::0080 (SCROLL2::0080)",
+        "callee": "process Item::bark",
+        "purpose": "Emit short textual feedback to the player (failure messages, notices that a component is required, or 'nothing found').",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SCROLL2::047E",
+        "callee": "Item::create",
+        "purpose": "Create temporary marker/effect items used to mark detected objects.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SCROLL2::047E",
+        "callee": "Item::getZ",
+        "purpose": "Get target item's Z coordinate to position the marker correctly when popping it into the world.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SCROLL2::047E",
+        "callee": "Item::getY",
+        "purpose": "Get target item's Y coordinate for marker placement.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SCROLL2::047E",
+        "callee": "Item::getX",
+        "purpose": "Get target item's X coordinate for marker placement.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SCROLL2::047E",
+        "callee": "Item::pop",
+        "purpose": "Place the created marker item into the world at computed coordinates.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SCROLL2::042D",
+        "callee": "Item::getFrame",
+        "purpose": "Read current animation frame of the temporary effect item to step animation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SCROLL2::042D",
+        "callee": "Item::setFrame",
+        "purpose": "Advance the temporary effect item's animation frame during the short loop.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SCROLL2::042D",
+        "callee": "FREE::1C19",
+        "purpose": "Insert a delay between animation frame steps by spawning a short-lived helper.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SCROLL2::047E",
+        "callee": "Item::destroy",
+        "purpose": "Clean up/destroy temporary marker/effect items after their animation completes.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_SCROLL2::0080 (SCROLL2::0080)",
+    "behavior_summary_one_liner": "U8P_SCROLL2::0080 (SCROLL2::0080) is the on-use handler for a 'Scroll of Dispelling Magical Portals'. When a player reads the scroll it displays the scroll text, places the avatar in a short stasis, plays a sequence of visual and audio effects, then scans nearby world tiles/items for portal-like objects (doors, sealed walls, or items marked by quality/frame values).",
+    "external_call_count": 21,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

@@ -1,0 +1,356 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_DEVON.json",
+  "file": "U8P_DEVON",
+  "behavior_summary": [
+    "This script implements the conversation/identification behavior for an NPC referred to as 'Devon'. On initialization or when the player enters the NPC's fast-area trigger the script selects a short identifying label (examples in code: \"Devon\", \"fisherman \", \"man \") and sends it as a message to the player.",
+    "Beyond the initial identification, the module contains a set of helpers that prepare dialog parameters, build a selectable list of player dialog options, present conversation UI, and handle the selected reply with many context-sensitive branches that depend on global game-state flags.",
+    "Periodic/per-event helper logic increments a small local counter and occasionally emits brief sympathetic or alarmed lines; other helpers act as guards that gate callbacks into engine subsystems or relay to utility routines.",
+    "A single global flag (global [00FC 01]) is explicitly written when the NPC reveals its name; many other global flags are read to choose dialogue variants and to gate availability."
+  ],
+  "notable_control_flow": [
+    "Entry: U8P_DEVON::init_0080 runs on actor init and on fast-area entry; it quickly chooses a short identifying string and sends it to the specified pid then suspends/returns.",
+    "Guard checks: multiple helpers (e.g., U8P_DEVON::init_0261 and U8P_DEVON::init_00FF) include early-exit logic based on combinations of global flags such as [005B 01], [0063 01], preventing dialog from proceeding in certain game states.",
+    "Dialog composition: U8P_DEVON::init_00FF builds numeric dialog parameters (local2/local3/local0) by querying state via 0581:28F9 and then calls the conversation engine 057C:133F to start or step conversation flows.",
+    "Main conversation: U8P_DEVON::init_035B assembles a slist (local14) of reply options based on many flags and helper returns, presents them through 057C:* APIs, and branches on the chosen string (local1) to trigger side effects including world/quest calls (e.g., 0402:5079) and setting global [00FC 01].",
+    "State mutation: only global [00FC 01] is written (set to 1) when the NPC identifies itself; other globals are treated as read-only selectors that shape behavior."
+  ],
+  "open_questions": [
+    "Precise semantics of engine routines (0581:28F9, 057C:091C, 057C:15E7, 057C:133F): their detailed return meanings and how returned bytes map to UI elements are inferred but not certain.",
+    "Exact gameplay meaning of many global flags (for example [0058],[005A],[005C],[005D],[003F],[0100],[0036]): they gate conversation trees but their narrative/quest identities are unknown.",
+    "The runtime interpretation of some helper-returned numeric modes (local0 values like 0x30/0x28/0x27) — what specific conversation nodes those constants correspond to in the high-level dialogue graph is inferred only.",
+    "Whether some external calls (058B:0080, 0402:0261, 0402:5079) perform animation/state changes, quest progress, or both is probable but not conclusively determined from this excerpt."
+  ],
+  "main_function": {
+    "name": "U8P_DEVON::init_0080",
+    "execution_form": "process",
+    "purpose": "On NPC initialization or when the player enters the NPC's fast-area, choose and send a short identifying string to the player and then suspend. This is the lightweight identification/first-contact behavior for the NPC 'Devon'.",
+    "entry_conditions": [
+      "Actor init event (script/process start) or fast-area entry trigger for the NPC",
+      "Script runs only when processing is allowed (respects set info/process-exclude state)",
+      "Choices are conditioned on global flags such as global [00FC 01] and global [00FD 02]"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_DEVON::init_0080",
+      "kind": "main",
+      "role": "Initial identification/fast-area entry handler that selects and emits the NPC's short label to the player.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DEVON::init_00FF",
+      "kind": "helper",
+      "role": "Prepare dialog parameters (local0/local2/local3) by querying game state and then call the conversation engine (057C:133F) to start/advance dialog.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DEVON::init_0261",
+      "kind": "helper",
+      "role": "Guard/conditional helper that checks global flags and invokes an engine callback when allowed.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DEVON::init_028F",
+      "kind": "helper",
+      "role": "Thin relay that calls utility 0581:2A56 and returns; used to reuse external logic.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DEVON::init_02AA",
+      "kind": "helper",
+      "role": "Handles a contextual event (param1==3 branch): queries conversation state, presents the line 'What are you doing there...?' and invokes world/quest callbacks.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_DEVON::init_035B",
+      "kind": "helper",
+      "role": "Main conversation/dialogue handler: builds the options list (local14), presents UI, handles the player's chosen reply and executes side-effects including writing global [00FC 01].",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DEVON::init_047A",
+      "kind": "helper",
+      "role": "Per-tick/per-event probe that queries 057C:0BCF to update local8 and occasionally emits brief reassuring/alarm lines.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_DEVON::calli 08h 0049h",
+      "kind": "extern",
+      "role": "Engine text/display call used to present spoken/message strings to a pid in the context of this NPC.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DEVON::0581:28F9",
+      "kind": "extern",
+      "role": "State/query helper used with byte indices to select dialog variants and routes.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DEVON::057C:133F",
+      "kind": "extern",
+      "role": "Conversation/dialog engine entry used to start or continue dialog flows with numeric identifiers.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DEVON::057C:091C",
+      "kind": "extern",
+      "role": "Engine routine that presents or queries a single dialog/state option and returns a byte used for branching.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_DEVON::057C:15E7",
+      "kind": "extern",
+      "role": "Engine routine that records/sets dialog/response identifiers or updates UI elements for the NPC.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_DEVON::0402:0261",
+      "kind": "extern",
+      "role": "World/quest subsystem call used after dialog to advance state or trigger scripted events.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_DEVON::058B:0080",
+      "kind": "extern",
+      "role": "Small engine control/action call that likely affects NPC state or animation after alarm text.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_DEVON::0581:2A56",
+      "kind": "extern",
+      "role": "Utility/lookup helper that returns a value used by higher-level dialog logic.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_DEVON::057C:0BCF",
+      "kind": "extern",
+      "role": "Engine probe/random/state function returning a numeric used to pace periodic messages (local8).",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_DEVON::calli 06h 00AEh",
+      "kind": "extern",
+      "role": "Callback invoked by guard helper (init_0261) to perform an engine-level callback and return a result.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_DEVON::0402:5079",
+      "kind": "extern",
+      "role": "World/quest call invoked as a side-effect from a conversation branch in init_035B.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_DEVON::init_0080",
+        "callee": "U8P_DEVON::init_00FF",
+        "purpose": "Not direct in canonical flow but related helper: init_00FF prepares dialog params for conversation engine; U8P_DEVON::init_0080 focuses on initial identification and may defer to helpers for richer dialog.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DEVON::init_035B",
+        "callee": "U8P_DEVON::init_00FF",
+        "purpose": "init_035B uses init_00FF to compute dialog indices/numeric codes before calling 057C:133F to present options.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DEVON::init_0261",
+        "callee": "U8P_DEVON::init_028F",
+        "purpose": "init_0261 can use the relay helper init_028F to access shared utility behavior (0581:2A56) depending on flags.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DEVON::init_047A",
+        "callee": "U8P_DEVON::init_035B",
+        "purpose": "Periodic helper may indirectly cause dialog/emote behavior handled by main conversation logic when thresholds are reached (inferred pacing interaction).",
+        "confidence": "low"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_DEVON::init_0080",
+        "callee": "U8P_DEVON::calli 08h 0049h",
+        "purpose": "Send the selected short identifying string (e.g., 'Devon') to the player pid in the context of this NPC.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DEVON::init_00FF",
+        "callee": "U8P_DEVON::0581:28F9",
+        "purpose": "Query game/world/NPC state with small byte indices to decide which dialog index/mode to use (sets local0/local2/local3).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DEVON::init_00FF",
+        "callee": "U8P_DEVON::057C:133F",
+        "purpose": "Invoke the conversation engine with pid, computed dialog index (local3), and numeric code (local2) to start/advance dialog flows.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DEVON::init_0261",
+        "callee": "U8P_DEVON::calli 06h 00AEh",
+        "purpose": "Invoke an engine callback when guard conditions pass; process returned result and suspend.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DEVON::init_02AA",
+        "callee": "U8P_DEVON::057C:091C",
+        "purpose": "Query/present a single dialog/state option and branch before showing the reprimand text 'What are you doing there...?'.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DEVON::init_02AA",
+        "callee": "U8P_DEVON::calli 08h 0049h",
+        "purpose": "Deliver the line 'What are you doing there...?' to pid when caught/suspicious activity branch is triggered.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DEVON::init_035B",
+        "callee": "U8P_DEVON::057C:091C",
+        "purpose": "Use 057C:091C as a pre-check/presentation primitive in building the dialog flow before showing text or options.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DEVON::init_035B",
+        "callee": "U8P_DEVON::057C:15E7",
+        "purpose": "Record or set a dialog/response id in the engine after receiving a retval from checks (used to drive the UI flow).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DEVON::init_035B",
+        "callee": "U8P_DEVON::0402:0261",
+        "purpose": "Trigger world/quest side-effects from certain conversation branches.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DEVON::init_035B",
+        "callee": "U8P_DEVON::058B:0080",
+        "purpose": "Invoke a small engine action likely to change NPC state/animation after alarm text is emitted.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DEVON::init_028F",
+        "callee": "U8P_DEVON::0581:2A56",
+        "purpose": "Relay to a utility/lookup routine and return its numeric result to the caller.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DEVON::init_047A",
+        "callee": "U8P_DEVON::057C:0BCF",
+        "purpose": "Probe engine/random-state to obtain a number used to increment local8 for pacing periodic messages.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DEVON::init_035B",
+        "callee": "U8P_DEVON::0402:5079",
+        "purpose": "Invoke a specific world/quest action as a consequence of a particular dialogue branch.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "global [00FC 01]",
+        "likely_effect": "Used to decide whether the NPC has already identified itself and to select greeting/identification path.",
+        "confidence": "high"
+      },
+      {
+        "name": "global [00FD 02]",
+        "likely_effect": "Selects an alternate short label (e.g., 'fisherman ') used by U8P_DEVON::init_0080 when choosing identification text.",
+        "confidence": "high"
+      },
+      {
+        "name": "global [005B 01]",
+        "likely_effect": "Availability/location bit used with [0063] to gate dialog and helper invocation.",
+        "confidence": "high"
+      },
+      {
+        "name": "global [0063 01]",
+        "likely_effect": "Paired with [005B] for early-exit/availability checks; influences whether some helpers run.",
+        "confidence": "high"
+      },
+      {
+        "name": "global [0058 01]",
+        "likely_effect": "Major branch selector in conversation logic routed through init_035B.",
+        "confidence": "high"
+      },
+      {
+        "name": "global [005A 01]",
+        "likely_effect": "Selects specific greeting/content variants in helper logic.",
+        "confidence": "medium"
+      },
+      {
+        "name": "global [005C 01]",
+        "likely_effect": "Used with [005D] to choose alternate reply sets and special-casing in dialog building.",
+        "confidence": "medium"
+      },
+      {
+        "name": "global [005D 01]",
+        "likely_effect": "Paired with [005C] to alter dialog option sets.",
+        "confidence": "medium"
+      },
+      {
+        "name": "global [003C 01]",
+        "likely_effect": "Influences periodic counter increment behavior in init_047A (visit/alarm gating).",
+        "confidence": "medium"
+      },
+      {
+        "name": "global [0038 01]",
+        "likely_effect": "Also affects incrementing of local8; related to alarm/visit state.",
+        "confidence": "medium"
+      },
+      {
+        "name": "global [003F 01]",
+        "likely_effect": "Combined with [0100] to select a large alternate dialog path in init_035B.",
+        "confidence": "medium"
+      },
+      {
+        "name": "global [0100 01]",
+        "likely_effect": "Paired with [003F] to gate an alternate conversation branch.",
+        "confidence": "medium"
+      },
+      {
+        "name": "global [000B 01]",
+        "likely_effect": "Used to pick a simple greeting variant in some branches.",
+        "confidence": "low"
+      },
+      {
+        "name": "global [0036 02]",
+        "likely_effect": "Multi-bit index used to route into a different conversation tree; exact semantics unknown.",
+        "confidence": "low"
+      },
+      {
+        "name": "global [0101 01]",
+        "likely_effect": "Used occasionally to select a greeting or dialog path.",
+        "confidence": "low"
+      }
+    ],
+    "writes": [
+      {
+        "name": "global [00FC 01]",
+        "likely_effect": "Set to 1 when the NPC reveals its name; marks that the NPC has identified itself so future greetings change accordingly.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_DEVON::init_0080",
+    "behavior_summary_one_liner": "This script implements the conversation/identification behavior for an NPC referred to as 'Devon'. On initialization or when the player enters the NPC's fast-area trigger the script selects a short identifying label (examples in code: \"Devon\", \"fisherman \", \"man \") and sends it as a message to the player.",
+    "external_call_count": 13,
+    "flag_read_count": 15,
+    "flag_write_count": 1
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

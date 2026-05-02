@@ -1,0 +1,76 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_HELMET.json",
+  "file": "U8P_HELMET",
+  "behavior_summary": [
+    "This script implements the 'U8P_HELMET::look' (examine) handler for a helmet item. When an actor examines the helmet it builds the literal text \"helmet \", invokes the item's bark routine so that description is presented to the examining process/player, and signals that the U8P_HELMET::look event was handled.",
+    "Before barking, the handler sets an info/state on the item and applies a process-exclude (a guard to control further processing or reentrancy) for the duration of the operation.",
+    "The temporary string is freed after use and the bark return value is used in an implication sequence to indicate the event result; finally the routine suspends/returns."
+  ],
+  "notable_control_flow": [
+    "Entry on Event 0 (U8P_HELMET::look).",
+    "Set item info and apply a process-exclude guard on the item.",
+    "Push actor/process id context and construct the literal string \"helmet \".",
+    "Call external Item::bark with the item and the string to display the description.",
+    "Free the temporary string, push the bark return value, use an implies sequence to mark handling, then suspend and return."
+  ],
+  "open_questions": [
+    "Exact numeric info id being set on the item by the 'set info' opcode is not explicitly named here (appears in other scripts as 0x210 but not verified for this helmet); exact meaning of that info is unclear (low confidence).",
+    "Precise semantics of the 'process-exclude' opcode in this engine: inferred to prevent reentrancy or further processing of the item during the operation but could have other side effects (medium confidence).",
+    "Whether the 'implies' usage is purely a convention for signaling the event was handled to the engine or also influences other control paths in higher-level script machinery (medium confidence)."
+  ],
+  "main_function": {
+    "name": "U8P_HELMET::look",
+    "execution_form": "process",
+    "purpose": "Respond to the player/actor examining the helmet by producing a short descriptive message ('helmet ') via Item::bark and marking the item with an info/state and process-exclude to control processing; indicate the event was handled and return.",
+    "entry_conditions": [
+      "Event 0 (U8P_HELMET::look) — triggered when the actor examines/looks at the helmet item (area/inspect trigger)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_HELMET::look",
+      "kind": "main",
+      "role": "Handle the 'U8P_HELMET::look' event for the helmet item: prepare state, build description string, call Item::bark, and signal handling.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine used to present/announce a short text message coming from an item/process to a player/process (used to show the helmet's description).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_HELMET::look",
+        "callee": "Item::bark",
+        "purpose": "Present or announce the constructed string 'helmet ' to the player/process that examined the item so the item's description is shown.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "HELMET::look",
+    "behavior_summary_one_liner": "This script implements the 'U8P_HELMET::look' (examine) handler for a helmet item. When an actor examines the helmet it builds the literal text \"helmet \", invokes the item's bark routine so that description is presented to the examining process/player, and signals that the U8P_HELMET::look event was handled.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

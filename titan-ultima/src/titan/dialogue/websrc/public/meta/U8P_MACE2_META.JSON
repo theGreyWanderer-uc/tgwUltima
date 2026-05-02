@@ -1,0 +1,69 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_MACE2.json",
+  "file": "U8P_MACE2",
+  "behavior_summary": [
+    "Handles the item's 'U8P_MACE2::look' (examine) event: when an actor inspects the mace, the script prepares item/info and process-exclude state, then directs the item to 'bark' a short description string \"mace \" to the requesting process/actor.",
+    "The routine invokes Item::bark targeted at the passed-in process/actor, captures the bark return value, suspends/waits on the bark result, and returns that value to the caller.",
+    "No global flags are read or written by this script excerpt (no persistent world-state changes observed)."
+  ],
+  "notable_control_flow": [
+    "Entry on a trigger-style event (Event 0: U8P_MACE2::look) that runs in the item's process context.",
+    "A short call sequence that builds/pushes a literal string, calls Item::bark, frees the temporary string, performs an implies/pop style control operation, and issues a suspend/wait before returning the bark result.",
+    "The function's return value is the direct return from Item::bark (propagated back to the caller)."
+  ],
+  "open_questions": [
+    "Exact semantic meaning of the 'set info' and 'process exclude' opcodes here — which object receives the info and whether the calling process or the item is excluded (inferred but not explicit).",
+    "Purpose of the zero-initialized local (init_flag) at start — appears to be a placeholder or boolean but its concrete use is not present in the excerpt.",
+    "Whether any side-effects beyond the bark (e.g., visual/audio cues or logging) occur as a result of Item::bark in the full engine implementation."
+  ],
+  "main_function": {
+    "name": "U8P_MACE2::look",
+    "execution_form": "process",
+    "purpose": "Respond to an actor's 'U8P_MACE2::look' action on the mace by preparing item/info state and emitting a short description ('mace ') via Item::bark to the requesting process, then returning the bark result.",
+    "entry_conditions": [
+      "Event 0 (U8P_MACE2::look) — triggered when an actor inspects or 'looks' at the mace item"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_MACE2::look",
+      "kind": "main",
+      "role": "Handle the mace item's 'U8P_MACE2::look' event and produce a short descriptive bark to the requesting process.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_MACE2::look",
+        "callee": "Item::bark",
+        "purpose": "Request that the item/process emit/display the short description string \"mace \" to the given target process/actor; return value is captured and returned by MACE2::look.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "MACE2::look",
+    "behavior_summary_one_liner": "Handles the item's 'U8P_MACE2::look' (examine) event: when an actor inspects the mace, the script prepares item/info and process-exclude state, then directs the item to 'bark' a short description string \"mace \" to the requesting process/actor.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

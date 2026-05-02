@@ -1,0 +1,164 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_CHIMNEY.json",
+  "file": "U8P_CHIMNEY",
+  "behavior_summary": [
+    "CHIMNEY::look: When the chimney item is examined, the script prepares the object and calls Item::bark with the literal \"chimney \" so the player sees the chimney description. No persistent game-state is changed by this handler.",
+    "U8P_CHIMNEY::enterFastArea: When an actor enters the chimney's fast-area trigger, the routine checks the chimney's current frame and an external gating function (FREE::1A85(0x02)). If both checks pass (frame <= 3 and FREE::1A85 returns 1), it computes spawn coordinates from the chimney (x=getX, y=getY, z=getZ+0x28), attempts to create item type 0x02F5 at that location via Item::legal_create, and if creation is successful it sets the 0x0080 status flag on the spawned item via Item::orStatus."
+  ],
+  "notable_control_flow": [
+    "CHIMNEY::look is an event/process entry executed on a 'U8P_CHIMNEY::look' (examine) event and performs a single bark call before returning.",
+    "U8P_CHIMNEY::enterFastArea is triggered by area-entry (fast-area) and uses two guards (frame threshold and FREE::1A85 check) before attempting the spawn. The spawn attempt is conditional on Item::legal_create's return value.",
+    "The creation code uses an out-parameter (created_item_out) to receive the new item reference and then mutates that item's status (orStatus) if creation succeeded."
+  ],
+  "open_questions": [
+    "Exact semantics of FREE::1A85(0x02): the code treats its return as a boolean; its precise meaning (timing, probability, or flag check) is not documented here and is inferred.",
+    "Whether Item::legal_create returning zero denotes success is inferred from control comparisons; the actual API convention in this engine is not explicitly recorded in the disassembly.",
+    "The gameplay purpose of item type 0x02F5 (spawned by enterFastArea) is unknown from this fragment—what object/actor this type represents and how it interacts afterward is not provided."
+  ],
+  "main_function": {
+    "name": "U8P_CHIMNEY::look",
+    "execution_form": "process",
+    "purpose": "Respond to a player/actor examining the chimney by producing a short descriptive bark ('chimney ').",
+    "entry_conditions": [
+      "Event 0: the 'U8P_CHIMNEY::look' / examine event for the chimney item (triggered when the player/actor inspects the object)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_CHIMNEY::look",
+      "kind": "main",
+      "role": "Handle 'U8P_CHIMNEY::look'/examine event; construct or reference the string 'chimney ' and call Item::bark to present it to the viewer.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CHIMNEY::enterFastArea",
+      "kind": "helper",
+      "role": "Fast-area entry trigger: guarded attempt to spawn item type 0x02F5 above the chimney and mark that spawned item's status (0x0080) on success.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine-provided routine to display/emote a short message from an item/process to a player/process.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getFrame",
+      "kind": "extern",
+      "role": "Return the item's current frame/state index; used as a gating condition in enterFastArea.",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::1A85",
+      "kind": "extern",
+      "role": "Library/free routine called with a byte (0x02) whose return is used as a boolean gate; precise semantics uncertain.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::getX",
+      "kind": "extern",
+      "role": "Return the item's X coordinate for spawn placement.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getY",
+      "kind": "extern",
+      "role": "Return the item's Y coordinate for spawn placement.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getZ",
+      "kind": "extern",
+      "role": "Return the item's Z coordinate; enterFastArea uses getZ + 0x28 as spawn height.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::legal_create",
+      "kind": "extern",
+      "role": "Attempt to create/spawn an item of a given type at coordinates; returns a status and provides an out-parameter for the created item reference (return-value-to-zero semantics inferred).",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::orStatus",
+      "kind": "extern",
+      "role": "Bitwise-OR a status mask into a target item's status word; used here to set mask 0x0080 on the spawned item.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_CHIMNEY::look",
+        "callee": "Item::bark",
+        "purpose": "Emit the description string 'chimney ' to the player/process viewing the item.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CHIMNEY::enterFastArea",
+        "callee": "Item::getFrame",
+        "purpose": "Read the chimney's current frame/state to decide whether spawning logic should run (frame <= 3 gate).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CHIMNEY::enterFastArea",
+        "callee": "FREE::1A85",
+        "purpose": "Secondary gating check invoked as FREE::1A85(0x02); return compared to 1 to allow spawning. Exact meaning is inferred as a boolean/timing/permission check.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_CHIMNEY::enterFastArea",
+        "callee": "Item::getZ",
+        "purpose": "Get the chimney's Z coordinate to compute spawn height (z + 0x28).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CHIMNEY::enterFastArea",
+        "callee": "Item::getY",
+        "purpose": "Get the chimney's Y coordinate to compute spawn Y.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CHIMNEY::enterFastArea",
+        "callee": "Item::getX",
+        "purpose": "Get the chimney's X coordinate to compute spawn X.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CHIMNEY::enterFastArea",
+        "callee": "Item::legal_create",
+        "purpose": "Attempt to spawn item type 0x02F5 at computed coordinates; success/failure is checked via return value (zero treated as success here).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_CHIMNEY::enterFastArea",
+        "callee": "Item::orStatus",
+        "purpose": "Set status bit 0x0080 on the newly created item (out-parameter from legal_create) if creation succeeded.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "CHIMNEY::look",
+    "behavior_summary_one_liner": "CHIMNEY::look: When the chimney item is examined, the script prepares the object and calls Item::bark with the literal \"chimney \" so the player sees the chimney description. No persistent game-state is changed by this handler.",
+    "external_call_count": 8,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

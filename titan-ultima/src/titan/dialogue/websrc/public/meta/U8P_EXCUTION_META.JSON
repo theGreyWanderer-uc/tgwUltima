@@ -1,0 +1,211 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_EXCUTION.json",
+  "file": "U8P_EXCUTION",
+  "behavior_summary": [
+    "Handles an 'U8P_EXCUTION::hatch' event for an egg/item: orchestrates a short scripted scene when an egg hatches.",
+    "Plays a music cue, checks and updates the egg's internal X-range/state, and places the avatar in stasis to freeze player input during the sequence.",
+    "Performs coordinate-based branching (Z and X comparisons between the egg and avatar) to choose different spawn/animation parameter sets.",
+    "Iterates over item data (shape/slots) and spawns multiple short-lived action/animation helpers and a FREE effect at the egg's coordinates to produce visual/sound effects.",
+    "Updates the egg's status bits (Item::orStatus) to mark it as hatched/consumed and sequences NPC movement (pathfind) and dialog (Item::bark) lines, suspending between actions to stage the scene."
+  ],
+  "notable_control_flow": [
+    "Early branch based on Egg::getEggXRange() to avoid re-running the U8P_EXCUTION::hatch sequence if already set.",
+    "Coordinate comparisons (Item::getZ and Item::getX vs avatar) select different spawn/action argument sets (different visual/dialog variants depending on relative position).",
+    "Loop/loopnext construct over the egg's contained shapes/items to spawn effects per-slot (uses BP-02h as iterator and BP-04h as temporary slot value).",
+    "Sequenced spawn/call/bark/suspend operations to create a multi-step cutscene-like event (spawns and process calls interleaved with suspends)."
+  ],
+  "open_questions": [
+    "Exact semantic meaning of the specific status mask values passed to Item::orStatus (precise gameplay flags are inferred but not named).",
+    "Precise identity and behavior of the many small spawned helpers (METHOD::091C, METHOD::15E7) — they appear to be animation/action drivers but their concrete effects are inferred.",
+    "Full implications of Egg::setEggXRange(1) beyond serving as a re-run guard: does it gate future interactions or change rendering/AI in other systems?",
+    "Exact mapping from spawn argument bytes to animation/action outcomes (direction, action code, timing) — numeric mappings are observed but not fully decoded."
+  ],
+  "main_function": {
+    "name": "U8P_EXCUTION::hatch",
+    "execution_form": "process",
+    "purpose": "Execute the U8P_EXCUTION::hatch event for an egg/item: play audio, freeze player, update egg state, spawn visual/animation helpers, command NPC movement and dialog, and produce a staged in-game scene for the hatching.",
+    "entry_conditions": [
+      "Triggered by the item's U8P_EXCUTION::hatch event (engine event that invokes the egg's U8P_EXCUTION::hatch handler).",
+      "Runs only when Egg::getEggXRange() indicates the sequence should proceed (guard prevents re-run)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_EXCUTION::hatch",
+      "kind": "main",
+      "role": "Primary event handler implementing the U8P_EXCUTION::hatch cutscene and state changes.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_EXCUTION::METHOD::091C",
+      "kind": "helper",
+      "role": "Spawned helper used repeatedly to trigger short animations/actions on a target PID (appears to drive single-step actor animations or effects).",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_EXCUTION::METHOD::15E7",
+      "kind": "helper",
+      "role": "Spawned helper paired with METHOD::091C; likely complementary movement/pose/timed behavior driver for the scene.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_EXCUTION::FREE::36E7",
+      "kind": "helper",
+      "role": "Free (utility) routine called during setup; likely performs resource initialization or a one-off effect.",
+      "confidence": "low"
+    },
+    {
+      "name": "U8P_EXCUTION::FREE::1C6D",
+      "kind": "helper",
+      "role": "Spawned free helper that creates an ephemeral visual effect (corpse/splash/particle) at the egg's CX,CY,CZ coordinates.",
+      "confidence": "medium"
+    },
+    {
+      "name": "playMusic",
+      "kind": "extern",
+      "role": "Play a music/sound cue (used early in the U8P_EXCUTION::hatch sequence).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::* / Egg::* / Npc::* (Item::getZ, Item::getX, Item::getCX, Item::getCY, Item::getCZ, Item::orStatus, Egg::getEggXRange, Egg::setEggXRange, Npc::pathfind, Item::bark)",
+      "kind": "extern",
+      "role": "External engine/item/npc APIs used to read coordinates/state, change item status, command pathfinding, and emit dialog.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_EXCUTION::hatch",
+        "callee": "U8P_EXCUTION::METHOD::091C",
+        "purpose": "Spawn repeated short action/animation helpers attached to actors/PIDs to realize staged animations during U8P_EXCUTION::hatch.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_EXCUTION::hatch",
+        "callee": "U8P_EXCUTION::METHOD::15E7",
+        "purpose": "Spawned in sequence with METHOD::091C to produce complementary actor behaviors (movement/pose/timing).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_EXCUTION::hatch",
+        "callee": "U8P_EXCUTION::FREE::1C6D",
+        "purpose": "Spawn a free effect at the egg's coordinates (visual/sound effect tied to the U8P_EXCUTION::hatch).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_EXCUTION::hatch",
+        "callee": "U8P_EXCUTION::FREE::36E7",
+        "purpose": "Call a free/utility routine during setup; presumed to prepare or reset resources needed for the sequence.",
+        "confidence": "low"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_EXCUTION::hatch",
+        "callee": "playMusic",
+        "purpose": "Play a specific music/sound cue to accompany the U8P_EXCUTION::hatch event.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_EXCUTION::hatch",
+        "callee": "Egg::getEggXRange",
+        "purpose": "Read an egg-specific guard/state to decide whether to run the U8P_EXCUTION::hatch sequence or which variant to use.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_EXCUTION::hatch",
+        "callee": "Egg::setEggXRange",
+        "purpose": "Set the egg X-range/state (written to 1) to mark that the U8P_EXCUTION::hatch sequence has run or to alter future behavior.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_EXCUTION::hatch",
+        "callee": "Item::getZ",
+        "purpose": "Compare egg Z-coordinate against another entity (avatar) to select behavior variant.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_EXCUTION::hatch",
+        "callee": "Item::getX",
+        "purpose": "Compare egg X-coordinate against another entity (avatar) to select behavior variant.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_EXCUTION::hatch",
+        "callee": "Item::getCX / Item::getCY / Item::getCZ",
+        "purpose": "Retrieve world coordinates to pass to FREE::1C6D to spawn effects at the egg's location.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_EXCUTION::hatch",
+        "callee": "Item::orStatus",
+        "purpose": "Set status bits on the egg item (mark as hatched/consumed/disabled to prevent reuse).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_EXCUTION::hatch",
+        "callee": "U8P_EXCUTION::setAvatarInStasis",
+        "purpose": "Place the avatar into stasis (freeze player actions) while the U8P_EXCUTION::hatch scene runs.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_EXCUTION::hatch",
+        "callee": "Npc::pathfind",
+        "purpose": "Command NPCs to move to target coordinates as part of the staged sequence.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_EXCUTION::hatch",
+        "callee": "Item::bark",
+        "purpose": "Emit dialog lines from items/NPCs to narrate the U8P_EXCUTION::hatch scene.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "Egg::getEggXRange",
+        "likely_effect": "Gate whether the U8P_EXCUTION::hatch sequence runs or which variant executes (re-run guard).",
+        "confidence": "high"
+      }
+    ],
+    "writes": [
+      {
+        "name": "Egg::setEggXRange",
+        "likely_effect": "Set a guard/state (value 1 observed) to mark the egg's U8P_EXCUTION::hatch-state and prevent immediate re-triggering.",
+        "confidence": "high"
+      },
+      {
+        "name": "Avatar stasis (via setAvatarInStasis)",
+        "likely_effect": "Freeze/unfreeze player control during the cutscene (written to 1 during sequence).",
+        "confidence": "high"
+      },
+      {
+        "name": "Item status bits (via Item::orStatus)",
+        "likely_effect": "Mark the egg/item with status flags to change processing/availability after hatching.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_EXCUTION::hatch",
+    "behavior_summary_one_liner": "Handles an 'U8P_EXCUTION::hatch' event for an egg/item: orchestrates a short scripted scene when an egg hatches.",
+    "external_call_count": 10,
+    "flag_read_count": 1,
+    "flag_write_count": 3
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

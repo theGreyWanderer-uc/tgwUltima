@@ -1,0 +1,242 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_GUARD1.json",
+  "file": "U8P_GUARD1",
+  "behavior_summary": [
+    "Implements the guard NPC's short inspection reaction (GUARD1::look), proximity enter/exit hooks (GUARD1::enterFastArea / GUARD1::leaveFastArea), and the full conversation/talk handler (GUARD1::use).",
+    "GUARD1::look: when a player inspects the guard, the NPC barks a short identity line; if the guard is dead it barks a 'dead guardsman' message instead.",
+    "GUARD1::enterFastArea / leaveFastArea: manage per-actor fast-area registration/cleanup via an engine helper (FREE::2A56) and spawn a brief helper (U8P_GUARD1::1033) when a living actor enters proximity.",
+    "GUARD1::use: presents a branching dialog tree (via Item::ask) driven by persistent global flags (guard1met, guard1pissed, guard1town, guard1job, toranDead), player responses and random variation (urandom). It controls speech (Item::bark), may set the Avatar into stasis, schedules animations/movements (via spawn and Npc::pathfind), and updates guard state flags."
+  ],
+  "notable_control_flow": [
+    "U8P_GUARD1::look immediately checks Npc::isDead and selects one of two short barks before returning.",
+    "U8P_GUARD1::enterFastArea checks Npc::isDead; if alive it calls FREE::2A56 (registration) then spawn U8P_GUARD1::1033; dead guards bypass registration/spawn.",
+    "U8P_GUARD1::leaveFastArea calls FREE::2A56 to deregister/cleanup and returns.",
+    "U8P_GUARD1::use builds a dynamic menu (slist) for Item::ask; selected choices are string-compared to known options (e.g., 'Bye ', 'What is your name?', 'I am the Avatar!', 'Open the gate!') and drive branching: replies produce barks, may set global flags, may set Avatar stasis, and spawn timed/animation helper processes.",
+    "Dialog composition in U8P_GUARD1::use depends on toranDead (adds/removes 'Open the gate!' option) and guard1met/guard1pissed to choose first-time vs subsequent/angry responses; urandom is used to vary repeated replies."
+  ],
+  "open_questions": [
+    "FREE::2A56 is used for registration/management in several places (enter/leave and during use) but its exact semantics (what resource/registry it manipulates) are inferred, not confirmed.",
+    "The exact behaviors and parameters of many spawned METHOD::#### helpers (e.g., METHOD::15E7, METHOD::091C, METHOD::0E4F) are not present in this file and are only inferred as animation/movement/timer helpers.",
+    "The internal purpose and timing semantics of U8P_GUARD1::1033 (spawned on enterFastArea) are only inferred as a short helper; its implementation is not shown here.",
+    "Precise boundaries and string content of some ask-menu entries are inferred from comparisons; localized string variants or exact option ordering are not present in this extract."
+  ],
+  "main_function": {
+    "name": "U8P_GUARD1::look",
+    "execution_form": "process",
+    "purpose": "Respond when a player inspects/targets the guard: produce an immediate short bark identifying the guard or indicating the guard is dead.",
+    "entry_conditions": [
+      "Event 0 (U8P_GUARD1::look) triggered when an actor (typically the Avatar) inspects the guard.",
+      "The function queries Npc::isDead to select the proper short response."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_GUARD1::look",
+      "kind": "main",
+      "role": "Short inspection/identity response for the guard NPC",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_GUARD1::enterFastArea",
+      "kind": "helper",
+      "role": "Handle actor entering guard's proximity: register via engine helper, spawn proximity helper if guard alive",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_GUARD1::leaveFastArea",
+      "kind": "helper",
+      "role": "Handle actor leaving guard's proximity: deregister/cleanup via engine helper",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_GUARD1::use",
+      "kind": "helper",
+      "role": "Full conversation/talk handler: present dialog menu, branch on responses, update flags, spawn animations/timers, and control avatar stasis",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_GUARD1::1033",
+      "kind": "helper",
+      "role": "Brief spawned helper process created on proximity entry (likely timed/auxiliary behavior); implementation not included here",
+      "confidence": "medium"
+    },
+    {
+      "name": "Npc::isDead",
+      "kind": "extern",
+      "role": "Check NPC death state used to branch U8P_GUARD1::look and fast-area behavior",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_GUARD1::enterFastArea",
+        "callee": "U8P_GUARD1::1033",
+        "purpose": "Spawn a short helper process when an actor enters the guard's fast area (proximity helper/timer)",
+        "confidence": "high"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_GUARD1::look",
+        "callee": "Npc::isDead",
+        "purpose": "Determine whether to use the 'dead guardsman' or 'guardsman' bark branch",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD1::look",
+        "callee": "Item::bark",
+        "purpose": "Emit the short identification or dead-line to the inspecting process/player",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD1::enterFastArea",
+        "callee": "FREE::2A56",
+        "purpose": "Register/manage per-actor fast-area state or resources when an actor enters proximity (inferred registration call)",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GUARD1::leaveFastArea",
+        "callee": "FREE::2A56",
+        "purpose": "Deregister/cleanup per-actor fast-area state on exit (inferred cleanup call)",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GUARD1::use",
+        "callee": "Item::ask",
+        "purpose": "Present a multiple-choice dialog to the player and receive the selected response for branching",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD1::use",
+        "callee": "Item::bark",
+        "purpose": "Produce dialog lines / speech bubbles for the guard's responses throughout conversation",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD1::use",
+        "callee": "U8P_GUARD1::getName",
+        "purpose": "Obtain the player's or NPC's name to build personalized responses like 'I am <name>.'",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD1::use",
+        "callee": "U8P_GUARD1::setAvatarInStasis",
+        "purpose": "Temporarily disable player controls during some dialog/interaction sequences",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD1::use",
+        "callee": "urandom",
+        "purpose": "Introduce random variation into repeated reply selection",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD1::use",
+        "callee": "Npc::getDir",
+        "purpose": "Query guard facing direction to choose direction-dependent animation or movement spawn",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD1::use",
+        "callee": "Npc::getLastAnimSet",
+        "purpose": "Check last animation set to conditionally run an animation sequence",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GUARD1::use",
+        "callee": "Item::getDirToItem",
+        "purpose": "Compute direction to a target position/item to orient spawned animation helpers",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GUARD1::use",
+        "callee": "Npc::pathfind",
+        "purpose": "Command the guard to pathfind/move to a target tile as part of a dialog-linked action",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GUARD1::use",
+        "callee": "FREE::1C19",
+        "purpose": "Spawn a timed helper or schedule a delayed side-effect (inferred from spawn-with-delay usage)",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GUARD1::use",
+        "callee": "spawn (METHOD::####)",
+        "purpose": "Spawn various animation/movement/timer helpers (METHOD::15E7, METHOD::091C, METHOD::0E4F, METHOD::0BCF, etc.) to enact visible behaviors triggered by dialog",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "toranDead",
+        "likely_effect": "Used to decide whether to include the 'Open the gate!' dialog option; affects available dialog branches",
+        "confidence": "high"
+      },
+      {
+        "name": "guard1job",
+        "likely_effect": "Read when player requests gate opening to determine if prerequisite job/condition has been completed; influences guard's response",
+        "confidence": "high"
+      },
+      {
+        "name": "guard1met",
+        "likely_effect": "Read to select first-time meeting vs subsequent dialog branches",
+        "confidence": "high"
+      },
+      {
+        "name": "guard1pissed",
+        "likely_effect": "Read to select terse/angry reply variations and influence dialog flow",
+        "confidence": "high"
+      },
+      {
+        "name": "xavierSitting",
+        "likely_effect": "Read to choose an alternate short greeting branch in certain flows",
+        "confidence": "medium"
+      }
+    ],
+    "writes": [
+      {
+        "name": "guard1met",
+        "likely_effect": "Set to record that the player has properly introduced themself or met the guard; changes future dialog to non-first-time branch",
+        "confidence": "high"
+      },
+      {
+        "name": "guard1pissed",
+        "likely_effect": "Set when the guard becomes annoyed (e.g., challenged); causes shorter/angrier dialog on later interactions",
+        "confidence": "high"
+      },
+      {
+        "name": "guard1town",
+        "likely_effect": "Set when the player is told/confirmed the city's name; alters future dialog about the city identity",
+        "confidence": "high"
+      },
+      {
+        "name": "xavierSitting",
+        "likely_effect": "Sometimes cleared/modified during conversation flows to change future greeting behavior (inferred)",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "GUARD1::look",
+    "behavior_summary_one_liner": "Implements the guard NPC's short inspection reaction (GUARD1::look), proximity enter/exit hooks (GUARD1::enterFastArea / GUARD1::leaveFastArea), and the full conversation/talk handler (GUARD1::use).",
+    "external_call_count": 15,
+    "flag_read_count": 5,
+    "flag_write_count": 4
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

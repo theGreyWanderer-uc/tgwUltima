@@ -1,0 +1,238 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_DART.json",
+  "file": "U8P_DART",
+  "behavior_summary": [
+    "Implements throwing/using a dart item: obtains a target (item/actor or ground coords), computes a spawn point and direction based on the thrower and target, validates placement, spawns a thrown-dart projectile into the world, removes the dart from the thrower's inventory, and initiates projectile flight.",
+    "Aim and spawn position include randomized jitter that is biased by the thrower's dexterity (higher dexterity reduces spread).",
+    "When the spawned projectile hits something, DART::hit handles impact feedback: plays SFX, prompts target barks, triggers area reaction for NPCs, and treats a special target type (0x02BE) as a bull's-eye awarding dexterity and setting a status flag on that target."
+  ],
+  "notable_control_flow": [
+    "Guard: the U8P_DART::use action starts by calling process target(); if no valid target is returned the function returns early (abort throw).",
+    "Guard: after computing an intended spawn WorldPoint the function calls canExistAt(...) and/or Item::legal_move(...) — failure on those checks aborts the throw and prevents spawning.",
+    "On success the function: sets projectile visual frame (Item::setFrame), spawns orientation helper (U8P_DART::046A), pushes the item into the world (Item::push), schedules cleanup/free callbacks (FREE::* spawned), pops/removes the item from the thrower (Item::pop), computes dexterity-biased random jitter, and finally calls Item::shoot(...) to start the projectile.",
+    "Hit branching: U8P_DART::hit discriminates target type and state (isNpc / isDead). Live NPCs get sound and a randomized short bark; dead NPCs bypass reaction. Special-case type 0x02BE triggers Item::orStatus(0x1000) and AccumulateDexterity(...) in addition to unique feedback.",
+    "Several spawned helper methods (METHOD::091C, METHOD::15E7 via U8P_DART::046A, and FREE callbacks) are used to orchestrate flight, orientation visuals, and cleanup asynchronously."
+  ],
+  "open_questions": [
+    "Exact numeric meanings and semantics of some canExistAt(...) parameters (size/flags) are not explicit and are inferred from placement checks.",
+    "Precise behavior and API contract of spawned METHOD::091C and FREE::1C19 / FREE::2A12 (they appear to manage projectile flight and cleanup but exact responsibilities are unclear).",
+    "Exact representation and gameplay meaning of the special target type 0x02BE (why it awards dexterity and what object it denotes).",
+    "Precise formulas for how Npc::getDex and the urandom(...) calls map to final spread/range values (we have inferred bias but not exact arithmetic constants).",
+    "Whether DART::hit is invoked directly by the engine on collision or via a specific callback chain (inferred as engine-callback on projectile collision)."
+  ],
+  "main_function": {
+    "name": "U8P_DART::use",
+    "execution_form": "process",
+    "purpose": "Handle a throw/U8P_DART::use action for the dart item: pick/validate target, compute and validate spawn placement and orientation, spawn the visual projectile, remove the dart from the thrower, compute dexterity-biased randomness, and call Item::shoot to launch the projectile.",
+    "entry_conditions": [
+      "Triggered by Event 1 (U8P_DART::use) on the dart item (player or NPC uses/throws it).",
+      "Requires a non-null return from process target() (a chosen target or coords).",
+      "Requires canExistAt(...) / Item::legal_move(...) to succeed for the computed spawn position."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_DART::use",
+      "kind": "main",
+      "role": "Primary handler for using/throwing the dart; computes spawn, validates placement, spawns and launches the projectile.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DART::look",
+      "kind": "helper",
+      "role": "Look/examine handler: causes the dart to 'bark' its description string (\"dart \") to the querying process.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DART::hit",
+      "kind": "helper",
+      "role": "Impact handler for the dart projectile: plays SFX, provokes target speech, triggers area reactions, handles a bull's-eye special case that awards dexterity and sets a status flag.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DART::046A",
+      "kind": "helper",
+      "role": "Small spawned helper that queries thrower direction and spawns METHOD::15E7 to create an orientation-specific visual/effect.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_DART::use",
+        "callee": "U8P_DART::046A",
+        "purpose": "Spawn a short orientation/visual helper tied to the thrower's facing direction before pushing the projectile.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DART::use",
+        "callee": "U8P_DART::hit",
+        "purpose": "Logical relationship: DART::hit is the projectile impact handler invoked when the thrown dart collides; DART::use prepares and launches the projectile so that hits will be routed to DART::hit.",
+        "confidence": "high"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_DART::use",
+        "callee": "U8P_DART::process target()",
+        "purpose": "Obtain the player/NPC-selected target (item/actor or ground coordinates) to aim the throw.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DART::use",
+        "callee": "Item::getX",
+        "purpose": "Read X coordinate of the thrower or the selected target for spawn/direction computations.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DART::use",
+        "callee": "Item::getY",
+        "purpose": "Read Y coordinate of the thrower or the selected target for spawn/direction computations.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DART::use",
+        "callee": "Item::getZ",
+        "purpose": "Read Z coordinate (height) and apply an offset to compute spawn height for the projectile.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DART::use",
+        "callee": "Item::getDirToCoords",
+        "purpose": "Compute direction from thrower to target coordinates to orient spawn offsets and projectile facing.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DART::use",
+        "callee": "U8P_DART::canExistAt",
+        "purpose": "Collision/placement check to determine whether the computed spawn WorldPoint is valid; failing this aborts the throw.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DART::use",
+        "callee": "Item::legal_move",
+        "purpose": "Request a validated/legal worldpoint for item placement; returns adjusted coords used for spawning.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DART::use",
+        "callee": "METHOD::091C (spawned)",
+        "purpose": "Spawn a helper/method likely responsible for initial projectile flight or movement management after legal placement.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DART::use",
+        "callee": "Item::setFrame",
+        "purpose": "Set the visual frame to the thrown/projectile appearance before pushing the item into the world.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DART::use",
+        "callee": "U8P_DART::046A",
+        "purpose": "Spawn orientation-specific visual helper tied to thrower direction (redundant entry to emphasize visual spawn ordering).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DART::use",
+        "callee": "Item::push",
+        "purpose": "Place the dart item instance into the world visually at the computed spawn point.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DART::use",
+        "callee": "FREE::1C19 / FREE::2A12 (spawned)",
+        "purpose": "Schedule cleanup or delayed callbacks for the spawned projectile (lifecycle management and effects).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DART::use",
+        "callee": "Item::pop",
+        "purpose": "Remove the dart from the thrower's inventory/slot since it has been thrown into the world.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DART::use",
+        "callee": "Npc::getDex",
+        "purpose": "Retrieve the thrower's dexterity to bias random spread/jitter of aim and spawn offsets.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DART::use",
+        "callee": "urandom",
+        "purpose": "Generate random values used multiple times to jitter X/Y/Z and the direction; bounds are influenced by (0x1E - dex).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DART::use",
+        "callee": "Item::shoot",
+        "purpose": "Initiate the projectile's movement/flight from the prepared WorldPoint with flags/parameters.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DART::look",
+        "callee": "process Item::bark",
+        "purpose": "Display the dart's name/description string to the viewing process/session.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DART::hit",
+        "callee": "Item::isNpc / Npc::isDead",
+        "purpose": "Determine whether the hit target is an NPC and whether it is alive to decide reaction behavior.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DART::hit",
+        "callee": "U8P_DART::playSFX",
+        "purpose": "Play impact sound effects upon hitting a target.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DART::hit",
+        "callee": "process Item::bark",
+        "purpose": "Cause the hit target (when appropriate) to emit a short reaction line (randomized among options).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DART::hit",
+        "callee": "process Item::enterFastArea",
+        "purpose": "Trigger immediate area/fast-area reactions on the hit target (provoking combat/AI responses).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DART::hit",
+        "callee": "Item::getType / Item::orStatus",
+        "purpose": "Detect and mark a special-case target type (0x02BE) by setting a status bit (0x1000) on that target.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DART::hit",
+        "callee": "U8P_DART::AccumulateDexterity",
+        "purpose": "Award or register dexterity gain for the attacker when a bull's-eye special-case hit occurs.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "DART::use",
+    "behavior_summary_one_liner": "Implements throwing/using a dart item: obtains a target (item/actor or ground coords), computes a spawn point and direction based on the thrower and target, validates placement, spawns a thrown-dart projectile into the world, removes the dart from the thrower's inventory, and initiates projectile flight.",
+    "external_call_count": 23,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

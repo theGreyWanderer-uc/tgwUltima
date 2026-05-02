@@ -1,0 +1,187 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_CHILD.json",
+  "file": "U8P_CHILD",
+  "behavior_summary": [
+    "This script implements the behavior for a 'child' NPC: housekeeping when leaving a small trigger area, simple reactions when looked at or targeted/cast on, and a large multi-branch dialog sequence when used (interacted with).",
+    "U8P_CHILD::CHILD::leaveFastArea clears several stored references for the NPC and marks the NPC as excluded from processing (cleanup) when the Avatar leaves the child's fast/trigger area.",
+    "U8P_CHILD::CHILD::look responds to being examined by checking death state and producing a short bark ('dead child' or 'child').",
+    "U8P_CHILD::CHILD::cast handles being targeted or cast-on: it checks the NPC's target, may spawn guard or helper processes, respects death state, and selects frightened barks via random choice.",
+    "U8P_CHILD::CHILD::use is the interactive dialog handler: it constructs response strings, builds choice lists, presents questions with Item::ask, compares player replies (strcmp) to branch through a large conversation tree, spawns follow-up behaviors, and sets NPC activity when finished."
+  ],
+  "notable_control_flow": [
+    "U8P_CHILD::CHILD::leaveFastArea: triggered by Event 10 (U8P_CHILD::leaveFastArea) -> set info/process-exclude -> call resetRef repeatedly for specific ref IDs -> return immediately (cleanup-only flow).",
+    "U8P_CHILD::CHILD::look: set info/exclude -> call Npc::isDead -> choose one of two static barks -> call Item::bark -> suspend/return.",
+    "U8P_CHILD::CHILD::cast: check Npc::getTarget; if no target spawn a FREE helper; if target == Avatar (1) possibly spawn guard (CALGUARD) and FREE helper; check death state; use urandom to select between frightened barks; call Item::bark and spawn follow-ups as needed.",
+    "U8P_CHILD::CHILD::use: builds strings (getName/concat), registers or frees string resources (FREE::2A56), uses urandom to vary greetings, creates slists and calls Item::ask to get player choices, branches heavily by comparing returned strings with known phrases (strcmp), may spawn other methods (METHOD::0BCF, METHOD::1090, FREE::1C19), and sets NPC activity via Npc::cSetActivity at ends of dialog branches."
+  ],
+  "open_questions": [
+    "Exact semantic meaning of each resetRef id (0x021C, 0x0205, 0x0204, 0x00F0, 0x0200) — likely references to objects/areas/scripts associated with this child but not canonicalized.",
+    "Precise effects of FREE::2A56 (appears to register/clean/free constructed strings or list resources for dialog UI) and whether it performs display-time side effects.",
+    "Concrete behaviors of spawned entry points METHOD::0BCF, METHOD::1090, FREE::1C19 and CALGUARD::0080 (inferred to animate or call guards but exact gameplay effect is unknown).",
+    "Whether any global quest flags are toggled by U8P_CHILD::CHILD::use branches (none observed in disassembly, but dialog may logically alter state elsewhere)."
+  ],
+  "main_function": {
+    "name": "U8P_CHILD::leaveFastArea",
+    "execution_form": "process",
+    "purpose": "Housekeeping/cleanup when the child NPC's trigger area is exited: mark/exclude the NPC from processing and clear several stored reference slots associated with the NPC.",
+    "entry_conditions": [
+      "Event 10: U8P_CHILD::leaveFastArea — invoked when the Avatar or relevant actor leaves the child's small trigger region"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_CHILD::leaveFastArea",
+      "kind": "main",
+      "role": "Cleanup when leaving fast/trigger area; resets stored references and excludes NPC from processing.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CHILD::look",
+      "kind": "helper",
+      "role": "Examine/look handler: check death state and produce an appropriate short bark ('dead child' or 'child').",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CHILD::cast",
+      "kind": "helper",
+      "role": "Handler for being targeted/cast-on: may spawn helper/guard processes, checks target and death, and emits frightened barks chosen by randomness.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CHILD::use",
+      "kind": "helper",
+      "role": "Primary interaction/dialog routine: builds strings, constructs choice lists, asks the player questions (Item::ask), branches heavily based on replies, spawns follow-ups, and sets NPC activity.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_CHILD::leaveFastArea",
+        "callee": "U8P_CHILD::resetRef",
+        "purpose": "Clear/reset stored reference slots for this NPC (called repeatedly with different reference ids: 0x021C, 0x0205, 0x0204, 0x00F0, 0x0200).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CHILD::look",
+        "callee": "Npc::isDead",
+        "purpose": "Check whether the NPC is dead to select the correct bark ('dead child' vs 'child') or abort further actions.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CHILD::look",
+        "callee": "Item::bark",
+        "purpose": "Emit a short examination string to the examining process/player.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CHILD::cast",
+        "callee": "Npc::getTarget",
+        "purpose": "Determine who is targeting the child (used to decide if the Avatar is the aggressor and whether to spawn guards/helpers).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CHILD::cast",
+        "callee": "spawn",
+        "purpose": "Create helper/free processes or guard-calling routines in response to being targeted (e.g., spawn FREE helper or CALGUARD).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CHILD::cast",
+        "callee": "urandom",
+        "purpose": "Select between alternate frightened barks ('Mommy!', 'Ahhh! Bad man!') to vary reaction.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CHILD::cast",
+        "callee": "Npc::isDead",
+        "purpose": "Avoid barking/response if NPC is dead (abort behavior).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CHILD::cast",
+        "callee": "Item::bark",
+        "purpose": "Emit frightened bark lines when targeted.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CHILD::use",
+        "callee": "U8P_CHILD::getName",
+        "purpose": "Obtain the NPC's name to construct 'I am <name>.' and other personalized responses.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CHILD::use",
+        "callee": "U8P_CHILD::concat / string utilities",
+        "purpose": "Assemble response strings for the dialog (e.g., 'I am <name>.').",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CHILD::use",
+        "callee": "FREE::2A56",
+        "purpose": "Register/clean/free or otherwise manage constructed strings/lists used in the dialog system (called after building strings and lists).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_CHILD::use",
+        "callee": "urandom",
+        "purpose": "Randomize greeting variants and some dialog choices.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CHILD::use",
+        "callee": "create list / Item::ask",
+        "purpose": "Build a slist of choices and present a multiple-choice prompt to the player; receive the player's selected reply to branch dialog.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CHILD::use",
+        "callee": "U8P_CHILD::strcmp",
+        "purpose": "Compare the player's reply string against known phrases to pick dialog branches.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CHILD::use",
+        "callee": "spawn",
+        "purpose": "Start follow-up behavior scripts (METHOD::0BCF, METHOD::1090, FREE::1C19) or other side-effectful processes as part of dialog outcomes.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_CHILD::use",
+        "callee": "Item::bark",
+        "purpose": "Emit lines of dialog during the interaction sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CHILD::use",
+        "callee": "Npc::cSetActivity",
+        "purpose": "Set the NPC's activity state (e.g., idle) when dialog branches finish.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_CHILD::CHILD::leaveFastArea",
+    "behavior_summary_one_liner": "This script implements the behavior for a 'child' NPC: housekeeping when leaving a small trigger area, simple reactions when looked at or targeted/cast on, and a large multi-branch dialog sequence when used (interacted with).",
+    "external_call_count": 17,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

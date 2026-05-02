@@ -1,0 +1,130 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_BASESCRL.json",
+  "file": "U8P_BASESCRL",
+  "behavior_summary": [
+    "Provides examine ('U8P_BASESCRL::look') and activate ('use') behavior for in-game scroll items. When a player inspects a scroll, the script reads the scroll's subtype (quality) and makes the item 'bark' a human-readable name/description for that subtype (e.g., \"scroll of healing\", \"scroll of invisibility\", \"scroll of trap detection\").",
+    "When a player uses (activates) a scroll, the script reads the same quality code and spawns the corresponding scroll-effect process/script (spawn(script_id, pid, item)), selecting the effect script by quality with a switch-like chain of comparisons. Unknown/unspecified quality values fall back to a generic/default branch.",
+    "The code uses temporary string allocation/free helpers to prepare messages for Item::bark, and it follows the engine's imply/suspend or yield pattern after performing bark/spawn calls."
+  ],
+  "notable_control_flow": [
+    "U8P_BASESCRL::look: calls Item::getQuality(item) and then branches on the returned small integer to select a specific literal string to pass to Item::bark(item, string). If the code does not match a known case, it uses a generic 'scroll' label.",
+    "U8P_BASESCRL::use: calls Item::getQuality(item) and uses a switch-like chain to choose which external script to spawn; many discrete quality values map to distinct spawn targets (including ranges 0x00..0x0F and specific higher codes 0x32..0x37).",
+    "Both handlers allocate temporary C-strings for presentation, free those temporaries after the bark call, and then yield/suspend (engine scheduling) after spawn or bark return handling."
+  ],
+  "open_questions": [
+    "Exact numeric-to-effect mapping for every quality code in the 0x00..0x0F range: some codes are listed in the disassembly, but a complete enumerated table is not available in the extracted snippet.",
+    "Precise calling-convention and stack layout for the pid/player parameter: pid is strongly inferred but not explicitly named in the disassembly metadata.",
+    "Whether any other global game state or quest flags are modified by specific scroll effects spawned by BASESCRL::use (those effects run in separate scripts and are not visible here).",
+    "Capitalization/punctuation and localized text variants of the strings presented by Item::bark (extracted literals represent one locale/compile)."
+  ],
+  "main_function": {
+    "name": "U8P_BASESCRL::look",
+    "execution_form": "process",
+    "purpose": "When the player inspects/examines a scroll item, determine the scroll's subtype by calling Item::getQuality(item) and present a user-visible descriptive string via Item::bark. Known quality values map to specific descriptive strings; otherwise a generic 'scroll' label is shown.",
+    "entry_conditions": [
+      "Triggered by an examine/U8P_BASESCRL::look event (player or actor looks at the scroll).",
+      "Runs with the item context available and with an implicit pid/player process id pushed for bark."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_BASESCRL::look",
+      "kind": "main",
+      "role": "Examine/U8P_BASESCRL::look handler: read item quality and display the appropriate name/description via Item::bark.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BASESCRL::use",
+      "kind": "helper",
+      "role": "Use/activate handler: read item quality and spawn the corresponding scroll-effect script, passing pid and item.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getQuality",
+      "kind": "extern",
+      "role": "Engine/library call that returns a small integer quality/subtype code for a given Item instance; used to determine behavior in both U8P_BASESCRL::look and use.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/library call that displays text or makes an item 'speak' to a player/process; used by U8P_BASESCRL::look to show the scroll name/description.",
+      "confidence": "high"
+    },
+    {
+      "name": "spawn",
+      "kind": "extern",
+      "role": "Engine/system call to create/launch a new process/script for the scroll's effect; used by use to start effect handlers.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BASESCRL::string helpers (allocate/strToPtr/free)",
+      "kind": "extern",
+      "role": "Helpers used to create temporary C-string pointers from literals and free them after use for Item::bark argument preparation.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_BASESCRL::look",
+        "callee": "Item::getQuality",
+        "purpose": "Obtain the scroll's subtype/quality code to decide which descriptive string to display.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BASESCRL::look",
+        "callee": "Item::bark",
+        "purpose": "Present a human-readable name/description of the scroll (the string chosen based on quality).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BASESCRL::look",
+        "callee": "U8P_BASESCRL::string helpers (strToPtr/free)",
+        "purpose": "Allocate/prepare a temporary C-string for Item::bark and free it afterward.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BASESCRL::use",
+        "callee": "Item::getQuality",
+        "purpose": "Read the scroll's subtype code to determine which effect script to spawn.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BASESCRL::use",
+        "callee": "spawn",
+        "purpose": "Launch the scroll-effect process/script corresponding to the quality code, passing pid and item as arguments.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BASESCRL::use",
+        "callee": "U8P_BASESCRL::string helpers (if used for messaging)",
+        "purpose": "Potentially prepare strings for any messages generated during use (less commonly observed than in U8P_BASESCRL::look).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "inform",
+    "spawn"
+  ],
+  "quick_facts": {
+    "main_function": "BASESCRL::look",
+    "behavior_summary_one_liner": "Provides examine ('U8P_BASESCRL::look') and activate ('use') behavior for in-game scroll items. When a player inspects a scroll, the script reads the scroll's subtype (quality) and makes the item 'bark' a human-readable name/description for that subtype (e.g., \"scroll of healing\", \"scroll of invisibility\", \"scroll of trap detection\").",
+    "external_call_count": 6,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

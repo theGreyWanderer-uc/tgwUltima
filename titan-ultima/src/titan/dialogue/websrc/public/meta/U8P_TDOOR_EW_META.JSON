@@ -1,0 +1,115 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_TDOOR_EW.json",
+  "file": "U8P_TDOOR_EW",
+  "behavior_summary": [
+    "This script implements event handlers for an east-west two-tile door object. The handlers do minimal local work and delegate the actual logic to shared DOOR_NS routines by spawning them as processes.",
+    "Event handlers covered: U8P_TDOOR_EW::look (examine), use (activate/open), and gotHit (receive damage). Each handler prepares a small piece of door-identifying info, excludes the object from normal processing, then spawns a DOOR_NS handler to perform the real behavior and returns that handler's result.",
+    "U8P_TDOOR_EW::look: prepares info (push constant 0x0208 + indirect 2-byte info), runs process-exclude, then spawns DOOR_NS::00D0 with (info, self) to perform inspection-related behavior.",
+    "use: prepares info (push constant 0x0207 + indirect 2-byte info), runs process-exclude, pushes a constant byte 0x01 (inferred mode flag), then spawns DOOR_NS::08B4 with (use_flag, info, self) to perform interaction/opening logic.",
+    "gotHit: prepares info (push constant 0x020C + indirect 2-byte info), runs process-exclude, forwards the incoming damage word parameter, then spawns DOOR_NS::0C82 with (damage, info, self) to centralize damage response (breakage/sound/state change).",
+    "No global flags are read or written in this excerpt; object-context and small immediate parameters are used to communicate state to DOOR_NS handlers."
+  ],
+  "notable_control_flow": [
+    "Each event handler runs synchronously until it spawns a DOOR_NS handler; the spawn return value is captured into a temporary and then returned to the caller.",
+    "Before delegating, every handler sets an info key (different constant per event) and runs a 'process exclude' operation on the object — implying the object is marked or protected while the spawned handler runs.",
+    "Delegation centralizes door behavior into DOOR_NS: this file acts as a thin adapter translating event-specific parameters into the shared handler's calling convention."
+  ],
+  "open_questions": [
+    "Precise meanings of the pushed info constants (0x0208, 0x0207, 0x020C) and how DOOR_NS interprets the indirect 2-byte info remain unspecified.",
+    "Exact semantics of the constant byte 0x01 passed from use() — inferred to be a mode/option but the possible modes and effects are unknown.",
+    "Whether 'process exclude' prevents concurrent interactions or is purely a bookkeeping flag for the spawned DOOR_NS routines is not explicit.",
+    "How the returned spawn retval is used by the engine or caller (beyond being returned) is not detailed in the excerpt."
+  ],
+  "main_function": {
+    "name": "U8P_TDOOR_EW::look",
+    "execution_form": "process",
+    "purpose": "Handle 'U8P_TDOOR_EW::look' (examine) events for an east-west two-tile door by preparing door info/state, excluding the object from normal processing, and spawning a shared DOOR_NS handler (DOOR_NS::00D0) to perform the inspection behavior. Returns the spawned handler's result.",
+    "entry_conditions": [
+      "Event 0 (U8P_TDOOR_EW::look) — invoked when the avatar or relevant actor looks at or inspects this door object."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_TDOOR_EW::look",
+      "kind": "main",
+      "role": "Prepare door info and delegate 'U8P_TDOOR_EW::look' behavior to DOOR_NS::00D0 (spawned).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_TDOOR_EW::use",
+      "kind": "helper",
+      "role": "Prepare door info, push a use-mode flag (0x01), and delegate 'use' behavior to DOOR_NS::08B4 (spawned).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_TDOOR_EW::gotHit",
+      "kind": "helper",
+      "role": "Forward an incoming damage/hit parameter plus door info to DOOR_NS::0C82 (spawned) to handle hit/damage reactions.",
+      "confidence": "high"
+    },
+    {
+      "name": "DOOR_NS::00D0",
+      "kind": "extern",
+      "role": "Shared handler for door 'U8P_TDOOR_EW::look' behavior (called via spawn).",
+      "confidence": "high"
+    },
+    {
+      "name": "DOOR_NS::08B4",
+      "kind": "extern",
+      "role": "Shared handler for door 'use' behavior (called via spawn).",
+      "confidence": "high"
+    },
+    {
+      "name": "DOOR_NS::0C82",
+      "kind": "extern",
+      "role": "Shared handler for door 'gotHit' (damage) behavior (called via spawn).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_TDOOR_EW::look",
+        "callee": "DOOR_NS::00D0",
+        "purpose": "Delegate door-inspection/U8P_TDOOR_EW::look processing using prepared door info and the door object.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TDOOR_EW::use",
+        "callee": "DOOR_NS::08B4",
+        "purpose": "Delegate use/interaction logic; forwards a constant use flag (0x01), the door info, and the door object to the shared use handler.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TDOOR_EW::gotHit",
+        "callee": "DOOR_NS::0C82",
+        "purpose": "Delegate damage/hit handling; forwards the incoming damage value, door info, and the door object to the shared damage handler.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_TDOOR_EW::TDOOR_EW::look",
+    "behavior_summary_one_liner": "This script implements event handlers for an east-west two-tile door object. The handlers do minimal local work and delegate the actual logic to shared DOOR_NS routines by spawning them as processes.",
+    "external_call_count": 3,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

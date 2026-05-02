@@ -1,0 +1,93 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_JBOX.json",
+  "file": "U8P_JBOX",
+  "behavior_summary": [
+    "Provides the examine ('U8P_JBOX::look') and use behaviors for a jewelry box item.",
+    "U8P_JBOX::look announces the item to the player by preparing item context (set info / process exclude opcodes) and invoking Item::bark with the literal string \"jewelry box \", producing the short description shown when the player inspects the item.",
+    "U8P_JBOX::use reads the item's status word (Item::getStatus) and tests bit 0x0100. If that bit is clear the script closes the item's UI/gump (Item::closeGump); if set it opens a gump with parameter 0x0A (Item::openGump(0x0A)). This implements conditional open/close UI behavior based on the item's status."
+  ],
+  "notable_control_flow": [
+    "Examine path (U8P_JBOX::look) is straightforward: set info / process exclude -> call Item::bark with a static string -> local cleanup -> suspend/return.",
+    "Use path (U8P_JBOX::use) branches on a status bit: it fetches the item status into a local (status_flag) and performs a bitwise test (& 0x0100). One branch calls Item::closeGump, the other calls Item::openGump(0x0A).",
+    "Both functions run as item/process scripts (execution_form: process) and use implicit item context (item pointer passed via the process stack)."
+  ],
+  "open_questions": [
+    "Exact semantic meaning of the 'set info' and 'process exclude' opcodes used before barking and before use handling (which info id is set and what exclusion scope this enforces) — inferred but not explicit.",
+    "Precise gameplay semantic of status bit 0x0100 tested in U8P_JBOX::use (appears to be an 'open' flag for the gump, but the canonical meaning of the bit is not present).",
+    "Meaning/purpose of the small 'implies' / retval/temp sequence after Item::bark in U8P_JBOX::look — likely scripting housekeeping or implicit control flow, exact engine effect unclear."
+  ],
+  "main_function": {
+    "name": "U8P_JBOX::look",
+    "execution_form": "process",
+    "purpose": "Handle the player inspecting/examining the jewelry box: set item context and present a short description string to the player via Item::bark.",
+    "entry_conditions": [
+      "Event 0 (U8P_JBOX::look/examine) — triggered when an actor inspects the jewelry box (implicit item pointer passed at BP+06h)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_JBOX::look",
+      "kind": "main",
+      "role": "Examine/U8P_JBOX::look handler that announces the item and sets item processing context before suspending.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_JBOX::use",
+      "kind": "helper",
+      "role": "Use/activate handler that toggles or conditionally opens/closes the item's UI/gump based on the item's status word (tests bit 0x0100).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_JBOX::look",
+        "callee": "Item::bark",
+        "purpose": "Cause the item to emit/display the short description string \"jewelry box \" to the player/viewer.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_JBOX::use",
+        "callee": "Item::getStatus",
+        "purpose": "Retrieve the item's status word so the script can test bit 0x0100 and decide whether to open or close the gump.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_JBOX::use",
+        "callee": "Item::closeGump",
+        "purpose": "Close the item's UI/gump when the tested status bit (0x0100) is clear.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_JBOX::use",
+        "callee": "Item::openGump",
+        "purpose": "Open the item's UI/gump with parameter 0x0A when the tested status bit (0x0100) is set.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_JBOX::look",
+    "behavior_summary_one_liner": "Provides the examine ('U8P_JBOX::look') and use behaviors for a jewelry box item.",
+    "external_call_count": 4,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

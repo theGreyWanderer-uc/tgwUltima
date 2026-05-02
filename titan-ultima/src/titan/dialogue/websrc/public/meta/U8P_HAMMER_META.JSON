@@ -1,0 +1,77 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_HAMMER.json",
+  "file": "U8P_HAMMER",
+  "behavior_summary": [
+    "Handles the item's 'U8P_HAMMER::look' event for the hammer. When a viewer inspects the hammer, the handler builds/passes the literal string \"hammer \" to the item's bark routine so the item announces its name/description to the viewing process/player.",
+    "Before calling bark the code sets process-level info and a process-exclude flag on the instance (engine/behavior bookkeeping), frees the temporary string after use, evaluates a return value via an 'implies' style check, then suspends the process. This matches the typical item-event pattern of announcing and then suspending."
+  ],
+  "notable_control_flow": [
+    "Event entry (U8P_HAMMER::look) triggers the function and expects a process/instance pointer and a pid/context on the stack.",
+    "Set process info and process-exclude flags on the referenced instance (engine bookkeeping) prior to communication.",
+    "Call to Item::bark with the literal \"hammer \" and the instance/pid context to display/announce the text.",
+    "Free temporary string memory, check a returned value with an 'implies' check, then suspend the process (end of handler)."
+  ],
+  "open_questions": [
+    "Which exact info ID(s) and process-exclusion semantics are set (the disassembly shows opcodes but the precise meaning of the info key is not explicit)?",
+    "What is the exact semantic role of the pushed pid/context parameter (viewer PID vs. caller process) in Item::bark in this engine variant?",
+    "Does the 'implies' return-value check influence any higher-level behavior or is it only used to decide immediate suspension semantics?",
+    "Are there any conditional behaviors when the bark call returns a nonzero value (not observed in the disassembly beyond the immediate implies/pop)?"
+  ],
+  "main_function": {
+    "name": "U8P_HAMMER::look",
+    "execution_form": "process",
+    "purpose": "Respond to a 'U8P_HAMMER::look' (examine) event on the hammer item by announcing the item's name/description to the viewing process and then suspending further processing of the event.",
+    "entry_conditions": [
+      "Event 0 (U8P_HAMMER::look) — triggered when the Avatar or another relevant actor inspects the hammer item.",
+      "Function expects an instance/process pointer (inferred from usage of [BP+06h]) and a pid/context pushed for Item::bark."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_HAMMER::look",
+      "kind": "main",
+      "role": "Item event handler for the hammer's 'U8P_HAMMER::look' event; composes and issues an announce/bark and manages process bookkeeping before suspending.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item service used to emit/display a short text message (here the literal 'hammer ') to a target process/player; treated as an external runtime call.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_HAMMER::look",
+        "callee": "Item::bark",
+        "purpose": "Deliver the literal string \"hammer \" to the viewing process/player so the item announces its name/description; receives instance/process and pid/context parameters.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "announce",
+    "suspend",
+    "process-flag"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_HAMMER::HAMMER::look",
+    "behavior_summary_one_liner": "Handles the item's 'U8P_HAMMER::look' event for the hammer. When a viewer inspects the hammer, the handler builds/passes the literal string \"hammer \" to the item's bark routine so the item announces its name/description to the viewing process/player.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

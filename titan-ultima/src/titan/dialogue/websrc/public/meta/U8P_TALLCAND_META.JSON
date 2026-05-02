@@ -1,0 +1,127 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_TALLCAND.json",
+  "file": "U8P_TALLCAND",
+  "behavior_summary": [
+    "Provides handlers for a tall candlestick item: when the player looks at the item it announces its short name, when the item is 'used' it toggles or cycles a visual state encoded in the item's frame bits, and an animation/auxiliary method can be spawned to drive ongoing visual behavior.",
+    "TALLCAND::look (Event 0) calls Item::bark(this_item_process, \"candlestick \") to present the object's descriptive name to the player and then suspends/returns.",
+    "TALLCAND::use (Event 1) reads the item's frame (Item::getFrame), inspects the low two bits: if they are 0 it increments the frame (frame+1), otherwise it clears the low two bits (frame & 0xFC); the new frame is written back with Item::setFrame. This implements a toggle/cycle of the visual state (e.g., lit/unlit or state stages).",
+    "TALLCAND::anim (Event 2) sets per-process info/exclusion and spawns METHOD::0610 for the item process, indicating an animation or helper method is started to handle timed/animated behavior for the candlestick."
+  ],
+  "notable_control_flow": [
+    "Look handler: simple straight-line control — set process info/exclusion, call Item::bark, then suspend/return.",
+    "Use handler: read-modify-write pattern on an item-local frame value; decision branch based on (frame & 3) to either increment or clear low bits before calling Item::setFrame.",
+    "Anim handler: non-blocking spawn of METHOD::0610 (animation/helper) for the item process, then suspend — indicates asynchronous animation behavior is delegated to a spawned method.",
+    "No global flags are read or written by these handlers; state is object-local (frame bits) and behavior is driven by spawned method(s) and frame updates."
+  ],
+  "open_questions": [
+    "What exact gameplay meaning do the low two bits of the frame encode? (Likely lit/unlit or stage index, but not explicit.)",
+    "What precise behavior METHOD::0610 implements when spawned (e.g., flicker animation, timed light decay, interaction with world lighting)?",
+    "What specific process info/exclusion fields are set by the handlers and whether they affect other engine systems (collision, AI processing, visibility)?",
+    "Are there other events or systems that toggle the same frame bits (interactions, time of day, other items)?"
+  ],
+  "main_function": {
+    "name": "U8P_TALLCAND::look (Event 0)",
+    "execution_form": "process",
+    "purpose": "When the player or relevant actor examines the candlestick, present the object's short descriptive name via the item's bark/description routine.",
+    "entry_conditions": [
+      "Invoked by the Look event for the candlestick item (player inspects or examines the object).",
+      "VM supplies this_item_process (object process) and pid (viewer process) as parameters."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_TALLCAND::look (Event 0)",
+      "kind": "main",
+      "role": "Look/inspect handler that announces the item's short name to the viewer via Item::bark.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_TALLCAND::use (Event 1)",
+      "kind": "helper",
+      "role": "Use handler that toggles or cycles the item's visual/frame state by manipulating the low two bits of the frame and writing it back.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_TALLCAND::anim (Event 2)",
+      "kind": "helper",
+      "role": "Animation/auxiliary handler that spawns METHOD::0610 for the item process to run ongoing visual/temporal behavior.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine-provided routine to display or emit a short text message from an item/process to a target process/player.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getFrame",
+      "kind": "extern",
+      "role": "Engine-provided accessor returning the item's current frame/state value.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::setFrame",
+      "kind": "extern",
+      "role": "Engine-provided mutator to set the item's frame/state value.",
+      "confidence": "high"
+    },
+    {
+      "name": "METHOD::0610",
+      "kind": "extern",
+      "role": "Spawnable method id used for candlestick animation/auxiliary behavior (specifics inferred but not present in this script).",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_TALLCAND::look (Event 0)",
+        "callee": "Item::bark",
+        "purpose": "Present the item's short descriptive text ('candlestick ') to the viewer process; primary visible feedback when the player examines the object.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TALLCAND::use (Event 1)",
+        "callee": "Item::getFrame",
+        "purpose": "Read the current frame/state of the item to determine which branch of the toggle/cycle to execute.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TALLCAND::use (Event 1)",
+        "callee": "Item::setFrame",
+        "purpose": "Write the updated frame after incrementing or clearing low bits to update the item's visual state.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TALLCAND::anim (Event 2)",
+        "callee": "METHOD::0610 (spawn)",
+        "purpose": "Spawn an asynchronous animation/auxiliary method to handle timed changes or animation for the candlestick process.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "TALLCAND::look (Event 0)",
+    "behavior_summary_one_liner": "Provides handlers for a tall candlestick item: when the player looks at the item it announces its short name, when the item is 'used' it toggles or cycles a visual state encoded in the item's frame bits, and an animation/auxiliary method can be spawned to drive ongoing visual behavior.",
+    "external_call_count": 4,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

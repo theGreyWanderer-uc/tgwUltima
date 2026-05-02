@@ -1,0 +1,228 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_STALAG.json",
+  "file": "U8P_STALAG",
+  "behavior_summary": [
+    "Provides the 'U8P_STALAG::look' (examine) response for a stalagmite/stalactite object so the player sees a short description like \"stalactite \".",
+    "Handles hits against the stalag object: decides behavior based on the item's current frame (intact vs already-broken), who hit it (player/avatar vs NPC), and a hitCode parameter. Player-caused breaks freeze the avatar (stasis), play a breaking sound, run a multi-frame break animation that spawns debris effects, then destroy the object. NPC hits play a different sound and run a shorter animation before destroying the object.",
+    "Uses engine/item APIs (Item::getFrame, Item::isNpc, Item::receiveHit, Item::setType, Item::setFrame, spawn FREE::1C19, Item::destroy) to mutate state, animate, and clean up."
+  ],
+  "notable_control_flow": [
+    "Event 0 (U8P_STALAG::look): U8P_STALAG::STALAG::look prepares and forwards the literal description string to Item::bark and returns that result.",
+    "Hit handling (U8P_STALAG::STALAG::hit) branches by: (A) whether the item is intact (checked via Item::getFrame), (B) whether the attacker is an NPC (Item::isNpc(attacker)), and (C) hitCode == 1 for the player branch. These branches select sound effects, whether to set avatar stasis, which animations to run, and whether to call the object's U8P_STALAG::look method (METHOD::0080) as part of the reaction.",
+    "Player-break branch: setAvatarInStasis(1) -> playSFX(...) -> Kernel::resetRef(...) -> urandom(...) -> Item::receiveHit(...) -> Item::setType(...) -> loop Item::setFrame(0..~10) spawning FREE::1C19 each frame -> setAvatarInStasis(0) -> Item::destroy().",
+    "NPC-hit branch: Kernel::resetRef(...) -> playSFX(...) -> Item::setType(...) -> shorter loop Item::setFrame(0..~4) spawning FREE::1C19 each frame -> Item::destroy()."
+  ],
+  "open_questions": [
+    "Exact numeric constants: the sound IDs passed to playSFX, the type id used in Item::setType, and exact frame loop bounds (inferred as ~0..10 and ~0..4) are approximated from control flow and not definitively named here.",
+    "Precise semantics of METHOD::0080: it appears to invoke the object's own U8P_STALAG::look method (U8P_STALAG::STALAG::look) in one branch, but whether it does additional state work is not shown.",
+    "Whether hitCode values other than 1 correspond to critical vs glancing blows or to specific weapon types is not fully resolvable from this excerpt.",
+    "Whether the spawned FREE::1C19 process is purely visual debris or also affects gameplay (collision, damage) is inferred but not proven."
+  ],
+  "main_function": {
+    "name": "U8P_STALAG::look",
+    "execution_form": "process",
+    "purpose": "Produce a short, player-visible description for the stalagmite/stalactite item (appends/returns the literal string \"stalactite \") via Item::bark.",
+    "entry_conditions": [
+      "Event 0 (U8P_STALAG::look/examine) triggered when an actor examines or looks at the item."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_STALAG::look",
+      "kind": "main",
+      "role": "Handle the object's U8P_STALAG::look/examine event and invoke Item::bark with the description string.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_STALAG::hit",
+      "kind": "helper",
+      "role": "Respond to hit events against the stalag: branch on attacker type and hitCode, play SFX, animate breaking, spawn debris, apply receiveHit, and destroy or change type as appropriate.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine used to display or enqueue short text from an item to a viewer/process.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getFrame",
+      "kind": "extern",
+      "role": "Query the item's visual frame/state to determine intact vs damaged.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::isNpc",
+      "kind": "extern",
+      "role": "Test if the attacker pid is an NPC to select NPC-specific behavior.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_STALAG::setAvatarInStasis",
+      "kind": "extern",
+      "role": "Toggle player/avatar stasis (freeze/unfreeze) during animations.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_STALAG::playSFX",
+      "kind": "extern",
+      "role": "Play a sound effect associated with hitting or breaking the item.",
+      "confidence": "high"
+    },
+    {
+      "name": "Kernel::resetRef",
+      "kind": "extern",
+      "role": "Engine housekeeping before mutating/spawning processes related to the item.",
+      "confidence": "medium"
+    },
+    {
+      "name": "urandom",
+      "kind": "extern",
+      "role": "Generate randomness used as a parameter to Item::receiveHit to vary effects.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::receiveHit",
+      "kind": "extern",
+      "role": "Record/apply the hit to the item (damage bookkeeping).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::setType",
+      "kind": "extern",
+      "role": "Change the item type (likely to a broken/fragment type) before animation and destruction.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::setFrame",
+      "kind": "extern",
+      "role": "Advance the item's animation frame during break sequences.",
+      "confidence": "high"
+    },
+    {
+      "name": "spawn FREE::1C19",
+      "kind": "extern",
+      "role": "Spawn a short-lived visual/debris process each animation frame.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::destroy",
+      "kind": "extern",
+      "role": "Remove the item from the world after breaking animation completes.",
+      "confidence": "high"
+    },
+    {
+      "name": "METHOD::0080",
+      "kind": "extern",
+      "role": "Invokes the object's U8P_STALAG::look method (used in one hit branch to display/refresh description).",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_STALAG::hit",
+        "callee": "U8P_STALAG::look",
+        "purpose": "In one player-hit branch, call the object's own U8P_STALAG::look method (via METHOD::0080) to display or re-show description as part of the reaction.",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_STALAG::look",
+        "callee": "Item::bark",
+        "purpose": "Send the literal short description string ('stalactite ') to be displayed to the viewer.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STALAG::hit",
+        "callee": "Item::getFrame",
+        "purpose": "Check current visual frame/state to determine if the item is intact and which reaction branch to take.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STALAG::hit",
+        "callee": "Item::isNpc",
+        "purpose": "Determine whether the attacker is an NPC (select NPC vs player reaction branches).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STALAG::hit",
+        "callee": "U8P_STALAG::setAvatarInStasis",
+        "purpose": "Freeze/unfreeze the player (1 before animation, 0 after) during a player-triggered break animation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STALAG::hit",
+        "callee": "U8P_STALAG::playSFX",
+        "purpose": "Play branch-appropriate sound effects for breaking or being struck.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STALAG::hit",
+        "callee": "Kernel::resetRef",
+        "purpose": "Engine housekeeping/reset references before mutating or spawning related processes.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_STALAG::hit",
+        "callee": "urandom",
+        "purpose": "Generate small randomness passed to Item::receiveHit to vary effect parameters.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STALAG::hit",
+        "callee": "Item::receiveHit",
+        "purpose": "Record or apply the hit/damage to the item in the player-hit branch.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STALAG::hit",
+        "callee": "Item::setType",
+        "purpose": "Switch the item's type to a broken/fragments variant prior to animating and destroying it.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STALAG::hit",
+        "callee": "Item::setFrame",
+        "purpose": "Advance the object's animation frames in a loop to animate breaking.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STALAG::hit",
+        "callee": "spawn FREE::1C19",
+        "purpose": "Create per-frame debris/particle effects during the break animation.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_STALAG::hit",
+        "callee": "Item::destroy",
+        "purpose": "Remove the object from the world after the break animation finishes.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_STALAG::STALAG::look",
+    "behavior_summary_one_liner": "Provides the 'U8P_STALAG::look' (examine) response for a stalagmite/stalactite object so the player sees a short description like \"stalactite \".",
+    "external_call_count": 12,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

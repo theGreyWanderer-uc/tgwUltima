@@ -1,0 +1,147 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_CATAPORT.json",
+  "file": "U8P_CATAPORT",
+  "behavior_summary": [
+    "CATAPORT::hatch handles the game event where an egg object hatches: it checks preconditions, hides the screen, teleports the hatched NPC to a destination determined by the egg type, then restores the screen.",
+    "The handler first aborts if the global flag postEarthQuake is set (preventing hatching during/post-earthquake).",
+    "It compares two Z (height) values obtained from the egg (Item::getZ called twice) and only proceeds if the values differ (guarding against an unwanted vertical condition).",
+    "If guards pass, it calls a process FadeToBlack(pid), suspends to let the fade complete, queries the egg type via Egg::getEggId, obtains a map id via Npc::getMap, teleports the resulting NPC via Npc::teleport to one of two hard-coded coordinate pairs depending on egg id, then calls process FadeFromBlack(pid) and suspends again to complete the transition."
+  ],
+  "notable_control_flow": [
+    "Guard: read of global postEarthQuake -> immediate return if true (prevents U8P_CATAPORT::hatch).",
+    "Guard: two calls to Item::getZ on the egg -> if Z values are equal the function returns early (only continue when vertical positions differ).",
+    "Visual-suspension sequence: FadeToBlack(pid) is called and the process suspends/waits for completion before teleport; similarly FadeFromBlack(pid) is called and the process suspends again after teleport.",
+    "Branching on egg type: Egg::getEggId() selects between two teleport coordinate pairs passed to Npc::teleport.",
+    "Map id is dynamically retrieved from the egg/NPC with Npc::getMap and passed into the teleport call."
+  ],
+  "open_questions": [
+    "Why are two Item::getZ() values compared on the same egg? (appears to be a vertical-state guard — exact intent is inferred).",
+    "Which exact entity is being teleported after hatching (the egg object, an associated NPC spawn, or another linked instance)? The code teleports an NPC-like object using Npc::teleport but the identity is inferred.",
+    "What are the semantic meanings of the two hard-coded destination coordinate pairs (are they staging positions, different nests, quest-specific locations)?",
+    "Are there additional side effects (inventory, quest progression, object destruction) performed elsewhere when an egg hatches that this handler relies on?"
+  ],
+  "main_function": {
+    "name": "U8P_CATAPORT::hatch",
+    "execution_form": "process",
+    "purpose": "Handle an egg hatching event: ensure preconditions are met, perform a fade-to-black visual transition, teleport the hatched NPC to a destination chosen by egg type, then fade back in.",
+    "entry_conditions": [
+      "Triggered on the egg U8P_CATAPORT::hatch event (Event 7).",
+      "Only executes when global flag postEarthQuake is false.",
+      "Only continues when two Item::getZ() results differ (inferred vertical-condition guard)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_CATAPORT::hatch",
+      "kind": "main",
+      "role": "Event handler for egg hatching (Event 7).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getZ",
+      "kind": "extern",
+      "role": "Query an object's Z/elevation coordinate; used as a guard.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CATAPORT::process FadeToBlack",
+      "kind": "extern",
+      "role": "Start a fade-to-black for the calling process (visual hide before teleport).",
+      "confidence": "high"
+    },
+    {
+      "name": "Egg::getEggId",
+      "kind": "extern",
+      "role": "Return egg type identifier to choose teleport destination.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::getMap",
+      "kind": "extern",
+      "role": "Retrieve map id for the NPC/egg to pass into teleport.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::teleport",
+      "kind": "extern",
+      "role": "Move an NPC to specified map coordinates; used to place the hatched creature.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CATAPORT::process FadeFromBlack",
+      "kind": "extern",
+      "role": "End the fade-to-black (fade back in) for the calling process.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_CATAPORT::hatch",
+        "callee": "Item::getZ",
+        "purpose": "Read egg's Z/elevation twice to compare and gate hatching on a vertical condition.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CATAPORT::hatch",
+        "callee": "U8P_CATAPORT::process FadeToBlack",
+        "purpose": "Visually hide the scene before teleporting the hatched entity; the process suspends to wait for completion.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CATAPORT::hatch",
+        "callee": "Egg::getEggId",
+        "purpose": "Determine egg type / U8P_CATAPORT::hatch outcome to select teleport destination.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CATAPORT::hatch",
+        "callee": "Npc::getMap",
+        "purpose": "Obtain the map id for the teleport destination arguments.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CATAPORT::hatch",
+        "callee": "Npc::teleport",
+        "purpose": "Teleport the hatched NPC to a coordinate pair chosen by egg id on the obtained map.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CATAPORT::hatch",
+        "callee": "U8P_CATAPORT::process FadeFromBlack",
+        "purpose": "Reveal the scene after teleport; the process suspends to wait for completion.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "postEarthQuake",
+        "likely_effect": "When true, prevents CATAPORT::hatch from running (hatching disabled during/post earthquake).",
+        "confidence": "high"
+      }
+    ],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "CATAPORT::hatch",
+    "behavior_summary_one_liner": "CATAPORT::hatch handles the game event where an egg object hatches: it checks preconditions, hides the screen, teleports the hatched NPC to a destination determined by the egg type, then restores the screen.",
+    "external_call_count": 6,
+    "flag_read_count": 1,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

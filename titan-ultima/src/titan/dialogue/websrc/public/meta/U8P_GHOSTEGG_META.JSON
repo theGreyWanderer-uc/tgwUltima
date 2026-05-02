@@ -1,0 +1,194 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_GHOSTEGG.json",
+  "file": "U8P_GHOSTEGG",
+  "behavior_summary": [
+    "Handles egg state transitions and hatching behavior for a GHOSTEGG item.",
+    "U8P_GHOSTEGG::leaveFastArea (Event 10) runs when the egg item leaves a fast-area trigger: it reads the egg's eggId and, if eggId < 0x64, subtracts 0x64 and writes the result back; if eggId >= 0x64 it returns without change. This appears to clear/unset a previously applied 0x64 state flag.",
+    "U8P_GHOSTEGG::hatch (Event 7, helper) performs the hatching sequence: it aborts if eggId >= 0x64, otherwise for eggId == 1 it applies a probabilistic gate via urandom(10); when proceeding it sets eggId to 0x64, creates an NPC (type 0x23), marks it with a status bit, places it at the egg's coordinates, spawns an asynchronous NPC behavior, assigns a target and alignment, and forces it into combat.",
+    "eggId values are used as an encoded state: values >= 0x64 mark a 'hatched/in-progress/flagged' state; U8P_GHOSTEGG::leaveFastArea reverses a 0x64 addition in some cases so state can change when the item leaves the trigger region."
+  ],
+  "notable_control_flow": [
+    "Event-driven: U8P_GHOSTEGG::leaveFastArea is triggered by area-exit; hatch is triggered by a hatch event (separate event handler).",
+    "State gate: both U8P_GHOSTEGG::leaveFastArea and hatch check eggId against 0x64 to guard duplicate or re-entrant hatching logic.",
+    "Probabilistic branch: U8P_GHOSTEGG::hatch uses urandom(10) when eggId == 1 to sometimes abort/delay hatching (inferred ~90% chance to proceed).",
+    "Creation sequence in hatch is multi-step and aborts early if eggId indicates already-processed state (>=0x64)."
+  ],
+  "open_questions": [
+    "Precise semantic meaning of eggId numeric values (what do values 0,1,n represent prior to adding 0x64?).",
+    "Who/what sets eggId prior to hatch being invoked and under which game conditions eggId == 1 vs other values occurs?",
+    "Exact meaning of the 0x64 constant (is it a bitflag, sentinel value, or index offset?) — inference is that it marks 'in-progress/hatched' state.",
+    "Which target pid is set on the spawned NPC (Npc::setTarget) — player, nearby NPC, or the egg's owner? The disassembly does not make the target source explicit.",
+    "Exact status bit mask applied with Item::orStatus on the newly created NPC (what gameplay flag is being set?)."
+  ],
+  "main_function": {
+    "name": "U8P_GHOSTEGG::leaveFastArea",
+    "execution_form": "process",
+    "purpose": "On area-exit, check and adjust the egg's eggId state to clear a previously-applied 0x64 flag when appropriate so the egg's state can transition after leaving the trigger region.",
+    "entry_conditions": [
+      "Event 10 (U8P_GHOSTEGG::leaveFastArea) — triggered when the egg item leaves its fast-area trigger region",
+      "Parameter: egg_item (the item instance triggering the event) provided by the engine"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_GHOSTEGG::leaveFastArea",
+      "kind": "main",
+      "role": "area-exit trigger that inspects and adjusts eggId state (clears/additional-state removal)",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_GHOSTEGG::hatch",
+      "kind": "helper",
+      "role": "hatching sequence that may spawn and initialize a new NPC and set eggId to the flagged value 0x64 to prevent duplicate hatching",
+      "confidence": "high"
+    },
+    {
+      "name": "Egg::getEggId",
+      "kind": "extern",
+      "role": "read the egg item's eggId/state",
+      "confidence": "high"
+    },
+    {
+      "name": "Egg::setEggId",
+      "kind": "extern",
+      "role": "write the egg item's eggId/state",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::create",
+      "kind": "extern",
+      "role": "allocate/create an NPC instance of a given type",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::pop",
+      "kind": "extern",
+      "role": "place/spawn an item/NPC into the world at X,Y,Z",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_GHOSTEGG::leaveFastArea",
+        "callee": "Egg::getEggId",
+        "purpose": "Retrieve current eggId/state to decide if 0x64 subtraction is needed",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GHOSTEGG::leaveFastArea",
+        "callee": "Egg::setEggId",
+        "purpose": "Store adjusted eggId (eggId - 0x64) when leaving the fast area and eggId < 0x64",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GHOSTEGG::hatch",
+        "callee": "Egg::getEggId",
+        "purpose": "Check current eggId to guard against re-hatching when eggId >= 0x64",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GHOSTEGG::hatch",
+        "callee": "urandom",
+        "purpose": "Provide a random roll (urandom(10)) to probabilistically gate hatching when eggId == 1",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GHOSTEGG::hatch",
+        "callee": "Egg::setEggId",
+        "purpose": "Set eggId to 0x64 to mark that hatching/hatched state is in effect",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GHOSTEGG::hatch",
+        "callee": "Npc::create",
+        "purpose": "Create the NPC instance that emerges from the egg (type observed as 0x23)",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GHOSTEGG::hatch",
+        "callee": "Item::orStatus",
+        "purpose": "Apply a status bit/mask to the newly created NPC (mark the NPC with a flag)",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GHOSTEGG::hatch",
+        "callee": "Item::getX",
+        "purpose": "Obtain egg X coordinate to place the spawned NPC",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GHOSTEGG::hatch",
+        "callee": "Item::getY",
+        "purpose": "Obtain egg Y coordinate to place the spawned NPC",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GHOSTEGG::hatch",
+        "callee": "Item::getZ",
+        "purpose": "Obtain egg Z coordinate to place the spawned NPC",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GHOSTEGG::hatch",
+        "callee": "Item::pop",
+        "purpose": "Place the created NPC into the world at the egg's coordinates",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GHOSTEGG::hatch",
+        "callee": "Item::getDirToItem",
+        "purpose": "Compute a facing/direction for spawn behavior relative to the egg",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GHOSTEGG::hatch",
+        "callee": "spawn",
+        "purpose": "Spawn an asynchronous behavior/movement method for the created NPC (METHOD::15E7) with direction and pid",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GHOSTEGG::hatch",
+        "callee": "Npc::setTarget",
+        "purpose": "Assign a combat/AI target to the spawned NPC",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GHOSTEGG::hatch",
+        "callee": "Npc::setAlignment",
+        "purpose": "Set the spawned NPC's alignment/faction (e.g., hostile)",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GHOSTEGG::hatch",
+        "callee": "Npc::setInCombat",
+        "purpose": "Mark the spawned NPC as in combat to begin combat behavior",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_GHOSTEGG::leaveFastArea",
+    "behavior_summary_one_liner": "Handles egg state transitions and hatching behavior for a GHOSTEGG item.",
+    "external_call_count": 16,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

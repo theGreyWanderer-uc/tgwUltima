@@ -1,0 +1,75 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_VIVALTER.json",
+  "file": "U8P_VIVALTER",
+  "behavior_summary": [
+    "Provides the 'U8P_VIVALTER::look' (examine) handler for an altar object: when examined it composes the literal label \"altar \", asks the item/process to 'bark' that label so the player sees the altar name/description, then signals the U8P_VIVALTER::look succeeded.",
+    "The handler does not modify global game flags or inventories; its sole gameplay effect is producing the UI text for examination and returning a success implication for the U8P_VIVALTER::look action."
+  ],
+  "notable_control_flow": [
+    "Construct literal string \"altar \".",
+    "Push the object/process reference (inferred from the event parameter) and the string, then call Item::bark to display the label.",
+    "Free the constructed string buffer after the call.",
+    "Use the bark call return value and an 'implies' operation to indicate the U8P_VIVALTER::look succeeded, then suspend/return the handler."
+  ],
+  "open_questions": [
+    "Is the pushed [BP+06h] parameter the altar object instance (the thing being examined) or the viewer's process id? (analysis infers it's the object/process reference to which bark is directed).",
+    "Does Item::bark return any status beyond success/failure that affects the implies semantics in downstream logic?",
+    "Are there any locale/grammar variants of the label beyond the static literal \"altar \" that could be selected by other code paths?"
+  ],
+  "main_function": {
+    "name": "U8P_VIVALTER::look",
+    "execution_form": "process",
+    "purpose": "Handle the 'U8P_VIVALTER::look' event for the altar object by producing and displaying the altar label and indicating the U8P_VIVALTER::look succeeded.",
+    "entry_conditions": [
+      "Event 0 / 'U8P_VIVALTER::look' — invoked when a player or actor examines/looks at the altar object (the object's U8P_VIVALTER::look handler is triggered)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_VIVALTER::look",
+      "kind": "main",
+      "role": "Look handler for an altar item that composes and emits a short label via Item::bark.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine used to display short text/messages associated with an item/process.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_VIVALTER::look",
+        "callee": "Item::bark",
+        "purpose": "Request the item/process to display a short text label (here the literal \"altar \") to the player or viewing process.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_VIVALTER::VIVALTER::look",
+    "behavior_summary_one_liner": "Provides the 'U8P_VIVALTER::look' (examine) handler for an altar object: when examined it composes the literal label \"altar \", asks the item/process to 'bark' that label so the player sees the altar name/description, then signals the U8P_VIVALTER::look succeeded.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

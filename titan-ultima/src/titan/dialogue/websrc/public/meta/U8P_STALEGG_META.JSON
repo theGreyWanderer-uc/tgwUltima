@@ -1,0 +1,228 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_STALEGG.json",
+  "file": "U8P_STALEGG",
+  "behavior_summary": [
+    "STALEGG::hatch ensures an egg only hatches once by checking an egg-state id and early-returning if already hatched.",
+    "If not already hatched it marks the egg as hatched (Egg::setEggId(...,1)), triggers a camera quake and U8P_STALEGG::hatch sound, spawns a helper process, creates a new item at the egg's X,Y coordinates, flags that created item, and launches/hurls it.",
+    "STALEGG::leaveFastArea is a separate handler invoked when the trigger region is left; it clears the egg's quality (Item::setQuality(...,0)), likely disabling or resetting interactions."
+  ],
+  "notable_control_flow": [
+    "Guard: a read of Egg::getEggId on the triggering item is compared against 1; if equal the function returns immediately to prevent repeated hatches (strong guard to make U8P_STALEGG::hatch one-shot).",
+    "State update happens immediately after the guard: Egg::setEggId(...,1) marks the egg as hatched before spawning/creating effects, preventing reentrancy during the sequence.",
+    "The function sequences side effects with engine 'suspend' points around spawn/create/pop/hurl operations (spawn helper process, create/pop item, start a hurl process), indicating asynchronous engine/process synchronization.",
+    "leaveFastArea runs independently on area exit and performs cleanup by setting item quality to 0."
+  ],
+  "open_questions": [
+    "What exact item ID is created by Item::create/Item::pop (the disassembly shows a pushed id but the concrete item type is not identified here)?",
+    "What gameplay semantics does the Item::orStatus mask 0x02 encode for the created object (e.g., 'active', 'thrown', or other state)?",
+    "What precise parameters control Item::hurl (direction, force, lifespan)? The numeric args are present but their mapping to gameplay is inferred.",
+    "What is the purpose/behavior of the spawned FREE::1C19 process (visual effect, timer, AI for the hatched creature)?"
+  ],
+  "main_function": {
+    "name": "U8P_STALEGG::hatch",
+    "execution_form": "process",
+    "purpose": "Handle an egg hatching event: ensure the egg only hatches once, mark it as hatched, produce audiovisual feedback (camera quake + SFX), spawn a helper process, create and flag a new item at the egg's position, and launch that created item.",
+    "entry_conditions": [
+      "Event 7 ('U8P_STALEGG::hatch') — invoked when the egg's U8P_STALEGG::hatch event is triggered.",
+      "Appears tied to a fast-area or explicit U8P_STALEGG::hatch trigger (inferred from project fast-area semantics)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_STALEGG::hatch",
+      "kind": "main",
+      "role": "Primary U8P_STALEGG::hatch event handler for the egg; enforces one-shot U8P_STALEGG::hatch and sequences audiovisual spawn/create/hurl behavior.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_STALEGG::leaveFastArea",
+      "kind": "helper",
+      "role": "Fast-area exit handler for the egg: clears the egg's quality (Item::setQuality(...,0)) to reset or disable the egg when leaving the trigger region.",
+      "confidence": "high"
+    },
+    {
+      "name": "Egg::getEggId",
+      "kind": "extern",
+      "role": "Read egg internal ID/state to determine whether the egg has already hatched.",
+      "confidence": "high"
+    },
+    {
+      "name": "Egg::setEggId",
+      "kind": "extern",
+      "role": "Mark the egg's internal id/state (used to record that it has hatched, value set to 1).",
+      "confidence": "high"
+    },
+    {
+      "name": "Camera::startQuake",
+      "kind": "extern",
+      "role": "Start camera quake to emphasize U8P_STALEGG::hatch.",
+      "confidence": "high"
+    },
+    {
+      "name": "Camera::stopQuake",
+      "kind": "extern",
+      "role": "Stop previously started camera quake.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_STALEGG::playSFX",
+      "kind": "extern",
+      "role": "Play U8P_STALEGG::hatch sound effect.",
+      "confidence": "high"
+    },
+    {
+      "name": "spawn (FREE::1C19)",
+      "kind": "extern",
+      "role": "Spawn a helper/free process associated with the U8P_STALEGG::hatch sequence (purpose inferred as visual/timing helper).",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::create",
+      "kind": "extern",
+      "role": "Allocate/initialize a new item id for placement into the world.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::pop",
+      "kind": "extern",
+      "role": "Place/finalize the created item into the world at given coordinates and return a handle.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getX",
+      "kind": "extern",
+      "role": "Get the egg's X coordinate to position the created item.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getY",
+      "kind": "extern",
+      "role": "Get the egg's Y coordinate to position the created item.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::orStatus",
+      "kind": "extern",
+      "role": "OR status flags on the created item (mask 0x02 used here).",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::hurl (process)",
+      "kind": "extern",
+      "role": "Process to launch/throw the created item; invoked with numeric parameters and the created-item handle.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::setQuality",
+      "kind": "extern",
+      "role": "Set an item's quality (used by leaveFastArea to set quality to 0).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_STALEGG::hatch",
+        "callee": "Egg::getEggId",
+        "purpose": "Check whether the egg has already hatched (guard/one-shot check).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STALEGG::hatch",
+        "callee": "Egg::setEggId",
+        "purpose": "Mark the egg as hatched (set id/state to 1) to prevent repeated hatching.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STALEGG::hatch",
+        "callee": "Camera::startQuake",
+        "purpose": "Begin camera quake effect to emphasize U8P_STALEGG::hatch.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STALEGG::hatch",
+        "callee": "U8P_STALEGG::playSFX",
+        "purpose": "Play U8P_STALEGG::hatch sound effect.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STALEGG::hatch",
+        "callee": "spawn (FREE::1C19)",
+        "purpose": "Spawn a helper process to accompany the U8P_STALEGG::hatch sequence (likely visual/timing).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_STALEGG::hatch",
+        "callee": "Item::create",
+        "purpose": "Allocate the item id/slot for whatever is produced by the egg.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STALEGG::hatch",
+        "callee": "Item::getY",
+        "purpose": "Obtain egg Y coordinate so the created item can be placed there.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STALEGG::hatch",
+        "callee": "Item::getX",
+        "purpose": "Obtain egg X coordinate so the created item can be placed there.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STALEGG::hatch",
+        "callee": "Item::pop",
+        "purpose": "Place the created item into the world at the egg's coordinates and receive its handle.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STALEGG::hatch",
+        "callee": "Item::orStatus",
+        "purpose": "Set flags (mask 0x02) on the created item, presumably to mark it active or ready for physics/interaction.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_STALEGG::hatch",
+        "callee": "Camera::stopQuake",
+        "purpose": "Stop the camera quake effect once the core spawn/pop sequence is complete.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STALEGG::hatch",
+        "callee": "Item::hurl (process)",
+        "purpose": "Start a hurl/launch process to throw/launch the newly created item with specific numeric parameters.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_STALEGG::leaveFastArea",
+        "callee": "Item::setQuality",
+        "purpose": "Set the egg's quality to 0 on leaving the trigger region to disable or reset it.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "STALEGG::hatch",
+    "behavior_summary_one_liner": "STALEGG::hatch ensures an egg only hatches once by checking an egg-state id and early-returning if already hatched.",
+    "external_call_count": 13,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

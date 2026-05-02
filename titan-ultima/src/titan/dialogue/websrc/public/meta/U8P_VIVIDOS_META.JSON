@@ -1,0 +1,291 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_VIVIDOS.json",
+  "file": "U8P_VIVIDOS",
+  "behavior_summary": [
+    "Implements Vividos' ritual/cutscene (the 'Ceremony of Eternity') that runs when the instance's U8P_VIVIDOS::cast event is triggered and its target is the Avatar who is dead.",
+    "Primary guard: the caster's target must equal the Avatar (target == 1) and that target must be dead — only then does the main ritual proceed.",
+    "When triggered the script places the Avatar into stasis, sequences dialog lines (Item::bark), schedules timed/visual effects via spawned helper threads (METHOD::15E7, FREE::*), starts a camera quake and SFX, performs an HP/dir/frame-based effect call (METHOD::0080), spawns/places multiple NPCs and directs them to pathfind beside an altar, and later stops the quake and returns.",
+    "Timing and pacing are implemented by spawning many small helper threads and synchronizing with spawn/imply/suspend patterns rather than by blocking waits."
+  ],
+  "notable_control_flow": [
+    "Entry is an Event 11 'U8P_VIVIDOS::cast' handler (U8P_VIVIDOS::VIVIDOS::cast). It first reads Npc::getTarget and only continues if result == 1 and Npc::isDead(target) is true (guard).",
+    "The main sequence sets avatar stasis (setAvatarInStasis(1)), then spawns multiple METHOD::15E7 and FREE::* helper threads used as timers; the script consumes their returns with imply/pop patterns to synchronize pacing.",
+    "A long helper (U8P_VIVIDOS::VIVIDOS::01D7) encapsulates the full ceremony: dialog, camera quakes, SFX, coordinate lookups (Npc::getMap, Item::getZ/Y/X), area visual spawns, NPC creation/pop/orStatus, and pathfind commands.",
+    "The script relies heavily on asynchronous spawned helpers for sequencing; control returns only after quakes are stopped and spawned sequences have completed or been synchronized."
+  ],
+  "open_questions": [
+    "Exact semantics and timing behavior of METHOD::15E7 and the various FREE::* spawned helpers — they appear to be timer/delay/effect drivers but their internal behavior is not shown.",
+    "Whether target ID == 1 always maps to the Avatar in all contexts (it is inferred but treated as the Avatar here).",
+    "Precise meanings of status flags set via Item::orStatus on created NPCs (which bits are applied and their gameplay effects).",
+    "How many of the spawned NPCs remain persistent versus being purely cinematic helpers (the script creates multiple NPCs but their lifecycle beyond the scene is unclear)."
+  ],
+  "main_function": {
+    "name": "U8P_VIVIDOS::cast",
+    "execution_form": "process",
+    "purpose": "Gate and execute Vividos' ritual/cutscene when the instance 'casts' — verify the target is the Avatar and dead, freeze the Avatar, run a timed sequence of dialog, effects, camera quakes, SFX and spawn/move NPCs to stage the ceremony, then restore/cleanup.",
+    "entry_conditions": [
+      "Invoked as Event 11 (U8P_VIVIDOS::cast) for the Vividos instance.",
+      "Npc::getTarget() must return 1 (inferred to be the Avatar).",
+      "Npc::isDead(target) must be true (the Avatar is dead)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_VIVIDOS::cast",
+      "kind": "main",
+      "role": "Event 11 handler that gates and initiates the ceremony/ritual sequence.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_VIVIDOS::01D7",
+      "kind": "helper",
+      "role": "Implements the extended 'Ceremony of Eternity' cutscene: dialog, camera control, SFX, NPC creation/placement and choreography.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::getTarget",
+      "kind": "extern",
+      "role": "Return caster's current target id (used for the main guard).",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::isDead",
+      "kind": "extern",
+      "role": "Test whether the target/actor is dead (guard gating the ritual).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_VIVIDOS::setAvatarInStasis",
+      "kind": "extern",
+      "role": "Freeze/unfreeze the Avatar to prevent player input during the cinematic.",
+      "confidence": "high"
+    },
+    {
+      "name": "METHOD::15E7",
+      "kind": "extern",
+      "role": "Spawned repeatedly as a timing/effect step driver to pace the sequence (inferred).",
+      "confidence": "medium"
+    },
+    {
+      "name": "FREE::1C19",
+      "kind": "extern",
+      "role": "Spawned helper thread used as a short wait/timer or small effect helper (inferred).",
+      "confidence": "medium"
+    },
+    {
+      "name": "FREE::1C6D",
+      "kind": "extern",
+      "role": "Spawned to create an area visual/effect at map coordinates (inferred).",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Emit dialog lines from Vividos and other participants during the ceremony.",
+      "confidence": "high"
+    },
+    {
+      "name": "Camera::startQuake",
+      "kind": "extern",
+      "role": "Begin a screen/world quake effect for dramatic emphasis.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_VIVIDOS::playSFX",
+      "kind": "extern",
+      "role": "Play sound effects to accompany ceremony moments.",
+      "confidence": "high"
+    },
+    {
+      "name": "Camera::stopQuake",
+      "kind": "extern",
+      "role": "Stop the quake effect started earlier.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::create",
+      "kind": "extern",
+      "role": "Create NPC instances (ambassadors/undead) used in the ceremony.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::orStatus",
+      "kind": "extern",
+      "role": "Set status flags on created NPCs (e.g., hide/invulnerable) for staging.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::pop",
+      "kind": "extern",
+      "role": "Place spawned NPCs at coordinates on the map.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::pathfind",
+      "kind": "extern",
+      "role": "Command created NPCs to move to staging positions beside the altar.",
+      "confidence": "high"
+    },
+    {
+      "name": "METHOD::0080",
+      "kind": "extern",
+      "role": "Apply an animation/effect using HP/dir/frame parameters (inferred).",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_VIVIDOS::cast",
+        "callee": "U8P_VIVIDOS::01D7",
+        "purpose": "Invoke the long scripted ceremony/cutscene sequence after guard checks and initial pacing.",
+        "confidence": "high"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_VIVIDOS::cast",
+        "callee": "Npc::getTarget",
+        "purpose": "Obtain the caster's current target id to check whether it is the Avatar (==1).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VIVIDOS::cast",
+        "callee": "Npc::isDead",
+        "purpose": "Check that the target (inferred Avatar) is dead before proceeding with the ritual.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VIVIDOS::cast",
+        "callee": "U8P_VIVIDOS::setAvatarInStasis",
+        "purpose": "Freeze the Avatar (stasis on) for the duration of the ceremony.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VIVIDOS::cast",
+        "callee": "METHOD::15E7",
+        "purpose": "Spawned repeatedly to schedule/deliver timed effect or pacing steps during the ritual (inferred as a timer/effect driver).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_VIVIDOS::cast",
+        "callee": "FREE::1C19",
+        "purpose": "Spawn a short helper thread used as a wait or small effect synchronizer.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_VIVIDOS::01D7",
+        "callee": "Item::bark",
+        "purpose": "Deliver multiple dialog lines spoken by Vividos and other cinematic participants during the ceremony.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VIVIDOS::01D7",
+        "callee": "Camera::startQuake",
+        "purpose": "Begin a quake effect during key ritual moments.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VIVIDOS::01D7",
+        "callee": "U8P_VIVIDOS::playSFX",
+        "purpose": "Play sound effects synchronized with quakes/dialog for dramatic effect.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VIVIDOS::01D7",
+        "callee": "METHOD::0080",
+        "purpose": "Apply a visual/animation effect using NPC HP, direction and frame inputs (inferred from pushed args).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_VIVIDOS::01D7",
+        "callee": "Npc::getMap",
+        "purpose": "Get map id to spawn area visuals at correct map context.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VIVIDOS::01D7",
+        "callee": "Item::getZ",
+        "purpose": "Obtain Z (height) coordinate for area visual placement and NPC pop positions.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VIVIDOS::01D7",
+        "callee": "Item::getY",
+        "purpose": "Obtain Y coordinate for area visual placement and NPC pop positions.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VIVIDOS::01D7",
+        "callee": "Item::getX",
+        "purpose": "Obtain X coordinate for area visual placement and NPC pop positions.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VIVIDOS::01D7",
+        "callee": "FREE::1C6D",
+        "purpose": "Spawn an area visual/effect at the obtained coordinates (inferred).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_VIVIDOS::01D7",
+        "callee": "Npc::create",
+        "purpose": "Create NPC instances (ambassadors/undead) used to populate the ceremony scene.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VIVIDOS::01D7",
+        "callee": "Item::orStatus",
+        "purpose": "Set staging status bits on newly created NPCs (e.g., hide/invulnerable/immobile flags) so they behave as cinematic actors.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_VIVIDOS::01D7",
+        "callee": "Item::pop",
+        "purpose": "Place the created NPCs at computed coordinates near the altar.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VIVIDOS::01D7",
+        "callee": "Npc::pathfind",
+        "purpose": "Order created NPCs to walk to specified positions beside the altar to stage the ritual choreography.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VIVIDOS::01D7",
+        "callee": "Item::getFrame",
+        "purpose": "Poll an item's frame/state in a loop to trigger subsequent choreography when a frame target is reached (inferred).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_VIVIDOS::cast",
+        "callee": "Camera::stopQuake",
+        "purpose": "Stop the camera/world quake at the end of the cinematic sequence.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_VIVIDOS::VIVIDOS::cast",
+    "behavior_summary_one_liner": "Implements Vividos' ritual/cutscene (the 'Ceremony of Eternity') that runs when the instance's U8P_VIVIDOS::cast event is triggered and its target is the Avatar who is dead.",
+    "external_call_count": 20,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

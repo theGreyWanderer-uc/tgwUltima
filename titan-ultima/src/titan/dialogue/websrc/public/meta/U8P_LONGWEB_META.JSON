@@ -1,0 +1,73 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_LONGWEB.json",
+  "file": "U8P_LONGWEB",
+  "behavior_summary": [
+    "This script implements the 'U8P_LONGWEB::gotHit' event for a LONGWEB instance: when the web is struck, it records hit-related state on the object (via a set-info / process-exclude sequence) and then immediately destroys the web instance.",
+    "The routine does not inspect or branch on the numeric parameters; it performs a fixed sequence of state updates and cleanup, making the web a one-shot destructible object on hit."
+  ],
+  "notable_control_flow": [
+    "Single linear path: mark the object (set info / process exclude) then call Item::destroy on the instance.",
+    "No conditional branches or global-flag checks observed; parameters supplied to the event are not used to affect control flow.",
+    "Effectively a one-time trigger: after recording the hit state the object is removed from the world."
+  ],
+  "open_questions": [
+    "What exact info ID and field(s) are set by the 'set info' step (the disassembly shows a constant push but the semantic meaning of that info key is not named)?",
+    "Which object receives the 'set info' (the instructions derive a target from the item but the exact target relationship is inferred rather than explicit)?",
+    "What do the two declared parameters (uword, word) represent in gameplay terms (attacker PID, hit source ID, damage amount, etc.) — they are not used in this handler, so their role is uncertain)."
+  ],
+  "main_function": {
+    "name": "U8P_LONGWEB::gotHit",
+    "execution_form": "process",
+    "purpose": "Handle a hit event on a LONGWEB object by marking it as hit/excluding it from further processing and then destroying the item so the web is removed from the game world.",
+    "entry_conditions": [
+      "Event 6 (U8P_LONGWEB::gotHit) — invoked when the LONGWEB object is struck or receives damage"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_LONGWEB::gotHit",
+      "kind": "main",
+      "role": "Event handler for 'U8P_LONGWEB::gotHit': mark hit state / process-exclude and destroy the LONGWEB instance.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_LONGWEB::gotHit",
+        "callee": "U8P_LONGWEB::set info + process exclude",
+        "purpose": "Record a hit-related info/state on a target object and exclude that object from further processing (prevents further handling before destruction). This is an inferred engine operation rather than a normal function call.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LONGWEB::gotHit",
+        "callee": "Item::destroy",
+        "purpose": "Remove and clean up the LONGWEB item instance from the game world (destructible cleanup). Called with the item instance pointer supplied to the event.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "one-shot"
+  ],
+  "quick_facts": {
+    "main_function": "LONGWEB::gotHit",
+    "behavior_summary_one_liner": "This script implements the 'U8P_LONGWEB::gotHit' event for a LONGWEB instance: when the web is struck, it records hit-related state on the object (via a set-info / process-exclude sequence) and then immediately destroys the web instance.",
+    "external_call_count": 2,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

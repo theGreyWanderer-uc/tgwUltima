@@ -1,0 +1,77 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_EWBPAINT.json",
+  "file": "U8P_EWBPAINT",
+  "behavior_summary": [
+    "This script implements the 'U8P_EWBPAINT::look' (examine) handler for a painting object. When an actor looks at the painting it builds/presents a short description prefixed with the literal \"painting \".",
+    "Around the description emission it executes per-call 'set info' and 'process exclude' opcodes (appears to change temporary info/context or exclude the object from some processing while barking).",
+    "It calls Item::bark on the painting instance to make the item emit/display the constructed text to the viewer, captures that call's return value, uses that value in an implication/test sequence, then performs a small pop/temporary store and suspends.",
+    "No global flags are read or written by this handler in the extracted excerpt."
+  ],
+  "notable_control_flow": [
+    "U8P_EWBPAINT::look is a single-event handler (U8P_EWBPAINT::look). It performs a short linear sequence: set info/process-exclude -> prepare string 'painting ' -> call Item::bark -> capture return -> implies/test and pop -> suspend.",
+    "The set info / process exclude opcodes bracket the bark call, suggesting a temporary context/guard around the emission; this is a local control/guard rather than a persistent global change.",
+    "The return from Item::bark is tested/used in an implication-style operation, but control flow immediately proceeds to pop a temp and suspend; there is no observed branching or global state modification after the call."
+  ],
+  "open_questions": [
+    "What exact info id and target object are affected by the 'set info' and 'process exclude' opcodes (the disassembly shows the opcodes but the concrete info id meaning is not present here)?",
+    "What is the semantic meaning of the Item::bark return value in this context (the script tests it via an implies/test sequence but does not branch on it here)?",
+    "Does the process exclusion temporarily prevent other systems from observing the bark, or is it used to adjust which process receives additional info? The precise engine semantics remain inferred.",
+    "Are there any related handlers (e.g., enterFastArea/leaveFastArea or other painting events) that interact with this U8P_EWBPAINT::look handler in ways not visible in the excerpt?"
+  ],
+  "main_function": {
+    "name": "U8P_EWBPAINT::look",
+    "execution_form": "process",
+    "purpose": "Handle the player/actor 'U8P_EWBPAINT::look' event for the painting: construct and emit a short, prefixed description ('painting ') by invoking the painting's Item::bark routine, while temporarily adjusting per-call info/processing state.",
+    "entry_conditions": [
+      "Event 0: U8P_EWBPAINT::look — invoked when an actor/player looks at or examines this painting (inferred from event name and typical item handler patterns)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_EWBPAINT::look",
+      "kind": "main",
+      "role": "Event handler that describes the painting to a viewer by invoking Item::bark; wraps the emission with temporary info/exclude opcodes.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine used to emit/display a short text message (a 'bark') to a target process/viewer.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_EWBPAINT::look",
+        "callee": "Item::bark",
+        "purpose": "Request the painting item to emit/display the constructed description string (literal prefix 'painting ' plus item text) to the viewer/process. The painting instance (BP+06h) is passed as the target/context for the call.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "description",
+    "cleanup",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_EWBPAINT::look",
+    "behavior_summary_one_liner": "This script implements the 'U8P_EWBPAINT::look' (examine) handler for a painting object. When an actor looks at the painting it builds/presents a short description prefixed with the literal \"painting \".",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

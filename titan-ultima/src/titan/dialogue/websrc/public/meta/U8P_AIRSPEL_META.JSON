@@ -1,0 +1,180 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_AIRSPEL.json",
+  "file": "U8P_AIRSPEL",
+  "behavior_summary": [
+    "Provides logic for detecting and using an \"Air\" focus item. The small detector (AIRSPEL::0080) scans a collection of items and returns true if any item matches the Air-focus criteria (checks item frame==3 and item type bitmask).",
+    "The main handler (AIRSPEL::00CF) implements the \"read/use focus\" behaviour: it verifies and deducts NPC mana, optionally selects a 'breath' effect variant (based on global hasBreath or presence test), spawns oriented visual/sound/timed effects, awards a small intelligence reward, constructs a descriptive message about the focus reading (location fragment + time/day), and makes the item/NPC 'bark' that message to the player."
+  ],
+  "notable_control_flow": [
+    "AIRSPEL::0080 loops over a collection of item references and returns immediately (true) when a matching Air-focus is found; otherwise returns false after iteration.",
+    "AIRSPEL::00CF branches early if the caster lacks sufficient mana; otherwise it subtracts cost and continues.",
+    "AIRSPEL::00CF branches based on the global hasBreath flag to choose between a 'breath' spawn sequence and the standard spawn sequence; it also consults U8P_AIRSPEL::AIRSPEL::0080 to decide on certain effect variants in some paths.",
+    "String construction in AIRSPEL::00CF is incremental: it maps the caster's map id to a location code (FREE::36E7), selects/appends a location fragment, then appends time/day text computed from TimeInGameHours and numToStr before calling Item/Npc::bark."
+  ],
+  "open_questions": [
+    "What exact collection does AIRSPEL::0080 iterate? (inventory, equipped slots, nearby ground items, or a list returned by an engine call) — inferred but not explicit.",
+    "What does FREE::36E7 precisely return or compute from Npc::getMap (a normalized location id, a lookup index, or formatted text)?",
+    "What specific visual/audio effects are produced by METHOD::15E7 and FREE::29D8 spawn calls (spell projectile, breath cone, sound identifiers)?",
+    "Are there other global flags that influence which location fragment or day/time string is used beyond hasBreath?"
+  ],
+  "main_function": {
+    "name": "U8P_AIRSPEL::0080",
+    "execution_form": "process",
+    "purpose": "Scan a collection of items (likely an inventory or nearby item list) and detect whether any item matches the Air-focus criteria (item frame and type bitmask). Return 1 if a qualifying item is found, otherwise 0.",
+    "entry_conditions": [
+      "Called when code needs to know whether an Air spell focus item is present (invoked from U8P_AIRSPEL::AIRSPEL::00CF and possibly other callers).",
+      "Executed as a simple loop over a provided/implicit collection of item references."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_AIRSPEL::0080",
+      "kind": "main",
+      "role": "Presence-test helper that scans items and returns boolean indicating if an Air-focus exists (frame==3 + type mask).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_AIRSPEL::00CF",
+      "kind": "helper",
+      "role": "Primary 'use/read focus' handler: mana check/cost, spawn visual/sound effects, award intelligence, build and bark descriptive message, choose breath variant if applicable.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getFrame",
+      "kind": "extern",
+      "role": "Engine API returning an item's frame/variant (used to filter Air-focus by frame==3).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getType",
+      "kind": "extern",
+      "role": "Engine API returning an item's type bitmask (used for type-based filtering).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_AIRSPEL::00CF",
+        "callee": "U8P_AIRSPEL::0080",
+        "purpose": "Ask whether a qualifying Air-focus item is present to decide on effect variant/behavior.",
+        "confidence": "high"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_AIRSPEL::0080",
+        "callee": "Item::getFrame",
+        "purpose": "Read each item's frame/variant to filter for the Air-focus visual/state (frame==3).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AIRSPEL::0080",
+        "callee": "Item::getType",
+        "purpose": "Read item type flags/bitmask to identify focus items via mask comparisons.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AIRSPEL::00CF",
+        "callee": "Npc::getMap",
+        "purpose": "Obtain caster/NPC map id used to select a location fragment for the focus reading message.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AIRSPEL::00CF",
+        "callee": "FREE::36E7",
+        "purpose": "Transform or map the raw map id into a location code/index used to pick message fragments (exact mapping inferred).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_AIRSPEL::00CF",
+        "callee": "Npc::getMana",
+        "purpose": "Read caster's current mana to determine if the focus can be used.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AIRSPEL::00CF",
+        "callee": "Npc::setMana",
+        "purpose": "Write back the reduced mana after charging the focus cost.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AIRSPEL::00CF",
+        "callee": "METHOD::15E7 (spawned)",
+        "purpose": "Spawn visual/animation effects oriented by caster direction (projectile/cone/etc.).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_AIRSPEL::00CF",
+        "callee": "FREE::29D8 (spawned)",
+        "purpose": "Spawn helper for playing sound or timed auxiliary effects during the focus use.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_AIRSPEL::00CF",
+        "callee": "AccumulateIntelligence",
+        "purpose": "Award/increment a small intelligence-related reward when the focus is read.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AIRSPEL::00CF",
+        "callee": "U8P_AIRSPEL::TimeInGameHours",
+        "purpose": "Get current in-game time to compute time-of-day and day for the message appended to the focus reading.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AIRSPEL::00CF",
+        "callee": "U8P_AIRSPEL::numToStr",
+        "purpose": "Convert computed numeric day/time values into strings for message construction.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AIRSPEL::00CF",
+        "callee": "FREE::28F9",
+        "purpose": "(Inferred) Return a town/region index or related value used to append a location/town name fragment to the message.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_AIRSPEL::00CF",
+        "callee": "process Item::bark",
+        "purpose": "Display the constructed focus-reading string to the player (item or NPC 'speaks' the message).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AIRSPEL::00CF",
+        "callee": "Npc::getDir",
+        "purpose": "Obtain caster direction to orient spawned effects correctly.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "hasBreath",
+        "likely_effect": "Selects whether a 'breath' variant of the Air effect/spawn sequence should be used instead of the standard sequence.",
+        "confidence": "high"
+      }
+    ],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_AIRSPEL::AIRSPEL::0080",
+    "behavior_summary_one_liner": "Provides logic for detecting and using an \"Air\" focus item. The small detector (AIRSPEL::0080) scans a collection of items and returns true if any item matches the Air-focus criteria (checks item frame==3 and item type bitmask).",
+    "external_call_count": 14,
+    "flag_read_count": 1,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

@@ -1,0 +1,206 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_DANGERNS.json",
+  "file": "U8P_DANGERNS",
+  "behavior_summary": [
+    "DANGERNS::gotHit reacts to an incoming hit on a DANGERNS object: it examines incoming hit info and the item's quality/shape/script conditions to decide between spawning a short damage animation or playing a sound and applying a secondary, randomized reaction.",
+    "When conditions match (script/shape/quality/frame checks), the function sets a damage sprite frame on the item and spawns the helper coroutine U8P_DANGERNS::0165 which animates frames 1..5 then back down and finally clears the frame while spawning a per-frame visual effect (FREE::1C19).",
+    "When the checks fail, the code plays a hit sound (playSFX), then for non-NPC items (Item::isNpc == false) it may skip further reaction if the NPC is dead (Npc::isDead) or a local boolean gate; otherwise it computes a small randomized offset (urandom), reads the item's facing (Item::getDirFromItem) and calls METHOD::0080 to update orientation/state or trigger a related response.",
+    "The helper coroutine (U8P_DANGERNS::0165) is a short-lived animation script that iterates a frame counter (BP-02h) up and down, calling Item::setFrame and spawning FREE::1C19 each step with suspend/yield between frames, then restores frame 0 and exits."
+  ],
+  "notable_control_flow": [
+    "Entry triggered by Event 6 (U8P_DANGERNS::gotHit). Execution branches immediately based on the incoming hit_info parameter (zero vs non-zero) and a set of script/shape/quality/frame comparisons (loopscr-like checks).",
+    "If comparisons succeed -> setFrame(initial) and spawn U8P_DANGERNS::0165, then return.",
+    "If comparisons fail -> playSFX; then check Item::isNpc; if non-NPC and additional boolean/local gate permits and Npc::isDead is false, compute urandom offset, get direction via Item::getDirFromItem and call METHOD::0080 with computed params.",
+    "U8P_DANGERNS::0165 loops: increment frame counter 1..5, setFrame(counter), spawn FREE::1C19, suspend each step; then mirror sequence down to 1 and finally setFrame(0)."
+  ],
+  "open_questions": [
+    "Exact conditions evaluated by the 'loopscr' sequence (shape/script/quality/frame comparisons) — what shape/quality thresholds or script entries trigger the animated path?",
+    "Precise behavior and side-effects of METHOD::0080 (appears to update orientation/state or trigger a movement/animation but is not fully identified).",
+    "Exact purpose and visual effect of FREE::1C19 spawned per animation frame (likely a particle or short-lived visual effect).",
+    "Meaning and interpretation of some local flags (BP-0Dh and other bytes) used as boolean gates in the non-animation path — e.g., when are they set/cleared externally?"
+  ],
+  "main_function": {
+    "name": "U8P_DANGERNS::gotHit",
+    "execution_form": "process",
+    "purpose": "Handle a hit event on a DANGERNS object by either running a damage-frame animation (spawning U8P_DANGERNS::0165) or playing a hit sound and optionally applying a randomized orientation/state reaction for non-NPC objects.",
+    "entry_conditions": [
+      "Called on Event 6 (U8P_DANGERNS::gotHit) when the object is struck.",
+      "Branches on the incoming hit_info parameter (zero vs non-zero) and on a set of script/shape/quality/frame comparisons to choose behavior."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_DANGERNS::gotHit",
+      "kind": "main",
+      "role": "Main handler for Event 6 (U8P_DANGERNS::gotHit); decides whether to spawn damage animation or run alternate non-NPC reaction and plays sound when appropriate.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DANGERNS::0165",
+      "kind": "helper",
+      "role": "Spawned coroutine that animates the item's damage frames (1..5 and back) and spawns FREE::1C19 each frame, then clears the frame.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getQuality",
+      "kind": "extern",
+      "role": "Read item's quality used in decisions whether to run animated reaction.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::setFrame",
+      "kind": "extern",
+      "role": "Set the visible sprite/frame for the item during animation and to clear it afterwards.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DANGERNS::playSFX",
+      "kind": "extern",
+      "role": "Play hit/damage sound when the animated path is not taken.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::isNpc",
+      "kind": "extern",
+      "role": "Check whether the item is an NPC to gate non-NPC-only follow-up behavior.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::isDead",
+      "kind": "extern",
+      "role": "Check whether a referenced NPC is dead to avoid applying reactions to dead NPCs.",
+      "confidence": "medium"
+    },
+    {
+      "name": "urandom",
+      "kind": "extern",
+      "role": "Generate a small random value used to randomize frame/delay/orientation choices.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getDirFromItem",
+      "kind": "extern",
+      "role": "Retrieve an item's facing/direction to compute an oriented follow-up reaction.",
+      "confidence": "high"
+    },
+    {
+      "name": "METHOD::0080",
+      "kind": "extern",
+      "role": "Engine/game method invoked to apply a computed orientation/state change or related reaction (exact purpose inferred).",
+      "confidence": "medium"
+    },
+    {
+      "name": "FREE::1C19",
+      "kind": "extern",
+      "role": "Spawned per-frame visual/effect during the helper animation (likely particle/temporary effect).",
+      "confidence": "medium"
+    },
+    {
+      "name": "spawn",
+      "kind": "extern",
+      "role": "Engine primitive to start other scripts/coroutines (used to start U8P_DANGERNS::0165 and FREE::1C19).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_DANGERNS::gotHit",
+        "callee": "U8P_DANGERNS::0165",
+        "purpose": "Spawn a short-lived animation coroutine to animate damage frames when script/quality/frame conditions match.",
+        "confidence": "high"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_DANGERNS::gotHit",
+        "callee": "Item::getQuality",
+        "purpose": "Read the item's quality/attribute used in loopscr comparisons to decide reaction path.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DANGERNS::gotHit",
+        "callee": "Item::setFrame",
+        "purpose": "Set an initial damage frame before spawning the animation helper (and used elsewhere to clear/alter frames).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DANGERNS::gotHit",
+        "callee": "U8P_DANGERNS::playSFX",
+        "purpose": "Play a hit sound in the non-animation branch to indicate the item was struck.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DANGERNS::gotHit",
+        "callee": "Item::isNpc",
+        "purpose": "Determine whether follow-up randomized/orientation behavior should be skipped because the item is an NPC.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DANGERNS::gotHit",
+        "callee": "Npc::isDead",
+        "purpose": "Avoid applying follow-up reactions to NPCs that are already dead (gating behavior after Item::isNpc/in combination with local flag).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DANGERNS::gotHit",
+        "callee": "urandom",
+        "purpose": "Generate a small random offset used to compute a frame/delay or directional offset for METHOD::0080 call.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DANGERNS::gotHit",
+        "callee": "Item::getDirFromItem",
+        "purpose": "Retrieve the item's facing to compute a direction argument for METHOD::0080.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DANGERNS::gotHit",
+        "callee": "METHOD::0080",
+        "purpose": "Apply a computed direction/state update or trigger a specific engine action using the item and computed value (inferred orientation/state update).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DANGERNS::0165",
+        "callee": "Item::setFrame",
+        "purpose": "Set the item's visible frame each animation step and finally clear it at animation end.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DANGERNS::0165",
+        "callee": "spawn",
+        "purpose": "Spawn FREE::1C19 at each animation step to produce a per-frame visual/effect.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DANGERNS::0165",
+        "callee": "FREE::1C19",
+        "purpose": "Per-frame visual/effect spawned during the damage-frame animation (likely particle or flash effect).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "DANGERNS::gotHit",
+    "behavior_summary_one_liner": "DANGERNS::gotHit reacts to an incoming hit on a DANGERNS object: it examines incoming hit info and the item's quality/shape/script conditions to decide between spawning a short damage animation or playing a sound and applying a secondary, randomized reaction.",
+    "external_call_count": 11,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

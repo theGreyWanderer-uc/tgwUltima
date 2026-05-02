@@ -1,0 +1,181 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_PLATFORM.json",
+  "file": "U8P_PLATFORM",
+  "behavior_summary": [
+    "Provides the gameplay behavior for a raise/lower platform item: players can 'U8P_PLATFORM::use' the platform or heavy items hitting it can trigger an activation that runs a worker to animate the platform and move stacked items upward.",
+    "PLATFORM::use inspects the platform's current quality/state and surface weight to decide whether to spawn a worker process (PLATFORM::0131) that performs the raise/lower animation, or to play a failure sound if activation conditions are not met.",
+    "PLATFORM::gotHit reacts to damage/impact events: it ignores zero hits, otherwise checks if the referenced item is on the platform and if that item's weight (including contents) meets a threshold; if so it triggers the same U8P_PLATFORM::use behavior (spawning the worker) so heavy impacts can cause the platform to operate.",
+    "PLATFORM::0131 is the worker that carries out the animated transition: it sets intermediate/final quality states on the platform, plays SFX at key moments, computes effective altitude, iterates the ethereal/stack above the platform to pop/push or ascend items (including mapping item visuals/types by altitude), and spawns a cleanup/free process when finished."
+  ],
+  "notable_control_flow": [
+    "Entry via U8P_PLATFORM::PLATFORM::use checks Item::getQuality. If quality == 1 or 2 it spawns U8P_PLATFORM::PLATFORM::0131 with different initial flags. Otherwise it reads Item::getSurfaceWeight and activates the worker only if weight <= threshold (0x64), else plays a failure SFX and returns.",
+    "U8P_PLATFORM::PLATFORM::gotHit conditionally spawns U8P_PLATFORM::PLATFORM::use when a hit is non-zero, the referenced item is 'on' the platform (Item::isOn), and its weight including contents >= threshold (0x0A) — otherwise it adjusts an internal counter and suspends.",
+    "U8P_PLATFORM::PLATFORM::0131 sets a transient quality/state, loops to inspect and move stacked items up a Z-level (using getEtherealTop, pop/push, Item::ascend), remaps visual/type placeholders based on computed Z ranges, plays SFX on transitions, then spawns FREE::1C19 for cleanup and suspends."
+  ],
+  "open_questions": [
+    "Exact semantics and full set of numeric 'quality' codes (beyond inferred 1/2 as activatable states and intermediate codes used by the worker).",
+    "Precise meaning of the initial flag byte passed to PLATFORM::0131 (0, 1, 0xFE observed) and how each variant affects altitude calculations and visual mapping.",
+    "Exact SFX ids and their intended audio cues (success, failure, transition).",
+    "How Item::ascend failure modes are handled in detail (fall-back pop/push behavior) and whether other engine rules (collisions, blocking) influence the worker.",
+    "Whether other external events/processes can preempt the worker or affect intermediate quality values while PLATFORM::0131 runs."
+  ],
+  "main_function": {
+    "name": "U8P_PLATFORM::use",
+    "execution_form": "process",
+    "purpose": "Handle player/actor 'U8P_PLATFORM::use' interaction with the platform item. Decide whether conditions (quality or surface weight) permit starting the platform animation/worker; if permitted spawn U8P_PLATFORM::PLATFORM::0131 with an initial flag, otherwise play a failure SFX.",
+    "entry_conditions": [
+      "Invoked when a player or actor uses/interacts with the platform item (U8P_PLATFORM::use event)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_PLATFORM::use",
+      "kind": "main",
+      "role": "Entry handler for 'U8P_PLATFORM::use' interactions; gatekeeper that decides whether to spawn the platform worker or play failure sound.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_PLATFORM::gotHit",
+      "kind": "helper",
+      "role": "Responds to hit/damage events; triggers the U8P_PLATFORM::use behavior when a heavy-enough item on the platform is hit.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_PLATFORM::0131",
+      "kind": "helper",
+      "role": "Worker/process that animates the platform transition: set qualities, play SFX, move/push/pop/ascend stacked items, remap visual types, and spawn cleanup.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_PLATFORM::use",
+        "callee": "U8P_PLATFORM::0131",
+        "purpose": "Spawn the worker that performs the platform raise/lower animation and payload movement; caller chooses initial flag based on quality or surface weight.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PLATFORM::gotHit",
+        "callee": "U8P_PLATFORM::use",
+        "purpose": "Trigger the U8P_PLATFORM::use handler (and thus potential spawning of the worker) when a heavy item on the platform is hit.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PLATFORM::0131",
+        "callee": "FREE::1C19 (spawn)",
+        "purpose": "Spawn a cleanup/free process after the worker finishes moving items and updating platform state.",
+        "confidence": "high"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_PLATFORM::use",
+        "callee": "Item::getQuality",
+        "purpose": "Read platform 'quality' state to decide activation path and flag to pass to the worker.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PLATFORM::use",
+        "callee": "Item::getSurfaceWeight",
+        "purpose": "Read weight on the platform to allow activation when quality is not already the activatable codes; used as a guard threshold.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PLATFORM::use",
+        "callee": "U8P_PLATFORM::playSFX",
+        "purpose": "Play a failure SFX when activation conditions are not met (surface weight too high) or play-start SFX when spawning the worker.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PLATFORM::0131",
+        "callee": "Item::setQuality",
+        "purpose": "Update platform quality/state codes to mark intermediate and final animation states.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PLATFORM::0131",
+        "callee": "Item::getX",
+        "purpose": "Obtain platform X coordinate to operate on the stack at that location (pop/push operations).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PLATFORM::0131",
+        "callee": "Item::getY",
+        "purpose": "Obtain platform Y coordinate to operate on the stack at that location (pop/push operations).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PLATFORM::0131",
+        "callee": "Item::getZ",
+        "purpose": "Read platform Z to compute effective altitude and choose visual/type mappings and quality transitions.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PLATFORM::0131",
+        "callee": "U8P_PLATFORM::getEtherealTop",
+        "purpose": "Find the topmost ethereal/stack reference so the worker can iterate items above the platform and move them upward.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PLATFORM::0131",
+        "callee": "Item::getType",
+        "purpose": "Inspect each stacked item's type to map it to a placeholder or alternate visual type depending on altitude.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PLATFORM::0131",
+        "callee": "Item::push",
+        "purpose": "Insert placeholder or new stack entries while moving items during the raise animation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PLATFORM::0131",
+        "callee": "Item::pop",
+        "purpose": "Remove items from stack positions (variants used to pop at x,y,z) as part of lifting/moving payload.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PLATFORM::0131",
+        "callee": "Item::ascend",
+        "purpose": "Attempt to move items (or the platform/payload) up one Z-level; return value influences worker behavior for each item.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PLATFORM::gotHit",
+        "callee": "Item::isOn",
+        "purpose": "Verify the referenced item is located on this platform before using its weight to decide activation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PLATFORM::gotHit",
+        "callee": "Item::getWeightIncludingContents",
+        "purpose": "Measure total weight of a referenced item (including its contents) to compare against the activation threshold.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_PLATFORM::PLATFORM::use",
+    "behavior_summary_one_liner": "Provides the gameplay behavior for a raise/lower platform item: players can 'U8P_PLATFORM::use' the platform or heavy items hitting it can trigger an activation that runs a worker to animate the platform and move stacked items upward.",
+    "external_call_count": 14,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

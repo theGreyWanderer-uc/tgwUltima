@@ -1,0 +1,237 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_BGATE.json",
+  "file": "U8P_BGATE",
+  "behavior_summary": [
+    "Provides the gameplay behavior for the Black Gate object: a simple 'U8P_BGATE::look' (examine) handler and a hit/impact handler that either knocks the gate back, destroys it with effects, or triggers an endgame cinematic sequence.",
+    "U8P_BGATE::look responds to a player/actor examination by making the item 'bark' the description \"black gate \".",
+    "U8P_BGATE::gotHit handles damage/hit events. If the hit is effectively zero it returns; otherwise it reads the gate frame and either applies a randomized hurl (knockback) if the gate is in an advanced frame, or calls Kernel::resetRef to decide between triggering an endgame cinematic (resetRef==1) or destroying the gate and spawning a lightning effect (resetRef!=1).",
+    "The endgame cinematic path: freeze the avatar (setAvatarInStasis), set a global cinematic guard (yojustchill=1), play SFX, spawn a helper animation process (U8P_BGATE::01CE), perform fades and music stop, mark an NPC dead, reposition the camera, and call playEndgame.",
+    "U8P_BGATE::01CE is a helper process that steps the gate through frames 0x32..0x37 and spawns a short-lived per-frame helper (FREE::1C19) to drive per-frame visuals/timing."
+  ],
+  "notable_control_flow": [
+    "U8P_BGATE::look (entry via Event 0) -> call Item::bark with the static string and return/suspend.",
+    "U8P_BGATE::gotHit: if second parameter == 0 then return immediately.",
+    "U8P_BGATE::gotHit: else call Item::getFrame; if frame > 0x16 then compute random velocities via urandom and call Item::hurl (knockback) and play impact SFX.",
+    "U8P_BGATE::gotHit: if frame <= 0x16 then call Kernel::resetRef(refId, ProcessType). If resetRef returns 1 then start the endgame cinematic sequence (multiple calls including spawn U8P_BGATE::01CE, setAvatarInStasis, playSFX, FadeToWhite/Black, musicStop, Npc::setDead, Camera moves, playEndgame); otherwise call Item::destroy and spawn process LightningBolt and playSFX.",
+    "U8P_BGATE::01CE: loop from frame 0x32 to 0x37, set the item frame with Item::setFrame each iteration, spawn FREE::1C19 per step, and suspend between steps."
+  ],
+  "open_questions": [
+    "Exact semantics and return domain of Kernel::resetRef: disassembly indicates return==1 triggers endgame, but the precise meaning of the refId semantics is not documented.",
+    "Why the frame threshold is 0x16: the narrative/asset meaning of frames <=0x16 vs >0x16 (e.g., damaged states, immovable state) is inferred but not certain.",
+    "Purpose and implementation details of spawned FREE::1C19: inferred as a per-frame visual/timing helper but not fully identified.",
+    "Exact relationship between the hit parameters (first uword and second word) and in-game damage/type semantics beyond their use here."
+  ],
+  "main_function": {
+    "name": "U8P_BGATE::look",
+    "execution_form": "process",
+    "purpose": "Handle the player/actor 'U8P_BGATE::look' (examine) action on the Black Gate: prepare item info state and make the item display/speak the description string \"black gate \".",
+    "entry_conditions": [
+      "Event 0 (U8P_BGATE::look/examine) invoked when an actor inspects the gate"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_BGATE::look",
+      "kind": "main",
+      "role": "Examine/U8P_BGATE::look handler that calls Item::bark with the static description.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BGATE::gotHit",
+      "kind": "helper",
+      "role": "Hit/damage handler: either hurls the gate, destroys it with effects, or triggers an endgame cinematic depending on frame and Kernel::resetRef result.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BGATE::01CE",
+      "kind": "helper",
+      "role": "Cinematic/animation helper that steps the gate through frames 0x32..0x37 and spawns per-frame helper processes.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Emit/display a short text message from an item or process.",
+      "confidence": "high"
+    },
+    {
+      "name": "Kernel::resetRef",
+      "kind": "extern",
+      "role": "Kernel-level reference reset/modify routine whose return value is used to choose endgame vs destroy path.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::hurl",
+      "kind": "extern",
+      "role": "Apply knockback/launch to the item (used when gate is hurlable).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::destroy",
+      "kind": "extern",
+      "role": "Remove the item from the world (used when gate is destroyed).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BGATE::process LightningBolt",
+      "kind": "extern",
+      "role": "Visual effect spawned on destruction.",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::1C19",
+      "kind": "extern",
+      "role": "Spawned per-frame helper during BGATE::01CE animation (likely a timing/visual helper).",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_BGATE::gotHit",
+        "callee": "U8P_BGATE::01CE",
+        "purpose": "Spawn the gate frame-animation helper to drive the cinematic frame changes when resetRef indicates an endgame.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BGATE::01CE",
+        "callee": "FREE::1C19",
+        "purpose": "Spawn a per-frame helper process each loop iteration to stage per-frame visuals/timing (FREE::1C19 is an external spawn target but logically internal to the cinematic flow).",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_BGATE::look",
+        "callee": "Item::bark",
+        "purpose": "Display the static description string \"black gate \" to the viewer process.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BGATE::gotHit",
+        "callee": "Item::getFrame",
+        "purpose": "Read current gate frame to decide whether to hurl or proceed to reset/destroy/endgame logic.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BGATE::gotHit",
+        "callee": "urandom",
+        "purpose": "Generate randomness used to compute hurl velocities/angles for knockback.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BGATE::gotHit",
+        "callee": "Item::hurl",
+        "purpose": "Knockback/launch the gate with computed random velocities when gate frame indicates movability.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BGATE::gotHit",
+        "callee": "Kernel::resetRef",
+        "purpose": "Reset/modify a kernel reference for the provided refId and use the return value to decide between triggering an endgame cinematic or destroying the gate.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BGATE::gotHit",
+        "callee": "U8P_BGATE::setAvatarInStasis",
+        "purpose": "Freeze player input/action at the start of the endgame cinematic (called with 1).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BGATE::gotHit",
+        "callee": "U8P_BGATE::playSFX",
+        "purpose": "Play cinematic/impact sound effects during hit/destroy/endgame flows.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BGATE::gotHit",
+        "callee": "spawn",
+        "purpose": "Spawn U8P_BGATE::01CE (animation helper) or process LightningBolt depending on path.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BGATE::gotHit",
+        "callee": "U8P_BGATE::process FadeToWhite",
+        "purpose": "Perform a fade-to-white transition as part of the endgame cinematic.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BGATE::gotHit",
+        "callee": "U8P_BGATE::musicStop",
+        "purpose": "Stop background music to prepare for cinematic/endgame music or silence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BGATE::gotHit",
+        "callee": "U8P_BGATE::process FadeToBlack",
+        "purpose": "Perform a fade-to-black transition during the cinematic sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BGATE::gotHit",
+        "callee": "Npc::setDead",
+        "purpose": "Mark an NPC as dead as part of the cinematic narrative actions.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BGATE::gotHit",
+        "callee": "Camera::setCenterOn",
+        "purpose": "Center camera on a target to frame the endgame cinematic.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BGATE::gotHit",
+        "callee": "Camera::move_to",
+        "purpose": "Move the camera to a target position/parameters for cinematic choreography.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BGATE::gotHit",
+        "callee": "U8P_BGATE::playEndgame",
+        "purpose": "Trigger endgame music/sequence after camera and visual setup.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BGATE::gotHit",
+        "callee": "Item::destroy",
+        "purpose": "Remove the gate from the world when resetRef indicates no endgame path.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BGATE::01CE",
+        "callee": "Item::setFrame",
+        "purpose": "Set the gate's animation/frame index for each step of the cinematic animation.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": [
+      {
+        "name": "yojustchill",
+        "likely_effect": "Set to 1 during the endgame cinematic to lock/mark cinematic state and likely suppress normal input/behavior.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_BGATE::look",
+    "behavior_summary_one_liner": "Provides the gameplay behavior for the Black Gate object: a simple 'U8P_BGATE::look' (examine) handler and a hit/impact handler that either knocks the gate back, destroys it with effects, or triggers an endgame cinematic sequence.",
+    "external_call_count": 17,
+    "flag_read_count": 0,
+    "flag_write_count": 1
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

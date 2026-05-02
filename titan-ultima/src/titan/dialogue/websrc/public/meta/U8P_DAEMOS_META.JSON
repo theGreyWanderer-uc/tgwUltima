@@ -1,0 +1,119 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_DAEMOS.json",
+  "file": "U8P_DAEMOS",
+  "behavior_summary": [
+    "This script is a thin event-dispatcher for the Daemos NPC: on U8P_DAEMOS::look, use, enterFastArea, leaveFastArea and cast events it prepares a small event/context object, marks the target to avoid normal processing (process-exclude), pushes the caller pid and/or a name string, and spawns specialized handlers to perform the real game logic.",
+    "Look and Use delegate to SORCERER handlers (dialog/inspection/interaction) with the string 'Daemos' and the triggering pid; enterFastArea/leaveFastArea delegate proximity reactions to SORCERER handlers without the name string; cast forwards a spell id to the SPELCMBT subsystem to handle spells/combat.",
+    "After spawning a handler the script consumes the spawn return, evaluates it with an 'implies' test and then suspends — indicating it yields to the spawned process and conditionally influences follow-up flow based on the handler's return value.",
+    "No global flags are read or written by these handlers in this excerpt; all substantive behavior is delegated to external modules (SORCERER, SPELCMBT)."
+  ],
+  "notable_control_flow": [
+    "Common pattern across handlers: set info/context and process-exclude -> push pid (and push name for U8P_DAEMOS::look/use) -> spawn external handler -> free pushed string (when applicable) -> check spawn return (retval) with 'implies' -> pop result into temp -> suspend/return.",
+    "Delegation by spawn is the primary control mechanism: spawned handlers in other subsystems implement the gameplay responses; this script mainly marshals parameters and yields.",
+    "The 'implies' check on the spawn return suggests the spawned handler's result can gate or signal something to the caller, but the local script does not implement detailed branching beyond the implied test and suspend."
+  ],
+  "open_questions": [
+    "What exact info id/value is set by the 'set info' step and what precise engine semantics 'process-exclude' applies here (the disassembly shows the operation but not its game-meaning).",
+    "Which PID is passed in practice (player avatar, last speaker, or calling process) — stack usage implies a caller pid but the source is inferred from conventions rather than explicit naming.",
+    "What precise meanings and allowed values are encoded in the spawn return (retval) and how other systems react to the 'implies' result — the script reads and tests it but does not implement the reaction itself.",
+    "Are there any side effects in game state (quests, global flags) performed by the spawned SORCERER/SPELCMBT handlers that are not visible here?"
+  ],
+  "main_function": {
+    "name": "U8P_DAEMOS::look",
+    "execution_form": "process",
+    "purpose": "Handle the 'U8P_DAEMOS::look' (examine) event for the Daemos NPC by preparing context, pushing the caller pid and the name string 'Daemos', and delegating the actual inspection/dialog behavior to a SORCERER handler via spawn; then evaluate the handler's return and suspend.",
+    "entry_conditions": [
+      "Event 0 (U8P_DAEMOS::look) — triggered when a player/actor looks at or examines Daemos"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_DAEMOS::look",
+      "kind": "main",
+      "role": "Dispatch 'U8P_DAEMOS::look' event for Daemos: prepare context, push pid + 'Daemos' string, spawn SORCERER::039C to perform the behavior.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DAEMOS::use",
+      "kind": "helper",
+      "role": "Dispatch 'use' event similarly to U8P_DAEMOS::look: prepare context, push pid + 'Daemos', spawn SORCERER::05EC for use/interaction handling.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DAEMOS::enterFastArea",
+      "kind": "helper",
+      "role": "Handle fast-area entry by preparing context, pushing caller pid and spawning SORCERER::258C to run proximity/enter behavior.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DAEMOS::leaveFastArea",
+      "kind": "helper",
+      "role": "Handle fast-area exit by preparing context, pushing caller pid and spawning SORCERER::25D2 to run proximity/exit behavior.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DAEMOS::cast",
+      "kind": "helper",
+      "role": "Handle spell-cast events: forward the spell id (uword) and context to SPELCMBT::084D to process spells/combat.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_DAEMOS::look",
+        "callee": "SORCERER::039C",
+        "purpose": "Perform the actual U8P_DAEMOS::look/inspection/dialog/AI response for the sorcerer-type NPC 'Daemos'. Receives prepared context, caller pid and the string 'Daemos'.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMOS::use",
+        "callee": "SORCERER::05EC",
+        "purpose": "Perform the use/interaction behavior for the sorcerer NPC (dialog or item interaction). Receives prepared context, caller pid and the string 'Daemos'.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMOS::enterFastArea",
+        "callee": "SORCERER::258C",
+        "purpose": "Handle area-entry/proximity reaction for the sorcerer NPC. Receives prepared context and caller pid.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMOS::leaveFastArea",
+        "callee": "SORCERER::25D2",
+        "purpose": "Handle area-exit/proximity reaction for the sorcerer NPC. Receives prepared context and caller pid.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMOS::cast",
+        "callee": "SPELCMBT::084D",
+        "purpose": "Process a spell-cast action by forwarding the spell id and event/context to the spell/combat subsystem.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_DAEMOS::look",
+    "behavior_summary_one_liner": "This script is a thin event-dispatcher for the Daemos NPC: on U8P_DAEMOS::look, use, enterFastArea, leaveFastArea and cast events it prepares a small event/context object, marks the target to avoid normal processing (process-exclude), pushes the caller pid and/or a name string, and spawns specialized handlers to perform the real game logic.",
+    "external_call_count": 5,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

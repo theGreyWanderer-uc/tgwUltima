@@ -1,0 +1,87 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_INTERG.json",
+  "file": "U8P_INTERG",
+  "behavior_summary": [
+    "INTERG::hatch is the handler for a 'U8P_INTERG::hatch' fast-area event. It acts as a guarded trigger that may initiate an item-use action for a target process and then yield/suspend.",
+    "On entry it checks three global flags (benticCacked, interrogEW, devonInRule) and returns immediately if the specific combination benticCacked == 1 AND interrogEW == 0 AND devonInRule == 0 holds. This combination acts as a guard preventing the U8P_INTERG::hatch action.",
+    "If the guard does not match, the handler pushes a pid and invokes Item::use with a small action code (0x3B) and a stack pointer for extra args/results. It processes the returned value (an 'implies' operation and pop) and then suspends, indicating the use was initiated and the script yields."
+  ],
+  "notable_control_flow": [
+    "Early-exit guard: immediate return when (benticCacked == 1) AND (interrogEW == 0) AND (devonInRule == 0).",
+    "If guard fails, call to external Item::use is performed with parameters (pid, 0x3B, addr), the return value is post-processed (implies/pop), and the function suspends.",
+    "No globals are written by this handler; it is primarily a conditional trigger that delegates the action to Item::use."
+  ],
+  "open_questions": [
+    "What in-game meaning do the globals benticCacked, interrogEW, and devonInRule encode (quest states, one-time guards, or mode flags)?",
+    "What exactly is the action code 0x3B passed to Item::use — a specific U8P_INTERG::hatch animation, spawn, or scripted interaction?",
+    "Is BP+06h the PID of the triggering actor, the item instance that should perform the use, or a context object? The disassembly implies a pid is pushed but the exact origin is inferred.",
+    "Is the handler invoked on area-enter only (enterFastArea) or also on area-leave; i.e., does Event 7 represent a single U8P_INTERG::hatch moment or repeated triggers?"
+  ],
+  "main_function": {
+    "name": "U8P_INTERG::hatch",
+    "execution_form": "process",
+    "purpose": "Serve as the 'U8P_INTERG::hatch' fast-area event handler: check guard flags and, unless blocked, request an Item::use action (action code 0x3B) for a target pid, process the return value, and suspend.",
+    "entry_conditions": [
+      "Event 7 (fast-area 'U8P_INTERG::hatch' trigger) — invoked when the associated area/event fires.",
+      "Runs only when the early-exit guard (benticCacked == 1 && interrogEW == 0 && devonInRule == 0) is false; otherwise it returns immediately."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_INTERG::hatch",
+      "kind": "main",
+      "role": "U8P_INTERG::hatch event handler for the INTERG object; guards and delegates a U8P_INTERG::hatch action to Item::use",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_INTERG::hatch",
+        "callee": "Item::use",
+        "purpose": "Trigger an item-use/action for a target process/pid using action code 0x3B and an address for extra args/results. Used to perform the U8P_INTERG::hatch-related behavior when guard does not block it.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "benticCacked",
+        "likely_effect": "Part of a conjunctive guard; when == 1 contributes to blocking the U8P_INTERG::hatch action. Appears to be a one-bit/boolean state used as a guard.",
+        "confidence": "high"
+      },
+      {
+        "name": "interrogEW",
+        "likely_effect": "Part of the same guard; checked for == 0 to contribute to blocking the U8P_INTERG::hatch action. Likely encodes a complementary state to benticCacked.",
+        "confidence": "high"
+      },
+      {
+        "name": "devonInRule",
+        "likely_effect": "Also part of the guard; checked for == 0 as part of the conjunction that prevents the U8P_INTERG::hatch action when combined with benticCacked.",
+        "confidence": "high"
+      }
+    ],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "guard",
+    "action",
+    "suspend"
+  ],
+  "quick_facts": {
+    "main_function": "INTERG::hatch",
+    "behavior_summary_one_liner": "INTERG::hatch is the handler for a 'U8P_INTERG::hatch' fast-area event. It acts as a guarded trigger that may initiate an item-use action for a target process and then yield/suspend.",
+    "external_call_count": 1,
+    "flag_read_count": 3,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

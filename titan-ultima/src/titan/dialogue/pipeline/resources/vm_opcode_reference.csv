@@ -1,0 +1,106 @@
+Opcode,Params,Description
+0x00,1,pop 16 bit int and assign LS 8 bit int into bp+xx
+0x01,1,pop 16 bit int into bp+xx
+0x02,1,pop 32 bit int into bp+xx
+0x03,2,pop yy bytes into bp+xx
+0x08,0,pop 32bits into result register
+0x09,3,pop yy bytes into an element of list bp+xx (or slist if zz set)
+0x0A,1,push sign-extended 8 bit xx onto the stack as 16 bit
+0x0B,1,push 16 bit xxxx onto the stack
+0x0C,1,push 32 bit xxxxxxxx onto the stack
+0x0D,2,push string (yy ... yy) of length xx xx onto the stack
+0x0E,2,pop yy values of size xx and push the resulting list
+0x0F,2,intrinsic call (xx arg bytes + func num yyyy)
+0x11,2,call the function at offset yyyy of class xxxx
+0x12,0,pop 16bits into temp register
+0x13,0,pop 32bits into temp register
+0x14,0,16 bit add
+0x15,0,32 bit add
+0x16,0,pop two strings from the stack and push the concatenation
+0x17,0,pop two lists from the stack and push the sum of the lists
+0x19,1,add two stringlists removing duplicates (union slist)
+0x1A,1,substract string list (remove slist)
+0x1B,1,pop two lists from the stack and remove the 2nd from the 1st
+0x1C,0,subtract two 16 bit integers
+0x1D,0,subtract two 32 bit integers
+0x1E,0,multiply two 16 bit integers
+0x1F,0,multiply two 32 bit integers
+0x20,0,divide two 16 bit integers
+0x21,0,divide two 32 bit integers
+0x22,0,16 bit mod
+0x23,0,32 bit mod
+0x24,0,16 bit cmp (equal)
+0x25,0,32 bit cmp (equal)
+0x26,0,compare two strings (delete strings)
+0x28,0,16 bit less-than
+0x29,0,32 bit less-than
+0x2A,0,16 bit less-or-equal
+0x2B,0,32 bit less-or-equal
+0x2C,0,16 bit greater-than
+0x2D,0,32 bit greater-than
+0x2E,0,16 bit greater-or-equal
+0x2F,0,32 bit greater-or-equal
+0x30,0,16 bit boolean not
+0x31,0,32 bit boolean not
+0x32,0,16 bit boolean and
+0x33,0,32 bit boolean and
+0x34,0,16 bit boolean or
+0x35,0,32 bit boolean or
+0x36,0,16 bit not-equal
+0x37,0,32 bit not-equal
+0x38,2,is element (size xx) in list? (or slist if yy is true)
+0x39,0,16 bit bitwise and
+0x3A,0,16 bit bitwise or
+0x3B,0,16 bit bitwise not
+0x3C,0,16 bit left shift
+0x3D,0,16 bit right shift
+0x3E,1,push the value of the unsigned 8 bit local var xx as 16 bit int
+0x3F,1,push the value of the 16 bit local var xx
+0x40,1,push the value of the 32 bit local var xx
+0x41,1,push the string local var xx (duplicating the string)
+0x42,2,push the list (with yy size elements) at BP+xx (duplicating)
+0x43,1,push the stringlist local var xx (duplicating list and strings)
+0x44,2,push element from list indexed by last element (xx=size yy=slist flag)
+0x45,2,push huge of size yy from BP+xx
+0x4B,1,push 32 bit pointer address of BP+XX
+0x4C,1,indirect push - pops 32bit ptr and pushes xx bytes from ptr location
+0x4D,1,indirect pop - pops 32bit ptr and pops xx bytes into ptr location
+0x4E,2,push global xxxx size yy bits
+0x4F,2,pop value into global xxxx size yy bits
+0x50,0,return from function
+0x51,1,relative jump to xxxx if false (jne)
+0x52,1,relative jump to xxxx (jmp)
+0x53,0,suspend
+0x54,1,implies - link two processes (wait for process)
+0x57,4,spawn process function yyyy in class xxxx (aa arg bytes tt this size)
+0x58,5,spawn inline process function yyyy in class xxxx at offset zzzz
+0x59,0,push process id
+0x5A,1,init function - sets xx bytes on stack to 0 (local var size)
+0x5B,0,unhandled opcode (debugging)
+0x5C,0,unhandled opcode (debugging)
+0x5D,0,push 8 bit value returned from function call (push temp8 as 16 bit)
+0x5E,0,push 16 bit value returned from function call (push temp16)
+0x5F,0,push 32 bit value returned from function call (push temp32)
+0x60,0,convert 16-bit to 32-bit int (sign extend)
+0x61,0,convert 32-bit to 16-bit int
+0x62,1,free the string in var BP+xx
+0x63,1,free the stringlist in var BP+xx
+0x64,1,free the list in var BP+xx
+0x65,1,free the string at SP+xx
+0x66,1,free the list at SP+xx
+0x67,1,free the string list at SP+xx
+0x69,1,push the string in var BP+xx as 32 bit pointer (str to ptr)
+0x6B,0,pop a string and push 32 bit pointer to string (str to ptr)
+0x6C,2,copy (string/slist/list) in BP+xx to process (xx index yy type)
+0x6D,0,push 32bit result of process (process result)
+0x6E,1,substract xx from stack pointer (move sp)
+0x6F,1,push 32 pointer address of SP-xx
+0x70,3,loop something - stores current object in var xx (yy script size zz type)
+0x73,0,next loop object - pushes false if end reached (loopnext)
+0x74,1,add xx to the current loopscript
+0x75,3,for each list iteration (xx var yy size zzzz jump offset)
+0x76,3,for each slist iteration (xx var yy size zzzz jump offset)
+0x77,0,set info - assigns item number and ProcessType
+0x78,0,process exclude - exclusive access to (object type)
+0x79,0,end of function (shouldn't happen)
+0x7A,0,end of function (shouldn't happen)

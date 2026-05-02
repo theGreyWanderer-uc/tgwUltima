@@ -1,0 +1,190 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_LITZAPEW.json",
+  "file": "U8P_LITZAPEW",
+  "behavior_summary": [
+    "When an emitter item enters a fast-trigger area, U8P_LITZAPEW::enterFastArea marks the item (info/process-exclude), sets its visible frame to 0, and immediately spawns an asynchronous worker (U8P_LITZAPEW::00BC) to drive ongoing visual/sound effects and nearby-NPC interactions.",
+    "The spawned worker (U8P_LITZAPEW::00BC) repeatedly spawns short-lived effect processes (FREE::1C19 variants), randomizes and updates the emitter's animation/frame using urandom + Item::setFrame, suspends between spawns, and launches a short secondary animation worker (U8P_LITZAPEW::01C3) for more complex frame/sound sequences.",
+    "U8P_LITZAPEW::00BC also scans nearby map cells: for each overlapping alive NPC it computes a randomized direction (Npc::getDir + urandom) and invokes METHOD::0080 with the emitter and target cell to apply a directional interaction (likely knockback/orientation/movement).",
+    "U8P_LITZAPEW::01C3 performs a short timed animation: plays a sound (playSFX), cycles frames (3..5) with interleaved FREE::1C19 spawns, then sets a final frame sequence (2,1,0) with pauses and effect spawns before ending.",
+    "When the actor/item leaves the fast area, U8P_LITZAPEW::leaveFastArea clears the per-item state (info/process-exclude semantics) and calls FREE::2A56(item, 0x06) to perform cleanup/teardown for the effect."
+  ],
+  "notable_control_flow": [
+    "U8P_LITZAPEW::enterFastArea returns immediately after setting item state and spawning U8P_LITZAPEW::00BC; all ongoing behavior runs in spawned processes (asynchronous/process-based flow).",
+    "U8P_LITZAPEW::00BC contains a repeating spawn-and-wait loop: spawn FREE::1C19 effects, randomize frame, suspend, and occasionally spawn the secondary worker U8P_LITZAPEW::01C3.",
+    "U8P_LITZAPEW::00BC iterates over nearby map offsets/cells and conditionally applies METHOD::0080 to overlapping, living NPCs (Item::overlaps, Item::isNpc, Npc::isDead checks).",
+    "Randomization (urandom) is used for timing, frame selection, and direction offsets, producing non-deterministic visuals/interaction directions."
+  ],
+  "open_questions": [
+    "Exact semantics of FREE::1C19: spawned repeatedly as a short-lived effect; is it a visual particle, projectile, or damage-dealing object? (inferred, not certain).",
+    "Precise effect of METHOD::0080 on NPCs: patterns indicate movement/knockback or orientation change, but exact mechanics (damage vs. displacement vs. facing) are not explicit.",
+    "Meaning and lifetime of the per-item 'info' and process-exclude flags set/cleared by the script (which info id is used in some places, e.g., 0x210 observed elsewhere) and whether leaveFastArea always cancels all spawned workers reliably.",
+    "Under what conditions the primary worker U8P_LITZAPEW::00BC terminates: is it explicitly killed by the cleanup call (FREE::2A56) on leave, or does it self-terminate on internal criteria?",
+    "Precise parameter semantics for FREE::2A56(item, 0x06): inferred to be cleanup, but the meaning of code 0x06 is uncertain."
+  ],
+  "main_function": {
+    "name": "U8P_LITZAPEW::enterFastArea",
+    "execution_form": "process",
+    "purpose": "Initialize an emitter item when an actor enters its fast-trigger region: set per-item state, set initial animation frame, and spawn an asynchronous worker to perform repeated visual/sound effects and interact with nearby NPCs.",
+    "entry_conditions": [
+      "Fast-area entry event for the emitter item (U8P_LITZAPEW::enterFastArea).",
+      "The triggering actor/item instance is passed as the function parameter (item at BP+06h)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_LITZAPEW::enterFastArea",
+      "kind": "main",
+      "role": "Fast-area entry handler that marks the item, sets its initial frame (0), and spawns the primary worker U8P_LITZAPEW::00BC to run ongoing effects asynchronously.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_LITZAPEW::leaveFastArea",
+      "kind": "helper",
+      "role": "Fast-area exit handler that clears per-item state and invokes external cleanup FREE::2A56(item, 0x06).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_LITZAPEW::00BC",
+      "kind": "helper",
+      "role": "Primary spawned worker: drives repeated effect spawns (FREE::1C19), randomizes/sets item frames, scans nearby cells and applies METHOD::0080 to alive NPCs with randomized directions, and occasionally spawns the secondary animation helper U8P_LITZAPEW::01C3.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_LITZAPEW::01C3",
+      "kind": "helper",
+      "role": "Secondary spawned helper: short animation and sound sequence — plays SFX, cycles frames (3..5) with interleaved FREE::1C19 spawns, then transitions frames back to idle before returning.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_LITZAPEW::enterFastArea",
+        "callee": "U8P_LITZAPEW::00BC",
+        "purpose": "Spawn the asynchronous worker that performs the ongoing visual/effect logic and NPC interactions.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LITZAPEW::00BC",
+        "callee": "U8P_LITZAPEW::01C3",
+        "purpose": "Spawn a short secondary animation worker to run a frame/sound sequence concurrently with the primary loop.",
+        "confidence": "high"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_LITZAPEW::enterFastArea",
+        "callee": "Item::setFrame",
+        "purpose": "Set the emitter item's visible animation frame to 0 on initialization.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LITZAPEW::enterFastArea",
+        "callee": "spawn",
+        "purpose": "Spawn the primary worker (U8P_LITZAPEW::00BC) and receive its pid for bookkeeping.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LITZAPEW::leaveFastArea",
+        "callee": "FREE::2A56",
+        "purpose": "Invoke external cleanup/free routine for the item with a small code (0x06) when the item leaves the fast area.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LITZAPEW::00BC",
+        "callee": "spawn",
+        "purpose": "Repeatedly create FREE::1C19 effect processes (variants controlled by a byte argument) as part of the visual/effect loop.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LITZAPEW::00BC",
+        "callee": "Item::setFrame",
+        "purpose": "Update the emitter's visible frame to randomized values for animation variability.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LITZAPEW::00BC",
+        "callee": "urandom",
+        "purpose": "Produce random values used to vary timing, frame offsets, and NPC direction offsets.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LITZAPEW::00BC",
+        "callee": "Item::overlaps",
+        "purpose": "Test whether the emitter overlaps specific nearby map cells when searching for affected entities.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LITZAPEW::00BC",
+        "callee": "Item::isNpc",
+        "purpose": "Determine if an overlapping item is an NPC before applying NPC-specific logic.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LITZAPEW::00BC",
+        "callee": "Npc::isDead",
+        "purpose": "Skip dead NPCs when applying interactions.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LITZAPEW::00BC",
+        "callee": "Npc::getDir",
+        "purpose": "Obtain an NPC's current direction as a base for a randomized direction offset.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LITZAPEW::00BC",
+        "callee": "METHOD::0080",
+        "purpose": "Apply a directional interaction (likely knockback/orientation/movement) to a nearby NPC using the emitter, target cell, and computed direction.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LITZAPEW::01C3",
+        "callee": "U8P_LITZAPEW::playSFX",
+        "purpose": "Play a sound effect at the emitter as part of the short animation sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LITZAPEW::01C3",
+        "callee": "spawn",
+        "purpose": "Spawn additional FREE::1C19 effect processes between animation frame changes to enrich visuals/timing.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LITZAPEW::01C3",
+        "callee": "Item::setFrame",
+        "purpose": "Cycle the emitter's frames (3..5 then 2,1,0) during the short animation helper.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LITZAPEW::leaveFastArea",
+        "callee": "U8P_LITZAPEW::set info / process exclude",
+        "purpose": "Clear or reapply per-item info and process-exclude state as part of cleanup (inferred engine ops).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_LITZAPEW::enterFastArea",
+    "behavior_summary_one_liner": "When an emitter item enters a fast-trigger area, U8P_LITZAPEW::enterFastArea marks the item (info/process-exclude), sets its visible frame to 0, and immediately spawns an asynchronous worker (U8P_LITZAPEW::00BC) to drive ongoing visual/sound effects and nearby-NPC interactions.",
+    "external_call_count": 15,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_FIREPLAC.json",
+  "file": "U8P_FIREPLAC",
+  "behavior_summary": [
+    "Handles the player's 'U8P_FIREPLAC::look' (examine) interaction with the fireplace object. When the U8P_FIREPLAC::look event runs, the script prepares the required context and invokes the engine/item text routine so the player sees the item's short label/description.",
+    "Specifically, the handler builds/allocates the literal string \"fireplace \", pushes the target item/process and viewer context, and calls Item::bark to produce the visible text for the fireplace.",
+    "The return from Item::bark is captured and then used as an operand in a subsequent 'implies' control operation (behavior inferred). After that the handler suspends/returns without modifying any global flags."
+  ],
+  "notable_control_flow": [
+    "Entry on the 'U8P_FIREPLAC::look' event: push context/info tokens and the target item pointer (BP+06) before invoking text display.",
+    "Call to external Item::bark with parameters (item_ptr, \"fireplace \") and capture of its return value.",
+    "Apply an 'implies' opcode using the Item::bark return value (inferred control/conditional behavior), pop a small temporary, then suspend/return."
+  ],
+  "open_questions": [
+    "What exact semantics does the 'implies' opcode have here (e.g., conditional branching, permission propagation, side-effect gating)? The disassembly shows it is used with the Item::bark return but the runtime effect is not explicit.",
+    "Does the Item::bark return value influence any game-visible state beyond the local implies/pop sequence (no globals observed, but downstream effects are unknown)?",
+    "Are there any higher-level event subscriptions (fast-area enter/leave or additional events) that also target this same object/script beyond the observed U8P_FIREPLAC::look handler?",
+    "Is the pushed context/info token used to set object state or to exclude processing for the duration of the bark call (inferred from opcode sequence but not explicit)?"
+  ],
+  "main_function": {
+    "name": "U8P_FIREPLAC::look",
+    "execution_form": "process",
+    "purpose": "Produce the fireplace's short label/description for the player when they examine the fireplace by invoking the item bark/display routine with the literal string \"fireplace \".",
+    "entry_conditions": [
+      "Event 0 (U8P_FIREPLAC::look) — triggered when the Avatar or relevant actor examines/looks at the fireplace object."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_FIREPLAC::look",
+      "kind": "main",
+      "role": "Event handler for the object's 'U8P_FIREPLAC::look' (examine) interaction; prepares context, calls Item::bark, and handles its return.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine called to emit/display a short label or message (here used to show \"fireplace \").",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_FIREPLAC::look",
+        "callee": "Item::bark",
+        "purpose": "Display/emit the item's short label/description to the player; invoked with the item pointer and the literal string \"fireplace \".",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_FIREPLAC::FIREPLAC::look",
+    "behavior_summary_one_liner": "Handles the player's 'U8P_FIREPLAC::look' (examine) interaction with the fireplace object. When the U8P_FIREPLAC::look event runs, the script prepares the required context and invokes the engine/item text routine so the player sees the item's short label/description.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

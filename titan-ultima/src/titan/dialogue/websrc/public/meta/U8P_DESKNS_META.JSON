@@ -1,0 +1,116 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_DESKNS.json",
+  "file": "U8P_DESKNS",
+  "behavior_summary": [
+    "DESKNS::look: When an actor examines the desk (U8P_DESKNS::look event), the desk emits a short descriptive message by calling Item::bark with the literal string \"desk \". The routine then performs a small cleanup/implication sequence before returning.",
+    "DESKNS::use: When the desk is used, the script reads the item's status word (Item::getStatus) and tests bit 0x0100. If the bit is set it opens the desk's UI/gump with id 0x0D (Item::openGump); if the bit is clear it closes the gump (Item::closeGump)."
+  ],
+  "notable_control_flow": [
+    "DESKNS::look is a simple linear handler: set up, call Item::bark(item, \"desk \"), free the string, then run an implies/pop/suspend-like sequence before return.",
+    "DESKNS::use performs a branch on a single status bit (0x0100) read from Item::getStatus(item) to choose between Item::openGump(item, 0x0D) and Item::closeGump(item).",
+    "No global flags are read or written by these handlers in the canonical extraction; behavior is localized to the item instance and UI operations."
+  ],
+  "open_questions": [
+    "What is the semantic meaning of status bit 0x0100 on the desk's status word (e.g., 'is open', 'should show UI', or some other mode)?",
+    "Which process or player PID is targeted by Item::bark in this context (inferred to be the viewer/item's process but not explicitly annotated)?",
+    "What exact effect does the implies/pop/suspend sequence after Item::bark have in engine terms for this item (control-flow suspension, interrupt handling, or a no-op cleanup)?"
+  ],
+  "main_function": {
+    "name": "U8P_DESKNS::look",
+    "execution_form": "process",
+    "purpose": "Provide the descriptive text shown when a player/actor examines the desk and perform minimal cleanup/control sequencing afterward.",
+    "entry_conditions": [
+      "Event 0 — 'U8P_DESKNS::look' (actor inspects or 'looks at' the desk item or its trigger area)"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_DESKNS::look",
+      "kind": "main",
+      "role": "Examine handler that barks the static description string for the desk.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DESKNS::use",
+      "kind": "helper",
+      "role": "Use handler that toggles or controls the desk's gump/UI based on a status bit.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine to emit a short text message from the item to the player/process (used by U8P_DESKNS::look).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getStatus",
+      "kind": "extern",
+      "role": "Engine/item routine to read the item's status word used for conditional logic in use.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::openGump",
+      "kind": "extern",
+      "role": "Engine routine to open a UI/gump for the item with a supplied id (used with id 0x0D).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::closeGump",
+      "kind": "extern",
+      "role": "Engine routine to close the item's UI/gump.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_DESKNS::look",
+        "callee": "Item::bark",
+        "purpose": "Make the desk produce the short descriptive string \"desk \" directed at the examining process/player.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DESKNS::use",
+        "callee": "Item::getStatus",
+        "purpose": "Read the desk's status word to test bit 0x0100 and decide UI action.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DESKNS::use",
+        "callee": "Item::openGump",
+        "purpose": "Open the desk's gump/UI with id 0x0D when the tested status bit indicates the open path.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DESKNS::use",
+        "callee": "Item::closeGump",
+        "purpose": "Close the desk's gump/UI when the tested status bit indicates the close path.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "DESKNS::look",
+    "behavior_summary_one_liner": "DESKNS::look: When an actor examines the desk (U8P_DESKNS::look event), the desk emits a short descriptive message by calling Item::bark with the literal string \"desk \". The routine then performs a small cleanup/implication sequence before returning.",
+    "external_call_count": 4,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

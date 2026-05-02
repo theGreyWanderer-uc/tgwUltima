@@ -1,0 +1,75 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_MOREBROK.json",
+  "file": "U8P_MOREBROK",
+  "behavior_summary": [
+    "MOREBROK::look is a short 'U8P_MOREBROK::look' (Event 0) handler for the MOREBROK item. When an actor/player examines the object it: sets object/info state to mark the lookup and exclude normal processing, constructs a transient string \"debris \", calls Item::bark on the item to present that string to the viewer, frees the transient string, inspects the bark call's return via an implies/pop sequence, and then suspends/returns.",
+    "The visible gameplay effect is that examining the MOREBROK object causes the game to display the description text \"debris \" (via the item's bark mechanism).",
+    "No global flags are read or written by this handler (it only manipulates the item/process state and the transient message)."
+  ],
+  "notable_control_flow": [
+    "Entry on Event 0 (U8P_MOREBROK::look) triggers immediate setup: set object info and apply process-exclude semantics so the item is prepared/excluded from other processing before messaging.",
+    "A transient string literal \"debris \" is allocated/pushed and passed to Item::bark with the item instance and the viewer pid.",
+    "After Item::bark returns, the return value is pushed and evaluated with an implies/pop pattern (the script consumes that result) before suspending/returning.",
+    "The transient string is freed after the bark call (cleanup of allocated message buffer)."
+  ],
+  "open_questions": [
+    "What exact engine-info id(s) are set by the 'set info' opcodes used here, and what concrete gameplay state do they represent for MOREBROK (the script only shows that info/state is set and the process is excluded)?",
+    "What does the implies/pop evaluation of Item::bark's return value influence in higher-level logic (the value is inspected but not obviously used within this short handler)?",
+    "Are there any conditional effects from the bark return that affect subsequent scripts or global state elsewhere in the game (not visible in this single-handler excerpt)?"
+  ],
+  "main_function": {
+    "name": "U8P_MOREBROK::look",
+    "execution_form": "process",
+    "purpose": "Handle the player's examine/U8P_MOREBROK::look interaction by preparing the item state and emitting the short description \"debris \" to the viewer via Item::bark.",
+    "entry_conditions": [
+      "Event 0 (U8P_MOREBROK::look) — invoked when an actor/player looks at or inspects the MOREBROK object"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_MOREBROK::look",
+      "kind": "main",
+      "role": "Event handler for the item's 'U8P_MOREBROK::look' (examine) interaction; prepares object state and issues a bark/description.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine used to display or emit a short text message from an item/process to a player/process (used here to show the string \"debris \").",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_MOREBROK::look",
+        "callee": "Item::bark",
+        "purpose": "Display/emit the item's short description text (passes the item instance, a transient string \"debris \", and the viewer pid).",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "MOREBROK::look",
+    "behavior_summary_one_liner": "MOREBROK::look is a short 'U8P_MOREBROK::look' (Event 0) handler for the MOREBROK item. When an actor/player examines the object it: sets object/info state to mark the lookup and exclude normal processing, constructs a transient string \"debris \", calls Item::bark on the item to present that string to the viewer, frees the transient string, inspects the bark call's return via an implies/pop sequence, and then suspends/returns.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

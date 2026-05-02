@@ -1,0 +1,136 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_LOGO.json",
+  "file": "U8P_LOGO",
+  "behavior_summary": [
+    "Provides examine ('U8P_LOGO::look') and use behaviors for a logo/item. When examined, the script chooses a short descriptive prefix based on the item's frame (variant) and asks the item to 'bark' that string to the viewer.",
+    "When used, the script sequences spawned effects oriented to the actor and two short dialog barks from the item. It spawns a general effect, queries the actor's facing direction, spawns a direction-dependent effect, barks a first line, spawns a second direction-dependent effect, then barks a concluding line.",
+    "Frame thresholds partition descriptors into three categories: 'magical sphere ', 'magical tetrahedron ', and 'magical cube '."
+  ],
+  "notable_control_flow": [
+    "U8P_LOGO::LOGO::look calls Item::getFrame(item) and branches on the returned frame value to pick one of three descriptor strings, then calls Item::bark(item, string) and frees the temporary string.",
+    "U8P_LOGO::LOGO::use runs a sequence of spawn and wait/suspend operations interleaved with calls to Npc::getDir(pid) to obtain orientation and Item::bark(item, string) for two dialog lines.",
+    "Use-handler relies on suspension points (waits) between spawns and barks to sequence effects and dialog, implying temporal ordering rather than instantaneous multi-spawn."
+  ],
+  "open_questions": [
+    "Exact semantics and visual/functional effect of spawn METHOD::091C and METHOD::15E7 (inferred to be visual/timed effects but implementation details are unknown).",
+    "Precise meaning of the numeric frame thresholds (why <6, 6–10, >=11) and whether they map to art assets or gameplay tiers.",
+    "The callback/addr parameters passed to spawn calls are visible only as addresses/values in the disassembly — their runtime behavior and lifetime are not fully recoverable here.",
+    "Whether LOGO::use is triggered by a specific event code (inferred Event 1) or other interaction types in the engine's event dispatcher."
+  ],
+  "main_function": {
+    "name": "U8P_LOGO::look",
+    "execution_form": "process",
+    "purpose": "Handle the item's examine/U8P_LOGO::look action: determine the item's visual variant (frame) and present a short descriptive prefix by invoking Item::bark.",
+    "entry_conditions": [
+      "Event 0: item is 'looked at' / examined (actor triggered the item's U8P_LOGO::look event)"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_LOGO::look",
+      "kind": "main",
+      "role": "Examine handler that selects a descriptor based on Item::getFrame and calls Item::bark with that string.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_LOGO::use",
+      "kind": "helper",
+      "role": "Use handler that spawns effects (METHOD::091C, METHOD::15E7), queries actor direction (Npc::getDir), and emits two dialog barks via Item::bark while sequencing waits.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getFrame",
+      "kind": "extern",
+      "role": "Return the item's frame/variant index so logic can pick the descriptor.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Emit or queue a text/dialog line associated with the item (used for descriptors and spoken lines).",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::getDir",
+      "kind": "extern",
+      "role": "Return facing direction for an actor/pid so spawned effects can be oriented.",
+      "confidence": "high"
+    },
+    {
+      "name": "METHOD::091C",
+      "kind": "extern",
+      "role": "Spawned engine routine; likely creates a timed or attachment effect tied to pid (exact effect inferred).",
+      "confidence": "medium"
+    },
+    {
+      "name": "METHOD::15E7",
+      "kind": "extern",
+      "role": "Direction-dependent spawn routine called with effect codes (0x31, 0x32); likely draws orientation-specific visual effects.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_LOGO::look",
+        "callee": "Item::getFrame",
+        "purpose": "Retrieve the item's frame/variant index to decide which descriptor string to present.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGO::look",
+        "callee": "Item::bark",
+        "purpose": "Make the item 'speak' the chosen descriptor to the examining actor/process.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGO::use",
+        "callee": "METHOD::091C",
+        "purpose": "Spawn a general effect attached to the actor/pid before directional effects (likely a non-directional visual/timed effect).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LOGO::use",
+        "callee": "Npc::getDir",
+        "purpose": "Get the actor's facing direction so subsequent directional effects can be oriented correctly.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGO::use",
+        "callee": "METHOD::15E7",
+        "purpose": "Spawn a direction-dependent effect using the direction from Npc::getDir and an effect code (called twice with codes 0x31 and 0x32).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LOGO::use",
+        "callee": "Item::bark",
+        "purpose": "Emit two short dialog lines from the item interleaved with effect spawns to convey narrative flavor ('I have not the strength...' and '...but one day I shall!').",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_LOGO::LOGO::look",
+    "behavior_summary_one_liner": "Provides examine ('U8P_LOGO::look') and use behaviors for a logo/item. When examined, the script chooses a short descriptive prefix based on the item's frame (variant) and asks the item to 'bark' that string to the viewer.",
+    "external_call_count": 6,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

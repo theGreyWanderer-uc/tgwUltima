@@ -1,0 +1,228 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_METHOD.json",
+  "file": "U8P_METHOD",
+  "behavior_summary": [
+    "This script primarily provides small method wrappers and utility routines for an in-game item/actor. The principal exported behavior (METHOD::0080) simply forwards hit/damage events into the underlying item implementation (Item::receiveHit).",
+    "Helper routines implement utilities: compute direction to coordinates, present choice prompts to a player/process and wait for a reply, toggle or ensure status bits, update animation frames, and run movement/step decision logic that tests candidate positions with Item::legal_move and issues Item::move when appropriate.",
+    "One helper (METHOD::0676) appears to handle a terminal condition: if a specific status bit and containment condition hold it emits a farewell string (Item::bark/suspend) and spawns a BODYPART process, inferred as a death/dismemberment action."
+  ],
+  "notable_control_flow": [
+    "U8P_METHOD::METHOD::0080 is a straight-through wrapper: push parameters (this, three uword args) plus an implicit byte 0x01, call Item::receiveHit, return immediately (no suspends or loops).",
+    "Several helpers use suspend/wait semantics around Item::ask and around movement checks (movement helpers repeatedly suspend and call Item::legal_move to probe candidate points).",
+    "Movement helpers perform multi-step arithmetic (delta, normalization, div/mod, clamping) and loop until a legal move or failure is found; they use FREE::1C52 as a numeric conversion helper in those calculations.",
+    "State-manipulation helper (METHOD::0113) branches based on Item::getStatus and either calls Item::orStatus or Item::andStatus to set/clear bits."
+  ],
+  "open_questions": [
+    "Exact semantics and full parameter meanings for the movement helpers (METHOD::013E, METHOD::03CD) — e.g., whether the 5th byte parameter is step size, stride, or a direction flag — are inferred but not certain.",
+    "Precise behavior of FREE::1C52: it appears to be a numeric conversion/normalization helper used extensively in movement math, but its exact conversion rules are unknown.",
+    "Whether METHOD::0676 is invoked only on death or also on other detachment/containment transitions (the triggering conditions are inferred from a tested 0x08 status bit and root container check).",
+    "Whether any helper functions are externally exposed as item events (beyond METHOD::0080) or remain internal utility methods called by a larger AI/engine system."
+  ],
+  "main_function": {
+    "name": "U8P_METHOD::0080",
+    "execution_form": "process",
+    "purpose": "Thin wrapper that forwards a received hit/damage event to the item implementation by calling Item::receiveHit with the provided parameters and an implicit byte flag (0x01).",
+    "entry_conditions": [
+      "Called when this method receives a hit/damage event (inferred from its call to Item::receiveHit).",
+      "No fast-area enter/leave markers present; behaves as an event handler wrapper."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_METHOD::0080",
+      "kind": "main",
+      "role": "Forward hit/damage events to Item::receiveHit (thin wrapper).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_METHOD::0094",
+      "kind": "helper",
+      "role": "Compute direction to given coordinates by calling Item::getDirToCoords and returning the result.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_METHOD::00A9",
+      "kind": "helper",
+      "role": "Present a choice list / dialog via Item::ask, suspend to wait for response, process and return the selection string/result.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_METHOD::0113",
+      "kind": "helper",
+      "role": "Toggle/ensure/clear status bits on the item using Item::getStatus then Item::orStatus or Item::andStatus accordingly.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_METHOD::013E",
+      "kind": "helper",
+      "role": "Complex movement/position computation and legality checking routine that probes candidate positions and may call Item::legal_move or Item::move; likely used for NPC/item pathing.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_METHOD::03CD",
+      "kind": "helper",
+      "role": "Variant movement/step routine similar in purpose to METHOD::013E (movement decision and execution).",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_METHOD::0610",
+      "kind": "helper",
+      "role": "Frame/animation updater: inspects Item::getFrame bits and calls Item::setFrame to adjust animation state.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_METHOD::0676",
+      "kind": "helper",
+      "role": "Conditional death/special-state handler: checks a status bit and root container, then barks a farewell message and spawns a BODYPART process (inferred death/dismemberment behavior).",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_METHOD::0080",
+        "callee": "Item::receiveHit",
+        "purpose": "Deliver incoming hit/damage event to the underlying item implementation (parameters forwarded including implicit byte 0x01).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_METHOD::0094",
+        "callee": "Item::getDirToCoords",
+        "purpose": "Return direction from this item to supplied coordinates.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_METHOD::00A9",
+        "callee": "Item::ask",
+        "purpose": "Present a slist/choices to a process/player and suspend to wait for the response; returns a string/result.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_METHOD::0113",
+        "callee": "Item::getStatus",
+        "purpose": "Read current status bits to decide whether to set or clear bits.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_METHOD::0113",
+        "callee": "Item::andStatus",
+        "purpose": "Clear specified status bits when the test indicates they are not set (ensures bits cleared).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_METHOD::0113",
+        "callee": "Item::orStatus",
+        "purpose": "Set specified status bits when the test indicates they should be set (ensures bits set).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_METHOD::013E",
+        "callee": "Item::getX",
+        "purpose": "Obtain current X coordinate used in movement/delta calculations.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_METHOD::013E",
+        "callee": "Item::getY",
+        "purpose": "Obtain current Y coordinate used in movement/delta calculations.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_METHOD::013E",
+        "callee": "Item::getZ",
+        "purpose": "Obtain current Z coordinate used in movement/delta calculations.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_METHOD::013E",
+        "callee": "FREE::1C52",
+        "purpose": "Perform numeric conversion/normalization used repeatedly in movement arithmetic (inferred).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_METHOD::013E",
+        "callee": "Item::legal_move",
+        "purpose": "Test whether a candidate WorldPoint is a legal move (collision/terrain check) before moving.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_METHOD::013E",
+        "callee": "Item::move",
+        "purpose": "Execute an actual move to validated coordinates with a direction/flag byte.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_METHOD::03CD",
+        "callee": "Item::legal_move",
+        "purpose": "Probe candidate positions for legality as part of movement variant logic.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_METHOD::03CD",
+        "callee": "Item::move",
+        "purpose": "Issue movement when a candidate is acceptable.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_METHOD::0610",
+        "callee": "Item::getFrame",
+        "purpose": "Read current animation/frame word to compute next frame.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_METHOD::0610",
+        "callee": "Item::setFrame",
+        "purpose": "Set updated animation/frame value.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_METHOD::0676",
+        "callee": "Item::getStatus",
+        "purpose": "Check the specific 0x08 status bit prior to performing farewell/spawn actions.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_METHOD::0676",
+        "callee": "Item::getRootContainer",
+        "purpose": "Verify containment/root conditions before barking and spawning a BODYPART.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_METHOD::0676",
+        "callee": "process Item::bark",
+        "purpose": "Emit a farewell message string to the associated pid/process (suspends after bark).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_METHOD::0676",
+        "callee": "spawn BODYPART::0080",
+        "purpose": "Spawn a body-part process/object as part of the terminal action (inferred dismember/ death effect).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_METHOD::METHOD::0080",
+    "behavior_summary_one_liner": "This script primarily provides small method wrappers and utility routines for an in-game item/actor. The principal exported behavior (METHOD::0080) simply forwards hit/damage events into the underlying item implementation (Item::receiveHit).",
+    "external_call_count": 20,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

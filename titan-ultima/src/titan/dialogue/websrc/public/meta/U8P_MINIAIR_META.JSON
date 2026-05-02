@@ -1,0 +1,170 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_MINIAIR.json",
+  "file": "U8P_MINIAIR",
+  "behavior_summary": [
+    "Defines logic for a small hovering item (MINIAIR) that, when activated (U8P_MINIAIR::use) or examined (look), runs short visual and positional animations to produce a subtle hovering/mini-air effect.",
+    "U8P_MINIAIR::use sets item info/exclusion state for processing, computes a small initial phase/index, then spawns two short scripts: a frame animation driver (U8P_MINIAIR::00E9) and a movement/hover driver (U8P_MINIAIR::0129).",
+    "U8P_MINIAIR::look performs the same info/exclusion setup and only spawns the frame animation (U8P_MINIAIR::00E9).",
+    "U8P_MINIAIR::00E9 increments a per-tick frame counter and calls Item::setFrame to update visuals; behavior is clamped/altered when the global levitateAvatar flag is set.",
+    "U8P_MINIAIR::0129 is a repeating phase/step machine that computes small X/Y offsets from a phase/index, reads the item's base X/Y/Z via Item::getX/Y/Z, and calls Item::move to reposition the item each step, producing hover motion. If levitateAvatar is set, movement is suppressed/exited."
+  ],
+  "notable_control_flow": [
+    "U8P_MINIAIR::use immediately spawns two short-lived processes (frame animator and movement driver) and then returns; spawn return values are captured but not used to affect logic.",
+    "Both helper scripts suspend between ticks (tick-driven/suspend-resume behavior) to animate over several frames/steps rather than completing in one frame.",
+    "Global guard levitateAvatar is checked by both helpers: it short-circuits movement (0129 exits) and alters frame progression (00E9 clamps frames).",
+    "Movement driver (0129) transforms an initial phase parameter by multiplying by 6 to form an internal index used by a small step table/state machine that cycles offsets and calls Item::move each iteration."
+  ],
+  "open_questions": [
+    "Exact numeric frame indices and step timing used by U8P_MINIAIR::00E9 (the disassembly shows increments and ceilings but not the meaning of each frame).",
+    "Precise contents of the phase-to-offset table used by U8P_MINIAIR::0129 (how the multiplied index maps to X/Y components).",
+    "Meaning and effect of the byte parameter passed through Item::move (propagated from the original spawn call) — whether it encodes movement flags or a move speed.",
+    "Whether the info/exclusion flags set by U8P_MINIAIR::use/look carry gameplay consequences beyond preventing reprocessing (exact info ID semantics not recorded here)."
+  ],
+  "main_function": {
+    "name": "U8P_MINIAIR::use",
+    "execution_form": "process",
+    "purpose": "Handle activation/U8P_MINIAIR::use of the MINIAIR item: prepare the item (set info/exclude flags), compute a small initial phase/index, spawn a short frame animation process (U8P_MINIAIR::00E9) and a movement/hover process (U8P_MINIAIR::0129) that together produce a brief visual hover animation, then return.",
+    "entry_conditions": [
+      "Event: U8P_MINIAIR::use / activate the MINIAIR object (player or script invokes the item's U8P_MINIAIR::use event)"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_MINIAIR::use",
+      "kind": "main",
+      "role": "Entry handler for item activation: sets up item state and spawns helper animation/movement scripts.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MINIAIR::look",
+      "kind": "helper",
+      "role": "Handler for examination/look: sets item info/exclusion and spawns the visual frame animation (U8P_MINIAIR::00E9) without starting movement.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MINIAIR::00E9",
+      "kind": "helper",
+      "role": "Ticked frame-animation driver: increments frame counter each tick and calls Item::setFrame; behavior altered by levitateAvatar.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MINIAIR::0129",
+      "kind": "helper",
+      "role": "Position/movement/hover driver: uses an initial phase/index to run a small step machine that computes offsets and calls Item::move repeatedly to produce hover motion; exits if levitateAvatar is set.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::setFrame",
+      "kind": "extern",
+      "role": "Engine API to set the visual frame/shape index of the item (called by U8P_MINIAIR::00E9).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getX",
+      "kind": "extern",
+      "role": "Engine API to read the item's X coordinate (called by U8P_MINIAIR::0129).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getY",
+      "kind": "extern",
+      "role": "Engine API to read the item's Y coordinate (called by U8P_MINIAIR::0129).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getZ",
+      "kind": "extern",
+      "role": "Engine API to read the item's Z coordinate (used in vertical offset calculation inside U8P_MINIAIR::0129).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::move",
+      "kind": "extern",
+      "role": "Engine API to move/reposition the item to computed X/Y coordinates (called repeatedly by U8P_MINIAIR::0129).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_MINIAIR::use",
+        "callee": "U8P_MINIAIR::00E9",
+        "purpose": "Spawn a short frame-animation process to drive Item::setFrame updates after activation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MINIAIR::use",
+        "callee": "U8P_MINIAIR::0129",
+        "purpose": "Spawn a movement/hover process that will reposition the item over several ticks using a computed initial phase/index.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MINIAIR::look",
+        "callee": "U8P_MINIAIR::00E9",
+        "purpose": "Spawn the same short frame-animation process when the item is examined/looked-at.",
+        "confidence": "high"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_MINIAIR::00E9",
+        "callee": "Item::setFrame",
+        "purpose": "Update the displayed frame/shape index of the item according to the running frame counter.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MINIAIR::0129",
+        "callee": "Item::getX",
+        "purpose": "Read base X coordinate to compute target X for move operations.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MINIAIR::0129",
+        "callee": "Item::getY",
+        "purpose": "Read base Y coordinate to compute target Y for move operations.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MINIAIR::0129",
+        "callee": "Item::getZ",
+        "purpose": "Read base Z coordinate used in vertical offset calculation for movement.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MINIAIR::0129",
+        "callee": "Item::move",
+        "purpose": "Reposition the item each step to computed coordinates to produce hovering effect; a byte parameter from the original spawn is forwarded into this call.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "levitateAvatar",
+        "likely_effect": "When set, the frame-animation sequence in U8P_MINIAIR::00E9 is clamped/shortened and the movement driver U8P_MINIAIR::0129 suppresses/exits movement (global guard preventing hover animation).",
+        "confidence": "high"
+      }
+    ],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_MINIAIR::use",
+    "behavior_summary_one_liner": "Defines logic for a small hovering item (MINIAIR) that, when activated (U8P_MINIAIR::use) or examined (look), runs short visual and positional animations to produce a subtle hovering/mini-air effect.",
+    "external_call_count": 5,
+    "flag_read_count": 1,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

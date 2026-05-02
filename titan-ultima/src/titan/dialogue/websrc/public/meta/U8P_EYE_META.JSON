@@ -1,0 +1,68 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_EYE.json",
+  "file": "U8P_EYE",
+  "behavior_summary": [
+    "U8P_EYE::EYE::look is a short process-handler invoked when an actor 'looks' at or inspects the EYE object. It configures per-process state (sets process info and a process-exclude flag), causes the target actor/process to emit the literal message \"seeker \", and then suspends.",
+    "The handler constructs a temporary string pointer for \"seeker \", calls Item::bark on the supplied process/actor pointer, frees the string, captures Item::bark's return value, runs an 'implies' style operation with that return value, consumes the result into a small temporary, and then suspends the script.",
+    "All state changes observed are local to the involved process (per-process info and process-exclude); no global game flags are read or written by this script."
+  ],
+  "notable_control_flow": [
+    "Entry (Event 0 / U8P_EYE::look): set per-process info flag, set process-exclude flag on the relevant process.",
+    "Build/convert literal string \"seeker \" into a pointer, push the target process pointer ([BP+06h]) and the string, then call Item::bark.",
+    "After returning from Item::bark, free the temporary string, capture the return value, apply an 'implies' operation with that return, pop result into a temp, then suspend the process."
+  ],
+  "open_questions": [
+    "Which exact per-process info field (numeric id) is being set by the 'set info' opcode here? The disassembly shows the opcode but the concrete info id is not explicit.",
+    "What semantic effects does the 'implies' operation have after Item::bark in this engine (e.g., conditional continuation, signal, or side-effect)? The script pops the result and then suspends, so its practical effect is unclear.",
+    "Is [BP+06h] always the player PID in all call sites, or can other processes trigger EYE::look using different PIDs? This is inferred but not proven by this snippet alone."
+  ],
+  "main_function": {
+    "name": "U8P_EYE::look",
+    "execution_form": "process",
+    "purpose": "Respond to an examine/U8P_EYE::look event by setting per-process state for the EYE and causing the target process to 'bark' the text \"seeker \", then handle the bark return and suspend.",
+    "entry_conditions": [
+      "Event 0 — U8P_EYE::look/examine trigger (invoked when an actor/player inspects or 'looks at' the EYE)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_EYE::look",
+      "kind": "main",
+      "role": "Handle the object's U8P_EYE::look/examine event: set per-process flags, call Item::bark with \"seeker \", process return value, then suspend.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_EYE::look",
+        "callee": "Item::bark",
+        "purpose": "Make the target process/actor emit or display the short literal message \"seeker \". Item::bark is called with the target process pointer (inferred at [BP+06h]) and the string pointer.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "EYE::look",
+    "behavior_summary_one_liner": "U8P_EYE::EYE::look is a short process-handler invoked when an actor 'looks' at or inspects the EYE object. It configures per-process state (sets process info and a process-exclude flag), causes the target actor/process to emit the literal message \"seeker \", and then suspends.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

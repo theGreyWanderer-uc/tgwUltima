@@ -1,0 +1,86 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_INTERN.json",
+  "file": "U8P_INTERN",
+  "behavior_summary": [
+    "U8P_INTERN::look responds to a 'U8P_INTERN::look' (Event 0) trigger by causing the referenced process/object to emit a short descriptive message.",
+    "The handler builds the literal text \"Human Remains \", arranges call context flags (set info / process exclude), calls Item::bark on the target process to display that text, frees the temporary string, inspects the bark return value via an implies/pop sequence, and then suspends/returns.",
+    "Effect in gameplay: when the player (or relevant actor) examines the INTERN object, they are shown the short description \"Human Remains \"."
+  ],
+  "notable_control_flow": [
+    "Entry on Event 0 (U8P_INTERN::look): minimal init then create temporary string 'Human Remains '.",
+    "Set context flags (inferred: 'set info' and 'process exclude') to control recipient/context before invoking Item::bark.",
+    "Call Item::bark with the target process (inferred BP+06h) and the constructed string; free the string afterwards.",
+    "Capture Item::bark return, feed it through an implies/pop sequence (exact effect unclear), then suspend and return."
+  ],
+  "open_questions": [
+    "What precisely does the implies/pop sequence do with Item::bark's return value (flow control, conditional suppression, or engine bookkeeping)?",
+    "What exact semantic effect do the context flags 'set info' and 'process exclude' have for this call (which processes see the bark or are excluded)?",
+    "Is BP+06h always the player/process that triggered the U8P_INTERN::look, or can it be other processes (NPCs, scripts) in some contexts?"
+  ],
+  "main_function": {
+    "name": "U8P_INTERN::look",
+    "execution_form": "process",
+    "purpose": "Handle the object's 'U8P_INTERN::look' (examine) event by producing a short on-screen description ('Human Remains ') via Item::bark, then perform minimal cleanup and return.",
+    "entry_conditions": [
+      "Event 0 (U8P_INTERN::look) — triggered when an actor (typically the player) examines or looks at the INTERN object."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_INTERN::look",
+      "kind": "main",
+      "role": "Event handler for the object's 'U8P_INTERN::look' action; prepares context, issues Item::bark with a literal description, and returns.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine used to display a short text message or description originating from an item/process.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_INTERN::look",
+        "callee": "Item::bark",
+        "purpose": "Request the target process/object to emit/display the short description string 'Human Remains ' to the viewer/process context.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": [
+      {
+        "name": "set info (context key, inferred 0x210 usage)",
+        "likely_effect": "Appearsto set an info/context bit on the calling or target process to influence the subsequent bark call or processing.",
+        "confidence": "medium"
+      },
+      {
+        "name": "process exclude (contextual exclusion)",
+        "likely_effect": "Likely excludes certain processes or the caller from further handling or receiving the bark; used to control recipients/context of the message.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_INTERN::look",
+    "behavior_summary_one_liner": "U8P_INTERN::look responds to a 'U8P_INTERN::look' (Event 0) trigger by causing the referenced process/object to emit a short descriptive message.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 2
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

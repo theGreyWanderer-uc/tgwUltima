@@ -1,0 +1,76 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_MIR.json",
+  "file": "U8P_MIR",
+  "behavior_summary": [
+    "Implements the mirror object's response to a 'U8P_MIR::look' (examine) action. When a player/actor looks at the mirror, the script causes the item to emit the literal text \"mirror \" directed at the invoking process.",
+    "Behavior is local to the item: it prepares a call context, invokes Item::bark to present the string to the viewer, cleans up temporaries, and then suspends/returns.",
+    "No persistent global flags are read or written by this routine in the extracted snippet; the effect is a transient UI/message produced for the caller."
+  ],
+  "notable_control_flow": [
+    "Entry on the 'U8P_MIR::look' event (Event 0) for the mirror object.",
+    "Local initialization and a small sequence of push/indirect pushes to prepare arguments, including a pointer to the literal string \"mirror \".",
+    "Call to external routine Item::bark to produce the visible/audible message for the invoking process.",
+    "Post-call cleanup (free/stack adjust), push of the bark return value, an 'implies' operation involving that return, a pop of a temp, then suspend/return."
+  ],
+  "open_questions": [
+    "Exact formal parameter ordering and meanings for Item::bark in this engine (which pushed values correspond to which Item::bark parameter).",
+    "Precise semantics of the 'implies' instruction in this context (how the bark return influences control flow or the calling process).",
+    "Purpose and effect of the earlier 'set info' / 'process exclude' opcodes observed around the call — are they setting metadata on the item or configuring processing exclusion for this event?",
+    "Role of the initialized local (init_local_00) beyond stack/frame setup — any later use outside the snippet is not shown."
+  ],
+  "main_function": {
+    "name": "U8P_MIR::look",
+    "execution_form": "process",
+    "purpose": "Handle the 'U8P_MIR::look' verb for the mirror: produce the short description/message \"mirror \" directed at the invoking process and then return/suspend.",
+    "entry_conditions": [
+      "Event 0 (U8P_MIR::look) — invoked when an actor/player examines/looks at the mirror object"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_MIR::look",
+      "kind": "main",
+      "role": "Event handler for the mirror object's 'U8P_MIR::look' (examine) action; orchestrates message display via Item::bark.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item service used to make an item produce a short text/message directed at a process/player.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_MIR::look",
+        "callee": "Item::bark",
+        "purpose": "Deliver the literal string \"mirror \" (the mirror's short description/bark) to the invoking process/player; primary visible effect of the handler.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "display",
+    "cleanup"
+  ],
+  "quick_facts": {
+    "main_function": "MIR::look",
+    "behavior_summary_one_liner": "Implements the mirror object's response to a 'U8P_MIR::look' (examine) action. When a player/actor looks at the mirror, the script causes the item to emit the literal text \"mirror \" directed at the invoking process.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

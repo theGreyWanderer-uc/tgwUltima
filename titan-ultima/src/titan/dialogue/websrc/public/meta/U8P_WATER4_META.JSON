@@ -1,0 +1,96 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_WATER4.json",
+  "file": "U8P_WATER4",
+  "behavior_summary": [
+    "U8P_WATER4::gotHit handles the actor's 'U8P_WATER4::gotHit' (Event 6) by delegating the hit reaction to a spawned WATER behavior (WATER::0080) rather than performing damage arithmetic itself.",
+    "Before spawning, the routine configures VM/process context via 'set info' and 'process exclude' (inferred to prepare spawn metadata or prevent immediate re-triggering).",
+    "It passes an init value (0), a literal flag 0x020C, multiple caller-supplied parameters (BP+06 twice, BP+0A, BP+0C), an indirect pointer, and the current actor PID into WATER::0080 to drive the spawned behavior (likely a splash/ripple or visual effect).",
+    "The spawn return value is normalized with an 'implies' operation (compared with literal 1), stored into a temporary local, and then the script suspends — deferring further work to the spawned process."
+  ],
+  "notable_control_flow": [
+    "Linear handler: configure spawn context -> spawn WATER::0080 -> process spawn retval via 'implies' -> store into temp -> suspend.",
+    "No local damage resolution or global flag writes occur here; the function's primary control effect is to create a separate process to handle the reaction.",
+    "The 'process exclude' step suggests a guard against re-processing either this actor or the spawned process immediately after spawn."
+  ],
+  "open_questions": [
+    "What semantic meaning do the caller parameters represent (BP+06, BP+0A, BP+0C)? They likely encode damage, source id, or hit geometry but are not explicit.",
+    "What exact metadata is set by 'set info' (which info field or value) and how does it affect the spawned WATER::0080 process?",
+    "What is the indirect 2-byte pointer passed to the spawn (a tile/region pointer, an object reference, or engine context)?",
+    "What specific behavior WATER::0080 implements (visual-only splash, physics ripple, or further gameplay effects)?"
+  ],
+  "main_function": {
+    "name": "U8P_WATER4::gotHit",
+    "execution_form": "process",
+    "purpose": "Respond to being hit by spawning a dedicated WATER behavior (WATER::0080) to handle the hit reaction (likely splash/ripple/visual effect), then normalize the spawn result and suspend.",
+    "entry_conditions": [
+      "Event 6 (U8P_WATER4::gotHit) — invoked when the actor is struck or takes a hit",
+      "Implicit: called only in hit context with three parameters supplied by the caller (BP+06, BP+0A, BP+0C)"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_WATER4::gotHit",
+      "kind": "main",
+      "role": "Primary event handler for 'U8P_WATER4::gotHit'; delegates reaction work by spawning WATER::0080 and handling spawn result.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_WATER4::gotHit",
+        "callee": "U8P_WATER4::set info",
+        "purpose": "Configure VM/process/spawn metadata prior to spawning (exact key/value unknown).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_WATER4::gotHit",
+        "callee": "U8P_WATER4::process exclude",
+        "purpose": "Mark the current context or the target for exclusion to avoid immediate re-processing (guarding spawn semantics).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_WATER4::gotHit",
+        "callee": "spawn -> WATER::0080",
+        "purpose": "Create/launch a separate WATER::0080 process to perform the water-specific hit reaction; parameters include init=0, literal 0x020C, BP+06 (passed twice), an indirect 2-byte pointer, current actor PID, BP+0C, and BP+0A.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WATER4::gotHit",
+        "callee": "U8P_WATER4::implies",
+        "purpose": "Normalize/convert the spawn return value into a boolean-like result (compared with literal 1) before storing into a temp/return slot.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WATER4::gotHit",
+        "callee": "suspend",
+        "purpose": "Suspend the current script/thread after delegating the hit reaction to the spawned process.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_WATER4::gotHit",
+    "behavior_summary_one_liner": "U8P_WATER4::gotHit handles the actor's 'U8P_WATER4::gotHit' (Event 6) by delegating the hit reaction to a spawned WATER behavior (WATER::0080) rather than performing damage arithmetic itself.",
+    "external_call_count": 5,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

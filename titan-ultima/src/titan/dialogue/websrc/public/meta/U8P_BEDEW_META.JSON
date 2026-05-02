@@ -1,0 +1,256 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_BEDEW.json",
+  "file": "U8P_BEDEW",
+  "behavior_summary": [
+    "BEDEW::look: When a player/actor 'looks' at the bed item it emits a short descriptive bark ('bed ') to the viewer. This is a simple examine/description handler.",
+    "BEDEW::use: Implements the in-game resting mechanic for the bed item. It prevents resting while the avatar/NPC is in combat or when enemies are nearby (barking 'This is no time to rest!' and exiting). When resting is allowed it prompts the player to choose 0–5 'periods' to rest; a positive choice triggers a rest sequence that: saves and sets an avatar-in-stasis flag, fades the screen to black, advances the in-game time by periods * 4 hours, spawns a short-lived helper process (FREE::1C19), restores the avatar's HP and mana (values derived from attributes), fades back from black, and then restores the previous stasis state.",
+    "The routine allocates and frees a short string-list for the choice prompt and a returned string for parsing, and it ensures the avatar is placed into a temporary stasis so other actions do not interfere during the rest sequence."
+  ],
+  "notable_control_flow": [
+    "BEDEW::use begins by checking Npc::isInCombat and Npc::areEnemiesNear — if either returns true it calls Item::bark('This is no time to rest!') and returns early.",
+    "If not blocked, it constructs a slist ['0'..'5'], calls Item::ask to retrieve the player's choice string, parses that string into a numeric byte num_periods, and frees the returned string/list.",
+    "If num_periods == 0 it exits (no rest). If num_periods > 0 it executes the rest sequence: record getAvatarInStasis, setAvatarInStasis(1), FadeToBlack, compute new time = TimeInGameHours + num_periods*4 and SetTimeInGameHours(new time), spawn FREE::1C19 (pid, 0x64, 0), set HP = 2 * Npc::getStr(actor), set Mana = 2 * Npc::getInt(actor), FadeFromBlack, restore previous avatar stasis flag.",
+    "BEDEW::look is a single-shot path that builds the descriptor string, calls Item::bark, and returns."
+  ],
+  "open_questions": [
+    "Exact purpose and side effects of the spawned process FREE::1C19 are not present in the excerpt and remain uncertain (likely world-update or deferred save/cleanup during rest).",
+    "The meaning of a single 'period' is inferred as 4 in-game hours from code patterns but that unit is an inference, not an explicit named constant in the snippet.",
+    "Whether the actor/context passed to BEDEW::use is always the global avatar or can be another NPC is implied (avatar-specific using getAvatarInStasis) but not explicitly documented in the excerpt."
+  ],
+  "main_function": {
+    "name": "U8P_BEDEW::look",
+    "execution_form": "process",
+    "purpose": "Provide the item's short descriptive text when an actor looks at the bed (emit bark 'bed ').",
+    "entry_conditions": [
+      "Event 0 / 'U8P_BEDEW::look' — triggered when the player or an actor examines / inspects the bed item."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_BEDEW::look",
+      "kind": "main",
+      "role": "Describe the bed item to the player via Item::bark (examine handler).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BEDEW::use",
+      "kind": "helper",
+      "role": "Implement the resting mechanic when the bed is used: guard against combat/enemies, prompt for rest duration, advance time, spawn helper process, and restore HP/mana while managing avatar stasis and screen fades.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine-provided function used to display short messages from items/processes to players (used by both U8P_BEDEW::look and use).",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::isInCombat",
+      "kind": "extern",
+      "role": "Check whether the NPC/avatar is in combat (used as a guard preventing rest).",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::areEnemiesNear",
+      "kind": "extern",
+      "role": "Check whether enemies are nearby to prevent resting.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::ask",
+      "kind": "extern",
+      "role": "Present a short choice list to the player and return the chosen string (used to select rest periods).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BEDEW::FadeToBlack",
+      "kind": "extern",
+      "role": "Start screen fade-to-black transition during rest.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BEDEW::FadeFromBlack",
+      "kind": "extern",
+      "role": "End screen fade transition after rest.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BEDEW::TimeInGameHours",
+      "kind": "extern",
+      "role": "Read current in-game hour count (used to compute new time).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BEDEW::SetTimeInGameHours",
+      "kind": "extern",
+      "role": "Write updated in-game hour count (advance time by rest).",
+      "confidence": "high"
+    },
+    {
+      "name": "spawn FREE::1C19",
+      "kind": "extern",
+      "role": "Spawn a transient helper process during rest; exact behavior inferred/unknown.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_BEDEW::getAvatarInStasis",
+      "kind": "extern",
+      "role": "Read avatar in-stasis flag to save previous value for restoration after rest.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BEDEW::setAvatarInStasis",
+      "kind": "extern",
+      "role": "Set/clear avatar in-stasis flag around the rest sequence to prevent other actions.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::getStr",
+      "kind": "extern",
+      "role": "Return NPC/actor Strength used to compute HP restoration.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::setHp",
+      "kind": "extern",
+      "role": "Set NPC/actor HP after rest (used with Strength-derived value).",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::getInt",
+      "kind": "extern",
+      "role": "Return NPC/actor Intelligence used to compute mana restoration.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::setMana",
+      "kind": "extern",
+      "role": "Set NPC/actor mana after rest (used with Intelligence-derived value).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_BEDEW::look",
+        "callee": "Item::bark",
+        "purpose": "Emit the bed's short description ('bed ') to the viewing process.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEDEW::use",
+        "callee": "Npc::isInCombat",
+        "purpose": "Guard that prevents resting when the actor/avatar is in combat.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEDEW::use",
+        "callee": "Npc::areEnemiesNear",
+        "purpose": "Guard that prevents resting when enemies are nearby.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEDEW::use",
+        "callee": "Item::bark",
+        "purpose": "Inform the player about blocked rest ('This is no time to rest!') and prompt messages.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEDEW::use",
+        "callee": "Item::ask",
+        "purpose": "Present the choice list ['0'..'5'] and receive the player's selected rest duration as a string.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEDEW::use",
+        "callee": "U8P_BEDEW::getAvatarInStasis",
+        "purpose": "Read and save the avatar's prior stasis state so it can be restored after the rest sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEDEW::use",
+        "callee": "U8P_BEDEW::setAvatarInStasis",
+        "purpose": "Place the avatar into stasis (1) for the duration of rest to prevent interrupts, and later restore the saved state.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEDEW::use",
+        "callee": "U8P_BEDEW::FadeToBlack",
+        "purpose": "Visual transition at the start of rest.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEDEW::use",
+        "callee": "U8P_BEDEW::TimeInGameHours",
+        "purpose": "Read current game time to compute new time after rest.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEDEW::use",
+        "callee": "U8P_BEDEW::SetTimeInGameHours",
+        "purpose": "Advance the game's time by num_periods * 4 hours to simulate elapsed rest.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEDEW::use",
+        "callee": "spawn FREE::1C19",
+        "purpose": "Spawn a helper process during rest (likely for deferred world updates or housekeeping); exact effect is inferred/unknown.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BEDEW::use",
+        "callee": "Npc::getStr",
+        "purpose": "Read Strength to compute HP restoration after rest.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEDEW::use",
+        "callee": "Npc::setHp",
+        "purpose": "Set HP (example observed: 2 * Strength) as part of rest recovery.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEDEW::use",
+        "callee": "Npc::getInt",
+        "purpose": "Read Intelligence to compute mana restoration after rest.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEDEW::use",
+        "callee": "Npc::setMana",
+        "purpose": "Set mana (example observed: 2 * Intelligence) as part of rest recovery.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEDEW::use",
+        "callee": "U8P_BEDEW::FadeFromBlack",
+        "purpose": "Visual transition to resume gameplay after rest.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "BEDEW::look",
+    "behavior_summary_one_liner": "BEDEW::look: When a player/actor 'looks' at the bed item it emits a short descriptive bark ('bed ') to the viewer. This is a simple examine/description handler.",
+    "external_call_count": 16,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

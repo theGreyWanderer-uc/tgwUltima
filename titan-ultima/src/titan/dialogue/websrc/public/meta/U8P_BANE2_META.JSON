@@ -1,0 +1,240 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_BANE2.json",
+  "file": "U8P_BANE2",
+  "behavior_summary": [
+    "Implements NPC Bane's conversational behavior when the player interacts: first-meeting greeting (uses the avatar's name), offering/assigning a Truename (Daemion), and optionally recruiting the avatar as a Disciple.",
+    "Branches dialog and outcomes based on persistent global flags (baneMet, baneHasAsked, baneJoined, baneMad, acolyteKilled, sponsorTest, keyOfTheAcolyte) and on the player's chosen responses to ask() prompts.",
+    "Uses small randomization (urandom) to pick variant lines, spawns short helper processes to sequence follow-up lines/animation/effects, and in the hostile outcome sets the NPC combat target (Npc::setTarget) so Bane attacks the player."
+  ],
+  "notable_control_flow": [
+    "Entry into U8P_BANE2::0080 (main process) is an interaction/conversation trigger; it first tests baneMet to choose first-meeting versus repeat-greeting flows.",
+    "If first meeting: call getName(), compose/concatenate name-related strings, bark() greeting lines and present an ask() prompt to get the player's response about the Truename and disciple offer.",
+    "Recruitment flow: checks baneHasAsked and baneJoined to decide whether to offer or re-offer joining; writing baneHasAsked marks that the offer has been made.",
+    "Hostile branch: when baneMad or specific negative answers occur, the script may set Npc::setTarget(pid) and route to attack/dialogue that ends hostilities.",
+    "Short interaction handlers U8P_BANE2::0A03 and U8P_BANE2::0D58 are spawned or invoked for exit/brief-proximity lines; they use urandom for variants and bark() for one-line responses."
+  ],
+  "open_questions": [
+    "Exact textual content and slist entries passed to Item::ask() (the option strings and their numeric codes) are not present here and remain unknown.",
+    "Precise triggers that call U8P_BANE2::0A03 and U8P_BANE2::0D58 (enterFastArea vs leaveFastArea vs explicit spawn timing) are inferred but not fully certain.",
+    "The exact logic that combines sponsorTest and keyOfTheAcolyte to influence sponsorship dialogue is inferred; the concrete thresholds/conditions are unknown.",
+    "Whether spawned helper processes perform additional state changes beyond speech (e.g., animations or additional flag writes) is unclear from disassembly."
+  ],
+  "main_function": {
+    "name": "U8P_BANE2::0080",
+    "execution_form": "process",
+    "purpose": "Handle direct player interaction with NPC Bane: greet the player (including using the avatar name), offer or assign a Truename, propose recruitment as a Disciple, respond to the player's choices, and transition to hostile, neutral, or recruit outcomes. Also spawns helper processes for timed response sequencing and may set Bane's combat target in hostile cases.",
+    "entry_conditions": [
+      "Invoked when the player initiates conversation or interacts with Bane (enterFastArea-style interaction event).",
+      "Runs when dialog must be presented or when the NPC should respond to a proximity/interaction trigger."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_BANE2::0080",
+      "kind": "main",
+      "role": "Primary conversation/interaction handler for NPC Bane; orchestrates greeting, naming, recruiting, and hostile transitions.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BANE2::0A03",
+      "kind": "helper",
+      "role": "Short/exit conversation handler (leave-area or post-dialog follow-up); emits farewell or dismissive lines depending on baneMad and state; used for sequencing speech via spawn.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_BANE2::0D58",
+      "kind": "helper",
+      "role": "Brief proximity/enter handler; chooses between polite, dismissive, or hostile one-line responses based on baneMad and urandom; used for short encounters separate from full conversation.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_BANE2::getName",
+      "kind": "extern",
+      "role": "Engine/utility call used to obtain the avatar's displayed name for personalized greetings.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Emit dialog lines from the NPC to the player (text output).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::ask",
+      "kind": "extern",
+      "role": "Present multiple-choice prompts to the player and return the selected option; used for name/offer/acceptance dialogs.",
+      "confidence": "high"
+    },
+    {
+      "name": "urandom",
+      "kind": "extern",
+      "role": "Provide small random values to choose dialog variants.",
+      "confidence": "high"
+    },
+    {
+      "name": "spawn",
+      "kind": "extern",
+      "role": "Start helper/timed processes (U8P_BANE2::0A03, U8P_BANE2::0D58) to sequence follow-up speech or effects asynchronously.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::setTarget",
+      "kind": "extern",
+      "role": "Make the NPC hostile by setting its combat target to the player in hostile dialogue branches.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_BANE2::0080",
+        "callee": "U8P_BANE2::0A03",
+        "purpose": "Spawned/started as a short helper process to sequence follow-up or exit speech after main dialog branches.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BANE2::0080",
+        "callee": "U8P_BANE2::0D58",
+        "purpose": "Spawned or invoked for brief proximity responses (one-line variants) when interaction is short or the player just approaches/leaves.",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_BANE2::0080",
+        "callee": "U8P_BANE2::getName",
+        "purpose": "Retrieve the avatar's name string for inclusion in first-meeting greetings and Truename assignment.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BANE2::0080",
+        "callee": "Item::bark",
+        "purpose": "Emit constructed dialog lines to the player during greeting, naming, and recruitment flows.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BANE2::0080",
+        "callee": "Item::ask",
+        "purpose": "Present dialog choices to the player (e.g., accept Truename, accept/decline becoming Disciple) and receive the selected option for branching.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BANE2::0080",
+        "callee": "urandom",
+        "purpose": "Choose between small variant sets of dialog lines to avoid robotic repetition.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BANE2::0080",
+        "callee": "spawn",
+        "purpose": "Start helper processes (U8P_BANE2::0A03, U8P_BANE2::0D58) for timed follow-up speech or effects.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BANE2::0080",
+        "callee": "Npc::setTarget",
+        "purpose": "Set Bane's combat target to the player when the dialog reaches a hostile resolution, transitioning to combat behavior.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BANE2::0A03",
+        "callee": "urandom",
+        "purpose": "Select a variant farewell/dismissive line.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BANE2::0A03",
+        "callee": "Item::bark",
+        "purpose": "Emit the selected short line during exit handling.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BANE2::0D58",
+        "callee": "urandom",
+        "purpose": "Select variant one-line responses for quick interactions.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BANE2::0D58",
+        "callee": "Item::bark",
+        "purpose": "Emit the selected one-line response for brief proximity interactions.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "baneMet",
+        "likely_effect": "Distinguish first-meeting greeting (offer Truename) from repeat greetings.",
+        "confidence": "high"
+      },
+      {
+        "name": "baneMad",
+        "likely_effect": "Switch tone of dialog to annoyed/hostile; influences choice of dismissive or aggressive lines.",
+        "confidence": "high"
+      },
+      {
+        "name": "acolyteKilled",
+        "likely_effect": "Modify dialogue content to reflect an acolyte's death (changes wording and available responses).",
+        "confidence": "medium"
+      },
+      {
+        "name": "sponsorTest",
+        "likely_effect": "Used with keyOfTheAcolyte to alter sponsorship/training related dialog (eligibility branching).",
+        "confidence": "medium"
+      },
+      {
+        "name": "keyOfTheAcolyte",
+        "likely_effect": "Combined with sponsorTest to decide sponsor-related dialog; exact semantics inferred.",
+        "confidence": "medium"
+      },
+      {
+        "name": "baneHasAsked",
+        "likely_effect": "Check whether the recruitment question (become my Disciple) has already been presented to the player.",
+        "confidence": "high"
+      },
+      {
+        "name": "baneJoined",
+        "likely_effect": "Indicates whether the avatar already joined Bane; affects offer wording and available actions.",
+        "confidence": "high"
+      }
+    ],
+    "writes": [
+      {
+        "name": "baneMet",
+        "likely_effect": "Set to true after the first meeting to prevent repeating first-meeting greeting/Truename offer.",
+        "confidence": "high"
+      },
+      {
+        "name": "baneAvaName",
+        "likely_effect": "Record that Bane has assigned or noted a Truename for the avatar (marks naming completion).",
+        "confidence": "high"
+      },
+      {
+        "name": "baneHasAsked",
+        "likely_effect": "Mark that the recruitment question has been asked so it won't be redundantly re-offered without different conditions.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_BANE2::0080",
+    "behavior_summary_one_liner": "Implements NPC Bane's conversational behavior when the player interacts: first-meeting greeting (uses the avatar's name), offering/assigning a Truename (Daemion), and optionally recruiting the avatar as a Disciple.",
+    "external_call_count": 10,
+    "flag_read_count": 7,
+    "flag_write_count": 3
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

@@ -1,0 +1,187 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_DAEMSCEN.json",
+  "file": "U8P_DAEMSCEN",
+  "behavior_summary": [
+    "Provides scene/event logic for a daemon/Pyros encounter and a small per-item dispatcher. The module contains a main event handler that, when invoked with a subject object and a list, ignores NPC subjects and otherwise iterates the list to dispatch an oriented action for each element using the subject's facing.",
+    "Includes a short helper that makes an object emit agonized vocal lines with small waits between lines (hurt/dying vocalization).",
+    "Includes a large orchestrator that sequences a multi-step encounter: playing music, branching dialog by a global flag (acolyteKilled), creating/destroying map items and NPCs, issuing orientation/path commands, casting multiple fire-spell effects, making NPCs speak, and coordinating timing with spawn/suspend/delays."
+  ],
+  "notable_control_flow": [
+    "U8P_DAEMSCEN::0080 immediately sets object info then checks Item::isNpc(object); if true it returns early (guard against running on NPCs).",
+    "If the subject is not an NPC, U8P_DAEMSCEN::0080 iterates the provided item_list (foreach). For each element it reads the subject's facing via Npc::getDir and then spawns METHOD::15E7 for that list element with the facing as an argument; each spawn is awaited (implies/suspend semantics) so the routine dispatches actions sequentially.",
+    "U8P_DAEMSCEN::014B branches behavior and dialogue based on the global flag acolyteKilled and sequences many timed spawns/destroys/creates and spell casts; it uses short waits (FREE::1C19) and speech spawns (METHOD::087D) to pace the scene.",
+    "U8P_DAEMSCEN::00D1 performs short vocalization steps by spawning speech METHOD::087D and short delay FREE::1C19 between lines."
+  ],
+  "open_questions": [
+    "Exact in-game effect of METHOD::15E7 (animation, attack, movement, or effect) when spawned with a direction byte — inferred but not explicit.",
+    "Precise semantics and meaning of the object info keys set by the scripts (e.g., the 0x210-like info referenced in related scripts) and any side-effects on AI/process exclusion.",
+    "Which external functions call U8P_DAEMSCEN::0080 in the engine (event id or trigger type — area entry, script event, or item activation) is not explicit.",
+    "Full parameter ordering for some spawned methods (some calls use pid + text + byte, others push item pointers first) — ordering was inferred from usage patterns."
+  ],
+  "main_function": {
+    "name": "U8P_DAEMSCEN::0080",
+    "execution_form": "process",
+    "purpose": "Event handler that, when given a process id, a subject object and a list of targets, ignores NPC subjects and otherwise dispatches a per-list-element, direction-oriented action by reading the subject's facing and spawning METHOD::15E7 for each element (with suspend/await between spawns).",
+    "entry_conditions": [
+      "Called with pid (process id), object_ptr (subject) and item_list (list of targets).",
+      "Intended to run only when the passed object is not an NPC (it checks Item::isNpc and returns early on true)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_DAEMSCEN::0080",
+      "kind": "main",
+      "role": "Per-list dispatcher: gate by non-NPC subject and spawn oriented actions (METHOD::15E7) for each list element.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DAEMSCEN::00D1",
+      "kind": "helper",
+      "role": "Short vocalization routine: set info on an object and spawn speech lines with short waits (agonized/cry vocalization).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DAEMSCEN::014B",
+      "kind": "helper",
+      "role": "Large encounter/scene orchestrator for a Pyros/daemon event: plays music, chooses dialogue by acolyteKilled, spawns/destroys items and NPCs, issues pathfinding and orientation, casts multiple fire-spell effects, and sequences timed speech/actions.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::isNpc",
+      "kind": "extern",
+      "role": "Engine query to decide whether an item pointer refers to an NPC (used as an early exit guard).",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::getDir",
+      "kind": "extern",
+      "role": "Engine helper returning the facing/direction of an NPC/object (used to orient spawned effects/actions).",
+      "confidence": "high"
+    },
+    {
+      "name": "METHOD::15E7",
+      "kind": "extern",
+      "role": "Spawned action applied to list elements with a direction argument; likely an oriented effect/animation/attack (inferred).",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_DAEMSCEN::014B",
+        "callee": "U8P_DAEMSCEN::00D1",
+        "purpose": "Likely used to produce agonized vocal lines for created NPCs/objects during the scene (inferred from similar speech/delay patterns in 00D1).",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_DAEMSCEN::0080",
+        "callee": "Item::isNpc",
+        "purpose": "Guard: check whether the event subject is an NPC and early-return if true.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMSCEN::0080",
+        "callee": "Npc::getDir",
+        "purpose": "Read the subject's facing/direction to parameterize per-target spawned actions.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMSCEN::0080",
+        "callee": "METHOD::15E7",
+        "purpose": "Spawn the per-list-element action/behavior using the previously obtained direction; spawns are awaited/suspended to sequence them.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMSCEN::00D1",
+        "callee": "METHOD::087D",
+        "purpose": "Spawn speech/dialogue lines (make an agent 'bark' a scream/line).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMSCEN::00D1",
+        "callee": "FREE::1C19",
+        "purpose": "Short timed wait/delay between speech lines to pace vocalization.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMSCEN::014B",
+        "callee": "METHOD::087D",
+        "purpose": "Make created NPCs or the encounter emit dialogue/barks at staged times.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMSCEN::014B",
+        "callee": "Item::create / Npc::create",
+        "purpose": "Pop new items or NPCs into the scene at computed coordinates as part of encounter setup.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMSCEN::014B",
+        "callee": "Item::getX / Item::getY / Item::getZ",
+        "purpose": "Read coordinates of scene anchors or the player/objects for distance checks and spawn placement.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMSCEN::014B",
+        "callee": "Item::pop / Item::destroy / Item::touch",
+        "purpose": "Place temporary map tiles/anchors then remove or trigger them as part of the scene sequencing.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMSCEN::014B",
+        "callee": "Item::getDirToItem",
+        "purpose": "Compute directional targeting between items/NPCs before spawning oriented effects.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DAEMSCEN::014B",
+        "callee": "FIRESPEL::<various>",
+        "purpose": "Spawn/execute multiple fire-spell effects at locations or on targets during the encounter.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMSCEN::014B",
+        "callee": "METHOD::0113",
+        "purpose": "Initialize newly created NPCs (appearance/state) with a small byte argument after creation.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DAEMSCEN::014B",
+        "callee": "PENT::10C3",
+        "purpose": "Trigger a special encounter effect (teleport/pentagram) on list items with pid; used as part of scene mechanics.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "acolyteKilled",
+        "likely_effect": "Selects dialogue variants and named targets used by U8P_DAEMSCEN::014B (changes who speaks/which lines and some scene branching).",
+        "confidence": "high"
+      }
+    ],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_DAEMSCEN::0080",
+    "behavior_summary_one_liner": "Provides scene/event logic for a daemon/Pyros encounter and a small per-item dispatcher. The module contains a main event handler that, when invoked with a subject object and a list, ignores NPC subjects and otherwise iterates the list to dispatch an oriented action for each element using the subject's facing.",
+    "external_call_count": 13,
+    "flag_read_count": 1,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

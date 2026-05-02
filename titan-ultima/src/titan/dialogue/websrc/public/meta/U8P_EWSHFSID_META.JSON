@@ -1,0 +1,77 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_EWSHFSID.json",
+  "file": "U8P_EWSHFSID",
+  "behavior_summary": [
+    "Handles the item's 'U8P_EWSHFSID::look' event: when a player/actor examines this object the script builds the literal string \"shelf \", prepares call context, and asks the item to 'bark' that string so the description is presented to the viewer.",
+    "Before invoking the bark routine the script briefly alters processing context (inferred set-info and process-exclude opcodes) to control what information or side effects occur during the call.",
+    "After the Item::bark call the constructed string is freed and the bark return value is pushed through the VM result handling (an 'implies' style opcode) before suspending/returning — effectively returning/producing the bark result as the handler outcome."
+  ],
+  "notable_control_flow": [
+    "Entry: Event 0 (U8P_EWSHFSID::look) triggers U8P_EWSHFSID::look.",
+    "Allocate/construct a temporary stack string containing the ASCII text \"shelf \", convert it to a pointer for the call.",
+    "Set info / process-exclude opcodes are used to modify context for the upcoming call (likely to prevent re-entrancy or suppress other processing).",
+    "Push the target object/process (BP+06h) and the string pointer and call external Item::bark.",
+    "Free the temporary string, push the returned value, perform an 'implies' VM operation, then suspend/return the handler."
+  ],
+  "open_questions": [
+    "Which exact info identifier(s) are set by the 'set info' opcode here and what concrete gameplay flags or visibility rules do they control?",
+    "What precise effect does the 'process exclude' opcode have in this context (exclude which processors/behaviors and for how long)?",
+    "What semantics does the VM 'implies' opcode implement for this handler's return value (flow control, conditional propagation, or something else)?"
+  ],
+  "main_function": {
+    "name": "U8P_EWSHFSID::look",
+    "execution_form": "process",
+    "purpose": "Produce the object's short descriptive text when examined by constructing the literal \"shelf \" and routing it through the item's bark/display routine while briefly altering processing context to avoid unwanted side-effects.",
+    "entry_conditions": [
+      "Event 0 (U8P_EWSHFSID::look) — triggered when an actor/player looks at or examines the object (the object's 'U8P_EWSHFSID::look' handler)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_EWSHFSID::look",
+      "kind": "main",
+      "role": "Look/examine event handler for this item; prepares and dispatches a short description via Item::bark.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "External engine/item routine that emits/displays/returns a short text string from an item/process (used to show the item's description).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_EWSHFSID::look",
+        "callee": "Item::bark",
+        "purpose": "Present the constructed description string \"shelf \" to the target process/player or otherwise produce the item's visible description.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_EWSHFSID::look",
+    "behavior_summary_one_liner": "Handles the item's 'U8P_EWSHFSID::look' event: when a player/actor examines this object the script builds the literal string \"shelf \", prepares call context, and asks the item to 'bark' that string so the description is presented to the viewer.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

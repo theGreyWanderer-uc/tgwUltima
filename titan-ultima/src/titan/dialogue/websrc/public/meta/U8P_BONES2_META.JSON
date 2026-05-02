@@ -1,0 +1,135 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_BONES2.json",
+  "file": "U8P_BONES2",
+  "behavior_summary": [
+    "Responds to a player 'U8P_BONES2::look' on the skeleton by emitting a short descriptive label ('skeleton ') from the skeleton item/process.",
+    "Handles a player 'use' on the skeleton: checks an item status bit (mask 0x0100). If the bit is clear it simply closes any open UI gump for the item and returns.",
+    "If the status bit 0x0100 is set, the 'use' handler performs a probabilistic branch using urandom(100): in a low-probability case it opens a gump with parameter 0x0C; otherwise the skeleton shouts 'Do not disturb my rest! ' and the process is suspended (interaction halted)."
+  ],
+  "notable_control_flow": [
+    "BONES2::look (U8P_BONES2::look event) has a single straight-line behavior: call Item::bark(\"skeleton \") and then return/suspend as per normal event termination (high confidence).",
+    "BONES2::use (use event) branches on a status bit: if (Item::getStatus() & 0x0100) == 0 then call Item::closeGump() and return (high confidence).",
+    "When status bit 0x0100 is set, a random choice is made using urandom(0x64). If the returned value > 0x5F (i.e., only on a rare roll) call Item::openGump(0x0C); otherwise call Item::bark(\"Do not disturb my rest! \") and suspend the process (high confidence on branching logic, medium confidence on exact numeric threshold semantics due to urandom interpretation)."
+  ],
+  "open_questions": [
+    "What exact gameplay meaning does status bit 0x0100 encode for the skeleton (e.g., 'is hostile', 'has gump open', or 'is awakened')? (inferred, medium confidence).",
+    "What is the semantics and UI content of gump id/parameter 0x0C (what UI/window is presented to the player)? (low confidence).",
+    "Is the implies/pop sequence after Item::bark used for any gameplay effect beyond normal event termination (likely housekeeping; low confidence)."
+  ],
+  "main_function": {
+    "name": "U8P_BONES2::look",
+    "execution_form": "process",
+    "purpose": "Serve the item 'U8P_BONES2::look' (examine) event by making the skeleton item emit a short descriptive label to the viewer.",
+    "entry_conditions": [
+      "Invoked when a player or actor inspects/looks at the skeleton item (Event 0 / U8P_BONES2::look)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_BONES2::look",
+      "kind": "main",
+      "role": "Handle the 'U8P_BONES2::look' event for the skeleton item; call Item::bark with the label 'skeleton '.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BONES2::use",
+      "kind": "helper",
+      "role": "Handle the 'use' event on the skeleton: check a status bit, possibly close a gump, otherwise run a random branch to either open a gump or bark a warning and suspend.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine API to emit/display a short text message from an item/process to a player/process.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getStatus",
+      "kind": "extern",
+      "role": "Engine API returning status bits/flags for the item/process; used to test mask 0x0100.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::closeGump",
+      "kind": "extern",
+      "role": "Engine API to close the item's UI gump if open.",
+      "confidence": "high"
+    },
+    {
+      "name": "urandom",
+      "kind": "extern",
+      "role": "Engine/random API returning a pseudorandom integer in [0, n-1]; used for probabilistic branching (called with 0x64).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::openGump",
+      "kind": "extern",
+      "role": "Engine API to open a UI gump for the item with a supplied parameter (here 0x0C).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_BONES2::look",
+        "callee": "Item::bark",
+        "purpose": "Emit the descriptive label 'skeleton ' from the skeleton item to the viewer/process.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BONES2::use",
+        "callee": "Item::getStatus",
+        "purpose": "Read the item's status bits to test mask 0x0100 and decide control flow.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BONES2::use",
+        "callee": "Item::closeGump",
+        "purpose": "Close the item's UI gump when the tested status bit is clear (clean-up behavior on 'use').",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BONES2::use",
+        "callee": "urandom",
+        "purpose": "Generate a pseudorandom value in [0,99] (called with 0x64) to implement rare behavior branching.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BONES2::use",
+        "callee": "Item::openGump",
+        "purpose": "Open a specific UI gump (parameter 0x0C) in the rare random branch.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BONES2::use",
+        "callee": "Item::bark",
+        "purpose": "Display a warning message 'Do not disturb my rest! ' when the random check falls into the common branch, prior to suspending the process.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "BONES2::look",
+    "behavior_summary_one_liner": "Responds to a player 'U8P_BONES2::look' on the skeleton by emitting a short descriptive label ('skeleton ') from the skeleton item/process.",
+    "external_call_count": 6,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

@@ -1,0 +1,86 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_FLOOR.json",
+  "file": "U8P_FLOOR",
+  "behavior_summary": [
+    "FLOOR::gotHit is the U8P_FLOOR::gotHit event handler for a floor object. When invoked it records or updates an information entry (info code 0x20C) on the floor object using the first argument, then calls a 'process exclude' operation to prevent further/reentrant handling related to that info change.",
+    "The routine also copies the second argument into a short local ([BP-02h]) and compares it to 1; in the provided excerpt that comparison does not alter control flow (both outcomes return), so its observable effect is unclear from this snippet.",
+    "Overall the handler appears to log a hit-related value on the floor and mark the object/process as excluded from further immediate processing."
+  ],
+  "notable_control_flow": [
+    "Linear sequence: set info (0x20C) -> process exclude -> store second parameter to local -> compare local to 1 -> return.",
+    "The comparison of [BP-02h] against 1 is present but does not change return behavior in the provided excerpt, so it currently appears to be a non-branching conditional or a vestigial check."
+  ],
+  "open_questions": [
+    "What semantic meaning does info code 0x20C have (e.g., last hitter id, hit type, timestamp)?",
+    "What side-effects or broader engine behavior does 'process exclude' trigger for the floor object (temporary ignore, permanent disable, AI exclusion)?",
+    "What is the intended effect of the [BP-02h] == 1 comparison in contexts not present in the excerpt — does other code rely on this local being set or checked differently?",
+    "Are there additional handlers or scripts that respond to info 0x20C being set on the floor object?"
+  ],
+  "main_function": {
+    "name": "U8P_FLOOR::gotHit",
+    "execution_form": "process",
+    "purpose": "Handle a hit event on a floor object by storing hit-related data (info id 0x20C) associated with the floor and excluding the process/object from further immediate handling; also copy a small parameter into a local and compare it to 1 (effect unclear).",
+    "entry_conditions": [
+      "Invoked on Event 6 (U8P_FLOOR::gotHit) for the floor object — triggered when the object receives a hit event from an actor or effect."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_FLOOR::gotHit",
+      "kind": "main",
+      "role": "Event handler for U8P_FLOOR::gotHit on the floor object; records info and excludes the process.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FLOOR::set info",
+      "kind": "extern",
+      "role": "Engine call to store/update an info key (used here with id 0x20C) on a target object.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FLOOR::process exclude",
+      "kind": "extern",
+      "role": "Engine call that marks the referenced process/object to be excluded from further processing (prevents reentrant or duplicate handling).",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_FLOOR::gotHit",
+        "callee": "U8P_FLOOR::set info",
+        "purpose": "Record/update the info entry id 0x20C on the floor object using the first argument as the stored value or identifier.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FLOOR::gotHit",
+        "callee": "U8P_FLOOR::process exclude",
+        "purpose": "Exclude or mark the process/object to avoid further immediate processing after the info key is set (likely a guard against reentrancy/duplicate effects).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "FLOOR::gotHit",
+    "behavior_summary_one_liner": "FLOOR::gotHit is the U8P_FLOOR::gotHit event handler for a floor object. When invoked it records or updates an information entry (info code 0x20C) on the floor object using the first argument, then calls a 'process exclude' operation to prevent further/reentrant handling related to that info change.",
+    "external_call_count": 2,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_CLOTH.json",
+  "file": "U8P_CLOTH",
+  "behavior_summary": [
+    "Provides the 'U8P_CLOTH::look' (examine) handler for the cloth item. When a player/actor examines the cloth, the script prepares the item, emits a short descriptive message ('cloth ') to the viewer using Item::bark, and then returns.",
+    "Before emitting the message the routine sets item-level info/processing-exclude opcodes to prevent further processing or recursion while the bark is produced.",
+    "A temporary string containing the literal \"cloth \" is allocated/pushed, passed to Item::bark with the item/viewer PID, then freed after the call. The bark return value is briefly inspected and the process suspends/returns."
+  ],
+  "notable_control_flow": [
+    "Entry on a U8P_CLOTH::look/examine trigger → set item info/process-exclude flags → allocate/push literal string \"cloth \" → push item/viewer PID ([BP+06h]) → call external Item::bark → free temporary string → pop/inspect bark return value → suspend/return.",
+    "All state changes appear local to the item (no global flags are read or written by this snippet)."
+  ],
+  "open_questions": [
+    "Is [BP+06h] strictly the item instance PID or sometimes the viewer/process PID in this engine call convention? (appears to be the item 'this' passed to Item::bark; inferred).",
+    "What exact info id(s) and semantics are being set by the 'set info' / 'process exclude' opcodes and whether they persist beyond this call (likely they mark the object to avoid reentrancy).",
+    "Does Item::bark return any meaningfully used value in this context, or is its return only inspected for control-flow artifact (inferred as not used further)?"
+  ],
+  "main_function": {
+    "name": "U8P_CLOTH::look",
+    "execution_form": "process",
+    "purpose": "Handle the cloth item's examine/U8P_CLOTH::look event: mark the item to avoid further processing, and make the item produce a short descriptive message 'cloth ' to the viewer using Item::bark.",
+    "entry_conditions": [
+      "Event 0 (U8P_CLOTH::look/examine) — triggered when an actor examines/looks at the cloth item."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_CLOTH::look",
+      "kind": "main",
+      "role": "Main handler for the cloth item's 'U8P_CLOTH::look' (examine) event; prepares item state and delegates to Item::bark to display the description.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine used to emit a short text message (a 'bark') from the item/process to a target viewer/process.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_CLOTH::look",
+        "callee": "Item::bark",
+        "purpose": "Display the short description string 'cloth ' to the viewer/process; called with the item/viewer PID and the temporary string pointer.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "CLOTH::look",
+    "behavior_summary_one_liner": "Provides the 'U8P_CLOTH::look' (examine) handler for the cloth item. When a player/actor examines the cloth, the script prepares the item, emits a short descriptive message ('cloth ') to the viewer using Item::bark, and then returns.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

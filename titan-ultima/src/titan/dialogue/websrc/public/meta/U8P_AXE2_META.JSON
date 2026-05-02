@@ -1,0 +1,74 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_AXE2.json",
+  "file": "U8P_AXE2",
+  "behavior_summary": [
+    "Responds to the 'U8P_AXE2::look' (examine) event for the axe item by producing and sending the short description string \"axe \" to the appropriate recipient(s).",
+    "Sets messaging/context state (pid and processing exclusions) so the description is routed to the intended viewer(s), calls Item::bark with the allocated string, captures the bark return value, uses it in a subsequent implies/pop sequence, then suspends/returns.",
+    "All changes are local to the item and message routing; no global flags are read or written by this script."
+  ],
+  "notable_control_flow": [
+    "Event-driven: the function runs in response to a U8P_AXE2::look/examine trigger (Event 0).",
+    "Message-routing setup occurs before the bark call (set info / process exclude / pid adjustments), so recipients are determined prior to emitting text.",
+    "Return value from Item::bark is captured and immediately used in an 'implies' operation; the result is popped and the process is suspended — indicating the bark's result may affect ephemeral control/state but not persistent globals."
+  ],
+  "open_questions": [
+    "Which exact recipients are excluded or included by the set-info/process-exclude sequence (the script configures routing but the exact pid semantics are engine-level and not fully specified here).",
+    "What concrete effect the 'implies' operation has in the surrounding engine (it uses the bark return value but its gameplay impact is only inferred).",
+    "Whether the allocated string lifetime or allocation site has any additional side effects beyond being passed to Item::bark and freed."
+  ],
+  "main_function": {
+    "name": "U8P_AXE2::look",
+    "execution_form": "process",
+    "purpose": "Handle the 'U8P_AXE2::look' (examine) event for the axe item: prepare message routing, emit the item's short description \"axe \", capture the bark return value for a downstream implies operation, then suspend/return.",
+    "entry_conditions": [
+      "Triggered by Event 0 (player/actor looks at or examines the axe).",
+      "Runs with an implicit 'this' / item reference provided (inferred at BP+06h)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_AXE2::look",
+      "kind": "main",
+      "role": "Process-event handler for the axe item's U8P_AXE2::look/examine action; builds and emits the short description to viewer(s).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine used to emit/display short text messages from an item/process to one or more player/process recipients.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_AXE2::look",
+        "callee": "Item::bark",
+        "purpose": "Deliver the literal description string \"axe \" from the axe item to the configured recipient(s). Caller precedes this call by setting pid and using set-info/process-exclude to control routing; return value is captured for immediate use.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup"
+  ],
+  "quick_facts": {
+    "main_function": "AXE2::look",
+    "behavior_summary_one_liner": "Responds to the 'U8P_AXE2::look' (examine) event for the axe item by producing and sending the short description string \"axe \" to the appropriate recipient(s).",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

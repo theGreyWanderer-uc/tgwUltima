@@ -1,0 +1,128 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_LAMP1.json",
+  "file": "U8P_LAMP1",
+  "behavior_summary": [
+    "Provides simple interaction handlers for a wall lamp item. When the player 'looks' at the lamp it emits a short identifying text ('wall lamp '). When the player 'uses' the lamp the script collects the lamp's map coordinates (X,Y,Z), adjusts X by -0x20 and invokes an engine routine (FREE::2411) with those coordinates and constants — inferred to spawn/trigger an object or effect near the lamp.",
+    "Both handlers set process/context info and exclude normal processing before performing their action to ensure the bark or engine call runs under the intended engine context.",
+    "No persistent global flags are read or written by these handlers in the provided excerpt."
+  ],
+  "notable_control_flow": [
+    "LAMP1::look: set process/info context -> call Item::bark(this, \"wall lamp \") -> free temporary string -> implies/pop return handling -> suspend.",
+    "LAMP1::use: set process/info context -> call Item::getZ/Y/X to read coordinates -> compute X-0x20 -> push (X-0x20, Y, Z, 0x00, 0x025E, item, context) -> call FREE::2411 -> return.",
+    "Both functions perform pre-call context setup (set info/process exclude) to guard their operations from normal processing."
+  ],
+  "open_questions": [
+    "Exact semantics of FREE::2411: the call appears to spawn or trigger something at the provided coordinates (0x025E looks like an object/type id), but its precise effect is inferred.",
+    "Meaning and effect of the specific info/process-exclude values set before calls (what engine state key is being set and how it affects other systems).",
+    "Whether LAMP1::use is tied to a particular event id in the engine (Event 1/use is inferred from pattern but not explicitly labeled here)."
+  ],
+  "main_function": {
+    "name": "U8P_LAMP1::look",
+    "execution_form": "process",
+    "purpose": "When the player inspects (looks at) the wall lamp, present a short descriptive text ('wall lamp ') as an item bark and then suspend. Ensures the bark runs under the correct process/context.",
+    "entry_conditions": [
+      "Event 0 (U8P_LAMP1::look) — triggered when the Avatar or relevant actor looks at or examines the wall lamp."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_LAMP1::look",
+      "kind": "main",
+      "role": "Handle the 'U8P_LAMP1::look' event for the wall lamp; present identifying bark text and suspend.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_LAMP1::use",
+      "kind": "helper",
+      "role": "Handle the 'use' event: read lamp coordinates, adjust X, and call engine routine (FREE::2411) to spawn/trigger an effect/object near the lamp.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine to show/emit short text associated with an item (used by U8P_LAMP1::look to show 'wall lamp ').",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getZ",
+      "kind": "extern",
+      "role": "Return item Z coordinate (height) for use in spatial calls.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getY",
+      "kind": "extern",
+      "role": "Return item Y coordinate for use in spatial calls.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getX",
+      "kind": "extern",
+      "role": "Return item X coordinate; value is adjusted by -0x20 before use.",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::2411",
+      "kind": "extern",
+      "role": "Engine routine invoked with coordinates and constants; likely spawns, frees, or triggers an object/effect at or near the lamp (inferred).",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_LAMP1::look",
+        "callee": "Item::bark",
+        "purpose": "Display/emit the lamp's short identifying text 'wall lamp ' to the viewer/process.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LAMP1::use",
+        "callee": "Item::getZ",
+        "purpose": "Obtain the lamp's Z coordinate to pass to FREE::2411.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LAMP1::use",
+        "callee": "Item::getY",
+        "purpose": "Obtain the lamp's Y coordinate to pass to FREE::2411.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LAMP1::use",
+        "callee": "Item::getX",
+        "purpose": "Obtain the lamp's X coordinate, which is then adjusted (X - 0x20) before being passed to FREE::2411.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LAMP1::use",
+        "callee": "FREE::2411",
+        "purpose": "Invoke an engine routine with (X-0x20, Y, Z, 0x00, 0x025E, item, context) — likely to spawn or trigger an object/effect at or near the lamp; exact effect is inferred.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "guard",
+    "cleanup"
+  ],
+  "quick_facts": {
+    "main_function": "LAMP1::look",
+    "behavior_summary_one_liner": "Provides simple interaction handlers for a wall lamp item. When the player 'looks' at the lamp it emits a short identifying text ('wall lamp '). When the player 'uses' the lamp the script collects the lamp's map coordinates (X,Y,Z), adjusts X by -0x20 and invokes an engine routine (FREE::2411) with those coordinates and constants — inferred to spawn/trigger an object or effect near the lamp.",
+    "external_call_count": 5,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

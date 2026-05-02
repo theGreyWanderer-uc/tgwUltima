@@ -1,0 +1,157 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_ENDSTRAT.json",
+  "file": "U8P_ENDSTRAT",
+  "behavior_summary": [
+    "ENDSTRAT::hatch implements an 'egg hatching / punishment' sequence: when triggered it scans a provided item/area reference for matching child items, temporarily immobilizes the avatar, plays staged visual and sound effects (including a lightning bolt), makes the source object 'bark' a chastising message, and then releases the avatar.",
+    "For each matching item it may spawn one or more NPCs: Npc::create is called, randomized offsets (urandom) are added to the source item's X/Y/Z, the created NPC is placed via Item::pop, and then set into combat targeting the triggering player. The per-item spawn count is limited by a small loop threshold (inferred).",
+    "Multiple short-lived free processes (FREE::1C6D, FREE::1C19, FREE::1C8B) are spawned with varied timings to produce layered visual/audio effects; urandom is used to vary offsets and timings."
+  ],
+  "notable_control_flow": [
+    "A brief avatar stasis window is established at the start (setAvatarInStasis(1)) and released at the end (setAvatarInStasis(0)) to prevent the player from interrupting the staged effects.",
+    "The routine iterates over a collection derived from the supplied reference (BP+06h), processing each match and using an internal counter ([BP-06h]) to limit spawns per item (inferred <4).",
+    "Effect spawning is staged: immediate emitter spawns at the item's coordinates, then timed/free processes are spawned with urandom-modulated durations to create a sequence, interleaved with playSFX and LightningBolt calls.",
+    "When spawning NPCs the code computes X/Y/Z base from Item::getX/getY/getZ, adds small random offsets (urandom), calls Npc::create, uses Item::pop to place the NPC, then calls Npc::setInCombat and Npc::setTarget to make them aggressive toward the triggering pid."
+  ],
+  "open_questions": [
+    "What exact item-shape or attribute matching criteria select which items from the supplied reference are processed?",
+    "What exact NPC type ids and numeric SFX ids are used when spawning (disassembly patterns show calls but not the concrete constants)?",
+    "What is the precise spawn limit per item (the code compares a counter to a small constant; inferred as <4 but exact threshold is uncertain)?",
+    "What are the intended gameplay consequences of the chastising 'bark' text (is it purely cosmetic or tied to quest/flag state)?",
+    "Do any global flags get set by this routine under rare conditions (none were observed, but surrounding scripts sometimes write flags)?"
+  ],
+  "main_function": {
+    "name": "U8P_ENDSTRAT::hatch",
+    "execution_form": "process",
+    "purpose": "Respond to the 'U8P_ENDSTRAT::hatch' trigger by inflicting a short staged punishment/effect sequence on the player and spawning hostile NPCs near the source item, using randomized offsets and timed effects.",
+    "entry_conditions": [
+      "Event 7 (U8P_ENDSTRAT::hatch) — triggered by the ENDSTRAT object's U8P_ENDSTRAT::hatch/trigger region or similar event",
+      "Invocation with a process id (caller pid) and an object/item or area reference at BP+06h whose contents are enumerated"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_ENDSTRAT::hatch",
+      "kind": "main",
+      "role": "Handle U8P_ENDSTRAT::hatch/punishment event: stage effects, bark message, spawn NPCs, and target the player.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_ENDSTRAT::hatch",
+        "callee": "U8P_ENDSTRAT::setAvatarInStasis",
+        "purpose": "Temporarily immobilize the avatar at the start of the effect sequence and release it at the end.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDSTRAT::hatch",
+        "callee": "Item::getZ",
+        "purpose": "Read the item's Z coordinate to use as the base height for visual effects and NPC spawns.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDSTRAT::hatch",
+        "callee": "Item::getY",
+        "purpose": "Read the item's Y coordinate as a spawn base.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDSTRAT::hatch",
+        "callee": "Item::getX",
+        "purpose": "Read the item's X coordinate as a spawn base.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDSTRAT::hatch",
+        "callee": "FREE::1C6D",
+        "purpose": "Spawn a short-lived visual/effect emitter at computed coordinates early in the sequence.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ENDSTRAT::hatch",
+        "callee": "FREE::1C19",
+        "purpose": "Spawn timed visual/sound effect processes multiple times with randomized durations to create layered timing.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ENDSTRAT::hatch",
+        "callee": "FREE::1C8B",
+        "purpose": "Spawn another short-lived timed effect later in the punishment sequence.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ENDSTRAT::hatch",
+        "callee": "Item::bark",
+        "purpose": "Make the source item utter a chastising message to the triggering player/process during the sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDSTRAT::hatch",
+        "callee": "U8P_ENDSTRAT::LightningBolt",
+        "purpose": "Trigger a lightning visual centered on the item/scene as a punishment effect.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDSTRAT::hatch",
+        "callee": "U8P_ENDSTRAT::playSFX",
+        "purpose": "Play a sound effect during the staged punishment/effect sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDSTRAT::hatch",
+        "callee": "Npc::create",
+        "purpose": "Create new NPC(s) to spawn near the source item.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDSTRAT::hatch",
+        "callee": "urandom",
+        "purpose": "Generate pseudorandom offsets and timing multipliers to vary spawn positions and staged effect delays.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDSTRAT::hatch",
+        "callee": "Item::pop",
+        "purpose": "Place the created NPC (or item) at the computed X/Y coordinates, finalizing the spawn location.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDSTRAT::hatch",
+        "callee": "Npc::setInCombat",
+        "purpose": "Mark spawned NPCs as in combat so they act aggressively immediately.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDSTRAT::hatch",
+        "callee": "Npc::setTarget",
+        "purpose": "Set the spawned NPC's target to the triggering player/process so it will attack that entity.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "ENDSTRAT::hatch",
+    "behavior_summary_one_liner": "ENDSTRAT::hatch implements an 'egg hatching / punishment' sequence: when triggered it scans a provided item/area reference for matching child items, temporarily immobilizes the avatar, plays staged visual and sound effects (including a lightning bolt), makes the source object 'bark' a chastising message, and then releases the avatar.",
+    "external_call_count": 15,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

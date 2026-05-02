@@ -1,0 +1,185 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_SGBOOK.json",
+  "file": "U8P_SGBOOK",
+  "behavior_summary": [
+    "This script module implements a collection of book-reading handlers. Each function prepares a specific piece of in-game text (lore, letters, or spell descriptions) and invokes the engine UI routine that displays book content to a player.",
+    "When a handler runs it sets book-related info on the target object, arranges the player context (pid), allocates/creates a runtime string pointer for the literal text, calls Book::read(book_object_ptr, string_ptr) to present the text to the player, frees the temporary string, and then propagates/handles the return value.",
+    "Handlers are data-driven: each function differs only in the literal string payload (title/body) it pushes before calling Book::read. No global game flags are read or written by these handlers in the observed excerpt."
+  ],
+  "notable_control_flow": [
+    "Linear per-handler flow: set book info -> push implicit player id -> push literal text -> convert literal to pointer -> call Book::read -> free temporary string -> handle/propagate retval.",
+    "No branching or global-state based logic in these handlers; they act as thin wrappers around a single display call.",
+    "Multiple separate helper functions (U8P_SGBOOK::08A3, ::0AC9, ::0CE0, etc.) follow the same flow with different text payloads."
+  ],
+  "open_questions": [
+    "Which exact event(s) trigger each function (e.g., on-use, on-read, or on-enter area)? Inference: they run when the player interacts/reads the corresponding book object, but the precise event id is not explicit in the excerpt.",
+    "Is the 'set info' opcode used for visual/UI state, object metadata, or to mark the object as currently open? The engine-level effect of the set-info step is inferred but not confirmed.",
+    "Are there any player-specific permission checks (e.g., skill or quest gating) performed outside these handlers before they are invoked?",
+    "Exact lifetime/ownership semantics of 'str to ptr' and 'free string' (allocator used and whether Book::read expects ownership transfer) are inferred but not proven from the snippet."
+  ],
+  "main_function": {
+    "name": "U8P_SGBOOK::0080",
+    "execution_form": "process",
+    "purpose": "Present the book titled 'THE SAGA OF BONE CRUSHER' to the player by preparing its text payload and calling the engine Book::read UI routine for the target book object.",
+    "entry_conditions": [
+      "Inferred: invoked when a player interacts with or attempts to read the corresponding in-world book object (i.e., a read/use interaction).",
+      "Pattern: an on-read/book-open handler called with the target book object pointer and an implicit player id (pid)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_SGBOOK::0080",
+      "kind": "main",
+      "role": "Handler that prepares and displays the 'THE SAGA OF BONE CRUSHER' text via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_SGBOOK::08A3",
+      "kind": "helper",
+      "role": "Helper handler that prepares and displays 'Enemies of Tenebrae'.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_SGBOOK::0AC9",
+      "kind": "helper",
+      "role": "Helper handler that prepares and displays 'WHAT THE FISH TELL ME' (poem).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_SGBOOK::0CE0",
+      "kind": "helper",
+      "role": "Helper handler that prepares and displays 'The Spell of Divination' description.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_SGBOOK::0E62",
+      "kind": "helper",
+      "role": "Helper handler that prepares and displays 'The Spell of Healing Touch'.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_SGBOOK::0F95",
+      "kind": "helper",
+      "role": "Helper handler that prepares and displays 'The spell of Aerial Servant'.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_SGBOOK::11EA",
+      "kind": "helper",
+      "role": "Helper handler that prepares and displays 'The Spell of Reveal'.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_SGBOOK::13AD",
+      "kind": "helper",
+      "role": "Helper handler that prepares and displays 'The Spell of Restoration'.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_SGBOOK::1598",
+      "kind": "helper",
+      "role": "Helper handler that prepares and displays 'The Spell of Fade From Sight'.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_SGBOOK::16C8",
+      "kind": "helper",
+      "role": "Helper handler that prepares and displays 'The spell of Air Walk'.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_SGBOOK::19E5",
+      "kind": "helper",
+      "role": "Helper handler that prepares and displays 'The Spell of Hear Truth'.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_SGBOOK::1B74",
+      "kind": "helper",
+      "role": "Helper handler that prepares and displays 'The spell of Intervention'.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_SGBOOK::1D26",
+      "kind": "helper",
+      "role": "Helper handler that prepares and displays a long entry 'The Spell of Resurrection'.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_SGBOOK::247E",
+      "kind": "helper",
+      "role": "Helper handler that prepares and displays a personal letter/story beginning 'My dearest Prevan,'.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_SGBOOK::2D4E",
+      "kind": "helper",
+      "role": "Helper handler that prepares and displays 'THE CHRONICLE OF PAGAN'.",
+      "confidence": "high"
+    },
+    {
+      "name": "Book::read",
+      "kind": "extern",
+      "role": "Engine/UI routine that opens/displays a book text to the player (called with book object context and a char* string).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_SGBOOK::str to ptr",
+      "kind": "extern",
+      "role": "Runtime helper that converts an inline literal string into an allocated pointer suitable for Book::read.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_SGBOOK::free string",
+      "kind": "extern",
+      "role": "Runtime helper that frees temporary/allocated string memory produced by 'str to ptr'.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_SGBOOK::0080 (and all U8P_SGBOOK helpers listed)",
+        "callee": "Book::read",
+        "purpose": "Display/open the prepared book text for the specified book object and player context; primary UI call that shows the content to the player.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::0080 (and all U8P_SGBOOK helpers listed)",
+        "callee": "U8P_SGBOOK::str to ptr",
+        "purpose": "Allocate or otherwise convert the inline/literal pushed text to a char* pointer suitable for passing to Book::read.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_SGBOOK::0080 (and all U8P_SGBOOK helpers listed)",
+        "callee": "U8P_SGBOOK::free string",
+        "purpose": "Free the temporary memory allocated by 'str to ptr' after Book::read returns.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "SGBOOK::0080",
+    "behavior_summary_one_liner": "This script module implements a collection of book-reading handlers. Each function prepares a specific piece of in-game text (lore, letters, or spell descriptions) and invokes the engine UI routine that displays book content to a player.",
+    "external_call_count": 3,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

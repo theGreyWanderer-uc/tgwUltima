@@ -1,0 +1,73 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_PULCHNNS.json",
+  "file": "U8P_PULCHNNS",
+  "behavior_summary": [
+    "When the object is examined (U8P_PULCHNNS::look event), the script marks/adjusts some per-object processing state, constructs the literal message \"bell ringer \", and requests that the viewer/process receive that short message via Item::bark.",
+    "The temporary string is freed after use. The function pushes the bark return, performs an 'implies' operation on that result, consumes a small temp and then suspends/returns.",
+    "No global flags are read or written by this handler in the observed code; its effect is primarily local: produce a short descriptive/message bark to the inspecting process and set local info/exclusion state on the object."
+  ],
+  "notable_control_flow": [
+    "Entry is event-driven (U8P_PULCHNNS::look/examine). The routine performs a sequence: set local info / process exclude -> build string -> call Item::bark(pid, str) -> free string -> push bark retval -> 'implies' operation -> pop temp -> suspend/return.",
+    "The use of 'implies' on the bark return value suggests the return may gate further engine processing or be used as a boolean control; exact semantics of 'implies' here are inferred."
+  ],
+  "open_questions": [
+    "What exactly do the opcodes 'set info' and 'process exclude' change on the object (precise meaning of info id 0x210 or other keys)?",
+    "Which concrete engine/process id is passed in [BP+06h] (player pid, viewer pid, or an internal process)?",
+    "What precise effect does the 'implies' instruction have in the engine here (side-effect vs control flow flag)?"
+  ],
+  "main_function": {
+    "name": "U8P_PULCHNNS::look",
+    "execution_form": "process",
+    "purpose": "Handle the object's 'U8P_PULCHNNS::look' (examine) event: mark local processing state, make the object emit the short text \"bell ringer \" to the inspecting process via Item::bark, then clean up and suspend.",
+    "entry_conditions": [
+      "Triggered by Event 0 (U8P_PULCHNNS::look/examine) when an actor/player inspects the object."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_PULCHNNS::look",
+      "kind": "main",
+      "role": "Event handler for the object's U8P_PULCHNNS::look/examine event; prepares and issues a short bark message and updates local object state.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item API used to send/display a short message ('bark') to a target process/player with a provided string.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_PULCHNNS::look",
+        "callee": "Item::bark",
+        "purpose": "Deliver the short descriptive string \"bell ringer \" to the inspecting process (pid inferred from stack param) so the viewer sees/receives the message.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "message",
+    "cleanup"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_PULCHNNS::look",
+    "behavior_summary_one_liner": "When the object is examined (U8P_PULCHNNS::look event), the script marks/adjusts some per-object processing state, constructs the literal message \"bell ringer \", and requests that the viewer/process receive that short message via Item::bark.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

@@ -1,0 +1,231 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_PESANT1.json",
+  "file": "U8P_PESANT1",
+  "behavior_summary": [
+    "Manages a peasant NPC's interactions: cleans up per-NPC references when actors leave its fast trigger (U8P_PESANT1::leaveFastArea), responds to being looked at, used, or targeted by spells, and runs short and long conversational flows.",
+    "Prevents overlapping conversations globally via the somebodyTalking flag: use() checks/sets this flag to block simultaneous dialogs.",
+    "Dialog flows (PESANT1::0656 and PESANT1::030D) produce randomized greetings, present choice menus to the player (Item::ask), and orchestrate short waits/gestures (spawned helper methods) while restoring NPC activity when finished.",
+    "Cast reactions may call for help or spawn helpers/guards probabilistically and avoid action if the NPC is dead.",
+    "U8P_PESANT1::leaveFastArea removes stored references for the leaving actor (resetRef/FREE calls) and clears any process-exclusion/info bits so the NPC no longer points to that actor."
+  ],
+  "notable_control_flow": [
+    "Event-driven: each exported function is an event handler (look/cast/use/U8P_PESANT1::leaveFastArea) invoked by engine events — use() is the main player-interaction router and spawns dialog subroutines.",
+    "Use() examines the incoming frame (Item::getFrame) and the NPC map (Npc::getMap) to select which dialog routine to spawn (PESANT1::0656 or PESANT1::030D).",
+    "Dialog flow in PESANT1::030D loops on player choices returned by Item::ask, comparing response strings and branching to lines or exit; randomized choices (urandom) determine phrasing and whether to continue into the longer dialog.",
+    "Global synchronization: somebodyTalking is set to block other NPCs from starting conversations and cleared after refusal or completion; use() enforces this lock with short spawn/wait and bark sequences on contention.",
+    "Cleanup path: PESANT1::leaveFastArea is explicitly called on Event 10 (actor leaving fast area) and invokes resetRef/FREE operations for multiple stored slots to avoid stale references."
+  ],
+  "open_questions": [
+    "Exact set of info/slot IDs that U8P_PESANT1::leaveFastArea clears and whether any are used outside dialog/cast handlers (slots are referred to but not enumerated in this summary).",
+    "Precise semantics of spawned METHOD::0BCF, METHOD::1090 and FREE::1C19 beyond inferred animation/delay roles — their side effects are inferred from usage patterns.",
+    "Whether any other global flags besides somebodyTalking are read or written by this script in unobserved code paths.",
+    "How map IDs map to specific dialog variants — selection logic is present but exact mapping (which map IDs produce which dialog) is partially inferred."
+  ],
+  "main_function": {
+    "name": "U8P_PESANT1::leaveFastArea",
+    "execution_form": "process",
+    "purpose": "When an actor leaves the NPC's fast-area trigger, remove per-NPC references to that actor and clear related info/process exclusion so the NPC no longer holds stale links to the leaving actor.",
+    "entry_conditions": [
+      "Event 10: triggered when an actor leaves the NPC's fast trigger region"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_PESANT1::leaveFastArea",
+      "kind": "main",
+      "role": "Cleanup handler for actors exiting the NPC's fast-area trigger. Calls resetRef/FREE to clear stored actor references and remove process exclusion.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_PESANT1::look",
+      "kind": "helper",
+      "role": "Respond to 'look' events by barking a short description; uses Npc::isDead to emit alternate corpse text.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_PESANT1::cast",
+      "kind": "helper",
+      "role": "Handle being targeted by spells/abilities: consults target state, may spawn helpers/guards or bark for help based on randomness and local flags; suppressed if NPC is dead.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_PESANT1::use",
+      "kind": "helper",
+      "role": "Primary player-interaction router. Detects talk attempts via Item::getFrame, enforces somebodyTalking lock, selects and spawns appropriate dialog routine (0656 or 030D) based on map/frame.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_PESANT1::030D",
+      "kind": "helper",
+      "role": "Long dialog subroutine implementing greeting, name-question loop via Item::ask, response branching, and restoring NPC activity; uses urandom for line variation.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_PESANT1::0656",
+      "kind": "helper",
+      "role": "Short greeting/identification routine that builds 'Why, I am <name>!' messages, offers a quick exchange, and can route into the longer dialog (030D) depending on responses/randomness.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_PESANT1::use",
+        "callee": "U8P_PESANT1::0656",
+        "purpose": "Spawned as a short greeting dialog when map/frame indicate that variant of conversation should run.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PESANT1::use",
+        "callee": "U8P_PESANT1::030D",
+        "purpose": "Spawned as the longer interactive dialog when map/frame indicate that variant should run or when the short dialog routes into it.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PESANT1::0656",
+        "callee": "U8P_PESANT1::030D",
+        "purpose": "Short greeting may transition into the longer dialog based on player choices/randomness.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_PESANT1::030D",
+        "callee": "U8P_PESANT1::0656",
+        "purpose": "Dialog routines interact in the flow; 030D may reuse short-lines or return control to activity restoration routines (inferred interaction).",
+        "confidence": "low"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_PESANT1::leaveFastArea",
+        "callee": "U8P_PESANT1::resetRef",
+        "purpose": "Clear per-NPC reference slots so the NPC no longer points at the leaving actor (primary cleanup operation).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PESANT1::leaveFastArea",
+        "callee": "FREE::2A56",
+        "purpose": "Also used to free/clear stored info slots during cleanup (appears alongside resetRef usage).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_PESANT1::look",
+        "callee": "Npc::isDead",
+        "purpose": "Determine whether to use dead-corpse variant of bark text.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PESANT1::look",
+        "callee": "Item::bark",
+        "purpose": "Emit a short descriptive string to the examining process (e.g., 'peasant <pid>' or 'dead peasant <pid>').",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PESANT1::cast",
+        "callee": "Npc::getTarget",
+        "purpose": "Check current NPC target to decide reaction to being cast upon; influences spawning of guards or pleas for help.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PESANT1::cast",
+        "callee": "urandom",
+        "purpose": "Randomly choose between different bark lines and whether to summon help or call for the town sorcerer.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PESANT1::cast",
+        "callee": "spawn",
+        "purpose": "Spawn helper processes (e.g., guard spawns or delay processes) as part of the reaction to spells.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PESANT1::use",
+        "callee": "Item::getFrame",
+        "purpose": "Inspect the incoming use/frame token to detect a talk attempt or other interaction type.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PESANT1::use",
+        "callee": "Npc::getMap",
+        "purpose": "Select map-specific dialog variants to spawn (0656 vs 030D).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PESANT1::use",
+        "callee": "Item::bark",
+        "purpose": "Emit refusal/feedback messages when somebodyTalking prevents conversation or to speak lines during interactions.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PESANT1::use",
+        "callee": "spawn",
+        "purpose": "Spawn dialog subroutines and short delay processes that coordinate waits/animations around speech.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PESANT1::030D",
+        "callee": "Item::ask",
+        "purpose": "Present choice menus to the player (e.g., 'What is your name?' with 'bye') and receive the selected string for branching.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PESANT1::030D",
+        "callee": "urandom",
+        "purpose": "Randomize greeting lines and response variations within the dialog loop.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PESANT1::030D",
+        "callee": "spawn",
+        "purpose": "Trigger small gesture/animation methods (METHOD::0BCF, METHOD::1090) and short delay process (FREE::1C19) around spoken lines.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PESANT1::030D",
+        "callee": "Npc::cSetActivity",
+        "purpose": "Restore or change NPC activity/state after dialog completion.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_PESANT1::0656",
+        "callee": "U8P_PESANT1::getName",
+        "purpose": "Retrieve NPC display name to construct the identification line 'Why, I am <name>!'.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PESANT1::0656",
+        "callee": "urandom",
+        "purpose": "Randomly choose between alternate small-phrase variants during the short greeting.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": [
+      {
+        "name": "somebodyTalking",
+        "likely_effect": "Acts as a mutex to prevent multiple NPCs from starting blocking conversations at the same time; set when this NPC begins a conversation attempt and cleared when that attempt ends or is refused.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "PESANT1::leaveFastArea",
+    "behavior_summary_one_liner": "Manages a peasant NPC's interactions: cleans up per-NPC references when actors leave its fast trigger (U8P_PESANT1::leaveFastArea), responds to being looked at, used, or targeted by spells, and runs short and long conversational flows.",
+    "external_call_count": 17,
+    "flag_read_count": 0,
+    "flag_write_count": 1
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

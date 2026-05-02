@@ -1,0 +1,77 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_TABLWARE.json",
+  "file": "U8P_TABLWARE",
+  "behavior_summary": [
+    "U8P_TABLWARE::look handles the 'U8P_TABLWARE::look' (examine) event for a tableware item: when an actor inspects the object it marks the item with an info flag, prevents further processing for that moment, and emits a short descriptive string to the inspecting viewer.",
+    "The routine constructs the literal string \"tableware \", calls Item::bark(viewer_pid, \"tableware \") so the item 'speaks' the description to the viewer, frees the temporary string, then completes (the bark return is consumed and ignored).",
+    "No global state is read or modified by this handler in the observed excerpt; its effects are local to the item and the viewer interaction."
+  ],
+  "notable_control_flow": [
+    "Entry as an Event 0 / 'U8P_TABLWARE::look' handler (triggered by an actor examining the object).",
+    "Set item info with constant 0x208 and execute a process-exclude step (inferred to mark the response as informational and avoid further processing).",
+    "Allocate/build temporary message \"tableware \", call Item::bark with viewer_pid and the message, then free the message.",
+    "Push/pop/implies sequence consumes the return from Item::bark and then the process suspends/returns; the return value is not used for additional logic."
+  ],
+  "open_questions": [
+    "The precise semantic meaning of info id 0x208 (what exact object state or UI behavior it encodes) — appears to be an 'info' marker but exact effect is unknown.",
+    "The exact engine-level effect of 'process exclude' here (how long the exclusion lasts and which subsystems it prevents) — likely prevents immediate further processing of the item.",
+    "The implications of the implies/pop sequence after the bark return (appears to be a control-flow/interrupt handling idiom whose runtime effect is unclear).",
+    "Whether any other subsystems observe or record this 'U8P_TABLWARE::look' event besides the bark output (no globals seen, but side effects outside the disassembly slice are possible)."
+  ],
+  "main_function": {
+    "name": "U8P_TABLWARE::look",
+    "execution_form": "process",
+    "purpose": "Respond to a player/actor 'U8P_TABLWARE::look' (examine) event on a tableware object by marking the item as informational/excluded and emitting the short text \"tableware \" to the inspecting viewer.",
+    "entry_conditions": [
+      "Event 0 (U8P_TABLWARE::look) — invoked when an actor examines or looks at the object.",
+      "Expected parameter: viewer_pid (inferred from usage at BP+06h), the process/player id to receive the bark text."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_TABLWARE::look",
+      "kind": "main",
+      "role": "Handle 'U8P_TABLWARE::look' (examine) event for tableware items; prepare info state and produce a short descriptive bark to the inspecting viewer.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item service that displays/emits a short text message on behalf of an item/process to a specified viewer/process.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_TABLWARE::look",
+        "callee": "Item::bark",
+        "purpose": "Deliver the short examine description string \"tableware \" to the viewer process (viewer_pid), i.e., make the item 'speak' its description to the inspecting actor.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "informational"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_TABLWARE::look",
+    "behavior_summary_one_liner": "U8P_TABLWARE::look handles the 'U8P_TABLWARE::look' (examine) event for a tableware item: when an actor inspects the object it marks the item with an info flag, prevents further processing for that moment, and emits a short descriptive string to the inspecting viewer.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

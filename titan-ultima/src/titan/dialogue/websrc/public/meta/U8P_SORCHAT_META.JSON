@@ -1,0 +1,240 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_SORCHAT.json",
+  "file": "U8P_SORCHAT",
+  "behavior_summary": [
+    "SORCHAT::0080 parses a script/token stream attached to an item and, for tokens that indicate spell firing or item creation, spawns fire-spell effects (projectiles/visuals) at positions computed from the item's world coordinates plus token-specific offsets, then performs cleanup and destroys temporary objects and the item when appropriate.",
+    "SORCHAT::hatch (Event 7) gates whether the main parser (SORCHAT::0080) is allowed to run or whether the item provokes NPC retaliation: it tests the item's coordinates against hardcoded region/mask checks and either spawns U8P_SORCHAT::SORCHAT::0080 or locates an NPC to bark, set target to the player, spawn NPC methods, and destroy/free the item.",
+    "Spawned spells are registered/cleaned with FREE::* calls and created via FIRESPEL::1F65; some token branches validate possible targets with FIRESPEL::2B3E before spawning. A local flag records whether any spell was successfully fired."
+  ],
+  "notable_control_flow": [
+    "SORCHAT::0080 loops over item-associated tokens (examples include '$', '=', '@', '%', '&', '*', 'B') and branches per-token to validate targets, compute offsets, spawn fire-spells, register/free spawned pids, and optionally destroy referenced item instances.",
+    "After spawning a spell object, the routine yields/suspends around spawn and free calls (spawn -> FREE::1C19/FREE::1A96 sequencing) and uses return/temp values to decide further cleanup.",
+    "U8P_SORCHAT::SORCHAT::hatch performs sequential coordinate/mask checks to decide branch: allow parsing (spawn main process) vs provoke NPCs (bark, set target, spawn methods, destroy item)."
+  ],
+  "open_questions": [
+    "Exact token grammar and the meaning of every token handled by SORCHAT::0080 (only a subset and behavior patterns are inferred).",
+    "Precise semantics and parameters of FIRESPEL::1F65 and FIRESPEL::2B3E beyond 'spawn' and 'validate'—what payload/template IDs or flags are passed from the script tokens?",
+    "Meaning and mapping of the hardcoded region/mask constants tested in hatch(): which map areas or gameplay rules do they correspond to?",
+    "Whether any global state is set by these routines beyond the observed spawn/free/destroy behavior (no global flags were definitively written in this disassembly)."
+  ],
+  "main_function": {
+    "name": "U8P_SORCHAT::0080",
+    "execution_form": "process",
+    "purpose": "Parse an item's attached script/token stream and produce corresponding spell/projectile/item spawns at positions derived from that item's coordinates; clean up spawned objects and destroy the item when appropriate.",
+    "entry_conditions": [
+      "Spawned when the item's hatch handler (U8P_SORCHAT::SORCHAT::hatch) allows normal processing.",
+      "Invoked when an item/script produces tokens that represent spell firing or item creation (called from item processing/spawn path)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_SORCHAT::0080",
+      "kind": "main",
+      "role": "Parse item script tokens and spawn/cleanup fire-spell effects and temporary objects.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_SORCHAT::hatch",
+      "kind": "helper",
+      "role": "Event 7 handler that decides whether to run SORCHAT::0080 or provoke NPC retaliation based on item coordinate/mask checks.",
+      "confidence": "high"
+    },
+    {
+      "name": "FIRESPEL::2B3E",
+      "kind": "extern",
+      "role": "Validate/qualify a token/list element as a valid spell target before spawning.",
+      "confidence": "medium"
+    },
+    {
+      "name": "FIRESPEL::1F65",
+      "kind": "extern",
+      "role": "Instantiate/spawn a fire-spell effect at given coordinates/parameters.",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::1C19",
+      "kind": "extern",
+      "role": "Register or free the spawned object/pid after spawn (cleanup/registration).",
+      "confidence": "medium"
+    },
+    {
+      "name": "FREE::1A96",
+      "kind": "extern",
+      "role": "Additional free/cleanup/messaging call used after destroy/handling.",
+      "confidence": "medium"
+    },
+    {
+      "name": "FREE::2A56",
+      "kind": "extern",
+      "role": "Free/messaging call used by hatch() to release references indexed from the item.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::getX",
+      "kind": "extern",
+      "role": "Return the item's X coordinate for spawn position computation.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getY",
+      "kind": "extern",
+      "role": "Return the item's Y coordinate for spawn position computation.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getZ",
+      "kind": "extern",
+      "role": "Return the item's Z/frame value for vertical offset/frame tests.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::destroy",
+      "kind": "extern",
+      "role": "Destroy/remove the item from the world.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::isDead",
+      "kind": "extern",
+      "role": "Check if an NPC referenced by the item is dead (used by hatch() to gate retaliation).",
+      "confidence": "high"
+    },
+    {
+      "name": "METHOD::0BCF",
+      "kind": "extern",
+      "role": "Spawn a scripted method/behavior on an NPC (used by hatch() to start reaction).",
+      "confidence": "medium"
+    },
+    {
+      "name": "METHOD::1090",
+      "kind": "extern",
+      "role": "Spawn a follow-up method/behavior on an NPC after the bark.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Make an NPC/item emit dialogue; used by hatch() to warn or taunt the player.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::setTarget",
+      "kind": "extern",
+      "role": "Set NPC's combat/AI target to the player (provocation).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_SORCHAT::hatch",
+        "callee": "U8P_SORCHAT::0080",
+        "purpose": "Spawn the main parser/process to handle the item's script when region/mask checks permit.",
+        "confidence": "high"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_SORCHAT::0080",
+        "callee": "FIRESPEL::2B3E",
+        "purpose": "Validate a looped token/element as a valid spell target before spawning a fire-spell.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_SORCHAT::0080",
+        "callee": "FIRESPEL::1F65",
+        "purpose": "Spawn/instantiate a fire-spell effect at computed coordinates (item X/Y/Z plus offsets).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SORCHAT::0080",
+        "callee": "FREE::1C19",
+        "purpose": "Register or free the spawned fire-spell pid as part of cleanup after spawning.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_SORCHAT::0080",
+        "callee": "FREE::1A96",
+        "purpose": "Additional cleanup/registration call used after spawn or item destroy.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_SORCHAT::0080",
+        "callee": "Item::getX",
+        "purpose": "Read item's X coordinate for spawn placement.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SORCHAT::0080",
+        "callee": "Item::getY",
+        "purpose": "Read item's Y coordinate for spawn placement.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SORCHAT::0080",
+        "callee": "Item::getZ",
+        "purpose": "Read item's Z/frame for vertical offset/frame logic.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SORCHAT::hatch",
+        "callee": "Npc::isDead",
+        "purpose": "Check candidate NPC referenced by the item to decide whether to provoke it.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SORCHAT::hatch",
+        "callee": "METHOD::0BCF",
+        "purpose": "Spawn an NPC method/behavior as part of retaliation sequence.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_SORCHAT::hatch",
+        "callee": "Item::bark",
+        "purpose": "Make the NPC bark a theft/retaliation message to the player.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SORCHAT::hatch",
+        "callee": "Npc::setTarget",
+        "purpose": "Set the NPC's target to the player to provoke combat/AI response.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SORCHAT::hatch",
+        "callee": "FREE::2A56",
+        "purpose": "Free/messaging call to release references when aborting/provoking.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_SORCHAT::hatch",
+        "callee": "Item::destroy",
+        "purpose": "Destroy the item after provoking NPC or after special processing decisions.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_SORCHAT::SORCHAT::0080",
+    "behavior_summary_one_liner": "SORCHAT::0080 parses a script/token stream attached to an item and, for tokens that indicate spell firing or item creation, spawns fire-spell effects (projectiles/visuals) at positions computed from the item's world coordinates plus token-specific offsets, then performs cleanup and destroys temporary objects and the item when appropriate.",
+    "external_call_count": 13,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

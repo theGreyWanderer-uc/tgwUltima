@@ -1,0 +1,281 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_VARDION.json",
+  "file": "U8P_VARDION",
+  "behavior_summary": [
+    "Implements Vardion NPC behavior: casting spells, reacting to theft, dialog interactions, area initialization/cleanup, and periodic scheduling/movement.",
+    "VARDION::cast marks Vardion as 'mad' (aggressive) and spawns the spell/combat engine with the caller and the provided spell parameter.",
+    "Avatar theft triggers a staged escalation: warnings (vardionWarned increments), immobilization/stun and speech, then targeting/attack and possible scene spawn when thresholds/flags are reached.",
+    "Use/interact opens dialog gumps and dispatches a multi-option conversation helper; branching depends on many global flags to start scenes, join/combat behavior, or special daemon sequences.",
+    "enterFastArea initializes or removes area items (based on flags like acolyteKilled and goToInnerSanctum), and leaveFastArea frees the area membership list."
+  ],
+  "notable_control_flow": [
+    "VARDION::cast (Event 11) -> set vardionMad = 1 -> spawn SPELCMBT::084D(pid, [BP+06h], param) -> propagate spawned retval to caller.",
+    "VARDION::AvatarStoleSomething: early exit if param==0 or if vardionJoined/sponsorTest/keyOfTheAcolyte suppress response; otherwise compute direction to stolen item, call METHOD::091C to animate/react, loop nearby items/actors to identify offender(s), increment vardionWarned and escalate vocal/hostile actions (stasis, bark lines, setTarget, spawn follow-up VARDION routines).",
+    "VARDION::use (Event 1): if dead -> dead-path; if alive -> toggle/close gump or call U8P_VARDION::073C to build dialog options. Branches into scene spawns (VARDION2, DAEMSCEN routines) or combat depending on flags (keyOfTheAcolyte, acolyteKilled, vardionMad, vardionJoined, sponsorTest, inDaemonScene, avatarMasterSorcerer).",
+    "U8P_VARDION::enterFastArea: iterate area contents and conditionally modify/destroy items using Item::getX, Item::destroy, and frame/shape checks; may teleport Vardion to inner sanctum if goToInnerSanctum is set; no-op when NPC is dead.",
+    "U8P_VARDION::leaveFastArea: call FREE::2A56 to free area/list context (cleanup)."
+  ],
+  "open_questions": [
+    "Exact semantic meaning of the numeric parameter passed to VARDION::cast (inferred as a spell id or variant) and how SPELCMBT::084D interprets it.",
+    "Precise strings, numeric thresholds, and exact branching conditions used by AvatarStoleSomething for each increment of vardionWarned (only high-level escalation observed).",
+    "Full identity and behavior of spawned 'VARDION' follow-up routines referenced during theft escalation (names like VARDION::04CE were inferred from flow but not canonically resolved).",
+    "Exact shape/frame constants and X-coordinate ranges used in enterFastArea to decide which items to destroy or modify."
+  ],
+  "main_function": {
+    "name": "U8P_VARDION::cast",
+    "execution_form": "process",
+    "purpose": "When Vardion performs a U8P_VARDION::cast action, mark the NPC as enraged (set vardionMad) and spawn the spell/combat process (SPELCMBT::084D) using the caller pid, NPC context and supplied parameter; return/propagate the spawned process result.",
+    "entry_conditions": [
+      "Event 11 (U8P_VARDION::cast) invoked on the NPC when a U8P_VARDION::cast action is triggered.",
+      "Called with a single uword parameter (likely a spell identifier or variant)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_VARDION::cast",
+      "kind": "main",
+      "role": "Perform spell casting: set vardionMad, spawn SPELCMBT::084D, return spawn retval",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_VARDION::AvatarStoleSomething",
+      "kind": "helper",
+      "role": "React to the avatar stealing from Vardion's area: warning escalation, immobilize/attack, set targets, and spawn follow-up behaviors",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_VARDION::look",
+      "kind": "helper",
+      "role": "Produce context-sensitive look/examine text based on vardionName, vardionJob and life state; call Item::bark to display strings",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_VARDION::schedule",
+      "kind": "helper",
+      "role": "Periodic scheduling: control movement/behavior (spawn METHOD::143A/METHOD::133F), teleport to inner sanctum if flagged, and set avatar as target when appropriate",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_VARDION::enterFastArea",
+      "kind": "helper",
+      "role": "Fast-area entry trigger: initialize/adjust/destroy nearby items and possibly teleport NPC based on acolyteKilled and goToInnerSanctum flags",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_VARDION::leaveFastArea",
+      "kind": "helper",
+      "role": "Fast-area exit trigger: cleanup/free area membership lists (FREE::2A56)",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_VARDION::use",
+      "kind": "helper",
+      "role": "Main player interaction handler (Event 1): dialog/gump management and branch into conversation, scenes, or combat based on flags",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_VARDION::073C",
+      "kind": "helper",
+      "role": "Conversation subroutine: build selectable dialog list, present choices, handle player selection and branch to responses/scenes",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_VARDION::use",
+        "callee": "U8P_VARDION::073C",
+        "purpose": "Delegate conversation/menu construction and player choice handling",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VARDION::enterFastArea",
+        "callee": "U8P_VARDION::schedule",
+        "purpose": "Related scheduling/teleportation behavior (appears to coordinate inner sanctum movement when flags set)",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_VARDION::cast",
+        "callee": "SPELCMBT::084D",
+        "purpose": "Spawn the spell/combat engine/process which implements the U8P_VARDION::cast effect (passed pid, NPC context, U8P_VARDION::cast parameter)",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VARDION::AvatarStoleSomething",
+        "callee": "Item::getDirToItem",
+        "purpose": "Compute direction from Vardion to the stolen item to drive an animation/response",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VARDION::AvatarStoleSomething",
+        "callee": "METHOD::091C",
+        "purpose": "Spawn/trigger NPC reaction animation/behavior using computed direction",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VARDION::AvatarStoleSomething",
+        "callee": "U8P_VARDION::setAvatarInStasis",
+        "purpose": "Temporarily immobilize the avatar during threat or attack sequences",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VARDION::enterFastArea",
+        "callee": "Item::getX",
+        "purpose": "Inspect item X coordinates to decide whether to destroy or adjust area items",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VARDION::enterFastArea",
+        "callee": "Item::destroy",
+        "purpose": "Remove area items when conditions (shape/frame/X ranges or acolyteKilled) indicate they should be cleared",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VARDION::use",
+        "callee": "Item::openGump",
+        "purpose": "Open dialog/UI gump when starting conversation with the player (gump management)",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VARDION::use",
+        "callee": "METHOD::1090",
+        "purpose": "Common follow-up method invoked at the end of some interaction paths (UI/behavior cleanup or next-step)",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VARDION::leaveFastArea",
+        "callee": "FREE::2A56",
+        "purpose": "Free/cleanup area/list references associated with the fast-area membership",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VARDION::schedule",
+        "callee": "METHOD::143A",
+        "purpose": "Spawn movement/behavior routine as part of periodic scheduling",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VARDION::schedule",
+        "callee": "METHOD::133F",
+        "purpose": "Secondary behavior/method spawned after METHOD::143A depending on results",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_VARDION::use",
+        "callee": "DAEMSCEN::<multiple>",
+        "purpose": "Trigger scene/daemon-managed scripts when flags like keyOfTheAcolyte or acolyteKilled apply",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VARDION::look",
+        "callee": "Item::bark",
+        "purpose": "Emit the selected look/description string to the viewer/pid",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VARDION::AvatarStoleSomething",
+        "callee": "Npc::setTarget",
+        "purpose": "Set the NPC's combat/attack target to the avatar as part of escalation",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VARDION::enterFastArea",
+        "callee": "Npc::teleport",
+        "purpose": "Teleport Vardion into inner sanctum coordinates when goToInnerSanctum flag is set",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "vardionJoined",
+        "likely_effect": "Suppress hostile theft response; treat avatar as ally",
+        "confidence": "high"
+      },
+      {
+        "name": "sponsorTest",
+        "likely_effect": "Privilege flag that suppresses hostile reactions (e.g., theft handling)",
+        "confidence": "high"
+      },
+      {
+        "name": "keyOfTheAcolyte",
+        "likely_effect": "Gate daemon scene interactions and suppress some hostile responses",
+        "confidence": "high"
+      },
+      {
+        "name": "vardionWarned",
+        "likely_effect": "Read to determine current theft-warning level and select dialog branch",
+        "confidence": "high"
+      },
+      {
+        "name": "acolyteKilled",
+        "likely_effect": "Cause enterFastArea to alter/destroy items and change use() behavior (daemon scene triggers)",
+        "confidence": "high"
+      },
+      {
+        "name": "goToInnerSanctum",
+        "likely_effect": "Trigger teleportation of Vardion into an inner sanctum during area entry/schedule",
+        "confidence": "high"
+      },
+      {
+        "name": "inDaemonScene",
+        "likely_effect": "Prevent schedule() movement/behavior while Vardion is inside a scripted scene",
+        "confidence": "high"
+      },
+      {
+        "name": "avatarMasterSorcerer",
+        "likely_effect": "Cause Vardion to set the avatar as target or behave specially toward avatar",
+        "confidence": "high"
+      },
+      {
+        "name": "vardionName",
+        "likely_effect": "Control whether 'Vardion' appears in full-name or short forms in look() and dialog",
+        "confidence": "high"
+      },
+      {
+        "name": "vardionJob",
+        "likely_effect": "Control job/title wording in look()/dialog ('Sorcerer' vs 'Mage')",
+        "confidence": "high"
+      },
+      {
+        "name": "vardionOffer",
+        "likely_effect": "Enable or disable specific dialog/quest options in the conversation helper",
+        "confidence": "high"
+      }
+    ],
+    "writes": [
+      {
+        "name": "vardionMad",
+        "likely_effect": "Set to indicate Vardion is enraged/hostile after casting; used to change subsequent use()/behavior branching",
+        "confidence": "high"
+      },
+      {
+        "name": "vardionWarned",
+        "likely_effect": "Increment or update to escalate theft-warning state, influencing subsequent warnings and attack behavior",
+        "confidence": "high"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "VARDION::cast",
+    "behavior_summary_one_liner": "Implements Vardion NPC behavior: casting spells, reacting to theft, dialog interactions, area initialization/cleanup, and periodic scheduling/movement.",
+    "external_call_count": 15,
+    "flag_read_count": 11,
+    "flag_write_count": 2
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

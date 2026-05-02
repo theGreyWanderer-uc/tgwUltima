@@ -1,0 +1,115 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_LCHST_NS.json",
+  "file": "U8P_LCHST_NS",
+  "behavior_summary": [
+    "Provides 'U8P_LCHST_NS::look' and 'use' handlers for a locked chest item. The 'U8P_LCHST_NS::look' handler causes the item to display a short description ('locked chest ') and then yields/suspends. The 'use' handler either spawns the 'U8P_LCHST_NS::look' handler when the main game loop is not running or, when the game is running, plays a sound and toggles the chest UI (gump) open/closed based on a status bit.",
+    "The chest uses Item::bark to present short text to the player, isGameRunning to decide between spawn vs. immediate behavior, and Item::getStatus to test a 0x0100 flag that determines whether Item::openGump or Item::closeGump is called.",
+    "When the game is not running, U8P_LCHST_NS::use delegates to U8P_LCHST_NS::look via spawn so the same 'locked chest' message appears without opening the gump; when running it provides audible feedback (playSFX) and toggles UI state."
+  ],
+  "notable_control_flow": [
+    "U8P_LCHST_NS::use checks isGameRunning(): if false then spawn U8P_LCHST_NS::look (passing pid/item) and suspend; if true continue to play sound and query item status.",
+    "After playSFX, U8P_LCHST_NS::use calls Item::getStatus() and tests (status & 0x0100): when set -> call Item::openGump(item, 0x07); when clear -> call Item::closeGump(item).",
+    "U8P_LCHST_NS::look prepares item/process info, calls Item::bark(item, \"locked chest \") to show a message, cleans up the temporary string, executes an implies/pop bookkeeping sequence, then suspends (yields)."
+  ],
+  "open_questions": [
+    "What exact semantic meaning does the Item status bit 0x0100 have (open flag, locked flag, or 'has-gump-open' state)? — appears to control gump open vs close but exact name is unknown.",
+    "What is the intended target of the bark call (the item's owner/player PID vs. global UI)? The code pushes a pid when spawning and passes item to Item::bark; this appears to direct the message to the triggering process but is inferred.",
+    "Why does spawn-only behavior occur when the game loop is not running (is this a UI/state limitation of the engine)? — likely an engine-level guard but details are uncertain.",
+    "What does the openGump parameter 0x07 represent (gump type, page, or mode)? — inferred to be a gump parameter but meaning is unclear.",
+    "What role does the implies/pop sequence have exactly in the suspend/resume flow (bookkeeping for process continuation)?"
+  ],
+  "main_function": {
+    "name": "U8P_LCHST_NS::look",
+    "execution_form": "process",
+    "purpose": "Handle the 'U8P_LCHST_NS::look' (examine) interaction for the locked chest: inform the player by barking the literal text \"locked chest \" and then suspend the handler.",
+    "entry_conditions": [
+      "Event 0: triggered when an actor looks at or inspects the chest (examine/observe interaction).",
+      "Handler starts by setting item/process info and excluding the process (engine bookkeeping) before producing feedback."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_LCHST_NS::look",
+      "kind": "main",
+      "role": "Examination ('U8P_LCHST_NS::look') handler: show item description and yield.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_LCHST_NS::use",
+      "kind": "helper",
+      "role": "Use/activation handler: play SFX and toggle chest UI when game running; spawn U8P_LCHST_NS::look handler when not running.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_LCHST_NS::use",
+        "callee": "U8P_LCHST_NS::look",
+        "purpose": "Spawn/delegate to the U8P_LCHST_NS::look handler when the game loop is not running so the locked-chest message appears without opening UI.",
+        "confidence": "high"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_LCHST_NS::look",
+        "callee": "Item::bark",
+        "purpose": "Display a short description/text associated with the item ('locked chest ') to the relevant process/player.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LCHST_NS::use",
+        "callee": "U8P_LCHST_NS::isGameRunning",
+        "purpose": "Decide whether to spawn the U8P_LCHST_NS::look handler (when false) or proceed with immediate use behavior (when true).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LCHST_NS::use",
+        "callee": "U8P_LCHST_NS::playSFX",
+        "purpose": "Provide audible feedback when the chest is used while the game is running (args observed: 0x64, 0x58).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LCHST_NS::use",
+        "callee": "Item::getStatus",
+        "purpose": "Retrieve item status flags; tested against mask 0x0100 to decide open vs close behavior.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LCHST_NS::use",
+        "callee": "Item::openGump",
+        "purpose": "Open the chest UI/gump when the tested status bit (0x0100) is set; passed an extra parameter 0x07.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LCHST_NS::use",
+        "callee": "Item::closeGump",
+        "purpose": "Close the chest UI/gump when the tested status bit (0x0100) is clear.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_LCHST_NS::look",
+    "behavior_summary_one_liner": "Provides 'U8P_LCHST_NS::look' and 'use' handlers for a locked chest item. The 'U8P_LCHST_NS::look' handler causes the item to display a short description ('locked chest ') and then yields/suspends. The 'use' handler either spawns the 'U8P_LCHST_NS::look' handler when the main game loop is not running or, when the game is running, plays a sound and toggles the chest UI (gump) open/closed based on a status bit.",
+    "external_call_count": 6,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

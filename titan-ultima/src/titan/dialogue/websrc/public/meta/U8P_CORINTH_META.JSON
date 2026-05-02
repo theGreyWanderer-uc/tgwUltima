@@ -1,0 +1,212 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_CORINTH.json",
+  "file": "U8P_CORINTH",
+  "behavior_summary": [
+    "Provides Corinth NPC behaviour: a 'U8P_CORINTH::look' handler that barks a short greeting depending on whether the NPC has been met before, theft response logic that warns or calls guards, schedule management that records/updates the NPC's schedule state, and area-triggered behaviours that spawn short looping activity routines when the player enters or leaves a fast-area trigger.",
+    "The NPC uses global flags (corinthMet, corinthSchedule, stolenOnce, guardsCalled, somebodyTalking) to select greetings, escalate responses to theft, and choose which activity routine to run when the player approaches.",
+    "Runtime actions are implemented by spawning engine methods (animations/movements), using Item::bark for short dialog, pathfinding to targets during roaming behaviours, and interacting with the FREE subsystem for delays and queries."
+  ],
+  "notable_control_flow": [
+    "CORINTH::look (main entry) reads global corinthMet and barks either a first-meeting string or a repeat-meeting string, then suspends.",
+    "U8P_CORINTH::enterFastArea checks NPC liveliness and corinthSchedule, resets area/item references, and spawns one of several behavior processes (e.g., U8P_CORINTH::0364 or U8P_CORINTH::09B5) depending on schedule value.",
+    "U8P_CORINTH::AvatarStoleSomething classifies the stolen item by type; on first observed theft it sets stolenOnce and issues a warning bark, on subsequent/serious thefts it shouts, delays via FREE::1C19, and spawns CALGUARD::0080 to summon guards (guardsCalled prevents duplicate calls).",
+    "U8P_CORINTH::0364 is a looping behavior that inspects frames/shapes, may pathfind to chosen targets, avoids interrupting when somebodyTalking is true, and issues barks/animations via spawned METHOD::* helpers."
+  ],
+  "open_questions": [
+    "Exact meanings and IDs of item types that trigger escalation in AvatarStoleSomething (type id comparisons are observed but specific named types are inferred).",
+    "Precise behaviors implemented by METHOD::091C, METHOD::15E7, METHOD::133F, METHOD::143A and how they differ (animations, small moves, or state changes are inferred).",
+    "Behavior and purpose of U8P_CORINTH::09B5 (referenced by schedule/enterFastArea) are not present in the excerpt; its role is inferred to be an alternate activity routine.",
+    "Exact semantics and index meanings for FREE::28F9 and FREE::1CE3 (they are queried and their numeric results are used to choose branches, but concrete mapping to world state is only inferred)."
+  ],
+  "main_function": {
+    "name": "U8P_CORINTH::look",
+    "execution_form": "process",
+    "purpose": "Handle player 'U8P_CORINTH::look' (examine) event for the Corinth NPC: set up item/process info state, choose and play a short greeting/bark based on whether the NPC has been met before (corinthMet), and then suspend.",
+    "entry_conditions": [
+      "Event 0: invoked when the player examines or 'looks at' the Corinth NPC (player process id passed as caller)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_CORINTH::look",
+      "kind": "main",
+      "role": "Respond to player 'U8P_CORINTH::look' event; produce greeting and set process info/exclude flags.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CORINTH::AvatarStoleSomething",
+      "kind": "helper",
+      "role": "React to a theft by the avatar: clear references, classify stolen item, warn or escalate to calling guards, set stolenOnce on first theft.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CORINTH::schedule",
+      "kind": "helper",
+      "role": "Compute and store a schedule byte into corinthSchedule, avoid changes if NPC is dead, spawn methods to apply schedule transitions.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CORINTH::enterFastArea",
+      "kind": "helper",
+      "role": "Fast-area entry trigger: when an actor (avatar) enters, clear references and spawn the appropriate activity routine based on corinthSchedule.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CORINTH::leaveFastArea",
+      "kind": "helper",
+      "role": "Fast-area exit trigger: clean/clear the area-related reference via FREE::2A56.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CORINTH::0364",
+      "kind": "helper",
+      "role": "Looping activity routine: inspect frames/nearby items, attempt pathfinding to targets, manage barks/animations and timing; avoids interrupting existing speech.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CORINTH::04DC",
+      "kind": "helper",
+      "role": "Proximity/conversation routine: choose among multiple short dialogue/animation branches using randomness and small delays; used to produce varied greetings or comments.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_CORINTH::09B5",
+      "kind": "helper",
+      "role": "Alternate activity routine spawned for some schedule states (inferred from enterFastArea spawning it when corinthSchedule==2).",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_CORINTH::enterFastArea",
+        "callee": "U8P_CORINTH::0364",
+        "purpose": "Spawn the main roaming/behavior loop when corinthSchedule indicates schedule==1.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CORINTH::enterFastArea",
+        "callee": "U8P_CORINTH::09B5",
+        "purpose": "Spawn an alternate activity routine when corinthSchedule indicates schedule==2.",
+        "confidence": "high"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_CORINTH::look",
+        "callee": "Item::bark",
+        "purpose": "Display a short greeting string to the player (first-meeting vs repeat greeting).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CORINTH::AvatarStoleSomething",
+        "callee": "U8P_CORINTH::resetRef",
+        "purpose": "Clear stored item/marker references associated with the NPC when theft is observed.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CORINTH::AvatarStoleSomething",
+        "callee": "Item::getType",
+        "purpose": "Classify the stolen item to determine whether to escalate and call guards.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CORINTH::AvatarStoleSomething",
+        "callee": "Npc::getDir",
+        "purpose": "Query NPC facing to play a direction-specific short animation (METHOD::15E7) when reacting to theft.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CORINTH::AvatarStoleSomething",
+        "callee": "CALGUARD::0080",
+        "purpose": "Spawn/notify the guard AI to respond to a serious or repeated theft.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CORINTH::schedule",
+        "callee": "FREE::28F9",
+        "purpose": "Query free-system state to decide which schedule branch to take when computing corinthSchedule.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CORINTH::0364",
+        "callee": "Npc::pathfind",
+        "purpose": "Attempt movement toward chosen target coordinates during looping behavior; success/failure selects next actions.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CORINTH::0364",
+        "callee": "Item::getFrame",
+        "purpose": "Inspect frames/shapes of nearby items/tiles when picking pathing or interaction targets.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CORINTH::0364",
+        "callee": "FREE::1C19",
+        "purpose": "Set short delays between barks/animations in the looping behavior.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_CORINTH::leaveFastArea",
+        "callee": "FREE::2A56",
+        "purpose": "Clear/clean an area-related reference (cleanup on fast-area exit).",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "corinthMet",
+        "likely_effect": "Selects which greeting string to bark in CORINTH::look (0 => first-meeting greeting, nonzero => repeat greeting).",
+        "confidence": "high"
+      },
+      {
+        "name": "guardsCalled",
+        "likely_effect": "Used as a guard to prevent re-calling guards multiple times from AvatarStoleSomething.",
+        "confidence": "high"
+      },
+      {
+        "name": "corinthSchedule",
+        "likely_effect": "Determines which behavior routine to spawn on area entry (enterFastArea) and is read by schedule()/enterFastArea to branch behavior.",
+        "confidence": "high"
+      },
+      {
+        "name": "somebodyTalking",
+        "likely_effect": "Gating flag consulted by looping behavior (0364) to avoid interrupting existing dialog/speech.",
+        "confidence": "high"
+      }
+    ],
+    "writes": [
+      {
+        "name": "stolenOnce",
+        "likely_effect": "Set to 1 on the first observed theft to change subsequent responses (first theft gives mild warning, later thefts escalate).",
+        "confidence": "high"
+      },
+      {
+        "name": "corinthSchedule",
+        "likely_effect": "Updated by schedule() to persist the computed schedule/state for the NPC, used later by enterFastArea and behavior selection.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "CORINTH::look",
+    "behavior_summary_one_liner": "Provides Corinth NPC behaviour: a 'U8P_CORINTH::look' handler that barks a short greeting depending on whether the NPC has been met before, theft response logic that warns or calls guards, schedule management that records/updates the NPC's schedule state, and area-triggered behaviours that spawn short looping activity routines when the player enters or leaves a fast-area trigger.",
+    "external_call_count": 10,
+    "flag_read_count": 4,
+    "flag_write_count": 2
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

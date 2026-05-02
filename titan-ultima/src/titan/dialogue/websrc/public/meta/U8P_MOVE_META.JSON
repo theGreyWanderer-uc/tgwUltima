@@ -1,0 +1,201 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_MOVE.json",
+  "file": "U8P_MOVE",
+  "behavior_summary": [
+    "MOVE::0080 is a repeating NPC/item AI/process attached to an entity (entity pointer passed as parameter). It periodically inspects that entity's properties, updates per-entity info slots, optionally greets the player, computes facing, and issues pathfinding/movement orders.",
+    "The script queries multiple entity attributes (via FREE::1E6A and FREE::1D62) and uses their values plus the global flag arcadionMet to choose between a short-range interaction (greet + short pathfind) and an alternate movement behavior (longer range pathfind).",
+    "When the greeting/interaction branch is taken the script: computes direction to a target (Item::getDirToItem), spawns a direction-apply helper (METHOD::091C), makes the entity bark a fixed string ('Greetings Disciple.'), and calls Npc::pathfind with a close-range parameter (0x04).",
+    "The process also spawns short-lived helpers/timers (METHOD::0AC6 with a retval from FREE::1A96, and FREE::1C19 with pid and a small numeric) to schedule follow-up/timed behavior, then suspends and repeats."
+  ],
+  "notable_control_flow": [
+    "Entry is a periodic/suspended process (execution_form: process) that repeatedly suspends and resumes rather than returning once.",
+    "Early in the script two per-entity info slots (IDs like 0x0205 and 0x0204) are set (via FREE::2A56/set info) to prepare state before behavior decisions.",
+    "A numeric property from FREE::1E6A is compared against 0x1E and another from FREE::1D62 against 0x40; only when those checks allow does the greeting/pathfind behavior execute.",
+    "A guard using the global flag arcadionMet changes the pathfinding parameter (close 0x04 vs longer 0x28), altering movement distance/behavior.",
+    "Several actions are performed by spawning helper methods (METHOD::091C, METHOD::0AC6, FREE::1C19) rather than inline, so timing and sequencing are delegated to those spawned processes."
+  ],
+  "open_questions": [
+    "Exact semantic meanings of FREE::1E6A and FREE::1D62 returns (which concrete entity fields they read) remain uncertain — they appear to be small numeric state or type fields.",
+    "Precise semantics of entity info slots 0x0205 and 0x0204 (what each slot represents) are inferred only from their use as setup flags.",
+    "Exact trigger/activation conditions that start MOVE::0080 (area entry vs. NPC start vs. always-running update) are inferred from suspend/resume behavior but not explicit in the excerpt.",
+    "What the small numeric arguments to FREE::1C19 and METHOD::0AC6 represent (timing, priority, or animation indices) is likely but not certain."
+  ],
+  "main_function": {
+    "name": "U8P_MOVE::0080",
+    "execution_form": "process",
+    "purpose": "Periodic AI/update routine for an NPC/entity that inspects the entity, sets per-entity info, optionally greets the player, adjusts facing, and issues pathfinding commands while scheduling short helper tasks.",
+    "entry_conditions": [
+      "Attached to an entity and runs as a suspended/resumed process (periodic update loop).",
+      "Behaviors branch based on entity properties returned by FREE::1E6A and FREE::1D62 and the global arcadionMet flag."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_MOVE::0080",
+      "kind": "main",
+      "role": "NPC/item periodic AI/update process that inspects an entity and issues movement/speech/timers.",
+      "confidence": "high"
+    },
+    {
+      "name": "METHOD::091C",
+      "kind": "extern",
+      "role": "Spawned helper that applies a computed facing/direction or starts a direction-dependent action on the entity.",
+      "confidence": "medium"
+    },
+    {
+      "name": "METHOD::0AC6",
+      "kind": "extern",
+      "role": "Spawned timed/delayed helper; accepts a small numeric parameter (retval from FREE::1A96) and the entity pointer to schedule a short action.",
+      "confidence": "medium"
+    },
+    {
+      "name": "FREE::1C19",
+      "kind": "extern",
+      "role": "Spawned timer/event helper taking pid and a small numeric to schedule a short follow-up task.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::getDirToItem",
+      "kind": "extern",
+      "role": "Compute direction from actor/pid to target entity/item; result used to spawn METHOD::091C.",
+      "confidence": "high"
+    },
+    {
+      "name": "process Item::bark",
+      "kind": "extern",
+      "role": "Make the entity speak/display a short string (used for the greeting 'Greetings Disciple.').",
+      "confidence": "high"
+    },
+    {
+      "name": "process Npc::pathfind",
+      "kind": "extern",
+      "role": "Issue pathfinding/movement orders toward a specified target/index with a movement/range parameter (values observed: 0x04 and 0x28).",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::1E6A",
+      "kind": "extern",
+      "role": "Query a numeric property of the entity (called with a small flag 0x01); return is compared to constants (e.g., 0x1E).",
+      "confidence": "medium"
+    },
+    {
+      "name": "FREE::1D62",
+      "kind": "extern",
+      "role": "Query another numeric attribute of the entity; return compared against 0x40 to gate behavior.",
+      "confidence": "medium"
+    },
+    {
+      "name": "FREE::2A56",
+      "kind": "extern",
+      "role": "Set/modify entity info slots (called with slot ids like 0x0205 and 0x0204 and the entity pointer).",
+      "confidence": "medium"
+    },
+    {
+      "name": "FREE::1A96",
+      "kind": "extern",
+      "role": "Return a small numeric used as a parameter for METHOD::0AC6 (likely a random/timer value).",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_MOVE::0080",
+        "callee": "U8P_MOVE::0080 (spawn)",
+        "purpose": "The script repeatedly suspends and effectively re-invokes/continues itself as a long-running process (periodic update).",
+        "confidence": "high"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_MOVE::0080",
+        "callee": "FREE::2A56",
+        "purpose": "Set per-entity info slots (IDs like 0x0205 and 0x0204) for state preparation before behavior decisions.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MOVE::0080",
+        "callee": "FREE::1E6A",
+        "purpose": "Read a numeric entity property (used to compare against 0x1E to choose the interaction branch).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_MOVE::0080",
+        "callee": "FREE::1D62",
+        "purpose": "Read an additional numeric attribute of the entity (checked against 0x40) to gate greeting/pathfinding.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_MOVE::0080",
+        "callee": "Item::getDirToItem",
+        "purpose": "Compute direction from pid/actor to the target to allow the entity to face the player before greeting or moving.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MOVE::0080",
+        "callee": "METHOD::091C",
+        "purpose": "Spawn a helper to apply the computed facing/direction to the entity (uses retval from Item::getDirToItem).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_MOVE::0080",
+        "callee": "process Item::bark",
+        "purpose": "Make the entity speak the fixed greeting message 'Greetings Disciple.' in the interaction branch.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MOVE::0080",
+        "callee": "process Npc::pathfind",
+        "purpose": "Command NPC movement toward the chosen target/index ([BP-06h]) with different range parameters (0x04 for close/greeting, 0x28 for alternate branch when arcadionMet is set).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MOVE::0080",
+        "callee": "FREE::1A96",
+        "purpose": "Obtain a small numeric (likely a delay or configuration value) which is then passed to METHOD::0AC6 for a timed helper spawn.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_MOVE::0080",
+        "callee": "METHOD::0AC6",
+        "purpose": "Spawn a timed/delayed helper using the numeric returned by FREE::1A96 and the entity pointer.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_MOVE::0080",
+        "callee": "FREE::1C19",
+        "purpose": "Spawn a small timer/event helper with pid and a small numeric (0 or 0x1E depending on branch) to schedule follow-up behavior.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "arcadionMet",
+        "likely_effect": "Alter choice of pathfinding/movement parameter (choose close-range interaction vs longer-range movement).",
+        "confidence": "high"
+      }
+    ],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "MOVE::0080",
+    "behavior_summary_one_liner": "MOVE::0080 is a repeating NPC/item AI/process attached to an entity (entity pointer passed as parameter). It periodically inspects that entity's properties, updates per-entity info slots, optionally greets the player, computes facing, and issues pathfinding/movement orders.",
+    "external_call_count": 10,
+    "flag_read_count": 1,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

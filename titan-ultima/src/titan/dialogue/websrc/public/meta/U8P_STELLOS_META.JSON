@@ -1,0 +1,260 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_STELLOS.json",
+  "file": "U8P_STELLOS",
+  "behavior_summary": [
+    "Implements the NPC Stellos' interactive and scheduled behaviors: how it responds when looked at, how it chooses and runs patrol/search schedules, how it reacts to theft, and a scripted cast/death/teleport sequence.",
+    "STELLOS::look provides the short examine text the player sees; it branches on the NPC's dead/alive state and on two global flags (stellosName, stellosJob) to pick name/job variants.",
+    "Schedule management (U8P_STELLOS::schedule -> global stellosSchedule) selects and records which behavior branch the NPC should run; enterFastArea reads that flag and spawns the appropriate active routine (search/entry behaviors).",
+    "LeaveFastArea clears references and a one-shot heal flag (stellosJustHealed) and, if the NPC is alive, may randomly teleport it away (using urandom + Npc::teleport).",
+    "U8P_STELLOS::cast waits for a target, then runs a scripted speech/animation sequence that removes immortality, marks the NPC dead, and teleports it (appears to be a sacrificial or escape scripted action).",
+    "A repeated item-search loop (U8P_STELLOS::054E) inspects nearby items/frames, pathfinds to interesting coordinates, and triggers animations — driving NPC searching/approach behavior."
+  ],
+  "notable_control_flow": [
+    "STELLOS::look: guard on Npc::isDead() -> corpse-specific bark; else read stellosName and stellosJob to select between four short barks and then suspend.",
+    "U8P_STELLOS::schedule: computes and writes a schedule token into global stellosSchedule, then spawns one or two METHOD::* routines to implement that schedule.",
+    "U8P_STELLOS::enterFastArea: on area entry, resets multiple refs, reads stellosSchedule and spawns either the search routine (U8P_STELLOS::054E) or an alternate entry routine (U8P_STELLOS::0BAD) depending on the token.",
+    "U8P_STELLOS::cast: loops (short waits) until Npc::getTarget() returns a target; then executes dialog and animations, clears immortality, sets dead, and teleports the NPC.",
+    "U8P_STELLOS::leaveFastArea: clears refs, sets stellosJustHealed = 0, and may call urandom + Npc::teleport to move the NPC randomly when leaving."
+  ],
+  "open_questions": [
+    "Exact textual variants and string IDs used for the four non-corpse U8P_STELLOS::look barks (only their approximate strings are inferred).",
+    "Precise semantics and parameters of the several FREE::<id> utility routines (timers, state checks, ref cleanup) — their internal behavior is inferred but not known.",
+    "Exact identity and role of the alternate entry routine referenced as U8P_STELLOS::0BAD (spawn target name inferred from disassembly context).",
+    "Whether the teleport destinations chosen in leaveFastArea are constrained by navigation/blocked tiles or are always valid in all contexts (the code uses urandom but higher-level checks are unknown).",
+    "The meaning and lifecycle of some reference markers reset by resetRef(...): what game objects they point to and how other systems use them."
+  ],
+  "main_function": {
+    "name": "U8P_STELLOS::look",
+    "execution_form": "process",
+    "purpose": "Provide the short examine/U8P_STELLOS::look response for Stellos. If the NPC is dead, present a corpse description; if alive, pick a short name/job bark according to two global flags and emit it to the querying process.",
+    "entry_conditions": [
+      "Event 0 (player or actor 'looks' at this NPC)",
+      "Called with the viewer process/pid passed in BP+06h"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_STELLOS::look",
+      "kind": "main",
+      "role": "Handle 'U8P_STELLOS::look' event: conditional bark text selection based on Npc::isDead and globals stellosName/stellosJob.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_STELLOS::schedule",
+      "kind": "helper",
+      "role": "Choose and record a behavior schedule (writes stellosSchedule) and spawn scheduled METHODs to perform the behavior.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_STELLOS::enterFastArea",
+      "kind": "helper",
+      "role": "Area-entry trigger: reset refs, read stellosSchedule, and spawn the appropriate schedule routine (entry/search behavior).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_STELLOS::leaveFastArea",
+      "kind": "helper",
+      "role": "Area-exit trigger: clear refs, reset stellosJustHealed, and possibly teleport NPC away using randomization.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_STELLOS::cast",
+      "kind": "helper",
+      "role": "Event-driven cast sequence (Event 11): waits for a target then runs a sacrificial/escape animation, clears immortality, sets the NPC dead, and teleports it.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_STELLOS::AvatarStoleSomething",
+      "kind": "helper",
+      "role": "Theft reaction: reset refs, face thief/item, bark a reprimand, and trigger schedule/enterFastArea behavior to respond.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_STELLOS::054E",
+      "kind": "helper",
+      "role": "Looped item/approach/search routine used by a schedule branch: inspects items/frames, pathfinds to matches, animates and delays.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_STELLOS::06A1",
+      "kind": "helper",
+      "role": "Short greeting/idle interaction subroutine that barks a greeting when nobody else is talking and performs small animations/delays.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_STELLOS::0BAD",
+      "kind": "helper",
+      "role": "Alternate spawned entry routine referenced by enterFastArea (exact behavior inferred as an alternate schedule branch).",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_STELLOS::schedule",
+        "callee": "U8P_STELLOS::enterFastArea",
+        "purpose": "Indirect coordination via writing global stellosSchedule; schedule chooses a token that enterFastArea later reads to spawn the proper routine.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STELLOS::enterFastArea",
+        "callee": "U8P_STELLOS::054E",
+        "purpose": "Spawn the looped item/search routine when stellosSchedule indicates that schedule branch.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STELLOS::enterFastArea",
+        "callee": "U8P_STELLOS::0BAD",
+        "purpose": "Spawn an alternate entry routine when stellosSchedule indicates the other schedule branch (exact routine name inferred).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_STELLOS::cast",
+        "callee": "U8P_STELLOS::06A1",
+        "purpose": "Cast sequence spawns animations and may spawn short helper methods; 06A1 is a short interaction routine used elsewhere for greetings/delays (relationship inferred).",
+        "confidence": "low"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_STELLOS::look",
+        "callee": "Npc::isDead",
+        "purpose": "Guard: determine whether to present corpse text or live name/job text.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STELLOS::look",
+        "callee": "process Item::bark",
+        "purpose": "Emit the short examine text to the querying process/pid (the player's UI).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STELLOS::enterFastArea",
+        "callee": "U8P_STELLOS::resetRef",
+        "purpose": "Clear stored object/target references on area entry to ensure a clean state before spawning schedule behavior.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STELLOS::*",
+        "callee": "FREE::<various>",
+        "purpose": "Use utility routines for small timed delays, state checks, or ref cleanup (spawned for timing and control).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_STELLOS::schedule",
+        "callee": "METHOD::<various>",
+        "purpose": "Spawn helper methods (movement/animations/sequence implementers) that realize the chosen schedule.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STELLOS::054E",
+        "callee": "Item::getFrame",
+        "purpose": "Read nearby item/frame indexes to decide whether to approach or animate them.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STELLOS::054E",
+        "callee": "process Npc::pathfind",
+        "purpose": "Move the NPC toward target coordinates discovered while scanning items/frames.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STELLOS::leaveFastArea",
+        "callee": "urandom",
+        "purpose": "Generate random offsets used to pick a teleport destination when the player leaves the area.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STELLOS::leaveFastArea",
+        "callee": "Npc::teleport",
+        "purpose": "Teleport the NPC to the computed random coordinates as part of leaving behavior.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STELLOS::cast",
+        "callee": "Npc::getTarget",
+        "purpose": "Poll for a valid target; the cast sequence waits until a target exists before executing the sacrificial/escape actions.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STELLOS::cast",
+        "callee": "process Npc::doAnim",
+        "purpose": "Play facing-dependent animations as part of the cast/death sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STELLOS::cast",
+        "callee": "Npc::clrImmortal",
+        "purpose": "Remove immortality so that setDead takes effect (part of the sacrificial/death script).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STELLOS::cast",
+        "callee": "Npc::setDead",
+        "purpose": "Mark the NPC as dead following the cast/animation sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STELLOS::AvatarStoleSomething",
+        "callee": "U8P_STELLOS::resetRef",
+        "purpose": "Reset state references before turning to face the thief and initiating a response.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "stellosName",
+        "likely_effect": "Select whether to use the NPC's proper name variant in STELLOS::look (affects which bark string is picked).",
+        "confidence": "high"
+      },
+      {
+        "name": "stellosJob",
+        "likely_effect": "Select whether to append a job/title ('monk') or use generic 'man' in STELLOS::look.",
+        "confidence": "high"
+      },
+      {
+        "name": "stellosSchedule",
+        "likely_effect": "Control which schedule/behavior branch to run when the avatar enters the area; read by enterFastArea and by schedule-dependent routines.",
+        "confidence": "high"
+      },
+      {
+        "name": "somebodyTalking",
+        "likely_effect": "Guard used in dialogue/interaction routines (e.g., U8P_STELLOS::054E/06A1) to avoid starting speech if another actor is talking.",
+        "confidence": "high"
+      }
+    ],
+    "writes": [
+      {
+        "name": "stellosSchedule",
+        "likely_effect": "Set by U8P_STELLOS::schedule to record the NPC's next behavior branch so entry logic and loops know which routine to spawn/execute.",
+        "confidence": "high"
+      },
+      {
+        "name": "stellosJustHealed",
+        "likely_effect": "Cleared (set to 0) by leaveFastArea as a one-shot marker reset when the player leaves the NPC's immediate area.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_STELLOS::look",
+    "behavior_summary_one_liner": "Implements the NPC Stellos' interactive and scheduled behaviors: how it responds when looked at, how it chooses and runs patrol/search schedules, how it reacts to theft, and a scripted cast/death/teleport sequence.",
+    "external_call_count": 14,
+    "flag_read_count": 4,
+    "flag_write_count": 2
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

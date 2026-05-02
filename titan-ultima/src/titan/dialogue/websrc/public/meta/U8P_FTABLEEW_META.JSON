@@ -1,0 +1,92 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_FTABLEEW.json",
+  "file": "U8P_FTABLEEW",
+  "behavior_summary": [
+    "FTABLEEW::look runs when an actor 'looks' at the table object. It marks the item/process with an info flag and a process-exclude flag, constructs the literal string \"table \", and requests the item to 'bark' that string to the viewing process.",
+    "The routine passes the viewer process id (inferred from the caller stack frame) to Item::bark so the viewer receives the description.",
+    "After barking the description the routine frees the temporary string, inspects the bark return value (used in an 'implies' check), then immediately suspends the script."
+  ],
+  "notable_control_flow": [
+    "Early writes: set an item info flag (constant pushed) and then set a process-exclude flag for the object — these are write-side effects performed before producing the description.",
+    "Construct-call-cleanup sequence: allocate/prepare literal string \"table \", call Item::bark with (viewer_pid, string), then free the string.",
+    "Post-call check: push return value from Item::bark, perform an 'implies' operation and pop into a temp/local before executing suspend — the exact behavioral effect of this check is inferred and not fully certain."
+  ],
+  "open_questions": [
+    "Exact numeric id and semantic meaning of the 'info' flag written early (a numeric constant like 0x0208 is pushed in the code; its precise gameplay meaning is not certain).",
+    "Precise semantics of the 'process exclude' operation for this object (appears to prevent some further processing of the item but exact effect is inferred).",
+    "Meaning of the 'implies' operation on Item::bark's return value and how the popped result affects later logic — it is read then the script suspends, so its runtime impact is unclear.",
+    "Whether any other engine or UI-side side-effects accompany the bark (sound, animation) beyond the textual output."
+  ],
+  "main_function": {
+    "name": "U8P_FTABLEEW::look",
+    "execution_form": "process",
+    "purpose": "Respond to an actor examining (looking at) the table by setting item/process state flags and emitting a short descriptive text ('table ') to the viewer, then suspend.",
+    "entry_conditions": [
+      "Event 0 — invoked when an actor issues a 'U8P_FTABLEEW::look' (examine) action on the table object (inferred)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_FTABLEEW::look",
+      "kind": "main",
+      "role": "Handle the 'U8P_FTABLEEW::look' (examine) event for the table object: set item/process flags, construct and emit the description string, then suspend.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine invoked to present a short text message from an item to a target process/player (used to show 'table ').",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_FTABLEEW::look",
+        "callee": "Item::bark",
+        "purpose": "Deliver the description string ('table ') to the viewer process so the player sees the item's short description.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FTABLEEW::look",
+        "callee": "U8P_FTABLEEW::free (string deallocation) - inferred",
+        "purpose": "Free the temporary string buffer used to hold the literal 'table ' after barking it (inferred from code sequence).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": [
+      {
+        "name": "item info (constant pushed, inferred)",
+        "likely_effect": "Mark the item with a particular info/state key (engine-level), probably to note it has been examined or to alter future processing.",
+        "confidence": "medium"
+      },
+      {
+        "name": "process exclude",
+        "likely_effect": "Exclude this item/process from some kinds of processing or scheduling (prevents further automatic handling); used immediately after setting info.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "FTABLEEW::look",
+    "behavior_summary_one_liner": "FTABLEEW::look runs when an actor 'looks' at the table object. It marks the item/process with an info flag and a process-exclude flag, constructs the literal string \"table \", and requests the item to 'bark' that string to the viewing process.",
+    "external_call_count": 2,
+    "flag_read_count": 0,
+    "flag_write_count": 2
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

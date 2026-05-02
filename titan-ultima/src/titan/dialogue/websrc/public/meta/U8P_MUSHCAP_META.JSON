@@ -1,0 +1,75 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_MUSHCAP.json",
+  "file": "U8P_MUSHCAP",
+  "behavior_summary": [
+    "Handles the 'U8P_MUSHCAP::look' (examine) event for a mushroom-cap item: when a player/actor inspects the item the script prepares the item/process state, issues a short descriptive text ('mushroom') via the item's bark routine, then suspends/returns.",
+    "Performs local item/process metadata operations (inferred set-info and process-exclude opcodes) to adjust the item state before producing the message.",
+    "Calls Item::bark with the item process and the literal string \"mushroom  \", directed at the inspecting pid/context, then cleans up temporaries."
+  ],
+  "notable_control_flow": [
+    "On Event 0 (U8P_MUSHCAP::look), the handler sets item/process-level info flags and excludes the process from normal processing (these opcodes are present in the disassembly and their effect is inferred).",
+    "Pushes the viewer pid and the static literal 'mushroom  ' (converted to a pointer) then calls Item::bark to display the short name to the viewer.",
+    "After the call the code frees the temporary string pointer, adjusts the stack, evaluates an implies/pop sequence on the bark return, and then suspends/returns control."
+  ],
+  "open_questions": [
+    "Exact numeric identifier and semantic meaning of the info key set by the 'set info' opcode (inference only).",
+    "Precise semantics and effect of the implies/pop sequence observed after Item::bark's return (appears to be a control/cleanup pattern but specifics are unclear).",
+    "Whether any global game-state flags are intended to be modified by this handler beyond local process metadata (no global reads/writes observed in this excerpt)."
+  ],
+  "main_function": {
+    "name": "U8P_MUSHCAP::look",
+    "execution_form": "process",
+    "purpose": "Respond to a player/actor examining the mushroom-cap item by preparing the item state and emitting its short descriptive name to the viewer via Item::bark.",
+    "entry_conditions": [
+      "Event 0 (U8P_MUSHCAP::look) — triggered when an actor/player inspects or 'looks' at the mushroom-cap item."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_MUSHCAP::look",
+      "kind": "main",
+      "role": "Handle the 'U8P_MUSHCAP::look' event for the mushroom-cap item and drive the display of its short description.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine used to display or emit a short text (item name/description) to a target viewer/process.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_MUSHCAP::look",
+        "callee": "Item::bark",
+        "purpose": "Present the item's short name/description ('mushroom  ') to the inspecting player/process (pid).",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "MUSHCAP::look",
+    "behavior_summary_one_liner": "Handles the 'U8P_MUSHCAP::look' (examine) event for a mushroom-cap item: when a player/actor inspects the item the script prepares the item/process state, issues a short descriptive text ('mushroom') via the item's bark routine, then suspends/returns.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

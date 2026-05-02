@@ -1,0 +1,88 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_DAGGER.json",
+  "file": "U8P_DAGGER",
+  "behavior_summary": [
+    "Serves the 'look' (examine) event for the dagger item. When an actor examines the dagger, the script builds the literal string \"dagger \", performs brief process-info/process-exclude setup (to control who receives the ensuing message), calls the item's bark routine so the dagger reports/describes itself, frees the temporary string, then suspends/returns.",
+    "No global game-state flags are read or written by this handler; its effects are local to the item/process and messaging.",
+    "Allocates a transient string, passes that string pointer to Item::bark along with the item/process pointer passed into the script, and then frees the string."
+  ],
+  "notable_control_flow": [
+    "Entry: Event 0 (look) — handler executes as a process-style script acting on the item/process passed at BP+06h.",
+    "Performs a set-info / process-exclude sequence immediately before emitting the description (appears to scope or hide the bark from unintended recipients).",
+    "Calls Item::bark and consumes its return value via an implies/pop sequence (return value not used to modify global state).",
+    "Frees the temporary message string and suspends/returns after the bark call completes."
+  ],
+  "open_questions": [
+    "Exact info key/id and semantics used in the set-info/process-exclude sequence: which info slot (numeric id) is being set and what precise visibility effect is intended?",
+    "Whether the process-info/process-exclude sequence modifies only temporary messaging visibility or also impacts longer-lived process state for the item (inferred as temporary here).",
+    "Whether Item::bark's return value can influence control flow in other contexts (here it is consumed but has no observed effect)."
+  ],
+  "main_function": {
+    "name": "U8P_DAGGER::look (Func_80, Event 0)",
+    "execution_form": "process",
+    "purpose": "Handle the dagger item's 'look' event by producing a short descriptive message ('dagger ') via Item::bark, while performing brief process-info/process-exclude setup and cleaning up temporary resources.",
+    "entry_conditions": [
+      "Event 0: look (triggered when a player or actor examines/looks at the dagger)"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_DAGGER::look (Func_80, Event 0)",
+      "kind": "main",
+      "role": "Process-style event handler for the dagger's 'look' event; constructs and emits the item description.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine used to emit/display a short text message from an item/process to a target process/player.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DAGGER::engine:set info / process-exclude",
+      "kind": "extern",
+      "role": "Engine operations invoked to set object/process info and exclude/include processes for messaging; used here to adjust visibility/metadata before barking.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_DAGGER::look (Func_80, Event 0)",
+        "callee": "Item::bark",
+        "purpose": "Emit the dagger's short description string ('dagger ') to the relevant target/process so the item 'speaks' or displays its name when examined.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAGGER::look (Func_80, Event 0)",
+        "callee": "U8P_DAGGER::engine:set info / process-exclude",
+        "purpose": "Temporarily adjust process/object info and exclude/include processing so that the subsequent bark is scoped to intended recipients (visibility control).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "DAGGER::look (Func_80, Event 0)",
+    "behavior_summary_one_liner": "Serves the 'look' (examine) event for the dagger item. When an actor examines the dagger, the script builds the literal string \"dagger \", performs brief process-info/process-exclude setup (to control who receives the ensuing message), calls the item's bark routine so the dagger reports/describes itself, frees the temporary string, then suspends/returns.",
+    "external_call_count": 2,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

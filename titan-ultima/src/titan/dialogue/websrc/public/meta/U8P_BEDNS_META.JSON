@@ -1,0 +1,167 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_BEDNS.json",
+  "file": "U8P_BEDNS",
+  "behavior_summary": [
+    "Provides two gameplay behaviors for a bed object: an inspect/'U8P_BEDNS::look' handler that displays a short description ('bed '), and a use/rest handler that lets the player attempt to sleep/rest for 0–5 periods (4 hours per period).",
+    "When used, resting is blocked if the avatar is in combat or enemies are nearby; otherwise the script prompts for a period count, optionally fades the screen, advances the in-game clock by 4 hours per chosen period, restores HP and Mana (inferred from Strength and Intelligence), spawns a helper free process at the start of rest, and restores the avatar's prior stasis state."
+  ],
+  "notable_control_flow": [
+    "U8P_BEDNS::look is a short process event (Event 0) that prepares the item and calls process Item::bark with the literal string 'bed '.",
+    "U8P_BEDNS::use (Event 1) first guards resting with Npc::isInCombat() and Npc::areEnemiesNear(pid, 1); if either returns true it calls Item::bark('This is no time to rest!') and exits.",
+    "If resting is allowed, U8P_BEDNS::use prompts the player with Item::bark('Rest for how many periods of time?'), builds a choice list ['0','1','2','3','4','5'], calls process Item::ask and parses the returned string into a numeric selection (0..5).",
+    "If the player selected 0 the function returns without advancing time. For choice > 0 it saves getAvatarInStasis(), sets stasis on (setAvatarInStasis(1)), calls process FadeToBlack(pid), advances time using TimeInGameHours() + (choice * 4) -> SetTimeInGameHours(...), spawns FREE::1C19(pid, 0x64, 0), restores HP via Npc::setHp(Npc::getStr()*2) and Mana via Npc::setMana(Npc::getInt()*2), calls process FadeFromBlack(pid), and finally restores the previously saved stasis value."
+  ],
+  "open_questions": [
+    "What exact behavior/finality does spawn FREE::1C19(pid, 0x64, 0) perform during/resting (cleanup, timed regen, or other effect)?",
+    "Does SetTimeInGameHours perform hour-of-day wrapping modulo 24 or perform calendar/date progression beyond hour adjustment?",
+    "Are HP and Mana set to exactly getStr()*2 and getInt()*2 respectively in all cases, or are there other modifiers not visible in this script (buffs, level-scaling)?",
+    "Is the choice parsing strictly string-equals against '0'..'5' (inferred) and are alternate locale/number formats possible?"
+  ],
+  "main_function": {
+    "name": "U8P_BEDNS::look",
+    "execution_form": "process",
+    "purpose": "Handle the player's 'U8P_BEDNS::look' or inspect event for the bed object and emit its short description to the player via Item::bark.",
+    "entry_conditions": [
+      "Event 0 (U8P_BEDNS::look/inspect) triggered when the actor inspects or 'looks at' the bed",
+      "Fast-area/area-entry semantics treated as an inspect trigger if engine uses area-entry semantics"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_BEDNS::look",
+      "kind": "main",
+      "role": "Inspect handler that makes the bed 'speak' its short description to the player (calls Item::bark).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BEDNS::use",
+      "kind": "helper",
+      "role": "Use/rest handler that enforces guards (combat/proximity), prompts for rest duration, advances time, restores HP/Mana, spawns a free helper process, and handles fade/stasis transitions.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_BEDNS::look",
+        "callee": "process Item::bark",
+        "purpose": "Display the bed's short description string ('bed ') to the player/process that inspected it.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEDNS::use",
+        "callee": "Npc::isInCombat",
+        "purpose": "Guard: detect if the avatar is currently in combat to block resting.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEDNS::use",
+        "callee": "Npc::areEnemiesNear",
+        "purpose": "Guard: detect nearby enemies (called with flag 1) to block resting.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEDNS::use",
+        "callee": "process Item::bark",
+        "purpose": "Communicate to player: either the prompt 'Rest for how many periods of time?' or the denial 'This is no time to rest!'.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEDNS::use",
+        "callee": "process Item::ask",
+        "purpose": "Present the choices ['0','1','2','3','4','5'] to the player and return the selected string for parsing into a period count.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEDNS::use",
+        "callee": "U8P_BEDNS::getAvatarInStasis",
+        "purpose": "Read the avatar's current stasis/frozen state so it can be restored after the rest sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEDNS::use",
+        "callee": "U8P_BEDNS::setAvatarInStasis",
+        "purpose": "Set the avatar in-stasis flag (used to freeze the avatar during fading/time advance).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEDNS::use",
+        "callee": "U8P_BEDNS::process FadeToBlack",
+        "purpose": "Trigger fade-out effect before advancing time and applying restorations.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEDNS::use",
+        "callee": "U8P_BEDNS::TimeInGameHours",
+        "purpose": "Read current in-game hour as the base for advancing time by choice*4 hours.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEDNS::use",
+        "callee": "U8P_BEDNS::SetTimeInGameHours",
+        "purpose": "Set the in-game clock forward by (choice * 4) hours.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEDNS::use",
+        "callee": "spawn FREE::1C19",
+        "purpose": "Spawn a free/helper process associated with resting (inferred: cleanup/timed effect); called with (pid, 0x64, 0).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BEDNS::use",
+        "callee": "Npc::getStr",
+        "purpose": "Read avatar Strength to compute HP restoration amount (inferred multiplier *2).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BEDNS::use",
+        "callee": "Npc::setHp",
+        "purpose": "Restore avatar HP using a value derived from Strength (inferred as getStr()*2).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BEDNS::use",
+        "callee": "Npc::getInt",
+        "purpose": "Read avatar Intelligence to compute Mana restoration amount (inferred multiplier *2).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BEDNS::use",
+        "callee": "Npc::setMana",
+        "purpose": "Restore avatar Mana using a value derived from Intelligence (inferred as getInt()*2).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BEDNS::use",
+        "callee": "U8P_BEDNS::process FadeFromBlack",
+        "purpose": "Trigger fade-in effect after applying time advancement and restorations.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_BEDNS::look",
+    "behavior_summary_one_liner": "Provides two gameplay behaviors for a bed object: an inspect/'U8P_BEDNS::look' handler that displays a short description ('bed '), and a use/rest handler that lets the player attempt to sleep/rest for 0–5 periods (4 hours per period).",
+    "external_call_count": 16,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

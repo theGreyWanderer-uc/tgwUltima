@@ -1,0 +1,129 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_OPNBDROL.json",
+  "file": "U8P_OPNBDROL",
+  "behavior_summary": [
+    "This script implements the in-game behavior for a bedroll item. When the item is examined ('U8P_OPNBDROL::look' event) it displays the label \"bedroll \".",
+    "When the item is used ('use' event) the script collects the item's world coordinates (X, Y, Z) and delegates to the engine's FREE subsystem (FREE::2411) with those coordinates, the item pointer, and an identifier (0x0216) to initiate the bedroll's runtime action (likely open/activate/sleep).",
+    "No global flags are read or written by these handlers; behavior is localized to displaying text on U8P_OPNBDROL::look and delegating a use-action to the runtime on use."
+  ],
+  "notable_control_flow": [
+    "U8P_OPNBDROL::OPNBDROL::look: simple linear flow — prepare context, call Item::bark with the static string \"bedroll \", free temporary string, then suspend/return.",
+    "U8P_OPNBDROL::OPNBDROL::use: sequentially calls Item::getZ, Item::getY, Item::getX to collect coordinates, then calls FREE::2411 with (X, Y, Z, 0, 0x0216, Item* , extra/process info) to hand control to engine-level behavior.",
+    "The 'U8P_OPNBDROL::look' and 'use' behaviors are separate entry events (Event 0 and Event 1 respectively) rather than one calling the other."
+  ],
+  "open_questions": [
+    "What exact runtime behavior or script is triggered by FREE::2411 when passed identifier 0x0216 (inferred to be bedroll-use behavior but the concrete effect is not present in this excerpt)?",
+    "What is the meaning and origin of the pushed 'pid' value observed in the script (appears to be process/player context used when setting process info/exclusion) and how it impacts downstream processing?",
+    "Are there any additional side-effects or state changes performed by the FREE::2411 handler (e.g., starting a sleep timer, playing an animation, spawning a UI) that are not visible here?"
+  ],
+  "main_function": {
+    "name": "U8P_OPNBDROL::look",
+    "execution_form": "process",
+    "purpose": "Present the item's textual label/description when the bedroll is examined by a player/process (bark the string \"bedroll \").",
+    "entry_conditions": [
+      "Event 0: triggered when the actor looks at/examines the bedroll item (examine/inspect interaction)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_OPNBDROL::look",
+      "kind": "main",
+      "role": "Handle the 'U8P_OPNBDROL::look' (examine) event for the bedroll; display the item's label via Item::bark.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_OPNBDROL::use",
+      "kind": "helper",
+      "role": "Handle the 'use' event for the bedroll; collect coordinates and invoke FREE subsystem to perform the use action.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item-level call to display/emit a short text message from an item/process to a player or process.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getZ",
+      "kind": "extern",
+      "role": "Return the item's Z coordinate for use by runtime handlers.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getY",
+      "kind": "extern",
+      "role": "Return the item's Y coordinate for use by runtime handlers.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getX",
+      "kind": "extern",
+      "role": "Return the item's X coordinate for use by runtime handlers.",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::2411",
+      "kind": "extern",
+      "role": "Engine/free subsystem entry invoked to start the bedroll-use behavior at specified coordinates with the given item and identifier (0x0216).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_OPNBDROL::look",
+        "callee": "Item::bark",
+        "purpose": "Display the static label \"bedroll \" to the inspecting process/player.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_OPNBDROL::use",
+        "callee": "Item::getZ",
+        "purpose": "Retrieve the bedroll's Z (height/level) coordinate to pass to the FREE handler.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_OPNBDROL::use",
+        "callee": "Item::getY",
+        "purpose": "Retrieve the bedroll's Y coordinate to pass to the FREE handler.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_OPNBDROL::use",
+        "callee": "Item::getX",
+        "purpose": "Retrieve the bedroll's X coordinate to pass to the FREE handler.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_OPNBDROL::use",
+        "callee": "FREE::2411",
+        "purpose": "Delegate the actual 'use' runtime behavior (identified by id 0x0216) to engine-level code, supplying coordinates and the item pointer.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "OPNBDROL::look",
+    "behavior_summary_one_liner": "This script implements the in-game behavior for a bedroll item. When the item is examined ('U8P_OPNBDROL::look' event) it displays the label \"bedroll \".",
+    "external_call_count": 5,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

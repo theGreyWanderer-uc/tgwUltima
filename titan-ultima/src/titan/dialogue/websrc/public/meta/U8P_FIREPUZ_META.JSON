@@ -1,0 +1,219 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_FIREPUZ.json",
+  "file": "U8P_FIREPUZ",
+  "behavior_summary": [
+    "Responds to a hit on a specific item type (the FIREPUZ prototype) by spawning an asynchronous helper to play effects, animate, spawn loot, and then removes the original item immediately.",
+    "The main handler (FIREPUZ::gotHit) guards on a hit-flag parameter and the item's type; it only acts when the hit-flag is non-zero and Item::getType(item) == 0x0310.",
+    "The helper (FIREPUZ::00C7) resets kernel references for the context, plays visual/sound effects, runs a short multi-frame animation with timed pauses, reads an internal quality value and uses it to choose and create several loot items, sets/adjusts qualities on spawned items, touches them to update state, and finally destroys a helper-owned item/context."
+  ],
+  "notable_control_flow": [
+    "Early-guard/fast-exit in U8P_FIREPUZ::gotHit: returns immediately if the hit-flag byte parameter is zero.",
+    "Type-check gate in U8P_FIREPUZ::gotHit: proceeds only when Item::getType(...) == 0x0310.",
+    "Asynchronous handoff: U8P_FIREPUZ::gotHit spawns U8P_FIREPUZ::00C7 with the item and pid/context, then calls Item::destroy on the original item so visible/loot work happens independently.",
+    "U8P_FIREPUZ::00C7 performs sequential steps: Kernel::resetRef, spawn effect (FREE::2A12), looped Item::setFrame calls interleaved with FREE::1C19 delays to animate, then branching logic that creates/pops multiple loot items and sets their qualities before cleanup.",
+    "Loot-creation branch choice appears to be driven by a read-and-incremented Item::getQuality value (used as a seed/accumulator) which then influences which prototype ids and how many items are popped."
+  ],
+  "open_questions": [
+    "Exact meanings of numeric constants passed to FREE::2A12 and FREE::1C19 (specific effect ids, durations or flags) remain unclear.",
+    "Precise semantic meaning of the item-type constant 0x0310 (inferred as FIREPUZ) and the variants of prototype ids used for loot are not explicitly named here.",
+    "Whether the quality accumulator read from Item::getQuality represents player-influenced quality, durability, or an internal RNG/seed is inferred but not certain.",
+    "Exact semantics of Kernel::resetRef(0x0203, pid) — whether it clears a specific process state, reference count, or a visual attachment — is not fully determined."
+  ],
+  "main_function": {
+    "name": "U8P_FIREPUZ::gotHit",
+    "execution_form": "process",
+    "purpose": "Handle a hit event on the FIREPUZ item: validate the hit and item type; if valid, spawn an asynchronous helper to play effects/animation and generate loot, then destroy the original item.",
+    "entry_conditions": [
+      "Invoked on a hit event (Event 6 / U8P_FIREPUZ::gotHit).",
+      "Only proceeds when the hit-flag/slot parameter (byte at BP+0Ah) is non-zero.",
+      "Only proceeds when Item::getType(item_reference) == 0x0310."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_FIREPUZ::gotHit",
+      "kind": "main",
+      "role": "Event handler for hit events on the FIREPUZ prototype; performs guards then delegates to helper and destroys the source item.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FIREPUZ::00C7",
+      "kind": "helper",
+      "role": "Asynchronous routine that resets references, plays effects, animates the (now separate) item/process, spawns multiple loot items with adjusted qualities, and performs cleanup.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getType",
+      "kind": "extern",
+      "role": "Engine call used to query the prototype/type id of an item.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::destroy",
+      "kind": "extern",
+      "role": "Engine call used to remove an item instance from the world.",
+      "confidence": "high"
+    },
+    {
+      "name": "Kernel::resetRef",
+      "kind": "extern",
+      "role": "Engine/kernel call used to reset or clear a reference/state for the pid/context before effects/animation.",
+      "confidence": "medium"
+    },
+    {
+      "name": "FREE::2A12",
+      "kind": "extern",
+      "role": "Spawned effect/process, inferred to be visual/sound/particle effect used at helper start and on each loot spawn.",
+      "confidence": "medium"
+    },
+    {
+      "name": "FREE::1C19",
+      "kind": "extern",
+      "role": "Spawned short timer/delay or small effect used to pace animation/frame changes.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::setFrame",
+      "kind": "extern",
+      "role": "Set the sprite/frame for an item to create an animation sequence.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getQuality",
+      "kind": "extern",
+      "role": "Read an item's numeric quality/attribute used to seed branch/quantity logic.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::setQuality",
+      "kind": "extern",
+      "role": "Write an item's quality/attribute to adjust spawned loot value.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::create",
+      "kind": "extern",
+      "role": "Allocate/create a new item instance of a given prototype prior to popping it into the world.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::pop",
+      "kind": "extern",
+      "role": "Place a created item into the world/inventory with specified prototype/flags.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::touch",
+      "kind": "extern",
+      "role": "Mark an item as updated so the engine refreshes its visible state.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_FIREPUZ::gotHit",
+        "callee": "U8P_FIREPUZ::00C7",
+        "purpose": "Spawn an asynchronous helper to perform animation/effects/loot creation so the main handler can remove the source item immediately.",
+        "confidence": "high"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_FIREPUZ::gotHit",
+        "callee": "Item::getType",
+        "purpose": "Check the prototype/type id of the hit item to ensure the behavior only triggers for the FIREPUZ type (compared to 0x0310).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIREPUZ::gotHit",
+        "callee": "Item::destroy",
+        "purpose": "Destroy the original FIREPUZ item after spawning the helper so visuals/loot are handled by the helper process.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIREPUZ::00C7",
+        "callee": "Kernel::resetRef",
+        "purpose": "Reset/clear kernel-level reference/state for the pid/context before running effects/animation (preparation/cleanup step).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FIREPUZ::00C7",
+        "callee": "FREE::2A12",
+        "purpose": "Spawn visual/sound/particle effects at helper start and when spawning each loot piece to augment the destruction animation.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FIREPUZ::00C7",
+        "callee": "FREE::1C19",
+        "purpose": "Spawn short timers/delays tied to the pid/context to pace frame changes and iterations (acts as a suspend/wait).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FIREPUZ::00C7",
+        "callee": "Item::setFrame",
+        "purpose": "Advance or change the displayed frame of the helper's item to animate breaking/explosion sequences.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIREPUZ::00C7",
+        "callee": "Item::getQuality",
+        "purpose": "Read a numeric quality from the item into a local accumulator that influences which loot branch to execute and values assigned to spawned items.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FIREPUZ::00C7",
+        "callee": "Item::create",
+        "purpose": "Create new item instances (intermediate step before Item::pop) used for loot generation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIREPUZ::00C7",
+        "callee": "Item::pop",
+        "purpose": "Place created loot items into the world/inventory with specific prototype ids and flags.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIREPUZ::00C7",
+        "callee": "Item::setQuality",
+        "purpose": "Adjust the quality/value on spawned loot items using the accumulator derived from Item::getQuality.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FIREPUZ::00C7",
+        "callee": "Item::touch",
+        "purpose": "Mark spawned/modified items as updated so the engine acknowledges their altered state (e.g., changed quality or frame).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIREPUZ::00C7",
+        "callee": "Item::destroy",
+        "purpose": "Cleanup/destroy the helper-owned item/context at the end of the sequence.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_FIREPUZ::gotHit",
+    "behavior_summary_one_liner": "Responds to a hit on a specific item type (the FIREPUZ prototype) by spawning an asynchronous helper to play effects, animate, spawn loot, and then removes the original item immediately.",
+    "external_call_count": 12,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

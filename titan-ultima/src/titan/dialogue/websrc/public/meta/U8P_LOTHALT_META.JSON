@@ -1,0 +1,76 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_LOTHALT.json",
+  "file": "U8P_LOTHALT",
+  "behavior_summary": [
+    "This script implements the object's Event 0 ('U8P_LOTHALT::look') handler. When an actor inspects the object, the associated process is prepared (per-process info bits and a process-exclude flag are set), the literal string \"Lothian\" is constructed and passed to Item::bark for the target process to emit, the temporary string memory is freed, and the handler returns the bark call's result.",
+    "No global game-state flags are read or written by this snippet; behavior is localized to the target process and temporary resources.",
+    "The handler appears designed to announce the name \"Lothian\" when looked at, while using process state adjustments to suppress or alter other processing while the bark occurs."
+  ],
+  "notable_control_flow": [
+    "Event-driven: entry is the 'U8P_LOTHALT::look' event (Event 0) on the object; execution runs in the context of a process.",
+    "Before the bark call the code sets per-process info and a process-exclude flag — likely to change actor state or prevent re-entrancy/other reactions during the bark.",
+    "Construct-use-cleanup sequence: allocate/prepare literal string \"Lothian\", call Item::bark(process, string), then free the temporary string.",
+    "The return value from Item::bark is captured and propagated as the handler's return; an intermediate temporary is used in an implies/pop sequence before suspend/return (semantics inferred)."
+  ],
+  "open_questions": [
+    "What exact semantics and ID are associated with the per-process info and 'process exclude' opcodes (what behavior they enable/disable)?",
+    "What precise meaning and consumers exist for the handler's return value from Item::bark (is it used by the engine for dialog flow or ignored)?",
+    "What does the intermediate 'implies' / pop temporary control (is it a guard for suspending the process, or an engine-specific bookkeeping value)?"
+  ],
+  "main_function": {
+    "name": "U8P_LOTHALT::look",
+    "execution_form": "process",
+    "purpose": "Handle the item's 'U8P_LOTHALT::look' event by causing the associated process to emit the text \"Lothian\". The handler sets per-process info/exclusion state, constructs and passes a temporary string to Item::bark, frees the temporary, and returns the bark result.",
+    "entry_conditions": [
+      "Triggered by Event 0 (the 'U8P_LOTHALT::look' or examine action) for the object."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_LOTHALT::look",
+      "kind": "main",
+      "role": "Event handler for the object's 'U8P_LOTHALT::look' action; drives local process state changes and invokes Item::bark to emit a name string.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine to make the target process/object emit or display a short text string (used here to speak 'Lothian').",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_LOTHALT::look",
+        "callee": "Item::bark",
+        "purpose": "Ask the target process/object to emit/display the literal string \"Lothian\" to the game UI or listeners.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_LOTHALT::look",
+    "behavior_summary_one_liner": "This script implements the object's Event 0 ('U8P_LOTHALT::look') handler. When an actor inspects the object, the associated process is prepared (per-process info bits and a process-exclude flag are set), the literal string \"Lothian\" is constructed and passed to Item::bark for the target process to emit, the temporary string memory is freed, and the handler returns the bark call's result.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

@@ -1,0 +1,232 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_PENT.json",
+  "file": "U8P_PENT",
+  "behavior_summary": [
+    "Implements pentagram-related gameplay: cleaning up improper/extra items when someone enters the pentagram trigger area (U8P_PENT::enterFastArea), reacting to physical hits on the pentagram to start ritual effects (gotHit), and handling player 'use' attempts to activate the pentagram ritual (use).",
+    "U8P_PENT::enterFastArea: when the fast-area trigger is entered and the global flag acolyteKilled is set and the triggering item's map/frame match expected values, the handler enumerates nearby items and destroys those that match specific frame/shape masks and positional constraints — effectively pruning or enforcing the pentagram's center contents.",
+    "gotHit: validates hit parameters and global state (tonguing, pyrosFree, etc.), selects a valid focus/candle item, sets a 'tonguing' ritual flag, may put the avatar into stasis, spawns multiple asynchronous visual/effect processes (FREE::* and METHOD::*), and manipulates or destroys involved items to start the ritual sequence.",
+    "use: validates party/quest prerequisites (vardionJoined, baneJoined, acolyteKilled), checks for a single valid focus at the pentagram center and an appropriate set of lit candles, barks feedback to the player when requirements fail, and when validated spawns the ritual/effect processes and calls internal helpers to build/validate item lists and orchestrate the activation."
+  ],
+  "notable_control_flow": [
+    "Fast-area entry path is gated by the global flag acolyteKilled and by the triggering item's map/frame bits; if either fails, U8P_PENT::enterFastArea exits without altering the world.",
+    "Item enumeration loops test item frames/types and spatial X/Y ranges relative to the trigger; matching items are destroyed via Item::destroy.",
+    "gotHit uses multiple guards (tonguing flag, pyrosFree, hit parameters, item frame/type) to prevent duplicate or invalid activations; when conditions pass it sets tongue-related state and spawns multiple asynchronous routines.",
+    "use performs layered validation: quest/party flags first (vardionJoined, baneJoined, sponsorTest affects messaging), then presence and uniqueness of a center focus, then count/state of candles; failure at any step produces a player-facing bark and aborts activation."
+  ],
+  "open_questions": [
+    "Exact numeric frame/shape mask values and which concrete in-game item types (e.g., 'focus' vs 'candle') correspond to each frame test — inference is based on frame/shape checks but not explicit names.",
+    "Precise side effects and durations of the spawned FREE::* and METHOD::* processes (visuals, damage, NPC behavior) — disassembly shows spawns but not the high-level gameplay effects.",
+    "Where and when the 'tonguing' flag is cleared after gotHit sets it — clearing sequences are inferred but not present in this snippet.",
+    "Exact player-facing strings used by PENT::use failure branches (bark text is invoked but literal strings are not fully recovered here)."
+  ],
+  "main_function": {
+    "name": "U8P_PENT::enterFastArea",
+    "execution_form": "process",
+    "purpose": "On fast-area (trigger) entry, ensure the pentagram center contains only allowed items by inspecting the triggering actor/item and removing nearby items that do not match the pentagram's expected frame/shape and spatial constraints. Acts as cleanup/enforcement when the acolyte-related state applies.",
+    "entry_conditions": [
+      "Called on U8P_PENT::enterFastArea (fast-area trigger entry).",
+      "Proceeds only if global flag 'acolyteKilled' is non-zero.",
+      "Proceeds only when the triggering item's map and frame bits match expected values (ensures correct pentagram variant/state)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_PENT::enterFastArea",
+      "kind": "main",
+      "role": "Trigger-area handler that prunes incorrect or unwanted items within the pentagram center when conditions (acolyteKilled and trigger-item frame/map) are met.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_PENT::gotHit",
+      "kind": "helper",
+      "role": "Handles Event 6 (pentagram being struck): validates hit and global state, may set ritual state (tonguing), spawn visual/effect processes, set avatar stasis, and manipulate/destroy selected items to begin a ritual sequence.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_PENT::use",
+      "kind": "helper",
+      "role": "Handles 'use' (player activation): verifies party/quest preconditions, checks for a single valid focus and proper candles/lights, barks player messages on failure, and on success orchestrates the ritual by spawning effects and calling internal list/validation helpers.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_PENT::5336",
+      "kind": "helper",
+      "role": "Internal validation helper (inferred): used by use/gotHit to validate item lists or ritual preconditions.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_PENT::3940",
+      "kind": "helper",
+      "role": "Internal helper (inferred): possibly performs a different validation pass or state check for activation sequences.",
+      "confidence": "low"
+    },
+    {
+      "name": "U8P_PENT::39E7",
+      "kind": "helper",
+      "role": "Internal helper (inferred): builds/filters nearby item lists (foci/candles) for ritual operations.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_PENT::3B43",
+      "kind": "helper",
+      "role": "Internal helper (inferred): further list manipulation or ritual orchestration utility used during use/gotHit.",
+      "confidence": "low"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_PENT::use",
+        "callee": "U8P_PENT::5336",
+        "purpose": "Validate ritual prerequisites or an item list prior to activation.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_PENT::use",
+        "callee": "U8P_PENT::3940",
+        "purpose": "Additional validation or alternate path checks during use; exact role inferred from invocation context.",
+        "confidence": "low"
+      },
+      {
+        "caller": "U8P_PENT::use",
+        "callee": "U8P_PENT::39E7",
+        "purpose": "Build or filter a nearby-item list (candles/foci) used to decide whether activation can proceed.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_PENT::use",
+        "callee": "U8P_PENT::3B43",
+        "purpose": "Post-validation list handling or item-movement helper invoked as part of orchestration.",
+        "confidence": "low"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_PENT::enterFastArea",
+        "callee": "Item::getMap",
+        "purpose": "Check the triggering item's map/region to gate fast-area behavior to the correct map.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PENT::enterFastArea",
+        "callee": "Item::getFrame",
+        "purpose": "Inspect triggering-item frame bits to determine variant/type and whether cleanup should run.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PENT::enterFastArea",
+        "callee": "Item::getX",
+        "purpose": "Obtain item X coordinate for spatial inclusion/exclusion tests when enumerating nearby items.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PENT::enterFastArea",
+        "callee": "Item::getY",
+        "purpose": "Obtain item Y coordinate for spatial inclusion/exclusion tests.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PENT::enterFastArea",
+        "callee": "Item::destroy",
+        "purpose": "Remove items that do not comply with pentagram layout or that must be pruned when the avatar enters the center.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PENT::gotHit",
+        "callee": "spawn",
+        "purpose": "Start asynchronous visual/effect processes (addresses in FREE::* or METHOD::*) to present ritual visuals or run concurrent logic.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PENT::gotHit",
+        "callee": "Item::getFrame",
+        "purpose": "Check the struck item's frame/type to decide if it is a valid focus/candle for initiating the tonguing ritual.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PENT::gotHit",
+        "callee": "U8P_PENT::getAvatarInStasis",
+        "purpose": "Query whether the avatar is already in stasis before setting it for the ritual sequence.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_PENT::gotHit",
+        "callee": "U8P_PENT::setAvatarInStasis",
+        "purpose": "Set avatar stasis to prevent player movement/actions during ritual visual sequences.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_PENT::use",
+        "callee": "Item::bark",
+        "purpose": "Provide player-facing messages when ritual prerequisites fail or to narrate stages of activation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PENT::use",
+        "callee": "Npc::isBusy",
+        "purpose": "Check NPC busy state before spawning additional processes that act on or near NPCs.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "acolyteKilled",
+        "likely_effect": "Gates pentagram behavior variant; when set allows U8P_PENT::enterFastArea pruning and choice of activation branches in use/gotHit.",
+        "confidence": "high"
+      },
+      {
+        "name": "tonguing",
+        "likely_effect": "Indicates whether a 'tonguing' ritual sequence is already active; read to prevent redundant activations in gotHit.",
+        "confidence": "high"
+      },
+      {
+        "name": "pyrosFree",
+        "likely_effect": "Used to gate whether certain pyrotechnic/free effects may be spawned during gotHit.",
+        "confidence": "medium"
+      },
+      {
+        "name": "vardionJoined",
+        "likely_effect": "Used during use to require specific party membership before allowing ritual activation or to choose an alternative message.",
+        "confidence": "medium"
+      },
+      {
+        "name": "baneJoined",
+        "likely_effect": "Also used in use to check party composition prerequisites for activation.",
+        "confidence": "medium"
+      },
+      {
+        "name": "sponsorTest",
+        "likely_effect": "A boolean that changes validation/messaging behavior in use (affects which bark or path is chosen).",
+        "confidence": "low"
+      }
+    ],
+    "writes": [
+      {
+        "name": "tonguing",
+        "likely_effect": "Set to 1 when gotHit successfully chooses a valid focus and begins the tonguing ritual; prevents reentry until cleared elsewhere.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_PENT::enterFastArea",
+    "behavior_summary_one_liner": "Implements pentagram-related gameplay: cleaning up improper/extra items when someone enters the pentagram trigger area (U8P_PENT::enterFastArea), reacting to physical hits on the pentagram to start ritual effects (gotHit), and handling player 'use' attempts to activate the pentagram ritual (use).",
+    "external_call_count": 11,
+    "flag_read_count": 6,
+    "flag_write_count": 1
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

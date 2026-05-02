@@ -1,0 +1,186 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_THURGEGG.json",
+  "file": "U8P_THURGEGG",
+  "behavior_summary": [
+    "This script implements an egg-hatching mechanic triggered when an actor enters the egg's fast-area trigger. On area entry it performs a probabilistic gate and additional conditional checks; if they pass the script spawns an NPC at the egg's coordinates, transfers/associates the egg to that NPC, flags involved items, initializes the NPC's activity, waits briefly, then creates a secondary post-hatch item and gives it to the spawned NPC.",
+    "Randomness is used twice: urandom(100) is a primary gate (proceeds only if result > 50) and urandom(5) selects a variant for the post-hatch created item.",
+    "Several low-level details (the exact looped condition that gates hatching and the precise semantics of Item::pop variants) are inferred from call patterns rather than explicit source code."
+  ],
+  "notable_control_flow": [
+    "Entry occurs on U8P_THURGEGG::enterFastArea (area entry trigger). The first control check is urandom(100) > 0x32 (50); failing this returns immediately.",
+    "A subsequent loop/compare sequence examines Egg::getEggId() and related data; if that test fails the handler returns without creating anything.",
+    "On success: Npc::create is called to spawn an NPC; the egg item is marked (Item::orStatus(0x0080)), moved/associated to the NPC (Item::pop using Item::getX/Y/Z), the new NPC's activity is set (Npc::cSetActivity(0)), a short suspend occurs, then Item::create is used to make a post-hatch item, which is flagged and given to the NPC."
+  ],
+  "open_questions": [
+    "Exact condition tested by the loop/compare sequence that reads Egg::getEggId() — what game state or nearby objects is it checking?",
+    "Precise semantics of Item::pop variants used here (three-argument vs single-argument) — whether they transfer ownership, place items in world coordinates, or parent items to processes.",
+    "Meaning and gameplay effect of the status mask 0x0080 set by Item::orStatus — inferred as 'processed' or non-pickable but not certain.",
+    "What concrete item variants correspond to the urandom(5) branches for Item::create(type 0x00AE) — exact in-game items are unclear."
+  ],
+  "main_function": {
+    "name": "U8P_THURGEGG::enterFastArea",
+    "execution_form": "process",
+    "purpose": "Respond to an actor entering an egg's trigger region by possibly hatching the egg: spawn an NPC at the egg's location, transfer and flag the egg, initialize the NPC, then after a short delay create and assign a post-hatch item to that NPC.",
+    "entry_conditions": [
+      "Triggered on U8P_THURGEGG::enterFastArea for the egg item (area entry).",
+      "Primary probabilistic gate: urandom(100) must return a value > 0x32 (50).",
+      "A subsequent conditional/loop check based on Egg::getEggId() and nearby/related data must succeed."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_THURGEGG::enterFastArea",
+      "kind": "main",
+      "role": "Area-entry handler that implements egg-hatching logic.",
+      "confidence": "high"
+    },
+    {
+      "name": "Egg::getEggId",
+      "kind": "extern",
+      "role": "Read the egg's id/type used by gating logic.",
+      "confidence": "high"
+    },
+    {
+      "name": "urandom",
+      "kind": "extern",
+      "role": "Provide randomness for gating and variant selection.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::create",
+      "kind": "extern",
+      "role": "Spawn the NPC instance used as the hatched creature.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::orStatus",
+      "kind": "extern",
+      "role": "Set status bits on items (mask 0x0080 used here).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getX",
+      "kind": "extern",
+      "role": "Read item's X coordinate for NPC placement/transfer.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getY",
+      "kind": "extern",
+      "role": "Read item's Y coordinate for NPC placement/transfer.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getZ",
+      "kind": "extern",
+      "role": "Read item's Z coordinate for NPC placement/transfer.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::pop",
+      "kind": "extern",
+      "role": "Move/associate item to NPC or world coordinates; used for both the egg and post-hatch item.",
+      "confidence": "medium"
+    },
+    {
+      "name": "process Npc::cSetActivity",
+      "kind": "extern",
+      "role": "Initialize the spawned NPC's activity/state.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::create",
+      "kind": "extern",
+      "role": "Create post-hatch item (type 0x00AE variant influenced by urandom(5)).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_THURGEGG::enterFastArea",
+        "callee": "Egg::getEggId",
+        "purpose": "Read the egg's type/id to use in gating logic.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_THURGEGG::enterFastArea",
+        "callee": "urandom",
+        "purpose": "First call: probabilistic gate using urandom(100). Second call: select a post-hatch item variant using urandom(5).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_THURGEGG::enterFastArea",
+        "callee": "Npc::create",
+        "purpose": "Spawn the new NPC (hatched creature) and receive its id/address for subsequent operations.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_THURGEGG::enterFastArea",
+        "callee": "Item::orStatus",
+        "purpose": "Flag the egg item (and later the created item) with mask 0x0080; likely to mark as processed/non-pickable.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_THURGEGG::enterFastArea",
+        "callee": "Item::getX",
+        "purpose": "Obtain egg X coordinate to place/transfer the egg and position the NPC.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_THURGEGG::enterFastArea",
+        "callee": "Item::getY",
+        "purpose": "Obtain egg Y coordinate to place/transfer the egg and position the NPC.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_THURGEGG::enterFastArea",
+        "callee": "Item::getZ",
+        "purpose": "Obtain egg Z coordinate to place/transfer the egg and position the NPC.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_THURGEGG::enterFastArea",
+        "callee": "Item::pop",
+        "purpose": "Transfer or place the egg at the spawned NPC's location (three-argument/pop variant) and later assign the created post-hatch item to the NPC (single-argument variant).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_THURGEGG::enterFastArea",
+        "callee": "process Npc::cSetActivity",
+        "purpose": "Set the spawned NPC's initial activity/state (called with activity 0).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_THURGEGG::enterFastArea",
+        "callee": "Item::create",
+        "purpose": "Create the post-hatch item (type 0x00AE variant chosen by urandom(5)) and return its id/address for flagging and assignment.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_THURGEGG::enterFastArea",
+    "behavior_summary_one_liner": "This script implements an egg-hatching mechanic triggered when an actor enters the egg's fast-area trigger. On area entry it performs a probabilistic gate and additional conditional checks; if they pass the script spawns an NPC at the egg's coordinates, transfers/associates the egg to that NPC, flags involved items, initializes the NPC's activity, waits briefly, then creates a secondary post-hatch item and gives it to the spawned NPC.",
+    "external_call_count": 10,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

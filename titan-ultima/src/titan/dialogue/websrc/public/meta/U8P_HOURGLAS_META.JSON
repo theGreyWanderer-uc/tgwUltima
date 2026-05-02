@@ -1,0 +1,175 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_HOURGLAS.json",
+  "file": "U8P_HOURGLAS",
+  "behavior_summary": [
+    "Provides event handlers for an hourglass item: an animation tick handler that advances/toggles visual frames and plays a sound on certain transitions, a look handler that describes the object, and a use handler that reports the current in-game time/phase to the player.",
+    "HOURGLAS::anim (the main process) appears to spawn a small timing helper (FREE::1C19), suspend to wait for ticks, then on each resume read the item's animation frame and toggle it between paired frames (0<->1 and 2<->3). Transitions from the higher frame back to the lower frame (1->0 and 3->2) trigger a sound effect.",
+    "HOURGLAS::look simply causes the item to 'bark' the short description \"clock \" to the caller/process.",
+    "HOURGLAS::use queries a global time service (FREE::28F9) to obtain a numeric time/period code (0..5), maps that code to a human-readable period name (e.g., \"Bloodwatch.\", \"FirstEbb.\", \"DayTide.\", \"ThreeMoons.\", \"LastEbb.\", \"EvenTide.\"), constructs the message \"The time is now <Name>\" and barks it; if no valid code is found it falls back to \"This clock is broken \"."
+  ],
+  "notable_control_flow": [
+    "U8P_HOURGLAS::HOURGLAS::anim runs as a process: it spawns FREE::1C19 at start, uses suspend/resume semantics to create periodic behavior, and uses a small saved temp slot around implies/suspend sequences.",
+    "Frame-reading and setting are conditional: for frames 0/1 and 2/3 the handler toggles to the paired frame; when toggling from the higher to the lower frame it also invokes playSFX.",
+    "The look and use handlers follow the same suspend/imply flow pattern for short immediate replies (prepare, call Item::bark, resume/return)."
+  ],
+  "open_questions": [
+    "Exact timing/frequency and implementation details of the spawned FREE::1C19 helper: it is inferred to be a timer/tick driver but its parameters and scheduling semantics are not shown directly.",
+    "Whether other engine events (fast-area enter/leave) can trigger these handlers in addition to the explicit 'U8P_HOURGLAS::anim', 'look', and 'use' events observed in the disassembly.",
+    "If the hourglass shares frames or sounds with other items (frame indices and sound id usage are numeric and not named here), so asset mapping is not fully resolved.",
+    "Whether the 'broken' fallback in use() can occur in normal gameplay or only under unusual circumstances (e.g., time service unavailable)."
+  ],
+  "main_function": {
+    "name": "U8P_HOURGLAS::anim",
+    "execution_form": "process",
+    "purpose": "Drive the hourglass item's periodic animation: spawn a timing helper, suspend and resume on ticks, toggle the item's animation frame between paired indices (0<->1 and 2<->3) and play a sound effect on each transition from the higher frame back to the lower frame.",
+    "entry_conditions": [
+      "Invoked by the engine as the item's animation tick handler (Event 2 / 'U8P_HOURGLAS::anim'), likely started via a spawn so it runs as a process tied to the item.",
+      "Activated when the animation needs advancing (inferred from spawn/suspend/rotate flow)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_HOURGLAS::anim",
+      "kind": "main",
+      "role": "Periodic animation/process handler for the hourglass item; toggles frames and triggers SFX on certain transitions.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_HOURGLAS::look",
+      "kind": "helper",
+      "role": "Responds to 'look' events by barking the short description string for the object to the caller.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_HOURGLAS::use",
+      "kind": "helper",
+      "role": "Responds to 'use' events: queries a global time service to format and bark a message describing the current time/period or a broken-clock fallback.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getFrame",
+      "kind": "extern",
+      "role": "Reads the current animation frame index of an item instance.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::setFrame",
+      "kind": "extern",
+      "role": "Sets the animation frame index of an item instance.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Causes an item to emit/display a text message to a player/process (used by look and use).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_HOURGLAS::playSFX",
+      "kind": "extern",
+      "role": "Plays a sound effect with numeric ids/params; used on specific frame transitions.",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::28F9",
+      "kind": "extern",
+      "role": "Global/time service queried by use() to obtain a numeric time/phase code (0..5) used to select a human-readable period name.",
+      "confidence": "medium"
+    },
+    {
+      "name": "FREE::1C19",
+      "kind": "extern",
+      "role": "Spawned helper (inferred timing helper) used to drive U8P_HOURGLAS::anim()'s periodic resume/tick behavior.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_HOURGLAS::anim",
+        "callee": "U8P_HOURGLAS::none",
+        "purpose": "Does not call other internal U8P_HOURGLAS handlers; acts as an independent process-driven routine.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_HOURGLAS::look",
+        "callee": "U8P_HOURGLAS::none",
+        "purpose": "Self-contained helper that does not invoke other internal handlers.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_HOURGLAS::use",
+        "callee": "U8P_HOURGLAS::none",
+        "purpose": "Self-contained helper that queries externals but does not call other internal handlers.",
+        "confidence": "high"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_HOURGLAS::anim",
+        "callee": "Item::getFrame",
+        "purpose": "Read the current frame index to decide toggle behavior.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_HOURGLAS::anim",
+        "callee": "Item::setFrame",
+        "purpose": "Set the new animation frame after toggling.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_HOURGLAS::anim",
+        "callee": "U8P_HOURGLAS::playSFX",
+        "purpose": "Play a sound effect when the animation transitions from the upper frame to the lower frame (1->0 and 3->2).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_HOURGLAS::anim",
+        "callee": "FREE::1C19",
+        "purpose": "Spawned at start; likely a timing/tick helper used to wake/resume the U8P_HOURGLAS::anim process periodically.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_HOURGLAS::look",
+        "callee": "Item::bark",
+        "purpose": "Emit the short description string \"clock \" to the caller/player.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_HOURGLAS::use",
+        "callee": "FREE::28F9",
+        "purpose": "Query the global time/phase service repeatedly to obtain a numeric code used to select a period name for the message.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_HOURGLAS::use",
+        "callee": "Item::bark",
+        "purpose": "Display the constructed time message (or broken-clock fallback) to the player/process.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "HOURGLAS::anim",
+    "behavior_summary_one_liner": "Provides event handlers for an hourglass item: an animation tick handler that advances/toggles visual frames and plays a sound on certain transitions, a look handler that describes the object, and a use handler that reports the current in-game time/phase to the player.",
+    "external_call_count": 7,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

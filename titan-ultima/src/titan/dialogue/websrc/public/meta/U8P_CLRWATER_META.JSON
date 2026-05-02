@@ -1,0 +1,90 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_CLRWATER.json",
+  "file": "U8P_CLRWATER",
+  "behavior_summary": [
+    "Responds to a hit (U8P_CLRWATER::gotHit event) by spawning a WATER behavior/process (WATER::0080) to react to the impact — likely to clear or update water at or near the hit location.",
+    "Before spawning it configures spawn context via engine ops 'set info' and 'process exclude' which affect the spawned process's metadata and concurrency/exclusion rules.",
+    "Passes several arguments to the spawned WATER::0080 process (including values derived from BP+06h, BP+0Ah, BP+0Ch, pid and a constant 0x020C).",
+    "Inspects the spawn return value, applies a logical 'implies' operation (with literal operands 1,1), stores that result into a temp local, then suspends/returns; the implication result likely serves as a boolean/flow indicator but its exact use is not visible in this snippet."
+  ],
+  "notable_control_flow": [
+    "Entry on Event 6 (U8P_CLRWATER::gotHit) for U8P_CLRWATER::gotHit.",
+    "Call sequence: set info -> process exclude -> spawn WATER::0080 with prepared arguments.",
+    "Immediately after spawn, the returned value is pushed/consumed by an 'implies' operation (operands include the retval and literals 1,1), result stored to a temp local.",
+    "Function then suspends/returns; no observed global flags are modified in this fragment."
+  ],
+  "open_questions": [
+    "What exact semantics and parameter meanings does WATER::0080 implement (clear water, play splash animation, update water tiles, etc.)?",
+    "What are the precise meanings of the pushed arguments (especially BP+06h passed twice and the indirect 2-byte value) in relation to water-clearing behavior?",
+    "Which info key/value is being set by 'set info' and how does it influence the spawned WATER process?",
+    "How is the boolean-like result of the 'implies' operation used by the larger game system (the temp is stored but not used in this excerpt)?"
+  ],
+  "main_function": {
+    "name": "U8P_CLRWATER::gotHit",
+    "execution_form": "process",
+    "purpose": "Handle a hit event by configuring spawn context and spawning the WATER::0080 process to perform a water-related reaction near the impacted object/location; then interpret the spawn's return value to a boolean-like temp and suspend.",
+    "entry_conditions": [
+      "Event 6 (U8P_CLRWATER::gotHit) — invoked when this object is struck/hit"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_CLRWATER::gotHit",
+      "kind": "main",
+      "role": "Respond to hit events by spawning WATER::0080 with contextual parameters, using set info/process exclude to prepare spawn context, and post-processing the spawn retval.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_CLRWATER::gotHit",
+        "callee": "U8P_CLRWATER::set info",
+        "purpose": "Configure metadata/state that will apply to or parameterize the subsequent spawn (affects how the spawned process sees the target or its behavior).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_CLRWATER::gotHit",
+        "callee": "U8P_CLRWATER::process exclude",
+        "purpose": "Set exclusion rules or concurrency constraints influencing the upcoming spawn or related processes (prevents conflicting processes or marks the target excluded).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_CLRWATER::gotHit",
+        "callee": "WATER::0080 (spawn)",
+        "purpose": "Spawn a WATER-handling process to react to the hit — inferred to clear or otherwise update water at/near the impact using passed parameters (0x020C, BP+06h, an indirect 2-byte value, pid, BP+0Ch, BP+0Ah).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CLRWATER::gotHit",
+        "callee": "U8P_CLRWATER::implies",
+        "purpose": "Apply a logical implication operation to the spawn return value (with literal operands 1,1) to produce a boolean-like result stored in a temp local for later use or signaling.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "CLRWATER::gotHit",
+    "behavior_summary_one_liner": "Responds to a hit (U8P_CLRWATER::gotHit event) by spawning a WATER behavior/process (WATER::0080) to react to the impact — likely to clear or update water at or near the hit location.",
+    "external_call_count": 4,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

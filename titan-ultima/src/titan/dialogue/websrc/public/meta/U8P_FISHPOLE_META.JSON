@@ -1,0 +1,134 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_FISHPOLE.json",
+  "file": "U8P_FISHPOLE",
+  "behavior_summary": [
+    "FISHPOLE::look: When the player examines the fishing pole it emits a short descriptive bark ('fishing pole ').",
+    "FISHPOLE::use: When the pole is used it queries the current use-target. If there is no target it does nothing. If the target exists and is of a specific type (literal 0x015B) a random chance gate (roughly 1/8) determines whether the use results in a catch.",
+    "On a successful catch the script reads the target world coordinates, adds a small random offset/count (urandom(3)), attempts to spawn an item (literal 0x0270) at that WorldPoint via Item::legal_create, and barks a success message ('I caught something! ').",
+    "If spawning fails a visual/fallback Item::shoot animation toward the location is executed, and the success bark still occurs afterward. If the type check or random gate fails the script barks 'No fish here.' and returns."
+  ],
+  "notable_control_flow": [
+    "U8P_FISHPOLE::FISHPOLE::look: short linear handler — sets up item U8P_FISHPOLE::look state and calls process Item::bark with a static string, then returns. (confidence: high)",
+    "U8P_FISHPOLE::FISHPOLE::use: guarded entry — calls process target(); if return is null/zero the function returns immediately. (confidence: high)",
+    "U8P_FISHPOLE::FISHPOLE::use: type guard — proceeds only when Item::getType() == 0x015B (inferred valid fishing spot/type). (confidence: high)",
+    "U8P_FISHPOLE::FISHPOLE::use: random gate — uses urandom(10) and checks (retval & 0x07) == 0 to implement ~1/8 catch chance. (confidence: high)",
+    "U8P_FISHPOLE::FISHPOLE::use: on success — reads target Item::getX/Y/Z, uses urandom(3) for a small extra value, attempts Item::legal_create(type=0x0270, count=?, WorldPoint*); on create-failure calls Item::shoot(WorldPoint*, ...). Then barks 'I caught something! '. (confidence: medium-high)",
+    "U8P_FISHPOLE::FISHPOLE::use: on failure of type/random check — barks 'No fish here.' and returns. (confidence: high)"
+  ],
+  "open_questions": [
+    "What concrete in-game object corresponds to type 0x015B (the valid fishing target)? (confidence: low — inferred only from literal compare)",
+    "What exact item is type 0x0270 that the script attempts to spawn (the caught item)? (confidence: low — literal present but identity not documented here)",
+    "What are the semantics of the urandom(3) second call (is it additional count, offset, or both)? The disassembly shows it is used when building the WorldPoint/creation parameters but exact role is inferred. (confidence: medium)",
+    "Are there additional side effects (inventory insertion, quest flags) triggered elsewhere when Item::legal_create succeeds? None are visible in this script. (confidence: low)"
+  ],
+  "main_function": {
+    "name": "U8P_FISHPOLE::look",
+    "execution_form": "process",
+    "purpose": "Produce the short description / spoken name for the fishing pole when it is examined by the player (emit a brief bark).",
+    "entry_conditions": [
+      "Event 0: triggered when the player (or relevant actor) 'looks' at the fishing pole."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_FISHPOLE::look",
+      "kind": "main",
+      "role": "Examination handler that makes the item emit a short descriptive string via process Item::bark.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FISHPOLE::use",
+      "kind": "helper",
+      "role": "Use/interaction handler: validates target, applies a random catch chance, attempts to spawn/animate the caught item, and emits success/failure barks.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_FISHPOLE::look",
+        "callee": "Item::bark",
+        "purpose": "Display the item's short description string ('fishing pole ') to the viewing process; primary ux for 'U8P_FISHPOLE::look'.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FISHPOLE::use",
+        "callee": "U8P_FISHPOLE::process target()",
+        "purpose": "Obtain the currently targeted object for the use action; presence/non-presence gates the rest of the logic.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FISHPOLE::use",
+        "callee": "Item::getType",
+        "purpose": "Read the target's type id to test whether it is the allowed fishing spot/type (compare to 0x015B).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FISHPOLE::use",
+        "callee": "urandom",
+        "purpose": "Provide pseudo-random numbers used for the catch chance (urandom(10) & mask) and for a small additional value (urandom(3)) applied to the spawn parameters.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FISHPOLE::use",
+        "callee": "Item::getX",
+        "purpose": "Read the target's world X coordinate for spawning/animation placement.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FISHPOLE::use",
+        "callee": "Item::getY",
+        "purpose": "Read the target's world Y coordinate for spawning/animation placement.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FISHPOLE::use",
+        "callee": "Item::getZ",
+        "purpose": "Read the target's world Z/plane for spawning/animation placement.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FISHPOLE::use",
+        "callee": "Item::legal_create",
+        "purpose": "Attempt to create/spawn the caught item (literal type 0x0270) at the computed WorldPoint; return indicates success or failure.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FISHPOLE::use",
+        "callee": "Item::shoot",
+        "purpose": "Fallback visual/animation effect toward the WorldPoint when Item::legal_create fails (provides feedback instead of actual spawn).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FISHPOLE::use",
+        "callee": "Item::bark",
+        "purpose": "Emit user-facing messages: 'I caught something! ' on success branch, or 'No fish here.' on failure branch.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "FISHPOLE::look",
+    "behavior_summary_one_liner": "FISHPOLE::look: When the player examines the fishing pole it emits a short descriptive bark ('fishing pole ').",
+    "external_call_count": 10,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

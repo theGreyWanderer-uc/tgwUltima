@@ -1,0 +1,197 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_TORCH.json",
+  "file": "U8P_TORCH",
+  "behavior_summary": [
+    "U8P_TORCH::TORCH::look handles the player's examination of a torch: it prepares process/item info state and always displays the short description string \"torch  \" to the viewer via Item::bark.",
+    "U8P_TORCH::TORCH::use implements the \"use object\" behavior for the torch: it asks the current process for a target, validates reachability, enforces several target-type/frame/status constraints, and if all checks pass triggers an effect at the target's coordinates by invoking FREE::2411 with the target reference.",
+    "If no target is chosen the use action aborts immediately; if the chosen target is not reachable the torch barks \"can't reach \" and the use aborts.",
+    "Type (0x018B), frame (0x13), and a cleared status bit (0x08) are required on the target for the use action to proceed — these specific constants' meanings are inferred from comparisons and treated as eligibility checks."
+  ],
+  "notable_control_flow": [
+    "U8P_TORCH::TORCH::look: straightforward linear handler — set info/exclude, call Item::bark(\"torch  \"), then suspend/return (no branching).",
+    "U8P_TORCH::TORCH::use: target selection -> if target==0 then return; else call Item::canReach(flag=0x01,target) -> if not reachable then Item::bark(\"can't reach \") and return; else perform type/frame/status checks -> if any fail return; else gather Z,Y,X and call FREE::2411(x,y,z,0,0x010B,target)."
+  ],
+  "open_questions": [
+    "Exact semantic meaning of the type constant 0x018B (what in-game object/class it denotes).",
+    "Exact meaning of frame value 0x13 and why that frame is required for the torch use.",
+    "Precise semantics of the status bit 0x08 (what it represents when set/clear).",
+    "Concrete effect performed by FREE::2411 (inferred to be the torch-on-target effect, but library semantics are unknown).",
+    "Details of the 'set info / process exclude' operations invoked on U8P_TORCH::look (what info id is set and why the exclusion is needed)."
+  ],
+  "main_function": {
+    "name": "U8P_TORCH::look",
+    "execution_form": "process",
+    "purpose": "Provide the examine/U8P_TORCH::look response for the torch: set up process/item info state and display the short description to the viewing process.",
+    "entry_conditions": [
+      "Event 0 (U8P_TORCH::look) — invoked when the player or actor looks at/inspects the torch (area/inspect trigger)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_TORCH::look",
+      "kind": "main",
+      "role": "Examine/U8P_TORCH::look handler that displays the torch description to the player.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_TORCH::use",
+      "kind": "helper",
+      "role": "Use-on-target handler: select target, validate, and trigger an effect at the target when eligible.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine used to display short messages or descriptions to a process/player.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_TORCH::process target()",
+      "kind": "extern",
+      "role": "Runtime/process helper that requests/returns a target selection for the current action (returns 0 if none).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::canReach",
+      "kind": "extern",
+      "role": "Reachability test used to verify whether the actor/process can reach the selected target.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getType",
+      "kind": "extern",
+      "role": "Returns the target item's type id used for eligibility checks.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getFrame",
+      "kind": "extern",
+      "role": "Returns the target item's frame/state index used for eligibility checks.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getStatus",
+      "kind": "extern",
+      "role": "Returns the target item's status bits consulted during eligibility checks.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getZ",
+      "kind": "extern",
+      "role": "Returns the target's Z coordinate used when invoking the effect.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getY",
+      "kind": "extern",
+      "role": "Returns the target's Y coordinate used when invoking the effect.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getX",
+      "kind": "extern",
+      "role": "Returns the target's X coordinate used when invoking the effect.",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::2411",
+      "kind": "extern",
+      "role": "Library/free routine invoked with target coords and reference; inferred to perform the torch-on-target effect or trigger an effect at that location.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_TORCH::look",
+        "callee": "Item::bark",
+        "purpose": "Display the torch's short description string to the viewing process.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TORCH::use",
+        "callee": "U8P_TORCH::process target()",
+        "purpose": "Request the current process to select a target for the use action; return 0 if none selected.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TORCH::use",
+        "callee": "Item::canReach",
+        "purpose": "Check whether the actor/process can reach the selected target (called with flag 0x01); failure leads to a \"can't reach\" message and abort.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TORCH::use",
+        "callee": "Item::bark",
+        "purpose": "On failed reachability, inform the player with \"can't reach \".",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TORCH::use",
+        "callee": "Item::getType",
+        "purpose": "Retrieve the target's type id and compare to constant 0x018B as part of the eligibility checks.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TORCH::use",
+        "callee": "Item::getFrame",
+        "purpose": "Retrieve the target's frame and compare to 0x13 as part of the eligibility checks.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TORCH::use",
+        "callee": "Item::getStatus",
+        "purpose": "Read target status bits and ensure bit 0x08 is clear before proceeding.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TORCH::use",
+        "callee": "Item::getZ",
+        "purpose": "Fetch Z coordinate for passing to FREE::2411 when triggering the effect.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TORCH::use",
+        "callee": "Item::getY",
+        "purpose": "Fetch Y coordinate for passing to FREE::2411 when triggering the effect.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TORCH::use",
+        "callee": "Item::getX",
+        "purpose": "Fetch X coordinate for passing to FREE::2411 when triggering the effect.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TORCH::use",
+        "callee": "FREE::2411",
+        "purpose": "Invoke the library routine with (x,y,z,0,0x010B,target) to trigger the torch's effect at the target location (inferred).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_TORCH::TORCH::look",
+    "behavior_summary_one_liner": "U8P_TORCH::TORCH::look handles the player's examination of a torch: it prepares process/item info state and always displays the short description string \"torch  \" to the viewer via Item::bark.",
+    "external_call_count": 11,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_TANKARD.json",
+  "file": "U8P_TANKARD",
+  "behavior_summary": [
+    "Handles the player's 'U8P_TANKARD::look' (examine) action for a tankard item: the script marks the item so it won't be reprocessed (sets item-local info and process-exclude flags), constructs the literal string \"tankard \", and requests the item to 'bark' that string to the viewer/caller.",
+    "Work is local to the item and caller: no global flags are read or written. The routine frees the temporary string after calling Item::bark and preserves/propagates a prior return value before suspending/returning."
+  ],
+  "notable_control_flow": [
+    "Set item-local info and 'process-exclude' state on the tankard instance to indicate examination has occurred.",
+    "Create or reference the static string \"tankard \", push item and caller parameters, and call Item::bark to emit the examination text.",
+    "Free the temporary string pointer and push the preserved retval before performing the final suspend/return."
+  ],
+  "open_questions": [
+    "Exact parameter ordering and types: the code pushes an item pointer and a caller/pid but the precise ABI (which argument is first) is inferred from push order and not explicit (appears to be item/context then caller pid).",
+    "The exact identifier/value used for the 'set info' opcode (engine-level info id) is not shown; its semantic meaning is inferred only as 'info shown' and 'process exclude'.",
+    "How the preserved retval is used by the caller/process after this routine returns is not shown; the routine preserves and re-returns it but the wider control effect is unknown."
+  ],
+  "main_function": {
+    "name": "U8P_TANKARD::look",
+    "execution_form": "process",
+    "purpose": "Respond to an examine/U8P_TANKARD::look action on a tankard: mark the item as having had its info shown, exclude it from further processing, and cause the item to emit the short description string \"tankard \" to the inspecting actor.",
+    "entry_conditions": [
+      "Event 0 / 'U8P_TANKARD::look' — triggered when an actor/player examines or looks at the tankard item (invoked by the game's U8P_TANKARD::look/examine system)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_TANKARD::look",
+      "kind": "main",
+      "role": "Main handler for the tankard's 'U8P_TANKARD::look' event; sets item info/process-exclude and invokes a bark to present the text 'tankard '.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item-level routine used to emit/display a short text message originating from an item/process to a target process (viewer).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_TANKARD::look",
+        "callee": "Item::bark",
+        "purpose": "Request the item to display/emit the literal message \"tankard \" to the caller/viewer process (deliver the item's short description).",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "informative"
+  ],
+  "quick_facts": {
+    "main_function": "TANKARD::look",
+    "behavior_summary_one_liner": "Handles the player's 'U8P_TANKARD::look' (examine) action for a tankard item: the script marks the item so it won't be reprocessed (sets item-local info and process-exclude flags), constructs the literal string \"tankard \", and requests the item to 'bark' that string to the viewer/caller.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}
