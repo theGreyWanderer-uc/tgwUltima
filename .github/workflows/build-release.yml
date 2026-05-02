@@ -191,6 +191,29 @@ jobs:
           print(f"No duplicate entries in {wheel.name}")
           PY
 
+      - name: Verify wheel includes non-placeholder dialogue shell
+        working-directory: titan-ultima
+        run: |
+          python - <<'PY'
+          import zipfile
+          from pathlib import Path
+
+          wheels = sorted(Path("dist").glob("*.whl"))
+          if not wheels:
+            raise SystemExit("No wheel file found in dist/")
+
+          wheel = wheels[0]
+          target = "titan/dialogue/webbundle/index.html"
+          marker = "Titan dialogue shell placeholder"
+          with zipfile.ZipFile(wheel) as zf:
+            text = zf.read(target).decode("utf-8", "replace")
+
+          if marker in text:
+            raise SystemExit("Placeholder dialogue shell detected in wheel; expected prebuilt production web bundle")
+
+          print(f"Dialogue shell verified in {wheel.name}")
+          PY
+
       - name: Upload package artifacts
         uses: actions/upload-artifact@v6
         with:

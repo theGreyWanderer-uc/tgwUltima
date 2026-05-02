@@ -351,6 +351,17 @@ def _resolve_shell_dir() -> Optional[Path]:
     return None
 
 
+def _is_placeholder_shell(shell_dir: Path) -> bool:
+    index_path = shell_dir / "index.html"
+    if not index_path.is_file():
+        return False
+    try:
+        text = index_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    return "Titan dialogue shell placeholder" in text
+
+
 def _serve_dialogue(shell_dir: Path, data_dir: Path, meta_dir: Path, host: str, port: int, open_browser: bool) -> int:
     class DialogueHandler(SimpleHTTPRequestHandler):
         def log_message(self, format: str, *args) -> None:
@@ -464,6 +475,15 @@ def launch_cmd(
     if shell_dir is None:
         typer.secho(
             "[x] No dialogue web shell found. Expected index.html in webbundle/ or websrc/dist/.",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise SystemExit(1)
+
+    if _is_placeholder_shell(shell_dir):
+        typer.secho(
+            "[x] Installed dialogue shell is a placeholder, not the production web UI. "
+            "Install a packaged release/CI wheel that includes the prebuilt web bundle.",
             fg=typer.colors.RED,
             err=True,
         )
