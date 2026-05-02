@@ -639,18 +639,18 @@ def cmd_setup(args: SimpleNamespace) -> int:
     detected_u7bg: Optional[Path] = None
     detected_u7si: Optional[Path] = None
     print("\nSearching for Ultima 7 installations...")
-    for base in u7_candidates:
-        if not base.exists() or not _looks_like_u7_root(base):
+    for u7_base in u7_candidates:
+        if not u7_base.exists() or not _looks_like_u7_root(u7_base):
             continue
-        lowered = base.name.lower()
+        lowered = u7_base.name.lower()
         if "serpent" in lowered:
             if detected_u7si is None:
-                detected_u7si = base
-                print(f"  Found Serpent Isle: {base}")
+                detected_u7si = u7_base
+                print(f"  Found Serpent Isle: {u7_base}")
         else:
             if detected_u7bg is None:
-                detected_u7bg = base
-                print(f"  Found Black Gate:   {base}")
+                detected_u7bg = u7_base
+                print(f"  Found Black Gate:   {u7_base}")
 
     bg_default = str(detected_u7bg) if detected_u7bg else ""
     si_default = str(detected_u7si) if detected_u7si else ""
@@ -682,9 +682,97 @@ def cmd_setup(args: SimpleNamespace) -> int:
         if ans not in ("n", "no"):
             nonfixed_value = str(engine_save_file).replace("\\", "/")
 
+    # -- Detection summary + confirmation -------------------------
+    u8_static_detected = (Path(base) / lang / "STATIC") if lang else Path(base)
+    u8_usecode_detected = (
+        (Path(base) / lang / "USECODE" / "EUSECODE.FLX")
+        if lang else (Path(base) / "USECODE" / "EUSECODE.FLX")
+    )
+    u7bg_static_detected = (Path(u7bg_base) / "STATIC") if u7bg_base else None
+    u7si_static_detected = (Path(u7si_base) / "STATIC") if u7si_base else None
+
+    print("\nDetected folders to write to titan.toml:")
+    print(f"  U8 base:      {base}")
+    print(f"  U8 language:  {lang or '(flat mode)'}")
+    print(f"  U8 STATIC:    {u8_static_detected}")
+    print(f"  U8 USECODE:   {u8_usecode_detected}")
+    print(f"  U7 BG base:   {u7bg_base or '(empty)'}")
+    print(f"  U7 BG STATIC: {u7bg_static_detected or '(empty)'}")
+    print(f"  U7 SI base:   {u7si_base or '(empty)'}")
+    print(f"  U7 SI STATIC: {u7si_static_detected or '(empty)'}")
+
+    confirm = input("Are these paths correct? [Y/n] ").strip().lower()
+
+    manual_u8_static = ""
+    manual_u8_usecode = ""
+    manual_u7bg_static = ""
+    manual_u7si_static = ""
+
+    if confirm in ("n", "no"):
+        print("\nClearing detected values and switching to manual STATIC path entry.")
+        base = ""
+        lang = ""
+        u7bg_base = ""
+        u7si_base = ""
+
+        manual_u8_static = input("U8 STATIC path [optional]: ").strip().replace("\\", "/")
+        manual_u8_usecode = input("U8 EUSECODE.FLX path [optional]: ").strip().replace("\\", "/")
+        manual_u7bg_static = input("U7 BG STATIC path [optional]: ").strip().replace("\\", "/")
+        manual_u7si_static = input("U7 SI STATIC path [optional]: ").strip().replace("\\", "/")
+
     # -- Build and write titan.toml --------------------------------
     base_toml = base.replace("\\", "/")
     nonfixed_is_abs = Path(nonfixed_value).is_absolute()
+
+    u8_static_manual_path = Path(manual_u8_static) if manual_u8_static else None
+    if manual_u8_usecode:
+        u8_usecode_path = manual_u8_usecode
+    elif u8_static_manual_path is not None:
+        u8_usecode_path = str(u8_static_manual_path.parent / "USECODE" / "EUSECODE.FLX").replace("\\", "/")
+    else:
+        u8_usecode_path = str(u8_usecode_detected).replace("\\", "/")
+
+    if u8_static_manual_path is not None:
+        u8_paths_fixed = str(u8_static_manual_path / "FIXED.DAT").replace("\\", "/")
+        u8_paths_palette = str(u8_static_manual_path / "U8PAL.PAL").replace("\\", "/")
+        u8_paths_typeflag = str(u8_static_manual_path / "TYPEFLAG.DAT").replace("\\", "/")
+        u8_paths_gumpage = str(u8_static_manual_path / "GUMPAGE.DAT").replace("\\", "/")
+        u8_paths_xformpal = str(u8_static_manual_path / "XFORMPAL.DAT").replace("\\", "/")
+        u8_paths_ecredits = str(u8_static_manual_path / "ECREDITS.DAT").replace("\\", "/")
+        u8_paths_quotes = str(u8_static_manual_path / "QUOTES.DAT").replace("\\", "/")
+        u8_paths_shapes_flx = str(u8_static_manual_path / "U8SHAPES.FLX").replace("\\", "/")
+        u8_paths_fonts_flx = str(u8_static_manual_path / "U8FONTS.FLX").replace("\\", "/")
+        u8_paths_gumps_flx = str(u8_static_manual_path / "U8GUMPS.FLX").replace("\\", "/")
+    else:
+        u8_paths_fixed = "FIXED.DAT"
+        u8_paths_palette = "U8PAL.PAL"
+        u8_paths_typeflag = "TYPEFLAG.DAT"
+        u8_paths_gumpage = "GUMPAGE.DAT"
+        u8_paths_xformpal = "XFORMPAL.DAT"
+        u8_paths_ecredits = "ECREDITS.DAT"
+        u8_paths_quotes = "QUOTES.DAT"
+        u8_paths_shapes_flx = "U8SHAPES.FLX"
+        u8_paths_fonts_flx = "U8FONTS.FLX"
+        u8_paths_gumps_flx = "U8GUMPS.FLX"
+
+    def _u7_section_from_manual(static_path: str, variant: str) -> list[str]:
+        static_norm = static_path.replace("\\", "/")
+        static_p = Path(static_norm)
+        base_guess = ""
+        if static_p.name.upper() == "STATIC" and static_p.parent != static_p:
+            base_guess = str(static_p.parent).replace("\\", "/")
+        section_name = "u7bg" if variant == "blackgate" else "u7si"
+        return [
+            "",
+            f"[{section_name}.game]",
+            f'base     = "{base_guess}"',
+            f'variant  = "{variant}"',
+            "",
+            f"[{section_name}.paths]",
+            f'static   = "{static_norm}"',
+            f'shapes   = "{static_norm}/SHAPES.VGA"',
+            f'palette  = "{static_norm}/PALETTES.FLX"',
+        ]
 
     lines = [
         "# titan.toml \u2014 created by `titan setup`",
@@ -693,17 +781,18 @@ def cmd_setup(args: SimpleNamespace) -> int:
         f'language = "{lang}"',
         "",
         "[u8.paths]",
-        'fixed     = "FIXED.DAT"',
-        'palette   = "U8PAL.PAL"',
-        'typeflag  = "TYPEFLAG.DAT"',
-        'gumpage   = "GUMPAGE.DAT"',
-        'xformpal  = "XFORMPAL.DAT"',
-        'ecredits  = "ECREDITS.DAT"',
-        'quotes    = "QUOTES.DAT"',
+        f'fixed     = "{u8_paths_fixed}"',
+        f'palette   = "{u8_paths_palette}"',
+        f'typeflag  = "{u8_paths_typeflag}"',
+        f'gumpage   = "{u8_paths_gumpage}"',
+        f'xformpal  = "{u8_paths_xformpal}"',
+        f'ecredits  = "{u8_paths_ecredits}"',
+        f'quotes    = "{u8_paths_quotes}"',
         "",
-        'u8shapes  = "U8SHAPES.FLX"',
-        'u8fonts   = "U8FONTS.FLX"',
-        'u8gumps   = "U8GUMPS.FLX"',
+        f'u8shapes  = "{u8_paths_shapes_flx}"',
+        f'u8fonts   = "{u8_paths_fonts_flx}"',
+        f'u8gumps   = "{u8_paths_gumps_flx}"',
+        f'usecode   = "{u8_usecode_path}"',
         "",
         "# Pre-extracted directories (relative to where you run titan)",
         'shapes    = "shapes/"',
@@ -716,7 +805,9 @@ def cmd_setup(args: SimpleNamespace) -> int:
     else:
         lines.append(f'nonfixed  = "{nonfixed_value}"')
 
-    if u7bg_base:
+    if manual_u7bg_static:
+        lines += _u7_section_from_manual(manual_u7bg_static, "blackgate")
+    elif u7bg_base:
         lines += [
             "",
             "[u7bg.game]",
@@ -729,7 +820,9 @@ def cmd_setup(args: SimpleNamespace) -> int:
             'palette  = "STATIC/PALETTES.FLX"',
         ]
 
-    if u7si_base:
+    if manual_u7si_static:
+        lines += _u7_section_from_manual(manual_u7si_static, "serpentisle")
+    elif u7si_base:
         lines += [
             "",
             "[u7si.game]",
@@ -749,9 +842,12 @@ def cmd_setup(args: SimpleNamespace) -> int:
     # -- Optional extraction ---------------------------------------
     ans = input("\nExtract shapes/ and globs/ now? [Y/n] ").strip().lower()
     if ans not in ("n", "no"):
-        static_dir = (
-            (Path(base) / lang / "STATIC") if lang else Path(base)
-        )
+        if manual_u8_static:
+            static_dir = Path(manual_u8_static)
+        else:
+            static_dir = (
+                (Path(base) / lang / "STATIC") if lang else Path(base)
+            )
         for flx, out in [("U8SHAPES.FLX", "shapes/"), ("GLOB.FLX", "globs/")]:
             src = static_dir / flx
             if src.exists():
