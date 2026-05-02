@@ -72,5 +72,11 @@ exclude = [
 "src/titan/dialogue/pipeline/resources" = "titan/dialogue/pipeline/resources"
 "src/titan/dialogue/webbundle" = "titan/dialogue/webbundle"
 
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "src/titan/dialogue/websrc",
+    "src/titan/dialogue/websrc/**",
+]
+
 [project.scripts]
 titan = "titan.cli:main"

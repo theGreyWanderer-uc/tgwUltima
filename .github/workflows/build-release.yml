@@ -140,6 +140,7 @@ jobs:
           mkdir -p ../webbundle
           rm -rf ../webbundle/*
           cp -r dist/* ../webbundle/
+          rm -rf node_modules
 
       - name: Verify bundled shell
         run: test -f titan-ultima/src/titan/dialogue/webbundle/index.html
