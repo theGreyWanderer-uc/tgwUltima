@@ -28,6 +28,7 @@ TITAN organises commands into **game-specific sub-apps** and **shared
 
 ```
 titan <shared-command>          # Flex archives, XMIDI music, config/setup
+titan dialogue <command>        # U8 dialogue web pipeline + local viewer
 titan u8 <command>              # Ultima 8: Pagan
 titan u7 <command>              # Ultima 7: The Black Gate / Serpent Isle
 ```
@@ -786,6 +787,91 @@ titan u8 unkcoff-dump <file> [-o DIR]
 **Example**
 ```bash
 titan u8 unkcoff-dump UNKCOFF.DAT -o unkcoff/
+```
+
+---
+
+## Dialogue commands (`titan dialogue`)
+
+Use these commands to generate dialogue runtime artifacts and launch the
+local web viewer.
+
+---
+
+#### `dialogue prepare`
+
+Generate fold/text/json/data artifacts required by the dialogue viewer.
+
+```
+titan dialogue prepare [--usecode FILE] [--workdir DIR] [--symbols FILE] [--classes FILE] [--force]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `--usecode FILE` | Path to `EUSECODE.FLX` (optional if configured via `titan setup`) |
+| `--workdir DIR` | Runtime output directory (default: platform-specific Titan data dir) |
+| `--symbols FILE` | Override bundled `symbols.csv` |
+| `--classes FILE` | Override bundled `usecode_classes.csv` |
+| `--force` | Regenerate artifacts by clearing existing runtime outputs first |
+
+**Examples**
+```bash
+# Standard user flow after `titan setup`
+titan dialogue prepare
+
+# Advanced override
+titan dialogue prepare --usecode /path/to/EUSECODE.FLX --force
+```
+
+---
+
+#### `dialogue validate`
+
+Validate dialogue artifacts required for launch.
+
+```
+titan dialogue validate [--workdir DIR] [--content-lint]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `--workdir DIR` | Runtime output directory |
+| `--content-lint` | Run deep JSON content lint checks (**unfinished feature; use as experimental diagnostics**) |
+
+**Examples**
+```bash
+titan dialogue validate
+titan dialogue validate --content-lint
+```
+
+---
+
+#### `dialogue launch`
+
+Launch the local static dialogue web viewer using prepared runtime data.
+
+```
+titan dialogue launch [--usecode FILE] [--workdir DIR] [--symbols FILE] [--classes FILE] [--host ADDR] [--port N] [--force] [--no-open]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `--usecode FILE` | Path to `EUSECODE.FLX` (optional if configured via `titan setup`) |
+| `--workdir DIR` | Runtime output directory |
+| `--symbols FILE` | Override bundled `symbols.csv` |
+| `--classes FILE` | Override bundled `usecode_classes.csv` |
+| `--host ADDR` | Bind address (default: `127.0.0.1`) |
+| `--port N` | Bind port (default: `4173`) |
+| `--force` | Regenerate artifacts before launch |
+| `--no-open` | Do not open browser automatically |
+
+**Examples**
+```bash
+# Standard command (recommended)
+titan dialogue launch
+
+# Advanced network override
+titan dialogue launch --host 127.0.0.1 --port 4173
 ```
 
 ---
@@ -1741,5 +1827,8 @@ A value on the command line always wins.
 | `u7 save-npcs` | Dump NPC data from an Exult U7 savegame |
 | `u7 save-schedules` | Dump NPC schedules from an Exult U7 savegame |
 | `u7 font-create` | Interactive wizard for creating U7 font shapes from TTF |
+| `dialogue prepare` | Generate dialogue runtime artifacts |
+| `dialogue validate` | Validate dialogue runtime artifacts (`--content-lint` is unfinished) |
+| `dialogue launch` | Launch local dialogue web viewer (`--host/--port` optional advanced overrides) |
 | `setup` | First-time setup wizard — creates `titan.toml` |
 | `config` | Show or edit active `titan.toml` |

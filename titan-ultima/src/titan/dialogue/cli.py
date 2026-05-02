@@ -247,6 +247,7 @@ def _has_prepared_artifacts(runtime_root: Path) -> bool:
 def _validate_pipeline_outputs(runtime_root: Path, expected_classes: int, run_content_lint: bool) -> int:
     dirs = _runtime_dirs(runtime_root)
     websrc_data = _dialogue_root() / "websrc" / "public" / "data"
+    websrc_meta = _dialogue_root() / "websrc" / "public" / "meta"
     errors = 0
 
     def _ok(message: str) -> None:
@@ -322,6 +323,15 @@ def _validate_pipeline_outputs(runtime_root: Path, expected_classes: int, run_co
         _bad(f"Websrc flag metadata missing (for npx vite): {websrc_flag_meta}")
     else:
         _ok(f"Websrc flag metadata: {websrc_flag_meta}")
+
+    if not websrc_meta.is_dir():
+        _bad(f"Websrc meta directory missing (required for dialogue launch): {websrc_meta}")
+    else:
+        meta_count = _count(websrc_meta, "*_META.JSON")
+        if meta_count == 0:
+            _bad(f"Websrc meta directory is empty (required for dialogue launch): {websrc_meta}")
+        else:
+            _ok(f"Websrc meta files: {meta_count}")
 
     if run_content_lint:
         typer.secho("Optional content lint", fg=typer.colors.BRIGHT_BLUE, bold=True)

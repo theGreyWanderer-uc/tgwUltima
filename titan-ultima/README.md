@@ -22,6 +22,7 @@ sound effects to full isometric world maps.
 | **Fonts** | Interactive wizard (`font-create`) builds U7 FONTS.VGA-compatible shapes from TrueType fonts — mono, multi-shade, or hollow gradient rendering (stroke outline + vertical colour fill) with 30 gradient presets (with colour swatches), 11 stock presets (BG & SI), 6 bundled TTFs, palette LUT mapping, hex-to-palette colour resolution, ASCII art preview. Scans game directories for font archives, shows live slot tables from actual Flex data, auto-generates Exult Studio preview placeholder for non-standard glyph layouts (Gargish, Runic). Parses `exult.cfg` to auto-resolve the correct font archive path (including mod patch directories). Non-interactive batch mode via TOML config |
 | **Palette** | Export the VGA 6-bit palette as a colour swatch |
 | **Sound** | One-step Sonarc audio export from `SOUND.FLX` to WAV (`u8 sound-export-all`); single-file decode (`u8 sound-export`); speech FLX archives (`E44.FLX`, `E80.FLX`, …) extract dialogue transcripts + Sonarc audio; Creative Voice (.voc) decoder for U7 speech (`INTROSND.DAT`, `U7SPEECH.SPC`) |
+| **Dialogue web** | End-user dialogue web pipeline for U8: prepare runtime dialogue artifacts, validate generated outputs, and launch a local static web viewer that can interact with U8 NPC conversations and items (`titan dialogue prepare`, `titan dialogue validate`, `titan dialogue launch`) |
 | **Music** | One-step XMIDI→MIDI export from Flex archives (`u8 music-export`, `u7 music-export`); multi-track XMIDI support (MIDI Format 1) |
 | **Maps** | **U8:** Render full isometric or top-down world maps from `FIXED.DAT` + GLOBs with engine-accurate dependency-graph depth sorting; merge live NPCs and items from save files; filter by all 16 TYPEFLAG bits; chunk coordinate grid overlay. **U7:** Render parallel-oblique world maps from `U7MAP` + `U7CHUNKS` + `SHAPES.VGA` with IFIX fixed objects and optional IREG dynamic objects; classic/flat/steep projection views; sprite-accurate dependency-DAG depth sorting; RLE terrain promotion with nearby-flat fill; colour-sampled world minimap (`map-sample`); `--full` world render; filter by TFA flags; chunk + superchunk grid overlay with coordinate labels; world-tile rectangle highlights with per-rectangle hex colours |
 | **Type data** | **U8:** Decode `TYPEFLAG.DAT` shape physics/flag metadata. **U7:** Parse `TFA.DAT` flag array + `SHPDIMS.DAT` + `WGTVOL.DAT` |
@@ -67,6 +68,29 @@ titan u8 map-render-all --maps 0 5 39 --views iso_classic iso_high
 titan u7 map-render --game bg --sc 85 -o britain_bg.png
 titan u7 typeflag-dump --game si -f csv -o tfa_si.csv
 ```
+
+### Ultima 8 dialogue web viewer (end-user flow)
+
+After `titan setup`, you can run the dialogue pipeline without passing
+`--usecode` manually.
+
+```bash
+# 1) Build runtime dialogue artifacts
+titan dialogue prepare
+
+# 2) Validate artifacts
+titan dialogue validate
+
+# 3) Launch viewer (standard command)
+titan dialogue launch
+
+# Advanced optional override
+titan dialogue launch --host 127.0.0.1 --port 4173
+```
+
+Open `http://127.0.0.1:4173/` in your browser if it does not open automatically.
+If launch reports missing dialogue meta assets, reinstall TITAN from the latest release/CI wheel.
+If launch reports a placeholder dialogue shell, reinstall TITAN from the latest release/CI wheel.
 
 ### Option B — manual setup (no config file)
 
