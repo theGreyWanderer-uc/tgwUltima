@@ -132,6 +132,15 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Sanitize Titan packaging workspace
+        run: |
+          rm -rf titan-ultima/.venv titan-ultima/.env titan-ultima/env titan-ultima/venv
+          rm -rf titan-ultima/.venv-* titan-ultima/.tox
+          rm -rf titan-ultima/build titan-ultima/dist
+          rm -rf titan-ultima/src/titan/dialogue/websrc/node_modules
+          rm -rf titan-ultima/src/titan/dialogue/webbundle
+          mkdir -p titan-ultima/src/titan/dialogue/webbundle
+
       - name: Build dialogue web bundle
         working-directory: titan-ultima/src/titan/dialogue/websrc
         run: |

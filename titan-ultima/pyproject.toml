@@ -78,7 +78,13 @@ exclude = [
     ".venv",
     ".venv/**",
     ".venv-*/**",
+    ".env",
+    ".env/**",
+    "env/**",
     "venv/**",
+    "build/**",
+    "dist/**",
+    "**/node_modules/**",
     "src/titan/dialogue/websrc",
     "src/titan/dialogue/websrc/**",
 ]
