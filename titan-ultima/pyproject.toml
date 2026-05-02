@@ -69,6 +69,7 @@ exclude = [
     "src/titan/dialogue/pipeline/resources",
     "src/titan/dialogue/websrc",
     "src/titan/dialogue/webbundle",
+    "src/titan/third_party/fold",
 ]
 
 [tool.hatch.build.targets.wheel.force-include]
@@ -77,6 +78,7 @@ exclude = [
 "src/titan/dialogue/pipeline/resources" = "titan/dialogue/pipeline/resources"
 "src/titan/dialogue/websrc/public/meta" = "titan/dialogue/websrc/public/meta"
 "src/titan/dialogue/webbundle" = "titan/dialogue/webbundle"
+"src/titan/third_party/fold" = "titan/third_party/fold"
 
 [tool.hatch.build.targets.sdist]
 exclude = [

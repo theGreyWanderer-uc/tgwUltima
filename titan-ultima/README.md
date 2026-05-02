@@ -533,6 +533,21 @@ remaining five are fan recreations released under permissive terms.
 
 MIT
 
+### Third-party components
+
+TITAN also distributes a modified `fold` component derived from the
+Pentagram project as part of dialogue tooling. That component is
+licensed under **GNU GPL v2 or later** and is **not** covered by TITAN's
+MIT license.
+
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and
+`src/titan/third_party/fold/` for:
+
+- attribution and license scope
+- corresponding source mapping (exact upstream/branch commit)
+- build entry points used to produce the distributed binary
+- bundled GPL license text
+
 ### Important note
 
 **Ultima** (Copyright 1981–1999, Electronic Arts)

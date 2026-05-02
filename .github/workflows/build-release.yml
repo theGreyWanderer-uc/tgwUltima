@@ -214,6 +214,40 @@ jobs:
           print(f"Dialogue shell verified in {wheel.name}")
           PY
 
+      - name: Verify wheel includes fold compliance bundle
+        working-directory: titan-ultima
+        run: |
+          python - <<'PY'
+          import zipfile
+          from pathlib import Path
+
+          wheels = sorted(Path("dist").glob("*.whl"))
+          if not wheels:
+            raise SystemExit("No wheel file found in dist/")
+
+          wheel = wheels[0]
+          required = [
+            "titan/third_party/fold/NOTICE.md",
+            "titan/third_party/fold/SOURCE_MAPPING.md",
+            "titan/third_party/fold/COPYING",
+          ]
+
+          with zipfile.ZipFile(wheel) as zf:
+            names = set(i.filename for i in zf.infolist())
+            missing = [p for p in required if p not in names]
+            if missing:
+              print("Missing required fold compliance files:")
+              for p in missing:
+                print(f"  {p}")
+              raise SystemExit(1)
+
+            copying = zf.read("titan/third_party/fold/COPYING").decode("utf-8", "replace")
+            if "GNU GENERAL PUBLIC LICENSE" not in copying:
+              raise SystemExit("fold/COPYING does not look like GPL license text")
+
+          print(f"Fold compliance bundle verified in {wheel.name}")
+          PY
+
       - name: Upload package artifacts
         uses: actions/upload-artifact@v6
         with:
