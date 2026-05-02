@@ -56,6 +56,9 @@ Changelog = "https://github.com/theGreyWanderer-uc/tgwUltima/blob/main/titan-ult
 [tool.hatch.version]
 path = "src/titan/_version.py"
 
+[tool.hatch.build.hooks.custom]
+path = "hatch_build.py"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/titan"]
 # Exclude luts and bundled fonts from package auto-discovery (non-Python data)
