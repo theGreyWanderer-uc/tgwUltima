@@ -1,0 +1,222 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_LOTHLAY.json",
+  "file": "U8P_LOTHLAY",
+  "behavior_summary": [
+    "LOTHLAY::look: When a player/actor inspects this item/NPC it sets up inspection state and makes the object 'speak' the name \"Lothian\" to the viewer using Item::bark. This is informational only.",
+    "LOTHLAY::gotHit: Implements a guarded one-time panic/summon reaction when the object is hit. It uses a per-item quantity/flag (Item::getQ / Item::setQ) to ensure the sequence runs only once, filters the attacker via Item::isNpc and Npc::isDead, and if conditions pass it barks a distress call, starts a camera quake, plays an SFX, spawns a helper (FREE::1C19), queries HP and direction, calls an internal behavior method (METHOD::0080) with hp and direction, then stops the quake."
+  ],
+  "notable_control_flow": [
+    "A one-shot guard: Item::getQ is read at hit entry and Item::setQ is set to prevent repeated reactions.",
+    "Attacker filtering: calls to Item::isNpc and Npc::isDead gate whether the summon reaction proceeds (inferred to avoid responding to NPC or dead attackers).",
+    "Sequenced dramatics: Item::bark (shout) -> Camera::startQuake -> playSFX -> spawn (FREE::1C19) -> METHOD::0080 -> Camera::stopQuake.",
+    "Damage parameter is present in the gotHit signature but not used for branching in the observed code excerpt (inferred)."
+  ],
+  "open_questions": [
+    "Exact in-game event number that maps to LOTHLAY::gotHit in this script (inferred to be Event 6 but not canonical here).",
+    "Precise role and implementation of METHOD::0080 (appears to use hp and direction to drive spawned helper but exact effect is unknown).",
+    "Details of the spawn descriptor FREE::1C19 (what actor is spawned and its behavior beyond the call to METHOD::0080).",
+    "Whether Item::isNpc check intends to ignore NPC-origin attacks or to allow only NPC-origin attacks (inference favors ignoring NPC attackers).",
+    "Whether the 'damage' parameter is used elsewhere or in other code paths not shown here."
+  ],
+  "main_function": {
+    "name": "U8P_LOTHLAY::look",
+    "execution_form": "process",
+    "purpose": "Handle a player/actor 'U8P_LOTHLAY::look' (examine) event for the object: prepare info state and make the item/NPC emit the name \"Lothian\" to the viewer via Item::bark.",
+    "entry_conditions": [
+      "Event 0 (U8P_LOTHLAY::look) — triggered when an actor inspects/looks at the object (Avatar/player enters the U8P_LOTHLAY::look/trigger area)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_LOTHLAY::look",
+      "kind": "main",
+      "role": "Respond to 'U8P_LOTHLAY::look' event by setting object state and invoking Item::bark to display the name 'Lothian'.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_LOTHLAY::gotHit",
+      "kind": "helper",
+      "role": "Respond to hit events: one-shot guard, attacker filtering, dramatized summon/panic sequence that spawns an ally and calls an internal method using hp and direction.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Display / emit short text message from an item/process to a player or process.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getQ",
+      "kind": "extern",
+      "role": "Read per-item quantity/flag used as a one-shot guard.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::setQ",
+      "kind": "extern",
+      "role": "Set per-item quantity/flag to mark reaction as occurred.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::isNpc",
+      "kind": "extern",
+      "role": "Test whether an id refers to an NPC (used for attacker filtering).",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::isDead",
+      "kind": "extern",
+      "role": "Check whether an NPC is dead (used to avoid reacting to dead attackers).",
+      "confidence": "high"
+    },
+    {
+      "name": "Camera::startQuake",
+      "kind": "extern",
+      "role": "Begin camera quake effect to dramatize the shout-for-help sequence.",
+      "confidence": "high"
+    },
+    {
+      "name": "Camera::stopQuake",
+      "kind": "extern",
+      "role": "End the camera quake effect.",
+      "confidence": "high"
+    },
+    {
+      "name": "spawn (FREE::1C19)",
+      "kind": "extern",
+      "role": "Spawn a helper/ally actor instance in response to the call for help.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::getHp",
+      "kind": "extern",
+      "role": "Query this NPC's current HP; used as a parameter for an internal behavior METHOD call.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getDirFromItem",
+      "kind": "extern",
+      "role": "Compute direction from this item to a target id; used as direction arg for METHOD::0080.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_LOTHLAY::playSFX",
+      "kind": "extern",
+      "role": "Play a sound effect accompanying the panic/summon sequence.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_LOTHLAY::METHOD::0080",
+      "kind": "helper",
+      "role": "Internal method called with (hp, direction, local pointer) — likely configures movement/behavior/animation of spawned helper toward the attacker (inferred).",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_LOTHLAY::gotHit",
+        "callee": "U8P_LOTHLAY::METHOD::0080",
+        "purpose": "Pass NPC hp and direction plus a local pointer to drive behavior/targeting of the spawned helper (inferred).",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_LOTHLAY::look",
+        "callee": "Item::bark",
+        "purpose": "Make the inspected object emit the name 'Lothian' to the inspector/viewer.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOTHLAY::gotHit",
+        "callee": "Item::getQ",
+        "purpose": "Read a per-item 'once' flag to decide whether to run the panic/summon reaction.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOTHLAY::gotHit",
+        "callee": "Item::setQ",
+        "purpose": "Set the per-item flag so the reaction will not repeat.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOTHLAY::gotHit",
+        "callee": "Item::isNpc",
+        "purpose": "Check whether the attacker id corresponds to an NPC to filter reactions.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOTHLAY::gotHit",
+        "callee": "Npc::isDead",
+        "purpose": "Ensure the attacker is not dead before proceeding with the summon (avoid reacting to dead attackers).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOTHLAY::gotHit",
+        "callee": "Item::bark",
+        "purpose": "Shout a Mountain King-style call for help to nearby players/actors.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOTHLAY::gotHit",
+        "callee": "Camera::startQuake",
+        "purpose": "Start a camera quake to dramatize the shout/summon event.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOTHLAY::gotHit",
+        "callee": "U8P_LOTHLAY::playSFX",
+        "purpose": "Play a sound effect to accompany the panic/summon sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOTHLAY::gotHit",
+        "callee": "spawn (FREE::1C19)",
+        "purpose": "Spawn the helper/ally entity in response to the call for help.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOTHLAY::gotHit",
+        "callee": "Npc::getHp",
+        "purpose": "Retrieve this NPC's hp to pass into METHOD::0080 (used to influence spawned helper behavior).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOTHLAY::gotHit",
+        "callee": "Item::getDirFromItem",
+        "purpose": "Compute direction from this object to the attacker/target to pass into METHOD::0080.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOTHLAY::gotHit",
+        "callee": "Camera::stopQuake",
+        "purpose": "Stop the previously started camera quake after the reaction completes.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "LOTHLAY::look",
+    "behavior_summary_one_liner": "LOTHLAY::look: When a player/actor inspects this item/NPC it sets up inspection state and makes the object 'speak' the name \"Lothian\" to the viewer using Item::bark. This is informational only.",
+    "external_call_count": 12,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

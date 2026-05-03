@@ -1,0 +1,220 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_GOLEM.json",
+  "file": "U8P_GOLEM",
+  "behavior_summary": [
+    "Provides player interactions for a summoned/placed golem NPC: describing it when inspected, presenting a contextual command menu on use, and executing commands such as Follow, Stop, Move, Open (doors), Attack (assign target), Leave (self-destruct), and short vocalizations (Grunt).",
+    "GOLEM::look marks/flags the item as inspected and makes the golem emit a short identifying string ('golem ') to the inspecting process.",
+    "GOLEM::use builds a choice list (Item::ask), dispatches to multiple behaviors based on the player's selection, and uses engine services (pathfind, movement spawn, door toggles, setTarget, destroy) to carry out the commands.",
+    "Follow mode spawns a background follow-loop (GOLEM::03CC) that repeatedly checks distance to the leader/target and spawns single-step movement actions until cancelled or conditions change.",
+    "Move and Open use repeated small movement spawns (METHOD::091C and METHOD::15E7) and/or pathfind to approach a target, with Move implementing a retry/step loop and Open toggling door quality flags then spawning a door animation routine."
+  ],
+  "notable_control_flow": [
+    "Event dispatch on Item::ask result: string comparison drives a multi-way branch covering Follow, Stop, Move, Open, Attack, Leave, Grunt, and Nothing.",
+    "Follow command spawns U8P_GOLEM::GOLEM::03CC (background process) and returns; Stop calls resetRef to cancel/clear follow references.",
+    "Move command resolves the player's process target, queries Item::getRange and Item::getDirToItem, then loops: spawn movement step (METHOD::091C) + follow-up (METHOD::15E7) and retry until arrival or retry limit; falls back to barking 'Ugh ' if move not viable.",
+    "Open command pathfinds to the target door, spawns short movement/animation then flips a door quality bit (read/write via Item::getQuality / Item::setQuality) and spawns DOOR_NS::08B4 to animate/apply the change.",
+    "Leave spawns a short action then calls Item::destroy to remove the golem from the world."
+  ],
+  "open_questions": [
+    "Exact meanings and semantics of the specific byte arguments passed to METHOD::091C and METHOD::15E7 (timing, animation flags) are inferred but not explicit.",
+    "Precise semantics of the door quality bit(s) toggled during Open (which bit(s) encode open vs closed) are inferred from context but not definitively identified.",
+    "How the follow-loop (U8P_GOLEM::GOLEM::03CC) is reliably cancelled in all cases — Stop calls resetRef but the exact cancellation handshake with the spawned process is not fully specified.",
+    "Whether some menu branches are hidden or altered when the NPC is in combat (Npc::isInCombat) beyond the observed guard/early branch — menu differences are inferred from a combat check but not fully enumerated.",
+    "The exact info id(s) and 'process exclude' semantics set by GOLEM::look (and by the follow loop) are present in the bytecode but their higher-level gameplay flags/UX effects are only inferred."
+  ],
+  "main_function": {
+    "name": "U8P_GOLEM::look",
+    "execution_form": "process",
+    "purpose": "Handle the 'U8P_GOLEM::look' (examine) event for the golem item: set item info/processing state and make the golem produce a short identifying bark ('golem ').",
+    "entry_conditions": [
+      "Event 0 / fast-area 'U8P_GOLEM::look' trigger when a player or process inspects/looks at the golem item."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_GOLEM::look",
+      "kind": "main",
+      "role": "Examination handler: mark the item and present a short identification string to the viewer.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_GOLEM::use",
+      "kind": "helper",
+      "role": "Primary interaction/menu handler for player 'use' on the golem; builds Item::ask menu and implements Follow/Stop/Move/Open/Attack/Leave/Grunt/Nothing behaviors.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_GOLEM::03CC",
+      "kind": "helper",
+      "role": "Spawned background follow-loop implementing Follow behavior: periodically check range to leader/target and spawn step movement until cancelled.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_GOLEM::use",
+        "callee": "U8P_GOLEM::03CC",
+        "purpose": "Spawn the background follow behavior when the player selects 'Follow'.",
+        "confidence": "high"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_GOLEM::look",
+        "callee": "Item::bark",
+        "purpose": "Make the golem emit/display the identifying string 'golem ' to the inspecting process.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GOLEM::use",
+        "callee": "Item::ask",
+        "purpose": "Present the command menu (Follow, Stop, Move, Open, Attack, Leave, Grunt, Nothing) and obtain the player's selection.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GOLEM::use",
+        "callee": "U8P_GOLEM::process target",
+        "purpose": "Resolve the player's currently selected target id for Move/Open/Attack commands.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GOLEM::use",
+        "callee": "Npc::isInCombat",
+        "purpose": "Guard or alter available commands/flow based on whether the golem is in combat.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GOLEM::use",
+        "callee": "Item::getRange",
+        "purpose": "Measure distance to a target to decide movement vs failure (used by Move and by the follow loop).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GOLEM::use",
+        "callee": "Item::getDirToItem",
+        "purpose": "Obtain direction to target for spawning a single-step movement action (METHOD::091C).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GOLEM::use",
+        "callee": "METHOD::091C (spawned)",
+        "purpose": "Spawn a single-step movement/action in a given direction for the golem (part of Move/retry loop).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GOLEM::use",
+        "callee": "METHOD::15E7 (spawned)",
+        "purpose": "Spawn follow-up movement/animation or delay to complete a movement step; used after METHOD::091C and in other short actions like Leave/Open.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GOLEM::use",
+        "callee": "Npc::pathfind",
+        "purpose": "Request the golem to pathfind to a specified destination (used before Open to approach a door).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GOLEM::use",
+        "callee": "Item::getType",
+        "purpose": "Check the type of the target to confirm it's door-like before performing Open logic.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GOLEM::use",
+        "callee": "DOOR_NS::05E4",
+        "purpose": "Obtain a door object/reference from an id when performing door Open.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GOLEM::use",
+        "callee": "Item::getQuality",
+        "purpose": "Read door quality flags to determine current open/closed state before toggling.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GOLEM::use",
+        "callee": "Item::setQuality",
+        "purpose": "Write modified quality flags to toggle a door's open/closed bit(s).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GOLEM::use",
+        "callee": "DOOR_NS::08B4 (spawned)",
+        "purpose": "Spawn the door-handling/animation routine after toggling door flags.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GOLEM::use",
+        "callee": "Item::destroy",
+        "purpose": "Remove/destroy the golem item when player selects 'Leave'.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GOLEM::use",
+        "callee": "U8P_GOLEM::resetRef",
+        "purpose": "Clear follower/reference state when player selects 'Stop'.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GOLEM::use",
+        "callee": "Npc::setTarget",
+        "purpose": "Assign the golem's combat target when player selects 'Attack' with a valid process target.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GOLEM::use",
+        "callee": "Item::bark",
+        "purpose": "Emit short fallback vocalizations like 'Ugh ' for Grunt or when Move fails/declines to act.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GOLEM::03CC",
+        "callee": "Item::getRange",
+        "purpose": "Used in the follow-loop to measure distance to the leader/target and decide whether to spawn movement steps.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GOLEM::03CC",
+        "callee": "Item::getDirToItem",
+        "purpose": "Get movement direction to the leader/target for spawning single-step movement.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GOLEM::03CC",
+        "callee": "METHOD::091C (spawned)",
+        "purpose": "Spawn single-step movement towards leader/target when range threshold exceeded.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GOLEM::03CC",
+        "callee": "METHOD::15E7 (spawned)",
+        "purpose": "Follow-up movement/animation spawn used periodically in the follow-loop.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_GOLEM::GOLEM::look",
+    "behavior_summary_one_liner": "Provides player interactions for a summoned/placed golem NPC: describing it when inspected, presenting a contextual command menu on use, and executing commands such as Follow, Stop, Move, Open (doors), Attack (assign target), Leave (self-destruct), and short vocalizations (Grunt).",
+    "external_call_count": 22,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

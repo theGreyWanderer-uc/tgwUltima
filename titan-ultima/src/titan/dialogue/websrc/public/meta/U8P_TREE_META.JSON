@@ -1,0 +1,67 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_TREE.json",
+  "file": "U8P_TREE",
+  "behavior_summary": [
+    "Responds to the item's 'U8P_TREE::look' (examine) event by composing a short descriptive message beginning with the literal \"tree \".",
+    "Delivers that message to the inspecting process/player by calling Item::bark with the constructed string and the viewer's process id.",
+    "Does not modify persistent game state or global flags; its effect is purely communicative/visual to the viewer.",
+    "Allocates/fills a temporary string buffer for the message, passes it to Item::bark, frees the temporary, and then processes the return value before suspending/returning."
+  ],
+  "notable_control_flow": [
+    "Entry on U8P_TREE::look/examine event -> build message string (prefix \"tree \") -> push viewer pid and string -> call Item::bark -> free temporary string -> handle return value (implies/pop) -> suspend/return.",
+    "No loops, no branching that changes game state; control flow is linear and event-driven."
+  ],
+  "open_questions": [
+    "What additional item-specific text (if any) is concatenated to the literal \"tree \" inside the constructed_string? The disassembly shows allocation and concatenation but not the exact source of any suffix.",
+    "Is BP+06h always the viewer/process id in every caller context, or are there edge cases where a different pid is passed? (Inference from stack usage is high but not formally verified).",
+    "Are there any localized side-effects of Item::bark (e.g., logging, UI focus changes) not visible in this script that might affect player experience?"
+  ],
+  "main_function": {
+    "name": "U8P_TREE::look",
+    "execution_form": "process",
+    "purpose": "Handle the object's U8P_TREE::look/examine event by constructing a short description starting with \"tree \" and asking the item to 'bark' that message to the inspecting process/player.",
+    "entry_conditions": [
+      "Event 0 — the U8P_TREE::look/examine event triggered when an actor inspects or looks at the tree item."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_TREE::look",
+      "kind": "main",
+      "role": "U8P_TREE::look/examine event handler for the tree item",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_TREE::look",
+        "callee": "Item::bark",
+        "purpose": "Deliver/display the constructed text message (\"tree ...\") to the viewer/process id provided; act as the item's output mechanism for descriptions.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup"
+  ],
+  "quick_facts": {
+    "main_function": "TREE::look",
+    "behavior_summary_one_liner": "Responds to the item's 'U8P_TREE::look' (examine) event by composing a short descriptive message beginning with the literal \"tree \".",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

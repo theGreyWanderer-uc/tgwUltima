@@ -1,0 +1,74 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_KINGBDEW.json",
+  "file": "U8P_KINGBDEW",
+  "behavior_summary": [
+    "Handles the \"U8P_KINGBDEW::look\" (examine) interaction for the bed object: when the object is inspected it prepares presentation state then asks the item to 'bark' the short description string \"bed \".",
+    "The routine captures and interprets the return value from Item::bark (coerced via an implies operation) and then suspends/returns, effectively reporting a truthy/falsey result to the caller based on the bark result.",
+    "No global flags are read or written by this snippet; behavior is limited to preparing object state and producing a short UI message."
+  ],
+  "notable_control_flow": [
+    "Entry occurs as an event-driven process (Event 0 / 'U8P_KINGBDEW::look') for the bed object.",
+    "Sequence: set object info/process exclusion (prepares presentation state) -> push object/process context and string literal -> call external Item::bark -> free temporary string -> coerce/interpret bark return via an implies/pop idiom -> suspend/return.",
+    "The function's return is directly influenced by the return value of Item::bark (used with an implies operation)."
+  ],
+  "open_questions": [
+    "Exact semantics of the 'set info' and 'process exclude' operations in this context (what info key is set and how exclusion affects subsequent processing) — inferred but not explicit.",
+    "Precise meaning of Item::bark's return value and how its truthiness should be interpreted by callers beyond this implies/pop use.",
+    "Whether additional side-effects occur elsewhere when this object is excluded from processing (broader game logic implications)."
+  ],
+  "main_function": {
+    "name": "U8P_KINGBDEW::look",
+    "execution_form": "process",
+    "purpose": "Respond to an inspect/U8P_KINGBDEW::look event on the bed object by preparing presentation state and emitting the short description string \"bed \" via Item::bark; return a truthy/falsey result based on bark's return.",
+    "entry_conditions": [
+      "Event 0 (U8P_KINGBDEW::look) — triggered when the Avatar or relevant actor inspects/looks at the bed (interpreted as a fast-area/inspect trigger)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_KINGBDEW::look",
+      "kind": "main",
+      "role": "Event handler for the bed object's 'U8P_KINGBDEW::look' (examine) event; prepares display state and forwards a short description to Item::bark.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine-provided routine used to display/emit a short text description or message for an item/process (here called with \"bed \").",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_KINGBDEW::look",
+        "callee": "Item::bark",
+        "purpose": "Display/emit the item's short description string to the target process/player; called with the object/process pointer and the literal \"bed \".",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "presentation",
+    "description"
+  ],
+  "quick_facts": {
+    "main_function": "KINGBDEW::look",
+    "behavior_summary_one_liner": "Handles the \"U8P_KINGBDEW::look\" (examine) interaction for the bed object: when the object is inspected it prepares presentation state then asks the item to 'bark' the short description string \"bed \".",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

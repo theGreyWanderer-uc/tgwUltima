@@ -1,0 +1,170 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_SLIDER.json",
+  "file": "U8P_SLIDER",
+  "behavior_summary": [
+    "Implements activation and deactivation logic for a sliding/toggle floor item: when triggered it plays a sound, inspects the item's current animation frame and type, and either attempts a placement/move (via FREE::2411) or advances/retreats the item's animation frame and schedules a short delayed follow-up.",
+    "The primary handler (Func_80) is the activation path: if the item frame != 4 it increments the frame, writes it back, and spawns a short-lived delayed process (FREE::1C19) to finalize or visually update the state. If the frame == 4 it gathers item coordinates and type, maps type -> index, and calls FREE::2411 to attempt a move/placement; its return value gates continuation.",
+    "A complementary helper (Func_1A1) mirrors the main flow for the opposite direction: it plays the same sound, maps type with a mirrored order, calls FREE::2411, then decrements the frame and conditionally spawns the same delayed process when appropriate."
+  ],
+  "notable_control_flow": [
+    "Initial always-run actions: set-info (engine op inferred) and playSFX at entry, then a suspend/wait.",
+    "Primary decision: branch on Item::getFrame() == 4 — this selects either the placement/move path (FREE::2411) or the frame-advance path (increment frame and schedule delayed update).",
+    "Type-based mapping: Item::getType() is compared against constants to select a mappedIndex passed into FREE::2411; this changes behavior per slider variant.",
+    "FREE::2411 return value acts as a guard: its result determines whether the function returns/aborts early or continues to update frames and spawn follow-ups.",
+    "Frame changes are accompanied by spawning FREE::1C19(pid, 0x0A, 0) to schedule a visual/finalizing update after a short delay."
+  ],
+  "open_questions": [
+    "Exact semantics of FREE::2411: inferred to be a placement/movement helper but its precise effects, meaning of the mappedIndex parameter, and its return-value contract are unknown.",
+    "Purpose and behavior of spawned FREE::1C19: appears to schedule a visual update or finalize a placement, but exact payload and how it interacts with the item remain unclear.",
+    "Meaning of the numeric frame threshold (== 4): whether this corresponds to a fully retracted/extended state depends on the animation conventions used elsewhere.",
+    "Details of the type-to-index mapping constants: what each mappedIndex identifies (direction, shape variant, or movement mode) is inferred but not certain.",
+    "Any global side-effects of the 'set info' and implied engine ops at function entry (what info key is being set and why) are only inferred."
+  ],
+  "main_function": {
+    "name": "Func_80 (SLIDER::0080)",
+    "execution_form": "process",
+    "purpose": "Handle the slider's activation trigger: play activation sound, inspect and update the item's animation frame or attempt a placement/move based on frame/type, and schedule a short delayed task to finalize or visually update the change.",
+    "entry_conditions": [
+      "Invoked when the actor/process activates or enters the slider trigger area (inferred from playSFX and 'set info' operations).",
+      "Runs as an item/process handler that suspends briefly after playing the sound (synchronous audio/animation coupling)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_SLIDER::Func_80 (SLIDER::0080)",
+      "kind": "main",
+      "role": "Primary activation handler for the slider item; decides between advancing frame or invoking placement/movement.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_SLIDER::Func_1A1 (SLIDER::01A1)",
+      "kind": "helper",
+      "role": "Complementary/deactivation handler that mirrors the main flow and performs the reverse frame change path and placement attempts.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::*",
+      "kind": "extern",
+      "role": "Provided item API used to read/write item frame, position, type, and to destroy or bark (used across handlers).",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::*",
+      "kind": "extern",
+      "role": "Engine helper processes: FREE::2411 (placement/movement helper) and FREE::1C19 (spawned short-lived follow-up); used for movement gating and delayed updates.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_SLIDER::playSFX",
+      "kind": "extern",
+      "role": "Play a sound effect to provide audio feedback on activation/deactivation.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_SLIDER::Func_80",
+        "callee": "U8P_SLIDER::playSFX",
+        "purpose": "Play slider activation sound immediately when the handler runs; provides audio feedback for the action.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SLIDER::Func_80",
+        "callee": "Item::getFrame",
+        "purpose": "Read the item's current animation/frame to decide whether to take the placement/move path or to advance the frame.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SLIDER::Func_80",
+        "callee": "Item::setFrame",
+        "purpose": "Write the incremented frame when advancing the slider animation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SLIDER::Func_80",
+        "callee": "Item::getX",
+        "purpose": "Retrieve item's X coordinate for use by FREE::2411 in placement/move attempt.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SLIDER::Func_80",
+        "callee": "Item::getY",
+        "purpose": "Retrieve item's Y coordinate for use by FREE::2411 in placement/move attempt.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SLIDER::Func_80",
+        "callee": "Item::getZ",
+        "purpose": "Retrieve item's Z (level/height) for use by FREE::2411 in placement/move attempt.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SLIDER::Func_80",
+        "callee": "Item::getType",
+        "purpose": "Read item type so that the code can map it to a mappedIndex that parametrizes FREE::2411 behavior (variant-specific behavior).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SLIDER::Func_80",
+        "callee": "FREE::2411",
+        "purpose": "Attempt a placement/movement operation using (z,y,x, mode byte, mappedIndex, item pointer, indirect data). Its return value gates whether frame updates/scheduling proceed.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_SLIDER::Func_80",
+        "callee": "spawn FREE::1C19",
+        "purpose": "Spawn a short-lived delayed process (pid, delay 0x0A, arg 0) to finalize or visually update the slider after a brief delay following a frame change.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_SLIDER::Func_1A1",
+        "callee": "U8P_SLIDER::playSFX",
+        "purpose": "Play the same slider sound for the complementary/deactivation path.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SLIDER::Func_1A1",
+        "callee": "FREE::2411",
+        "purpose": "Same placement/move attempt as the main function but with a mirrored mappedIndex/mode; its success/failure affects whether the frame is decremented and whether follow-up is scheduled.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_SLIDER::Func_1A1",
+        "callee": "Item::setFrame",
+        "purpose": "Write the decremented frame when retreating/deactivating the slider animation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SLIDER::Func_1A1",
+        "callee": "spawn FREE::1C19",
+        "purpose": "Conditionally spawn the delayed follow-up when the decremented frame remains non-zero.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "Func_80 (SLIDER::0080)",
+    "behavior_summary_one_liner": "Implements activation and deactivation logic for a sliding/toggle floor item: when triggered it plays a sound, inspects the item's current animation frame and type, and either attempts a placement/move (via FREE::2411) or advances/retreats the item's animation frame and schedules a short delayed follow-up.",
+    "external_call_count": 13,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

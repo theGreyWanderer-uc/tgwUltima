@@ -1,0 +1,240 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_GUARD8.json",
+  "file": "U8P_GUARD8",
+  "behavior_summary": [
+    "Implements the short-examine (U8P_GUARD8::look) and full-interaction (use), area-trigger (enterFastArea), and periodic maintenance (schedule) behaviors for a guard NPC (GUARD8).",
+    "GUARD8::look: when a player 'looks' at the guard, the script checks if the NPC is dead and issues a short bark describing the guard as either 'guardsman ' or 'dead guardsman '.",
+    "U8P_GUARD8::enterFastArea: when an actor enters the guard's trigger region, if the guard is dead it is revived (clrDead, clrInCombat) and teleported to a fixed location; if alive, the script spawns reaction methods to produce guard behavior.",
+    "U8P_GUARD8::schedule: periodic heartbeat that spawns a check METHOD and, if that method indicates a particular result, clears the dead flag and spawns a reset/init METHOD.",
+    "U8P_GUARD8::use: full-talk flow that barks, spawns longer dialog/behavior methods, examines several persistent world flags (hydrosFree, hasHeart, pyrosFree) to possibly issue an urgent broadcast, uses guard-specific flags (guard8Met, guard8Pissed, guard8Thanked) to select greeting branches, offers a short choice menu via Item::ask and responds accordingly; it updates persistent flags (sets guard8Met, may clear guard8Pissed, may set guard8Thanked)."
+  ],
+  "notable_control_flow": [
+    "GUARD8::look branches immediately on Npc::isDead to choose a one-line bark, then frees temporaries and suspends.",
+    "enterFastArea has an early revival path (Npc::clrDead, Npc::clrInCombat, Npc::teleport) vs an alive path that spawns two asynchronous METHODS for reaction; those spawns are used rather than inline behavior.",
+    "schedule spawns a METHOD::143A with several args and inspects the spawn result; on a specific result it revives the NPC and spawns an initialization METHOD::133F.",
+    "use uses a small integer accumulator (local BP-06h) incremented by reads of hydrosFree/hasHeart/pyrosFree to select an urgent-message branch; otherwise it does multi-branch dialog driven by guard8Met/guard8Pissed, random choice (urandom), and player's selection from Item::ask."
+  ],
+  "open_questions": [
+    "Exact textual content and localization of the longer dialog blocks used in use() beyond the two short barks (only shorthand descriptions are present).",
+    "Precise semantics and return protocol of the spawned METHODs (IDs 091C, 15E7, 143A, 133F, 0BCF, 1090) — what each METHOD does and what return codes they produce.",
+    "Whether guard8Thanked is set in this file or external code paths (scout facts mention it but snippet context is partial).",
+    "Exact coordinates/map identifiers used by Npc::teleport (map/tile/z/orientation values are present but their in-game meaning needs mapping to world coordinates)."
+  ],
+  "main_function": {
+    "name": "U8P_GUARD8::look",
+    "execution_form": "process",
+    "purpose": "Respond to a player/actor 'U8P_GUARD8::look' (short examine) by barking a one-line identification that differs if the guard is dead or alive.",
+    "entry_conditions": [
+      "Event 0: player/process inspects or 'looks at' the guard (short interaction)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_GUARD8::look",
+      "kind": "main",
+      "role": "Short-examine handler that chooses an alive vs dead bark.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_GUARD8::enterFastArea",
+      "kind": "helper",
+      "role": "Trigger-region entry handler; revives/teleports dead guard or spawns reaction methods when alive.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_GUARD8::schedule",
+      "kind": "helper",
+      "role": "Periodic scheduler/heartbeat that spawns a check METHOD and may revive/reset the guard based on the result.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_GUARD8::use",
+      "kind": "helper",
+      "role": "Full 'use' / talk interaction implementing multi-branch dialog, flag updates, and choice handling.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::isDead",
+      "kind": "extern",
+      "role": "Query NPC death state used by U8P_GUARD8::look and enterFastArea.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Emit spoken/text lines to the player (used for barks and long dialog).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::ask",
+      "kind": "extern",
+      "role": "Present a selectable list of dialog options and return the chosen string.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_GUARD8::enterFastArea",
+        "callee": "U8P_GUARD8::spawn METHOD::091C",
+        "purpose": "Start an asynchronous reaction/behavior when the guard is alive and the player enters the trigger.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD8::enterFastArea",
+        "callee": "U8P_GUARD8::spawn METHOD::15E7",
+        "purpose": "Start a second reaction/behavior for area entry (complements METHOD::091C).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD8::schedule",
+        "callee": "U8P_GUARD8::spawn METHOD::143A",
+        "purpose": "Spawn a scheduled check METHOD and inspect its result to decide whether to revive/reset the NPC.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD8::schedule",
+        "callee": "U8P_GUARD8::spawn METHOD::133F",
+        "purpose": "Spawn reset/initialization behavior after clearing dead state based on schedule check result.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GUARD8::use",
+        "callee": "U8P_GUARD8::spawn METHOD::0BCF",
+        "purpose": "Kick off a longer dialog/behavior thread at start of the talk interaction.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD8::use",
+        "callee": "U8P_GUARD8::spawn METHOD::1090",
+        "purpose": "Spawn an urgent broadcast/behavior when the urgent-message counter indicates multiple faction frees.",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_GUARD8::look",
+        "callee": "Npc::isDead",
+        "purpose": "Check whether to describe the guard as dead or alive.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD8::look",
+        "callee": "Item::bark",
+        "purpose": "Emit the one-line identification to the player (either 'guardsman ' or 'dead guardsman ').",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD8::enterFastArea",
+        "callee": "Npc::clrDead",
+        "purpose": "Clear the NPC dead flag to revive it when a relevant actor enters the area.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD8::enterFastArea",
+        "callee": "Npc::clrInCombat",
+        "purpose": "Clear in-combat state when reviving/resetting the NPC.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD8::enterFastArea",
+        "callee": "Npc::teleport",
+        "purpose": "Move the revived NPC to a predefined location/orientation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD8::use",
+        "callee": "urandom",
+        "purpose": "Pick between alternate short replies to vary dialog.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD8::use",
+        "callee": "Item::ask",
+        "purpose": "Show dialog choices (Who are you?, What is your duty?, Where am I?, Bye) and receive player's selection string.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD8::use",
+        "callee": "FREE::1C19 / FREE::2A56",
+        "purpose": "Call global utility routines as part of conversation setup/cleanup (UI or script helpers).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "hydrosFree",
+        "likely_effect": "Influences the urgent-message counter in use(); presence increases likelihood of the urgent broadcast branch.",
+        "confidence": "high"
+      },
+      {
+        "name": "hasHeart",
+        "likely_effect": "Picked to select one of two long-warning dialog blocks and increments urgent counter; affects which long bark is used.",
+        "confidence": "high"
+      },
+      {
+        "name": "pyrosFree",
+        "likely_effect": "Similar to hydrosFree: increments urgent-message counter used in use().",
+        "confidence": "high"
+      },
+      {
+        "name": "guard8Met",
+        "likely_effect": "Determines whether to use a 'first meeting' greeting branch or the 'met before' greeting.",
+        "confidence": "high"
+      },
+      {
+        "name": "guard8Pissed",
+        "likely_effect": "Alters greeting into an angry short reply vs normal greeting flow.",
+        "confidence": "high"
+      },
+      {
+        "name": "devonInRule",
+        "likely_effect": "Selects which authority the guard cites in the 'duty' response (Devon vs alternative).",
+        "confidence": "high"
+      },
+      {
+        "name": "guard8Thanked",
+        "likely_effect": "Used to avoid repeating a unique 'thank you' dialog (presence suppresses thank-you branch).",
+        "confidence": "medium"
+      }
+    ],
+    "writes": [
+      {
+        "name": "guard8Met",
+        "likely_effect": "Set to 1 on the player's first full talk so future interactions take the 'met' branch.",
+        "confidence": "high"
+      },
+      {
+        "name": "guard8Pissed",
+        "likely_effect": "Cleared (written 0) along some dialog paths to calm the guard after resolving anger.",
+        "confidence": "high"
+      },
+      {
+        "name": "guard8Thanked",
+        "likely_effect": "Set when the guard thanks the player to avoid repeating that line in future conversations.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "GUARD8::look",
+    "behavior_summary_one_liner": "Implements the short-examine (U8P_GUARD8::look) and full-interaction (use), area-trigger (enterFastArea), and periodic maintenance (schedule) behaviors for a guard NPC (GUARD8).",
+    "external_call_count": 8,
+    "flag_read_count": 7,
+    "flag_write_count": 3
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

@@ -1,0 +1,140 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_LAMP3.json",
+  "file": "U8P_LAMP3",
+  "behavior_summary": [
+    "LAMP3::look: When a player/actor examines the wall lamp, the script composes the literal string 'wall lamp ' and invokes the item's bark/display routine so the description is shown to the viewer.",
+    "LAMP3::use: When the lamp is used, the script reads the lamp's frame/state and spawns/activates a nearby effect via FREE::2411. The effect id and which coordinate is offset by +0x20 depend on the lamp's frame (frame==0 uses effect id 0x013A and offsets X; otherwise uses effect id 0x013D and offsets Y)."
+  ],
+  "notable_control_flow": [
+    "LAMP3::look allocates a temporary string, converts it to a pointer, pushes the viewer/item arguments and calls Item::bark, then frees the temporary string before returning.",
+    "LAMP3::use queries Item::getFrame and branches: one branch for frame == 0, the other for frame != 0; both branches fetch Z, Y, X via Item::getZ/getY/getX, add 0x20 to a different coordinate depending on the branch, then call FREE::2411 with the computed coordinates, a zero byte flag, a frame-dependent effect id, and the item reference.",
+    "No global flags are observed to be read or written by these handlers; behavior is local to the item and effect spawn routine."
+  ],
+  "open_questions": [
+    "What exactly does FREE::2411 implement? It appears to spawn or toggle a visual/lighting effect (inferred from arguments and differing effect ids), but the precise effect semantics are unknown.",
+    "What do the two effect ids (0x013A and 0x013D) represent relative to lamp frames (e.g., light on vs. light off, or two orientation-specific visuals)?",
+    "Why is a +0x20 offset applied to X in one branch and to Y in the other? This likely aligns the spawned effect to a lamp sprite orientation, but exact anchor semantics are not confirmed.",
+    "Are there other events (e.g., enterFastArea/leaveFastArea) implemented elsewhere for this lamp that change frame or global state?"
+  ],
+  "main_function": {
+    "name": "U8P_LAMP3::look",
+    "execution_form": "process",
+    "purpose": "Display a short descriptive text for the wall lamp to the viewer by calling the item's bark/display routine with the literal string 'wall lamp '.",
+    "entry_conditions": [
+      "Event 0: invoked when the Avatar (or relevant actor) 'looks at' or examines this lamp (examination/inspect trigger)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_LAMP3::look",
+      "kind": "main",
+      "role": "Handle the 'U8P_LAMP3::look' (examine) event; compose and pass the description string to Item::bark.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_LAMP3::use",
+      "kind": "helper",
+      "role": "Handle the 'use' event: read lamp frame/state, compute an offset coordinate and call FREE::2411 to spawn/trigger a frame-dependent effect near the lamp.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine invoked to display a short text or message for an item to a player/process.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getFrame",
+      "kind": "extern",
+      "role": "Return the item's current frame/state; drives branch in LAMP3::use.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getX",
+      "kind": "extern",
+      "role": "Return item X coordinate (used by LAMP3::use and subject to an offset in one branch).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getY",
+      "kind": "extern",
+      "role": "Return item Y coordinate (used by LAMP3::use and subject to an offset in the alternate branch).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getZ",
+      "kind": "extern",
+      "role": "Return item Z/level coordinate (passed unchanged to FREE::2411).",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::2411",
+      "kind": "extern",
+      "role": "Engine/system routine called to spawn/trigger an effect at computed coordinates with an effect id; exact behavior inferred (likely visual/lighting effect).",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_LAMP3::look",
+        "callee": "Item::bark",
+        "purpose": "Display the composed description string 'wall lamp ' to the viewer/process.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LAMP3::use",
+        "callee": "Item::getFrame",
+        "purpose": "Obtain the lamp's frame/state to decide which effect id to use and which coordinate to offset.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LAMP3::use",
+        "callee": "Item::getZ",
+        "purpose": "Fetch item's Z coordinate to pass to the effect spawn routine.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LAMP3::use",
+        "callee": "Item::getY",
+        "purpose": "Fetch item's Y coordinate; in the branch frame != 0 this Y value is incremented by 0x20 before calling FREE::2411.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LAMP3::use",
+        "callee": "Item::getX",
+        "purpose": "Fetch item's X coordinate; in the branch frame == 0 this X value is incremented by 0x20 before calling FREE::2411.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LAMP3::use",
+        "callee": "FREE::2411",
+        "purpose": "Spawn or trigger a frame-dependent effect at computed coordinates, passing a zero byte flag, a chosen effect id (0x013A or 0x013D), and the item reference.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "animation",
+    "description"
+  ],
+  "quick_facts": {
+    "main_function": "LAMP3::look",
+    "behavior_summary_one_liner": "LAMP3::look: When a player/actor examines the wall lamp, the script composes the literal string 'wall lamp ' and invokes the item's bark/display routine so the description is shown to the viewer.",
+    "external_call_count": 6,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

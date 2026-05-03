@@ -1,0 +1,75 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_SABRE.json",
+  "file": "U8P_SABRE",
+  "behavior_summary": [
+    "SABRE::look handles the item's 'U8P_SABRE::look' (examine) event. When triggered it constructs the literal string \"sabre \", calls Item::bark with that string targeting the sabre item/process, frees the string, then performs an implication/pop sequence on the bark return value before suspending/returning.",
+    "The handler operates locally (no global flags read or written) and its visible gameplay effect is to present the text \"sabre \" to the viewer when the sabre is examined.",
+    "Small process-context setup occurs (push target pid/process, set info/process-exclude-like opcodes inferred) to establish the call context for Item::bark."
+  ],
+  "notable_control_flow": [
+    "Entry on Event 0 (U8P_SABRE::look/examine) -> allocate/build transient string \"sabre \" -> push item/process pointer as target -> call external Item::bark -> free transient string -> use bark return value in an 'implies' operation and pop a temp -> suspend/return.",
+    "All state changes are local: no global flags are modified. The function primarily sequences construction, call, cleanup, and a short return-value-driven implication step."
+  ],
+  "open_questions": [
+    "The exact semantics and intended effect of the 'implies' operation on the Item::bark return value are unclear (control flow hint/inferred engine behavior).",
+    "Whether the trailing space in the literal \"sabre \" is purposeful for concatenation elsewhere or purely decorative is unknown.",
+    "Precise meaning of the small process-context opcodes (set info + process exclude) observed prior to bark is inferred but not fully confirmed from this disassembly.",
+    "If there are any other event numbers that can reach this same handler besides Event 0 (U8P_SABRE::look) is not observed; assumed primary entry is Event 0."
+  ],
+  "main_function": {
+    "name": "U8P_SABRE::look",
+    "execution_form": "process",
+    "purpose": "Respond to the item's U8P_SABRE::look/examine event by presenting a short descriptive text to the player: construct and pass the literal \"sabre \" to Item::bark using the item/process pointer as the call target, then clean up and suspend.",
+    "entry_conditions": [
+      "Event 0 (the 'U8P_SABRE::look' or examine event for the sabre item/class)"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_SABRE::look",
+      "kind": "main",
+      "role": "Handle 'U8P_SABRE::look' (examine) event for the sabre item; build and emit description text.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine used to display/emit a text string on behalf of a process/item (used to show the sabre description).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_SABRE::look",
+        "callee": "Item::bark",
+        "purpose": "Deliver the constructed literal string \"sabre \" to the viewer via the item's bark/display routine. The item/process pointer (from BP+06h) is used as the implicit 'this' / target.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "SABRE::look",
+    "behavior_summary_one_liner": "SABRE::look handles the item's 'U8P_SABRE::look' (examine) event. When triggered it constructs the literal string \"sabre \", calls Item::bark with that string targeting the sabre item/process, frees the string, then performs an implication/pop sequence on the bark return value before suspending/returning.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

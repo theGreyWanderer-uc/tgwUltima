@@ -1,0 +1,131 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_GRAVE_NS.json",
+  "file": "U8P_GRAVE_NS",
+  "behavior_summary": [
+    "Handles player interaction with a gravestone item: a short 'U8P_GRAVE_NS::look' description is shown when examined, and a more detailed epitaph reader runs when the item is used.",
+    "Both U8P_GRAVE_NS::look and use perform local bookkeeping on the item (set info / process-exclude) before presenting text to the player.",
+    "The detailed reader (U8P_GRAVE_NS::00CB) obtains the item's quality value to select one of many hard-coded epitaph strings and calls Grave::read to display the chosen epitaph.",
+    "Use launches the reader asynchronously via spawn so the use event returns immediately while the epitaph is presented by a spawned process."
+  ],
+  "notable_control_flow": [
+    "U8P_GRAVE_NS::look: mark item (set info / process-exclude) then call Item::bark to show the short description and return.",
+    "U8P_GRAVE_NS::use: perform same item bookkeeping, then spawn U8P_GRAVE_NS::00CB to run the detailed reader asynchronously.",
+    "U8P_GRAVE_NS::00CB: call Item::getQuality, store result in a local ([BP-02h]), set a small flag/byte ([BP-04h] = 0x1B), use the quality value as a switch to choose an epitaph string, then call Grave::read with that string and the flag."
+  ],
+  "open_questions": [
+    "Exact meaning of the info key set during 'set info' / process-exclude (what 0x210 or equivalent encodes) — inferred only from opcodes.",
+    "Precise semantics of the constant 0x1B stored at [BP-04h] and how Grave::read uses it (formatting/line-count/flag hypothesis).",
+    "Full mapping between Item::getQuality return values and epitaph meanings beyond the excerpt (the mapping exists but its design intent is inferred)."
+  ],
+  "main_function": {
+    "name": "U8P_GRAVE_NS::look",
+    "execution_form": "process",
+    "purpose": "Respond to an examine/U8P_GRAVE_NS::look action on a gravestone by marking the item (info/process-exclude) and producing a short descriptive bark ('gravestone ') to the viewing actor.",
+    "entry_conditions": [
+      "Event 0: player/actor performs a 'U8P_GRAVE_NS::look' (examine) action on the gravestone item (triggered by entering the U8P_GRAVE_NS::look/observe area)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_GRAVE_NS::look",
+      "kind": "main",
+      "role": "Short-examine handler: set item bookkeeping flags then call Item::bark to display a one-line description.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_GRAVE_NS::use",
+      "kind": "helper",
+      "role": "Handle 'use' event: set item bookkeeping flags and spawn the detailed reader (U8P_GRAVE_NS::00CB) to present the epitaph asynchronously.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_GRAVE_NS::00CB",
+      "kind": "helper",
+      "role": "Detailed epitaph reader: fetch item quality via Item::getQuality, select a hard-coded epitaph string via a large switch, and call Grave::read to present it.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine call used to display a short item message/bark to the actor (used by U8P_GRAVE_NS::look()).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getQuality",
+      "kind": "extern",
+      "role": "Engine call returning a numeric quality/subtype used as the selector for epitaph variants.",
+      "confidence": "high"
+    },
+    {
+      "name": "Grave::read",
+      "kind": "extern",
+      "role": "Engine/UI routine that presents multi-line epitaph text to the player; receives a small flag/word and the text pointer plus context.",
+      "confidence": "high"
+    },
+    {
+      "name": "spawn",
+      "kind": "extern",
+      "role": "Usecode opcode to create a new process for asynchronous execution (used to run U8P_GRAVE_NS::00CB from use()).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_GRAVE_NS::use",
+        "callee": "U8P_GRAVE_NS::00CB",
+        "purpose": "Launch the detailed epitaph reader asynchronously so the 'use' event returns quickly.",
+        "confidence": "high"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_GRAVE_NS::look",
+        "callee": "Item::bark",
+        "purpose": "Show the short one-line description 'gravestone ' to the viewing actor; parameters: item pointer and literal string.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GRAVE_NS::use",
+        "callee": "spawn",
+        "purpose": "Spawn a process to run U8P_GRAVE_NS::00CB with the item/pid context as argument.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GRAVE_NS::00CB",
+        "callee": "Item::getQuality",
+        "purpose": "Retrieve the item's quality/subtype value used as the selector for which epitaph string to display.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GRAVE_NS::00CB",
+        "callee": "Grave::read",
+        "purpose": "Present the chosen epitaph text to the player; parameters: small flag/word (from [BP-04h]), epitaph string pointer, and item/pid context.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_GRAVE_NS::look",
+    "behavior_summary_one_liner": "Handles player interaction with a gravestone item: a short 'U8P_GRAVE_NS::look' description is shown when examined, and a more detailed epitaph reader runs when the item is used.",
+    "external_call_count": 4,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

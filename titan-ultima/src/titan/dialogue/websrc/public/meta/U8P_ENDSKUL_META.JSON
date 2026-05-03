@@ -1,0 +1,72 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_ENDSKUL.json",
+  "file": "U8P_ENDSKUL",
+  "behavior_summary": [
+    "When the skull item is inspected (U8P_ENDSKUL::look event), the script builds or references the literal text \"skull \" and asks the item to 'bark' that text so the player sees the description.",
+    "The function forwards the item/process pointer (the inspected object) and the string to Item::bark, uses Item::bark's return value as its own return value, and performs stack/cleanup for the ephemeral string.",
+    "No global flags are read or written by this routine; its effect is purely descriptive/display for the U8P_ENDSKUL::look interaction."
+  ],
+  "notable_control_flow": [
+    "Entry on the 'U8P_ENDSKUL::look' trigger leads directly to a single external call Item::bark and then returns the bark return value.",
+    "An ephemeral string ('skull ') is allocated/constructed, passed to Item::bark, and then freed/cleaned up before returning.",
+    "There is no branching or global state modification observed in this routine; it is a short linear handler."
+  ],
+  "open_questions": [
+    "Exact mechanism used to construct and free the string 'skull ' (allocation API or assembler-level literal handling) is inferred but not explicit.",
+    "Whether Item::bark's return value influences higher-level flow (e.g., preventing further processing) in callers beyond this return is not shown here."
+  ],
+  "main_function": {
+    "name": "U8P_ENDSKUL::look",
+    "execution_form": "process",
+    "purpose": "Respond to an inspect/U8P_ENDSKUL::look event for the skull item by making the skull produce the descriptive text 'skull ' via Item::bark and returning that result.",
+    "entry_conditions": [
+      "Event 0 — invoked when a player/actor looks at or inspects the skull item (the U8P_ENDSKUL::look/inspect trigger)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_ENDSKUL::look",
+      "kind": "main",
+      "role": "Handle the skull item's 'U8P_ENDSKUL::look' (inspect) event; build/pass description text to Item::bark and return its result.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine that displays/emits a short text message for an item/process; called with the item pointer and the string 'skull '.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_ENDSKUL::look",
+        "callee": "Item::bark",
+        "purpose": "Display or emit the descriptive text 'skull ' to the viewer/process when the skull is examined; the bark return value is forwarded as this function's return.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup"
+  ],
+  "quick_facts": {
+    "main_function": "ENDSKUL::look",
+    "behavior_summary_one_liner": "When the skull item is inspected (U8P_ENDSKUL::look event), the script builds or references the literal text \"skull \" and asks the item to 'bark' that text so the player sees the description.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

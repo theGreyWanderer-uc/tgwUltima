@@ -1,0 +1,72 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_NSBIGWEB.json",
+  "file": "U8P_NSBIGWEB",
+  "behavior_summary": [
+    "When the web object is hit (Usecode Event 6), the script marks the object with an internal info code (0x20C), excludes it from further processing, and then immediately destroys the object instance.",
+    "This results in the web removing itself from the game world on being hit and prevents subsequent processing/AI of that instance."
+  ],
+  "notable_control_flow": [
+    "Linear sequence: set object info (0x20C) -> process exclude the instance -> call Item::destroy(this) -> return.",
+    "No branching or looping observed; the handler performs a single-shot cleanup/termination of the instance."
+  ],
+  "open_questions": [
+    "What exact semantic meaning does object info 0x20C encode (e.g., 'broken', 'triggered', 'consumed')? This is inferred but not confirmed.",
+    "Is the first parameter (uword) used to influence behavior (damage/hit type), or is it ignored by this handler?",
+    "Does 'process exclude' also notify other systems (collision, triggers) or only prevent further script processing for this instance?"
+  ],
+  "main_function": {
+    "name": "U8P_NSBIGWEB::gotHit",
+    "execution_form": "process",
+    "purpose": "Handle the web object being hit: mark the instance with info 0x20C, prevent further processing of that instance, and destroy/remove the item from the world.",
+    "entry_conditions": [
+      "Invoked as Usecode Event 6 (U8P_NSBIGWEB::gotHit) — triggered when the web object is hit by an actor or effect."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_NSBIGWEB::gotHit",
+      "kind": "main",
+      "role": "Event handler for the web object's 'got hit' event; marks and removes the instance.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::destroy",
+      "kind": "extern",
+      "role": "Engine routine called to remove/destroy the item/object instance passed as 'this'.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_NSBIGWEB::gotHit",
+        "callee": "Item::destroy",
+        "purpose": "Remove/destroy the web object instance (called with the object pointer passed into the handler).",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_NSBIGWEB::gotHit",
+    "behavior_summary_one_liner": "When the web object is hit (Usecode Event 6), the script marks the object with an internal info code (0x20C), excludes it from further processing, and then immediately destroys the object instance.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

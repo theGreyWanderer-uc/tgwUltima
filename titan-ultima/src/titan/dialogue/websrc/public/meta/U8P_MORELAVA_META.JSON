@@ -1,0 +1,86 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_MORELAVA.json",
+  "file": "U8P_MORELAVA",
+  "behavior_summary": [
+    "MORELAVA::gotHit handles the object's 'got hit' event by recording a value into an info slot (0x20C) on a referenced target and then marking/excluding that target from further processing.",
+    "The handler appears to accept two incoming parameters; one is used as the dword value written into info 0x20C (inferred to be damage or hit magnitude), and the other is likely an identifier/source (attacker/process) though its use is not explicit in the snippet.",
+    "No global flags are read or written by this handler; its effects are local to the target/process context that receives the info write and exclusion."
+  ],
+  "notable_control_flow": [
+    "Event entry: invoked for Event 6 (U8P_MORELAVA::gotHit).",
+    "Sequence: push infoId (0x20C) -> push dword [BP+06] (incoming value) -> push target reference (push indirect 02 bytes) -> call set info -> call process exclude -> return.",
+    "There are no conditionals or loops observed; control flow is linear and ends with a return after exclusion."
+  ],
+  "open_questions": [
+    "What is the semantic meaning of info id 0x20C (exact game-level meaning of the stored value)?",
+    "What precisely is the 'target' referenced by the indirect 02-byte push (the object being annotated/excluded)?",
+    "What are the exact roles and sizes of the two formal parameters (which one is attacker id vs damage/value)?"
+  ],
+  "main_function": {
+    "name": "U8P_MORELAVA::gotHit",
+    "execution_form": "process",
+    "purpose": "On receiving a 'got hit' event, store a provided value into info slot 0x20C for a target object and then exclude that target from further processing to prevent reprocessing or re-triggering.",
+    "entry_conditions": [
+      "Event 6 (U8P_MORELAVA::gotHit) — triggered when the MoreLava object is struck or would register a hit"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_MORELAVA::gotHit",
+      "kind": "main",
+      "role": "Event handler that records hit info and excludes the affected process/target",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MORELAVA::set info",
+      "kind": "extern",
+      "role": "Engine routine to write a numeric value into an object/process info slot (here used for info id 0x20C)",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MORELAVA::process exclude",
+      "kind": "extern",
+      "role": "Engine routine to mark/exclude a process/object from further processing or consideration",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_MORELAVA::gotHit",
+        "callee": "U8P_MORELAVA::set info",
+        "purpose": "Write the incoming value (dword at BP+06) into the target's info slot 0x20C, associating the hit value with the referenced object/process.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MORELAVA::gotHit",
+        "callee": "U8P_MORELAVA::process exclude",
+        "purpose": "Exclude or mark the (same) target/process from further processing after the info write; likely prevents duplicated handling or further AI processing for that target.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "MORELAVA::gotHit",
+    "behavior_summary_one_liner": "MORELAVA::gotHit handles the object's 'got hit' event by recording a value into an info slot (0x20C) on a referenced target and then marking/excluding that target from further processing.",
+    "external_call_count": 2,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

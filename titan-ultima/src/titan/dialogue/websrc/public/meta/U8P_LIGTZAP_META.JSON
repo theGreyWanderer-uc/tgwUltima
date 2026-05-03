@@ -1,0 +1,251 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_LIGTZAP.json",
+  "file": "U8P_LIGTZAP",
+  "behavior_summary": [
+    "U8P_LIGTZAP::gotHit implements a one-shot lightning zap reaction when the object is struck by a valid overlapping source: it guards against re-entry, schedules and shows lightning visuals and SFX, animates a temporary sprite, applies a directional effect to the hit NPC, and then clears the guard so the zapper can trigger again.",
+    "The routine only runs when a non-zero hit source parameter is provided, the hit source overlaps this item (Item::overlaps), and a global guard alreadyHitLightningZapper is clear.",
+    "Visuals are produced by spawning a LightningBolt process, creating a temporary item sprite (Item::create), placing it near the object (Item::getX/Y/Z + offsets, Item::pop), playing a sound (playSFX), animating frames (Item::setFrame in a 0..4 loop with timed/spawned delays), and destroying the sprite (Item::destroy) after the animation/delay.",
+    "After the visual sequence the code obtains the NPC's facing direction (Npc::getDir) and calls METHOD::0080 with that direction and object pointers to apply the zap's gameplay effect (likely damage/knockback), and finally clears alreadyHitLightningZapper to allow future triggers."
+  ],
+  "notable_control_flow": [
+    "Early exit if the hit-source parameter (BP+0Ah) is zero.",
+    "Guard check of global alreadyHitLightningZapper prevents starting the sequence if already set.",
+    "Item::overlaps(hitSource, this) is used as a gating collision test; the sequence proceeds only if overlap returns true.",
+    "Sequence uses urandom + spawn to introduce randomized/staggered delays for visuals and uses free/timed helper processes to step through animation frames and schedule destruction.",
+    "The global guard is set at sequence start and cleared only after the full visual/effect sequence completes.",
+    "Loop/frame progression inside U8P_LIGTZAP::gotHit; treated as control-flow, not explicit internal call."
+  ],
+  "open_questions": [
+    "Exact semantics of METHOD::0080: inferred to apply the actual lightning effect (damage/knockback) but purpose is not explicit.",
+    "Precise meaning of the temporary item type/id created (0x01FF or similar) and how its frames map to the lightning animation.",
+    "Whether LightningBolt process does additional gameplay effects separate from METHOD::0080, or is purely visual.",
+    "Timing details and exact spawn helper implementations (FREE::1C19 / FREE::29D8) are inferred from behaviour but not fully specified."
+  ],
+  "main_function": {
+    "name": "U8P_LIGTZAP::gotHit",
+    "execution_form": "process",
+    "purpose": "Respond to an incoming hit by spawning lightning visuals and SFX, apply a directional gameplay effect to the target NPC, and prevent immediate retriggers using a global guard.",
+    "entry_conditions": [
+      "Invoked on U8P_LIGTZAP::gotHit event (Event 6).",
+      "Parameter BP+0Ah (hit source) must be non-zero.",
+      "Global alreadyHitLightningZapper must be 0.",
+      "Item::overlaps(BP+0Ah, BP+06h) must return true (hit source overlaps this object)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_LIGTZAP::gotHit",
+      "kind": "main",
+      "role": "Event handler for hit events; orchestrates guard, visuals, SFX, effect application, and cleanup.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::overlaps",
+      "kind": "extern",
+      "role": "Collision test used as gating check before triggering the zap sequence.",
+      "confidence": "high"
+    },
+    {
+      "name": "urandom",
+      "kind": "extern",
+      "role": "Provide random delay/variation used to stagger spawned helper timing.",
+      "confidence": "high"
+    },
+    {
+      "name": "spawn",
+      "kind": "extern",
+      "role": "Create timed/free helper processes used for scheduling frame advances and delayed destroy.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_LIGTZAP::process LightningBolt",
+      "kind": "extern",
+      "role": "Start/run lightning visual process; may also encapsulate some effect logic.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::create",
+      "kind": "extern",
+      "role": "Create temporary sprite/item used for the lightning visual.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getX",
+      "kind": "extern",
+      "role": "Read created item's X coordinate for positioning the pop location.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getY",
+      "kind": "extern",
+      "role": "Read created item's Y coordinate for positioning the pop location.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getZ",
+      "kind": "extern",
+      "role": "Read created item's Z coordinate for positioning the pop location.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::pop",
+      "kind": "extern",
+      "role": "Place/activate the temporary sprite at an offset position to display the visual.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_LIGTZAP::playSFX",
+      "kind": "extern",
+      "role": "Play the lightning sound effect when the zap triggers.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::setFrame",
+      "kind": "extern",
+      "role": "Animate the temporary sprite through frames (0..4) during the visual sequence.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::destroy",
+      "kind": "extern",
+      "role": "Destroy the temporary sprite after animation/delay.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::getDir",
+      "kind": "extern",
+      "role": "Obtain NPC facing to pass into METHOD::0080 so the effect can be applied directionally.",
+      "confidence": "high"
+    },
+    {
+      "name": "METHOD::0080",
+      "kind": "extern",
+      "role": "Apply the zap's gameplay effect (likely damage/knockback) using direction and object pointers; exact semantics inferred.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_LIGTZAP::gotHit",
+        "callee": "Item::overlaps",
+        "purpose": "Confirm the hit source actually overlaps this object before triggering the zap sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LIGTZAP::gotHit",
+        "callee": "urandom",
+        "purpose": "Generate small random values to vary spawn/timing of visual/effect helper processes.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LIGTZAP::gotHit",
+        "callee": "spawn",
+        "purpose": "Create timed/free helper processes to delay steps, animate frames, and schedule destruction.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LIGTZAP::gotHit",
+        "callee": "U8P_LIGTZAP::process LightningBolt",
+        "purpose": "Start a LightningBolt visual/process at trigger time (may be purely visual or partially gameplay-related).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LIGTZAP::gotHit",
+        "callee": "Item::create",
+        "purpose": "Create a temporary sprite/item used to display the lightning visual.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LIGTZAP::gotHit",
+        "callee": "Item::getX",
+        "purpose": "Read created item's X coordinate to compute pop position (offset by -50).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LIGTZAP::gotHit",
+        "callee": "Item::getY",
+        "purpose": "Read created item's Y coordinate to compute pop position (offset by -50).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LIGTZAP::gotHit",
+        "callee": "Item::getZ",
+        "purpose": "Read Z coordinate to keep vertical positioning consistent for the pop.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LIGTZAP::gotHit",
+        "callee": "Item::pop",
+        "purpose": "Place the temporary sprite into the world at a computed offset to display the lightning.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LIGTZAP::gotHit",
+        "callee": "U8P_LIGTZAP::playSFX",
+        "purpose": "Play the zap SFX (SFX id 0x00C8) when the effect triggers.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LIGTZAP::gotHit",
+        "callee": "Item::setFrame",
+        "purpose": "Advance the temporary sprite through animation frames (0..4) during the effect.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LIGTZAP::gotHit",
+        "callee": "Item::destroy",
+        "purpose": "Remove the temporary visual sprite after the animation completes or after a delay.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LIGTZAP::gotHit",
+        "callee": "Npc::getDir",
+        "purpose": "Obtain the target NPC's facing direction to parameterize the gameplay effect.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LIGTZAP::gotHit",
+        "callee": "METHOD::0080",
+        "purpose": "Apply the zap's gameplay consequence (inferred: damage, push, or other effect) using direction and object pointers.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "alreadyHitLightningZapper",
+        "likely_effect": "Read as a guard: must be 0 to allow the zap sequence to run and avoid re-entry.",
+        "confidence": "high"
+      }
+    ],
+    "writes": [
+      {
+        "name": "alreadyHitLightningZapper",
+        "likely_effect": "Written to 1 when the zap sequence starts to prevent retriggers, and cleared back to 0 after the sequence completes so the zapper can be used again.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_LIGTZAP::gotHit",
+    "behavior_summary_one_liner": "U8P_LIGTZAP::gotHit implements a one-shot lightning zap reaction when the object is struck by a valid overlapping source: it guards against re-entry, schedules and shows lightning visuals and SFX, animates a temporary sprite, applies a directional effect to the hit NPC, and then clears the guard so the zapper can trigger again.",
+    "external_call_count": 14,
+    "flag_read_count": 1,
+    "flag_write_count": 1
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

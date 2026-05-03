@@ -1,0 +1,127 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_EWLAMPTP.json",
+  "file": "U8P_EWLAMPTP",
+  "behavior_summary": [
+    "When the object receives a 'U8P_EWLAMPTP::look' event, it prepares process attribution/state, constructs the literal text \"lamp \", and invokes the item's display/bark routine so the player sees the word \"lamp\".",
+    "The handler runs under a modified process context (set info + process exclude) so the bark is attributed/filtered appropriately, then frees the temporary string, evaluates the bark return value with an implication operation, and suspends/returns.",
+    "This behavior is local to the process and the provided actor/item context; no global flags are read or written by this script."
+  ],
+  "notable_control_flow": [
+    "Entry on Event 0 (U8P_EWLAMPTP::look) into U8P_EWLAMPTP::look.",
+    "Set process info using an indirect pointer and the context argument (BP+06h) to attribute the subsequent bark call.",
+    "Apply process exclusion state (process exclude) before calling Item::bark.",
+    "Call Item::bark with the literal string \"lamp \", the context actor/item, and a PID pushed for process attribution.",
+    "Free the temporary string buffer created for the message.",
+    "Consume the return value from Item::bark and use an 'implies' operation on it, then pop a temp and suspend/return."
+  ],
+  "open_questions": [
+    "Exactly which PID value is pushed before calling Item::bark and whether it represents the item, the viewer, or a helper process (inferred but not explicit).",
+    "Precise semantics of the 'process exclude' opcode in this engine: whether it hides the process, changes visibility, or modifies event routing.",
+    "Whether the 'implies' operation influences further game state or merely drives the handler's boolean return (its downstream effect is not shown).",
+    "Confirm which runtime/free routine is used to release the constructed \"lamp \" string (the disassembly implies a free but the target symbol is not explicit)."
+  ],
+  "main_function": {
+    "name": "U8P_EWLAMPTP::look",
+    "execution_form": "process",
+    "purpose": "Respond to the player's or actor's 'U8P_EWLAMPTP::look' action by presenting the short text description \"lamp \" via the item's bark/display routine, attributing the action to a specific process/context and cleaning up temporaries.",
+    "entry_conditions": [
+      "Event 0: 'U8P_EWLAMPTP::look' (triggered when the player or an actor examines/looks at this object)"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_EWLAMPTP::look",
+      "kind": "main",
+      "role": "Handle U8P_EWLAMPTP::look/examine event for the lamp object; construct and dispatch the short display string.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_EWLAMPTP::set info",
+      "kind": "extern",
+      "role": "Configure process/object attribution/state prior to calling display routines (used to set caller context).",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_EWLAMPTP::process exclude",
+      "kind": "extern",
+      "role": "Modify process exclusion/visibility flags so the subsequent bark runs with the intended filtering/attribution.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Display or emit the provided short text string ('lamp ') to the target viewer/process.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_EWLAMPTP::free",
+      "kind": "extern",
+      "role": "Deallocate the temporary string buffer created for the bark message (inferred).",
+      "confidence": "medium"
+    },
+    {
+      "name": "suspend",
+      "kind": "extern",
+      "role": "End the handler by suspending/returning control to the engine (observed as final opcode).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_EWLAMPTP::look",
+        "callee": "U8P_EWLAMPTP::set info",
+        "purpose": "Prepare/assign process/object attribution using the context actor/item (BP+06h) so the following bark call is run/credited under the correct info.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_EWLAMPTP::look",
+        "callee": "U8P_EWLAMPTP::process exclude",
+        "purpose": "Adjust process exclusion/visibility state before emitting the bark, likely to prevent re-entrance or to change how the bark is routed.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_EWLAMPTP::look",
+        "callee": "Item::bark",
+        "purpose": "Deliver the literal message 'lamp ' to be shown to the player/actor identified by the context parameter; returns a value consumed by an implication operation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_EWLAMPTP::look",
+        "callee": "U8P_EWLAMPTP::free",
+        "purpose": "Release the temporary string buffer allocated for the bark message after Item::bark returns (inferred from cleanup opcodes).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_EWLAMPTP::look",
+        "callee": "suspend",
+        "purpose": "Terminate the handler, yielding control back to the engine (final operation).",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "EWLAMPTP::look",
+    "behavior_summary_one_liner": "When the object receives a 'U8P_EWLAMPTP::look' event, it prepares process attribution/state, constructs the literal text \"lamp \", and invokes the item's display/bark routine so the player sees the word \"lamp\".",
+    "external_call_count": 5,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

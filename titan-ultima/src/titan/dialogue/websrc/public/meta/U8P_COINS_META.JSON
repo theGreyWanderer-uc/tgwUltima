@@ -1,0 +1,137 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_COINS.json",
+  "file": "U8P_COINS",
+  "behavior_summary": [
+    "Provides the gameplay behavior for obsidian coin items: when a coin stack is inspected ('U8P_COINS::look'), the script builds a human-readable string containing the stack count and the phrase ' obsidian coin' and makes the owning process/actor speak that string to the viewer.",
+    "Separately, a helper updates the coin item's visual frame based on quantity: quantities 1..5 map to frames 0..4 and any quantity >= 6 maps to frame 5.",
+    "Temporary strings are allocated (numToStr, concat) and freed after use; quantity is read from the item via Item::getQuantity and used both for wording (pluralization) and for frame selection."
+  ],
+  "notable_control_flow": [
+    "U8P_COINS::COINS::look: read quantity -> convert number to string -> concat ' obsidian coin' -> if quantity != 1 then concat 's' -> call Item::bark with constructed string.",
+    "U8P_COINS::COINS::combine: read quantity -> if quantity < 6 set frame = quantity - 1 else set frame = 5 -> call Item::setFrame.",
+    "Short ephemeral control sequences (implies/pop) are used around the bark call; they appear to be control/flow artifacts and do not affect the constructed message semantics."
+  ],
+  "open_questions": [
+    "Which PID is passed into COINS::look as the bark target (inferred from [BP+06h] but the surrounding caller context is not shown)?",
+    "Are there any additional side-effects or state flags set elsewhere when combine runs (none observed here, but external calls could have side effects)?",
+    "Exact memory ownership/allocator semantics for temporary strings (numToStr/concat/free) — the script frees temporaries but precise allocator rules are not shown.",
+    "Whether pluralization rules extend beyond simple '!= 1' (e.g., localization or special cases) — here only a binary plural suffix is used."
+  ],
+  "main_function": {
+    "name": "U8P_COINS::look",
+    "execution_form": "process",
+    "purpose": "Handle the 'U8P_COINS::look' (inspect) event for coin items: read the stack count, construct an English description like '<N> obsidian coin(s)', and have the owning process/actor speak it via Item::bark.",
+    "entry_conditions": [
+      "Event 0 (U8P_COINS::look) — triggered when the item is examined/inspected.",
+      "Function is entered with the item 'this' pointer in [BP+06h] (inferred)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_COINS::look",
+      "kind": "main",
+      "role": "Builds and emits the coin-count description when the item is examined (Item::bark).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_COINS::combine",
+      "kind": "helper",
+      "role": "Update the item's display frame based on quantity (maps 1..5 to frames 0..4, 6+ to frame 5).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getQuantity",
+      "kind": "extern",
+      "role": "Return the numeric quantity of the item (used by U8P_COINS::look and combine).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_COINS::numToStr",
+      "kind": "extern",
+      "role": "Convert a numeric quantity to a decimal string for message construction.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_COINS::concat",
+      "kind": "extern",
+      "role": "Concatenate strings to build the spoken description.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Emit a short text message from an item/process to a target pid (used to show the 'U8P_COINS::look' text).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::setFrame",
+      "kind": "extern",
+      "role": "Set the item's visual frame/index (used by combine).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_COINS::look",
+        "callee": "Item::getQuantity",
+        "purpose": "Read the stack count to determine wording and pluralization.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_COINS::look",
+        "callee": "U8P_COINS::numToStr",
+        "purpose": "Convert the numeric quantity into a string for concatenation into the output message.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_COINS::look",
+        "callee": "U8P_COINS::concat",
+        "purpose": "Append the literal ' obsidian coin' and conditionally 's' to the numeric string.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_COINS::look",
+        "callee": "Item::bark",
+        "purpose": "Have the owning process/actor speak the constructed description string to the viewer pid.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_COINS::combine",
+        "callee": "Item::getQuantity",
+        "purpose": "Read the stack count to decide which visual frame to set.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_COINS::combine",
+        "callee": "Item::setFrame",
+        "purpose": "Set the sprite/frame index based on the quantity mapping (1..5 -> 0..4, 6+ -> 5).",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "animation",
+    "cleanup",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_COINS::COINS::look",
+    "behavior_summary_one_liner": "Provides the gameplay behavior for obsidian coin items: when a coin stack is inspected ('U8P_COINS::look'), the script builds a human-readable string containing the stack count and the phrase ' obsidian coin' and makes the owning process/actor speak that string to the viewer.",
+    "external_call_count": 6,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

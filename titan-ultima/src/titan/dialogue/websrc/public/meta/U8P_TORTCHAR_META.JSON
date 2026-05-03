@@ -1,0 +1,81 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_TORTCHAR.json",
+  "file": "U8P_TORTCHAR",
+  "behavior_summary": [
+    "Handles the object's 'U8P_TORTCHAR::look' (examine) event: configures per-process/info state, emits a short description string, frees temporary resources, and suspends the script.",
+    "Specifically, when the torture chair is looked at, the handler calls Item::bark with the literal string \"torture chair \" and a process/object pointer so the description is attributed to that object.",
+    "Before barking it appears to push an info id (0x0208) and apply a 'process exclude' which likely controls presentation or which processes receive the info. After bark the allocated string is freed and the process is suspended."
+  ],
+  "notable_control_flow": [
+    "Entry on Event 0 (U8P_TORTCHAR::look) -> set info (push 0x0208) and process-exclude -> allocate/prepare string 'torture chair ' -> call Item::bark -> free string -> apply an 'implies' result/pop to a temp -> suspend and return.",
+    "No observable reads or writes to global flags in this handler; behavior is localized to the object/process and the bark call."
+  ],
+  "open_questions": [
+    "What is the exact meaning of the info id 0x0208 that is pushed before barking (presentation, visibility, or routing control)?",
+    "What engine routine is used to free the allocated string (disassembly shows a free but the specific function name is not explicit)?",
+    "What does the 'implies' and subsequent pop into temp represent semantically in engine terms (a control/interruption flag, return-code processing, or debug artifact)?",
+    "Is the BP+06 parameter the viewer's pid or the object's own process/pid (evidence strongly suggests it is the object/process context for the bark but caller semantics are inferred)?"
+  ],
+  "main_function": {
+    "name": "U8P_TORTCHAR::look",
+    "execution_form": "process",
+    "purpose": "Respond to the object's Look event by preparing presentation state and emitting the short description 'torture chair ' via Item::bark, then clean up and suspend the process.",
+    "entry_conditions": [
+      "Event 0 (U8P_TORTCHAR::look) — triggered when the player or actor examines/looks at the torture chair object."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_TORTCHAR::look",
+      "kind": "main",
+      "role": "Handler for the torture chair object's Look event; prepares info/exclusion and calls Item::bark to show the short description.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_TORTCHAR::look",
+        "callee": "Item::bark",
+        "purpose": "Have the item/process produce/display the short description string 'torture chair ' attributed to the provided process/object pointer (pid).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TORTCHAR::look",
+        "callee": "suspend",
+        "purpose": "Suspend the current process after producing the bark and cleaning up (yield/stop further immediate processing).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TORTCHAR::look",
+        "callee": "U8P_TORTCHAR::free (memory)",
+        "purpose": "Free the allocated description string after Item::bark returns (exact free routine is not explicitly named in the extracted snippet).",
+        "confidence": "low"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "TORTCHAR::look",
+    "behavior_summary_one_liner": "Handles the object's 'U8P_TORTCHAR::look' (examine) event: configures per-process/info state, emits a short description string, frees temporary resources, and suspends the script.",
+    "external_call_count": 3,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

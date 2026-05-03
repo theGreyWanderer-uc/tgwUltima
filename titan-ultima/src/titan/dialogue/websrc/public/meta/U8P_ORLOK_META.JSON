@@ -1,0 +1,230 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_ORLOK.json",
+  "file": "U8P_ORLOK",
+  "behavior_summary": [
+    "Provides NPC Orlok's interactive behaviors: handling player 'U8P_ORLOK::look' (examine) to emit an appropriate short description, managing fast-area enter/exit setup and teardown, running idle/background behavior, reacting to assaults by calling guards and shouting, and driving conversation startup/selection.",
+    "ORLOK::look selects a one-line description based on Orlok's life state (dead/alive) and two global flags (orlokName, orlokJob) and makes Orlok 'bark' that string to the player.",
+    "U8P_ORLOK::enterFastArea resets stored references, configures processing exclusion, and spawns the background idle routine U8P_ORLOK::02DC.",
+    "U8P_ORLOK::leaveFastArea clears references and, if Orlok is alive, teleports him to a random x/y coordinate.",
+    "U8P_ORLOK::cast monitors if Orlok has a target/assailant, waits/delays while checking conditions, and when appropriate spawns guard behavior and has Orlok shout for help.",
+    "U8P_ORLOK::02DC is a looping idle/background script that picks randomized actions and animations, uses Orlok's position to vary behavior, and may spawn the conversation entry U8P_ORLOK::049C when nobody is talking.",
+    "U8P_ORLOK::049C (conversation entry) chooses dialog branches using a random roll and the orlokMet flag, orients Orlok toward the player, and sequences speech with delays."
+  ],
+  "notable_control_flow": [
+    "ORLOK::look: Branches first on Npc::isDead -> if dead use the 'body' description; else evaluate global flags orlokName and orlokJob (combined and individually) to choose one of several short descriptions before calling Item::bark.",
+    "U8P_ORLOK::enterFastArea -> clears multiple reference slots (resetRef / FREE::2A56) then spawns U8P_ORLOK::02DC to run idle logic.",
+    "U8P_ORLOK::leaveFastArea -> clears the same references; if Npc::isDead indicates Orlok is alive, generate two urandom values and Npc::teleport Orlok to those coordinates.",
+    "U8P_ORLOK::cast -> polls Npc::getTarget into a local, waits/delays (via FREE::1C19) possibly in a loop, and when attacker conditions are satisfied spawns CALGUARD::0080, re-checks life state, clears refs, and uses Item::bark to shout.",
+    "U8P_ORLOK::02DC -> repeats a delay, picks a random index (urandom) to select among movement/animation METHOD spawns; also reads Orlok X coordinate to choose alternate behaviors and may spawn the conversation entry if somebodyTalking is false."
+  ],
+  "open_questions": [
+    "Exact mapping of orlokName/orlokJob flag bit meanings to the individual strings (which flag combinations map precisely to 'Orlok the barkeep' vs 'Orlok' vs 'barkeep' vs 'man') is inferred but not definitively named.",
+    "Precise semantics and side-effects of the various FREE::* helpers (e.g., FREE::2A56, FREE::1C19, FREE::1D62) are inferred (cleanup/delay/random helper) but not fully known.",
+    "Detailed parameters and animation semantics for METHOD::091C and METHOD::15E7 (what numeric args represent) are not documented here.",
+    "Exact dialogue texts and full branching logic inside U8P_ORLOK::049C (conversation) are only partially reconstructed from references and random-branch patterns."
+  ],
+  "main_function": {
+    "name": "U8P_ORLOK::look",
+    "execution_form": "process",
+    "purpose": "Respond to a player examining Orlok by choosing and emitting a brief descriptive bark string. Uses Orlok life state and global flags to pick the most appropriate one-line description.",
+    "entry_conditions": [
+      "Event 0: the player (or viewing process) looks at/examines the Orlok NPC."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_ORLOK::look",
+      "kind": "main",
+      "role": "Handle 'U8P_ORLOK::look' (examine) event: decide description based on Npc::isDead and global flags and call Item::bark to speak.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ORLOK::enterFastArea",
+      "kind": "helper",
+      "role": "Fast-area entry handler: configure process exclude, clear stored references, and spawn idle/background routine U8P_ORLOK::02DC.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ORLOK::leaveFastArea",
+      "kind": "helper",
+      "role": "Fast-area exit handler: clear references and teleport Orlok to a random location if alive.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ORLOK::cast",
+      "kind": "helper",
+      "role": "React to being targeted/attacked: poll for attacker, delay/retry, spawn guard behavior and shout for help when appropriate.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ORLOK::02DC",
+      "kind": "helper",
+      "role": "Idle/background behavior: periodic delays, random action selection, position-based animation branches, and possible conversation spawn.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ORLOK::049C",
+      "kind": "helper",
+      "role": "Conversation entry/routine: selects dialog lines using random roll and orlokMet, orients Orlok to player, sequences lines with delays.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_ORLOK::enterFastArea",
+        "callee": "U8P_ORLOK::02DC",
+        "purpose": "Spawn the idle/background behavior that runs Orlok's periodic animations and conversation checks.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ORLOK::02DC",
+        "callee": "U8P_ORLOK::049C",
+        "purpose": "May spawn the conversation entry routine when random conditions and somebodyTalking indicate it's OK to start dialog.",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_ORLOK::look",
+        "callee": "Npc::isDead",
+        "purpose": "Check whether Orlok is dead to select a corpse description instead of alive descriptions.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ORLOK::look",
+        "callee": "Item::bark",
+        "purpose": "Have Orlok speak the chosen short description to the examining player.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ORLOK::enterFastArea",
+        "callee": "U8P_ORLOK::resetRef",
+        "purpose": "Clear per-NPC reference slots used for tracking players/items when entering the fast area.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ORLOK::enterFastArea",
+        "callee": "FREE::2A56",
+        "purpose": "Utility cleanup calls to free/reset referenced resources during fast-area setup.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ORLOK::leaveFastArea",
+        "callee": "FREE::2A56",
+        "purpose": "Clear/free stored references when leaving the fast area.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ORLOK::leaveFastArea",
+        "callee": "Npc::teleport",
+        "purpose": "Teleport Orlok to random coordinates generated by urandom when exiting the fast area while alive.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ORLOK::leaveFastArea",
+        "callee": "urandom",
+        "purpose": "Generate random X and Y coordinates for teleport destination.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ORLOK::cast",
+        "callee": "Npc::getTarget",
+        "purpose": "Obtain Orlok's current combat/interaction target to detect attackers.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ORLOK::cast",
+        "callee": "FREE::1C19",
+        "purpose": "Spawned as a delay/timer between target checks or as part of a wait loop.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ORLOK::cast",
+        "callee": "CALGUARD::0080",
+        "purpose": "Spawn guard/defense behavior in response to assault detection.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ORLOK::cast",
+        "callee": "Item::bark",
+        "purpose": "Make Orlok shout for help (e.g., 'Beren! I am assaulted!') after guards are called.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ORLOK::02DC",
+        "callee": "urandom",
+        "purpose": "Select random idle action/animation index.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ORLOK::02DC",
+        "callee": "Npc::getX",
+        "purpose": "Read Orlok's X coordinate to choose different behavior branches based on position thresholds.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ORLOK::02DC",
+        "callee": "METHOD::091C",
+        "purpose": "Spawned to perform facing/movement/animation actions selected by random branch.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ORLOK::02DC",
+        "callee": "METHOD::15E7",
+        "purpose": "Another method spawn used to apply facing/animation with timing, often after querying Npc::getDir.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ORLOK::02DC",
+        "callee": "Npc::getDir",
+        "purpose": "Get current facing to drive subsequent METHOD spawns.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "orlokName",
+        "likely_effect": "Used to decide whether Orlok's proper name should be used in the 'U8P_ORLOK::look' description (affects choice between 'Orlok' vs generic terms).",
+        "confidence": "high"
+      },
+      {
+        "name": "orlokJob",
+        "likely_effect": "Used to decide whether Orlok's job/title ('barkeep') should be included in the 'U8P_ORLOK::look' description, and combined with orlokName to choose a full 'Orlok the barkeep' string.",
+        "confidence": "high"
+      },
+      {
+        "name": "orlokMet",
+        "likely_effect": "Indicates whether the player has met Orlok before; affects conversation selection in U8P_ORLOK::049C (first-time vs repeat greetings).",
+        "confidence": "medium"
+      },
+      {
+        "name": "somebodyTalking",
+        "likely_effect": "Prevents U8P_ORLOK::02DC from starting conversation behavior when another dialog is active.",
+        "confidence": "high"
+      }
+    ],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "ORLOK::look",
+    "behavior_summary_one_liner": "Provides NPC Orlok's interactive behaviors: handling player 'U8P_ORLOK::look' (examine) to emit an appropriate short description, managing fast-area enter/exit setup and teardown, running idle/background behavior, reacting to assaults by calling guards and shouting, and driving conversation startup/selection.",
+    "external_call_count": 16,
+    "flag_read_count": 4,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

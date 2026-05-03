@@ -1,0 +1,167 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_BOOKMARK.json",
+  "file": "U8P_BOOKMARK",
+  "behavior_summary": [
+    "This script implements a set of bookmark/book handlers that present in-game book or log text to a player/UI by preparing an inline string, converting it to a temporary pointer, and invoking the engine Book::read routine to display it.",
+    "Each handler follows a common sequence: call an engine 'set info' on the target, create a temporary string from an inlined literal (str-to-ptr), push the current process id (pid) and the target, call Book::read with that pointer, free the temporary string, optionally spawn background tasks for deferred cleanup or side effects, then suspend/return.",
+    "The primary gameplay effect is to show flavor text (books, logs, guides) to the player when they interact with a particular bookmark/book item; spawns schedule follow-up tasks (cleanup or target methods) after initiating the read."
+  ],
+  "notable_control_flow": [
+    "U8P_BOOKMARK::BOOKMARK::0080 sets object info on the provided target ([BP+06h]) then converts an embedded string literal to a heap/string pointer and immediately calls Book::read(pid, target, string_ptr).",
+    "After Book::read returns, the temporary string pointer is freed and the function issues two spawn calls: one to FREE::1C19 (likely a delayed/free worker) and one to METHOD::0676 (a method invoked on the target with arg 0x01), then the process suspends/blocks until read handling completes.",
+    "Multiple helper functions (U8P_BOOKMARK::BOOKMARK::01EB, ::0700, ::0C03, ::12CC, ::175F, ::1E2E, ::294B, ::310D, ::394D, ::4357, ::443C) replicate the same control flow pattern to present different static texts."
+  ],
+  "open_questions": [
+    "Exact semantics of the 'set info' call's third indirect 2-byte argument (appears to be a type/size id) — what state or UI mode is being set on the target?",
+    "Precise behavior and timing of FREE::1C19 and METHOD::0676 spawned tasks (what cleanup or post-read side effects do they enact?)",
+    "Meaning of Book::read's return value and whether it affects subsequent logic beyond being popped/suspended (the return is captured but not used for globals here).",
+    "Whether any of these handlers are bound to particular in-game events beyond a player 'read' interaction (e.g., area triggers) in other script sections."
+  ],
+  "main_function": {
+    "name": "U8P_BOOKMARK::0080",
+    "execution_form": "process",
+    "purpose": "Present a specific bookmarked book's text to a provided target/UI: prepare object info, allocate a temporary string from an embedded literal, call Book::read to display the text to the target/pid, free the temporary string, spawn background cleanup/side-effect tasks, then suspend/return.",
+    "entry_conditions": [
+      "Invoked when the player (or another actor) opens/reads the specific bookmarked book item (inferred from pattern and absence of global flag gating).",
+      "Parameter [BP+06h] is the target object/UI context receiving the book text; pid is the current process/player id implicitly pushed to Book::read."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_BOOKMARK::0080",
+      "kind": "main",
+      "role": "Primary bookmark/book display handler that prepares and displays a specific book text and schedules follow-up tasks.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOKMARK::01EB",
+      "kind": "helper",
+      "role": "Helper handler presenting a different long book text using the same set-info -> str-to-ptr -> Book::read -> free -> suspend pattern.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOKMARK::0700",
+      "kind": "helper",
+      "role": "Helper presenting another book text following the common pattern.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOKMARK::0C03",
+      "kind": "helper",
+      "role": "Helper presenting another volume text via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOKMARK::12CC",
+      "kind": "helper",
+      "role": "Helper presenting 'THE BIG BOOK OF ADVENTURE' text.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOKMARK::175F",
+      "kind": "helper",
+      "role": "Helper presenting 'BROGDAN'S HELPFUL GUIDE TO MUSHROOMS' text.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOKMARK::1E2E",
+      "kind": "helper",
+      "role": "Helper presenting 'STORIES TO MAKE CHILDREN SLEEP' text.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOKMARK::294B",
+      "kind": "helper",
+      "role": "Helper presenting 'ADVENTURE QUARTERLY~VOL. IX' text.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOKMARK::310D",
+      "kind": "helper",
+      "role": "Helper presenting 'ADVENTURE QUARTERLY~VOL. XII' text.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOKMARK::394D",
+      "kind": "helper",
+      "role": "Helper presenting 'THE OFFICIAL LOGBOOK OF CRIMES AND PUNISHMENTS' text.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOKMARK::4357",
+      "kind": "helper",
+      "role": "Helper presenting a short 'GUARD LOG' text variant.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOKMARK::443C",
+      "kind": "helper",
+      "role": "Helper presenting another 'GUARD LOG' text variant.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_BOOKMARK::0080",
+        "callee": "U8P_BOOKMARK::set info",
+        "purpose": "Attach or set preparatory metadata/state on the target object/context ([BP+06h]) before presenting the book (args include 0x0001, the target, and an indirect 2-byte value).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BOOKMARK::0080",
+        "callee": "U8P_BOOKMARK::str to ptr",
+        "purpose": "Convert an inlined string literal on the stack into a temporary heap/string pointer suitable for Book::read.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BOOKMARK::0080",
+        "callee": "Book::read",
+        "purpose": "Display the prepared book text to the provided target/UI using the pushed pid and target; primary UI routine for book reading.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BOOKMARK::0080",
+        "callee": "U8P_BOOKMARK::free string",
+        "purpose": "Deallocate the temporary string pointer returned by str-to-ptr after Book::read to avoid leaks.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BOOKMARK::0080",
+        "callee": "spawn FREE::1C19",
+        "purpose": "Schedule a background cleanup or delayed-free task related to the read/display lifecycle (arguments observed: pid, 0x14, 0).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BOOKMARK::0080",
+        "callee": "spawn METHOD::0676",
+        "purpose": "Schedule a deferred method to run on the target (arg 0x01 and the target are pushed), likely to trigger a post-read side-effect on the object.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_BOOKMARK::BOOKMARK::0080",
+    "behavior_summary_one_liner": "This script implements a set of bookmark/book handlers that present in-game book or log text to a player/UI by preparing an inline string, converting it to a temporary pointer, and invoking the engine Book::read routine to display it.",
+    "external_call_count": 6,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

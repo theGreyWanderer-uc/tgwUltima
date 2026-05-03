@@ -1,0 +1,206 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_FIGHT.json",
+  "file": "U8P_FIGHT",
+  "behavior_summary": [
+    "When an actor enters a specific fight-area fast trigger the script optionally spawns a small encounter (pair(s) of NPCs and associated props) and runs a short interrogation/torture-style dialog sequence between them.",
+    "Entry is gated to avoid repeated or unwanted runs: the area's Egg id is checked and set, a global flag (devonInRule) is consulted, and a probabilistic urandom(100) check can skip the sequence.",
+    "If allowed the script scans items in/near the area and, based on the items' frames, creates NPCs of different types at those coordinates, creates/flags associated items/props, orients the NPCs toward each other via short spawned helper processes, and either triggers dialog (Item::bark) or sets NPC activity depending on whether somebody is already talking.",
+    "A companion leave handler resets the area's egg id and performs cleanup so the trigger can be retriggered or resources freed."
+  ],
+  "notable_control_flow": [
+    "Entry (U8P_FIGHT::enterFastArea) runs on area trigger and immediately performs gating: Egg::getEggId(area) compared to 1, read of global devonInRule, and urandom(100) against a threshold — any of these can prevent the encounter from starting.",
+    "If encounter proceeds, Egg::setEggId(area,1) is written to mark that the area has been handled for the moment.",
+    "The script iterates area items, branching on Item::getFrame (frame==0 vs frame==1) to choose NPC types and spawn/placement logic.",
+    "After spawn the script computes facing (Item::getDirToItem / Npc::getDir) and spawns short-lived orientation/activity processes (METHOD::091C, METHOD::15E7, FREE::1C19) prior to dialog or activity change.",
+    "Dialog execution is conditional on global somebodyTalking; if clear the script increments an internal counter (BP-0Ah) and selects one of several scripted bark exchanges; otherwise it avoids barking and sets NPC activity (Npc::cSetActivity).",
+    "leaveFastArea clears Egg::setEggId(area,0) and calls a cleanup/free routine (FREE::2A56)."
+  ],
+  "open_questions": [
+    "Exact numeric thresholds and probabilities used by the urandom(100) check (the disassembly showed a compare to a literal but the intended spawn probability fraction is inferred).",
+    "Precise NPC type IDs and item shape IDs created for each frame branch — types inferred from patterns but not enumerated explicitly here.",
+    "Whether multiple area items cause multiple paired spawns or only a single paired encounter (the iteration suggests multiples but practical limits are not explicit).",
+    "The semantics of the Egg id slot beyond simple gating (e.g., persistence across saves or cross-instance interactions) and whether other systems read it."
+  ],
+  "main_function": {
+    "name": "U8P_FIGHT::enterFastArea",
+    "execution_form": "process",
+    "purpose": "Drive an on-enter fight-area encounter: gate execution, spawn NPCs/props at marker items, orient them, and optionally run a multi-branch interrogation/torture dialog sequence driven by an internal counter. Also mark the area to avoid immediate retrigger and rely on a leave handler for cleanup.",
+    "entry_conditions": [
+      "Invoked on fast-area entry (U8P_FIGHT::enterFastArea event) with the area/item passed as parameter (area_item).",
+      "Early-exit gating when Egg::getEggId(area) == 1 (already handled), when global devonInRule is set, or when a urandom(100) chance check succeeds (probabilistic skip)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_FIGHT::enterFastArea",
+      "kind": "main",
+      "role": "Trigger handler that spawns encounter NPCs/props, orients them, and drives dialog or activity changes.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FIGHT::leaveFastArea",
+      "kind": "helper",
+      "role": "Cleanup handler: clears the area's Egg id, clears process-exclude/info flags set on entry, and invokes a free/cleanup routine so the area can be re-triggered or resources released.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_FIGHT::enterFastArea",
+        "callee": "Egg::getEggId",
+        "purpose": "Read the area's stored marker/egg id to decide whether to skip the encounter (prevents immediate retrigger).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIGHT::enterFastArea",
+        "callee": "Egg::setEggId",
+        "purpose": "Set the area's egg id to 1 after deciding to run the encounter to mark it handled until leave clears it.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIGHT::enterFastArea",
+        "callee": "urandom",
+        "purpose": "Provide a random number (e.g., urandom(100)) to probabilistically gate the encounter so it doesn't run every entry.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIGHT::enterFastArea",
+        "callee": "Item::getFrame",
+        "purpose": "Inspect marker/area items' frames to select which NPC type/branch to spawn for each marker.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIGHT::enterFastArea",
+        "callee": "Npc::create",
+        "purpose": "Create NPC instances of the chosen types at positions derived from area items.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIGHT::enterFastArea",
+        "callee": "Item::create",
+        "purpose": "Create props/items associated with spawned NPCs (e.g., gear or markers) and further set status on them.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIGHT::enterFastArea",
+        "callee": "Item::orStatus",
+        "purpose": "Set flags on created items (e.g., persistence or non-interactive bits) after creation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIGHT::enterFastArea",
+        "callee": "Item::pop",
+        "purpose": "Pop or place created NPCs/props at the coordinates taken from area items (used for positioning).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIGHT::enterFastArea",
+        "callee": "Item::getX",
+        "purpose": "Read X coordinate from an area/marker item for placement of created NPCs/props.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIGHT::enterFastArea",
+        "callee": "Item::getY",
+        "purpose": "Read Y coordinate from an area/marker item for placement of created NPCs/props.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIGHT::enterFastArea",
+        "callee": "Item::getZ",
+        "purpose": "Read Z coordinate from an area/marker item for placement of created NPCs/props.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIGHT::enterFastArea",
+        "callee": "Item::getDirToItem",
+        "purpose": "Compute facing direction from one spawned NPC/item to another so they may be oriented toward each other.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIGHT::enterFastArea",
+        "callee": "Npc::getDir",
+        "purpose": "Read an NPC's facing to inform orientation/activity spawns (METHOD::15E7) so they maintain consistent facing.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIGHT::enterFastArea",
+        "callee": "spawn METHOD::091C",
+        "purpose": "Spawn a short-lived process to orient or animate an NPC toward a given direction (small helper effect).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIGHT::enterFastArea",
+        "callee": "spawn METHOD::15E7",
+        "purpose": "Spawn another small helper process to set or animate NPC direction/activity.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIGHT::enterFastArea",
+        "callee": "FREE::1C19",
+        "purpose": "Spawn a small helper/utility process (likely a short delay, sound, or effect) as part of the encounter setup.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FIGHT::enterFastArea",
+        "callee": "Item::bark",
+        "purpose": "Make spawned NPCs speak scripted lines (the interrogation/torture dialog).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIGHT::enterFastArea",
+        "callee": "process Npc::cSetActivity",
+        "purpose": "Set or change NPC activity/state in branches where dialog is not run (for example when somebodyTalking is true).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIGHT::leaveFastArea",
+        "callee": "Egg::setEggId",
+        "purpose": "Clear the area's egg id (set to 0) on leaving the area to allow future retriggers.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIGHT::leaveFastArea",
+        "callee": "FREE::2A56",
+        "purpose": "Invoke a cleanup/free routine to release resources and clear process-exclude info set during entry/encounter.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "devonInRule",
+        "likely_effect": "When set it is OR'd into the entry gating and suppresses or alters encounter triggering.",
+        "confidence": "high"
+      },
+      {
+        "name": "somebodyTalking",
+        "likely_effect": "If true the script avoids calling Item::bark (to prevent interrupting ongoing speech) and instead takes non-speaking branches like setting NPC activity.",
+        "confidence": "high"
+      }
+    ],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_FIGHT::enterFastArea",
+    "behavior_summary_one_liner": "When an actor enters a specific fight-area fast trigger the script optionally spawns a small encounter (pair(s) of NPCs and associated props) and runs a short interrogation/torture-style dialog sequence between them.",
+    "external_call_count": 20,
+    "flag_read_count": 2,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

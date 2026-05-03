@@ -1,0 +1,75 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_NSRUNWOD.json",
+  "file": "U8P_NSRUNWOD",
+  "behavior_summary": [
+    "Services the 'U8P_NSRUNWOD::look' (examine) event for a wood item: when the object is inspected, the routine prepares a safe per-call context and delegates to the item's bark routine to produce the visible description.",
+    "The handler constructs/passes the literal string \"wood \" to Item::bark along with the item/process pointer, treats Item::bark's return as its own result, frees the temporary string, and then suspends/returns.",
+    "Per-call/process-exclude semantics are applied before invoking the bark method (inferred: prevents reentrancy or establishes caller context)."
+  ],
+  "notable_control_flow": [
+    "Entry triggered by the 'U8P_NSRUNWOD::look' event for the item; sets up call-related info and applies process-exclude/pid semantics prior to calling Item::bark (inferred protective/context setup).",
+    "Pushes the item pointer (parameter) and the literal \"wood \", converts/passes the string pointer to Item::bark, then frees that temporary string after the call.",
+    "The return value from Item::bark is propagated as this function's return value; a small temporary is popped after an 'implies' sequence before the script suspends/returns."
+  ],
+  "open_questions": [
+    "Exact engine semantics and numeric id(s) of the 'set info' / 'process-exclude' operations used prior to calling Item::bark (only the general effect is inferred).",
+    "Whether the process-exclude semantics affect only this item instance or also modify a target/process referenced indirectly by the item (inference based on operand patterns).",
+    "Whether Item::bark performs any side effects beyond producing text for the viewer (e.g., logging, reputation, or state changes) — not visible in this excerpt."
+  ],
+  "main_function": {
+    "name": "U8P_NSRUNWOD::look",
+    "execution_form": "process",
+    "purpose": "Handle the 'U8P_NSRUNWOD::look' event for the wood object by delegating to Item::bark with the literal \"wood \", returning that call's result.",
+    "entry_conditions": [
+      "Event 0 (U8P_NSRUNWOD::look) — invoked when the Avatar or relevant actor examines/looks at this item.",
+      "Function executes when the item's U8P_NSRUNWOD::look handler is triggered; sets per-call info and applies process-exclude/pid setup before delegating."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_NSRUNWOD::look",
+      "kind": "main",
+      "role": "Look/inspect event handler for the wood item; prepares context and delegates to Item::bark.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine used to emit/display short descriptive text or 'bark' behavior for an item when called with a target process/object and a string.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_NSRUNWOD::look",
+        "callee": "Item::bark",
+        "purpose": "Request the item/process to emit/display its short description/message using the provided literal string \"wood \". The bark return value is used as this function's return.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "NSRUNWOD::look",
+    "behavior_summary_one_liner": "Services the 'U8P_NSRUNWOD::look' (examine) event for a wood item: when the object is inspected, the routine prepares a safe per-call context and delegates to the item's bark routine to produce the visible description.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

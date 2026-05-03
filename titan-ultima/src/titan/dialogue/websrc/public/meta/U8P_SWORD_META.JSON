@@ -1,0 +1,75 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_SWORD.json",
+  "file": "U8P_SWORD",
+  "behavior_summary": [
+    "SWORD::look is the handler invoked when the player examines the sword; it builds the literal text \"sword \" and asks the item to 'bark' that text so the name/description is presented to the viewer.",
+    "The routine allocates a temporary string \"sword \", calls Item::bark with the sword instance and that string, then frees the temporary.",
+    "The return value from Item::bark is captured and used in a subsequent 'implies' style test (inferred conditional) before the script suspends/returns; no global game-state flags are read or written in this snippet."
+  ],
+  "notable_control_flow": [
+    "Allocates a temporary message string, calls an external routine (Item::bark), and explicitly frees the temporary — indicating a request/response pattern with cleanup.",
+    "Captures Item::bark's return value and performs an 'implies' test (appears to be a conditional influence on flow) prior to suspending/returning to the engine.",
+    "Execution is event-driven (process form) and scoped to the item instance passed in as the handler parameter."
+  ],
+  "open_questions": [
+    "What exactly the 'implies' test on Item::bark's return value controls (e.g., whether a nonzero return suppresses further default processing or triggers additional behavior) — inferred but not explicit.",
+    "Precise calling convention/order of parameters to Item::bark in this environment (inferred from push order).",
+    "Whether Event 0 maps unambiguously to the player 'U8P_SWORD::look' action in all runtime contexts (inferred from patterns in related scripts)."
+  ],
+  "main_function": {
+    "name": "U8P_SWORD::look",
+    "execution_form": "process",
+    "purpose": "When the sword is examined, present its visible text by invoking the item's bark routine with the literal string \"sword \".",
+    "entry_conditions": [
+      "Event 0 (U8P_SWORD::look) — invoked when a player/actor 'looks at' or examines the sword."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_SWORD::look",
+      "kind": "main",
+      "role": "Event handler for the sword's examine/U8P_SWORD::look event; constructs and barks the display string.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item-provided routine to emit/display a short text (name/description) to a player/process.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_SWORD::look",
+        "callee": "Item::bark",
+        "purpose": "Request that the item/process display/emit the provided text string (\"sword \") to the target viewer/process. The call returns a value that the script tests with an 'implies' operation.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "SWORD::look",
+    "behavior_summary_one_liner": "SWORD::look is the handler invoked when the player examines the sword; it builds the literal text \"sword \" and asks the item to 'bark' that text so the name/description is presented to the viewer.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

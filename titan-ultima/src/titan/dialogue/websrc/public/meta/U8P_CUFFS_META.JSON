@@ -1,0 +1,72 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_CUFFS.json",
+  "file": "U8P_CUFFS",
+  "behavior_summary": [
+    "U8P_CUFFS::look is a short event handler that runs when a player/actor 'looks at' the cuffs object. It constructs the literal string \"shackle \", asks the item/process to 'bark' that string to the viewer (displaying the short description), frees the temporary string, performs a small post-call logical operation, then suspends/returns.",
+    "The handler's only observable gameplay effect is to present the descriptive/bark text for the cuffs to the inspecting actor; it does not modify persistent global flags or alter world state in the extracted snippet."
+  ],
+  "notable_control_flow": [
+    "Entry: triggered by the object's 'U8P_CUFFS::look' event (Event 0 / area-inspect).",
+    "Single external interaction: synchronous call to Item::bark to deliver the text to the viewer.",
+    "After the bark call the code frees the allocated string and executes a small logical 'implies' / pop sequence on the bark return value before suspending/returning — the exact meaning of this sequence is inferred and does not appear to change game state in this snippet."
+  ],
+  "open_questions": [
+    "Does Item::bark return a status/code that the 'implies' operation uses to influence higher-level flow, or is the 'implies' sequence only an engine-level housekeeping pattern? (confidence: medium)",
+    "Is the temporary string explicitly freed via a distinct FREE call or via an engine-managed cleanup path in the original bytecode? The disassembly shows a free but the exact routine name was not captured. (confidence: medium)",
+    "Are there any additional side-effects (e.g., setting item info/visibility) performed by surrounding opcodes outside the extracted snippet that affect this object's state when looked at? (confidence: low)"
+  ],
+  "main_function": {
+    "name": "U8P_CUFFS::look",
+    "execution_form": "process",
+    "purpose": "Provide a short descriptive/bark message when an actor inspects the cuffs item so the player sees the word 'shackle '.",
+    "entry_conditions": [
+      "Event 0 — invoked when an actor looks at / inspects the cuffs object (area/inspect trigger)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_CUFFS::look",
+      "kind": "main",
+      "role": "Look/event handler for the cuffs item; emits the item's short description to the viewer.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine routine used by items/processes to present short messages ('barks') to a target process/player.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_CUFFS::look",
+        "callee": "Item::bark",
+        "purpose": "Deliver the literal string \"shackle \" as a short description/bark to the viewer/process that inspected the item.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup"
+  ],
+  "quick_facts": {
+    "main_function": "CUFFS::look",
+    "behavior_summary_one_liner": "U8P_CUFFS::look is a short event handler that runs when a player/actor 'looks at' the cuffs object. It constructs the literal string \"shackle \", asks the item/process to 'bark' that string to the viewer (displaying the short description), frees the temporary string, performs a small post-call logical operation, then suspends/returns.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

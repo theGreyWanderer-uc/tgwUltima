@@ -1,0 +1,148 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_CARDAS.json",
+  "file": "U8P_CARDAS",
+  "behavior_summary": [
+    "This script implements event handlers for the Cardas NPC that act as thin adapters: they prepare event context and forward the actual behavior to shared system routines (SORCERER class handlers for dialog/proximity and SPELCMBT for spell resolution).",
+    "Handlers covered: U8P_CARDAS::look (examine), use (interact), enterFastArea (proximity enter), leaveFastArea (proximity leave), and cast (spell cast).",
+    "Each handler sets local info/process-exclude state, pushes the event context and caller pid (and the spell id for cast), spawns the appropriate external routine, consumes the returned value with an implies/pop pattern, then suspends/returns.",
+    "No global flags are read or written by these handlers; state changes and actual game effects are implemented in the called SORCERER / SPELCMBT routines."
+  ],
+  "notable_control_flow": [
+    "All handlers follow the same control pattern: set per-object info/process-exclude, push context and pid (and other params as needed), spawn an external resolver routine, free temporary string resources (when used), handle the spawn return via an implies/pop sequence, then suspend and return.",
+    "CARDAS::look and CARDAS::use pass a literal string \"Cardas\" to the SORCERER routines and free that string after spawning.",
+    "CARDAS::cast forwards a spell id (uword) to the spell-combat resolver SPELCMBT::084D and returns its result via the implied return handling."
+  ],
+  "open_questions": [
+    "What exact side-effects and dialog text the SORCERER::039C and SORCERER::05EC routines present for U8P_CARDAS::look/use — the cardas-specific content is implemented in those routines and not visible here.",
+    "Precise semantics and side-effects of the 'set info + process-exclude' sequence used by each handler (which info key is set and how the engine uses the exclusion) — inferred from pattern but not named here.",
+    "Meaning and consequences of the implies/pop handling of the spawned routine return value (how it affects calling process flow beyond suspending)."
+  ],
+  "main_function": {
+    "name": "U8P_CARDAS::look",
+    "execution_form": "process",
+    "purpose": "Handle the player's 'U8P_CARDAS::look' (examine) event on the Cardas NPC by forwarding to the shared SORCERER U8P_CARDAS::look/description routine with appropriate context and caller pid.",
+    "entry_conditions": [
+      "Event 0: triggered when an actor (typically the player) looks at Cardas or inspects the NPC."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_CARDAS::look",
+      "kind": "main",
+      "role": "Forward 'U8P_CARDAS::look' event to SORCERER::039C after preparing context and process exclusion",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CARDAS::use",
+      "kind": "helper",
+      "role": "Forward 'use' event to SORCERER::05EC with context and the literal 'Cardas'",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CARDAS::enterFastArea",
+      "kind": "helper",
+      "role": "Handle fast-area enter by forwarding to SORCERER::258C with context and caller pid",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CARDAS::leaveFastArea",
+      "kind": "helper",
+      "role": "Handle fast-area leave by forwarding to SORCERER::25D2 with context and caller pid",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CARDAS::cast",
+      "kind": "helper",
+      "role": "Forward spell-cast event (forwards spell id and context) to SPELCMBT::084D for resolution",
+      "confidence": "high"
+    },
+    {
+      "name": "SORCERER::039C",
+      "kind": "extern",
+      "role": "External SORCERER handler invoked for 'U8P_CARDAS::look' — provides Cardas-specific description/dialog",
+      "confidence": "high"
+    },
+    {
+      "name": "SORCERER::05EC",
+      "kind": "extern",
+      "role": "External SORCERER handler invoked for 'use' interactions",
+      "confidence": "high"
+    },
+    {
+      "name": "SORCERER::258C",
+      "kind": "extern",
+      "role": "External SORCERER handler for fast-area enter (proximity enter)",
+      "confidence": "high"
+    },
+    {
+      "name": "SORCERER::25D2",
+      "kind": "extern",
+      "role": "External SORCERER handler for fast-area leave (proximity exit)",
+      "confidence": "high"
+    },
+    {
+      "name": "SPELCMBT::084D",
+      "kind": "extern",
+      "role": "External spell-combat resolver used by CARDAS::cast to evaluate spell effects",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_CARDAS::look",
+        "callee": "SORCERER::039C",
+        "purpose": "Perform Cardas-specific U8P_CARDAS::look/description behavior (dialog, text, or contextual reactions). Called with (context, \"Cardas\", caller pid).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CARDAS::use",
+        "callee": "SORCERER::05EC",
+        "purpose": "Perform Cardas-specific use/interaction behavior. Called with (context, \"Cardas\", caller pid).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CARDAS::enterFastArea",
+        "callee": "SORCERER::258C",
+        "purpose": "Handle actor entering Cardas's proximity (fast-area enter) to trigger proximity-based behavior in SORCERER.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CARDAS::leaveFastArea",
+        "callee": "SORCERER::25D2",
+        "purpose": "Handle actor leaving Cardas's proximity (fast-area leave) to trigger exit behavior in SORCERER.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CARDAS::cast",
+        "callee": "SPELCMBT::084D",
+        "purpose": "Resolve a spell cast against Cardas by forwarding the spell id, context and caller pid to the spell-combat subsystem.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "dialog",
+    "proximity",
+    "combat"
+  ],
+  "quick_facts": {
+    "main_function": "CARDAS::look",
+    "behavior_summary_one_liner": "This script implements event handlers for the Cardas NPC that act as thin adapters: they prepare event context and forward the actual behavior to shared system routines (SORCERER class handlers for dialog/proximity and SPELCMBT for spell resolution).",
+    "external_call_count": 5,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

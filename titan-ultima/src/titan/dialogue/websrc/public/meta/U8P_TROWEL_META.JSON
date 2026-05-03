@@ -1,0 +1,154 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_TROWEL.json",
+  "file": "U8P_TROWEL",
+  "behavior_summary": [
+    "This script implements two item event handlers for a trowel: the 'U8P_TROWEL::look' handler (U8P_TROWEL::look) and a 'use' handler (U8P_TROWEL::use).",
+    "U8P_TROWEL::look simply presents the item name/description by invoking Item::bark with the literal \"trowel \", directing that message to the process/context that triggered the U8P_TROWEL::look.",
+    "U8P_TROWEL::use prompts the actor for a target repeatedly until one is provided, validates reachability with Item::canReach (barking \"can't reach \" and aborting if unreachable), accepts only targets of numeric type 3 or 4, calls FREE::24A7 as a gating precondition, and—on success—mutates the chosen target (sets quantity to 1, ORs status bit 0x0080) and causes the item to update/fall so the world state refreshes."
+  ],
+  "notable_control_flow": [
+    "U8P_TROWEL::look: linear handler — initialize context and call Item::bark then return.",
+    "U8P_TROWEL::use: loops on process target() until a non-zero target id is returned, then performs a sequence of guards (canReach, type check, FREE::24A7) that can each cause an early return.",
+    "FREE::24A7 acts as a gate: only when it indicates success (inferred by a specific return value check) does the code proceed to mutate the target and call Item::fall."
+  ],
+  "open_questions": [
+    "What exactly does FREE::24A7 check or allocate? (inferred as resource/permission check; semantics unknown).",
+    "What gameplay semantics correspond to numeric target types 3 and 4 (tile, creature, container, etc.)?",
+    "What is the gameplay meaning of setting the status bit 0x0080 on the target (inferred as a state change such as 'dug', 'marked', or 'processed')?",
+    "Does the quantity set to 1 represent creating/placing an object, or adjusting an existing stack? The intent is inferred but not explicit."
+  ],
+  "main_function": {
+    "name": "U8P_TROWEL::look",
+    "execution_form": "process",
+    "purpose": "Respond to the 'U8P_TROWEL::look' (examine) event for the trowel by preparing minimal item info and invoking the item bark routine to present the string \"trowel \" to the viewer/process.",
+    "entry_conditions": [
+      "Event 0 (U8P_TROWEL::look) — triggered when the player or actor examines/looks at the trowel"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_TROWEL::look",
+      "kind": "main",
+      "role": "Handle 'U8P_TROWEL::look' event: display item name/description via Item::bark.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_TROWEL::use",
+      "kind": "helper",
+      "role": "Handle 'use' event: prompt for target, validate reachability and type, gate with FREE::24A7, then mutate target (quantity/status) and update world state.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine to display/announce text attributed to an item/process (used for both the name and error messages).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_TROWEL::process target()",
+      "kind": "extern",
+      "role": "Engine prompt/selection routine that returns the chosen target id or 0 if none/cancelled.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_TROWEL::look",
+        "callee": "Item::bark",
+        "purpose": "Present the static string \"trowel \" to the triggering process/viewer.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TROWEL::use",
+        "callee": "U8P_TROWEL::process target()",
+        "purpose": "Prompt/obtain the target for the use action; loop until a non-zero target is returned.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TROWEL::use",
+        "callee": "Item::canReach",
+        "purpose": "Verify that the actor/process can reach the chosen target; if not reachable then display \"can't reach \" and abort.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TROWEL::use",
+        "callee": "Item::getX",
+        "purpose": "Read the target's X coordinate (stored for potential context/logic).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TROWEL::use",
+        "callee": "Item::getY",
+        "purpose": "Read the target's Y coordinate (stored for potential context/logic).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TROWEL::use",
+        "callee": "Item::getZ",
+        "purpose": "Read the target's Z (stack/height) coordinate.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TROWEL::use",
+        "callee": "Item::getType",
+        "purpose": "Obtain the numeric type of the target and accept only types 3 or 4; other types abort processing.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TROWEL::use",
+        "callee": "FREE::24A7",
+        "purpose": "A gating precondition/resource check invoked with small byte parameters; code proceeds only on the expected success return. Exact semantics are uncertain (likely inventory/permission/consumption check).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_TROWEL::use",
+        "callee": "Item::setQuantity",
+        "purpose": "Set the chosen target's quantity to 1 after FREE::24A7 allows the action.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TROWEL::use",
+        "callee": "Item::orStatus",
+        "purpose": "Apply bitwise OR with mask 0x0080 to the target's status flags (marking it with that state).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TROWEL::use",
+        "callee": "Item::fall",
+        "purpose": "Force the target to update/fall so the game world reflects the mutation (refresh stacking/position).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TROWEL::use",
+        "callee": "Item::bark",
+        "purpose": "On unreachable target, display the message \"can't reach \" to the actor/process and return.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "guard",
+    "feedback",
+    "world_update"
+  ],
+  "quick_facts": {
+    "main_function": "TROWEL::look",
+    "behavior_summary_one_liner": "This script implements two item event handlers for a trowel: the 'U8P_TROWEL::look' handler (U8P_TROWEL::look) and a 'use' handler (U8P_TROWEL::use).",
+    "external_call_count": 12,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

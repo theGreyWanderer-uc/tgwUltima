@@ -1,0 +1,81 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_FISHBONZ.json",
+  "file": "U8P_FISHBONZ",
+  "behavior_summary": [
+    "FISHBONZ::look is invoked when an actor 'looks at' or examines the Fish Bones item. The script prepares delivery flags, constructs the literal string \"fish bones \", and directs the item to emit that short description to the examining process/actor using the engine display routine (Item::bark).",
+    "The allocated string is explicitly freed after use. The function captures the return value from Item::bark and runs a small implies/pop sequence before suspending and returning, which likely propagates or respects the call's result in engine control flow.",
+    "Two engine-level opcodes are executed before the message: a 'set info' and a 'process exclude' (inferred). These likely adjust message delivery or item processing state for the duration of the bark."
+  ],
+  "notable_control_flow": [
+    "Entry on the 'U8P_FISHBONZ::look' event: main handler executes immediately when the item is examined.",
+    "Set item/info flags (set info opcode) and set a process exclusion state (process exclude opcode) before producing the message.",
+    "Call to Item::bark with parameters: pid (target process/actor) and the string \"fish bones \".",
+    "Free the allocated string buffer after the bark call returns.",
+    "Capture the bark return value, apply an implies/pop sequence (small control/propagation step), then suspend/return the script."
+  ],
+  "open_questions": [
+    "Exact semantic meaning of the specific 'set info' opcode value used and how it affects message routing or item state.",
+    "Precise effect of the 'process exclude' opcode in this context — whether it prevents other processing during the bark or marks the item for temporary exclusion.",
+    "What the implies/pop sequence does in engine terms (error/propagation handling vs. control/return shaping).",
+    "Whether any additional cleanup or side-effects occur elsewhere in the engine in response to the set-info/process-exclude opcodes."
+  ],
+  "main_function": {
+    "name": "U8P_FISHBONZ::look",
+    "execution_form": "process",
+    "purpose": "Handle the 'U8P_FISHBONZ::look' (examine) event for the Fish Bones item by presenting a short descriptive message to the examining actor.",
+    "entry_conditions": [
+      "Event 0 (U8P_FISHBONZ::look) — invoked when an actor examines or 'looks at' the Fish Bones item; the examining process id (pid) is provided as a parameter."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_FISHBONZ::look",
+      "kind": "main",
+      "role": "Primary event handler for the item's 'U8P_FISHBONZ::look' event; constructs and emits the description string and manages temporary flags and cleanup.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_FISHBONZ::look",
+        "callee": "Item::bark",
+        "purpose": "Display or emit the provided text string ('fish bones ') to the target process/actor (pid). Used to show the item's U8P_FISHBONZ::look description to the examiner.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": [
+      {
+        "name": "item info (set info opcode)",
+        "likely_effect": "Temporarily set or modify an info/state bit on the item that influences message delivery or processing.",
+        "confidence": "medium"
+      },
+      {
+        "name": "process exclude (process exclude opcode)",
+        "likely_effect": "Mark the item/process as excluded from some processing path or change how the engine dispatches further processing during the bark.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup"
+  ],
+  "quick_facts": {
+    "main_function": "FISHBONZ::look",
+    "behavior_summary_one_liner": "FISHBONZ::look is invoked when an actor 'looks at' or examines the Fish Bones item. The script prepares delivery flags, constructs the literal string \"fish bones \", and directs the item to emit that short description to the examining process/actor using the engine display routine (Item::bark).",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 2
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

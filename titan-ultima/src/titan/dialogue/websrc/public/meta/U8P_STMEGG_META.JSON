@@ -1,0 +1,175 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_STMEGG.json",
+  "file": "U8P_STMEGG",
+  "behavior_summary": [
+    "Implements an egg-hatching sequence for an item passed as the function parameter. The sequence starts a camera quake and plays a U8P_STMEGG::hatch sound, scans a nearby map/item array for entries matching a masked value derived from the egg, spawns a helper script for each match (creating hatchlings), runs a single follow-up/cleanup helper, stops the camera quake, and destroys the egg item.",
+    "Matching logic: for each scanned map entry the script compares Item::getQ(entry) to (Item::getMapArray(egg) & 0x1F). Every match triggers spawning of STMITE::00AE with the pid and the matched entry pointer/index.",
+    "Spawning semantics: each per-match spawn is implied/suspended on (the script waits for some return/implication), then after the loop the script spawns FREE::1C19 once (args pid, 0x0096, 0) and similarly suspends on it before finishing."
+  ],
+  "notable_control_flow": [
+    "Entry via an Event 7 fast-area/trigger handler starts an effect block (quake + SFX).",
+    "Iterative loop over a map/list: call Item::getQ on each entry, compare to (Item::getMapArray(egg) & 0x1F).",
+    "On a match: spawn U8P_STMITE::00AE (per-match helper) with (pid, matched_entry), then suspend/imply on the spawn's return before continuing the loop.",
+    "After finishing the scan loop: spawn U8P_FREE::1C19 once with (pid, 0x0096, 0) and suspend on its return.",
+    "Terminate effects (Camera::stopQuake) and remove the egg by calling Item::destroy(item)."
+  ],
+  "open_questions": [
+    "What semantic meaning is encoded in the low 5 bits of Item::getMapArray(egg)? (species/type lookup vs. variant index)",
+    "What exact behavior do U8P_STMITE::00AE and U8P_FREE::1C19 perform (spawned actor type, initial placement, lifetime, and the meaning of argument 0x0096)?",
+    "Who provides the pid argument and whether it is the player, the egg's owner, or a process id associated with the egg (caller context is inferred but not explicit)?",
+    "Does Event 7 fire only on area-entry (enterFastArea) or can it be triggered programmatically (i.e., are there other U8P_STMEGG::hatch triggers)?"
+  ],
+  "main_function": {
+    "name": "U8P_STMEGG::hatch",
+    "execution_form": "process",
+    "purpose": "Coordinate a visual/audio hatching sequence and spawn child actors for each matching nearby map/list entry, then run cleanup and remove the egg item.",
+    "entry_conditions": [
+      "Event 7 (fast-area / area-trigger style): appears to run when the avatar or some actor triggers the egg's U8P_STMEGG::hatch region or when the egg is commanded to U8P_STMEGG::hatch."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_STMEGG::hatch",
+      "kind": "main",
+      "role": "Orchestrates the U8P_STMEGG::hatch sequence (effects, scanning, spawning, cleanup, destroying the egg).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_STMITE::00AE",
+      "kind": "helper",
+      "role": "Per-match spawn helper; likely creates a hatchling/minion associated with a matched map entry.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_FREE::1C19",
+      "kind": "helper",
+      "role": "Post-spawn cleanup/follow-up helper; likely handles delayed effects or resource release after spawning.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::getQ",
+      "kind": "extern",
+      "role": "Query a map/list entry for its identifying quantity/id used for matching.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getMapArray",
+      "kind": "extern",
+      "role": "Retrieve an egg-associated map-array value whose low bits are used to determine spawn matches.",
+      "confidence": "high"
+    },
+    {
+      "name": "Camera::startQuake",
+      "kind": "extern",
+      "role": "Start camera shake effect to emphasize hatching.",
+      "confidence": "high"
+    },
+    {
+      "name": "Camera::stopQuake",
+      "kind": "extern",
+      "role": "Stop camera shake effect started at U8P_STMEGG::hatch begin.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_STMEGG::playSFX",
+      "kind": "extern",
+      "role": "Play U8P_STMEGG::hatch sound effect (sound id 0x31).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::destroy",
+      "kind": "extern",
+      "role": "Remove/destroy the egg item at the end of the sequence.",
+      "confidence": "high"
+    },
+    {
+      "name": "spawn",
+      "kind": "extern",
+      "role": "Engine spawn mechanism used to start helper scripts (STMITE::00AE and FREE::1C19).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_STMEGG::hatch",
+        "callee": "U8P_STMITE::00AE",
+        "purpose": "Spawn a per-match helper to create an individual hatchling/minion using the matched map entry and pid.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_STMEGG::hatch",
+        "callee": "U8P_FREE::1C19",
+        "purpose": "Spawn a single follow-up/cleanup helper after the per-match spawning phase (args: pid, 0x0096, 0).",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_STMEGG::hatch",
+        "callee": "Camera::startQuake",
+        "purpose": "Begin a camera shake effect to highlight the U8P_STMEGG::hatch event (called with intensity 4).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STMEGG::hatch",
+        "callee": "U8P_STMEGG::playSFX",
+        "purpose": "Play the U8P_STMEGG::hatch sound effect (sound id 0x31) at the sequence start.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STMEGG::hatch",
+        "callee": "Item::getMapArray",
+        "purpose": "Get a map-array value from the egg item; the script masks its low 5 bits for matching logic.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STMEGG::hatch",
+        "callee": "Item::getQ",
+        "purpose": "Read identifier/quantity from each scanned map/list entry to compare against the masked egg value.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STMEGG::hatch",
+        "callee": "spawn",
+        "purpose": "Start helper scripts (per-match STMITE::00AE and single FREE::1C19) to create hatchlings and run cleanup.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STMEGG::hatch",
+        "callee": "Camera::stopQuake",
+        "purpose": "Stop the camera shake effect after spawning and cleanup are complete.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STMEGG::hatch",
+        "callee": "Item::destroy",
+        "purpose": "Destroy/remove the egg item once the hatching sequence completes.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_STMEGG::hatch",
+    "behavior_summary_one_liner": "Implements an egg-hatching sequence for an item passed as the function parameter. The sequence starts a camera quake and plays a U8P_STMEGG::hatch sound, scans a nearby map/item array for entries matching a masked value derived from the egg, spawns a helper script for each match (creating hatchlings), runs a single follow-up/cleanup helper, stops the camera quake, and destroys the egg item.",
+    "external_call_count": 7,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

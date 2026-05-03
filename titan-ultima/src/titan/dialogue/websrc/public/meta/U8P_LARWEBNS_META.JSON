@@ -1,0 +1,69 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_LARWEBNS.json",
+  "file": "U8P_LARWEBNS",
+  "behavior_summary": [
+    "U8P_LARWEBNS::gotHit is an event handler invoked when the object is struck. It marks a small info/state key on a target, excludes that target from further processing, and then destroys the item instance passed to the handler.",
+    "The handler operates locally on the supplied item instance and does not read or write any global flags in the provided excerpt.",
+    "The action sequence is: set info (0x20C) on a target derived from the call context, apply a process-exclude to prevent further processing of that target, then call Item::destroy on the item instance parameter."
+  ],
+  "notable_control_flow": [
+    "U8P_LARWEBNS::gotHit runs as a short process-style handler: set-info -> process-exclude -> Item::destroy.",
+    "The process-exclude step indicates the object/target will be prevented from normal future processing (likely stops further event propagation or AI updates for that instance).",
+    "The function returns immediately after destruction; there are no observed loops or additional branches in the excerpt."
+  ],
+  "open_questions": [
+    "What exact game-state meaning does info id 0x20C represent? (appears to be a transient marker; exact semantics unknown) [confidence: low]",
+    "What precise object is the recipient of the set-info/process-exclude operations (the item parameter itself, its owner, or a different related object)? (likely the passed item but inferred) [confidence: medium]",
+    "What is the role of the first parameter (uword) pushed to U8P_LARWEBNS::gotHit? It is present but unused in the snippet. [confidence: medium-low]"
+  ],
+  "main_function": {
+    "name": "U8P_LARWEBNS::gotHit",
+    "execution_form": "process",
+    "purpose": "Handle a 'got hit' event by marking the target with a specific info/state, excluding it from further processing, and destroying the supplied item instance.",
+    "entry_conditions": [
+      "Event 6 (U8P_LARWEBNS::gotHit) — triggered when the object is struck or receives damage.",
+      "Called by engine/event system when the relevant object is hit."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_LARWEBNS::gotHit",
+      "kind": "main",
+      "role": "Event handler for hit/damage events that cleans up the affected item and prevents further processing.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_LARWEBNS::gotHit",
+        "callee": "Item::destroy",
+        "purpose": "Remove/destroy the item/object instance passed as the function's item parameter (value at BP+06h).",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_LARWEBNS::gotHit",
+    "behavior_summary_one_liner": "U8P_LARWEBNS::gotHit is an event handler invoked when the object is struck. It marks a small info/state key on a target, excludes that target from further processing, and then destroys the item instance passed to the handler.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

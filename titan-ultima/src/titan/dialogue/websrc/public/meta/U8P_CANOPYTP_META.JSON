@@ -1,0 +1,66 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_CANOPYTP.json",
+  "file": "U8P_CANOPYTP",
+  "behavior_summary": [
+    "Handles the player's 'U8P_CANOPYTP::look' (examine) action for the canopy object. When invoked it prepares local item state (init / set info / process-exclude semantics inferred), then asks the item to 'bark' the short descriptive string \"canopy \".",
+    "The return value from Item::bark is captured and propagated via an 'implies' operation, which the script uses to set or influence the resulting script outcome, then the process suspends/returns.",
+    "No global game flags are read or written by this script; behavior is local to the canopy instance and the immediate bark/display interaction."
+  ],
+  "notable_control_flow": [
+    "Entry on the 'U8P_CANOPYTP::look' trigger -> local init/state setting (inferred 'set info' / 'process exclude') -> push receiver and string -> call Item::bark(\"canopy \") -> capture return (retval) -> apply 'implies' to propagate/convert retval into a result/flag -> pop temporary -> suspend/return."
+  ],
+  "open_questions": [
+    "Precise semantics of the 'implies' opcode in this engine: does it convert a bark return into a boolean success, set a script-level result, or influence event propagation?",
+    "Exact meaning and target of the inferred 'set info' / 'process exclude' operations performed at function start: which info id is used and what object is excluded?",
+    "Whether the BP+06h parameter is the item instance (receiver) or the viewer/player PID in this engine's calling convention (inference favors receiver but uncertainty remains)."
+  ],
+  "main_function": {
+    "name": "U8P_CANOPYTP::look",
+    "execution_form": "process",
+    "purpose": "Respond to the 'U8P_CANOPYTP::look' event for a canopy object by producing its short descriptive text via Item::bark and propagating the bark result to the script's outcome.",
+    "entry_conditions": [
+      "Event 0 — the player/actor performs a 'U8P_CANOPYTP::look' (examine) action on the canopy object (entering its interaction/trigger area)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_CANOPYTP::look",
+      "kind": "main",
+      "role": "Main event handler for the canopy object's 'U8P_CANOPYTP::look' action; orchestrates local state and calls Item::bark to emit the description.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_CANOPYTP::look",
+        "callee": "Item::bark",
+        "purpose": "Cause the canopy item to emit/display the short descriptive string \"canopy \". The returned value is captured and used (via an 'implies' operation) to set/propagate the script's result or control flow.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "description",
+    "communication"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_CANOPYTP::CANOPYTP::look",
+    "behavior_summary_one_liner": "Handles the player's 'U8P_CANOPYTP::look' (examine) action for the canopy object. When invoked it prepares local item state (init / set info / process-exclude semantics inferred), then asks the item to 'bark' the short descriptive string \"canopy \".",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

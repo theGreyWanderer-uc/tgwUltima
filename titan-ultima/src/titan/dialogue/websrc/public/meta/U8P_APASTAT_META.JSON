@@ -1,0 +1,105 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_APASTAT.json",
+  "file": "U8P_APASTAT",
+  "behavior_summary": [
+    "U8P_APASTAT::look runs when a player examines this statue/item. It prepares the item (sets an info key and marks it excluded from some processing), then chooses one of two short examine strings based on the global flag ancientOnesMet and makes the item \"bark\" that string to the examining player.",
+    "If ancientOnesMet == 0 the displayed bark is \"Apathas\"; otherwise the displayed bark is \"male statue \".",
+    "After calling Item::bark the script performs an implies/pop/suspend sequence (internal flow control) and then returns. The set-info and process-exclude calls run before producing the bark."
+  ],
+  "notable_control_flow": [
+    "Reads global flag ancientOnesMet and branches on its value to select which literal string to pass to Item::bark.",
+    "Performs 'set info' (info id 0x0208) and 'process exclude' on the object early in the handler before the bark.",
+    "Calls Item::bark(this, string, pid) and consumes the return via an implies/pop/suspend sequence (script-level suspension/flow control)."
+  ],
+  "open_questions": [
+    "Exact semantic meaning of the info id 0x0208 used in the 'set info' call (what UI/behavior it toggles).",
+    "Precise effect of the 'process exclude' operation (what processing is being prevented/excluded).",
+    "Whether the trailing space in the string \"male statue \" is purposeful or an artifact of disassembly.",
+    "Whether any additional side-effects occur within Item::bark returns that this script relies upon (implied by the implies/pop use)."
+  ],
+  "main_function": {
+    "name": "U8P_APASTAT::look",
+    "execution_form": "process",
+    "purpose": "Handle the item's 'U8P_APASTAT::look' (examine) event: prepare item info/exclusion state and present a short context-dependent description string to the inspecting player.",
+    "entry_conditions": [
+      "Event 0 — U8P_APASTAT::look: triggered when a player/actor examines or looks at this item/statue."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_APASTAT::look",
+      "kind": "main",
+      "role": "Examine/\"U8P_APASTAT::look\" event handler for the APASTAT object; coordinates info setup and displays the examine string.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine to display or emit a short string (the item's examine text) to a target player/process.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_APASTAT::set info",
+      "kind": "extern",
+      "role": "Engine operation to set an info/metadata key (used here with id 0x0208) on the object before barking.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_APASTAT::process exclude",
+      "kind": "extern",
+      "role": "Engine operation to mark the object excluded from some processing list or future events.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_APASTAT::look",
+        "callee": "U8P_APASTAT::set info",
+        "purpose": "Configure item info/metadata (info id 0x0208) on the object prior to presentation; likely affects how the object is listed or interacted with.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_APASTAT::look",
+        "callee": "U8P_APASTAT::process exclude",
+        "purpose": "Mark the object excluded from some processing set (prevents further processing/interaction); exact target semantics inferred.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_APASTAT::look",
+        "callee": "Item::bark",
+        "purpose": "Deliver the examine text string to the player (signature used: Item::bark(this, char* str, pid)).",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "ancientOnesMet",
+        "likely_effect": "Selects which short description to show when the player looks at the statue: 0 -> \"Apathas\", non-zero -> \"male statue \".",
+        "confidence": "high"
+      }
+    ],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_APASTAT::look",
+    "behavior_summary_one_liner": "U8P_APASTAT::look runs when a player examines this statue/item. It prepares the item (sets an info key and marks it excluded from some processing), then chooses one of two short examine strings based on the global flag ancientOnesMet and makes the item \"bark\" that string to the examining player.",
+    "external_call_count": 3,
+    "flag_read_count": 1,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

@@ -1,0 +1,236 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_TRIALHAT.json",
+  "file": "U8P_TRIALHAT",
+  "behavior_summary": [
+    "U8P_TRIALHAT::hatch is the Event-7 'U8P_TRIALHAT::hatch' handler for the Trial Hat item. When triggered it either delegates to Item::use in a special-case path, or runs a staged 'trial' sequence.",
+    "In the full sequence it may place the avatar into stasis (freeze movement), compute positions relative to the hat, teleport the avatar to a staging location, center the camera, spawn visual and sound effects, create multiple guardian NPCs, configure their stats and target the avatar to provoke behavior, display dialog via Item::bark, and finally clean up and destroy the hat.",
+    "Many actions are ordered with short delays/timers (spawned FREE::* helpers and suspends) and use transient sprites/sfx and engine spawnable METHOD helpers to animate/orient guardians and effects."
+  ],
+  "notable_control_flow": [
+    "On entry the function checks the NPC/map context; if Npc::getMap() == 14 it reads the global flag MalchirTest to choose an alternate path.",
+    "If the map+MalchirTest condition is met the handler calls Item::use(pid, 0x1B) and suspends (delegation/shortcut).",
+    "Otherwise the function executes a multi-step scripted sequence: query and possibly set avatar stasis, compute offsets from Item::getX/Y/Z, teleport the avatar (Npc::teleport), spawn effects (FIRESPEL, createSprite, playSFX) and timed helpers (FREE::*), create guardian NPCs (Npc::create), adjust their stats and orientation (Npc::setDex, Npc::setHp, Item::getDirToItem and spawn METHODs), set their targets (Npc::setTarget), issue dialog via Item::bark, and destroy/pop the item at the end.",
+    "The sequence uses loops/collections to accumulate spawned NPC ids (BP-06h) and operates per-NPC using a loop-local handle (BP-04h); many operations are interleaved with suspend/delayed helpers to pace the scene."
+  ],
+  "open_questions": [
+    "Exact semantics and return/result types of spawnable METHOD::0113, METHOD::15E7 and METHOD::091C are unclear (they appear to prepare animation/animation-handle or orientation tokens and animate/orient guardians).",
+    "Precise behavior and timing of FREE::1C19, FREE::1C6D and FREE::1A96 are inferred as delayed helpers but their concrete effects (restore vs. timeout vs. state change) are not explicit.",
+    "The exact meaning and broader use of the global flag MalchirTest is unknown — it appears to gate a shortcut path but its gameplay semantics are not documented here.",
+    "Edge cases: whether avatar stasis is always restored to its prior state in every code path (e.g., early exit via Item::use) is not fully proven from the excerpt.",
+    "Number and templates of guardian NPCs spawned and exact positioning offsets are present in code but specific counts/types are inferred rather than enumerated in the summary."
+  ],
+  "main_function": {
+    "name": "U8P_TRIALHAT::hatch",
+    "execution_form": "process",
+    "purpose": "Handle the Trial Hat's activation: either defer to Item::use under a special map+flag condition or orchestrate a multi-step 'trial' sequence that stages the avatar, spawns audiovisual effects and guardian NPCs, sets NPC targets/camera focus, presents dialog, and destroys the hat.",
+    "entry_conditions": [
+      "Event 7 ('U8P_TRIALHAT::hatch') invoked on the Trial Hat item instance (item parameter passed at BP+06h).",
+      "Handler first checks the current map via Npc::getMap(); behavior diverges if the map equals 14.",
+      "Reads global flag MalchirTest to decide whether to immediately call Item::use or run the full trial sequence."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_TRIALHAT::hatch",
+      "kind": "main",
+      "role": "Event handler for the Trial Hat 'U8P_TRIALHAT::hatch' activation; orchestrates trial staging, effects and cleanup.",
+      "confidence": "high"
+    },
+    {
+      "name": "METHOD::0113",
+      "kind": "extern",
+      "role": "Spawnable helper likely preparing an animation/argument handle used by subsequent spawned METHODs/visuals.",
+      "confidence": "medium"
+    },
+    {
+      "name": "METHOD::15E7",
+      "kind": "extern",
+      "role": "Spawnable animation/orientation helper applied to NPCs with direction/actor args.",
+      "confidence": "medium"
+    },
+    {
+      "name": "METHOD::091C",
+      "kind": "extern",
+      "role": "Spawnable per-direction visual/orientation routine invoked with direction bytes from Item::getDirToItem.",
+      "confidence": "medium"
+    },
+    {
+      "name": "FIRESPEL::1F65",
+      "kind": "extern",
+      "role": "Spawned to create a fire/spell visual effect at the trial location.",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::1C19",
+      "kind": "extern",
+      "role": "Spawnable delayed/timer helper used in sequencing; exact effect inferred.",
+      "confidence": "medium"
+    },
+    {
+      "name": "FREE::1C6D",
+      "kind": "extern",
+      "role": "Spawnable delayed/timer helper used in sequencing; exact effect inferred.",
+      "confidence": "medium"
+    },
+    {
+      "name": "FREE::1A96",
+      "kind": "extern",
+      "role": "Spawnable delayed/timer helper used in sequencing; exact effect inferred.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_TRIALHAT::hatch",
+        "callee": "Npc::getMap",
+        "purpose": "Query current map to decide control flow (special-case path when map==14).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TRIALHAT::hatch",
+        "callee": "U8P_TRIALHAT::global flag MalchirTest (read)",
+        "purpose": "Read to decide whether to delegate to Item::use or run full trial sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TRIALHAT::hatch",
+        "callee": "Item::use",
+        "purpose": "Called in the map+MalchirTest shortcut to let the item perform its 'use' action instead of the scripted trial.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TRIALHAT::hatch",
+        "callee": "U8P_TRIALHAT::getAvatarInStasis",
+        "purpose": "Check whether the avatar is already frozen before setting stasis for the sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TRIALHAT::hatch",
+        "callee": "U8P_TRIALHAT::setAvatarInStasis",
+        "purpose": "Temporarily freeze (and later unfreeze) the avatar to lock player control during the staged trial.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TRIALHAT::hatch",
+        "callee": "Item::getX / Item::getY / Item::getZ",
+        "purpose": "Read the hat's world coordinates to compute teleport and spawn positions for avatar, sprites, and guardians.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TRIALHAT::hatch",
+        "callee": "Npc::teleport",
+        "purpose": "Move the avatar and/or other actors to the computed staging coordinates for the trial.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TRIALHAT::hatch",
+        "callee": "METHOD::0113",
+        "purpose": "Called repeatedly to prepare an argument/animation handle used by subsequent spawn calls for visuals/animations.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_TRIALHAT::hatch",
+        "callee": "Item::getDirToItem",
+        "purpose": "Compute facing direction from a guardian/NPC to the hat/avatar to orient spawnable animations and NPC facing.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TRIALHAT::hatch",
+        "callee": "METHOD::15E7 / METHOD::091C",
+        "purpose": "Spawned motion/orientation helpers that animate/orient NPCs/effects toward a target using direction bytes.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_TRIALHAT::hatch",
+        "callee": "FIRESPEL::1F65",
+        "purpose": "Spawn a fire/spell visual effect at the trial location as part of the audiovisual staging.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TRIALHAT::hatch",
+        "callee": "FREE::1C19 / FREE::1C6D / FREE::1A96",
+        "purpose": "Spawn delayed helper routines to schedule timed follow-up behavior or cleanup during the sequence.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_TRIALHAT::hatch",
+        "callee": "Camera::setCenterOn",
+        "purpose": "Center the player's camera on the avatar/item to focus the scene during the trial introduction.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TRIALHAT::hatch",
+        "callee": "Item::bark",
+        "purpose": "Deliver trial introduction and farewell dialog strings to the player (bark messages).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TRIALHAT::hatch",
+        "callee": "U8P_TRIALHAT::createSprite",
+        "purpose": "Create transient visual sprites at computed coordinates for effects during the staging.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TRIALHAT::hatch",
+        "callee": "U8P_TRIALHAT::playSFX",
+        "purpose": "Play sound effects associated with spawned sprites/effects.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TRIALHAT::hatch",
+        "callee": "Npc::create",
+        "purpose": "Spawn guardian NPCs at computed locations around the hat to fight/target the avatar.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TRIALHAT::hatch",
+        "callee": "Npc::setDex / Npc::setHp",
+        "purpose": "Adjust spawned guardians' stats (dexterity/HP) to prepare their behavior and difficulty.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TRIALHAT::hatch",
+        "callee": "Npc::setTarget",
+        "purpose": "Point spawned guardians at the avatar to provoke AI/combat engagement.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TRIALHAT::hatch",
+        "callee": "Item::pop / Item::getFrame / Item::destroy",
+        "purpose": "Manipulate the hat's inventory/frame state during iterations and ultimately remove/destroy the hat when the sequence completes.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "MalchirTest",
+        "likely_effect": "Gate/shortcut flag read early to decide whether U8P_TRIALHAT::hatch should call Item::use(pid,0x1B) instead of running the full trial sequence.",
+        "confidence": "high"
+      }
+    ],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_TRIALHAT::hatch",
+    "behavior_summary_one_liner": "U8P_TRIALHAT::hatch is the Event-7 'U8P_TRIALHAT::hatch' handler for the Trial Hat item. When triggered it either delegates to Item::use in a special-case path, or runs a staged 'trial' sequence.",
+    "external_call_count": 20,
+    "flag_read_count": 1,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

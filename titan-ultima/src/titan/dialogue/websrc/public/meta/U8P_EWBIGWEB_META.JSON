@@ -1,0 +1,77 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_EWBIGWEB.json",
+  "file": "U8P_EWBIGWEB",
+  "behavior_summary": [
+    "This script implements the U8P_EWBIGWEB::gotHit handler for a web object. When the web is struck, it records a short piece of metadata (set-info with id 0x020C) tied to the object, marks/excludes processing for that target (process exclude), and then destroys the web instance.",
+    "The routine acts as a one-shot cleanup: record hit context, prevent further processing, and remove the web from the world."
+  ],
+  "notable_control_flow": [
+    "On entry (Event 6 - U8P_EWBIGWEB::gotHit) the handler pushes constant 0x020C and the web item reference, executes a 'set info' opcode to store hit metadata, then runs a 'process exclude' opcode, and finally calls Item::destroy on the web instance before returning.",
+    "There are no loops or conditionals observed — the sequence is linear and always proceeds to destroy the item."
+  ],
+  "open_questions": [
+    "What is the semantic meaning of info id 0x020C (what data or game-state does it represent)?",
+    "Does 'process exclude' prevent other handlers from running on this object or only change internal processing flags? (inferred but not explicit)",
+    "Is the second parameter (word arg2) used elsewhere or intended for future logic (it is not referenced in the visible instructions)?"
+  ],
+  "main_function": {
+    "name": "U8P_EWBIGWEB::gotHit",
+    "execution_form": "process",
+    "purpose": "Handle the 'U8P_EWBIGWEB::gotHit' event for the web object: record hit-related info on a referenced target and then destroy the web object to remove it from the game world.",
+    "entry_conditions": [
+      "Event 6 (U8P_EWBIGWEB::gotHit) — triggered when the object is struck/hit"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_EWBIGWEB::gotHit",
+      "kind": "main",
+      "role": "Event handler for hit/damage on the web object; records info and destroys the instance.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_EWBIGWEB::gotHit",
+        "callee": "Item::destroy",
+        "purpose": "Remove/destroy the web item instance from the world (cleanup of the hit web).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_EWBIGWEB::gotHit",
+        "callee": "U8P_EWBIGWEB::set info (engine opcode)",
+        "purpose": "Attach/record metadata identified by constant 0x020C to the referenced object (stores hit context or flags).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_EWBIGWEB::gotHit",
+        "callee": "U8P_EWBIGWEB::process exclude (engine opcode)",
+        "purpose": "Exclude the referenced object from further processing or alter its processing state (prevents additional handlers/AI from running on it).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup"
+  ],
+  "quick_facts": {
+    "main_function": "EWBIGWEB::gotHit",
+    "behavior_summary_one_liner": "This script implements the U8P_EWBIGWEB::gotHit handler for a web object. When the web is struck, it records a short piece of metadata (set-info with id 0x020C) tied to the object, marks/excludes processing for that target (process exclude), and then destroys the web instance.",
+    "external_call_count": 3,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

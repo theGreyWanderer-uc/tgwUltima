@@ -1,0 +1,135 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_DEADNS.json",
+  "file": "U8P_DEADNS",
+  "behavior_summary": [
+    "DEADNS::look: When a player/actor examines the dead-body item, the item sets processing context (info/process-exclude), then emits the short description string \"dead body \" directed at the inspecting process and suspends. This is a short, purely descriptive 'U8P_DEADNS::look' handler.",
+    "DEADNS::use: When a player/actor 'uses' (activates) the dead-body item the script reads the item's status word and tests bit 0x0100. If that bit is clear the item closes any related UI/gump and returns. If the bit is set, the script makes a random roll (urandom(100)) and on a rare outcome (roll > 95 inferred) the item barks \"leave my bones alone... \" to the player and the script suspends; otherwise it opens a UI gump with id 0x0C."
+  ],
+  "notable_control_flow": [
+    "U8P_DEADNS::DEADNS::look: linear handler — set info/process-exclude, call Item::bark(pid, \"dead body \"), do housekeeping (implies/pop), suspend/return. Confidence: high.",
+    "U8P_DEADNS::DEADNS::use: read item status via Item::getStatus(); test status & 0x0100. If bit 0x0100 == 0 -> call Item::closeGump() and return. Confidence: high.",
+    "U8P_DEADNS::DEADNS::use: if status & 0x0100 != 0 -> call urandom(100). If urandom > 95 (small chance) -> call Item::bark(pid, \"leave my bones alone... \") and suspend; else call Item::openGump(0x0C). Confidence: medium (random threshold and urandom range inferred)."
+  ],
+  "open_questions": [
+    "What is the semantic meaning of the 0x0100 status bit on the item (enables UI interactions, ownership, or other state)? Confidence: low.",
+    "Does urandom(n) return 0..n-1 exactly, and therefore is the >95 comparison equivalent to a ~4% chance? This is inferred from usage but not explicit. Confidence: medium.",
+    "Are the bark strings intentionally containing trailing spaces (\"dead body \", \"leave my bones alone... \") or is that an artifact of extraction? Confidence: low.",
+    "What exact downstream effects does the set-info / process-exclude sequence have for this item beyond preventing further processing? Confidence: medium."
+  ],
+  "main_function": {
+    "name": "U8P_DEADNS::look",
+    "execution_form": "process",
+    "purpose": "Provide the short descriptive response when the dead-body item is examined by an actor: set per-process/info context and emit the text \"dead body \" to the inspecting process, then perform suspension/housekeeping.",
+    "entry_conditions": [
+      "Triggered when an actor/player looks at (examines) the item — the item's U8P_DEADNS::look/observe area is entered."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_DEADNS::look",
+      "kind": "main",
+      "role": "Examination/U8P_DEADNS::look handler that emits a descriptive bark to the inspecting process.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DEADNS::use",
+      "kind": "helper",
+      "role": "Use/activate handler: checks an item status bit to decide whether to close UI, open a gump, or occasionally produce a refusal bark and suspend.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine-provided utility: display/emit a short text message from the item to a process/actor.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getStatus",
+      "kind": "extern",
+      "role": "Return item's status word (bitflags) used by the script to branch on 0x0100.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::closeGump",
+      "kind": "extern",
+      "role": "Close UI/gump associated with the item; used when the status bit is clear.",
+      "confidence": "high"
+    },
+    {
+      "name": "urandom",
+      "kind": "extern",
+      "role": "Pseudo-random number generator; called with 100 to decide a rare special-case branch.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::openGump",
+      "kind": "extern",
+      "role": "Open a UI/gump for the item (called with id 0x0C on the normal enabled path).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_DEADNS::look",
+        "callee": "Item::bark",
+        "purpose": "Emit the short description string \"dead body \" to the inspecting process (pid) when the item is examined.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DEADNS::use",
+        "callee": "Item::getStatus",
+        "purpose": "Fetch the item's status bitfield so the script can test bit 0x0100 to determine permitted interactions.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DEADNS::use",
+        "callee": "Item::closeGump",
+        "purpose": "Close any open UI/gump when the enabling status bit (0x0100) is not set, then return.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DEADNS::use",
+        "callee": "urandom",
+        "purpose": "Make a random roll (called with 100) to decide a rare refusal bark path versus normal UI open.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DEADNS::use",
+        "callee": "Item::bark",
+        "purpose": "On a rare random result, emit the refusal string \"leave my bones alone... \" to the player and suspend further processing.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DEADNS::use",
+        "callee": "Item::openGump",
+        "purpose": "Open the item's UI/gump (id 0x0C) on the enabled path when the rare refusal does not occur.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "DEADNS::look",
+    "behavior_summary_one_liner": "DEADNS::look: When a player/actor examines the dead-body item, the item sets processing context (info/process-exclude), then emits the short description string \"dead body \" directed at the inspecting process and suspends. This is a short, purely descriptive 'U8P_DEADNS::look' handler.",
+    "external_call_count": 6,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

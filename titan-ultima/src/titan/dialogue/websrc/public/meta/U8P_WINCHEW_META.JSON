@@ -1,0 +1,180 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_WINCHEW.json",
+  "file": "U8P_WINCHEW",
+  "behavior_summary": [
+    "Provides behavior for a winch item: describing it when inspected, guarding use by an item-quality check, and performing a short turning animation/sound/effect sequence when used and usable.",
+    "WINCHEW::look (main handler) makes the item produce a short description ('winch ') to the player/process that triggered the U8P_WINCHEW::look.",
+    "WINCHEW::use checks the item's quality; if quality == 0 it plays a locked SFX and barks 'locked ' to indicate the winch is unusable; if quality > 0 it calls an engine/free routine (FREE::2A56, likely a state change) and spawn()s an animation/effect routine (WINCHEW::0110).",
+    "U8P_WINCHEW::WINCHEW::0110 is a spawned animator that loops a few times, plays a turning sound each outer iteration, cycles the item's visible frames (0..3), spawn()s a small visual/timing effect (FREE::1C19) per frame, and yields/suspends between frames to animate the winch turning."
+  ],
+  "notable_control_flow": [
+    "U8P_WINCHEW::WINCHEW::look: set up item info/exclude, call Item::bark(itemPid, \"winch \"), propagate its return (implied) and suspend/return.",
+    "U8P_WINCHEW::WINCHEW::use: call Item::getQuality(itemPid) -> if zero: playSFX(locked), Item::bark(itemPid, \"locked \"), suspend/return; else: call FREE::2A56 with itemPid and related pointer, then spawn U8P_WINCHEW::WINCHEW::0110(itemPid) to run the animation.",
+    "U8P_WINCHEW::WINCHEW::0110 (spawned): outer loop approx. 3 iterations (0..2): play turning SFX, inner loop frames 0..3: Item::setFrame(itemPid, frame); spawn FREE::1C19(pid, 5, 0); propagate return value (implied), suspend to yield between frames; complete and return when loops finish."
+  ],
+  "open_questions": [
+    "Exact semantics of FREE::2A56 called from WINCHEW::use — appears to be a state change/notification/consumption step but this is inferred from context.",
+    "Precise effect of FREE::1C19 spawned per-frame in the animator — likely a visual or timing effect but specifics are unknown.",
+    "Whether the animation's completion triggers any other game logic (doors, puzzles, or quest flags) outside this script — not observable in this excerpt.",
+    "The exact meaning of the implied return value propagation after Item::bark and FREE::1C19 (how callers interpret these returns) is not fully documented."
+  ],
+  "main_function": {
+    "name": "U8P_WINCHEW::look",
+    "execution_form": "process",
+    "purpose": "Handle the 'U8P_WINCHEW::look' (examine) event for the winch item: prepare item state and make it emit a short description string ('winch ') to the inspecting process/player.",
+    "entry_conditions": [
+      "Event 0 — player/actor inspects or looks at the winch item (triggered by entering the item's U8P_WINCHEW::look/examine area)"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_WINCHEW::look",
+      "kind": "main",
+      "role": "Responds to the 'U8P_WINCHEW::look' event by describing the winch to the player via Item::bark.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_WINCHEW::use",
+      "kind": "helper",
+      "role": "Handle the 'use' event: check Item::getQuality to decide between playing a 'locked' response or initiating the turning animation/effect via FREE::2A56 and spawn.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_WINCHEW::0110",
+      "kind": "helper",
+      "role": "Spawned animation/effect routine: play SFX, cycle frames with Item::setFrame, spawn per-frame effects (FREE::1C19) and suspend between frames to animate the winch turning.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine API: make an item/process emit a short text message to a player/process.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getQuality",
+      "kind": "extern",
+      "role": "Engine API: return item's quality/condition used as a guard for useability.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::setFrame",
+      "kind": "extern",
+      "role": "Engine API: set the visible sprite frame for an item to animate it.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_WINCHEW::playSFX",
+      "kind": "extern",
+      "role": "Engine API: play a sound effect (locked sound, turning sound).",
+      "confidence": "high"
+    },
+    {
+      "name": "spawn",
+      "kind": "extern",
+      "role": "Engine operation to start a spawned process/routine (used to run the animator and per-frame effects).",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::2A56",
+      "kind": "extern",
+      "role": "Free/engine routine called when winch is usable; likely triggers state change or other side-effect before animation (inferred).",
+      "confidence": "medium"
+    },
+    {
+      "name": "FREE::1C19",
+      "kind": "extern",
+      "role": "Free/engine routine spawned per-frame by the animator; likely produces a small transient visual or timing effect (inferred).",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_WINCHEW::use",
+        "callee": "U8P_WINCHEW::0110",
+        "purpose": "Spawn the animation/effect routine that plays sound, cycles frames, and spawns per-frame effects when the winch is used and quality>0.",
+        "confidence": "high"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_WINCHEW::look",
+        "callee": "Item::bark",
+        "purpose": "Emit the item description string 'winch ' to the inspecting process/player.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WINCHEW::use",
+        "callee": "Item::getQuality",
+        "purpose": "Query whether the winch is usable (quality > 0) or locked (quality == 0).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WINCHEW::use",
+        "callee": "U8P_WINCHEW::playSFX",
+        "purpose": "Play a locked sound effect when quality == 0, or used by animator for turning sound when usable.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WINCHEW::use",
+        "callee": "Item::bark",
+        "purpose": "When locked (quality == 0), emit the short message 'locked ' to the user.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WINCHEW::use",
+        "callee": "FREE::2A56",
+        "purpose": "Perform a pre-animation state change/notification when the winch is usable (inferred: mark activation, consume resource, or notify linked objects).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_WINCHEW::0110",
+        "callee": "U8P_WINCHEW::playSFX",
+        "purpose": "Play the turning SFX at the start of each outer animation loop.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WINCHEW::0110",
+        "callee": "Item::setFrame",
+        "purpose": "Change the winch item's visible frame index (0..3) to animate rotation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WINCHEW::0110",
+        "callee": "spawn",
+        "purpose": "Spawn FREE::1C19 per frame to create transient visual/timing effects during the animation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WINCHEW::0110",
+        "callee": "FREE::1C19",
+        "purpose": "Spawned effect/process per animation frame (likely visual or timing related).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "WINCHEW::look",
+    "behavior_summary_one_liner": "Provides behavior for a winch item: describing it when inspected, guarding use by an item-quality check, and performing a short turning animation/sound/effect sequence when used and usable.",
+    "external_call_count": 9,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

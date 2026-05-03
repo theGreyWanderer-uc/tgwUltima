@@ -1,0 +1,77 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_STATUE1.json",
+  "file": "U8P_STATUE1",
+  "behavior_summary": [
+    "STATUE1::look is a short process handler that runs when an actor examines the statue object.",
+    "The handler sets object info/state and excludes the process from further processing (prepares/marks the statue for inspection).",
+    "It invokes Item::bark to emit the literal inspection text \"statue \" directed at the examining actor/process.",
+    "The return value from Item::bark is captured and combined with an 'implies' operation before suspending and returning; this likely influences script continuation or a boolean result but does not change any observed global flags."
+  ],
+  "notable_control_flow": [
+    "Entry is event-driven (U8P_STATUE1::look/examine).",
+    "Script sets object info and then applies a process-exclude action to the statue (state change/cleanup for the object).",
+    "An external call to Item::bark is made; its return is used with an 'implies' opcode which then leads to suspend/return — the implies usage suggests conditional or boolean chaining affecting the immediate return value or continuation.",
+    "No global flags are read or written by the observed snippet."
+  ],
+  "open_questions": [
+    "Exact semantic effect of the 'implies' opcode with the bark return value: does it change control flow, produce a boolean, or affect higher-level script scheduling?",
+    "Precise meaning of the info id set by 'set info' and the scope of 'process exclude' (is the statue permanently excluded or temporarily flagged?).",
+    "Whether the bark return value can carry error/diagnostic info that higher-level code relies upon.",
+    "Whether any other event handlers in the same process rely on the info/ exclusion state set here (not visible in this snippet)."
+  ],
+  "main_function": {
+    "name": "U8P_STATUE1::look",
+    "execution_form": "process",
+    "purpose": "Respond to an actor examining the statue by marking the object state and emitting a short descriptive string ('statue ') to the examiner.",
+    "entry_conditions": [
+      "Event 0 (U8P_STATUE1::look) — triggered when an actor looks at/examines the statue"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_STATUE1::look",
+      "kind": "main",
+      "role": "Process handler for the statue object's 'U8P_STATUE1::look' (examine) event.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item method used to emit/display a short message (bark) to a target process/player.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_STATUE1::look",
+        "callee": "Item::bark",
+        "purpose": "Have the statue process emit the inspection text 'statue ' to the viewing actor/process (display a short description/bark).",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "description",
+    "state-change"
+  ],
+  "quick_facts": {
+    "main_function": "STATUE1::look",
+    "behavior_summary_one_liner": "STATUE1::look is a short process handler that runs when an actor examines the statue object.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

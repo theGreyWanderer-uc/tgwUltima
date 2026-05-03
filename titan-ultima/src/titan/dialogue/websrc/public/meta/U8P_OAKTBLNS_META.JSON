@@ -1,0 +1,73 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_OAKTBLNS.json",
+  "file": "U8P_OAKTBLNS",
+  "behavior_summary": [
+    "Responds to the object's 'U8P_OAKTBLNS::look' (examine) event by preparing local process/context state, constructing the literal label string \"table \", and asking the item system to 'bark' that string to the examining actor.",
+    "The actor/process that triggered the U8P_OAKTBLNS::look is passed through as the target of the bark call so the message is delivered to the correct process/player.",
+    "After calling Item::bark the temporary string is freed and the function inspects the bark return value via an implication-style operation, then suspends/returns."
+  ],
+  "notable_control_flow": [
+    "Event-driven: this runs on the Look/Examine event (Event 0) for the object.",
+    "Performs local process/context setup (inferred 'set info' and 'process exclude') before producing output — likely to mark or temporarily alter processing for the object.",
+    "Allocates/constructs a short literal string (\"table \"), calls Item::bark with the actor PID and that string, frees the string, and then processes the bark return value (implies/pop) before suspending."
+  ],
+  "open_questions": [
+    "Exact semantic effect of the 'set info' and 'process exclude' opcodes used before barking: do they change object's state, prevent reentrancy, or affect rendering?",
+    "The precise meaning and use of the bark return value that is inspected with the 'implies' operation — is it an error code, conditional signal, or interaction flag?",
+    "Whether the actor argument ([BP+06h]) is always a player PID or can be another process type in some contexts."
+  ],
+  "main_function": {
+    "name": "U8P_OAKTBLNS::look",
+    "execution_form": "process",
+    "purpose": "Handle the in-game 'U8P_OAKTBLNS::look' (examine) event for the table-like object by producing the label/description string to the examining actor and performing local process/context setup and cleanup.",
+    "entry_conditions": [
+      "Event 0: invoked when an actor (player/process) looks at or examines the object"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_OAKTBLNS::look",
+      "kind": "main",
+      "role": "Event handler for the object's 'U8P_OAKTBLNS::look' (examine) event. Prepares context, builds label string, calls Item::bark, frees resources, then suspends.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_OAKTBLNS::look",
+        "callee": "Item::bark",
+        "purpose": "Deliver/display the constructed label string (\"table \") to the specified process/actor so the player sees or hears the object's name/description.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_OAKTBLNS::look",
+        "callee": "U8P_OAKTBLNS::engine: set info / process exclude (inferred)",
+        "purpose": "Local process/context adjustments applied before barking; likely marks object state or prevents further processing while handling the event.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup"
+  ],
+  "quick_facts": {
+    "main_function": "OAKTBLNS::look",
+    "behavior_summary_one_liner": "Responds to the object's 'U8P_OAKTBLNS::look' (examine) event by preparing local process/context state, constructing the literal label string \"table \", and asking the item system to 'bark' that string to the examining actor.",
+    "external_call_count": 2,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

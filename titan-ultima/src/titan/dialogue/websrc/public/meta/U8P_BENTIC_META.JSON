@@ -1,0 +1,296 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_BENTIC.json",
+  "file": "U8P_BENTIC",
+  "behavior_summary": [
+    "Defines the behaviour for the NPC Bentic (librarian) covering: what happens when the player 'looks' at the NPC, uses/interacts with the NPC, when the NPC is scheduled to act, how it reacts to actors entering/leaving its immediate trigger region (fast-area), how it responds to theft by the avatar, and how it reacts when attacked or targeted by spells.",
+    "BENTIC::look (main) presents a short identification string to the player. If the NPC is dead it emits a dead-librarian line; otherwise it composes a short identification from global flags (benticName, benticJob) to emit either 'Bentic the Librarian', 'Bentic', 'librarian', or 'man'.",
+    "BENTIC::use manages a conversational menu: greeting variants depend on benticMet and haveAvaName, it clears mentionedPagan at start, asks dialog choices via Item::ask, records whether the player gave their name, sets benticMet/benticName/haveAvaName appropriately, and conditionally offers a book or a story (benticGivenBook, benticStoryTold affect branches).",
+    "BENTIC::schedule periodically queries FREE::28F9 to compute schedule parameters; if alive it spawns METHOD::133F to perform scheduled movement/action.",
+    "BENTIC::enterFastArea/leaveFastArea implement proximity-trigger behavior: enterFastArea performs housekeeping (FREE::2A56) then spawns a reaction routine (U8P_BENTIC::3A25) when alive; leaveFastArea runs housekeeping and, if alive, teleports the NPC to a nearby random location using urandom + Npc::teleport.",
+    "BENTIC::AvatarStoleSomething detects when the avatar steals certain item types (via Item::getType), resets stored references (resetRef), barks a plea to return the item, and spawns the enterFastArea handler so the NPC can react/move toward the actor.",
+    "BENTIC::cast handles being targeted/attacked: it checks for an attacker target, uses randomness (urandom) to decide whether to bark for help and/or spawn a guard-alert (CALGUARD::0080); when no direct target it spawns FREE::1C19 as a reaction helper."
+  ],
+  "notable_control_flow": [
+    "Npc::isDead short-circuits multiple handlers: U8P_BENTIC::look(), schedule(), enterFastArea() and others avoid normal behavior when the NPC is dead (dead-specific dialog or immediate returns).",
+    "Dialog branching in BENTIC::use is driven by global flags (benticMet, benticName, haveAvaName, benticGivenBook, benticStoryTold, mentionedPagan) and by the player choice string returned from Item::ask.",
+    "Asynchronous/spawned behavior is used for movement and reactions: schedule() spawns METHOD::133F; enterFastArea() spawns U8P_BENTIC::3A25; AvatarStoleSomething spawns a facing/animation helper (METHOD::15E7) and enterFastArea; cast() may spawn CALGUARD::0080 or FREE::1C19.",
+    "Randomness (urandom) is used both for teleport offset computation in leaveFastArea and for probabilistic decisions in cast() about calling for help or alerting guards.",
+    "Item::ask returns a string result which is strcmp'd against known options to choose conversation branches; responses update global state flags to affect future interactions."
+  ],
+  "open_questions": [
+    "Exact semantics and bit meanings returned by FREE::28F9 (calendar/availability bits) — the schedule() logic uses them to compute parameters but the concrete mapping of bits to times/actions is not present.",
+    "Precise identity and content of the options presented in Item::ask (strings) and the full set of dialog lines; we have inferred branch labels but not literal dialog beyond 'Bentic the Librarian' and similar identifiers.",
+    "Which concrete item types AvatarStoleSomething tests for (Item::getType compares to constants) — the types are referenced but the constants' human-readable names are not included in the canonical extract.",
+    "Whether and under what exact conditions benticGivenBook is set when a book is given — observed reads and likely writes exist but the exact assignment location/mechanism is inferred.",
+    "The exact behavior and parameters of spawned METHOD::133F and U8P_BENTIC::3A25 (movement vs animation vs state change) beyond the inferred roles."
+  ],
+  "main_function": {
+    "name": "U8P_BENTIC::look",
+    "execution_form": "process",
+    "purpose": "When a player looks at the NPC, produce an appropriate short identification line. If the NPC is dead emit a dead-specific line; otherwise build and emit an identification that may include the NPC's personal name and/or job based on global flags.",
+    "entry_conditions": [
+      "Event 0 — triggered when the Avatar (player) looks at this NPC"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_BENTIC::look",
+      "kind": "main",
+      "role": "Handle 'U8P_BENTIC::look' (examine) action: present short identification or dead line to the viewer; consult benticName and benticJob to choose phrasing.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BENTIC::schedule",
+      "kind": "helper",
+      "role": "Periodic scheduler: read calendar/availability via FREE::28F9, assemble parameters and spawn METHOD::133F to perform scheduled activity (movement/animation).",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_BENTIC::enterFastArea",
+      "kind": "helper",
+      "role": "Fast-area 'enter' trigger: housekeeping via FREE::2A56, then spawn a reaction routine (U8P_BENTIC::3A25) if NPC is alive so it can respond/move.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BENTIC::leaveFastArea",
+      "kind": "helper",
+      "role": "Fast-area 'leave' trigger: always call FREE::2A56; if NPC alive compute random offset (urandom) and teleport NPC nearby (Npc::teleport).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BENTIC::AvatarStoleSomething",
+      "kind": "helper",
+      "role": "React to avatar theft: check stolen item's type (Item::getType), reset stored references (resetRef), bark a plea to return the item, spawn follow-up reaction (enterFastArea) and short animation (METHOD::15E7).",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_BENTIC::cast",
+      "kind": "helper",
+      "role": "Reaction to spells/attacks: check for attacker/target, use urandom for probabilistic decisions to bark for help or 'Help! Sorcerer!', and possibly spawn a guard-alert (CALGUARD::0080) or a reaction helper (FREE::1C19).",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_BENTIC::use",
+      "kind": "helper",
+      "role": "Primary player interaction menu: manage greetings, ask questions (Item::ask), record player name and 'met' state, offer topics (name/reading/job/story) and conditionally offer/take actions around books and stories.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_BENTIC::enterFastArea",
+        "callee": "U8P_BENTIC::3A25",
+        "purpose": "Spawn a reaction/movement routine when an actor enters the NPC's fast-area trigger (NPC reacts/approaches).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BENTIC::AvatarStoleSomething",
+        "callee": "U8P_BENTIC::enterFastArea",
+        "purpose": "After reacting to theft (barking, resetting refs), trigger the enterFastArea logic so NPC will follow or respond; used to sequence theft reaction into movement/behavior.",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_BENTIC::look",
+        "callee": "Npc::isDead",
+        "purpose": "Check whether the NPC is dead to choose dead-specific U8P_BENTIC::look text or normal identification.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BENTIC::look",
+        "callee": "process Item::bark",
+        "purpose": "Emit the short identification string to the viewing player/process.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BENTIC::schedule",
+        "callee": "FREE::28F9",
+        "purpose": "Read calendar/availability or scheduling bits used to construct parameters for scheduled actions.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BENTIC::schedule",
+        "callee": "METHOD::133F (spawned)",
+        "purpose": "Spawn the scheduled action (movement/animation/state change) with parameters assembled from FREE::28F9 results.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BENTIC::enterFastArea",
+        "callee": "FREE::2A56",
+        "purpose": "Housekeeping or state check when an actor enters the fast-area before spawning reactions.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BENTIC::leaveFastArea",
+        "callee": "FREE::2A56",
+        "purpose": "Housekeeping/state helper invoked on leaving the fast-area.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BENTIC::leaveFastArea",
+        "callee": "urandom",
+        "purpose": "Generate random word(s) to compute position offsets for teleportation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BENTIC::leaveFastArea",
+        "callee": "Npc::teleport",
+        "purpose": "Teleport the NPC to a computed nearby coordinate when the fast-area is left.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BENTIC::AvatarStoleSomething",
+        "callee": "Item::getType",
+        "purpose": "Determine stolen item's type for conditional handling (which items trigger the theft reaction).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BENTIC::AvatarStoleSomething",
+        "callee": "U8P_BENTIC::resetRef",
+        "purpose": "Clear stored ownership or map references affected by the theft.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BENTIC::AvatarStoleSomething",
+        "callee": "process Item::bark",
+        "purpose": "Bark a plea to the avatar to return the stolen item.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BENTIC::AvatarStoleSomething",
+        "callee": "Npc::getDir",
+        "purpose": "Get NPC facing to spawn a short facing/animation helper for theft reaction.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BENTIC::AvatarStoleSomething",
+        "callee": "METHOD::15E7 (spawned)",
+        "purpose": "Perform a brief facing/animation action based on NPC direction after a theft.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BENTIC::cast",
+        "callee": "Npc::getTarget",
+        "purpose": "Check whether the NPC has an attacker/target to tailor cast/attack responses.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BENTIC::cast",
+        "callee": "urandom",
+        "purpose": "Make probabilistic decisions about shouting for help or spawning guards.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BENTIC::cast",
+        "callee": "CALGUARD::0080 (spawned)",
+        "purpose": "Alert guards or trigger guard-related behavior when the NPC calls for help.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BENTIC::cast",
+        "callee": "FREE::1C19 (spawned)",
+        "purpose": "Spawn a helper reaction when cast() is invoked without a direct attacker/target (timed/auxiliary reaction).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BENTIC::use",
+        "callee": "process Item::ask",
+        "purpose": "Present dialog choices to the player and receive a string result which drives branching in the interaction menu.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BENTIC::use",
+        "callee": "Item::getName",
+        "purpose": "Retrieve the player's/Avatar's name for personalized responses when the name is known or just provided.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "benticName",
+        "likely_effect": "Controls whether the NPC includes its personal name in U8P_BENTIC::look/use responses and which identification string to present.",
+        "confidence": "high"
+      },
+      {
+        "name": "benticJob",
+        "likely_effect": "Controls whether the NPC includes its job title ('librarian') in U8P_BENTIC::look/use responses.",
+        "confidence": "high"
+      },
+      {
+        "name": "benticMet",
+        "likely_effect": "Indicates whether the NPC has previously met the player; affects greeting branches in use().",
+        "confidence": "high"
+      },
+      {
+        "name": "mentionedPagan",
+        "likely_effect": "Used in dialog branching inside use(); cleared at the start of use() to influence which conversation options are shown.",
+        "confidence": "medium"
+      },
+      {
+        "name": "haveAvaName",
+        "likely_effect": "Indicates whether the player's name is known; read to determine if dialog should be personalized.",
+        "confidence": "high"
+      },
+      {
+        "name": "benticStoryTold",
+        "likely_effect": "Prevents repeating a particular story by determining whether the story option should be offered in use().",
+        "confidence": "medium"
+      },
+      {
+        "name": "benticGivenBook",
+        "likely_effect": "Indicates whether the NPC has already given its book to the player; used to suppress or alter book-offer dialog.",
+        "confidence": "medium"
+      }
+    ],
+    "writes": [
+      {
+        "name": "mentionedPagan",
+        "likely_effect": "Set to 0 at the start of use() to clear any prior mention state; affects subsequent dialog options in the current interaction.",
+        "confidence": "medium"
+      },
+      {
+        "name": "benticMet",
+        "likely_effect": "Set to 1 when the player provides their name or completes certain greeting branches to record that the NPC has met the player.",
+        "confidence": "high"
+      },
+      {
+        "name": "benticName",
+        "likely_effect": "Set in some use() branches to remember that the NPC's name token should be used in future U8P_BENTIC::look/use outputs.",
+        "confidence": "medium"
+      },
+      {
+        "name": "haveAvaName",
+        "likely_effect": "Set to 1 when the player tells their name so future dialog can be personalized.",
+        "confidence": "high"
+      },
+      {
+        "name": "benticGivenBook",
+        "likely_effect": "May be set when the NPC gives its book to the player, preventing repeated offers; exact write location is inferred.",
+        "confidence": "low"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "BENTIC::look",
+    "behavior_summary_one_liner": "Defines the behaviour for the NPC Bentic (librarian) covering: what happens when the player 'looks' at the NPC, uses/interacts with the NPC, when the NPC is scheduled to act, how it reacts to actors entering/leaving its immediate trigger region (fast-area), how it responds to theft by the avatar, and how it reacts when attacked or targeted by spells.",
+    "external_call_count": 19,
+    "flag_read_count": 7,
+    "flag_write_count": 5
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

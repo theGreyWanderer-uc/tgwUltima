@@ -1,0 +1,74 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_AMOSTAT.json",
+  "file": "U8P_AMOSTAT",
+  "behavior_summary": [
+    "AMOSTAT::look handles the game's 'U8P_AMOSTAT::look' (inspect) interaction for the Amoras statue/object.",
+    "When a player (pid) looks at the object (Event 0), the script reads the global flag ancientOnesMet and chooses between two short item bark strings: if ancientOnesMet == 0 it requests Item::bark to display \"Amoras\", otherwise it requests Item::bark to display \"female statue \".",
+    "The script does not modify any global flags; it calls Item::bark, captures its return, performs the implied/pop flow (engine dialog/flow handling), then suspends/returns."
+  ],
+  "notable_control_flow": [
+    "Entry on Event 0 (U8P_AMOSTAT::look) -> read global flag ancientOnesMet -> conditional branch selecting one of two static strings -> call Item::bark(pid, string) on the item instance -> capture return value (retval) and drive implies/pop sequence -> suspend/return.",
+    "No global writes or state changes performed by this script; it is purely descriptive/response logic for inspection."
+  ],
+  "open_questions": [
+    "Is the trailing space in the string \"female statue \" intentional for downstream concatenation/formatting, or an artifact of extraction? (confidence: medium)",
+    "Are there additional events or states where AMOSTAT has different behavior (other events than Event 0) not present in this disassembly? (confidence: low)",
+    "What higher-level quest or dialog logic sets ancientOnesMet and how that affects other objects besides AMOSTAT is outside the scope of this script. (confidence: low)"
+  ],
+  "main_function": {
+    "name": "U8P_AMOSTAT::look",
+    "execution_form": "process",
+    "purpose": "Provide the short examination (U8P_AMOSTAT::look) description for the Amoras statue/item, selecting one of two brief bark messages depending on whether the Ancient Ones have been met.",
+    "entry_conditions": [
+      "Event 0 (U8P_AMOSTAT::look) — triggered when a player/actor looks at or inspects the object.",
+      "Invocation with parameters: pid (viewer/process id) and item pointer/this (object instance at BP+06h)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_AMOSTAT::look",
+      "kind": "main",
+      "role": "Handle the 'U8P_AMOSTAT::look' (examine) event for the Amoras statue; choose description based on ancientOnesMet and call Item::bark.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_AMOSTAT::look",
+        "callee": "Item::bark",
+        "purpose": "Request the item to display a short description/message to the specified player/process (pid). Called with pid and a pointer to the chosen static string.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "ancientOnesMet",
+        "likely_effect": "Guards which bark string to display: 0 -> \"Amoras\", otherwise -> \"female statue \". Does not get modified by this script.",
+        "confidence": "high"
+      }
+    ],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "description",
+    "dialog"
+  ],
+  "quick_facts": {
+    "main_function": "AMOSTAT::look",
+    "behavior_summary_one_liner": "AMOSTAT::look handles the game's 'U8P_AMOSTAT::look' (inspect) interaction for the Amoras statue/object.",
+    "external_call_count": 1,
+    "flag_read_count": 1,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

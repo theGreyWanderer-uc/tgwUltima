@@ -1,0 +1,210 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_APPEAR.json",
+  "file": "U8P_APPEAR",
+  "behavior_summary": [
+    "Implements a floating platform item that provides a short inspect string, changes visual state when an actor enters/leaves its trigger, and runs a timed appearance/disappearance animation which can drop contained items.",
+    "U8P_APPEAR::look answers a player 'U8P_APPEAR::look' by barking the literal \"floating platform \".",
+    "U8P_APPEAR::enterFastArea initializes the platform visual (type/frame) and spawns an asynchronous animation handler (U8P_APPEAR::0136) to play the platform's appear/disappear sequence if globally allowed.",
+    "U8P_APPEAR::leaveFastArea resets visual state and calls a cleanup/free routine (FREE::2A56).",
+    "U8P_APPEAR::release checks the surface weight and, if zero, awards a dexterity bonus via AccumulateDexterity(0x0F).",
+    "U8P_APPEAR::0136 is the multi-step animated sequence: it reads global[0244].makePlatformAppear as a guard, toggles item type/frame, plays SFX, spawns timed FREE::1C19 delays between frame changes, and eventually restores/reset state and (inferred) triggers the content fall loop.",
+    "U8P_APPEAR::02C7 iterates platform contents and calls Item::fall() on each to make items drop when the platform clears."
+  ],
+  "notable_control_flow": [
+    "Global gate: U8P_APPEAR::0136 immediately exits unless global[0244].makePlatformAppear is set — a global enable/disable for the animation.",
+    "Event-driven triggers: enterFastArea and leaveFastArea are fast-area entry/exit handlers that change visuals and start/stop the animation logic.",
+    "Asynchronous animation: U8P_APPEAR::0136 spawns repeated FREE::1C19 delays (timers) between frame/type changes, using Item::getQuality to influence delay length; the sequence is therefore time-sliced across spawned/suspend calls.",
+    "Conditional reward: U8P_APPEAR::release reads Item::getSurfaceWeight() and calls AccumulateDexterity(0x0F) only when the weight is zero.",
+    "Content drop: a loop (U8P_APPEAR::02C7) walks contained slots and calls Item::fall() to drop objects, likely invoked as part of the disappearance path."
+  ],
+  "open_questions": [
+    "Exact semantics and parameters of FREE::1C19 (spawned repeatedly) — appears to be a delay/timer/async helper but precise delay semantics are unclear.",
+    "Exact role and parameters of FREE::2A56 called in leaveFastArea — likely cleanup/deregistration but not proven.",
+    "Whether U8P_APPEAR::02C7 is always invoked by U8P_APPEAR::0136 during disappearance or only in certain branches of the animation sequence (inferred but not explicit).",
+    "Where and when global[0244].makePlatformAppear is set/cleared elsewhere in the game — its source and lifecycle are unknown.",
+    "Precise meaning of Item::getQuality value and how it maps numerically to spawned delay duration (only observed as used multiplicatively)."
+  ],
+  "main_function": {
+    "name": "U8P_APPEAR::look",
+    "execution_form": "process",
+    "purpose": "Produce the short descriptive text for the APPEAR item when an actor examines it (bark \"floating platform \").",
+    "entry_conditions": [
+      "Event 0 (player/actor 'U8P_APPEAR::look' or examine action)"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_APPEAR::look",
+      "kind": "main",
+      "role": "Respond to the 'U8P_APPEAR::look' event by calling Item::bark with the description string.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_APPEAR::enterFastArea",
+      "kind": "helper",
+      "role": "Fast-area entry handler: set visual type/frame and spawn the asynchronous appearance animation (U8P_APPEAR::0136).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_APPEAR::leaveFastArea",
+      "kind": "helper",
+      "role": "Fast-area exit handler: reset type/frame and call cleanup FREE::2A56.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_APPEAR::release",
+      "kind": "helper",
+      "role": "Release event handler: check surface weight and award dexterity via AccumulateDexterity if weight == 0.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_APPEAR::0136",
+      "kind": "helper",
+      "role": "Spawned asynchronous animation and timing driver for the platform's appear/disappear sequence (frame changes, type toggles, SFX, delays).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_APPEAR::02C7",
+      "kind": "helper",
+      "role": "Iterate contained items and call Item::fall() on each to drop them off the platform.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine-provided call to display a short message or description; used by U8P_APPEAR::look.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::setType",
+      "kind": "extern",
+      "role": "Change the item's visual/behavioral type; used to switch platform graphics/states.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::setFrame",
+      "kind": "extern",
+      "role": "Set the item's animation frame index.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_APPEAR::enterFastArea",
+        "callee": "U8P_APPEAR::0136",
+        "purpose": "Spawn the asynchronous animation/appearance handler after setting initial type/frame.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_APPEAR::0136",
+        "callee": "U8P_APPEAR::02C7",
+        "purpose": "Inferred: trigger the content-fall loop to drop items as part of disappearance; observed by proximity of usage in the animation sequence.",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_APPEAR::look",
+        "callee": "Item::bark",
+        "purpose": "Display the text \"floating platform \" to the examining actor/process.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_APPEAR::enterFastArea",
+        "callee": "Item::setType",
+        "purpose": "Set the platform's visual type to 0x02AF when actor enters the trigger.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_APPEAR::enterFastArea",
+        "callee": "Item::setFrame",
+        "purpose": "Set the platform's initial frame (frame 5) prior to spawning animation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_APPEAR::leaveFastArea",
+        "callee": "Item::setType",
+        "purpose": "Restore/reset platform visual type on exit (0x02AF observed).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_APPEAR::leaveFastArea",
+        "callee": "Item::setFrame",
+        "purpose": "Reset frame to 5 on leaving the area.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_APPEAR::leaveFastArea",
+        "callee": "FREE::2A56",
+        "purpose": "Call cleanup/free routine when actor leaves the fast-area (likely deregistration/cleanup).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_APPEAR::release",
+        "callee": "Item::getSurfaceWeight",
+        "purpose": "Read surface weight to decide whether to award dexterity.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_APPEAR::release",
+        "callee": "U8P_APPEAR::AccumulateDexterity",
+        "purpose": "Award 0x0F dexterity when surface weight is zero.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_APPEAR::0136",
+        "callee": "Item::getQuality",
+        "purpose": "Read quality value to influence timing/delay arguments for spawned FREE::1C19 calls.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_APPEAR::0136",
+        "callee": "spawn FREE::1C19",
+        "purpose": "Spawn repeated timed/delay helpers between frame/type changes in the animation sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_APPEAR::0136",
+        "callee": "U8P_APPEAR::playSFX",
+        "purpose": "Play a sound effect synchronized with frame/type changes during animation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_APPEAR::02C7",
+        "callee": "Item::fall",
+        "purpose": "Make each contained sub-item fall/drop off the platform.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "global[0244].makePlatformAppear",
+        "likely_effect": "Guards the animation: when false the spawned animation handler (U8P_APPEAR::0136) exits immediately; when true the appear/disappear animation proceeds.",
+        "confidence": "high"
+      }
+    ],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_APPEAR::look",
+    "behavior_summary_one_liner": "Implements a floating platform item that provides a short inspect string, changes visual state when an actor enters/leaves its trigger, and runs a timed appearance/disappearance animation which can drop contained items.",
+    "external_call_count": 12,
+    "flag_read_count": 1,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

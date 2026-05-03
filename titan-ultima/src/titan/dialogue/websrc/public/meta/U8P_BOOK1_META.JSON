@@ -1,0 +1,231 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_BOOK1.json",
+  "file": "U8P_BOOK1",
+  "behavior_summary": [
+    "This script collection implements in-game book/page handlers: each function prepares metadata for a specific book entry, constructs a literal text payload (poem, lore, or spell description), and invokes the engine Book::read routine to display that text to the player.",
+    "After Book::read returns the handler frees the temporary string, propagates the return value, and then suspends/ends the script execution for that read event.",
+    "Handlers are event-driven: they run in response to a player (or actor) activating/reading the associated book object and do not perform world-state logic beyond preparing and displaying text."
+  ],
+  "notable_control_flow": [
+    "U8P_BOOK1::BOOK1::0080 (main) and most helpers follow the sequence: set book metadata -> push pid (player id) -> push literal text -> str-to-ptr -> call Book::read(text, object_handle) -> free temporary string -> push/return Book::read retval -> suspend.",
+    "U8P_BOOK1::BOOK1::029A appears to be an exception: it sets metadata using the object handle and returns immediately (no Book::read call observed).",
+    "No global flags are written/read by the functions in this file (behavior is self-contained display logic)."
+  ],
+  "open_questions": [
+    "Is BP+06h always a book object handle or, in some cases, a different calling-context PID? The code consistently forwards it to Book::read but exact type is inferred.",
+    "What exact engine info is set by the 'set metadata' operations (opcode constants are observed but their semantic names are not fully canonicalized here)?",
+    "Are any of these book handlers reachable by automated triggers (timers/area events) or strictly by explicit player activation? The disassembly strongly suggests activation handlers but exact entry mapping is inferred."
+  ],
+  "main_function": {
+    "name": "U8P_BOOK1::0080",
+    "execution_form": "process",
+    "purpose": "Handle the player 'read' activation for a particular book entry: set book metadata, push player id and a long multi-line string (poem/lore), call Book::read to display the text, free the temporary string, return the Book::read result, and suspend.",
+    "entry_conditions": [
+      "Invoked when the player (or relevant actor) activates/reads the corresponding book object (inferred from push-of-pid and call to Book::read)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_BOOK1::0080",
+      "kind": "main",
+      "role": "Primary book-entry handler that displays a long poem/lore via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::029A",
+      "kind": "helper",
+      "role": "Metadata-only handler: sets info for the book/object and returns without invoking Book::read (appears to be a minimal entry).",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_BOOK1::02A6",
+      "kind": "helper",
+      "role": "Book-entry handler: sets metadata and displays a short poem about 'Fred the demon' via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::03BA",
+      "kind": "helper",
+      "role": "Book-entry handler: sets metadata and displays a short story/string (cheese story) via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::0621",
+      "kind": "helper",
+      "role": "Book-entry handler: displays a long lore text about Pagans/Zealans/Titans via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::1103",
+      "kind": "helper",
+      "role": "Book-entry handler: displays necromancer lore (Galious/Moriens) via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::1D4A",
+      "kind": "helper",
+      "role": "Book-entry handler: displays 'On Sorcerous Ways' lore via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::289F",
+      "kind": "helper",
+      "role": "Book-entry handler: displays 'The Art of Flame' sorcery lore via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::33C4",
+      "kind": "helper",
+      "role": "Book-entry handler: displays 'The Tongue of Flame' lore via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::39C9",
+      "kind": "helper",
+      "role": "Book-entry handler: displays a short spell description 'Extinguish' via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::3B45",
+      "kind": "helper",
+      "role": "Book-entry handler: displays the 'Ignite' spell entry via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::3CDE",
+      "kind": "helper",
+      "role": "Book-entry handler: displays the 'Endure Heat' spell entry via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::3E82",
+      "kind": "helper",
+      "role": "Book-entry handler: displays the 'Flash' spell entry via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::3FBD",
+      "kind": "helper",
+      "role": "Book-entry handler: displays the 'Flame Bolt' spell entry via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::4189",
+      "kind": "helper",
+      "role": "Book-entry handler: begins the 'Fire Shield' spell entry (string truncated in disassembly) and displays it via Book::read.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_BOOK1::0080",
+        "callee": "Book::read(char*)",
+        "purpose": "Render/display the pushed multi-line text to the player and return a result; called with the temporary string pointer and the book/object handle (BP+06h).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BOOK1::02A6",
+        "callee": "Book::read(char*)",
+        "purpose": "Display a short poem/string for this book entry and return a result.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BOOK1::03BA",
+        "callee": "Book::read(char*)",
+        "purpose": "Display a story-string (cheese story) to the reader.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BOOK1::0621",
+        "callee": "Book::read(char*)",
+        "purpose": "Display a long lore text about Pagans/Zealans/Titans.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BOOK1::1103",
+        "callee": "Book::read(char*)",
+        "purpose": "Display necromancer lore (Galious/Moriens).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BOOK1::1D4A",
+        "callee": "Book::read(char*)",
+        "purpose": "Display 'On Sorcerous Ways' lore.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BOOK1::289F",
+        "callee": "Book::read(char*)",
+        "purpose": "Display 'The Art of Flame' lore.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BOOK1::33C4",
+        "callee": "Book::read(char*)",
+        "purpose": "Display 'The Tongue of Flame' lore.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BOOK1::39C9",
+        "callee": "Book::read(char*)",
+        "purpose": "Display the 'Extinguish' spell description.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BOOK1::3B45",
+        "callee": "Book::read(char*)",
+        "purpose": "Display the 'Ignite' spell description.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BOOK1::3CDE",
+        "callee": "Book::read(char*)",
+        "purpose": "Display the 'Endure Heat' spell description.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BOOK1::3E82",
+        "callee": "Book::read(char*)",
+        "purpose": "Display the 'Flash' spell description.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BOOK1::3FBD",
+        "callee": "Book::read(char*)",
+        "purpose": "Display the 'Flame Bolt' spell description.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BOOK1::4189",
+        "callee": "Book::read(char*)",
+        "purpose": "Display the 'Fire Shield' spell entry (string truncated in the disassembly sample).",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_BOOK1::BOOK1::0080",
+    "behavior_summary_one_liner": "This script collection implements in-game book/page handlers: each function prepares metadata for a specific book entry, constructs a literal text payload (poem, lore, or spell description), and invokes the engine Book::read routine to display that text to the player.",
+    "external_call_count": 14,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

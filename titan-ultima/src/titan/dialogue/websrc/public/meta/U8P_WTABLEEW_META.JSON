@@ -1,0 +1,93 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_WTABLEEW.json",
+  "file": "U8P_WTABLEEW",
+  "behavior_summary": [
+    "Provides gameplay handlers for a table object. The primary 'U8P_WTABLEEW::look' handler makes the object produce a short description string ('table ') to the viewer and prepares the object for examination by setting item info and process-exclude state.",
+    "Includes a hit handler (gotHit) that, under a specific condition on its second argument (inferred sentinel), changes the object's visual frame to 1 to reflect a reaction to being hit.",
+    "All external interactions are local to the item: emitting text via Item::bark and changing appearance via Item::setFrame. No global game flags are modified by these handlers in this excerpt."
+  ],
+  "notable_control_flow": [
+    "U8P_WTABLEEW::look: set item info/process-exclude → invoke Item::bark(this, \"table \") → free temporary string → push/handle retval/implies → suspend briefly (typical U8P_WTABLEEW::look handler lifecycle).",
+    "U8P_WTABLEEW::gotHit: set item info/process-exclude → examine second parameter; only when it matches the inferred sentinel condition does it call Item::setFrame(this, 1); otherwise returns without changing frame."
+  ],
+  "open_questions": [
+    "Exact meaning and numeric value of the 'second parameter' to gotHit that triggers the frame change (disassembly implies a sentinel like -1/0xFFFF but this is inferred).",
+    "Whether U8P_WTABLEEW::look receives an explicit viewer/process id (pid) as a parameter or uses an implicit 'this' PID for Item::bark in this engine variant (inferred but not explicit in the excerpt).",
+    "Precise semantics and id of the 'set info' / 'process-exclude' operation applied at the start of handlers (what info key is set and how exclusion influences later processing).",
+    "Why the U8P_WTABLEEW::look handler performs the implies/pop sequence before suspend (engine control detail—likely standard event return behavior but implementation specifics are unclear)."
+  ],
+  "main_function": {
+    "name": "U8P_WTABLEEW::look",
+    "execution_form": "process",
+    "purpose": "Handle the object's examination by a player/actor: prepare object info/exclusion state and emit the short description string 'table ' via Item::bark, then complete the handler lifecycle (return value handling and suspend).",
+    "entry_conditions": [
+      "Event 0 (U8P_WTABLEEW::look) — triggered when a player/actor looks at or examines the table object (area/interaction event)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_WTABLEEW::look",
+      "kind": "main",
+      "role": "Primary 'U8P_WTABLEEW::look' event handler for the table object; prepares state and emits description text.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_WTABLEEW::gotHit",
+      "kind": "helper",
+      "role": "Hit event handler: conditionally changes the object's visual frame to indicate being struck (guarded by a specific second-parameter check).",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine used to present a short text message or 'bark' from the item (used for object descriptions and short messages).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::setFrame",
+      "kind": "extern",
+      "role": "Engine/item routine used to change an item's animation/visual frame (used by gotHit to set frame 1).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_WTABLEEW::look",
+        "callee": "Item::bark",
+        "purpose": "Emit the table's short description string 'table ' to the viewer/process (UI feedback for examine/U8P_WTABLEEW::look).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WTABLEEW::gotHit",
+        "callee": "Item::setFrame",
+        "purpose": "Change the table object's visual/animation frame to 1 when the hit handler's second-parameter sentinel condition is met (visual reaction to hit).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "WTABLEEW::look",
+    "behavior_summary_one_liner": "Provides gameplay handlers for a table object. The primary 'U8P_WTABLEEW::look' handler makes the object produce a short description string ('table ') to the viewer and prepares the object for examination by setting item info and process-exclude state.",
+    "external_call_count": 2,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

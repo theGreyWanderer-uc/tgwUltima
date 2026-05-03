@@ -1,0 +1,158 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_BRKWIND.json",
+  "file": "U8P_BRKWIND",
+  "behavior_summary": [
+    "When an item receives the U8P_BRKWIND::hatch event (Event 7) U8P_BRKWIND::BRKWIND::hatch initializes the item and always spawns an initial visual/effect helper (FREE::1C19) with a fixed parameter, then suspends briefly.",
+    "After the initial spawn the U8P_BRKWIND::hatch handler checks a global guard flag (breakWind) and the item's height (Item::getZ()). If breakWind is false and the item's Z >= 0x70 the handler launches a repeating worker U8P_BRKWIND::BRKWIND::00CA on that item; otherwise it returns.",
+    "The worker U8P_BRKWIND::BRKWIND::00CA sets the global breakWind flag while active, repeatedly plays one of two wind/break SFX chosen by urandom, spawns additional FREE::1C19 effects with a small random offset, suspends between cycles, and continues as long as the item's Z >= 0x70. When Z falls below 0x70 the worker clears breakWind and stops.",
+    "Together these functions create a height-triggered wind/break visual+audio effect attached to an item and use a global flag to prevent multiple concurrent wind workers."
+  ],
+  "notable_control_flow": [
+    "Entry: U8P_BRKWIND::BRKWIND::hatch is triggered by Event 7 (U8P_BRKWIND::hatch). It unconditionally spawns a FREE::1C19 effect and suspends once before any gating logic.",
+    "Guard: After the initial effect the U8P_BRKWIND::hatch handler reads breakWind (inverted) and the item Z coordinate; both conditions must be true (breakWind == false AND Z >= 0x70) to spawn the worker U8P_BRKWIND::BRKWIND::00CA.",
+    "Worker loop: U8P_BRKWIND::BRKWIND::00CA is a repeating process that sets breakWind=1, performs randomized SFX and effect spawns, suspends, and re-evaluates Item::getZ() each cycle; it clears breakWind and returns when Z < 0x70."
+  ],
+  "open_questions": [
+    "What exact visual role and parameter semantics does FREE::1C19 have (the parameter 0x3C and later pid+rand+0x78 are inferred to select variants/positions but are not confirmed)?",
+    "Is breakWind a global flag intended to prevent concurrent workers across all instances world-wide, or is it scoped per-area/scene (observed as a global read/write but exact intended scope is unclear)?",
+    "Is 0x70 a height threshold tied to a specific gameplay surface/altitude or a calibrated visual range (the numeric threshold is observed but its gameplay mapping is inferred)?",
+    "Are there other code paths that clear or set breakWind outside this worker, creating interactions with other scripts?"
+  ],
+  "main_function": {
+    "name": "U8P_BRKWIND::hatch",
+    "execution_form": "process",
+    "purpose": "Handle the U8P_BRKWIND::hatch event for the item: initialize and spawn an immediate visual/effect, then conditionally start a repeating wind/break worker if no other worker is active and the item is at/above a height threshold.",
+    "entry_conditions": [
+      "Event 7 (U8P_BRKWIND::hatch) on the item.",
+      "Always runs its initial effect spawn irrespective of other state.",
+      "Spawns U8P_BRKWIND::BRKWIND::00CA only when global breakWind is false AND Item::getZ() >= 0x70."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_BRKWIND::hatch",
+      "kind": "main",
+      "role": "Event handler for U8P_BRKWIND::hatch (Event 7); spawns initial effect and may spawn the repeating worker.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BRKWIND::00CA",
+      "kind": "helper",
+      "role": "Repeating worker attached to the item that drives the wind/break audio-visual loop while the item is above the height threshold and manages the breakWind guard flag.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getZ",
+      "kind": "extern",
+      "role": "Query the item's Z (height) used for threshold checks in both U8P_BRKWIND::hatch and the worker.",
+      "confidence": "high"
+    },
+    {
+      "name": "urandom",
+      "kind": "extern",
+      "role": "Provide small random values used to pick sound variants and vary spawn parameters/timing.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BRKWIND::playSFX",
+      "kind": "extern",
+      "role": "Play wind/break sound effects (two close variants observed).",
+      "confidence": "high"
+    },
+    {
+      "name": "spawn FREE::1C19",
+      "kind": "extern",
+      "role": "Spawn a visual/particle helper/effect used for the wind/break animation.",
+      "confidence": "high"
+    },
+    {
+      "name": "spawn U8P_BRKWIND::BRKWIND::00CA",
+      "kind": "extern",
+      "role": "Start the repeating worker process attached to the item (invoked by U8P_BRKWIND::hatch).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_BRKWIND::hatch",
+        "callee": "U8P_BRKWIND::00CA",
+        "purpose": "Start the repeating wind/break worker when breakWind is false and item Z >= 0x70.",
+        "confidence": "high"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_BRKWIND::hatch",
+        "callee": "spawn FREE::1C19",
+        "purpose": "Create an immediate visual/effect instance on U8P_BRKWIND::hatch (parameter 0x3C).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BRKWIND::hatch",
+        "callee": "Item::getZ",
+        "purpose": "Query item height to decide whether to spawn the repeating worker.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BRKWIND::00CA",
+        "callee": "Item::getZ",
+        "purpose": "Re-check item height each worker cycle to decide whether to continue or stop the loop.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BRKWIND::00CA",
+        "callee": "urandom",
+        "purpose": "Generate small random values to choose between two SFX variants and to offset spawned effect parameters/timing.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BRKWIND::00CA",
+        "callee": "U8P_BRKWIND::playSFX",
+        "purpose": "Play a wind/break sound (variant selected by urandom) during each worker cycle.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BRKWIND::00CA",
+        "callee": "spawn FREE::1C19",
+        "purpose": "Spawn additional visual/effect instances with a randomized parameter derived from pid+urandom+0x78 to vary appearance/placement.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "breakWind",
+        "likely_effect": "Used by U8P_BRKWIND::hatch as a guard: U8P_BRKWIND::hatch reads and inverts breakWind to avoid spawning a duplicate/redundant worker if one is already running.",
+        "confidence": "high"
+      }
+    ],
+    "writes": [
+      {
+        "name": "breakWind",
+        "likely_effect": "Set to 1 by the worker U8P_BRKWIND::BRKWIND::00CA while active and cleared to 0 when the worker stops (when item Z < 0x70); functions as a global guard to prevent concurrent workers.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_BRKWIND::BRKWIND::hatch",
+    "behavior_summary_one_liner": "When an item receives the U8P_BRKWIND::hatch event (Event 7) U8P_BRKWIND::BRKWIND::hatch initializes the item and always spawns an initial visual/effect helper (FREE::1C19) with a fixed parameter, then suspends briefly.",
+    "external_call_count": 6,
+    "flag_read_count": 1,
+    "flag_write_count": 1
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

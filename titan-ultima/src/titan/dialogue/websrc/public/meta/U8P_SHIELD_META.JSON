@@ -1,0 +1,70 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_SHIELD.json",
+  "file": "U8P_SHIELD",
+  "behavior_summary": [
+    "Handles the 'U8P_SHIELD::look' (examine) event for a shield item instance. When the item is examined it prepares per-item context (via engine 'set info' / 'process exclude' semantics), requests the item to produce its descriptive text prefixed with the literal string \"shield \", captures the result from that request, performs cleanup, and returns/suspends with the captured result.",
+    "The handler is local to the shield item/process and does not read or write any global game flags in this snippet.",
+    "Item::bark is used to build/display the visible description; the bark call's return value is captured and propagated as the handler's result (likely indicating success or whether the message was consumed)."
+  ],
+  "notable_control_flow": [
+    "Entry on Event 0 (U8P_SHIELD::look/examine) for the shield item (triggered when an actor inspects the shield).",
+    "Set item-level context (inferred 'set info' and 'process exclude') before producing output — likely to mark temporary state so the item behaves correctly while barking.",
+    "Call out-of-process behavior via Item::bark with two parameters: the shield's process/id and the constant prefix \"shield \".",
+    "Capture the return value from Item::bark into a local (retval), clean up temporaries (free/adjust stack), then return/suspend while propagating that retval to the caller."
+  ],
+  "open_questions": [
+    "What exact effect does the 'set info' with the pushed info id and the subsequent 'process exclude' have at runtime for this shield instance? (inferred only)",
+    "What is the precise semantic type and meaning of Item::bark's return value (boolean success vs. consumed vs. other status)?",
+    "Are there any additional side effects on other systems (logs, quest state, UI focus) triggered by the bark call that are outside this snippet?"
+  ],
+  "main_function": {
+    "name": "U8P_SHIELD::look",
+    "execution_form": "process",
+    "purpose": "Respond to an examine/U8P_SHIELD::look event on a shield item by preparing item context and invoking the item's bark routine to present a description prefixed with \"shield \", then return the bark result.",
+    "entry_conditions": [
+      "Event 0 (U8P_SHIELD::look) — triggered when a player or actor inspects the shield (area/interaction U8P_SHIELD::look trigger)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_SHIELD::look",
+      "kind": "main",
+      "role": "Item examine handler for shield instances; orchestrates context setup and calls Item::bark to display description.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_SHIELD::look",
+        "callee": "Item::bark",
+        "purpose": "Request the item process to produce/display a description string for the shield. Called with the shield's process/id and the literal prefix string \"shield \". The bark return value is captured and propagated by the handler.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "SHIELD::look",
+    "behavior_summary_one_liner": "Handles the 'U8P_SHIELD::look' (examine) event for a shield item instance. When the item is examined it prepares per-item context (via engine 'set info' / 'process exclude' semantics), requests the item to produce its descriptive text prefixed with the literal string \"shield \", captures the result from that request, performs cleanup, and returns/suspends with the captured result.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

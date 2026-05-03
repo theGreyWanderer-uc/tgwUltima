@@ -1,0 +1,238 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_TARNA.json",
+  "file": "U8P_TARNA",
+  "behavior_summary": [
+    "This script implements the NPC Tarna's short examination response, area-triggered behavior adjustments, scheduled patrol spawning, and the primary dialogue/interaction handler.",
+    "TARNA::look (examine) chooses whether to label Tarna by name or as a generic 'guard' and issues a short bark (displayed text) to the examining player.",
+    "TARNA::enterFastArea and TARNA::leaveFastArea manage fast-area entry/exit semantics: enterFastArea sets Tarna's activity to a default when available, and leaveFastArea cleans up per-process area info.",
+    "TARNA::schedule chooses and spawns a movement/behavior METHOD (patrol) based on world state and a random/choice utility, but is suppressed if Toran is dead or Tarna is dead.",
+    "TARNA::use builds a context-sensitive dialogue menu from many global story flags, issues appropriate barks (including urgent 'Titan' warnings when certain counters are high), may spawn behavior/animation methods, and persistently records that Tarna knows the player's name when applicable."
+  ],
+  "notable_control_flow": [
+    "Examine (Event 0) -> TARNA::look: read tarnaName global flag to decide label and call Item::bark(pid, string, this).",
+    "Area entry -> U8P_TARNA::TARNA::enterFastArea: abort early if toranDead or Npc::isDead(); otherwise call Npc::cSetActivity(pid, 0, this).",
+    "Area exit -> U8P_TARNA::TARNA::leaveFastArea: call FREE::2A56 to free stored per-process area info.",
+    "Scheduling path -> U8P_TARNA::TARNA::schedule: if Tarna alive and toranDead is false, repeatedly call FREE::28F9 (choice/random) to pick a schedule variant and spawn METHOD::133F with chosen parameters.",
+    "Use/Conversation -> U8P_TARNA::TARNA::use: compute an urgency counter from hydrosFree/pyrosFree/hasHeart; if high, bark an urgent line and spawn METHOD::1090; otherwise assemble an slist menu using flags (tarnaMet, tarnaAvaName, devonInRule, hasBreath, saidOrlok, tarnaJob, tarnaTenebraed), present it via Item::ask, interpret player replies (string comparisons), issue barks, spawn follow-up METHODS (METHOD::0BCF, METHOD::1090), and set tarnaName when the player gives their name."
+  ],
+  "open_questions": [
+    "Exact mapping of schedule variants to world locations/waypoints used by METHOD::133F (details of parameters chosen after FREE::28F9 are inferred but not explicit).",
+    "Precise text and full set of menu strings appended to slist (some strings and their exact branching are inferred rather than exhaustively enumerated).",
+    "Whether U8P_TARNA::TARNA::schedule is ever invoked directly from U8P_TARNA::TARNA::use or only from NPC init/idle logic (no explicit direct call proven in the excerpt).",
+    "The exact meaning and format of the per-process info object allocated on enterFastArea (structure used by FREE::2A56 on leave) is not fully specified."
+  ],
+  "main_function": {
+    "name": "U8P_TARNA::look",
+    "execution_form": "process",
+    "purpose": "Handle an immediate 'U8P_TARNA::look' (examine) event for the NPC Tarna: choose whether to display her proper name or a generic 'guard' label and emit a short bark to the examining player.",
+    "entry_conditions": [
+      "Event 0 (U8P_TARNA::look) — invoked when the player examines or 'looks at' the NPC"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_TARNA::look",
+      "kind": "main",
+      "role": "Provides the NPC's examine/short-description response and issues a bark to the examining player.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_TARNA::schedule",
+      "kind": "helper",
+      "role": "Decide and spawn a scheduled patrol/behavior METHOD (METHOD::133F) based on random choice and world state; suppressed if toranDead or NPC is dead.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_TARNA::enterFastArea",
+      "kind": "helper",
+      "role": "Triggered when an actor enters Tarna's fast-area: if available, set Tarna's activity to a default and record per-process area info.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_TARNA::leaveFastArea",
+      "kind": "helper",
+      "role": "Triggered on fast-area exit: clear/free per-process area info created on entry.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_TARNA::use",
+      "kind": "helper",
+      "role": "Primary dialogue/interaction handler (Event 1): build dialogue menus from many global flags, handle replies, issue barks, spawn follow-ups, and set persistent knowledge flags like tarnaName.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_TARNA::use",
+        "callee": "U8P_TARNA::schedule",
+        "purpose": "Possibly spawn or refresh scheduled behavior after conversation ends (inferred; scheduling logic exists but direct call from use is not confirmed in the snippet).",
+        "confidence": "low"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_TARNA::look",
+        "callee": "Item::bark",
+        "purpose": "Display the NPC's short examine text to the player (e.g., 'Tarna' or 'guard').",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TARNA::schedule",
+        "callee": "Process FREE::28F9",
+        "purpose": "Choose among schedule/patrol variants (random/choice utility) to determine parameters for spawning METHOD::133F.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TARNA::schedule",
+        "callee": "METHOD::133F (spawn)",
+        "purpose": "Spawn the chosen patrol/movement/behavior routine for Tarna with selected parameters.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TARNA::enterFastArea",
+        "callee": "Npc::isDead",
+        "purpose": "Check whether Tarna is dead; if so, abort area-entry behavior.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TARNA::enterFastArea",
+        "callee": "Npc::cSetActivity",
+        "purpose": "Set Tarna's activity state (activity 0) when the player enters the fast-area and Tarna is available.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TARNA::leaveFastArea",
+        "callee": "Process FREE::2A56",
+        "purpose": "Free/clear stored per-process area info set on entry (cleanup).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TARNA::use",
+        "callee": "Item::bark",
+        "purpose": "Emit dialogue lines / greetings / information lines during conversation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TARNA::use",
+        "callee": "METHOD::0BCF (spawn)",
+        "purpose": "Spawn a short method at use() start, likely to animate or prepare Tarna for conversation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TARNA::use",
+        "callee": "METHOD::1090 (spawn)",
+        "purpose": "Spawn a follow-up method after urgent barks to animate or continue Tarna's urgent response.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TARNA::use",
+        "callee": "Item::ask",
+        "purpose": "Present the built dialogue/choice list (slist) to the player and receive their selection.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TARNA::use",
+        "callee": "U8P_TARNA::getName",
+        "purpose": "Retrieve the player's name to personalize greetings when tarnaAvaName is set.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TARNA::use",
+        "callee": "Npc::getMap",
+        "purpose": "Check Tarna's current map ID to route map-specific dialogue branches (e.g., devonInRule behavior).",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "toranDead",
+        "likely_effect": "Suppress scheduling and area-entry behaviors; if true, Tarna won't spawn patrols or change behavior on area entry.",
+        "confidence": "high"
+      },
+      {
+        "name": "tarnaName",
+        "likely_effect": "Decide whether to display Tarna's proper name versus a generic 'guard' label and influence greeting phrasing.",
+        "confidence": "high"
+      },
+      {
+        "name": "tarnaMet",
+        "likely_effect": "Gate whether Tarna runs an initial 'met' introduction branch versus a repeat greeting; used to spawn a special method when unset.",
+        "confidence": "high"
+      },
+      {
+        "name": "tarnaAvaName",
+        "likely_effect": "If set, make Tarna use the avatar/player's name in greetings (triggers getName()).",
+        "confidence": "high"
+      },
+      {
+        "name": "tarnaJob",
+        "likely_effect": "If unset, add 'Tell me about your job' to the information menu options.",
+        "confidence": "medium"
+      },
+      {
+        "name": "tarnaTenebraed",
+        "likely_effect": "Gate the presence of a 'Tell me about Tenebrae' information option in the dialogue menu.",
+        "confidence": "medium"
+      },
+      {
+        "name": "hydrosFree",
+        "likely_effect": "Increment an internal urgency counter contributing to an urgent/titan response when combined with other flags.",
+        "confidence": "high"
+      },
+      {
+        "name": "pyrosFree",
+        "likely_effect": "Increment the urgency counter used to decide an alarmed bark branch.",
+        "confidence": "high"
+      },
+      {
+        "name": "hasHeart",
+        "likely_effect": "Contribute to the urgency counter and influence whether the 'Titans' urgent branch triggers.",
+        "confidence": "high"
+      },
+      {
+        "name": "hasBreath",
+        "likely_effect": "Gate certain informational replies (e.g., whether healing-related topics are valid).",
+        "confidence": "medium"
+      },
+      {
+        "name": "devonInRule",
+        "likely_effect": "When true (and possibly map-specific), Tarna refuses to provide information because she is busy, changing dialogue flow.",
+        "confidence": "high"
+      },
+      {
+        "name": "saidOrlok",
+        "likely_effect": "Gate adding the 'Who is Orlok?' information option to the dialogue menu.",
+        "confidence": "medium"
+      }
+    ],
+    "writes": [
+      {
+        "name": "tarnaName",
+        "likely_effect": "Set when the player tells Tarna their name; records that Tarna 'knows' the player and changes subsequent greeting phrasing.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_TARNA::TARNA::look",
+    "behavior_summary_one_liner": "This script implements the NPC Tarna's short examination response, area-triggered behavior adjustments, scheduled patrol spawning, and the primary dialogue/interaction handler.",
+    "external_call_count": 12,
+    "flag_read_count": 12,
+    "flag_write_count": 1
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

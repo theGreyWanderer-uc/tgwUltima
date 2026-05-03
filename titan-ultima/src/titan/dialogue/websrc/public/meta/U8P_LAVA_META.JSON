@@ -1,0 +1,136 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_LAVA.json",
+  "file": "U8P_LAVA",
+  "behavior_summary": [
+    "Provides the in-game behavior for a lava object: when a player 'looks' at the lava it reports a short description ('molten rock ').",
+    "Separately, a coroutine (helper) drives the lava object's visual/audio lifecycle across ticks: it reads and advances the animation frame, periodically spawns a small auxiliary effect (FREE::1C19) with variant bytes, and destroys the lava item when the animation reaches a terminal frame.",
+    "The coroutine uses suspend points so its loop runs over multiple engine ticks and uses small-byte locals as timing/variant markers to choose when to spawn effects and how to step frames."
+  ],
+  "notable_control_flow": [
+    "U8P_LAVA::LAVA::look: on Event 0 (examine/U8P_LAVA::look) calls Item::bark with the literal 'molten rock ' and then suspends once before returning. (high)",
+    "U8P_LAVA::LAVA::00AF: runs as a coroutine (multi-tick). It initially spawns FREE::1C19 once, then loops: getFrame -> adjust local frame counter -> setFrame -> conditionally spawn FREE::1C19 with a byte variant -> suspend and repeat. When a terminal frame condition is reached it calls Item::destroy. (high)",
+    "Timing/variant decisions are driven by byte local [BP-04h] and a boolean flag [BP-05h], which select different byte constants (0x07, 0x20, 0x2D) and different frame progression behavior. (medium)"
+  ],
+  "open_questions": [
+    "What exact visual/sound effect FREE::1C19 produces (spawn inferred as particle/sound). (low)",
+    "Precise frame index values and which frame is considered 'terminal' are not shown in the excerpt; exact thresholds are inferred from comparisons but not concretely named. (medium)",
+    "How and where the coroutine U8P_LAVA::LAVA::00AF is started in the game world (trigger or spawn by other code) is not present in the excerpt. (medium)"
+  ],
+  "main_function": {
+    "name": "U8P_LAVA::look",
+    "execution_form": "process",
+    "purpose": "Handle the 'U8P_LAVA::look' (examine) event for the lava item by emitting a short description ('molten rock ') so the player sees that text.",
+    "entry_conditions": [
+      "Event 0 (player/actor performs 'U8P_LAVA::look' or examine on the lava item)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_LAVA::look",
+      "kind": "main",
+      "role": "Show a short description when the lava is examined (calls Item::bark with 'molten rock ').",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_LAVA::00AF",
+      "kind": "helper",
+      "role": "Coroutine managing the lava item's animation lifecycle: reads/sets frames, spawns periodic effects (FREE::1C19), and destroys the item at animation end.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine routine to emit/display a textual message from an item/process. Called by LAVA::look to present 'molten rock '.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getFrame",
+      "kind": "extern",
+      "role": "Read the current animation/frame index for an item (used by the coroutine).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::setFrame",
+      "kind": "extern",
+      "role": "Set the item's animation/frame index (used to advance or rewind animation).",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::1C19",
+      "kind": "extern",
+      "role": "Spawn an auxiliary transient effect (likely sound/particle). Spawned by the lava coroutine with pid and a small variant byte plus a 0 argument.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::destroy",
+      "kind": "extern",
+      "role": "Remove/destroy the item from the world when the animation lifecycle completes.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_LAVA::00AF",
+        "callee": "U8P_LAVA::00AF (self / coroutine scheduler)",
+        "purpose": "Runs across multiple ticks using suspend points; not invoked directly by LAVA::look in the provided excerpt — appears started/managed by the engine or other code. (medium)",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_LAVA::look",
+        "callee": "Item::bark",
+        "purpose": "Deliver the short description string 'molten rock ' to be presented to the player. Arguments: item (pid) and char* string. (high)",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LAVA::00AF",
+        "callee": "Item::getFrame",
+        "purpose": "Read the current animation/frame index into local [BP-02h] to decide progression. (high)",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LAVA::00AF",
+        "callee": "Item::setFrame",
+        "purpose": "Write updated animation/frame index back to the item after increment/decrement logic. (high)",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LAVA::00AF",
+        "callee": "FREE::1C19",
+        "purpose": "Spawn a transient effect periodically during the coroutine's loop; passed the owner's pid and a small byte variant from [BP-04h]. (medium)",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LAVA::00AF",
+        "callee": "Item::destroy",
+        "purpose": "Remove the lava item when the animation reaches its terminal frame/condition. (high)",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_LAVA::LAVA::look",
+    "behavior_summary_one_liner": "Provides the in-game behavior for a lava object: when a player 'looks' at the lava it reports a short description ('molten rock ').",
+    "external_call_count": 5,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

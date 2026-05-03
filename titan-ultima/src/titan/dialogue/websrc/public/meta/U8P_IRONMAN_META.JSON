@@ -1,0 +1,87 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_IRONMAN.json",
+  "file": "U8P_IRONMAN",
+  "behavior_summary": [
+    "Handles the 'U8P_IRONMAN::look' (examine) action for the IRONMAN object: when an actor inspects the object, the script marks the object with transient info/state flags, asks the object to 'bark' a short descriptive text \"Stone throne \", and then returns/suspends.",
+    "The visible effect to players is a short description string emitted by the item (via Item::bark).",
+    "The script allocates/pushes a literal string, invokes Item::bark on the IRONMAN instance, frees the string, consumes the bark return value in a follow-up logical step, and then suspends/returns control."
+  ],
+  "notable_control_flow": [
+    "On entry the script sets an info flag and a process-exclude flag on the object to control processing while handling the U8P_IRONMAN::look.",
+    "It constructs/pushes the literal \"Stone throne \", calls Item::bark on the object, and frees the string after the call.",
+    "It captures the return value from Item::bark, applies an 'implies' operation to that return (inferred control/logical check), then pops the result and suspends/returns."
+  ],
+  "open_questions": [
+    "Exact semantics and numeric id of the 'info' value set at the function start (opcode shows a set-info but its higher-level meaning is inferred).",
+    "Precise effect of 'process_exclude' in this context (appears to prevent further processing/reentrancy for the object, but exact engine behavior is inferred).",
+    "Meaning and effect of the 'implies' operation applied to Item::bark's return value (control flow guard, conditional side-effect, or engine convention?).",
+    "Whether the string lifetime/freeing is a direct FREE::* call or engine-managed (inference: it is freed immediately after the bark call)."
+  ],
+  "main_function": {
+    "name": "U8P_IRONMAN::look",
+    "execution_form": "process",
+    "purpose": "Respond to the examine/U8P_IRONMAN::look verb on the IRONMAN item: mark object state for processing, present a short description to the viewer by calling Item::bark with the literal \"Stone throne \", then finalize and suspend.",
+    "entry_conditions": [
+      "Event 0 — invoked when a player/actor performs the 'U8P_IRONMAN::look' (examine) action on the IRONMAN object (inferred from opcode pattern and related scripts)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_IRONMAN::look",
+      "kind": "main",
+      "role": "Handles the 'U8P_IRONMAN::look' verb for the IRONMAN object; coordinates flag setting, message construction, and calling Item::bark.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine used to emit/display a short text or message for an item/process (called by the U8P_IRONMAN::look handler).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_IRONMAN::look",
+        "callee": "Item::bark",
+        "purpose": "Cause the IRONMAN item to emit/display the short descriptive string \"Stone throne \" to the viewing process/player.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": [
+      {
+        "name": "info",
+        "likely_effect": "Set a transient/display-related info key on the object to indicate an information/display action is occurring (inferred).",
+        "confidence": "medium"
+      },
+      {
+        "name": "process_exclude",
+        "likely_effect": "Exclude the object from normal processing while the U8P_IRONMAN::look handler runs (inferred guard against reentrancy or other processing).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "IRONMAN::look",
+    "behavior_summary_one_liner": "Handles the 'U8P_IRONMAN::look' (examine) action for the IRONMAN object: when an actor inspects the object, the script marks the object with transient info/state flags, asks the object to 'bark' a short descriptive text \"Stone throne \", and then returns/suspends.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 2
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

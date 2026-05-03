@@ -1,0 +1,257 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_PLATE.json",
+  "file": "U8P_PLATE",
+  "behavior_summary": [
+    "Implements the runtime behavior of a pressure plate item: when stepped on (U8P_PLATE::gotHit) it updates the plate's visual state (frame), inspects encoded configuration bits (quality), and either toggles local frame only, or initiates multi-step operations that drive connected stairs and sliders.",
+    "Placing the plate into a 'busy' multi-step state spawns a short-lived helper (PLATE::0411) and one or more worker scripts (STAIR/SLIDER variants) that animate or change nearby tiles/items; the helper finalizes propagation, sets related item qualities, and accumulates a global intelligence/score in some cases.",
+    "A release handler resets the plate frame when surface weight falls to zero so the plate can unpress when nothing is standing on it."
+  ],
+  "notable_control_flow": [
+    "Entry checks Item::getFrame to ignore repeated presses when already in frame==1, otherwise sets frame to 1 and continues.",
+    "Reads Item::getQuality and splits it into low-byte 'type/flags' and high-byte 'index/parameter' to select one of several behavior paths.",
+    "Conditional branches based on quality low-byte bits (notably 0x01 and 0x02) determine whether to scan neighborhood for stairs, scan for sliders, or only play an SFX and spawn the lightweight helper.",
+    "Before starting multi-tile operations the routine checks global hanoiBusy; if not busy it sets hanoiBusy and (in some branches) updates hanoiStairDown, then spawns worker scripts and PLATE::0411; if busy it may play a busy SFX instead.",
+    "Neighborhood scans use Item::getX/Item::getY and Item::getFootpad to validate candidate targets by coordinate offsets before spawning corresponding STAIR/SLIDER scripts or writing quality to matched items."
+  ],
+  "open_questions": [
+    "Exact encoding and meaning of the high byte of quality (quality_high) used as an index/parameter for target selection: which numeric range maps to which neighbor offsets?",
+    "Precise identities and parameter encoding of some spawned worker script IDs (several STAIR/SLIDER variants are invoked; their internal differences are inferred but not enumerated).",
+    "Full semantics of AccumulateIntelligence and when/why score increments occur in game design terms (only inferred from helper behavior).",
+    "Exact conditions under which hanoiStairBlocked prevents propagation and how that interacts with multiple simultaneous plates."
+  ],
+  "main_function": {
+    "name": "U8P_PLATE::gotHit",
+    "execution_form": "process",
+    "purpose": "Respond to a pressure-plate being stepped on: set the plate to pressed, interpret configuration encoded in the item quality, and either perform a local SFX/frame toggle or coordinate a multi-tile operation by spawning helper and worker scripts to move/alter stairs/sliders.",
+    "entry_conditions": [
+      "Called on the 'U8P_PLATE::gotHit' event (Event 6) when an actor steps on or otherwise hits the plate.",
+      "Behavior is driven by the plate item's current frame and the plate's quality bytes."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_PLATE::gotHit",
+      "kind": "main",
+      "role": "Primary event handler reacting to plate activation; orchestrates frame updates, scans, global-flag gating, and spawning of helper/worker scripts.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_PLATE::release",
+      "kind": "helper",
+      "role": "Release event handler (Event 9) that resets the plate frame from 1 to 0 if nothing remains on the surface (surface weight == 0).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_PLATE::0411",
+      "kind": "helper",
+      "role": "Short-lived spawned helper that finalizes propagation: sets an internal state byte, scans for connected items by quality, spawns SLIDER worker scripts or writes back quality bytes, and increments an intelligence/score counter when relevant; respects hanoiStairBlocked.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getFrame",
+      "kind": "extern",
+      "role": "Query an item's current visual/interaction frame; used to detect pressed/unpressed state.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::setFrame",
+      "kind": "extern",
+      "role": "Set an item's frame to reflect state changes (e.g., pressed).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getQuality",
+      "kind": "extern",
+      "role": "Read the item's quality word encoding configuration flags and parameters.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getX",
+      "kind": "extern",
+      "role": "Return item's X coordinate for neighborhood scans.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getY",
+      "kind": "extern",
+      "role": "Return item's Y coordinate for neighborhood scans.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getFootpad",
+      "kind": "extern",
+      "role": "Provide footpad/anchor offsets used to validate and compute spawn parameters for adjacent stairs/sliders.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_PLATE::playSFX",
+      "kind": "extern",
+      "role": "Play a sound effect for feedback (successful press, busy/failure indication).",
+      "confidence": "high"
+    },
+    {
+      "name": "spawn",
+      "kind": "extern",
+      "role": "Spawn helper/worker scripts asynchronously (used to start PLATE::0411, STAIR and SLIDER worker scripts).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getSurfaceWeight",
+      "kind": "extern",
+      "role": "Return weight currently on plate surface; used by release to determine whether to reset frame.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::setQuality",
+      "kind": "extern",
+      "role": "Write back quality bytes into related items (used by helper propagation).",
+      "confidence": "high"
+    },
+    {
+      "name": "AccumulateIntelligence",
+      "kind": "extern",
+      "role": "Increment a global/aggregate intelligence or score counter when certain configurations are found (inferred).",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_PLATE::gotHit",
+        "callee": "U8P_PLATE::0411",
+        "purpose": "Offload longer/multi-step propagation and finalization to a spawned helper so U8P_PLATE::gotHit can finish quickly and asynchronous propagation can run; helper also clears hanoiBusy when done.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PLATE::0411",
+        "callee": "U8P_PLATE::release",
+        "purpose": "No direct evidence of release being called by 0411; both are related event handlers for plate lifecycle (listed as internal helpers).",
+        "confidence": "low"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_PLATE::gotHit",
+        "callee": "Item::getFrame",
+        "purpose": "Check whether the plate is already in the pressed frame to avoid redundant activation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PLATE::gotHit",
+        "callee": "Item::setFrame",
+        "purpose": "Set the plate's frame to pressed (frame=1) when activated.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PLATE::gotHit",
+        "callee": "Item::getQuality",
+        "purpose": "Read plate configuration (flags and index) to decide which operation path to follow.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PLATE::gotHit",
+        "callee": "Item::getX",
+        "purpose": "Obtain X coordinate for tile/item neighborhood scans to find targets.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PLATE::gotHit",
+        "callee": "Item::getY",
+        "purpose": "Obtain Y coordinate for tile/item neighborhood scans to find targets.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PLATE::gotHit",
+        "callee": "Item::getFootpad",
+        "purpose": "Get footpad offsets of candidate tiles/items to validate and compute spawn parameters for STAIR/SLIDER workers.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PLATE::gotHit",
+        "callee": "spawn",
+        "purpose": "Start PLATE::0411 and STAIR/SLIDER worker scripts to animate or change connected tiles asynchronously.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PLATE::gotHit",
+        "callee": "U8P_PLATE::playSFX",
+        "purpose": "Provide audible feedback on success/failure or when an operation is blocked by hanoiBusy.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PLATE::release",
+        "callee": "Item::getSurfaceWeight",
+        "purpose": "Decide whether the plate should reset frame to unpressed when actors step off.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PLATE::0411",
+        "callee": "Item::setQuality",
+        "purpose": "Propagate or record state into related items found during helper scanning.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PLATE::0411",
+        "callee": "spawn",
+        "purpose": "Spawn SLIDER worker scripts for connected slider targets during finalization.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PLATE::0411",
+        "callee": "AccumulateIntelligence",
+        "purpose": "Increment a game-level intelligence/score counter when certain configurations are found (inferred from helper behavior).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "hanoiBusy",
+        "likely_effect": "Checked to prevent starting overlapping multi-tile plate operations; read to choose a 'busy' branch versus initiating work.",
+        "confidence": "high"
+      },
+      {
+        "name": "hanoiStairDown",
+        "likely_effect": "Read to determine which stair-spawn variant/direction to use when operating stairs.",
+        "confidence": "high"
+      },
+      {
+        "name": "hanoiStairBlocked",
+        "likely_effect": "Read by PLATE::0411 to block or alter propagation to connected stairs/sliders.",
+        "confidence": "high"
+      }
+    ],
+    "writes": [
+      {
+        "name": "hanoiBusy",
+        "likely_effect": "Set to 1 when beginning a coordinated multi-tile operation to prevent re-entrance; cleared later by helper.",
+        "confidence": "high"
+      },
+      {
+        "name": "hanoiStairDown",
+        "likely_effect": "Updated when plate logic determines a stair-down preference so spawned STAIR scripts behave consistently.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_PLATE::PLATE::gotHit",
+    "behavior_summary_one_liner": "Implements the runtime behavior of a pressure plate item: when stepped on (U8P_PLATE::gotHit) it updates the plate's visual state (frame), inspects encoded configuration bits (quality), and either toggles local frame only, or initiates multi-step operations that drive connected stairs and sliders.",
+    "external_call_count": 12,
+    "flag_read_count": 3,
+    "flag_write_count": 2
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

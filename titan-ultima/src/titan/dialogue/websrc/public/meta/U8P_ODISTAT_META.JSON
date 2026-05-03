@@ -1,0 +1,80 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_ODISTAT.json",
+  "file": "U8P_ODISTAT",
+  "behavior_summary": [
+    "Provides the 'U8P_ODISTAT::look' (examine) event handler for an Odion/male statue object. When a player/actor examines the object the script causes the object to 'bark' (emit a short text message).",
+    "The emitted text depends on the global flag ancientOnesMet: if ancientOnesMet == 0 the object barks \"Odion\"; otherwise it barks \"male statue \".",
+    "After selecting and emitting the appropriate string via Item::bark the handler performs standard post-call bookkeeping and suspends, consistent with an item event process."
+  ],
+  "notable_control_flow": [
+    "Entry on an examine/interaction trigger (Event 0 / U8P_ODISTAT::look).",
+    "A single conditional branch reads the global flag ancientOnesMet to choose between two literal strings.",
+    "Call to external routine Item::bark with (pid, chosen_string, [BP+06h]), followed by a return/suspend sequence; no other state changes."
+  ],
+  "open_questions": [
+    "Is [BP+06h] a direct item process id (pid) or an item instance/context pointer? It is used as the context argument to Item::bark but its precise type is inferred.",
+    "What exact semantics does the engine 'implies' + pop sequence have after Item::bark (likely control/interrupt bookkeeping)?",
+    "Are the literal strings \"Odion\" and \"male statue \" used elsewhere for dialog/lookup (i.e., localization keys) or raw display text?"
+  ],
+  "main_function": {
+    "name": "U8P_ODISTAT::look",
+    "execution_form": "process",
+    "purpose": "Handle the 'U8P_ODISTAT::look' interaction for the Odion/male statue item by emitting a context-appropriate short message to the examining process/player.",
+    "entry_conditions": [
+      "Event 0 (U8P_ODISTAT::look) — invoked when an actor/player examines the object",
+      "Triggered by the item's interaction/area entry semantics (examine area or explicit U8P_ODISTAT::look command)"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_ODISTAT::look",
+      "kind": "main",
+      "role": "Event handler for the item's examine/U8P_ODISTAT::look interaction",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item API used to emit text from an item/process to a player/process",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_ODISTAT::look",
+        "callee": "Item::bark",
+        "purpose": "Cause the item/process to emit/display a short text message ('Odion' or 'male statue ') to the examining process/player; parameters observed: pid, const char* string, item/context pointer ([BP+06h]).",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "ancientOnesMet",
+        "likely_effect": "Selects which of two short bark strings the object will emit; acts as a dialog/quest-state guard determining whether the statue is identified as 'Odion' or 'male statue '.",
+        "confidence": "high"
+      }
+    ],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "ODISTAT::look",
+    "behavior_summary_one_liner": "Provides the 'U8P_ODISTAT::look' (examine) event handler for an Odion/male statue object. When a player/actor examines the object the script causes the object to 'bark' (emit a short text message).",
+    "external_call_count": 1,
+    "flag_read_count": 1,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

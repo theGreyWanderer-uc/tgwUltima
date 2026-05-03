@@ -1,0 +1,125 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_MUSHGRUP.json",
+  "file": "U8P_MUSHGRUP",
+  "behavior_summary": [
+    "MUSHGRUP::look: When a player/actor inspects this mushroom-group item, the script displays a fixed description by invoking Item::bark with the literal string \"mushroom\" and then suspends/returns.",
+    "MUSHGRUP::use: When the item is used, the script iterates with an index/counter (capped at 10), reads the item's world coordinates (getX/getY/getZ), generates a small random value, and calls an allocator/spawn routine (FREE::24A7) with those parameters and a type/id constant. If the allocator returns a non-zero value the routine returns early. If the allocator returns zero, the script sets a status bit (OR mask 0x0080) on a pointer derived from the allocator result and calls Item::fall() on that pointer to trigger falling/placement re-evaluation."
+  ],
+  "notable_control_flow": [
+    "U8P_MUSHGRUP::look is an event handler (process form) that prepares item info then immediately calls Item::bark(\"mushroom\") and suspends the process.",
+    "U8P_MUSHGRUP::use contains a guarded loop using local [BP-06h] as an index/counter; the loop enforces a cap (compare < 10) to bound iterations.",
+    "Within the loop U8P_MUSHGRUP::use sequentially calls Item::getX/getY/getZ -> urandom -> FREE::24A7 and branches on the allocator's return: non-zero -> exit/return early; zero -> set status bit (0x0080) on an item and call Item::fall.",
+    "The allocator/spawn call FREE::24A7 is a decision point whose return value determines whether spawning succeeded (inferred) or an alternate recovery path (flag+fall) should run."
+  ],
+  "open_questions": [
+    "What exactly does a zero vs non-zero return from FREE::24A7 represent (success vs failure, handle vs error code, or something else)?",
+    "What collection or nearby-objects structure is the loop scanning/indexing with [BP-06h]? (inventory, local spawn slots, a neighbor list?)",
+    "What is the semantic meaning of the large constant passed into FREE::24A7 (the 'huge F5 05' constant) and the type id 0x01D1 — what entity/type is being spawned?",
+    "Is the status mask 0x0080 a standard engine flag (e.g., 'falling' or 'no-collision') or a script-specific marker?",
+    "Are there additional engine-side side effects (sounds, animations) triggered implicitly by Item::fall or FREE::24A7 that this script relies on?"
+  ],
+  "main_function": {
+    "name": "U8P_MUSHGRUP::look",
+    "execution_form": "process",
+    "purpose": "Provide the 'U8P_MUSHGRUP::look' (inspect) behavior for the mushroom-group item: present a short descriptive text to the viewer via Item::bark and then suspend/return.",
+    "entry_conditions": [
+      "Event 0: 'U8P_MUSHGRUP::look' — invoked when the player/actor examines or looks at the mushroom-group item (enter area / explicit inspect action)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_MUSHGRUP::look",
+      "kind": "main",
+      "role": "Event handler for the 'U8P_MUSHGRUP::look' (inspect) action; calls Item::bark with the static description \"mushroom\" and then suspends.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MUSHGRUP::use",
+      "kind": "helper",
+      "role": "Handler for the 'use' action: bounded scan/loop, coordinate sampling, randomization and attempting to spawn/allocate an entity via FREE::24A7; on allocator failure uses Item::orStatus and Item::fall to change state.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine to display a short text message or description originating from an item/process.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_MUSHGRUP::look",
+        "callee": "Item::bark",
+        "purpose": "Display the item's inspect description ('mushroom') to the player/viewer.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MUSHGRUP::use",
+        "callee": "Item::getX",
+        "purpose": "Read the item's X coordinate to provide spatial arguments for spawning/allocator call.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MUSHGRUP::use",
+        "callee": "Item::getY",
+        "purpose": "Read the item's Y coordinate to provide spatial arguments for spawning/allocator call.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MUSHGRUP::use",
+        "callee": "Item::getZ",
+        "purpose": "Read the item's Z/level coordinate to provide spatial arguments for spawning/allocator call.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MUSHGRUP::use",
+        "callee": "urandom",
+        "purpose": "Generate a small random value used as an argument to FREE::24A7 to vary spawn behavior.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MUSHGRUP::use",
+        "callee": "FREE::24A7",
+        "purpose": "Attempt to allocate/spawn an object/entity using coordinates, a random parameter and type/config constants; return value controls subsequent flow.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_MUSHGRUP::use",
+        "callee": "Item::orStatus",
+        "purpose": "OR a status bit mask (0x0080) onto an item pointer when the allocator returned the handled/failure value, marking it for a state change.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_MUSHGRUP::use",
+        "callee": "Item::fall",
+        "purpose": "Trigger falling/placement re-evaluation for an item when allocation returned the special value (inferred failure/recovery path).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_MUSHGRUP::look",
+    "behavior_summary_one_liner": "MUSHGRUP::look: When a player/actor inspects this mushroom-group item, the script displays a fixed description by invoking Item::bark with the literal string \"mushroom\" and then suspends/returns.",
+    "external_call_count": 8,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

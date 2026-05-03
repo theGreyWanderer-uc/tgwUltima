@@ -1,0 +1,75 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_SILVORE.json",
+  "file": "U8P_SILVORE",
+  "behavior_summary": [
+    "Handles the in-game 'U8P_SILVORE::look' (examine) event for a silver ore object by preparing item/process state and emitting a one-line description to the viewer.",
+    "When the object is inspected, the handler builds or references the literal string 'silver ore ' and calls Item::bark to deliver that text to a target process (the viewer).",
+    "The routine surrounds the bark call with engine opcodes inferred as 'set info' and 'process exclude' to control how the description is presented or which process receives it.",
+    "After calling Item::bark the code captures its return value, applies an 'implies' operation, stores the result in a temporary, then suspends/returns — effectively yielding a boolean-like outcome from the bark interaction."
+  ],
+  "notable_control_flow": [
+    "Entry via a U8P_SILVORE::look/examine trigger (Event 0) causes immediate set-info/process-exclude engine operations before the Item::bark invocation (inferred recipient/visibility control).",
+    "The Item::bark call is synchronous from this handler's point of view: its return is captured into local 'retval'.",
+    "An 'implies' operation is applied to retval and the result placed into a temp local; the function then suspends/returns — suggesting the handler returns a success/propagation flag based on the bark outcome."
+  ],
+  "open_questions": [
+    "Exact semantics of the 'set info' and 'process exclude' opcodes in this context: do they change which process receives the bark, mark the item with a transient info flag, or suppress other processing?",
+    "Precise meaning of the 'implies' operation applied to the bark return: is it a boolean-normalization, a conditional propagation marker, or related to scripting control flow?",
+    "Full identity/semantics of the [BP+06h] parameter: appears to be the viewer/process PID but could be the item instance or a combined context depending on calling convention."
+  ],
+  "main_function": {
+    "name": "U8P_SILVORE::look",
+    "execution_form": "process",
+    "purpose": "Respond to a player/actor looking at the silver ore object by preparing context and emitting the one-line description 'silver ore ' to the viewer via Item::bark.",
+    "entry_conditions": [
+      "Event 0 (U8P_SILVORE::look) — triggered when an actor inspects/looks at the silver ore object"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_SILVORE::look",
+      "kind": "main",
+      "role": "Look/examine event handler for the silver ore object; prepares state and calls Item::bark to show a description.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/runtime routine used to emit/display a short text message from an item/process to a target process/player.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_SILVORE::look",
+        "callee": "Item::bark",
+        "purpose": "Deliver the literal description 'silver ore ' to the viewing process/player (one-line item description).",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "description",
+    "communication"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_SILVORE::look",
+    "behavior_summary_one_liner": "Handles the in-game 'U8P_SILVORE::look' (examine) event for a silver ore object by preparing item/process state and emitting a one-line description to the viewer.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

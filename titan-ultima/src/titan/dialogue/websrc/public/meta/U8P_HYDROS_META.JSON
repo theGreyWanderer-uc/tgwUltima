@@ -1,0 +1,212 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_HYDROS.json",
+  "file": "U8P_HYDROS",
+  "behavior_summary": [
+    "Registers and boots a Hydros (Water Titan) NPC when the entity is created, announcing its short name and then suspending its initializer (U8P_HYDROS::init_00).",
+    "Provides a dialog-driven interaction handler (U8P_HYDROS::init_10) that builds dynamic choice lists, presents lines and multi-choice prompts to the player, reads the player's selection, and branches across many canned responses.",
+    "Records conversation and quest progress in global flags (00E2, 00E3, 00E4, 00E5) to gate later dialog and behavior.",
+    "Can schedule delayed/timed actions and trigger in-world effects (animations, departure, and likely map/object manipulation) via engine calls when the player selects certain dialog options.",
+    "Contains helper utilities: a list/choice iterator (U8P_HYDROS::init_06) used when assembling/reading dialog lists, and a background worker (U8P_HYDROS::init_10_worker) that clears a runtime flag and calls lower-level world-manipulation routines using indices stored in locals."
+  ],
+  "notable_control_flow": [
+    "Initialization (U8P_HYDROS::init_00) runs once on spawn: set NPC info/type/flags, exclude process, register short name \"Water Titan \", then suspend.",
+    "Primary runtime logic is event-driven: U8P_HYDROS::init_10 acts as a conversation state machine invoked on player interaction and repeatedly presents an slist (local8) to the player and branches based on the returned selection (local5).",
+    "Dialog branches set or clear global flags (00E2/00E3/00E4) which change greetings, available options, and whether Hydros will accept help or depart.",
+    "Certain dialog choices schedule delayed callbacks (call 0581:1C8B) or call engine routines (0050:0F0F, 0050:12B0) to animate or remove the NPC; the worker (init_10_worker) performs lower-level map/object changes (call 0050:0D5F) using computed addresses/indices.",
+    "A small background worker toggles/clears global [00E5] to indicate/reset worker activity, preventing duplicate operations while world changes are applied."
+  ],
+  "open_questions": [
+    "Exact meaning and game-visible semantics of global flags 00E2, 00E3, 00E4 beyond inferred conversation/quest state (names and persistent effects are not present in the disassembly).",
+    "Precise engine behavior of external call IDs (0050:0D5F, 0050:0F0F, 0581:1C19, etc.): inferred from usage but exact side effects (which tiles/objects change or what animations play) are not fully determined.",
+    "Whether U8P_HYDROS::init_10_worker is started as its own process/thread or invoked inline by init_10 in particular branches (disassembly shows a worker but not the scheduler details).",
+    "Full contents and triggers of the truncated helper U8P_HYDROS::init_08 (starts at 0x0EA7) — its role is inferred but not confirmed due to truncation."
+  ],
+  "main_function": {
+    "name": "U8P_HYDROS::init_00",
+    "execution_form": "process",
+    "purpose": "Entity initialization: set NPC object info/flags, exclude a process from normal processing, register the short name 'Water Titan ' for the NPC, then suspend. Acts as bootstrap for the Hydros actor.",
+    "entry_conditions": [
+      "Script initialization / spawn (runs once when the object/process is created)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_HYDROS::init_00",
+      "kind": "main",
+      "role": "Entity initializer / NPC registration and bootstrap",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_HYDROS::init_10",
+      "kind": "helper",
+      "role": "Primary conversation and interaction state machine (dialog branching, choice building, set/clear global flags, trigger world actions and timers)",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_HYDROS::init_06",
+      "kind": "helper",
+      "role": "Iterator/choice-list reader utility used to iterate entries in a list or buffer (helper for slist operations)",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_HYDROS::init_10_worker",
+      "kind": "helper",
+      "role": "Background worker that polls locals and calls lower-level engine routines to apply map/object changes; clears runtime flag global [00E5]",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_HYDROS::init_08",
+      "kind": "helper",
+      "role": "Truncated helper likely related to interaction callbacks/continuation of polling logic",
+      "confidence": "low"
+    },
+    {
+      "name": "U8P_HYDROS::calli_0049",
+      "kind": "extern",
+      "role": "Engine/IOC: present a single text message from NPC to player (used as Item/NPC bark)",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_HYDROS::calli_004A",
+      "kind": "extern",
+      "role": "Engine/IOC: present a slist (choice UI) to the player and return their selection",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_HYDROS::init_10",
+        "callee": "U8P_HYDROS::init_06",
+        "purpose": "Iterate or read entries from a dialog/choice list while building or processing slist choices presented to the player.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_HYDROS::init_10",
+        "callee": "U8P_HYDROS::init_10_worker",
+        "purpose": "Start or delegate world-modification tasks (map/object changes and worker-managed state resets) after certain dialog choices or when applying Hydros' requested action.",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_HYDROS::init_10",
+        "callee": "U8P_HYDROS::calli_0049",
+        "purpose": "Display single lines of dialog from Hydros to the player (NPC bark/text output).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_HYDROS::init_10",
+        "callee": "U8P_HYDROS::calli_004A",
+        "purpose": "Present assembled slist choices (local8) to the player and capture selection into local5.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_HYDROS::init_10",
+        "callee": "U8P_HYDROS::call 0581:1C8B",
+        "purpose": "Schedule a timed/delayed event or callback (used to defer actions after dialog branches).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_HYDROS::init_10",
+        "callee": "U8P_HYDROS::call 0581:1C19",
+        "purpose": "Open/advance a UI or player prompt following certain dialog branches (inferred from usage context).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_HYDROS::init_10",
+        "callee": "U8P_HYDROS::call 0050:0F0F",
+        "purpose": "Commit NPC state changes (animations/movement/state update) after modifying object bytes/flags.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_HYDROS::init_10",
+        "callee": "U8P_HYDROS::call 0050:12B0",
+        "purpose": "Trigger an in-world reaction (sound/animation/visual) when Hydros rejects or departs.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_HYDROS::init_10",
+        "callee": "U8P_HYDROS::call 0050:13FB",
+        "purpose": "Perform a conditional check used to gate dialog paths (returns a boolean/retval used with implies).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_HYDROS::init_10_worker",
+        "callee": "U8P_HYDROS::call 0050:0D5F",
+        "purpose": "Apply lower-level map/object modifications (likely the operation that 'frees' Hydros by altering tiles or objects) using computed addresses/indices from locals.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "global [0036 02]",
+        "likely_effect": "A world or quest flag read to influence an early dialog branch (tested for equality with 1).",
+        "confidence": "medium"
+      },
+      {
+        "name": "global [00E2 01]",
+        "likely_effect": "Read to choose greeting/branch variants; acts as a boolean marker for prior acknowledgement in the Hydros conversation.",
+        "confidence": "high"
+      },
+      {
+        "name": "global [004E 01]",
+        "likely_effect": "Read to determine conversation flow or NPC state/quest progress that affects available dialog lines.",
+        "confidence": "medium"
+      },
+      {
+        "name": "global [00E4 01]",
+        "likely_effect": "Read to gate presentation of some choices and to decide whether to end the conversation.",
+        "confidence": "high"
+      },
+      {
+        "name": "global [00E3 01]",
+        "likely_effect": "Read to branch apology/repentance dialog and determine Hydros' disposition.",
+        "confidence": "medium"
+      }
+    ],
+    "writes": [
+      {
+        "name": "global [00E2 01]",
+        "likely_effect": "Set to 1 when the player selects a dialog option that acknowledges Hydros' identity; used to mark that an identity exchange or important dialog node occurred.",
+        "confidence": "high"
+      },
+      {
+        "name": "global [00E3 01]",
+        "likely_effect": "Toggled by dialog outcomes to record whether the player apologized or otherwise affected Hydros' disposition.",
+        "confidence": "medium"
+      },
+      {
+        "name": "global [00E4 01]",
+        "likely_effect": "Set/cleared during interaction to control subsequent behavior, including farewell/leave branches and choice availability.",
+        "confidence": "high"
+      },
+      {
+        "name": "global [00E5 01]",
+        "likely_effect": "Explicitly set to 0 by the worker helper to indicate/reset worker activity; used as a runtime guard to prevent repeated world modifications.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_HYDROS::init_00",
+    "behavior_summary_one_liner": "Registers and boots a Hydros (Water Titan) NPC when the entity is created, announcing its short name and then suspending its initializer (U8P_HYDROS::init_00).",
+    "external_call_count": 8,
+    "flag_read_count": 5,
+    "flag_write_count": 4
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

@@ -1,0 +1,93 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_PLAQUEEW.json",
+  "file": "U8P_PLAQUEEW",
+  "behavior_summary": [
+    "Handles player interactions with a plaque item. On 'U8P_PLAQUEEW::look' (Event 0) it marks the plaque as informational/excluded and produces a short text output ('plaque ') via Item::bark so the player sees the plaque's label.",
+    "On 'use' (Event 1) it similarly marks the plaque as informational/excluded and then delegates the interactive behavior by spawning PLAQUENS::00C2 with the plaque's pid; the detailed 'use' effect is implemented in that spawned routine.",
+    "The script does not modify global flags; its effects are local to the item instance (setting item info and process-exclude) and producing or delegating presentation/interaction."
+  ],
+  "notable_control_flow": [
+    "Entry on Event 0 ('U8P_PLAQUEEW::look'): set item info/process-exclude -> call Item::bark(pid, \"plaque \") -> return/suspend.",
+    "Entry on Event 1 ('use'): set item info/process-exclude -> call spawn(pid, PLAQUENS::00C2) to create a delegated handler -> return/suspend.",
+    "Both handlers intentionally prevent default processing of the item (via process-exclude) before producing output or spawning the use-handler."
+  ],
+  "open_questions": [
+    "Which exact item info key/value is set by the 'set info' opcode (interpreted here as an informational/process-exclude mark) and whether it carries additional metadata.",
+    "What precise gameplay behavior PLAQUENS::00C2 implements when spawned on 'use' (the script delegates the action but the effect is not present in this excerpt).",
+    "Whether Item::bark performs only a UI text display or may trigger other side-effects (sound, log) in some contexts."
+  ],
+  "main_function": {
+    "name": "U8P_PLAQUEEW::look",
+    "execution_form": "process",
+    "purpose": "Present the plaque's short descriptive label to the player (via Item::bark) and mark the plaque as informational so it is excluded from normal processing.",
+    "entry_conditions": [
+      "Event 0 — 'U8P_PLAQUEEW::look' / examine triggered when the Avatar or relevant actor inspects the plaque."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_PLAQUEEW::look",
+      "kind": "main",
+      "role": "Handle the 'U8P_PLAQUEEW::look' event: set item info/process-exclude and call Item::bark to present 'plaque ' to the player.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_PLAQUEEW::use",
+      "kind": "helper",
+      "role": "Handle the 'use' event: set item info/process-exclude and spawn PLAQUENS::00C2 to perform the detailed use behavior.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/UI routine called to emit a short string/message associated with an item (used here to show the plaque's label).",
+      "confidence": "high"
+    },
+    {
+      "name": "spawn",
+      "kind": "extern",
+      "role": "Engine routine used to launch a separate process (here PLAQUENS::00C2) to handle the plaque's 'use' behavior.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_PLAQUEEW::look",
+        "callee": "Item::bark",
+        "purpose": "Display or vocalize the plaque's short label string ('plaque ') to the player; used to implement the 'U8P_PLAQUEEW::look' UX.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PLAQUEEW::use",
+        "callee": "spawn (PLAQUENS::00C2)",
+        "purpose": "Delegate the 'use' interaction to a separate process/function (PLAQUENS::00C2) that implements the actual effect of using the plaque.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_PLAQUEEW::look",
+    "behavior_summary_one_liner": "Handles player interactions with a plaque item. On 'U8P_PLAQUEEW::look' (Event 0) it marks the plaque as informational/excluded and produces a short text output ('plaque ') via Item::bark so the player sees the plaque's label.",
+    "external_call_count": 2,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

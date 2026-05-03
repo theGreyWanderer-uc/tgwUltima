@@ -1,0 +1,188 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_EARTHEGG.json",
+  "file": "U8P_EARTHEGG",
+  "behavior_summary": [
+    "Manages an 'earth egg' object's trigger-area lifecycle and post-hatch behavior.",
+    "When an actor leaves the egg's fast-area trigger, the script checks the egg's state id and, if the id is 7, rolls it back to 6 and clears the area's reference to the egg.",
+    "A separate 'hatch' handler advances egg states, performs gated actions against multiple NPCs (only acting on NPCs that are alive), spawns utility/timed tasks between work blocks, and may spawn a persistent monitor coroutine to continue repetitive post-hatch behavior.",
+    "The persistent monitor coroutine periodically re-checks NPCs and re-issues the same spawn/actions over time until stopped."
+  ],
+  "notable_control_flow": [
+    "Event-driven: U8P_EARTHEGG::leaveFastArea runs on a U8P_EARTHEGG::leaveFastArea trigger and performs a short, deterministic cleanup sequence.",
+    "State-branching: U8P_EARTHEGG::hatch heavily branches on Egg::getEggId() to decide which actions to take and which NPCs to target.",
+    "Gated spawning: Before each spawn of METHOD::15E7 the code calls Npc::isDead(npcId) and only issues the spawn if that NPC is alive.",
+    "Cooperative background work: U8P_EARTHEGG::hatch uses suspend points and spawns U8P_EARTHEGG::04F8 to create ongoing, time-sliced monitoring/interaction behavior."
+  ],
+  "open_questions": [
+    "What are the semantic meanings of the egg id values (e.g., 6 vs 7) beyond the observed transitions? (inferred only)",
+    "What exact gameplay effect METHOD::15E7 produces when spawned (damage, animation, attach, AI command)?",
+    "What does FREE::1C19 do semantically—purely timing/cleanup or other state changes?",
+    "Which concrete NPC ids are checked and what are their in-game roles (the disassembly references ids but not named NPCs)?",
+    "What conditions stop/terminate the persistent U8P_EARTHEGG::04F8 coroutine?"
+  ],
+  "main_function": {
+    "name": "U8P_EARTHEGG::leaveFastArea",
+    "execution_form": "process",
+    "purpose": "Handle actor exit from the egg's fast-area trigger: check and adjust the egg's state id (change 7 to 6 if observed) and clear the area's reference/trigger association for the egg.",
+    "entry_conditions": [
+      "Event: U8P_EARTHEGG::leaveFastArea — invoked when the Avatar or another actor leaves the egg's fast-area trigger region."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_EARTHEGG::leaveFastArea",
+      "kind": "main",
+      "role": "Area-exit cleanup and state rollback for the egg object.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_EARTHEGG::hatch",
+      "kind": "helper",
+      "role": "Handle the hatch event: evaluate egg id state, perform NPC-gated spawns, advance egg id(s), and spawn the persistent monitor coroutine.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_EARTHEGG::04F8",
+      "kind": "helper",
+      "role": "Background monitor coroutine: repeatedly re-check NPCs and re-issue spawns/utility tasks on a loop with suspend points.",
+      "confidence": "high"
+    },
+    {
+      "name": "Egg::getEggId",
+      "kind": "extern",
+      "role": "Read the egg object's current state identifier.",
+      "confidence": "high"
+    },
+    {
+      "name": "Egg::setEggId",
+      "kind": "extern",
+      "role": "Set or update the egg object's state identifier.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_EARTHEGG::resetRef",
+      "kind": "extern",
+      "role": "Clear/reset a reference id association for the given object (used to detach the egg from the trigger/ref).",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::isDead",
+      "kind": "extern",
+      "role": "Query whether a specified NPC is dead; used as a gating condition before issuing spawns.",
+      "confidence": "high"
+    },
+    {
+      "name": "spawn METHOD::15E7",
+      "kind": "extern",
+      "role": "Spawn a method/action against a target (used repeatedly for NPC interactions/effects).",
+      "confidence": "medium"
+    },
+    {
+      "name": "spawn FREE::1C19",
+      "kind": "extern",
+      "role": "Spawn a timed/utility/cleanup action used between work blocks.",
+      "confidence": "medium"
+    },
+    {
+      "name": "spawn U8P_EARTHEGG::04F8",
+      "kind": "extern",
+      "role": "Spawn the persistent monitor coroutine for the egg (internal helper spawned via engine spawn).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_EARTHEGG::hatch",
+        "callee": "U8P_EARTHEGG::04F8",
+        "purpose": "Start a background monitor coroutine to continue repeated post-hatch behavior asynchronously.",
+        "confidence": "high"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_EARTHEGG::leaveFastArea",
+        "callee": "Egg::getEggId",
+        "purpose": "Read the egg's current state id to decide whether to change state on exit.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_EARTHEGG::leaveFastArea",
+        "callee": "Egg::setEggId",
+        "purpose": "If egg id == 7, set it to 6 to roll back the hatch/progress state on area exit.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_EARTHEGG::leaveFastArea",
+        "callee": "U8P_EARTHEGG::resetRef",
+        "purpose": "Clear the reference/trigger association (ref id 0x0205) between the area and the egg object as part of cleanup.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_EARTHEGG::hatch",
+        "callee": "Egg::getEggId",
+        "purpose": "Drive branching logic to determine which sets of NPC checks/spawns to perform based on egg stage.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_EARTHEGG::hatch",
+        "callee": "Npc::isDead",
+        "purpose": "Gate spawn actions so they only run for NPCs that are still alive.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_EARTHEGG::hatch",
+        "callee": "spawn METHOD::15E7",
+        "purpose": "Trigger per-NPC actions/interactions when that NPC is alive (exact effect inferred).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_EARTHEGG::hatch",
+        "callee": "spawn FREE::1C19",
+        "purpose": "Insert a timed/utility action between blocks of hatch work (likely pacing or cleanup).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_EARTHEGG::04F8",
+        "callee": "Npc::isDead",
+        "purpose": "Repeatedly check NPC death state as part of ongoing monitoring.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_EARTHEGG::04F8",
+        "callee": "spawn METHOD::15E7",
+        "purpose": "Re-issue per-NPC actions from the monitor loop for NPCs that remain alive.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_EARTHEGG::04F8",
+        "callee": "spawn FREE::1C19",
+        "purpose": "Periodically spawn utility/timed tasks inside the monitor loop.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_EARTHEGG::leaveFastArea",
+    "behavior_summary_one_liner": "Manages an 'earth egg' object's trigger-area lifecycle and post-hatch behavior.",
+    "external_call_count": 10,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

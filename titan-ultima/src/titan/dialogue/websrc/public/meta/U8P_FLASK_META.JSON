@@ -1,0 +1,197 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_FLASK.json",
+  "file": "U8P_FLASK",
+  "behavior_summary": [
+    "Provides examine (U8P_FLASK::look) and use behaviors for a flask item.",
+    "FLASK::look (Event 0) produces a short descriptive bark 'flask ' to the requesting process/actor (pid).",
+    "FLASK::use (Event 1, helper) models drinking from the flask: it reads the item's visual/content frame to determine if the flask contains liquid, reports \"It's empty.\" if insufficient, otherwise selects an outcome by urandom(3): poison, heal, or an ambiguous default.",
+    "Poison branch: computes magnitude = urandom(8)+8, applies an effect via METHOD::0080 and barks 'Argh! It's poison!'; conditionally spawns a MOREFOOD visual/palette effect if the global shroomPaletteEffectsActive is false.",
+    "Heal branch: computes magnitude = urandom(8)+8, barks 'Ahh! That feels better!', reads the NPC's HP and STR, adds the heal amount but clamps it relative to STR (cap inferred from arithmetic), and writes back the NPC HP via Npc::setHp.",
+    "After any non-empty consumption, the code decrements the item's frame by 3 and writes it back via Item::setFrame to represent consumed content."
+  ],
+  "notable_control_flow": [
+    "Entry condition for FLASK::look is Event 0 (actor examines the flask) which simply calls Item::bark with 'flask ' and the pid parameter.",
+    "FLASK::use starts by calling Item::getFrame; if frame < 3 it immediately barks \"It's empty.\" and exits without consuming content.",
+    "When frame >= 3, FLASK::use samples urandom(3) to branch: case 0 behaves like empty, case 1 = poison, case 2 = heal, default = ambiguous message. The poison and heal branches compute urandom(8)+8 as magnitude.",
+    "Poison branch calls METHOD::0080 with computed magnitude and may spawn MOREFOOD::0080 when shroomPaletteEffectsActive is false.",
+    "Heal branch reads Npc::getHp and Npc::getStr, computes a capped HP increase (cap derived from Strength), and applies it via Npc::setHp.",
+    "After executing a non-empty branch, the item's frame is reduced by 3 and written back via Item::setFrame (consumption accounting)."
+  ],
+  "open_questions": [
+    "Exact semantics of METHOD::0080 (applies damage, poison, or another effect?) and whether it targets the pid (consumer) or another actor.",
+    "Precise interpretation of the item's frame values and why consumption subtracts exactly 3 (units of volume or sprite frames).",
+    "Which actor/object is passed as the 'target NPC' for Npc::getHp/getStr/setHp in all usage contexts (the drinking actor, a held target, or another resolved object)?",
+    "Meaning of the default/other branch message 'Hmm... I wonder what that did.' — does it have a hidden effect not observed in the disassembly?",
+    "Exact threshold and formula used to clamp healing relative to Strength (inferred as involving 2*STR but not fully certain)."
+  ],
+  "main_function": {
+    "name": "U8P_FLASK::look",
+    "execution_form": "process",
+    "purpose": "When an actor examines the flask, present a short description by barking 'flask ' to the requesting process/actor (pid).",
+    "entry_conditions": [
+      "Event 0 (U8P_FLASK::look) — triggered when an actor/process looks at or inspects the flask"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_FLASK::look",
+      "kind": "main",
+      "role": "examine/U8P_FLASK::look handler that emits the item's short description via Item::bark",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FLASK::use",
+      "kind": "helper",
+      "role": "usage/drink handler that checks content, branches by randomness into poison/heal/other outcomes, updates NPC HP or applies an effect, and decrements item content frame",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "display text/message to a process/actor (used by both U8P_FLASK::look and use to show messages)",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getFrame",
+      "kind": "extern",
+      "role": "read the item's frame/content index to decide emptiness and amount available",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::setFrame",
+      "kind": "extern",
+      "role": "write a new frame/content index after consuming liquid (frame -= 3)",
+      "confidence": "high"
+    },
+    {
+      "name": "urandom",
+      "kind": "extern",
+      "role": "produce uniform random integers used for branching (urandom(3)) and magnitudes (urandom(8)+8)",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::getHp",
+      "kind": "extern",
+      "role": "read NPC current HP for heal computation",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::getStr",
+      "kind": "extern",
+      "role": "read NPC Strength stat used to cap healing",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::setHp",
+      "kind": "extern",
+      "role": "set NPC HP to apply healing result",
+      "confidence": "high"
+    },
+    {
+      "name": "METHOD::0080",
+      "kind": "extern",
+      "role": "apply an effect/damage with provided magnitude (used in poison branch); exact semantics inferred",
+      "confidence": "medium"
+    },
+    {
+      "name": "spawn MOREFOOD::0080",
+      "kind": "extern",
+      "role": "spawn visual/palette consumption effect when shroomPaletteEffectsActive is false",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_FLASK::look",
+        "callee": "Item::bark",
+        "purpose": "Display the static examine string 'flask ' to the requesting process/actor (pid).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FLASK::use",
+        "callee": "Item::getFrame",
+        "purpose": "Read the flask's frame/content index to decide whether it is empty and whether use is permitted.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FLASK::use",
+        "callee": "urandom",
+        "purpose": "Select a branch among empty/poison/heal/default (urandom(3)) and compute magnitudes (urandom(8)+8).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FLASK::use",
+        "callee": "METHOD::0080",
+        "purpose": "Apply a negative effect/damage using the computed magnitude in the poison branch.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FLASK::use",
+        "callee": "spawn MOREFOOD::0080",
+        "purpose": "Spawn a consumption/visual/palette effect when shroomPaletteEffectsActive is false (poison branch).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FLASK::use",
+        "callee": "Npc::getHp",
+        "purpose": "Read target NPC HP to compute and apply healing.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FLASK::use",
+        "callee": "Npc::getStr",
+        "purpose": "Read target NPC Strength to compute a cap on healing magnitude.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FLASK::use",
+        "callee": "Npc::setHp",
+        "purpose": "Write back the NPC's new HP after applying healed amount (with capping).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FLASK::use",
+        "callee": "Item::setFrame",
+        "purpose": "Decrease the item's frame by 3 after a successful consumption branch to account for used contents.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FLASK::use",
+        "callee": "Item::bark",
+        "purpose": "Communicate messages to the actor (e.g., \"It's empty.\", \"Argh! It's poison!\", \"Ahh! That feels better!\", or default text).",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "shroomPaletteEffectsActive",
+        "likely_effect": "When false, a MOREFOOD::0080 spawn is triggered in the poison branch; used as a guard for spawning palette/visual effects.",
+        "confidence": "high"
+      }
+    ],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_FLASK::FLASK::look",
+    "behavior_summary_one_liner": "Provides examine (U8P_FLASK::look) and use behaviors for a flask item.",
+    "external_call_count": 10,
+    "flag_read_count": 1,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

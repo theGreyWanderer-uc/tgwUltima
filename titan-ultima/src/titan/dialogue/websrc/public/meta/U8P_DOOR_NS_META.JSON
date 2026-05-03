@@ -1,0 +1,207 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_DOOR_NS.json",
+  "file": "U8P_DOOR_NS",
+  "behavior_summary": [
+    "Implements the in-game door object behavior: responding to player examine (U8P_DOOR_NS::look), use, and hit events; producing descriptive text for examined doors; and driving open/close animations and multi-tile updates.",
+    "DOOR_NS::look is the entry point for 'U8P_DOOR_NS::look' (examine) interactions: it establishes process context/exclusion and spawns a helper that composes and emits a short descriptive bark such as 'Locked Door', 'door', or 'tower door'.",
+    "Use and gotHit handlers set context/exclusion and spawn further handlers which attempt to open/operate the door or process damage/forced-entry attempts; the heavy lifting of permission checks, coordinated multi-tile updates, and animation is in helpers U8P_DOOR_NS::DOOR_NS::016C, ::0340 and ::05E4.",
+    "Door state and branching are primarily driven by item quality bits (tested against masks such as 0x0100 and 0x0200) and by item type codes (distinct door subtypes like normal vs tower).",
+    "Animation updates are coordinated by computing per-piece frame targets/timers, calling FREE::2411 as a claim/availability check, spawning FREE::1C19 for timed/asynchronous sub-processes, and repeatedly calling Item::setFrame / Item::setQuality while suspending to animate."
+  ],
+  "notable_control_flow": [
+    "Entry handlers (U8P_DOOR_NS::look/use/gotHit) set process info and a process exclude and then spawn a short-lived helper process to perform the visible behavior—spawn + suspend pattern used for bark/animation.",
+    "Decision points test Item::getQuality bits and Item::getType to choose message text and animation branches (locked vs unlocked, normal vs tower).",
+    "Animation helpers loop: compute target frames and timing, call FREE::2411 to claim/verify per-tile transitions, spawn FREE::1C19 to schedule per-step timing, call Item::setFrame and Item::setQuality, then suspend and repeat until transition finishes.",
+    "Scanning helper (U8P_DOOR_NS::DOOR_NS::05E4) iterates neighboring pieces (by coordinates and type) to collect/coordinate multi-tile door parts before invoking core animation/permission routines."
+  ],
+  "open_questions": [
+    "Exact semantics of the quality bit masks (e.g., 0x0100, 0x0200): they appear to indicate 'locked' and an auto/multi-tile mode but the concrete meaning is inferred.",
+    "Precise behavior and contract of FREE::2411: it behaves like a reservation/claim or permission test for applying a frame/state change to a tile or resource but the exact conditions and side-effects are unknown.",
+    "Role of FREE::1C19 beyond timing: appears to be a spawned helper for delayed animation/effects, but how it interacts with other game systems (sound/effects) is not confirmed.",
+    "Meaning of several numeric type constants (0x44, 0x45, 0x154, 0x156, 0x155) and how they map to in-game door subtypes and orientation."
+  ],
+  "main_function": {
+    "name": "U8P_DOOR_NS::look",
+    "execution_form": "process",
+    "purpose": "Handle the player 'U8P_DOOR_NS::look' (examine) event for a door: prepare process info and exclusion and spawn a helper that determines and emits the appropriate descriptive text (locked/normal/tower).",
+    "entry_conditions": [
+      "Triggered when a player or relevant actor examines the door (Usecode Event 0 / 'U8P_DOOR_NS::look').",
+      "Called with an implicit pid/player process and an item pointer for the door instance."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_DOOR_NS::look",
+      "kind": "main",
+      "role": "Entry handler for 'U8P_DOOR_NS::look' (examine) interactions; spawns descriptive bark helper and returns its result.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DOOR_NS::use",
+      "kind": "helper",
+      "role": "Handle 'use' event: set context and spawn a further handler (door operation attempt, likely open/close/unlock) with a flag argument.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DOOR_NS::gotHit",
+      "kind": "helper",
+      "role": "Handle 'got hit' event: set context and spawn damage/forced-entry handler with attacker/damage params and the door item.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DOOR_NS::00D0",
+      "kind": "helper",
+      "role": "Compose and emit the short descriptive bark when a door is examined: checks locked bit and type to pick 'Locked Door ', 'door ', or 'tower door ' and calls Item::bark.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DOOR_NS::016C",
+      "kind": "helper",
+      "role": "Capability/permission and parameter computation helper: inspects frame/type/quality and computes offsets/timers/flags, calls FREE::2411 and returns a boolean-like status indicating whether an action can proceed.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_DOOR_NS::0340",
+      "kind": "helper",
+      "role": "Core animation/state transition routine: coordinates multi-step open/close animation, calls FREE::2411, spawns FREE::1C19 for timing, and updates Item::setFrame/Item::setQuality in a loop with suspends.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DOOR_NS::05E4",
+      "kind": "helper",
+      "role": "Scan/iteration helper that finds related pieces of a potentially multi-tile door (by type/coords/quality) and dispatches to permission/animation routines for coordinated updates.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_DOOR_NS::look",
+        "callee": "U8P_DOOR_NS::00D0",
+        "purpose": "Spawn a helper to build and emit the U8P_DOOR_NS::look/examine text (bark) for the door.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DOOR_NS::use",
+        "callee": "U8P_DOOR_NS::08B4",
+        "purpose": "Spawn a deeper handler to attempt open/close or to process the use action; passed a flag argument (inferred to request an operation).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DOOR_NS::gotHit",
+        "callee": "U8P_DOOR_NS::0C82",
+        "purpose": "Spawn a handler to process hit/damage effects or forced entry attempts with the door item and hit parameters.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DOOR_NS::05E4",
+        "callee": "U8P_DOOR_NS::016C",
+        "purpose": "Invoke permission/parameter checks for individual pieces discovered by the scanner before attempting animation updates.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DOOR_NS::0340",
+        "callee": "U8P_DOOR_NS::016C",
+        "purpose": "Call the helper that computes per-piece parameters and performs the FREE::2411 check to verify a piece may be updated during animation.",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_DOOR_NS::00D0",
+        "callee": "Item::getQuality",
+        "purpose": "Read the door's quality/flags to determine locked/auto/mode bits used while selecting the descriptive text.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DOOR_NS::00D0",
+        "callee": "Item::getType",
+        "purpose": "Identify door subtype (normal vs tower vs special) to select the appropriate descriptor string.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DOOR_NS::00D0",
+        "callee": "Item::bark",
+        "purpose": "Emit the chosen descriptive string to the examining player/process.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DOOR_NS::016C",
+        "callee": "FREE::2411",
+        "purpose": "Perform a tile/resource claim or availability test with computed parameters to decide whether a piece can be updated.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DOOR_NS::0340",
+        "callee": "FREE::2411",
+        "purpose": "Repeatedly check/claim each tile/piece before performing frame/quality updates as part of animation.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DOOR_NS::0340",
+        "callee": "FREE::1C19",
+        "purpose": "Spawn a timed/asynchronous helper (likely to schedule delays or visual/sound effects) during animation steps.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DOOR_NS::0340",
+        "callee": "Item::setFrame",
+        "purpose": "Update the visual frame of a door piece during open/close animation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DOOR_NS::0340",
+        "callee": "Item::setQuality",
+        "purpose": "Toggle quality bits to reflect new door state (open/closed/locked) as part of the transition.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DOOR_NS::0340",
+        "callee": "Item::getFrame",
+        "purpose": "Read the current frame to compute stepwise changes and target frames for animation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DOOR_NS::05E4",
+        "callee": "Item::getX",
+        "purpose": "Read coordinates when scanning for neighboring pieces of a multi-tile door.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DOOR_NS::05E4",
+        "callee": "Item::getY",
+        "purpose": "Read coordinates when scanning for neighboring pieces of a multi-tile door.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DOOR_NS::05E4",
+        "callee": "Item::getZ",
+        "purpose": "Read height/level when scanning for neighboring pieces to ensure matching plane.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_DOOR_NS::DOOR_NS::look",
+    "behavior_summary_one_liner": "Implements the in-game door object behavior: responding to player examine (U8P_DOOR_NS::look), use, and hit events; producing descriptive text for examined doors; and driving open/close animations and multi-tile updates.",
+    "external_call_count": 12,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

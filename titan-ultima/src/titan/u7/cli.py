@@ -16,6 +16,7 @@ from types import SimpleNamespace
 from typing import Annotated, Literal, Optional
 
 import typer
+from titan._config import get_config
 
 u7_app = typer.Typer(
     name="u7",
@@ -23,6 +24,37 @@ u7_app = typer.Typer(
     no_args_is_help=True,
     pretty_exceptions_enable=False,
 )
+
+
+def _resolve_u7_paths(game: str) -> tuple[Optional[str], Optional[str]]:
+    """Resolve STATIC and palette paths from multi-game config for BG/SI."""
+    cfg = get_config() or {}
+    section_key = "u7bg" if game.lower() == "bg" else "u7si"
+    section = cfg.get(section_key, {}) if isinstance(cfg, dict) else {}
+    game_cfg = section.get("game", {}) if isinstance(section, dict) else {}
+    paths_cfg = section.get("paths", {}) if isinstance(section, dict) else {}
+
+    base = game_cfg.get("base") if isinstance(game_cfg, dict) else None
+    base_path = Path(str(base)).expanduser() if base else None
+
+    def _abs_from_cfg(value: object) -> Optional[str]:
+        if not value:
+            return None
+        p = Path(str(value)).expanduser()
+        if p.is_absolute() or base_path is None:
+            return str(p)
+        return str(base_path / p)
+
+    static = _abs_from_cfg(paths_cfg.get("static"))
+    palette = _abs_from_cfg(paths_cfg.get("palette"))
+
+    # Reasonable fallback if only base was configured.
+    if static is None and base_path is not None:
+        static = str(base_path / "STATIC")
+    if palette is None and static is not None:
+        palette = str(Path(static) / "PALETTES.FLX")
+
+    return static, palette
 
 
 # ============================================================================
@@ -546,6 +578,8 @@ def cmd_map_render(args: SimpleNamespace) -> int:
     from titan.u7.typeflag import U7TypeFlags
 
     static_dir = args.static
+    if not static_dir:
+        static_dir, _ = _resolve_u7_paths(getattr(args, "game", "bg"))
     if not os.path.isdir(static_dir):
         print(f"ERROR: STATIC directory not found: {static_dir}",
               file=sys.stderr)
@@ -557,6 +591,8 @@ def cmd_map_render(args: SimpleNamespace) -> int:
         return 1
 
     palette_path = args.palette
+    if not palette_path:
+        _, palette_path = _resolve_u7_paths(getattr(args, "game", "bg"))
     if not palette_path:
         palette_path = os.path.join(static_dir, "PALETTES.FLX")
     if not os.path.isfile(palette_path):
@@ -671,12 +707,16 @@ def cmd_map_sample(args: SimpleNamespace) -> int:
     from titan.u7.palette import U7Palette
 
     static_dir = args.static
+    if not static_dir:
+        static_dir, _ = _resolve_u7_paths(getattr(args, "game", "bg"))
     if not os.path.isdir(static_dir):
         print(f"ERROR: STATIC directory not found: {static_dir}",
               file=sys.stderr)
         return 1
 
     palette_path = args.palette
+    if not palette_path:
+        _, palette_path = _resolve_u7_paths(getattr(args, "game", "bg"))
     if not palette_path:
         palette_path = os.path.join(static_dir, "PALETTES.FLX")
     if not os.path.isfile(palette_path):
@@ -727,6 +767,8 @@ def cmd_typeflag_dump(args: SimpleNamespace) -> int:
     from titan.u7.typeflag import U7TypeFlags
 
     static_dir = args.static
+    if not static_dir:
+        static_dir, _ = _resolve_u7_paths(getattr(args, "game", "bg"))
     if not os.path.isdir(static_dir):
         print(f"ERROR: STATIC directory not found: {static_dir}",
               file=sys.stderr)
@@ -972,6 +1014,8 @@ def cmd_save_npcs(args: SimpleNamespace) -> int:
     # Load TFA for container detection if STATIC path provided
     container_shapes: set[int] | None = None
     static_dir = getattr(args, "static", None)
+    if not static_dir:
+        static_dir, _ = _resolve_u7_paths(getattr(args, "game", "bg"))
     if static_dir:
         from titan.u7.typeflag import U7TypeFlags
         tfa = U7TypeFlags.from_dir(static_dir)
@@ -1055,9 +1099,13 @@ _EXCLUDE_FLAG_CHOICES = [
 
 @u7_app.command("map-render")
 def map_render_cmd(
-    static: Annotated[str, typer.Argument(
+    static: Annotated[Optional[str], typer.Argument(
         help="Path to STATIC directory containing U7MAP, U7CHUNKS, "
-             "SHAPES.VGA, etc.")],
+             "SHAPES.VGA, etc. (default: from titan.toml u7bg/u7si)")] = None,
+    game: Annotated[
+        Literal["bg", "si"],
+        typer.Option("--game", help="Use config section for BG or SI defaults"),
+    ] = "bg",
     superchunk: Annotated[
         Optional[str],
         typer.Option("--superchunk", "--sc",
@@ -1248,6 +1296,7 @@ def map_render_cmd(
         print(f"Zone profile '{zone_profile}' -> {len(profile_rects)} rectangle(s)")
 
     raise SystemExit(cmd_map_render(SimpleNamespace(
+        game=game,
         static=static, superchunk=sc_int,
         chunk_x0=chunk_x0 or 0, chunk_y0=chunk_y0 or 0,
         chunk_x1=chunk_x1, chunk_y1=chunk_y1,
@@ -1264,8 +1313,12 @@ def map_render_cmd(
 
 @u7_app.command("map-sample")
 def map_sample_cmd(
-    static: Annotated[str, typer.Argument(
-        help="Path to STATIC directory")],
+    static: Annotated[Optional[str], typer.Argument(
+        help="Path to STATIC directory (default: from titan.toml u7bg/u7si)")] = None,
+    game: Annotated[
+        Literal["bg", "si"],
+        typer.Option("--game", help="Use config section for BG or SI defaults"),
+    ] = "bg",
     palette: Annotated[
         Optional[str],
         typer.Option("-p", "--palette",
@@ -1303,6 +1356,7 @@ def map_sample_cmd(
 ) -> None:
     """Render a colour-sampled U7 world minimap to PNG."""
     raise SystemExit(cmd_map_sample(SimpleNamespace(
+        game=game,
         static=static, palette=palette, output=output,
         scale=scale, grid=grid, grid_size=grid_size,
         superchunks=superchunks, exclude_flags=exclude,
@@ -1311,8 +1365,12 @@ def map_sample_cmd(
 
 @u7_app.command("typeflag-dump")
 def typeflag_dump_cmd(
-    static: Annotated[str, typer.Argument(
-        help="Path to STATIC directory containing TFA.DAT")],
+    static: Annotated[Optional[str], typer.Argument(
+        help="Path to STATIC directory containing TFA.DAT (default: from titan.toml u7bg/u7si)")] = None,
+    game: Annotated[
+        Literal["bg", "si"],
+        typer.Option("--game", help="Use config section for BG or SI defaults"),
+    ] = "bg",
     output: Annotated[
         Optional[str],
         typer.Option("-o", "--output",
@@ -1326,6 +1384,7 @@ def typeflag_dump_cmd(
 ) -> None:
     """Dump U7 type flag data (TFA.DAT, SHPDIMS.DAT, WGTVOL.DAT, OCCLUDE.DAT)."""
     raise SystemExit(cmd_typeflag_dump(SimpleNamespace(
+        game=game,
         static=static, output=output, format=format,
     )))
 
@@ -1408,8 +1467,12 @@ def save_npcs_cmd(
     static: Annotated[
         Optional[str],
         typer.Option("--static",
-                     help="Path to STATIC directory (for TFA container detection)"),
+                     help="Path to STATIC directory (default: from titan.toml u7bg/u7si)"),
     ] = None,
+    game: Annotated[
+        Literal["bg", "si"],
+        typer.Option("--game", help="Use config section for BG or SI defaults"),
+    ] = "bg",
     output: Annotated[
         Optional[str],
         typer.Option("-o", "--output",
@@ -1423,7 +1486,7 @@ def save_npcs_cmd(
 ) -> None:
     """Dump NPC data from an Exult U7 savegame."""
     raise SystemExit(cmd_save_npcs(SimpleNamespace(
-        file=file, static=static, output=output, format=format,
+        file=file, game=game, static=static, output=output, format=format,
     )))
 
 

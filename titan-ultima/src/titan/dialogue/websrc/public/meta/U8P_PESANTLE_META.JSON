@@ -1,0 +1,183 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_PESANTLE.json",
+  "file": "U8P_PESANTLE",
+  "behavior_summary": [
+    "When an actor enters the item's fast-area, the script may convert an Egg item into a peasant NPC: it checks local gating conditions, optionally rolls a random chance (if global hasHeart is false), reads the egg type id, creates an NPC of type 0x0344, marks the Egg item with a status flag (0x0080), removes/pops the item from the world at its coordinates, and launches an initialization behavior on the new NPC passing the egg id.",
+    "Spawning is guarded by a scan/loop that must set a local boolean (BP-05); if that flag is not set the handler returns without action.",
+    "If the global flag hasHeart is false, a probabilistic urandom(0x64) < 0x3C check can abort spawning (inferred gating).",
+    "The created NPC receives the egg id so it can initialize behavior (spawn METHOD::15E7 called with the egg id and a small flag)."
+  ],
+  "notable_control_flow": [
+    "Early exit if the scan/loop condition (local BP-05) is not satisfied — this is the primary gate before any spawning logic.",
+    "Conditional probabilistic gate: when global hasHeart == false, the code calls urandom(0x64) and compares the result against 0x3C; failing this check prevents NPC creation.",
+    "On pass: Egg::getEggId is called, Npc::create(type 0x0344) is invoked, item status is updated (Item::orStatus with mask 0x0080), the item coordinates are read (Item::getX/Y/Z) and Item::pop is called to remove the item, and finally a spawn (METHOD::15E7) is queued on the NPC with the egg id and flag 0x02."
+  ],
+  "open_questions": [
+    "What exact condition/criteria in the initial scan/loop sets BP-05 (what does the scan check for and against which targets)?",
+    "Is urandom called with a 0..99 range (0x64) or 0..255 and how should the comparison to 0x3C be interpreted for real spawn probability?",
+    "What is the semantic meaning of the item status mask 0x0080 (consumed, reserved, picked up?) and whether it prevents other scripts from acting on the same item?",
+    "What concrete NPC class/type does id 0x0344 represent in game data (the script implies 'peasant' but exact identity is unknown)?",
+    "What precisely does spawn METHOD::15E7 do on the created NPC (initial behavior, AI state, or further item-driven logic)?",
+    "Does the U8P_PESANTLE::enterFastArea event trigger only for the player/avatar or for any actor, and how does actor identity affect the gating scan?"
+  ],
+  "main_function": {
+    "name": "U8P_PESANTLE::enterFastArea",
+    "execution_form": "process",
+    "purpose": "Respond to an actor entering the fast-area of an Egg item by conditionally spawning a peasant-type NPC associated with that Egg, removing/consuming the Egg item, and initializing the NPC with the Egg's type id.",
+    "entry_conditions": [
+      "Event: fast-area entry for the Item instance (egg) referenced by the event parameter ([BP+06h]).",
+      "Local scan/loop must set BP-05 true; otherwise the function returns early.",
+      "If global hasHeart is false, a successful urandom(0x64) < 0x3C check is required to proceed (inferred)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_PESANTLE::enterFastArea",
+      "kind": "main",
+      "role": "Fast-area enter handler that may spawn an NPC from an Egg item and remove the item",
+      "confidence": "high"
+    },
+    {
+      "name": "urandom",
+      "kind": "extern",
+      "role": "Random number generator used for a probabilistic spawn gate when hasHeart is false",
+      "confidence": "high"
+    },
+    {
+      "name": "Egg::getEggId",
+      "kind": "extern",
+      "role": "Read egg-type identifier from the passed Item instance",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::create",
+      "kind": "extern",
+      "role": "Create an NPC instance of given type (0x0344) and return its handle/pid",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::orStatus",
+      "kind": "extern",
+      "role": "Set status flags on the Item (mask 0x0080) — likely marking it as consumed/claimed",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::getX",
+      "kind": "extern",
+      "role": "Retrieve item X coordinate for use with Item::pop",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getY",
+      "kind": "extern",
+      "role": "Retrieve item Y coordinate for use with Item::pop",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getZ",
+      "kind": "extern",
+      "role": "Retrieve item Z coordinate for use with Item::pop",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::pop",
+      "kind": "extern",
+      "role": "Remove/pop the item from the world at the given coordinates, possibly in association with the new NPC",
+      "confidence": "high"
+    },
+    {
+      "name": "spawn METHOD::15E7",
+      "kind": "extern",
+      "role": "Start/queue a behavior method on the created NPC to initialize it with egg id and flags",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_PESANTLE::enterFastArea",
+        "callee": "urandom",
+        "purpose": "When global hasHeart is false, perform a probabilistic roll (urandom(0x64) compared to 0x3C) to decide whether spawning proceeds",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_PESANTLE::enterFastArea",
+        "callee": "Egg::getEggId",
+        "purpose": "Read the egg type identifier from the passed Item; result is stored locally and later passed to the spawned NPC",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PESANTLE::enterFastArea",
+        "callee": "Npc::create",
+        "purpose": "Create a new NPC instance of type 0x0344; returned handle is used for further modifications and spawning behavior",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PESANTLE::enterFastArea",
+        "callee": "Item::orStatus",
+        "purpose": "Mark the Egg item with status mask 0x0080 (likely to prevent reuse/indicate consumed state)",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_PESANTLE::enterFastArea",
+        "callee": "Item::getX",
+        "purpose": "Obtain the Egg's X coordinate for Item::pop",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PESANTLE::enterFastArea",
+        "callee": "Item::getY",
+        "purpose": "Obtain the Egg's Y coordinate for Item::pop",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PESANTLE::enterFastArea",
+        "callee": "Item::getZ",
+        "purpose": "Obtain the Egg's Z coordinate for Item::pop",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PESANTLE::enterFastArea",
+        "callee": "Item::pop",
+        "purpose": "Remove/pop the Egg item from the world at its coordinates after creating the NPC",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PESANTLE::enterFastArea",
+        "callee": "spawn METHOD::15E7",
+        "purpose": "Launch an initialization behavior on the created NPC, passing the previously read egg id and a byte flag (0x02)",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "hasHeart",
+        "likely_effect": "Gate whether an additional probabilistic spawn check (urandom-based) is applied; if hasHeart == false the random gate can block spawning",
+        "confidence": "high"
+      }
+    ],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "PESANTLE::enterFastArea",
+    "behavior_summary_one_liner": "When an actor enters the item's fast-area, the script may convert an Egg item into a peasant NPC: it checks local gating conditions, optionally rolls a random chance (if global hasHeart is false), reads the egg type id, creates an NPC of type 0x0344, marks the Egg item with a status flag (0x0080), removes/pops the item from the world at its coordinates, and launches an initialization behavior on the new NPC passing the egg id.",
+    "external_call_count": 9,
+    "flag_read_count": 1,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

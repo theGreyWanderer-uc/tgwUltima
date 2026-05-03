@@ -1,0 +1,211 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_EGHOUL.json",
+  "file": "U8P_EGHOUL",
+  "behavior_summary": [
+    "Scans a provided context (area/container) for egg-like items and, for each matching egg, schedules per-item processing.",
+    "Per-item processing (helper) reads the egg's frame (incubation stage). If the frame is below a threshold (observed compare against 7) it increments the frame, triggers a deferred helper/effect (spawn FREE::1C19) and yields/suspends to allow future processing.",
+    "When an egg's frame reaches the threshold the helper attempts to convert the egg into a ghoul NPC (shape 0x8E), place the NPC at the egg's coordinates, set an initial target flag on the NPC, and remove/destroy the egg item. If NPC creation fails the helper runs fallback cleanup and destroys the egg anyway."
+  ],
+  "notable_control_flow": [
+    "U8P_EGHOUL::hatch enumerates items filtered by shape/type and spawns U8P_EGHOUL::00BD for each matching item; looping continues until all matches are processed.",
+    "U8P_EGHOUL::00BD branches on Item::getFrame() < 7 vs >= 7: low-frame path increments frame and spawns FREE::1C19 (deferred continuation); high-frame path attempts NPC creation and then cleanup (pop/place/destroy).",
+    "NPC creation success/failure changes the cleanup path: on success use Item::getX/Y/Z + Item::pop(x,y,z) and Npc::setTarget then Item::destroy; on failure call Item::pop() fallback then Item::destroy."
+  ],
+  "open_questions": [
+    "What precisely triggers U8P_EGHOUL::hatch in gameplay (periodic timer, area entry, explicit event)? (inferred: Event 7 'U8P_EGHOUL::hatch' is involved).",
+    "Exact semantics of item 'frame' (range meaning) and why threshold value 7 was chosen — is it time, stages, or attempts?",
+    "What does spawned FREE::1C19 do (visual effect, timer reschedule, sound, or other deferred processing)?",
+    "Precise engine semantics of Item::push and Item::pop variants (what internal stack/state they manipulate) and how they affect conversion to NPC.",
+    "Meaning of Npc::setTarget(...,1) in context — likely hostility or default AI target assignment, but not certain."
+  ],
+  "main_function": {
+    "name": "U8P_EGHOUL::hatch",
+    "execution_form": "process",
+    "purpose": "Enumerate egg-like items in the supplied context and kick off per-item incubation/hatching processing so eggs progress toward hatching or convert into ghoul NPCs when mature.",
+    "entry_conditions": [
+      "Invoked with a context/container/area parameter (BP+06) to scan; appears to run when the engine triggers the 'U8P_EGHOUL::hatch' event (Event 7) or equivalent scheduling.",
+      "Operates by iterating items of a specific shape/type and spawning a helper for each match."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_EGHOUL::hatch",
+      "kind": "main",
+      "role": "Enumerates a context for egg items and spawns per-item handlers.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_EGHOUL::00BD",
+      "kind": "helper",
+      "role": "Per-item handler: increment incubation frame or U8P_EGHOUL::hatch the egg into a ghoul NPC, then perform cleanup.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getFrame",
+      "kind": "extern",
+      "role": "Read item's frame/incubation stage for decision-making.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::setFrame",
+      "kind": "extern",
+      "role": "Write updated frame when incrementing incubation progress.",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::1C19",
+      "kind": "extern",
+      "role": "Spawned deferred helper/effect after frame increment (likely a timer or visual/sound effect).",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::push",
+      "kind": "extern",
+      "role": "Prepare/lock/mark the item before NPC creation (engine internal stack semantics).",
+      "confidence": "medium"
+    },
+    {
+      "name": "Npc::create",
+      "kind": "extern",
+      "role": "Create NPC of a specific shape (ghoul shape 0x8E observed); returns NPC id or 0 on failure.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getX",
+      "kind": "extern",
+      "role": "Query item X coordinate for NPC placement.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getY",
+      "kind": "extern",
+      "role": "Query item Y coordinate for NPC placement.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getZ",
+      "kind": "extern",
+      "role": "Query item Z coordinate for NPC placement.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::pop",
+      "kind": "extern",
+      "role": "Place/pop the newly created NPC into the world at coordinates (two variants observed: with args x,y,z/flags and no-arg fallback).",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::setTarget",
+      "kind": "extern",
+      "role": "Set NPC target/behavior flag (called with value 1; likely sets hostility or initial target).",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::destroy",
+      "kind": "extern",
+      "role": "Remove/destroy the egg item after hatching or on failure recovery.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_EGHOUL::hatch",
+        "callee": "U8P_EGHOUL::00BD",
+        "purpose": "Spawn a per-item handler for each egg-like item found in the scanned context so each egg can progress or U8P_EGHOUL::hatch independently.",
+        "confidence": "high"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_EGHOUL::00BD",
+        "callee": "Item::getFrame",
+        "purpose": "Read current incubation/frame value to decide whether to increment or U8P_EGHOUL::hatch.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_EGHOUL::00BD",
+        "callee": "Item::setFrame",
+        "purpose": "Write incremented incubation/frame value when egg is not yet mature.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_EGHOUL::00BD",
+        "callee": "FREE::1C19",
+        "purpose": "Spawned after incrementing frame; likely schedules a future wake-up, visual effect, or other deferred processing to continue incubation.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_EGHOUL::00BD",
+        "callee": "Item::push",
+        "purpose": "Engine preparation step done before attempting NPC creation/conversion; likely protects or marks the item during conversion.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_EGHOUL::00BD",
+        "callee": "Npc::create",
+        "purpose": "Attempt to create the ghoul NPC (shape 0x8E) when egg is mature.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_EGHOUL::00BD",
+        "callee": "Item::getX",
+        "purpose": "Get X coordinate of egg to place the new NPC.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_EGHOUL::00BD",
+        "callee": "Item::getY",
+        "purpose": "Get Y coordinate of egg to place the new NPC.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_EGHOUL::00BD",
+        "callee": "Item::getZ",
+        "purpose": "Get Z coordinate of egg to place the new NPC.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_EGHOUL::00BD",
+        "callee": "Item::pop",
+        "purpose": "Place/pop the newly created NPC into the world at the egg's coordinates (or call fallback no-arg variant on creation failure).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_EGHOUL::00BD",
+        "callee": "Npc::setTarget",
+        "purpose": "Set the new NPC's target/behavior flag to an initial value (1 observed) after placement.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_EGHOUL::00BD",
+        "callee": "Item::destroy",
+        "purpose": "Destroy/remove the egg item instance after successful hatching or after failure recovery.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_EGHOUL::hatch",
+    "behavior_summary_one_liner": "Scans a provided context (area/container) for egg-like items and, for each matching egg, schedules per-item processing.",
+    "external_call_count": 11,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

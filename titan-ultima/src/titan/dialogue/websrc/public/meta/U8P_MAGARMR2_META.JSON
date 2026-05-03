@@ -1,0 +1,75 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_MAGARMR2.json",
+  "file": "U8P_MAGARMR2",
+  "behavior_summary": [
+    "Handles the 'U8P_MAGARMR2::look' (examine) event for the Magic Armor item: when the item is examined it sets per-item state (info and process-exclude flags) and presents a short description to the player.",
+    "Constructs the literal string \"magic armor \", passes it (along with the item/process pointer) to Item::bark to display the examine text, then frees the temporary string.",
+    "Uses the return value from Item::bark in a small control-flow sequence (imply/pop/suspend) that affects function termination or process scheduling but does not change global state.",
+    "Does not read or write any global game flags; all state changes are limited to the item instance (per-item info/process exclusion)."
+  ],
+  "notable_control_flow": [
+    "Sequence: set per-item info -> set process-exclude -> build/allocate string -> call Item::bark -> free string -> push bark return -> imply/pop/suspend -> return.",
+    "The imply/pop/suspend pattern suggests the script may conditionally yield or affect the caller/process based on the bark return value (inferred), but exact scheduler semantics are not encoded here."
+  ],
+  "open_questions": [
+    "What exact info key/value is being set on the item by the 'set info' opcode (the disassembly shows an id but the semantic meaning is not explicit)?",
+    "Which process/actor receives the bark in practice (is the first bark parameter definitely the item PID at [BP+06h] or a viewer PID)?",
+    "What precise runtime effect does the imply/pop/suspend sequence have in this engine's scheduler (does it pause the calling process, suppress further processing, or simply consume the return)?"
+  ],
+  "main_function": {
+    "name": "U8P_MAGARMR2::look",
+    "execution_form": "process",
+    "purpose": "Respond to the item's 'U8P_MAGARMR2::look' (examine) event by marking the item and emitting the short description string \"magic armor \" to the game UI via Item::bark.",
+    "entry_conditions": [
+      "Event 0 (U8P_MAGARMR2::look) — triggered when a player or actor examines/looks at the Magic Armor item (entering the item's U8P_MAGARMR2::look/observe area)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_MAGARMR2::look",
+      "kind": "main",
+      "role": "Primary handler for the Magic Armor 'U8P_MAGARMR2::look' event; sets per-item flags and invokes Item::bark with the literal description.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine-provided routine used to display a short text message/label from an item or process to a player/process (used here to show 'magic armor ').",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_MAGARMR2::look",
+        "callee": "Item::bark",
+        "purpose": "Display the examine/U8P_MAGARMR2::look text for the Magic Armor item ('magic armor ') to the appropriate process/player. The item/process pointer and the constructed string are passed as parameters.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "MAGARMR2::look",
+    "behavior_summary_one_liner": "Handles the 'U8P_MAGARMR2::look' (examine) event for the Magic Armor item: when the item is examined it sets per-item state (info and process-exclude flags) and presents a short description to the player.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

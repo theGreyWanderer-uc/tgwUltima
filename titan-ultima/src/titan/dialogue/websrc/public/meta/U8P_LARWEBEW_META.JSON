@@ -1,0 +1,102 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_LARWEBEW.json",
+  "file": "U8P_LARWEBEW",
+  "behavior_summary": [
+    "U8P_LARWEBEW::gotHit handles an object being hit by recording a 2-byte value under info key 0x020C on the hit object, marking the hit as handled so no further default processing occurs, and then destroying the same object.",
+    "The handler treats its first parameter as the object reference/ID and uses it both for the set-info operation and for Item::destroy.",
+    "The second parameter is present in the function signature but is not used in the observed code.",
+    "Overall gameplay effect: when this object receives a hit it records a small state flag/value, suppresses additional hit processing, and removes the object from the world (cleanup/destruction)."
+  ],
+  "notable_control_flow": [
+    "U8P_LARWEBEW::gotHit pushes the object reference and a constant info key (0x020C) plus a 2-byte value, then invokes the engine 'set info' operation to store that value on the object.",
+    "Immediately after setting the info the handler issues a 'process exclude' so subsequent/default hit handling is suppressed for this event.",
+    "Finally it calls Item::destroy with the same object reference to remove the item from the game; the sequence is 'set-info -> process-exclude -> destroy'."
+  ],
+  "open_questions": [
+    "What is the semantic meaning of info key 0x020C (e.g., a 'marked-as-hit' flag, damage type, or owner id) — this is inferred but not explicit.",
+    "What is the exact source and semantic meaning of the indirect 2-byte value written into info 0x020C (constant, derived from the object, or caller-supplied)?",
+    "Does process-exclude prevent only default engine 'hit' behavior or also block other scripts/handlers attached to this object? (inferred to stop default handling)",
+    "Is Item::destroy immediate (synchronous) or deferred by the engine (affects timing of any chained effects)?"
+  ],
+  "main_function": {
+    "name": "U8P_LARWEBEW::gotHit",
+    "execution_form": "process",
+    "purpose": "Respond to a hit on an object by recording a small info value on that object, preventing further hit processing for this event, and destroying the object.",
+    "entry_conditions": [
+      "Event-driven: invoked when this object receives a hit (Event 6 / U8P_LARWEBEW::gotHit).",
+      "Called with the object reference/ID as the first parameter ([BP+06h]) and an additional word parameter (unused in observed snippet)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_LARWEBEW::gotHit",
+      "kind": "main",
+      "role": "Event handler for hit events — records info on the object, excludes further processing, and destroys the object.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_LARWEBEW::set info (opcode 77)",
+      "kind": "extern",
+      "role": "Engine opcode to store a key/value pair (info) on an object instance.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_LARWEBEW::process exclude (opcode 78)",
+      "kind": "extern",
+      "role": "Engine opcode to mark the current event/object as excluded/handled to prevent further processing.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::destroy",
+      "kind": "extern",
+      "role": "Remove/destroy the specified item/object from the game world.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_LARWEBEW::gotHit",
+        "callee": "U8P_LARWEBEW::set info (opcode 77)",
+        "purpose": "Write a 2-byte value into the object's info field identified by key 0x020C (record state about the hit).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LARWEBEW::gotHit",
+        "callee": "U8P_LARWEBEW::process exclude (opcode 78)",
+        "purpose": "Mark the hit event/object as handled so default or further hit processing is suppressed.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LARWEBEW::gotHit",
+        "callee": "Item::destroy",
+        "purpose": "Destroy/remove the object that was hit (cleanup after recording info and excluding processing).",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_LARWEBEW::gotHit",
+    "behavior_summary_one_liner": "U8P_LARWEBEW::gotHit handles an object being hit by recording a 2-byte value under info key 0x020C on the hit object, marking the hit as handled so no further default processing occurs, and then destroying the same object.",
+    "external_call_count": 3,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

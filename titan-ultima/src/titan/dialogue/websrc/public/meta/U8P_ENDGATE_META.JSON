@@ -1,0 +1,77 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_ENDGATE.json",
+  "file": "U8P_ENDGATE",
+  "behavior_summary": [
+    "U8P_ENDGATE::look is the handler invoked when an actor 'looks at' a gate object. It sets metadata on the gate/process (via a 'set info' with value 0x0208 and a 'process exclude' operation) and then asks the gate's process/item to 'bark' the short literal string \"gate \".",
+    "The bark call's return value is observed (used in an implies/pop sequence) and then the script suspends. No global flags are read or written by this handler.",
+    "Overall effect in gameplay: when the player inspects the gate, the gate announces itself with the text \"gate \" and the gate/process is marked with a specific info/state and excluded from some processing path (likely to avoid repeated handling)."
+  ],
+  "notable_control_flow": [
+    "Entry: Event 0 (U8P_ENDGATE::look) — the function runs in response to an examine/U8P_ENDGATE::look trigger on the gate.",
+    "Setup: initialize a small local slot (local_00) to 0 (unused thereafter in the excerpt).",
+    "Metadata ops: push info id 0x0208 and the process instance to perform 'set info' and then 'process exclude' on the object/process — likely changes object state or processing inclusion.",
+    "Communication: call external Item::bark(process, \"gate \") to show/emit the textual description.",
+    "Return/finish: check/consume Item::bark return value (via implies/pop) into a temporary then suspend the process."
+  ],
+  "open_questions": [
+    "What is the semantic meaning of info id 0x0208 (what game state or tag does it represent)?",
+    "What precise engine behavior does 'process exclude' enact for this gate (temporary suppression, permanent exclusion, or routing to a different handler)?",
+    "What is the significance of the Item::bark return value and the implies/pop sequence (does it indicate success, a blocking condition, or user interaction)?",
+    "Is local_00 intentionally reserved for future use or used elsewhere in code paths not visible in this excerpt?"
+  ],
+  "main_function": {
+    "name": "U8P_ENDGATE::look",
+    "execution_form": "process",
+    "purpose": "Respond to the player/actor looking at a gate by marking the gate's process with a specific info/state, excluding it from a processing set, and emitting the short description string \"gate \".",
+    "entry_conditions": [
+      "Event 0 (U8P_ENDGATE::look) — invoked when an actor looks at/inspects the gate object"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_ENDGATE::look",
+      "kind": "main",
+      "role": "Look/examine event handler for the gate object",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine used to display or emit a short string from an item/process to a target process/player",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_ENDGATE::look",
+        "callee": "Item::bark",
+        "purpose": "Emit/display the literal string \"gate \" from the gate's process to the viewing process/player",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "guard",
+    "cleanup"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_ENDGATE::look",
+    "behavior_summary_one_liner": "U8P_ENDGATE::look is the handler invoked when an actor 'looks at' a gate object. It sets metadata on the gate/process (via a 'set info' with value 0x0208 and a 'process exclude' operation) and then asks the gate's process/item to 'bark' the short literal string \"gate \".",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

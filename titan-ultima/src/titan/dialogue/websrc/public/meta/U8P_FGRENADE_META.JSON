@@ -1,0 +1,187 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_FGRENADE.json",
+  "file": "U8P_FGRENADE",
+  "behavior_summary": [
+    "FGRENADE::look: When a player/actor inspects the grenade/gem item, the script reads the item's frame and makes the inspecting actor 'bark' a short description. Frames map to three descriptions: low frames -> 'fire gem', mid frames -> 'chaos gem', high frames -> 'unstable gem'.",
+    "FGRENADE::use: Using/activating the grenade checks its quantity, decrements it, updates frame/animation state (and may spawn a short process for fuse/animation). It then attempts to spawn a throwable projectile (Item::legal_create) and, on success, applies hurl parameters (Item::hurl) with randomized offsets; on failure or in alternate paths it invokes igniteChaos at the map coordinates. The use path plays a sound, creates visual sprites/effects, and destroys the original item.",
+    "FGRENADE::hit and FGRENADE::gotHit: Present as event stubs that set process info/process-exclude and immediately return in the provided excerpt (no gameplay effect shown)."
+  ],
+  "notable_control_flow": [
+    "FGRENADE::look branches by a mapped frame value: frame < 4 => 'fire gem', 4 <= frame < 8 => 'chaos gem', otherwise => 'unstable gem'.",
+    "FGRENADE::use early-returns if Item::getQ reports quantity == 0 (guard).",
+    "FGRENADE::use decrements quantity and updates frame; if the (post-update) frame equals 0 it calls a specific METHOD::0676 path; otherwise it proceeds to spawn/hurl logic.",
+    "Projectile creation path: loop/compute randomized offsets -> Item::legal_create to spawn projectile -> on success call Item::hurl with randomized params; on failure or other branch call igniteChaos at item coordinates.",
+    "After spawn/hurl or igniteChaos the script plays a sound (playSFX), creates visual sprite(s) (createSprite), and destroys the original FGRENADE item (Item::destroy)."
+  ],
+  "open_questions": [
+    "Precise operations and parameter semantics of FREE::2A56 and FREE::1A96 (they appear to map/normalize frame values and compute randomized coordinate offsets respectively).",
+    "Exact parameter ordering and coordinate convention for igniteChaos (code suggests z,y,x ordering in calls; this is inferred).",
+    "Purpose and effects of METHOD::0676 spawned when frame==0 (inferred to trigger item-specific behavior but details unknown).",
+    "Full semantics of the spawned FREE::1C19 process (likely a fuse/timer/visual process) — timing and interactions are inferred from usage.",
+    "Precise numeric meanings of frames (which frame values correspond to which grenade subtype beyond the compared thresholds) and whether frame changes persist across uses."
+  ],
+  "main_function": {
+    "name": "U8P_FGRENADE::look",
+    "execution_form": "process",
+    "purpose": "Respond to an inspect/U8P_FGRENADE::look event on the FGRENADE item by determining its subtype from the item's frame and making the inspecting actor emit a short descriptor ('fire gem', 'chaos gem', or 'unstable gem').",
+    "entry_conditions": [
+      "Event 0 — triggered when an actor looks at or inspects the FGRENADE item (invoking process provides pid implicitly)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_FGRENADE::look",
+      "kind": "main",
+      "role": "Examine/description handler for FGRENADE items; maps frame to short bark strings for the inspecting actor.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FGRENADE::use",
+      "kind": "helper",
+      "role": "Activation/usage handler: checks quantity, updates frame/animation, may spawn fuse/process, attempts to spawn and hurl a projectile or triggers an on-ground explosion (igniteChaos), plays SFX/creates sprites, and destroys the original item.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FGRENADE::hit",
+      "kind": "helper",
+      "role": "Hit event stub — sets process info/process-exclude and returns (no additional behavior in excerpt).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FGRENADE::gotHit",
+      "kind": "helper",
+      "role": "Got-hit event stub — sets process info/process-exclude and returns (no additional behavior in excerpt).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_FGRENADE::look",
+        "callee": "Item::getFrame",
+        "purpose": "Read the item's current frame/index used to decide description category.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FGRENADE::look",
+        "callee": "FREE::2A56",
+        "purpose": "Post-process or normalize the frame value before selecting the description string (exact mapping unclear).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FGRENADE::look",
+        "callee": "Item::bark",
+        "purpose": "Instruct the inspecting actor/process (pid) to emit a short text string describing the grenade subtype.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FGRENADE::use",
+        "callee": "Item::getFrame",
+        "purpose": "Read the current frame to drive use/animation logic and decide behavior branches.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FGRENADE::use",
+        "callee": "Item::getQ",
+        "purpose": "Read the item's quantity/charges to guard whether use proceeds (early-return if zero).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FGRENADE::use",
+        "callee": "Item::setQ",
+        "purpose": "Update the item's quantity after a use (decrement/set new quantity).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FGRENADE::use",
+        "callee": "Item::setFrame",
+        "purpose": "Update the item's frame/animation index to reflect state changes caused by use.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FGRENADE::use",
+        "callee": "FREE::1C19",
+        "purpose": "Spawn a short process for fuse/timer/visual animation while grenade is active or being thrown.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FGRENADE::use",
+        "callee": "METHOD::0676",
+        "purpose": "Call/spawn a method when frame==0; likely triggers specific behavior tied to that frame value (uncertain).",
+        "confidence": "low"
+      },
+      {
+        "caller": "U8P_FGRENADE::use",
+        "callee": "FREE::1A96",
+        "purpose": "Compute adjusted coordinates or randomized offset values for projectile spawn/hurl parameters (used repeatedly with map coords).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FGRENADE::use",
+        "callee": "urandom",
+        "purpose": "Generate pseudo-random values used to vary hurl timing/velocity/offsets.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FGRENADE::use",
+        "callee": "Item::legal_create",
+        "purpose": "Attempt to create the thrown projectile sprite/item at computed coordinates (returns success/created id).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FGRENADE::use",
+        "callee": "Item::hurl",
+        "purpose": "Apply throw/hurl parameters (velocity/direction) to the newly created projectile item when creation succeeds.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FGRENADE::use",
+        "callee": "U8P_FGRENADE::igniteChaos",
+        "purpose": "Trigger the grenade's explosion/chaos effect at a map location (used as fallback or ground-use path).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FGRENADE::use",
+        "callee": "U8P_FGRENADE::playSFX",
+        "purpose": "Play sound effect associated with grenade activation/throw/explosion.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FGRENADE::use",
+        "callee": "U8P_FGRENADE::createSprite",
+        "purpose": "Create visual sprite/effect at/near the item's position to show the throw or explosion animation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FGRENADE::use",
+        "callee": "Item::destroy",
+        "purpose": "Destroy/remove the original FGRENADE item instance after it has been used/spawned/thrown.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "FGRENADE::look",
+    "behavior_summary_one_liner": "FGRENADE::look: When a player/actor inspects the grenade/gem item, the script reads the item's frame and makes the inspecting actor 'bark' a short description. Frames map to three descriptions: low frames -> 'fire gem', mid frames -> 'chaos gem', high frames -> 'unstable gem'.",
+    "external_call_count": 17,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

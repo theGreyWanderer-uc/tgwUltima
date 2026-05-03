@@ -1,0 +1,117 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_BARREL.json",
+  "file": "U8P_BARREL",
+  "behavior_summary": [
+    "Provides simple interactive logic for a barrel item: when examined the barrel emits a short description string 'barrel '.",
+    "When the barrel is 'used' (interacted with), it queries its internal status bits and toggles an associated UI gump: if status bit 0x0100 is set it opens gump id 4, otherwise it closes the gump.",
+    "All state changes are local to the item and mediated by Item methods (bark, getStatus, openGump, closeGump); no global flags are read or written by this script."
+  ],
+  "notable_control_flow": [
+    "Event 0 (U8P_BARREL::look) -> U8P_BARREL::BARREL::look: allocate temporary string 'barrel ', call Item::bark(target=item, str='barrel '), free temp, return.",
+    "Event 1 (use) -> U8P_BARREL::BARREL::use: call Item::getStatus(item) -> store in local [BP-02h]; test bit 0x0100; if set call Item::openGump(item, 4) else call Item::closeGump(item).",
+    "No cross-object globals are modified; the routine's branching solely depends on a per-item status bit."
+  ],
+  "open_questions": [
+    "What semantic meaning does status bit 0x0100 carry beyond controlling gump visibility (inferred but not explicit)?",
+    "What content/behavior is presented in gump id 4 (the UI opened by Item::openGump)?",
+    "Does Item::bark target the player process/pid that triggered the U8P_BARREL::look, or does it emit a world/log message via the item itself (inferred as player-facing but exact target is not explicit)?"
+  ],
+  "main_function": {
+    "name": "U8P_BARREL::look",
+    "execution_form": "process",
+    "purpose": "Handle the item's 'U8P_BARREL::look' (examine) event by producing a short descriptive announcement using Item::bark with the literal string 'barrel '.",
+    "entry_conditions": [
+      "Event 0 — triggered when the Avatar or relevant actor looks at / examines the barrel"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_BARREL::look",
+      "kind": "main",
+      "role": "Examines the item and emits a short description via Item::bark.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BARREL::use",
+      "kind": "helper",
+      "role": "Handles item 'use' events: reads item status and opens or closes a UI gump (id 4) accordingly.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine-provided call to emit/display a short text message associated with an item/process.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getStatus",
+      "kind": "extern",
+      "role": "Returns the item's status bitfield used to determine UI/gump behavior.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::openGump",
+      "kind": "extern",
+      "role": "Opens an item-associated UI window (called here with id=4).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::closeGump",
+      "kind": "extern",
+      "role": "Closes the item-associated UI window.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_BARREL::look",
+        "callee": "Item::bark",
+        "purpose": "Emit/display the static description string 'barrel ' when the barrel is examined.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BARREL::use",
+        "callee": "Item::getStatus",
+        "purpose": "Retrieve the barrel's status bitfield to test bit 0x0100 which controls gump behavior.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BARREL::use",
+        "callee": "Item::openGump",
+        "purpose": "Open the item's UI window when status bit 0x0100 is set (called with gump id 4).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BARREL::use",
+        "callee": "Item::closeGump",
+        "purpose": "Close the item's UI window when status bit 0x0100 is clear.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_BARREL::BARREL::look",
+    "behavior_summary_one_liner": "Provides simple interactive logic for a barrel item: when examined the barrel emits a short description string 'barrel '.",
+    "external_call_count": 4,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

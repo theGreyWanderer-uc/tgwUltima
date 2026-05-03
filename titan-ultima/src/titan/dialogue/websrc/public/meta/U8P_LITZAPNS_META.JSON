@@ -1,0 +1,223 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_LITZAPNS.json",
+  "file": "U8P_LITZAPNS",
+  "behavior_summary": [
+    "When an actor (typically the Avatar) enters the item's fast trigger area, U8P_LITZAPNS::enterFastArea marks the item active, sets its visual frame to an idle state, and spawns a persistent behavior process that repeatedly emits zap pulses.",
+    "The spawned coroutine (U8P_LITZAPNS::00BC) drives randomized visual frame changes, schedules timed waits via a FREE timer helper, plays a short animation/sound pulse (U8P_LITZAPNS::01C3), scans nearby tiles for overlapping items, filters found items to living NPCs, and invokes METHOD::0080 on each valid target (likely applying the zap effect).",
+    "Leaving the fast area runs U8P_LITZAPNS::leaveFastArea which attempts to clear process/timer resources (calls FREE::2A56) and reset item state/flags to stop ongoing activity."
+  ],
+  "notable_control_flow": [
+    "U8P_LITZAPNS::enterFastArea immediately sets item frame and spawns a long-running process (U8P_LITZAPNS::00BC) rather than performing all work inline.",
+    "U8P_LITZAPNS::00BC uses repeated spawn of FREE::1C19 as delay/timer primitives and yields/suspends between animation/effect steps, forming a periodic pulse loop.",
+    "Within each pulse, the coroutine randomizes frames/timing (urandom), runs a short sub-animation/sound routine (01C3), then scans area tiles and conditionally calls METHOD::0080 on overlapping living NPCs.",
+    "leaveFastArea invokes a cleanup/free routine (FREE::2A56) to cancel spawned timers/processes; process ids returned by spawn are stored/used for this cleanup."
+  ],
+  "open_questions": [
+    "What exact game effect does METHOD::0080 apply to targeted NPCs (damage, knockback, status, or other)? — inferred but not explicit.",
+    "Are FREE::1C19 and FREE::2A56 generic timer/spawn management helpers (scheduling and cancel) or do they have additional side effects specific to this item?",
+    "What exact meaning do the different numeric frames convey (which frame indices correspond to idle, charging, firing visually)?",
+    "Are there any external conditions that stop the spawned coroutine other than leaveFastArea (e.g., global state changes or item destruction)?"
+  ],
+  "main_function": {
+    "name": "U8P_LITZAPNS::enterFastArea",
+    "execution_form": "process",
+    "purpose": "Initialize the item's active state on fast-area entry, set its visible frame to idle, and spawn the main zap/effect process that will repeatedly produce zap pulses and affect nearby NPCs.",
+    "entry_conditions": [
+      "Fast-area 'enter' event triggered when an actor enters the item's fast trigger region.",
+      "Called with the item instance as parameter (item pointer passed at BP+06h)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_LITZAPNS::enterFastArea",
+      "kind": "main",
+      "role": "Area-entry trigger: set item frame, mark/process-exclude item state, and spawn the persistent zap coroutine.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_LITZAPNS::leaveFastArea",
+      "kind": "helper",
+      "role": "Area-exit cleanup: reset info/process-exclude and call FREE::2A56 to cancel/free timers or spawned processes associated with the item.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_LITZAPNS::00BC",
+      "kind": "helper",
+      "role": "Spawned persistent coroutine that sequences randomized animation, schedules delays, runs short animation/sound pulses, scans surrounding tiles for overlapping entities, filters to living NPCs, and invokes METHOD::0080 on each target.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_LITZAPNS::01C3",
+      "kind": "helper",
+      "role": "Short animation/sound pulse invoked by 00BC: plays sound, steps item through a few frames with delays, then restores idle frame.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::setFrame",
+      "kind": "extern",
+      "role": "Engine call to change the item's visible frame/animation state.",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::1C19",
+      "kind": "extern",
+      "role": "Timer/spawn helper used to create delays or scheduled callbacks (spawned repeatedly by 00BC and 01C3).",
+      "confidence": "medium"
+    },
+    {
+      "name": "FREE::2A56",
+      "kind": "extern",
+      "role": "Cleanup/free helper invoked on leaveFastArea to cancel timers/spawned resources linked to the item.",
+      "confidence": "medium"
+    },
+    {
+      "name": "urandom",
+      "kind": "extern",
+      "role": "Random number generator used to vary frames, timing offsets, and compute parameters passed to METHOD::0080.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::overlaps",
+      "kind": "extern",
+      "role": "Test whether a scanned tile/address overlaps a candidate item (used to detect targets within effect area).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::isNpc",
+      "kind": "extern",
+      "role": "Check whether a found overlapping item is an NPC (non-NPCs are skipped).",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::isDead",
+      "kind": "extern",
+      "role": "Check whether a found NPC target is dead; dead NPCs are skipped.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::getDir",
+      "kind": "extern",
+      "role": "Return NPC facing/direction used with urandom to compute a parameter for METHOD::0080.",
+      "confidence": "medium"
+    },
+    {
+      "name": "METHOD::0080",
+      "kind": "extern",
+      "role": "Invoked on valid NPC targets from 00BC with the item context and a computed parameter; likely applies the zap effect (damage/knockback/status) but exact semantics are inferred.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_LITZAPNS::playSFX",
+      "kind": "extern",
+      "role": "Play sound effect for the zap/animation pulse (used in 01C3).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_LITZAPNS::enterFastArea",
+        "callee": "U8P_LITZAPNS::00BC",
+        "purpose": "Spawn the main persistent zap/effect coroutine so behavior continues after area entry.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LITZAPNS::00BC",
+        "callee": "U8P_LITZAPNS::01C3",
+        "purpose": "Launch a short per-pulse animation/sound routine as part of each zap cycle.",
+        "confidence": "high"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_LITZAPNS::enterFastArea",
+        "callee": "Item::setFrame",
+        "purpose": "Set the item's visible frame to default/idle on area entry.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LITZAPNS::leaveFastArea",
+        "callee": "FREE::2A56",
+        "purpose": "Cancel or free timers/processes associated with the item when leaving the area (cleanup).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LITZAPNS::00BC",
+        "callee": "FREE::1C19",
+        "purpose": "Spawn short-lived timer processes to implement delays between animation/effect steps.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LITZAPNS::00BC",
+        "callee": "urandom",
+        "purpose": "Generate random values to vary frame selection, timing, and compute arguments for METHOD::0080.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LITZAPNS::00BC",
+        "callee": "Item::overlaps",
+        "purpose": "Detect items present at scanned tile addresses to compile candidate targets for the zap effect.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LITZAPNS::00BC",
+        "callee": "Item::isNpc",
+        "purpose": "Filter overlapping items to NPCs only before further checks.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LITZAPNS::00BC",
+        "callee": "Npc::isDead",
+        "purpose": "Skip dead NPCs when applying the zap effect.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LITZAPNS::00BC",
+        "callee": "Npc::getDir",
+        "purpose": "Obtain NPC facing/direction to combine with randomness and compute a parameter passed to METHOD::0080.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LITZAPNS::00BC",
+        "callee": "METHOD::0080",
+        "purpose": "Invoke the actual effect on a valid NPC target, passing the item context and a computed parameter (likely performs damage/knockback/status).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LITZAPNS::01C3",
+        "callee": "U8P_LITZAPNS::playSFX",
+        "purpose": "Play the zap pulse sound effect to accompany the visual animation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LITZAPNS::01C3",
+        "callee": "FREE::1C19",
+        "purpose": "Use timers to pace the short animation frame sequence.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_LITZAPNS::enterFastArea",
+    "behavior_summary_one_liner": "When an actor (typically the Avatar) enters the item's fast trigger area, U8P_LITZAPNS::enterFastArea marks the item active, sets its visual frame to an idle state, and spawns a persistent behavior process that repeatedly emits zap pulses.",
+    "external_call_count": 11,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

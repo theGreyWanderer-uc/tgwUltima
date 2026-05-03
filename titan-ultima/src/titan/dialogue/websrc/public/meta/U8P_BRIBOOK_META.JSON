@@ -1,0 +1,77 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_BRIBOOK.json",
+  "file": "U8P_BRIBOOK",
+  "behavior_summary": [
+    "Presents the full BRIBOOK text to the engine's book-reader routine so a player/actor can read the book.",
+    "Initializes some item/display metadata (via a 'set info' opcode) before creating the temporary string containing the book text.",
+    "Creates a large literal string (the book content), converts it to a pointer, calls Book::read with that pointer and a caller-supplied buffer/context, then frees the temporary string.",
+    "Propagates the return value from Book::read as this routine's return value, executes a suspend, and then returns."
+  ],
+  "notable_control_flow": [
+    "Executes a 'set info' opcode prior to pushing the book text (initialization of display/item metadata).",
+    "Allocates or materializes a large literal string for the book, converts it to a pointer and passes it to Book::read.",
+    "Calls Book::read and captures its return value, then frees the temporary string buffer.",
+    "Performs a suspend before returning the Book::read result to the caller."
+  ],
+  "open_questions": [
+    "Which exact info field is being set by the 'set info' opcode and how does it affect book presentation or item state?",
+    "What is the precise meaning/structure of the caller-supplied buffer_ptr passed at BP+06h (UI buffer, book object, or caller context)?",
+    "Are there any side effects of Book::read beyond display (e.g., logging progress, advancing quests) that this script relies on?",
+    "Is the large literal stored in script data or allocated at runtime, and are there edge cases in memory management for very long texts?"
+  ],
+  "main_function": {
+    "name": "U8P_BRIBOOK::0080",
+    "execution_form": "process",
+    "purpose": "Prepare and supply the BRIBOOK narrative text to the engine's book-reading routine so the player/actor can read the book; manage temporary string lifecycle and return the reader's result.",
+    "entry_conditions": [
+      "Triggered when the in-game book item is activated/used (player or actor opens/reads the book).",
+      "Inferred: invoked by an item use/read event mapped to the BRIBOOK script."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_BRIBOOK::0080",
+      "kind": "main",
+      "role": "Provide book text, initialize display metadata, call Book::read, and manage the temporary string lifecycle.",
+      "confidence": "high"
+    },
+    {
+      "name": "Book::read",
+      "kind": "extern",
+      "role": "Engine routine to render/process/display the provided book text to the player; returns a status/result propagated by BRIBOOK::0080.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_BRIBOOK::0080",
+        "callee": "Book::read",
+        "purpose": "Render/process/display the supplied book text to the player; receives a pointer to the temporary string and a caller-supplied buffer/context pointer and returns a result propagated by the script.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup"
+  ],
+  "quick_facts": {
+    "main_function": "BRIBOOK::0080",
+    "behavior_summary_one_liner": "Presents the full BRIBOOK text to the engine's book-reader routine so a player/actor can read the book.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

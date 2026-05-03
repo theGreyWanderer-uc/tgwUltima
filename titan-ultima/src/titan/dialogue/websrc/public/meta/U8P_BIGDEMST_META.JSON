@@ -1,0 +1,74 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_BIGDEMST.json",
+  "file": "U8P_BIGDEMST",
+  "behavior_summary": [
+    "When an actor looks at the BIGDEMST object, the script builds the literal description \"daemon statue \" and asks the item/process to 'bark' that text so the player sees the description.",
+    "Before producing the description it sets object-level info/process-exclude state (to control display or prevent default processing) and after calling the bark handler it frees the temporary string, inspects the handler return via an 'implies' operation, and then suspends the event.",
+    "No global game-state flags are modified by this script; its effects are local to the object/process and the immediate display behavior."
+  ],
+  "notable_control_flow": [
+    "Entry on Event 0 (U8P_BIGDEMST::look) for U8P_BIGDEMST::look.",
+    "Set object info and process-exclude state prior to the message operation (prevents or customizes default processing while barking).",
+    "Allocate/construct a short literal string \"daemon statue \", call Item::bark(this, string), then free the string.",
+    "Return value from Item::bark is used in an 'implies' operation (inferred control/flow check), result popped/stored, then the process suspends."
+  ],
+  "open_questions": [
+    "Exact numeric/info id(s) used when setting the 'info' and 'process exclude' state and their precise semantic effect on other systems.",
+    "Precise semantics of the 'implies' operation on the return value from Item::bark — whether it gates further behavior or is only used as a boolean/logical check.",
+    "Whether any other systems (e.g., UI layering or other item handlers) observe or react to the process-exclude state set here."
+  ],
+  "main_function": {
+    "name": "U8P_BIGDEMST::look",
+    "execution_form": "process",
+    "purpose": "Handle the 'U8P_BIGDEMST::look' (examine) event for the BIGDEMST object: prepare and emit the descriptive text \"daemon statue \" via the item's bark handler while marking the object to suppress or control default processing during the operation.",
+    "entry_conditions": [
+      "Event 0 (U8P_BIGDEMST::look) — triggered when a player/actor examines or looks at the BIGDEMST object"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_BIGDEMST::look",
+      "kind": "main",
+      "role": "Event handler that constructs the description string, sets object info/process-exclude state, calls Item::bark to display the string, then suspends.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item-provided routine that displays or otherwise emits a short text message on behalf of an item/process. Called with the item/process as 'this' and the constructed string.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_BIGDEMST::look",
+        "callee": "Item::bark",
+        "purpose": "Present the literal description \"daemon statue \" to the player/triggering process (item-driven UI message).",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_BIGDEMST::look",
+    "behavior_summary_one_liner": "When an actor looks at the BIGDEMST object, the script builds the literal description \"daemon statue \" and asks the item/process to 'bark' that text so the player sees the description.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

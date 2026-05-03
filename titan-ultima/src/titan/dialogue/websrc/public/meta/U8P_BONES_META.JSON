@@ -1,0 +1,136 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_BONES.json",
+  "file": "U8P_BONES",
+  "behavior_summary": [
+    "BONES::look: When a player/actor examines the bones item, the script marks the item/process for short-info handling and makes the item 'speak' its short description \"skeleton \" to the viewing process, then performs the engine's implies/pop/suspend handshake and returns.",
+    "BONES::use: When a player/actor uses the bones item the script checks an internal status word (Item::getStatus) and tests bit 0x0100. If that bit is clear it closes the item's UI/gump and returns. If the bit is set it performs a random roll (urandom(0x64)); on a rare outcome it has the item bark a warning \"Do not defile my bones, live one!\" and then suspends; otherwise it opens gump id 0x0C for the user."
+  ],
+  "notable_control_flow": [
+    "Look path is linear: set info/process-exclude -> Item::bark(\"skeleton \") -> implies/pop/suspend -> return.",
+    "Use path branches on an item-status bit (0x0100). If clear -> Item::closeGump -> return (early exit). If set -> urandom(0x64) branch: rare bark + suspend -> return; else -> Item::openGump(0x0C).",
+    "The rare warning bark path includes an implies/pop/suspend sequence after Item::bark indicating the message is delivered then the process yields/suspends rather than opening UI."
+  ],
+  "open_questions": [
+    "What precisely does the status bit 0x0100 represent on this bones item (locks, cursed state, protected state, or dialog-state)? — inferred but not explicit.",
+    "What exact probability threshold is intended by comparing urandom(0x64) to 0x5F (inferred ~4% if urandom returns 0..99, but exact urandom range/semantics are assumed).",
+    "What gameplay consequences (beyond message and suspend) result from the rare warning bark path (e.g., combat trigger, reputation change) — none observed in this script.",
+    "What exact engine semantics are performed by the implies/pop/suspend handshake used after bark (synchronization with the UI/engine vs. a process-yield) — inferred behavior only."
+  ],
+  "main_function": {
+    "name": "U8P_BONES::look",
+    "execution_form": "process",
+    "purpose": "Respond to a player/actor 'U8P_BONES::look' interaction by presenting the item's short description to the viewer and performing the engine synchronization/return sequence.",
+    "entry_conditions": [
+      "Event 0: actor/player examines (looks at) the BONES item",
+      "An interacting process id (actor PID) is passed to the handler (parameter at BP+06h)"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_BONES::look",
+      "kind": "main",
+      "role": "Handle 'U8P_BONES::look' (examine) interactions: set info/exclude and call Item::bark to show the short description.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BONES::use",
+      "kind": "helper",
+      "role": "Handle 'use' interactions: test item status bit 0x0100, close gump if bit clear, otherwise either warn (rare) or open gump id 0x0C.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine to emit/display text from the item to a process/player.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getStatus",
+      "kind": "extern",
+      "role": "Return the item's status/flags word used for bit testing.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::closeGump",
+      "kind": "extern",
+      "role": "Close the item's UI/gump for the interacting process.",
+      "confidence": "high"
+    },
+    {
+      "name": "urandom",
+      "kind": "extern",
+      "role": "Produce a pseudo-random integer used to implement a low-probability message branch.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::openGump",
+      "kind": "extern",
+      "role": "Open a UI/gump (gump id 0x0C) for the interacting process.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_BONES::look",
+        "callee": "Item::bark",
+        "purpose": "Show the item's short description \"skeleton \" to the viewer process (display text).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BONES::use",
+        "callee": "Item::getStatus",
+        "purpose": "Read the item's status/flags to test bit 0x0100 and decide use behavior.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BONES::use",
+        "callee": "Item::closeGump",
+        "purpose": "Close/cancel the item's UI when the status bit 0x0100 is clear (early return path).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BONES::use",
+        "callee": "urandom",
+        "purpose": "Produce a random value (argument 0x64) to implement a small-probability branch for a warning message.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BONES::use",
+        "callee": "Item::bark",
+        "purpose": "On a rare random outcome, have the item speak the warning \"Do not defile my bones, live one!\" to the user.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BONES::use",
+        "callee": "Item::openGump",
+        "purpose": "Open the item's UI/gump (id 0x0C) when status bit is set and the random check does not trigger the warning.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "BONES::look",
+    "behavior_summary_one_liner": "BONES::look: When a player/actor examines the bones item, the script marks the item/process for short-info handling and makes the item 'speak' its short description \"skeleton \" to the viewing process, then performs the engine's implies/pop/suspend handshake and returns.",
+    "external_call_count": 6,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

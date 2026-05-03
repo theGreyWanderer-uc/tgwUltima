@@ -1,0 +1,73 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_EARTHMAG.json",
+  "file": "U8P_EARTHMAG",
+  "behavior_summary": [
+    "Presents the contents of an Earthen Magic tome to the player: marks/sets info for the target object, prepares a large descriptive string containing spells, reagent lists, and ritual words, and invokes the engine's Book::read routine to display or process that text.",
+    "After Book::read returns the handler frees the temporary text buffer (implicit), inspects the call's return value (used in an 'implies' pattern), consumes the small temporary result, and then suspends the process.",
+    "No global game-state flags are read or written by this excerpt; the handler's effects are local presentation and possible control flow determined by Book::read's return value."
+  ],
+  "notable_control_flow": [
+    "U8P_EARTHMAG::0080: set info (flag/type 0x0001) on the passed-in context/object (BP+06) → allocate/point to large literal string (the tome text) → call Book::read with (BP+06, text) → free/cleanup text → push retval, evaluate implication, pop temporary → suspend."
+  ],
+  "open_questions": [
+    "Is the BP+06 parameter the book object instance, the reader/player PID, or a combined reader-context? (inferred from usage but not explicit).",
+    "What exact meaning does the 'set info' call with id 0x0001 have in engine semantics for this object (appearance, state, or UI mode)?",
+    "What control effect does the Book::read return value have when used with the implies/pop sequence (is it a success/abort encoding, or a dialog-choice result)?"
+  ],
+  "main_function": {
+    "name": "U8P_EARTHMAG::0080",
+    "execution_form": "process",
+    "purpose": "Display the Earthen Magic tome text to the player by setting up object info and calling Book::read with a long lore/spell string, then handle the return and suspend.",
+    "entry_conditions": [
+      "Invoked when the player/actor attempts to read or activate the Earthen Magic tome (inferred from being a Book::read invocation and typical item 'read' handlers)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_EARTHMAG::0080",
+      "kind": "main",
+      "role": "Handles the 'read' or 'examine' presentation for the Earthen Magic tome; prepares text and delegates presentation to Book::read.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_EARTHMAG::0080",
+        "callee": "U8P_EARTHMAG::set info",
+        "purpose": "Set an info/state key (id 0x0001) on the target referenced by BP+06; likely adjusts the object's presentation/state before reading.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_EARTHMAG::0080",
+        "callee": "Book::read",
+        "purpose": "Display or otherwise process the provided book text for the player/reader. Receives the prepared tome string and the BP+06 context and returns a value that the script inspects.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "presentation",
+    "suspend"
+  ],
+  "quick_facts": {
+    "main_function": "EARTHMAG::0080",
+    "behavior_summary_one_liner": "Presents the contents of an Earthen Magic tome to the player: marks/sets info for the target object, prepares a large descriptive string containing spells, reagent lists, and ritual words, and invokes the engine's Book::read routine to display or process that text.",
+    "external_call_count": 2,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

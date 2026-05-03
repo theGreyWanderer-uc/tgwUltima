@@ -1,0 +1,123 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_FALLROCK.json",
+  "file": "U8P_FALLROCK",
+  "behavior_summary": [
+    "Defines behavior for a static rock item: when an actor 'looks' at the rock it emits a short description ('rock') to that actor.",
+    "When the rock is hit (gotHit), it spawns a FREE/debris process and is given motion via Item::hurl, turning the static rock into a moving/thrown object.",
+    "Both U8P_FALLROCK::look and gotHit wrap their actions with process/info-state changes and a process-exclude step (engine-level guards to prevent recursion or to mark processing state)."
+  ],
+  "notable_control_flow": [
+    "U8P_FALLROCK::FALLROCK::look: set process/info and process-exclude -> call Item::bark(target=viewer, \"rock \") -> use return in an implies/pop sequence -> suspend/return.",
+    "U8P_FALLROCK::FALLROCK::gotHit: set process/info and process-exclude -> spawn FREE::1C19(subtype=0x3C, param=0) -> use spawn return in implies/pop -> call Item::hurl(args: 0x04,0,0,0, target=item) -> suspend/return."
+  ],
+  "open_questions": [
+    "Exact numeric/info id used for the 'set info' operation and the precise semantics of that info key (only the effect of setting/excluding is observed).",
+    "Meaning of the spawn subtype byte 0x3C used with FREE::1C19 (inferred to be debris/particle but not proven).",
+    "Precise semantics of the Item::hurl argument list (0x04,0,0,0) — whether these encode speed, direction, or a preset motion type.",
+    "Whether any additional game-state/global flags are affected elsewhere by these routines (no global flags are read/written in this script excerpt)."
+  ],
+  "main_function": {
+    "name": "U8P_FALLROCK::look",
+    "execution_form": "process",
+    "purpose": "When a process/actor examines the rock, produce a short descriptive text ('rock') directed at that actor and adjust process/info state to guard the action.",
+    "entry_conditions": [
+      "Event 0 (U8P_FALLROCK::look) — invoked when an actor views/inspects the rock (enterFastArea-style trigger of the item's U8P_FALLROCK::look event)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_FALLROCK::look",
+      "kind": "main",
+      "role": "Handle the 'U8P_FALLROCK::look' event: set per-process/info guard, call Item::bark to display 'rock ' to the viewer, then suspend.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FALLROCK::gotHit",
+      "kind": "helper",
+      "role": "Handle the 'gotHit' event: set guards, spawn a FREE-class debris/process, and invoke Item::hurl to impart motion to the rock.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine that emits a short text/message from an item to a target process/player.",
+      "confidence": "high"
+    },
+    {
+      "name": "spawn FREE::1C19",
+      "kind": "extern",
+      "role": "Engine spawn operation used to create a FREE-class process (likely debris/effect) associated with the rock being struck.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::hurl",
+      "kind": "extern",
+      "role": "Engine routine to apply motion/impulse to an item so it moves/flies after being hit.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_FALLROCK::set info / process-exclude",
+      "kind": "extern",
+      "role": "Engine-level operations observed before actions: set per-object/process info and exclude the process from normal processing temporarily (guard behavior).",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_FALLROCK::look",
+        "callee": "Item::bark",
+        "purpose": "Send/display the short description string 'rock ' to the viewing process (target passed via BP+06h).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FALLROCK::gotHit",
+        "callee": "spawn FREE::1C19",
+        "purpose": "Create a FREE-class process (inferred debris/effect) with subtype byte 0x3C and parameter 0 to represent rock breakage/debris.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FALLROCK::gotHit",
+        "callee": "Item::hurl",
+        "purpose": "Apply motion to the rock using arguments (0x04,0,0,0) so it is hurled/thrown after being struck.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FALLROCK::look",
+        "callee": "U8P_FALLROCK::set info / process-exclude",
+        "purpose": "Protect or mark the process/item state before/after barking to avoid recursion or indicate temporary processing exclusion.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FALLROCK::gotHit",
+        "callee": "U8P_FALLROCK::set info / process-exclude",
+        "purpose": "Temporarily set info and exclude the process/item before performing spawn/hurl to protect state or prevent reentry.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_FALLROCK::FALLROCK::look",
+    "behavior_summary_one_liner": "Defines behavior for a static rock item: when an actor 'looks' at the rock it emits a short description ('rock') to that actor.",
+    "external_call_count": 5,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

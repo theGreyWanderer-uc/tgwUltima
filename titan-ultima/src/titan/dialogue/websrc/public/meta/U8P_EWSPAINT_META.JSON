@@ -1,0 +1,77 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_EWSPAINT.json",
+  "file": "U8P_EWSPAINT",
+  "behavior_summary": [
+    "Handles the 'U8P_EWSPAINT::look' (examine) event for a painting object: it marks the object with a specific info/state, excludes it from further processing, and produces a short descriptive message ('painting') presented to the examining process.",
+    "Allocates or references a short literal string, calls Item::bark to emit the description to the viewer/process, frees the temporary string, and then follows standard U8P_EWSPAINT::look-handler control flow by using the bark return value in an implication and suspending."
+  ],
+  "notable_control_flow": [
+    "Entry on Event 0 (U8P_EWSPAINT::look) for the painting object.",
+    "Set item info with constant 0x0208 (inferred to update object description/state).",
+    "Run a 'process exclude' step to alter processing for this object (likely to prevent re-processing).",
+    "Create/obtain the string \"painting  \", push viewer/process context and object pid, then call Item::bark to display the message.",
+    "Free the temporary string, capture Item::bark return value, use it as the left operand of an 'implies' operation, pop/discard the result, then suspend execution."
+  ],
+  "open_questions": [
+    "Exact semantic meaning of info id 0x0208 (appears to be descriptive/info state but its precise gameplay effect is unknown).",
+    "Precise identity and role of the dword at BP+06h (inferred as the viewer/process pid or item context; not explicitly documented).",
+    "What the 'implies' usage of Item::bark's return value is intended to gate (appears to be a conventional control-flow idiom in U8P_EWSPAINT::look handlers, but the downstream effect is not visible in this script).",
+    "Whether any broader game state or quest flags should be changed when this painting is examined (no globals are written here, but surrounding scripts might rely on a side effect)."
+  ],
+  "main_function": {
+    "name": "U8P_EWSPAINT::look",
+    "execution_form": "process",
+    "purpose": "Respond to a player's or actor's examine/U8P_EWSPAINT::look action on a painting by setting object info/state, preventing further processing, and emitting a short descriptive message ('painting') to the viewer/process.",
+    "entry_conditions": [
+      "Event 0 (U8P_EWSPAINT::look) — triggered when the Avatar or relevant actor examines this painting object."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_EWSPAINT::look",
+      "kind": "main",
+      "role": "Handle the painting object's U8P_EWSPAINT::look/examine event: set info, exclude process, and call Item::bark to describe the object.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine used to present a short text message (bark) from an item/process to a target process/player; here used to show 'painting  '.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_EWSPAINT::look",
+        "callee": "Item::bark",
+        "purpose": "Display the short descriptive string \"painting  \" to the viewer/process and return a boolean/result used by the caller for an implication-based control idiom.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "description",
+    "cleanup",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "EWSPAINT::look",
+    "behavior_summary_one_liner": "Handles the 'U8P_EWSPAINT::look' (examine) event for a painting object: it marks the object with a specific info/state, excludes it from further processing, and produces a short descriptive message ('painting') presented to the examining process.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

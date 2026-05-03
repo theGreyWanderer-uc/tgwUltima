@@ -1,0 +1,210 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_LOGBOOK.json",
+  "file": "U8P_LOGBOOK",
+  "behavior_summary": [
+    "When the player 'uses' the logbook the script presents the long journal text (Book::read) and then runs a scripted follow-up sequence that either escorts or fights the player depending on state and player choice.",
+    "After reading the book the code checks the logbook's Item::getQuality. If quality==0 the avatar is put into stasis (setAvatarInStasis) to force the cutscene; otherwise the item is marked used (Item::setQuality=1) and secondexecution global is set to avoid re-running the special sequence.",
+    "The sequence creates NPCs and world objects (Npc::create, Item::pop), sets NPC HP from Npc::getStr()*2, calls AccumulateIntelligence(0x64), and spawns multiple timed helper processes (METHOD::15E7, FREE::* and internal helpers U8P_LOGBOOK::LOGBOOK::0B29 and U8P_LOGBOOK::LOGBOOK::0BE5) to choreograph movement, dialog and timing.",
+    "The player is presented with a two-option dialog (Item::ask). Choosing the cooperative option (\"I'll go quietly\") runs an escort/cutscene path that fades (FadeToBlack) and teleports the avatar (teleportToEgg/resetRef), whereas choosing the hostile option triggers combat mode (SetAvatarInCombat) and spawns guards/hostile NPCs.",
+    "A global flag toranDead is read to detect an inconsistent/cheat state; if toranDead is false the script runs an anti-cheat/thief path that displays scolding messages and spawns guards instead of the normal escort flow."
+  ],
+  "notable_control_flow": [
+    "Entry: U8P_LOGBOOK::LOGBOOK::use is triggered by item U8P_LOGBOOK::use; it suspends during Book::read and many spawned processes before resuming.",
+    "Quality check (Item::getQuality) gates whether the avatar is immediately set in stasis or the full scripted path runs and marks the item used.",
+    "A selection (Item::ask) branches the sequence into an escort/cutscene path or a combat/guard path.",
+    "Many actions are executed by spawn + suspend: staged METHOD::15E7 and FREE::* processes and the internal helpers U8P_LOGBOOK::LOGBOOK::0B29 and U8P_LOGBOOK::LOGBOOK::0BE5 implement timed loops to sequence NPC movements/dialog.",
+    "A global read (toranDead) can divert execution into an anti-cheat response that overrides the normal escort/teleport flow.",
+    "Loop/frame progression inside U8P_LOGBOOK::LOGBOOK::0B29; treated as control-flow, not explicit internal call."
+  ],
+  "open_questions": [
+    "Exact semantics of METHOD::15E7 — appears to be an engine helper for placing/moving NPCs or sequencing steps but its concrete effect is not shown in the disassembly.",
+    "Precise meaning of Item::getQuality values beyond 0 vs non-0 (inferred usage: 0 => first-time/unread state, >0 => used), and whether other quality values carry additional branches.",
+    "Whether toranDead is solely an anti-cheat flag or also represents legitimate story state (inferred as anti-cheat/thief handling but could be story-driven).",
+    "Exact object shapes/prototype ids passed to Item::pop and Npc::create and the identities of spawned NPCs (names like Lady Mordea, CALGUARD are inferred from behavior/context but not proven here).",
+    "Details of return values stored into npc_refs by METHOD::15E7 and the helper threads U8P_LOGBOOK::LOGBOOK::0B29/0BE5 — how those refs are used after the loops."
+  ],
+  "main_function": {
+    "name": "U8P_LOGBOOK::use",
+    "execution_form": "process",
+    "purpose": "Handle the player using/reading the logbook: display journal text, mark item state, spawn and orchestrate NPCs and timed sequences, update stats, and branch into escort/cutscene or combat/guard flows based on item state, a global flag and player choice.",
+    "entry_conditions": [
+      "Invoked when the logbook item is 'used' by an actor (player/avatar).",
+      "Triggered execution suspends while Book::read and while spawned helper processes run."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_LOGBOOK::use",
+      "kind": "main",
+      "role": "Primary U8P_LOGBOOK::use/interaction handler for the logbook item; orchestrates the reading, state changes, NPC spawns, dialog choices and final escort/combat or anti-cheat flows.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_LOGBOOK::look",
+      "kind": "helper",
+      "role": "Examine/look handler: set info flags and cause the item to 'bark' a short name string ('Bentic\\'s journal ').",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_LOGBOOK::0B29",
+      "kind": "helper",
+      "role": "Spawned timing helper: small loop (≈5 iterations) that repeatedly spawns METHOD::15E7 and sleeps to sequence NPC/motion steps; returns/updates an NPC reference passed by address.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_LOGBOOK::0BE5",
+      "kind": "helper",
+      "role": "Spawned timing helper: larger loop (≈10 iterations) similar to 0B29 used to choreograph another set of NPC/movement steps; returns/updates an NPC reference.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Book::read",
+      "kind": "extern",
+      "role": "Engine/UI call to present long journal text to the player and suspend until reading completes.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine call to display short messages/dialog lines originating from an item or NPC.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_LOGBOOK::use",
+        "callee": "U8P_LOGBOOK::0B29",
+        "purpose": "Spawned helper to sequence repeated METHOD::15E7 calls/timed events for one set of NPCs; used to animate or step escort behavior over time.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LOGBOOK::use",
+        "callee": "U8P_LOGBOOK::0BE5",
+        "purpose": "Spawned helper to sequence a longer set of METHOD::15E7/timed events for additional NPCs or phases of the scene.",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_LOGBOOK::use",
+        "callee": "Book::read",
+        "purpose": "Show the long journal/entry text to the player and wait for completion before continuing scripted events.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK::use",
+        "callee": "Item::getQuality",
+        "purpose": "Query the logbook state to decide stasis behavior and whether to mark the item as used.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK::use",
+        "callee": "U8P_LOGBOOK::setAvatarInStasis",
+        "purpose": "Temporarily disable avatar control/input during the cutscene or to clear stasis later.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK::use",
+        "callee": "Item::setQuality",
+        "purpose": "Mark the logbook as used (set quality to indicate the sequence has executed).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK::use",
+        "callee": "AccumulateIntelligence",
+        "purpose": "Apply a stat/world update (called with constant 0x64) as part of the consequences of reading the logbook.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LOGBOOK::use",
+        "callee": "Npc::getStr",
+        "purpose": "Retrieve an NPC attribute used to compute HP (strength used to set HP later).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK::use",
+        "callee": "Npc::setHp",
+        "purpose": "Set NPC hit points (computed from getStr * 2) for spawned NPCs.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK::use",
+        "callee": "Item::pop",
+        "purpose": "Create/place an item or world object used in the scripted sequence and return its handle.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LOGBOOK::use",
+        "callee": "Npc::create",
+        "purpose": "Create NPCs that escort, interact, or fight the player.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK::use",
+        "callee": "Item::ask",
+        "purpose": "Present a two-option dialog to the player and receive a selection that controls branching (escort vs combat).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK::use",
+        "callee": "U8P_LOGBOOK::SetAvatarInCombat",
+        "purpose": "Switch the avatar into combat mode when the hostile choice is selected.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK::use",
+        "callee": "U8P_LOGBOOK::FadeToBlack",
+        "purpose": "Fade the screen as part of the escort/cutscene prior to teleport/scene change.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK::use",
+        "callee": "U8P_LOGBOOK::teleportToEgg",
+        "purpose": "Teleport the avatar as the final step of the escort/cutscene sequence.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LOGBOOK::use",
+        "callee": "spawn (METHOD::15E7 / FREE::* / other)",
+        "purpose": "Start parallel/timed helper processes used to choreograph dialog, motion, guards and scripted timing.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "toranDead",
+        "likely_effect": "Gates normal escort/teleport flow vs anti-cheat/thief guard-spawning path; if false the script runs a scolding/guard response instead of the normal sequence.",
+        "confidence": "high"
+      }
+    ],
+    "writes": [
+      {
+        "name": "secondexecution",
+        "likely_effect": "Set to 1 to mark that the logbook's special scripted sequence has executed and should not be re-run.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_LOGBOOK::LOGBOOK::use",
+    "behavior_summary_one_liner": "When the player 'uses' the logbook the script presents the long journal text (Book::read) and then runs a scripted follow-up sequence that either escorts or fights the player depending on state and player choice.",
+    "external_call_count": 14,
+    "flag_read_count": 1,
+    "flag_write_count": 1
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_FTABLENS.json",
+  "file": "U8P_FTABLENS",
+  "behavior_summary": [
+    "Handles the object's 'U8P_FTABLENS::look' (examine) event for the table: when a player/actor examines the table, the object emits a short descriptive text and then yields/suspends.",
+    "Builds the literal string \"table \", converts/allocates it to a pointer, and passes it along with the table object pointer and the caller/process id to Item::bark so the message is displayed to the viewer.",
+    "Sets local item/process info flags and applies a process-exclude-like opcode before calling bark (affects how the object is processed thereafter).",
+    "Frees the temporary string after barking, consumes Item::bark's return via an 'implies' operation, stores the result to a temp local, then suspends/yields the process."
+  ],
+  "notable_control_flow": [
+    "Triggered by the 'U8P_FTABLENS::look' event (Event 0) for the table object; entry is event-driven rather than a periodic update.",
+    "Performs setup (set-info / process-exclude) then performs the external bark call, then performs cleanup (free) and yields instead of returning synchronously.",
+    "Return value from Item::bark is used in a post-call implication sequence (inferred control/decision primitive) before suspension."
+  ],
+  "open_questions": [
+    "Exact semantics and numeric identity of the 'set info' and 'process exclude' opcodes: what persistent state or exclusion they cause on the table instance.",
+    "Precise meaning of the 'implies' operation applied to Item::bark's return value and how it affects downstream behavior or scheduling.",
+    "Which exact engine memory/free routine is used to release the temporary string (the disassembly shows a free but the symbol is not canonical here)."
+  ],
+  "main_function": {
+    "name": "U8P_FTABLENS::look",
+    "execution_form": "process",
+    "purpose": "Respond to a player/actor examining the table by having the table produce a short descriptive message ('table ') and updating local item/process state before yielding.",
+    "entry_conditions": [
+      "Event 0 (U8P_FTABLENS::look/examine) invoked when the player/actor looks at or inspects the table object."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_FTABLENS::look",
+      "kind": "main",
+      "role": "Event handler for the table object's 'U8P_FTABLENS::look' (examine) event.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item API used to make an item/process emit/display a short text message to a target process/player.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_FTABLENS::look",
+        "callee": "Item::bark",
+        "purpose": "Have the table object emit the short description text ('table ') to the viewer/process; parameters are the table object pointer as 'this', a char* message, and the caller/process id.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FTABLENS::look",
+        "callee": "FREE::free",
+        "purpose": "Free the temporary string buffer previously allocated/converted for the bark call (symbol inferred; exact allocator/freer unknown).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "FTABLENS::look",
+    "behavior_summary_one_liner": "Handles the object's 'U8P_FTABLENS::look' (examine) event for the table: when a player/actor examines the table, the object emits a short descriptive text and then yields/suspends.",
+    "external_call_count": 2,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

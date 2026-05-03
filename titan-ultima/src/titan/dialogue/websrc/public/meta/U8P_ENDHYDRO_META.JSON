@@ -1,0 +1,295 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_ENDHYDRO.json",
+  "file": "U8P_ENDHYDRO",
+  "behavior_summary": [
+    "U8P_ENDHYDRO::hatch implements a single 'U8P_ENDHYDRO::hatch' event that plays out as a short scripted encounter: it finds a target item/location, briefly freezes the avatar, spawns multiple helper processes for visuals/AI, emits a taunt, creates and animates a temporary visual object at the target, then applies several randomized hits to the original target.",
+    "The sequence uses setAvatarInStasis to prevent player actions during critical timing, spawns FREE::* and HYDROS::* helper processes to orchestrate visual/timed behavior, and uses Item::create/Item::pop/Item::setFrame/Item::destroy to show a frame-by-frame animation centered on the target.",
+    "Damage to the target is applied after (and possibly during) the animation using urandom to vary amounts and Item::receiveHit to deliver multiple hits; SFX and an optional LightningBolt visual accompany the event for feedback."
+  ],
+  "notable_control_flow": [
+    "Entry: event-driven process (Event 7 / 'U8P_ENDHYDRO::hatch') begins by setting avatar stasis = 1, preventing player input until later in the sequence.",
+    "Coordinates for effect placement are read from the target via Item::getZ/Y/X and adjusted before spawning helper processes and the temporary animation item.",
+    "Multiple spawn calls are used to create concurrent helper processes (FREE::1C6D, HYDROS::0DDB, HYDROS::12B0, FREE::1C8B). The main process suspends around spawn patterns and timers to interleave animation and effects.",
+    "A frame loop runs setting Item::setFrame repeatedly (BP-06h used as frame/index), with short delays spawned via FREE::1C19 between frames; when frames finish the temporary item is destroyed.",
+    "After or during animation the script calls a utility (FREE::1A96), then uses urandom and Item::receiveHit multiple times to apply randomized damage to the original target. Finally stasis is cleared (setAvatarInStasis(0))."
+  ],
+  "open_questions": [
+    "Precise semantics of FREE::1A96: it appears to be a setup/utility call used before applying hits, but its exact effect on damage or state is unknown.",
+    "Exact spawn lifetimes and synchronization: how long each spawned HYDROS::*/FREE::* helper runs and whether they alter the hit timing or damage distribution is inferred but not explicit.",
+    "When and under what precise condition LightningBolt is triggered (the disassembly shows a call to a 'process LightningBolt' but the gating logic is not fully documented).",
+    "Whether the created item id 0x01FF is purely visual or also affects collision/hit registration for Item::receiveHit calls (appears visual-only but not certain)."
+  ],
+  "main_function": {
+    "name": "U8P_ENDHYDRO::hatch",
+    "execution_form": "process",
+    "purpose": "Run a short, scripted 'U8P_ENDHYDRO::hatch' sequence for an ENDHYDRO entity that immobilizes the player briefly, spawns visual/AI helper processes, displays a taunt, animates a temporary object at the target location, and applies multiple randomized hits to the target.",
+    "entry_conditions": [
+      "Invoked by the object's 'U8P_ENDHYDRO::hatch' event (Event 7).",
+      "Inferred to run when the ENDHYDRO entity/egg begins hatching or when a relevant trigger region/interaction triggers the U8P_ENDHYDRO::hatch event."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_ENDHYDRO::hatch",
+      "kind": "main",
+      "role": "Orchestrates the U8P_ENDHYDRO::hatch event, timing, visuals, and damage application.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ENDHYDRO::setAvatarInStasis",
+      "kind": "extern",
+      "role": "Engine call to freeze/unfreeze avatar input/actions during the scripted sequence.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getZ",
+      "kind": "extern",
+      "role": "Read Z coordinate of target for effect placement.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getY",
+      "kind": "extern",
+      "role": "Read Y coordinate of target for effect placement.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getX",
+      "kind": "extern",
+      "role": "Read X coordinate of target for effect placement.",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::1C6D",
+      "kind": "extern",
+      "role": "Spawned visual/timer helper positioned at the target (short-lived effect).",
+      "confidence": "medium"
+    },
+    {
+      "name": "HYDROS::0DDB",
+      "kind": "extern",
+      "role": "Hydros-specific helper process spawned for additional behavior tied to the U8P_ENDHYDRO::hatch.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Emit taunt/dialog text from the hydros entity.",
+      "confidence": "high"
+    },
+    {
+      "name": "HYDROS::12B0",
+      "kind": "extern",
+      "role": "Additional hydros helper process spawned during the sequence.",
+      "confidence": "medium"
+    },
+    {
+      "name": "FREE::1C8B",
+      "kind": "extern",
+      "role": "Spawned helper with a byte argument, likely controls a timed visual/state change.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_ENDHYDRO::process LightningBolt",
+      "kind": "extern",
+      "role": "Trigger/process a lightning bolt visual/attack effect centered on the actor.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_ENDHYDRO::playSFX",
+      "kind": "extern",
+      "role": "Play sound effects to accompany animation and hits.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::create",
+      "kind": "extern",
+      "role": "Create temporary animation/visual item (id 0x01FF) at the computed target location.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::pop",
+      "kind": "extern",
+      "role": "Position/initialize the created item with computed X/Y/Z + offsets.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::setFrame",
+      "kind": "extern",
+      "role": "Advance the visual animation frame of the created item.",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::1C19",
+      "kind": "extern",
+      "role": "Spawned short-timer used repeatedly to delay between animation frames.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::destroy",
+      "kind": "extern",
+      "role": "Destroy the temporary animation item at sequence end.",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::1A96",
+      "kind": "extern",
+      "role": "Utility/free routine invoked before damage application (exact role inferred).",
+      "confidence": "low"
+    },
+    {
+      "name": "urandom",
+      "kind": "extern",
+      "role": "Generate pseudo-random numbers to vary hit/damage amounts.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::receiveHit",
+      "kind": "extern",
+      "role": "Apply a hit/damage to the target item/entity, used multiple times with randomized amounts.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_ENDHYDRO::hatch",
+        "callee": "U8P_ENDHYDRO::setAvatarInStasis",
+        "purpose": "Freeze/unfreeze the avatar (stasis = 1 at start, later 0 to restore control) during the U8P_ENDHYDRO::hatch sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDHYDRO::hatch",
+        "callee": "Item::getZ",
+        "purpose": "Read target Z coordinate for placing spawned effects and the temporary item.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDHYDRO::hatch",
+        "callee": "Item::getY",
+        "purpose": "Read target Y coordinate for placing spawned effects and the temporary item.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDHYDRO::hatch",
+        "callee": "Item::getX",
+        "purpose": "Read target X coordinate for placing spawned effects and the temporary item.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDHYDRO::hatch",
+        "callee": "FREE::1C6D (spawned)",
+        "purpose": "Spawn a short-lived visual/timer helper at computed coords (effect cue).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ENDHYDRO::hatch",
+        "callee": "HYDROS::0DDB (spawned)",
+        "purpose": "Spawn hydros-specific helper tied to the U8P_ENDHYDRO::hatch/target for additional behavior or timed effects.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ENDHYDRO::hatch",
+        "callee": "Item::bark",
+        "purpose": "Emit the hydros taunt string to provide flavor/dialog during the U8P_ENDHYDRO::hatch.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDHYDRO::hatch",
+        "callee": "HYDROS::12B0 (spawned)",
+        "purpose": "Spawn a second hydros-specific helper process for complementary behavior.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ENDHYDRO::hatch",
+        "callee": "FREE::1C8B (spawned)",
+        "purpose": "Spawn a helper with a byte parameter (0x0F) probably controlling a timed visual/state change.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ENDHYDRO::hatch",
+        "callee": "U8P_ENDHYDRO::process LightningBolt",
+        "purpose": "Trigger a lightning visual/attack effect centered on the actor (conditional in the sequence).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ENDHYDRO::hatch",
+        "callee": "U8P_ENDHYDRO::playSFX",
+        "purpose": "Play sound effects (multiple SFX ids) to accompany animation and impact events.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDHYDRO::hatch",
+        "callee": "Item::create",
+        "purpose": "Create the temporary animation item (id 0x01FF) that will be popped and animated at the target.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDHYDRO::hatch",
+        "callee": "Item::pop",
+        "purpose": "Position/initialize the created item at target coordinates with small offsets and initial state.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDHYDRO::hatch",
+        "callee": "Item::setFrame",
+        "purpose": "Step through animation frames 0..4 on the created item to animate the U8P_ENDHYDRO::hatch/burst effect.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDHYDRO::hatch",
+        "callee": "FREE::1C19 (spawned)",
+        "purpose": "Spawn a short delay timer between frame updates in the animation loop.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ENDHYDRO::hatch",
+        "callee": "Item::destroy",
+        "purpose": "Remove the temporary visual item once animation completes.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDHYDRO::hatch",
+        "callee": "FREE::1A96",
+        "purpose": "Utility call executed before damage application; likely configures or gates subsequent hits (inferred).",
+        "confidence": "low"
+      },
+      {
+        "caller": "U8P_ENDHYDRO::hatch",
+        "callee": "urandom",
+        "purpose": "Generate randomized values to vary damage amounts passed to Item::receiveHit.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDHYDRO::hatch",
+        "callee": "Item::receiveHit",
+        "purpose": "Apply multiple randomized hits/damage to the original target during/after the U8P_ENDHYDRO::hatch sequence.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_ENDHYDRO::hatch",
+    "behavior_summary_one_liner": "U8P_ENDHYDRO::hatch implements a single 'U8P_ENDHYDRO::hatch' event that plays out as a short scripted encounter: it finds a target item/location, briefly freezes the avatar, spawns multiple helper processes for visuals/AI, emits a taunt, creates and animates a temporary visual object at the target, then applies several randomized hits to the original target.",
+    "external_call_count": 19,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

@@ -1,0 +1,141 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_FLOATIN.json",
+  "file": "U8P_FLOATIN",
+  "behavior_summary": [
+    "FLOATIN::look: When a player/actor 'looks' at the floating platform, the script marks the item (calls set info with id 0x0208 and process exclude) and makes the item emit a short description by calling Item::bark with the string \"floating platform \".",
+    "FLOATIN::release: When the platform's release event runs (e.g., actor steps off / release trigger), the script marks the item (set info id 0x020D and process exclude), queries the platform's current surface weight via Item::getSurfaceWeight, and if that weight is zero calls AccumulateDexterity(0x0F) — awarding or accumulating a dexterity bonus."
+  ],
+  "notable_control_flow": [
+    "U8P_FLOATIN::look: set info(0x0208) -> process exclude -> create/push string \"floating platform \" -> Item::bark(actor_pid, string) -> free string.",
+    "U8P_FLOATIN::release: set info(0x020D) -> process exclude -> Item::getSurfaceWeight(item) -> if retval == 0 then AccumulateDexterity(0x0F).",
+    "Both handlers use the actor/process id passed in (BP+06h) as the target of Item::bark or as the logical actor receiving the dexterity accumulation."
+  ],
+  "open_questions": [
+    "What exact gameplay meaning is encoded by the info ids 0x0208 and 0x020D (visual hint, state bit, or quest/UI tag)?",
+    "Does AccumulateDexterity(0x0F) apply to the actor PID passed into the event or to some other global/owner context (call site implies actor but the API binding is inferred)?",
+    "What precisely triggers the 'release' event in gameplay (actor stepping off, item destroyed, or other interaction)?",
+    "Are there additional side effects when process exclude is set (duration, persistence, interaction with other engine systems)?"
+  ],
+  "main_function": {
+    "name": "U8P_FLOATIN::look",
+    "execution_form": "process",
+    "purpose": "Provide the in-game short description for the floating platform when examined by an actor and prepare the item state for that interaction (set item info and exclude it from processing briefly).",
+    "entry_conditions": [
+      "Event 0 (U8P_FLOATIN::look) — invoked when an actor/player inspects or 'looks at' the floating platform."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_FLOATIN::look",
+      "kind": "main",
+      "role": "Examine/U8P_FLOATIN::look handler that prepares item info and barks the short description string to the examining actor.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FLOATIN::release",
+      "kind": "helper",
+      "role": "Release/stepping-off handler that checks surface weight and awards a dexterity bonus if the platform is empty.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FLOATIN::set info",
+      "kind": "extern",
+      "role": "Engine operation invoked to set an info/state id on an item (used with ids 0x0208 and 0x020D).",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_FLOATIN::process exclude",
+      "kind": "extern",
+      "role": "Engine operation to exclude the item from further processing (temporary mark used after set info).",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Emit/show a short text message from the item to the actor/process (used for item descriptions).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getSurfaceWeight",
+      "kind": "extern",
+      "role": "Return current weight on the item's surface; used to detect whether anyone is standing on the platform.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FLOATIN::AccumulateDexterity",
+      "kind": "extern",
+      "role": "Add or accumulate a dexterity bonus for an actor (called with 0x0F when platform is empty).",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_FLOATIN::look",
+        "callee": "U8P_FLOATIN::set info",
+        "purpose": "Mark the item with info id 0x0208 prior to producing its description (prepares item state for the U8P_FLOATIN::look interaction).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FLOATIN::look",
+        "callee": "U8P_FLOATIN::process exclude",
+        "purpose": "Exclude the item from processing immediately after setting info (likely a temporary/visual state guard).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FLOATIN::look",
+        "callee": "Item::bark",
+        "purpose": "Display the short description \"floating platform \" to the player/actor who looked at the item.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FLOATIN::release",
+        "callee": "U8P_FLOATIN::set info",
+        "purpose": "Mark the item with info id 0x020D when the release event begins (prepare/record state).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FLOATIN::release",
+        "callee": "U8P_FLOATIN::process exclude",
+        "purpose": "Exclude the item from processing after the release state change (symmetry with U8P_FLOATIN::look handler).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FLOATIN::release",
+        "callee": "Item::getSurfaceWeight",
+        "purpose": "Query how much weight is currently on the platform to determine if anyone remains standing on it.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FLOATIN::release",
+        "callee": "U8P_FLOATIN::AccumulateDexterity",
+        "purpose": "Award or accumulate a dexterity bonus (0x0F) when Item::getSurfaceWeight returns zero (platform empty).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_FLOATIN::look",
+    "behavior_summary_one_liner": "FLOATIN::look: When a player/actor 'looks' at the floating platform, the script marks the item (calls set info with id 0x0208 and process exclude) and makes the item emit a short description by calling Item::bark with the string \"floating platform \".",
+    "external_call_count": 7,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

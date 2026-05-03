@@ -1,0 +1,77 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_SGARGL.json",
+  "file": "U8P_SGARGL",
+  "behavior_summary": [
+    "When the gargoyle object is examined (U8P_SGARGL::look event), the script builds the label string \"gargoyle \" and asks the item/process to 'bark' that string to the viewer.",
+    "The handler operates on a process/object pointer passed in (inferred from BP+06h) and does not modify any global flags or persistent game state.",
+    "After calling Item::bark the code frees the temporary string, inspects the returned value via an implies-style operation, then suspends/returns — suggesting the return may influence engine control flow or UI but no further local state is changed."
+  ],
+  "notable_control_flow": [
+    "Entry on U8P_SGARGL::look event -> prepare temporary string \"gargoyle \"",
+    "Push process/object pointer (BP+06h) and string, call external Item::bark",
+    "Free temporary/string memory",
+    "Consume Item::bark return value with an implies/pop sequence",
+    "Suspend and return (end of handler)"
+  ],
+  "open_questions": [
+    "Is the parameter at BP+06h strictly a process ID/pointer or a broader object descriptor? (inferred as object/process pointer)",
+    "What semantics does the consumed return value from Item::bark carry for the engine (visual vs control flow cue)?",
+    "Does the implies/pop sequence trigger any conditional behavior elsewhere in the engine that depends on the bark return code?"
+  ],
+  "main_function": {
+    "name": "U8P_SGARGL::look",
+    "execution_form": "process",
+    "purpose": "Respond to the 'U8P_SGARGL::look' (examine) event for a gargoyle item by producing the human-readable label and routing it to the engine's item-message routine so the player sees \"gargoyle \".",
+    "entry_conditions": [
+      "Event 0 (U8P_SGARGL::look) — invoked when an actor/player examines or 'looks at' the gargoyle object."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_SGARGL::look",
+      "kind": "main",
+      "role": "Look/examine event handler for the gargoyle item; constructs display string and invokes messaging routine.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine routine to emit/display a short text/message associated with an item/process (used to show the object's label).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_SGARGL::look",
+        "callee": "Item::bark",
+        "purpose": "Deliver the constructed label string (\"gargoyle \") to the engine so the object produces a visible/audio message to the viewer.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "SGARGL::look",
+    "behavior_summary_one_liner": "When the gargoyle object is examined (U8P_SGARGL::look event), the script builds the label string \"gargoyle \" and asks the item/process to 'bark' that string to the viewer.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

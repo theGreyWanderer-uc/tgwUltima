@@ -1,0 +1,224 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_FIRESPEL.json",
+  "file": "U8P_FIRESPEL",
+  "behavior_summary": [
+    "Coordinates and runs a multi-stage 'fire spell' effect: spawns temporary visual/effect items, orients them toward a target point or entity, runs per-effect behavior scripts (projectiles/motes), plays SFX, applies impact/damage worker calls at legal map points, optionally recenters the camera, teleports/repositions an NPC/subject, and then cleans up temporary items.",
+    "The routine creates short-lived items that expand or move from a source toward target coordinates, repeatedly checks placement legality and distance thresholds, and spawns helper scripts (METHOD::013E and FIRESPEL subroutines) at chosen coordinates to apply the actual impact/effect.",
+    "The overall entry acts as a process: it spawns concurrent pieces (visual timers/free cleaners), may set temporary avatar stasis during key phases, and destroys input temporary items when finished."
+  ],
+  "notable_control_flow": [
+    "Top-level process entry U8P_FIRESPEL::0080: spawns helper processes (visual/cleanup), destroys an input temp item, then returns.",
+    "U8P_FIRESPEL::00A9: calculates direction from a source item to given (x,y), creates and places effect items at computed offsets, optionally centers camera, calls a local initializer METHOD::0113, and spawns visual sub-scripts (U8P_FIRESPEL::1F65) plus FREE timers to manage lifecycle.",
+    "U8P_FIRESPEL::059A: a runtime behavior loop for a spawned element (projectile/mote). It resolves targets, possibly sets avatar stasis, orients movers toward targets via Item::getDirToItem/Coords, checks Item::legal_move and a distance metric (FREE::1CE3), plays sound (playSFX), spawns impact worker METHOD::013E at legal points, and repeats/respawns until completion.",
+    "Many placement/spawn decisions are guarded by legal_move checks and distance comparisons, preventing invalid placements and controlling expansion radius."
+  ],
+  "open_questions": [
+    "Exact gameplay effect of METHOD::013E (spawned repeatedly at impact points) — likely applies damage/visual hit effects but not conclusively identified.",
+    "Precise semantics of METHOD::0113, METHOD::091C, METHOD::15E7 and other spawned METHODs: their animation/state changes are inferred only.",
+    "When and why the camera is centered (Camera::setCenterOn) — appears optional/conditional and may depend on context (e.g., caster vs. avatar view).",
+    "Full intent and rule-set for avatar stasis: which phases set/getAvatarInStasis and whether it blocks player control only or other processing.",
+    "Teleport/map semantics: whether Npc::teleport always preserves map or can cross-map — observed Npc::getMap used but exact behavior uncertain."
+  ],
+  "main_function": {
+    "name": "U8P_FIRESPEL::0080",
+    "execution_form": "process",
+    "purpose": "Entry/coordination process for the fire-spell effect: spawn and start visual/timed helpers, orchestrate per-instance effect creation and runtime loops, perform final teleport/reposition of affected NPC(s) or targets, and clean up temporary items.",
+    "entry_conditions": [
+      "Invoked when the fire-spell is executed (spell cast or area trigger)",
+      "Called with parameters: target_item (Item*), x (uword), y (uword), z (ubyte) indicating the spell's target position/context"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_FIRESPEL::0080",
+      "kind": "main",
+      "role": "Top-level orchestrator process for the fire spell (spawns helpers, handles cleanup and final teleportation/repositioning).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FIRESPEL::00A9",
+      "kind": "helper",
+      "role": "Compute direction to target coords, create and initialize temporary effect items, optionally recenter camera, and spawn visual/timer helpers to start an effect instance.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FIRESPEL::059A",
+      "kind": "helper",
+      "role": "Runtime loop for a spawned moving/expanding effect element (projectile/mote): target processing, movement/placement validation, SFX, impact spawns, and lifecycle termination/respawn logic.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FIRESPEL::1F65",
+      "kind": "helper",
+      "role": "Spawned visual/temporal sub-script contributing to the spell's animation lifecycle.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_FIRESPEL::2AF5",
+      "kind": "helper",
+      "role": "Internal helper invoked during runtime loop for specialized impact or movement logic (inferred).",
+      "confidence": "medium"
+    },
+    {
+      "name": "METHOD::0113",
+      "kind": "extern",
+      "role": "Local method used to initialize/configure newly created effect items (orientation/animation parameters).",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_FIRESPEL::0080",
+        "callee": "U8P_FIRESPEL::00A9",
+        "purpose": "Create and initialize individual effect instances at computed offsets from source and start their lifecycle.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIRESPEL::0080",
+        "callee": "U8P_FIRESPEL::1F65",
+        "purpose": "Spawn concurrent visual/animation sub-processes that run the spell's visuals independently.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FIRESPEL::00A9",
+        "callee": "U8P_FIRESPEL::1F65",
+        "purpose": "Start the per-instance visual/temporal script after creating the effect item and running initialization.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FIRESPEL::059A",
+        "callee": "U8P_FIRESPEL::2AF5",
+        "purpose": "Call internal routines for impact checks or specialized movement/effect logic during the runtime loop.",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_FIRESPEL::0080",
+        "callee": "Item::destroy",
+        "purpose": "Destroy input temporary item(s) passed into the spell, cleaning up used resources.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIRESPEL::00A9",
+        "callee": "Item::getDirToCoords",
+        "purpose": "Compute direction from the source item to target coordinates to orient newly created effect items.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIRESPEL::00A9",
+        "callee": "Item::create",
+        "purpose": "Create temporary effect items used for visuals/projectiles.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIRESPEL::00A9",
+        "callee": "Camera::setCenterOn",
+        "purpose": "Optionally recenter the camera on the source/created effect to focus the player's view during the effect.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FIRESPEL::00A9",
+        "callee": "METHOD::0113",
+        "purpose": "Initialize/configure created effect items (set animation/orientation/parameters).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FIRESPEL::00A9",
+        "callee": "FREE::1C19",
+        "purpose": "Spawn a short timer/cleanup helper to free resources or act as a delayed placeholder referencing a spawned pid.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FIRESPEL::059A",
+        "callee": "U8P_FIRESPEL::process target (process target())",
+        "purpose": "Resolve or pick a target entity for homing/orientation during the mover's runtime loop.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIRESPEL::059A",
+        "callee": "U8P_FIRESPEL::getAvatarInStasis / setAvatarInStasis",
+        "purpose": "Query and temporarily set avatar stasis state while critical portions of effect run (freeze/unfreeze player).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FIRESPEL::059A",
+        "callee": "Item::getDirToItem",
+        "purpose": "Orient mover/projectile toward a target item/entity.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIRESPEL::059A",
+        "callee": "Item::legal_move",
+        "purpose": "Check if a placement/move of an effect item to a worldpoint is legal; used to avoid invalid spawns.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIRESPEL::059A",
+        "callee": "FREE::1CE3",
+        "purpose": "Compute a distance/metric between points for range checks deciding when to spawn impact effects.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIRESPEL::059A",
+        "callee": "METHOD::013E",
+        "purpose": "Spawn worker that applies the spell's effect (damage/impact visuals/status) at chosen coordinates.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FIRESPEL::059A",
+        "callee": "U8P_FIRESPEL::playSFX",
+        "purpose": "Play sound effects associated with projectile/mote movement or impact.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIRESPEL::0080",
+        "callee": "Npc::getMap",
+        "purpose": "Query an NPC's current map id before teleporting to ensure teleport uses the correct map context.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FIRESPEL::0080",
+        "callee": "Npc::teleport",
+        "purpose": "Teleport or reposition an NPC/target to the computed destination coordinates after effect resolves.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FIRESPEL::059A",
+        "callee": "Item::touch",
+        "purpose": "Trigger item touch behaviour when an effect item contacts an entity or completes to cause interactions.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "inDaemonScene",
+        "likely_effect": "Selects variant orientation/behavior in the runtime loop (affects mover orientation/animation).",
+        "confidence": "high"
+      }
+    ],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_FIRESPEL::0080",
+    "behavior_summary_one_liner": "Coordinates and runs a multi-stage 'fire spell' effect: spawns temporary visual/effect items, orients them toward a target point or entity, runs per-effect behavior scripts (projectiles/motes), plays SFX, applies impact/damage worker calls at legal map points, optionally recenters the camera, teleports/repositions an NPC/subject, and then cleans up temporary items.",
+    "external_call_count": 16,
+    "flag_read_count": 1,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

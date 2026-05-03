@@ -1,0 +1,89 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_KEGNS.json",
+  "file": "U8P_KEGNS",
+  "behavior_summary": [
+    "When a player/actor 'looks' at the keg object, the script marks the keg with an info flag and excludes it from normal processing, then makes the keg 'speak' a short static label to the viewer.",
+    "The spoken label is the literal string \"keg \", created temporarily, passed to the item's bark routine for presentation to the viewer PID, and then freed.",
+    "The return value of Item::bark is read and used in a final implies/pop/suspend sequence so the handler finishes by returning/suspending with a truthy-like result (inferred)."
+  ],
+  "notable_control_flow": [
+    "Entry as an event-driven process handler for the 'U8P_KEGNS::look' trigger.",
+    "Set item info (push constant 0x0208) on the target object and apply a process-exclude to that object to prevent further processing.",
+    "Allocate/construct ephemeral string \"keg \", push arguments (item/process pointer and viewer PID inferred) and call Item::bark.",
+    "Free the ephemeral string after the bark call, consume the bark return value, perform an implies/pop, then suspend/return (finalizes the handler)."
+  ],
+  "open_questions": [
+    "Exact argument order for Item::bark (inference: item/process pointer, char* string, viewer PID) — calling convention is inferred from push order but not formally documented here.",
+    "Precise semantics and persistent effect of the info id 0x0208 set on the item (what game-state does 0x0208 represent?).",
+    "Exact semantics of the process-exclude opcode and its lifetime (is exclusion permanent, until reset, or only for the immediate frame?).",
+    "Meaning and consequences of the implies/pop sequence using the bark return value — is it gating further engine behavior or simply normalizing a return code?",
+    "Whether there are any additional side-effects on other game systems (e.g., quests, logging) beyond the visible item info and process exclude writes."
+  ],
+  "main_function": {
+    "name": "U8P_KEGNS::look",
+    "execution_form": "process",
+    "purpose": "Handle the 'U8P_KEGNS::look' event for a keg item: mark the item to alter processing, present the short label \"keg \" to the viewing process/player via Item::bark, free temporaries, and finalize by suspending/returning a truthy-like result.",
+    "entry_conditions": [
+      "Event 0 ('U8P_KEGNS::look') — triggered when an actor/player inspects/looks at the keg object"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_KEGNS::look",
+      "kind": "main",
+      "role": "Event handler for the keg item's U8P_KEGNS::look/examine interaction.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item method used to present a short text message (the item's label) to a viewer/process.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_KEGNS::look",
+        "callee": "Item::bark",
+        "purpose": "Deliver a short text message (the literal \"keg \") from the keg item to the viewer process/player; return value used by the handler's final implies/return sequence.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": [
+      {
+        "name": "item info (0x0208) on the target object",
+        "likely_effect": "Mark the item with a state/info bit so it is recognized as having been examined or to alter its future processing.",
+        "confidence": "medium"
+      },
+      {
+        "name": "process exclude (applied to the target object)",
+        "likely_effect": "Prevent the item from participating in further processing/AI cycles until cleared (guarding against duplicate handling).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "guard",
+    "ui_message"
+  ],
+  "quick_facts": {
+    "main_function": "KEGNS::look",
+    "behavior_summary_one_liner": "When a player/actor 'looks' at the keg object, the script marks the keg with an info flag and excludes it from normal processing, then makes the keg 'speak' a short static label to the viewer.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 2
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

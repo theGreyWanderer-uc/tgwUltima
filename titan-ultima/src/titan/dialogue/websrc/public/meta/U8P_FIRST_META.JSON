@@ -1,0 +1,137 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_FIRST.json",
+  "file": "U8P_FIRST",
+  "behavior_summary": [
+    "FIRST::hatch implements an item's \"U8P_FIRST::hatch\" event: it notifies nearby objects of an area entry, centers the camera on the U8P_FIRST::hatch focal point, runs a sequence of spawned visual/timed effects and method callbacks (with waits), and finally invokes the item's use logic to complete the U8P_FIRST::hatch (likely transforming or consuming the egg and spawning the hatched creature).",
+    "The routine iterates over a collection/address passed into the function and calls Item::enterFastArea on each found entry to signal proximity/area-entry behavior.",
+    "Multiple scripts/services are spawned (FREE::1C6D, FREE::1C19) and a METHOD (METHOD::15E7) is queued on the item/process; the code implies/waits on their results before continuing to Item::use."
+  ],
+  "notable_control_flow": [
+    "Iterate over entries provided at the input pointer and call process Item::enterFastArea for each entry to notify area entry (loop using local loop_iterator).",
+    "Call Camera::setCenterOn(0) immediately before spawning FX to center view on the U8P_FIRST::hatch event.",
+    "Spawn timed/free scripts (spawn FREE::1C6D, spawn FREE::1C19) and a METHOD (spawn METHOD::15E7) on the item/process, each followed by an implied/wait sequence (suspend until their implied retval conditions complete).",
+    "After effects/methods finish, call process Item::use(pid, 02, pointer) and wait for its completion as the final U8P_FIRST::hatch completion step."
+  ],
+  "open_questions": [
+    "What exactly do the numeric parameters passed to FREE::1C6D, FREE::1C19, and METHOD::15E7 control (timing, animation indices, sound IDs)? — inferred but not certain.",
+    "Is Camera::setCenterOn(0) centering on the avatar, the item, or a game-layer default? The 0 argument is interpreted as 'avatar/this item' but not proven.",
+    "Does Item::use(02, pointer) spawn the hatched creature, change item shape, or otherwise modify game state in a specific way? The exact transformation semantics are inferred.",
+    "Is the list/collection scanned (pointer at [BP+06h]) an explicit nearby-item list or a region-scan result provided by the engine? The code iterates it but the producer is unknown."
+  ],
+  "main_function": {
+    "name": "U8P_FIRST::hatch",
+    "execution_form": "process",
+    "purpose": "Respond to the U8P_FIRST::hatch/fast-area event by notifying nearby items of the area entry, focusing the camera, playing/waiting for hatching visual/timed effects and method callbacks, and finally invoking the item's use logic to complete the U8P_FIRST::hatch.",
+    "entry_conditions": [
+      "Event 7 (U8P_FIRST::hatch/fast-area entry) — triggered when the Avatar or relevant actor enters the item's trigger region or when the U8P_FIRST::hatch sequence is started."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_FIRST::hatch",
+      "kind": "main",
+      "role": "Handle U8P_FIRST::hatch/fast-area event for an item/process and coordinate effects and final use/transform.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::enterFastArea",
+      "kind": "extern",
+      "role": "Notify nearby item/process of area entry/proximity; called per-scanned entry in the loop.",
+      "confidence": "high"
+    },
+    {
+      "name": "Camera::setCenterOn",
+      "kind": "extern",
+      "role": "Center the camera on a focal target prior to the U8P_FIRST::hatch effects.",
+      "confidence": "high"
+    },
+    {
+      "name": "spawn FREE::1C6D",
+      "kind": "extern",
+      "role": "Spawn a free/timed effect or visual script used during the U8P_FIRST::hatch sequence.",
+      "confidence": "high"
+    },
+    {
+      "name": "spawn FREE::1C19",
+      "kind": "extern",
+      "role": "Spawn a follow-up timed effect/service for the U8P_FIRST::hatch sequence.",
+      "confidence": "high"
+    },
+    {
+      "name": "spawn METHOD::15E7",
+      "kind": "extern",
+      "role": "Queue a method-like callback/state change on the item/process (e.g., animation or sound step).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::use",
+      "kind": "extern",
+      "role": "Finalize the U8P_FIRST::hatch by invoking the item's use logic (likely consumes/transforms the item and spawns the hatched entity).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_FIRST::hatch",
+        "callee": "Item::enterFastArea",
+        "purpose": "Notify each nearby item/entry found in the scanned collection that the actor entered its fast-area so they can react; parameter is the per-item address/handle from the loop.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIRST::hatch",
+        "callee": "Camera::setCenterOn",
+        "purpose": "Center the game camera on the U8P_FIRST::hatch focal target before spawning visual/timed effects (called with 0 argument, inferred to mean avatar or current item).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIRST::hatch",
+        "callee": "spawn FREE::1C6D",
+        "purpose": "Start a free-running visual/timed hatching effect with several numeric parameters controlling timing/animation; code waits on its implied retval.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIRST::hatch",
+        "callee": "spawn FREE::1C19",
+        "purpose": "Start an additional timed/follow-up hatching effect (different timing parameter), and suspend until it completes.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIRST::hatch",
+        "callee": "spawn METHOD::15E7",
+        "purpose": "Queue a method callback/state/animation change on the pid with small numeric parameters and a pointer; the script implies/waits on its completion.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIRST::hatch",
+        "callee": "Item::use",
+        "purpose": "Invoke the item's use behavior (mode 0x02 and a pointer) to finish the U8P_FIRST::hatch—likely consume/transform the egg and spawn the hatched creature; wait for completion.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "FIRST::hatch",
+    "behavior_summary_one_liner": "FIRST::hatch implements an item's \"U8P_FIRST::hatch\" event: it notifies nearby objects of an area entry, centers the camera on the U8P_FIRST::hatch focal point, runs a sequence of spawned visual/timed effects and method callbacks (with waits), and finally invokes the item's use logic to complete the U8P_FIRST::hatch (likely transforming or consuming the egg and spawning the hatched creature).",
+    "external_call_count": 6,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

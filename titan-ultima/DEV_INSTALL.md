@@ -121,6 +121,32 @@ python -m build
 #   dist/titan_ultima-0.4.0-py3-none-any.whl (wheel)
 ```
 
+---
+
+## Updating bundled fold provenance
+
+If you update the fold binary used by TITAN, update the compliance bundle
+in `src/titan/third_party/fold/` in the same PR:
+
+```powershell
+# 1) Capture exact source commit used to build fold
+git -C C:\_Repos\pentagram rev-parse HEAD
+
+# 2) Refresh bundled GPL text from the source repository
+Copy-Item C:\_Repos\pentagram\COPYING .\src\titan\third_party\fold\COPYING -Force
+
+# 3) Update SOURCE_MAPPING.md commit, branch, and build notes
+#    (file: src/titan/third_party/fold/SOURCE_MAPPING.md)
+```
+
+Minimum required files for release artifacts:
+
+- `src/titan/third_party/fold/NOTICE.md`
+- `src/titan/third_party/fold/SOURCE_MAPPING.md`
+- `src/titan/third_party/fold/COPYING`
+
+CI validates that these files are present in the wheel.
+
 ## Running without installing
 
 If you just want to run the CLI without installing:

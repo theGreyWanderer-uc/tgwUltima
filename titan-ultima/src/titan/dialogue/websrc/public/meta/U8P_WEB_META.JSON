@@ -1,0 +1,76 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_WEB.json",
+  "file": "U8P_WEB",
+  "behavior_summary": [
+    "U8P_WEB::gotHit executes when the object receives a hit; it records a small piece of info on the hit object and then removes (destroys) that object.",
+    "The handler pushes a constant info key (0x20C), a 2-byte indirect value (from indirect_02), and the object's pointer (BP+06) to execute a 'set info' on the object, then performs a 'process exclude' operation and finally calls Item::destroy on the same object.",
+    "This sequence appears designed to mark or record who/what hit the object (or to set a small state/flag) immediately prior to removing the object from the world, ensuring the info is stored before destruction."
+  ],
+  "notable_control_flow": [
+    "Event-driven: U8P_WEB::gotHit is run in response to the U8P_WEB::gotHit event (Event 6) and runs to completion in one process invocation.",
+    "Deterministic linear flow: set info (with key 0x20C) -> process exclude -> Item::destroy. There are no observed branches or loops in this handler.",
+    "The 'process exclude' step is invoked after writing info and before destruction, likely to alter scheduling/processing of the object so it will not be further processed while being removed."
+  ],
+  "open_questions": [
+    "What exact semantics does info key 0x20C encode (attacker id, damage type, quest flag, or other metadata)?",
+    "What is the precise meaning and scope of the pushed 2-byte indirect value (indirect_02) — attacker PID, damage amount, or a small encoded flag?",
+    "What exact effect does 'process exclude' have in the engine for this object (prevents further AI, hides from lists, defers callbacks, etc.)?",
+    "Are there any side-effects elsewhere in the game triggered by setting info 0x20C prior to destruction?"
+  ],
+  "main_function": {
+    "name": "U8P_WEB::gotHit",
+    "execution_form": "process",
+    "purpose": "On being hit, record a small info entry (key 0x20C) on the hit object (value from an indirect 2-byte source) and then destroy that object.",
+    "entry_conditions": [
+      "Event 6 (U8P_WEB::gotHit) — invoked when this object is struck or receives a hit."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_WEB::gotHit",
+      "kind": "main",
+      "role": "Handle U8P_WEB::gotHit event: set object info and destroy the object",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::destroy",
+      "kind": "extern",
+      "role": "Engine routine to remove/destroy an item/object instance",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_WEB::gotHit",
+        "callee": "Item::destroy",
+        "purpose": "Remove/destroy the hit object passed at BP+06 after recording info",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_WEB::gotHit",
+    "behavior_summary_one_liner": "U8P_WEB::gotHit executes when the object receives a hit; it records a small piece of info on the hit object and then removes (destroys) that object.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

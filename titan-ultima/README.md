@@ -22,6 +22,7 @@ sound effects to full isometric world maps.
 | **Fonts** | Interactive wizard (`font-create`) builds U7 FONTS.VGA-compatible shapes from TrueType fonts — mono, multi-shade, or hollow gradient rendering (stroke outline + vertical colour fill) with 30 gradient presets (with colour swatches), 11 stock presets (BG & SI), 6 bundled TTFs, palette LUT mapping, hex-to-palette colour resolution, ASCII art preview. Scans game directories for font archives, shows live slot tables from actual Flex data, auto-generates Exult Studio preview placeholder for non-standard glyph layouts (Gargish, Runic). Parses `exult.cfg` to auto-resolve the correct font archive path (including mod patch directories). Non-interactive batch mode via TOML config |
 | **Palette** | Export the VGA 6-bit palette as a colour swatch |
 | **Sound** | One-step Sonarc audio export from `SOUND.FLX` to WAV (`u8 sound-export-all`); single-file decode (`u8 sound-export`); speech FLX archives (`E44.FLX`, `E80.FLX`, …) extract dialogue transcripts + Sonarc audio; Creative Voice (.voc) decoder for U7 speech (`INTROSND.DAT`, `U7SPEECH.SPC`) |
+| **Dialogue web** | End-user dialogue web pipeline for U8: prepare runtime dialogue artifacts, validate generated outputs, and launch a local static web viewer that can interact with U8 NPC conversations and items (`titan dialogue prepare`, `titan dialogue validate`, `titan dialogue launch`) |
 | **Music** | One-step XMIDI→MIDI export from Flex archives (`u8 music-export`, `u7 music-export`); multi-track XMIDI support (MIDI Format 1) |
 | **Maps** | **U8:** Render full isometric or top-down world maps from `FIXED.DAT` + GLOBs with engine-accurate dependency-graph depth sorting; merge live NPCs and items from save files; filter by all 16 TYPEFLAG bits; chunk coordinate grid overlay. **U7:** Render parallel-oblique world maps from `U7MAP` + `U7CHUNKS` + `SHAPES.VGA` with IFIX fixed objects and optional IREG dynamic objects; classic/flat/steep projection views; sprite-accurate dependency-DAG depth sorting; RLE terrain promotion with nearby-flat fill; colour-sampled world minimap (`map-sample`); `--full` world render; filter by TFA flags; chunk + superchunk grid overlay with coordinate labels; world-tile rectangle highlights with per-rectangle hex colours |
 | **Type data** | **U8:** Decode `TYPEFLAG.DAT` shape physics/flag metadata. **U7:** Parse `TFA.DAT` flag array + `SHPDIMS.DAT` + `WGTVOL.DAT` |
@@ -45,22 +46,51 @@ Requires Python 3.9+, NumPy ≥ 1.24, Pillow ≥ 10.0, Typer ≥ 0.15.
 
 ### Option A — first-time wizard (recommended)
 
-Run the interactive setup wizard once. It auto-detects your Ultima 8
-installation, handles Pentagram/ScummVM save paths, writes `titan.toml`, and
-optionally extracts the shape and glob archives for you.
+Run the interactive setup wizard once. It auto-detects Ultima 8 plus
+Ultima 7 (Black Gate / Serpent Isle) install locations, handles
+Pentagram/ScummVM save paths for U8, writes `titan.toml`, and optionally
+extracts the U8 shape and glob archives for you.
 
 ```bash
 titan setup
 ```
 
-After setup, U8 map commands need no path arguments at all:
+After setup, U8 commands need no path arguments, and U7 map/typeflag/save-npcs
+can use config defaults via `--game bg|si`:
 
 ```bash
 titan u8 map-render -m 5               # renders map_005_iso_classic.png
 titan u8 map-render -m 0 --no-roof     # roof tiles removed
 titan u8 map-render -m 39 --no-editor --no-ignore   # player-accurate
 titan u8 map-render-all --maps 0 5 39 --views iso_classic iso_high
+
+# U7 defaults from titan.toml
+titan u7 map-render --game bg --sc 85 -o britain_bg.png
+titan u7 typeflag-dump --game si -f csv -o tfa_si.csv
 ```
+
+### Ultima 8 dialogue web viewer (end-user flow)
+
+After `titan setup`, you can run the dialogue pipeline without passing
+`--usecode` manually.
+
+```bash
+# 1) Build runtime dialogue artifacts
+titan dialogue prepare
+
+# 2) Validate artifacts
+titan dialogue validate
+
+# 3) Launch viewer (standard command)
+titan dialogue launch
+
+# Advanced optional override
+titan dialogue launch --host 127.0.0.1 --port 4173
+```
+
+Open `http://127.0.0.1:4173/` in your browser if it does not open automatically.
+If launch reports missing dialogue meta assets, reinstall TITAN from the latest release/CI wheel.
+If launch reports a placeholder dialogue shell, reinstall TITAN from the latest release/CI wheel.
 
 ### Option B — manual setup (no config file)
 
@@ -217,13 +247,15 @@ Use `titan --config /other/path.toml <command>` to override.
 
 ### Format
 
+`titan setup` now writes the multi-game format by default. Legacy
+`[game]`/`[paths]` is still supported for backward compatibility.
+
 ```toml
-[game]
+[u8.game]
 base     = "C:/ultima8"   # root of your Ultima 8 install
 language = "ENGLISH"      # ENGLISH, FRENCH, GERMAN, etc.
-                          # leave "" for flat mode (files directly in base/)
 
-[paths]
+[u8.paths]
 # Relative paths are auto-expanded to <base>/<language>/STATIC/<name>
 fixed     = "FIXED.DAT"
 palette   = "U8PAL.PAL"
@@ -233,9 +265,27 @@ typeflag  = "TYPEFLAG.DAT"
 shapes    = "shapes/"
 globs     = "globs/"
 
-# Live objects — relative expands to <base>/<language>/SAVEGAME/<name>
+# Live objects — relative expands to <base>/cloud_saves/SAVEGAME/<name>
 # Absolute paths (e.g. Pentagram/ScummVM) are used unchanged
 nonfixed  = "U8SAVE.000"
+
+[u7bg.game]
+base     = "C:/GOG Games/Ultima VII/ULTIMA7"
+variant  = "blackgate"
+
+[u7bg.paths]
+static   = "STATIC/"
+shapes   = "STATIC/SHAPES.VGA"
+palette  = "STATIC/PALETTES.FLX"
+
+[u7si.game]
+base     = "C:/GOG Games/Ultima VII/SERPENT"
+variant  = "serpentisle"
+
+[u7si.paths]
+static   = "STATIC/"
+shapes   = "STATIC/SHAPES.VGA"
+palette  = "STATIC/PALETTES.FLX"
 ```
 
 A fully annotated template is available in
@@ -379,7 +429,7 @@ the default install locations are:
 | Windows | Ultima 8 (GOG Galaxy) | `C:\Program Files (x86)\GOG Galaxy\Games\Ultima 8` |
 | Windows | Ultima 8 (GOG Offline) | `C:\GOG Games\Ultima 8` |
 | Windows | Ultima 7 (GOG) | `C:\GOG Games\Ultima VII\ULTIMA7` (BG), `C:\GOG Games\Ultima VII\SERPENT` (SI) |
-| Linux | GOG | `~/GOG Games/Ultima 8`, `~/GOG Games/Ultima VII` |
+| Linux | GOG / Heroic | `~/GOG Games/Ultima 8`, `~/GOG Games/Ultima VII`, `~/Games/Heroic/Ultima 8`, `~/Games/Heroic/Ultima 7`, `~/Games/Heroic/Ultima 7 - Serpent Isle` |
 
 `titan setup` auto-detects these paths and others (legacy EA/Origin disc
 installs, common manual redirects such as `C:\ULTIMA8`).
@@ -482,6 +532,21 @@ remaining five are fan recreations released under permissive terms.
 ## License
 
 MIT
+
+### Third-party components
+
+TITAN also distributes a modified `fold` component derived from the
+Pentagram project as part of dialogue tooling. That component is
+licensed under **GNU GPL v2 or later** and is **not** covered by TITAN's
+MIT license.
+
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and
+`src/titan/third_party/fold/` for:
+
+- attribution and license scope
+- corresponding source mapping (exact upstream/branch commit)
+- build entry points used to produce the distributed binary
+- bundled GPL license text
 
 ### Important note
 

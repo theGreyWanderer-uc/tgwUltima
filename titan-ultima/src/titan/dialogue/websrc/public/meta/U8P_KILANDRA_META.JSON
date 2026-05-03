@@ -1,0 +1,270 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_KILANDRA.json",
+  "file": "U8P_KILANDRA",
+  "behavior_summary": [
+    "This script implements NPC Kilandra's examination text, reactive behaviors (when attacked or when the player steals), and a long-running wandering/interaction AI that runs while the player is nearby.",
+    "U8P_KILANDRA::look provides context-sensitive description text: it checks Npc::isDead() and the globals kilandraName and kilandraJob to choose an appropriate bark (corpse text, full name+job, name-only, job-only, or generic ‘woman’).",
+    "U8P_KILANDRA::enterFastArea activates Kilandra's AI by clearing reference slots and spawning the AI interpreter U8P_KILANDRA::0495.",
+    "U8P_KILANDRA::leaveFastArea clears references and, if Kilandra is alive, may reposition her randomly (inferred via urandom + Npc::teleport) as a cleanup/reposition behavior.",
+    "U8P_KILANDRA::schedule chooses a scheduled routine using FREE::28F9 flags and spawns METHOD::133F with selected parameters to set up timed behaviors.",
+    "U8P_KILANDRA::cast reacts to being attacked/cast on: it checks target via Npc::getTarget and if the Avatar is aggressor (and Kilandra is alive) it summons help (CALGUARD::0080), barks an alarm, and uses a timer helper (FREE::1C19) for cooldown/repeats.",
+    "U8P_KILANDRA::AvatarStoleSomething responds to theft by clearing refs, turning to the stolen item (Item::getDirToItem + METHOD::091C), chastising the player with a bark, and triggering active behavior/schedule.",
+    "U8P_KILANDRA::0495 is the main AI loop: it interprets a script of token frames (Item::getFrame), pathfinds to scripted points, spawns short action handlers (U8P_KILANDRA::05AC), and uses suspend/timers to pace movement.",
+    "U8P_KILANDRA::05AC handles small interactions reached by the AI: conditional dialog (first-meet vs repeat using kilandraMet), facing targets, fishing-related lines, and other short actions."
+  ],
+  "notable_control_flow": [
+    "Look handler branches first on Npc::isDead() and then on globals kilandraName and kilandraJob to select wording.",
+    "enterFastArea -> spawn(U8P_KILANDRA::0495) to begin active behavior; leaveFastArea -> clear/free refs and optionally teleport when alive.",
+    "AI interpreter (U8P_KILANDRA::0495) loops through script tokens (Item::getFrame), calling Npc::pathfind and spawning U8P_KILANDRA::05AC at markers; it uses suspend to yield between steps.",
+    "Reactive handlers (cast, AvatarStoleSomething) clear references, call orientation helpers, and spawn guard or schedule/timer helpers to escalate or defer responses.",
+    "schedule queries several FREE::28F9 flags to select one of multiple METHOD::133F parameter sets, enabling different timed behaviors to be launched."
+  ],
+  "open_questions": [
+    "Exact text variants and their string IDs are not present; what are the literal bark strings for each kilandraName / kilandraJob combination?",
+    "Precise meanings of FREE::28F9 flag indices used by schedule(): what runtime states do those bits represent?",
+    "What exact script/token data set does U8P_KILANDRA::0495 iterate (shapes/frames mapping to world positions) and where is it stored?",
+    "Does leaveFastArea teleport use map-safe validation or can it place Kilandra in inaccessible locations (teleport coordinates inferred but not fully documented)?",
+    "Are there additional global flags written by this script (none observed) or by spawned METHOD::133F instances that affect Kilandra's long-term state?"
+  ],
+  "main_function": {
+    "name": "U8P_KILANDRA::look",
+    "execution_form": "process",
+    "purpose": "Provide the descriptive/examination text when a player looks at Kilandra. It chooses phrasing based on whether Kilandra is dead and on global flags that control name and job variants.",
+    "entry_conditions": [
+      "Event 0: invoked when a player (pid) examines / looks at the NPC Kilandra"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_KILANDRA::look",
+      "kind": "main",
+      "role": "Produce context-sensitive examination text (bark) for the NPC based on death state and global name/job flags.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_KILANDRA::schedule",
+      "kind": "helper",
+      "role": "Select and spawn a scheduled behavior (METHOD::133F) by querying FREE::28F9 flags and setting schedule parameter bytes.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_KILANDRA::enterFastArea",
+      "kind": "helper",
+      "role": "Trigger when the avatar enters Kilandra's fast trigger region: clear refs and spawn the long-running AI (U8P_KILANDRA::0495).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_KILANDRA::leaveFastArea",
+      "kind": "helper",
+      "role": "Trigger on leaving the fast area: free/clear refs and, if alive, reposition Kilandra (inferred teleport to random coords).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_KILANDRA::cast",
+      "kind": "helper",
+      "role": "React to being cast/attacked: check target, summon guards, bark alarm, and use a timer/cooldown pattern (FREE::1C19).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_KILANDRA::AvatarStoleSomething",
+      "kind": "helper",
+      "role": "Handle theft by the Avatar: reset refs, turn to the stolen item, chastise the player, and trigger active behaviors/schedule.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_KILANDRA::0495",
+      "kind": "helper",
+      "role": "Long-running AI/pathing interpreter that follows a script, pathfinds, spawns short action handlers, and controls pacing with suspends.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_KILANDRA::05AC",
+      "kind": "helper",
+      "role": "Short action handler invoked by the AI: handles greetings (first-meet vs repeat via kilandraMet), dialog, facing, and small context actions.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::isDead",
+      "kind": "extern",
+      "role": "Engine helper used by U8P_KILANDRA::look and other handlers to determine whether Kilandra is dead and should suppress actions/dialog.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine primitive to display/speak text to a pid; primary mechanism used for all dialog and descriptive strings.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_KILANDRA::enterFastArea",
+        "callee": "U8P_KILANDRA::0495",
+        "purpose": "Activate the NPC's active AI pathing/interaction loop when the player enters the fast area.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KILANDRA::0495",
+        "callee": "U8P_KILANDRA::05AC",
+        "purpose": "Spawn short action handler when AI reaches a scripted interaction marker.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KILANDRA::AvatarStoleSomething",
+        "callee": "U8P_KILANDRA::schedule",
+        "purpose": "Trigger scheduled/active behavior after a theft reaction (inferred from spawn patterns).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_KILANDRA::AvatarStoleSomething",
+        "callee": "U8P_KILANDRA::enterFastArea",
+        "purpose": "Ensure active AI behavior runs after responding to theft (inferred spawn on reaction).",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_KILANDRA::look",
+        "callee": "Npc::isDead",
+        "purpose": "Check whether Kilandra is dead to select corpse vs living description text.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KILANDRA::look",
+        "callee": "Item::bark",
+        "purpose": "Send the chosen descriptive string to the viewing player (pid).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KILANDRA::schedule",
+        "callee": "FREE::28F9",
+        "purpose": "Query flag/availability bits used to select which schedule parameters to use.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KILANDRA::schedule",
+        "callee": "METHOD::133F",
+        "purpose": "Spawn the selected scheduled behavior with chosen parameters.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KILANDRA::enterFastArea",
+        "callee": "U8P_KILANDRA::resetRef",
+        "purpose": "Clear stored reference/state slots before starting active AI.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KILANDRA::leaveFastArea",
+        "callee": "FREE::2A56",
+        "purpose": "Free/clear stored references on leaving the fast area.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KILANDRA::leaveFastArea",
+        "callee": "urandom",
+        "purpose": "Choose random coordinates for a teleport reposition when leaving the fast area (inferred).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_KILANDRA::leaveFastArea",
+        "callee": "Npc::teleport",
+        "purpose": "Reposition Kilandra to chosen coordinates (inferred behavior when leaving area).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_KILANDRA::cast",
+        "callee": "Npc::getTarget",
+        "purpose": "Determine the NPC's current target to check if the Avatar is the aggressor.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KILANDRA::cast",
+        "callee": "CALGUARD::0080",
+        "purpose": "Call for guards/allies when attacked by the Avatar.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KILANDRA::cast",
+        "callee": "Item::bark",
+        "purpose": "Bark an alarm/chastising line when assaulted.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KILANDRA::AvatarStoleSomething",
+        "callee": "Item::getDirToItem",
+        "purpose": "Compute direction toward the stolen item so Kilandra can face it.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KILANDRA::AvatarStoleSomething",
+        "callee": "METHOD::091C",
+        "purpose": "Spawn a turn/rotation method so Kilandra faces the stolen item.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KILANDRA::0495",
+        "callee": "Npc::pathfind",
+        "purpose": "Request pathfinding toward scripted coordinates during the AI loop.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KILANDRA::0495",
+        "callee": "Item::getFrame",
+        "purpose": "Read script token/frame values that drive AI behavior decisions.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KILANDRA::05AC",
+        "callee": "U8P_KILANDRA::getName",
+        "purpose": "Retrieve player name to personalize dialog lines.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KILANDRA::cast",
+        "callee": "FREE::1C19",
+        "purpose": "Spawn a timer/delayed helper to implement cooldown or repeated checks.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "kilandraName (global[0107])",
+        "likely_effect": "Controls whether Kilandra's proper name is included in U8P_KILANDRA::look and dialog strings (selects name-vs-generic variants).",
+        "confidence": "high"
+      },
+      {
+        "name": "kilandraJob (global[0108])",
+        "likely_effect": "Selects job-specific wording in U8P_KILANDRA::look and dialog (e.g., 'fisherwoman' vs generic 'woman').",
+        "confidence": "high"
+      },
+      {
+        "name": "kilandraMet (global[0106])",
+        "likely_effect": "Indicates whether the player has met Kilandra before; used to choose first-meet greeting vs repeat greeting in U8P_KILANDRA::05AC.",
+        "confidence": "high"
+      }
+    ],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_KILANDRA::look",
+    "behavior_summary_one_liner": "This script implements NPC Kilandra's examination text, reactive behaviors (when attacked or when the player steals), and a long-running wandering/interaction AI that runs while the player is nearby.",
+    "external_call_count": 17,
+    "flag_read_count": 3,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

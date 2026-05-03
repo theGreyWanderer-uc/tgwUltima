@@ -1,0 +1,75 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_NSLAMPTP.json",
+  "file": "U8P_NSLAMPTP",
+  "behavior_summary": [
+    "Implements the lamp object's response to a 'U8P_NSLAMPTP::look' (examine) action. When invoked it asks the item to 'bark' the literal string \"lamp \" directed at the requesting process/player.",
+    "The routine passes the object/process id (inferred param) and a short static description to Item::bark, frees the temporary string, performs an implies/pop sequence and then suspends/returns — behavior interpreted as producing a successful U8P_NSLAMPTP::look result or completing the examination action.",
+    "No global flags are read or written by this script fragment; behavior is local to the lamp object and communication with the Item::bark external routine."
+  ],
+  "notable_control_flow": [
+    "Entry: handler runs as a process-style event handler (a 'U8P_NSLAMPTP::look' event) for the lamp object.",
+    "Sequence: push object/process id -> push literal string \"lamp \" -> call Item::bark -> free temporary string -> perform an 'implies' then pop -> suspend/return.",
+    "The implies/pop then suspend sequence appears to be a control-flow idiom that yields a success-like result to the caller or engine (inferred)."
+  ],
+  "open_questions": [
+    "What exact engine-level semantics does the 'implies' followed by pop and suspend encode here (success result, conditional chaining, or a protocol-specific return)?",
+    "Is the pushed [BP+06h] value strictly the viewer/player process id, the lamp's PID, or an item-instance pointer used by Item::bark (inferred but not absolutely proven)?",
+    "Are there any wider object-info flags or exclusions set by other parts of NSLAMPTP that interact with this U8P_NSLAMPTP::look handler (not present in this fragment)?"
+  ],
+  "main_function": {
+    "name": "U8P_NSLAMPTP::look",
+    "execution_form": "process",
+    "purpose": "Handle the 'U8P_NSLAMPTP::look' (examine) action for the lamp object by producing a short descriptive output ('lamp ') via the engine's Item::bark routine and then completing the event.",
+    "entry_conditions": [
+      "Event 0 / 'U8P_NSLAMPTP::look' — invoked when a player/actor examines or looks at the lamp object (inferred from binding to a U8P_NSLAMPTP::look event)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_NSLAMPTP::look",
+      "kind": "main",
+      "role": "Event handler for the lamp object's 'U8P_NSLAMPTP::look' action; composes and dispatches a short description.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine-provided routine used to make an item/process emit or display a short message; called by NSLAMPTP::look with the literal 'lamp '.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_NSLAMPTP::look",
+        "callee": "Item::bark",
+        "purpose": "Emit or display the lamp's description to the requesting process/player; passed the object/process id and the literal string 'lamp '.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "NSLAMPTP::look",
+    "behavior_summary_one_liner": "Implements the lamp object's response to a 'U8P_NSLAMPTP::look' (examine) action. When invoked it asks the item to 'bark' the literal string \"lamp \" directed at the requesting process/player.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

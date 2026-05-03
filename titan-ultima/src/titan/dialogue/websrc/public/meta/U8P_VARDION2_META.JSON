@@ -1,0 +1,134 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_VARDION2.json",
+  "file": "U8P_VARDION2",
+  "behavior_summary": [
+    "Implements the NPC Vardion's interaction/dialogue state machine invoked when a player interacts with him.",
+    "On first contact (checked by global flag vardionMet) Vardion asks who the player is, obtains the player's name via getName(), and builds a menu of reply options presented with process::ask.",
+    "The player's chosen reply (returned string) is compared against multiple known responses; matching branches produce appropriate dialogue via process::bark, update NPC state flags (e.g., vardionAvaName) and anger level (vardionMad), and in at least one antagonistic branch spawn a separate process (spawn FREE::1AD0).",
+    "A small local interaction_state flag controls whether the NPC insists on an answer or repeats/prompts; local slist holds the menu, resp_str holds the selected response, and playerName holds the constructed 'I am <name>.' string used for identity comparisons."
+  ],
+  "notable_control_flow": [
+    "Entry: U8P_VARDION2::0080 checks global vardionMet to select first-meeting vs repeat dialogue paths.",
+    "If first meeting: getName() is called and 'I am <name>.' is constructed and appended to the slist of reply options.",
+    "process::ask is called with slist; the returned string (resp_str) is strcmp'd against many canonical replies to determine branching.",
+    "Certain branches set vardionAvaName (when player claims to be the Avatar), others set/increment vardionMad (angering Vardion), and one branch spawns FREE::1AD0 (likely to escalate to assistance/hostility).",
+    "Looping/reprompt behavior is controlled by a local interaction_state which can force re-ask or proceed with handling the chosen response."
+  ],
+  "open_questions": [
+    "Precisely what behavior or entity spawn FREE::1AD0 creates (summon, guard, or immediate combat) — inferred but not explicit.",
+    "Exact semantics and numeric meanings of vardionMad values (1,2,3) and how they influence future interactions beyond the immediate bark/branch.",
+    "Where and how vardionMet is set elsewhere in game scripts (outside this excerpt) and how repeat interactions differ in complete context.",
+    "The precise effect of interaction_state variations (exact conditions under which prompts are repeated vs accepted)."
+  ],
+  "main_function": {
+    "name": "U8P_VARDION2::0080",
+    "execution_form": "process",
+    "purpose": "Handle player interaction/dialogue with the NPC Vardion: ask identity, present reply options, evaluate player replies, emit dialogue, and update NPC state (recognition of Avatar, anger) with possible escalation (spawn).",
+    "entry_conditions": [
+      "Triggered by player interaction with Vardion (e.g., conversation/trigger area entry).",
+      "Checks global vardionMet to determine first-time vs repeat behavior."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_VARDION2::0080",
+      "kind": "main",
+      "role": "NPC interaction/dialogue handler for Vardion",
+      "confidence": "high"
+    },
+    {
+      "name": "process::bark",
+      "kind": "extern",
+      "role": "Emit dialogue text from the NPC to the player",
+      "confidence": "high"
+    },
+    {
+      "name": "process::ask",
+      "kind": "extern",
+      "role": "Present a selectable list of player reply strings and return the chosen string",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_VARDION2::getName",
+      "kind": "extern",
+      "role": "Retrieve the player's name used to form identity reply comparisons",
+      "confidence": "high"
+    },
+    {
+      "name": "spawn FREE::1AD0",
+      "kind": "extern",
+      "role": "Spawn an external process/entity (likely assistance or hostile escalation)",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_VARDION2::0080",
+        "callee": "process::bark",
+        "purpose": "Output Vardion's dialogue lines in response to the player's choices or script-driven prompts.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VARDION2::0080",
+        "callee": "process::ask",
+        "purpose": "Present the assembled slist of reply options to the player and retrieve the selected reply string for strcmp-driven branching.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VARDION2::0080",
+        "callee": "U8P_VARDION2::getName",
+        "purpose": "Obtain the player's name so the script can create and compare an 'I am <name>.' reply to detect identity claims.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VARDION2::0080",
+        "callee": "spawn FREE::1AD0",
+        "purpose": "Spawn a separate process/entity as a side effect of an antagonistic player reply (likely to call for help or initiate hostility); exact spawn purpose is inferred.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "vardionMet",
+        "likely_effect": "Determines whether this is the first meeting path (affects whether identity/name prompt is used).",
+        "confidence": "high"
+      }
+    ],
+    "writes": [
+      {
+        "name": "vardionAvaName",
+        "likely_effect": "Set when the player claims to be the Avatar so Vardion records recognition of the Avatar identity.",
+        "confidence": "high"
+      },
+      {
+        "name": "vardionMad",
+        "likely_effect": "Updated/incremented to track Vardion's anger/hostility level in response to antagonistic player replies; influences subsequent dialogue and actions.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "dialogue",
+    "state",
+    "spawn",
+    "branching"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_VARDION2::0080",
+    "behavior_summary_one_liner": "Implements the NPC Vardion's interaction/dialogue state machine invoked when a player interacts with him.",
+    "external_call_count": 4,
+    "flag_read_count": 1,
+    "flag_write_count": 2
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

@@ -1,0 +1,75 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_TRING.json",
+  "file": "U8P_TRING",
+  "behavior_summary": [
+    "When the player 'looks' at Torwin's ring, the script prepares the item/process for display and makes the item emit a short descriptive text to the player.",
+    "The handler calls Item::bark with a hardcoded description string \"Torwin's ring \", captures the bark return value, reduces it to a boolean-like local, then suspends/returns.",
+    "No global game flags are read or written by this script fragment; its effect is purely descriptive/UI-facing for the ring item."
+  ],
+  "notable_control_flow": [
+    "Triggered by Event 0 (U8P_TRING::look): the routine runs when an actor examines the ring.",
+    "Performs setup on the item/process (inferred set-info / process-exclude sequence) to configure display/processing state before producing the description.",
+    "Calls the external routine Item::bark(U8P_TRING::look's item, \"Torwin's ring \") to show the text, then inspects the returned value and stores a small boolean-like result in a local before suspending/returning."
+  ],
+  "open_questions": [
+    "Exactly which 'info' id is set and the precise semantics of the 'process exclude' step (inferred from opcode sequences but not explicit).",
+    "Meaning and use of the bark return value: how the boolean-like local stored after the call is later interpreted by the engine or other scripts.",
+    "Whether the string memory/free lifecycle and any side effects of freeing the string are significant beyond standard cleanup."
+  ],
+  "main_function": {
+    "name": "U8P_TRING::look",
+    "execution_form": "process",
+    "purpose": "Handle the 'U8P_TRING::look' (examine) event for Torwin's ring by configuring the item/process display state and invoking the item's bark routine to present the description string to the player.",
+    "entry_conditions": [
+      "Event 0 (U8P_TRING::look) — invoked when the player or relevant actor examines/inspects the ring object."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_TRING::look",
+      "kind": "main",
+      "role": "Event handler for the ring's examine/U8P_TRING::look action; prepares display state and emits description text.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine to display or emit a short text string (used to show the ring's description).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_TRING::look",
+        "callee": "Item::bark",
+        "purpose": "Display the hardcoded description string \"Torwin's ring \" to the player/target process associated with the item.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_TRING::look",
+    "behavior_summary_one_liner": "When the player 'looks' at Torwin's ring, the script prepares the item/process for display and makes the item emit a short descriptive text to the player.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

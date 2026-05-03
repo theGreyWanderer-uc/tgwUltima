@@ -1,0 +1,87 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_TOYS.json",
+  "file": "U8P_TOYS",
+  "behavior_summary": [
+    "U8P_TOYS::TOYS::look handles the 'U8P_TOYS::look' (examine) event for a toy item: it reads the toy's frame/index and, based on that numeric value, makes the item emit a short descriptive text (via Item::bark) to the viewing process/player, then prevents further default U8P_TOYS::look handling by suspending.",
+    "The script maps specific frame values to short literal descriptions and invokes Item::bark with the chosen string. After barking it frees the temporary string and performs an implies/pop followed by suspend to stop further processing.",
+    "Frame->string mapping observed (inferred): 0 => \"doll \", 1 => \"doll \", 2 => \"wooden torax \", 3 => \"toy kith \", 4 => \"stuffed torax \"."
+  ],
+  "notable_control_flow": [
+    "U8P_TOYS::TOYS::look repeatedly calls Item::getFrame and compares the returned value against multiple literals; on match it calls Item::bark, frees the string, executes an implies/pop, and then suspend — effectively short-circuiting default U8P_TOYS::look handling.",
+    "The routine does not set or read persistent global flags; its effect is local: produce a short message and stop further U8P_TOYS::look processing.",
+    "The code redundantly re-reads the item's frame before each comparison instead of caching it, so the control flow is a set of independent conditional checks each leading to the same pattern of actions."
+  ],
+  "open_questions": [
+    "Are frames outside the observed 0..4 handled elsewhere or implicitly fall through to default U8P_TOYS::look behavior? (inferred behavior only, confidence: medium)",
+    "Is BP+06h unambiguously the item instance and pid a separate implicit parameter (viewer process id), or could conventions vary across similar scripts? (inferred, confidence: medium)",
+    "Exact semantics of the implies/pop sequence before suspend: appears to be a VM-level flow control to prevent default handling, but the precise engine-side effect is inferred (confidence: low-to-medium)."
+  ],
+  "main_function": {
+    "name": "U8P_TOYS::look",
+    "execution_form": "process",
+    "purpose": "Respond to a player 'U8P_TOYS::look' action on a toy item by emitting a short, frame-specific description via Item::bark and then suspending further default U8P_TOYS::look handling.",
+    "entry_conditions": [
+      "Event 0 (U8P_TOYS::look) — invoked when a player/actor examines or looks at the toy item."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_TOYS::look",
+      "kind": "main",
+      "role": "Handle item U8P_TOYS::look/examine event and produce a short description based on item frame.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getFrame",
+      "kind": "extern",
+      "role": "Return the numeric frame/index of an item used to select which description to emit.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Have the item emit/display a short text message to a target process/player.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_TOYS::look",
+        "callee": "Item::getFrame",
+        "purpose": "Query the toy's current frame/index to decide which descriptive string to emit.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TOYS::look",
+        "callee": "Item::bark",
+        "purpose": "Direct the item to 'speak' or display the chosen short description to the viewing process/player.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_TOYS::TOYS::look",
+    "behavior_summary_one_liner": "U8P_TOYS::TOYS::look handles the 'U8P_TOYS::look' (examine) event for a toy item: it reads the toy's frame/index and, based on that numeric value, makes the item emit a short descriptive text (via Item::bark) to the viewing process/player, then prevents further default U8P_TOYS::look handling by suspending.",
+    "external_call_count": 2,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

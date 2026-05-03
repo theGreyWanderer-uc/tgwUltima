@@ -1,0 +1,109 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_JEWELRY.json",
+  "file": "U8P_JEWELRY",
+  "behavior_summary": [
+    "JEWELRY::look is invoked when the jewelry item is examined and presents a short descriptive text to the examining player.",
+    "The function queries the item's frame/index (via Item::getFrame) to determine a subtype and maps frame values 0..7 to specific literal descriptions (e.g. 0 -> \"gemstone ring \", 1 -> \"gemstone necklace \", 2 -> \"amethyst gem \", 3 -> \"dark diamond \", 4 -> \"stone amber \", 5 -> \"dancing ruby \", 6 -> \"obsidian starstone \", 7 -> \"bright diamond \").",
+    "If the frame is outside 0..7, a generic description \"jewelry \" is used.",
+    "For the chosen description the routine constructs a temporary string pointer, calls Item::bark to send the text to the viewer/pid with the item as context, frees the temporary string, and returns."
+  ],
+  "notable_control_flow": [
+    "Selection is a simple branch/switch on the numeric frame returned from Item::getFrame: one branch per known subtype (0..7) and a default fallback.",
+    "After each branch, identical side effects occur: build literal string -> call Item::bark(pid, string, item) -> free string.",
+    "No global flags are read or written by this handler; it is a pure descriptive/interaction routine."
+  ],
+  "open_questions": [
+    "What exact numeric semantics map to item artwork/frame vs logical subtype (frame may correspond to sprite index rather than stable subtype)?",
+    "What is the origin of the pid pushed to Item::bark in this code path (the caller/engine supplies the viewer pid; the script treats it as the target for the bark)?",
+    "Are there any localization/concatenation rules applied elsewhere for these literals (this code uses static English literals; game may have higher-level localization hooks)?"
+  ],
+  "main_function": {
+    "name": "U8P_JEWELRY::look",
+    "execution_form": "process",
+    "purpose": "When the jewelry item is examined (U8P_JEWELRY::look), determine the item's visual/frame index and present a matching short description to the examining player by calling Item::bark with a literal string.",
+    "entry_conditions": [
+      "Event 0 (U8P_JEWELRY::look) — called when a player/actor inspects or looks at the jewelry item (entering its U8P_JEWELRY::look/observe handler)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_JEWELRY::look",
+      "kind": "main",
+      "role": "Handle the 'U8P_JEWELRY::look' event for the jewelry item: pick description from frame and bark to viewer.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getFrame",
+      "kind": "extern",
+      "role": "Engine/item routine returning the item's frame/index used to select description.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine to emit/display a short text message to a target pid in the context of the item.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_JEWELRY::str to ptr (runtime helper)",
+      "kind": "extern",
+      "role": "Construct a temporary string pointer from a literal for passing to Item::bark.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_JEWELRY::free string (runtime helper)",
+      "kind": "extern",
+      "role": "Free the temporary string pointer after use.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_JEWELRY::look",
+        "callee": "Item::getFrame",
+        "purpose": "Retrieve the numeric frame/index of the item to decide which description to use.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_JEWELRY::look",
+        "callee": "U8P_JEWELRY::str to ptr (runtime helper)",
+        "purpose": "Create a temporary string pointer for the selected literal description before barking.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_JEWELRY::look",
+        "callee": "Item::bark",
+        "purpose": "Send/display the description string to the viewer/pid, using the item as context/target.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_JEWELRY::look",
+        "callee": "U8P_JEWELRY::free string (runtime helper)",
+        "purpose": "Free the temporary string pointer allocated for the literal after Item::bark returns.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger"
+  ],
+  "quick_facts": {
+    "main_function": "JEWELRY::look",
+    "behavior_summary_one_liner": "JEWELRY::look is invoked when the jewelry item is examined and presents a short descriptive text to the examining player.",
+    "external_call_count": 4,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

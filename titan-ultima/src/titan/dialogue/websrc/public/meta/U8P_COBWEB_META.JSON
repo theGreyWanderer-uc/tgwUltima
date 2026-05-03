@@ -1,0 +1,89 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_COBWEB.json",
+  "file": "U8P_COBWEB",
+  "behavior_summary": [
+    "When the cobweb object is hit (U8P_COBWEB::gotHit event), the script records/marks a target with an internal info key and excludes it from further processing, then destroys the provided item/entity reference.",
+    "The primary visible gameplay effect is cleanup: removing the referenced item/entity from the world (via Item::destroy).",
+    "Internal 'set info' and 'process exclude' operations likely prevent further interactions or AI processing for the marked target after the hit."
+  ],
+  "notable_control_flow": [
+    "Entry on Event 6 (U8P_COBWEB::gotHit) causes immediate state changes and a destroy call — no prolonged loops or waits are present in the excerpt.",
+    "The routine pushes a constant info id (observed 0x20C/0x210-style constant in related scripts) and the first parameter to perform the 'set info' / 'process exclude' operations before calling Item::destroy.",
+    "No global flags are read or written by this snippet; control flow is short and deterministic: mark/exclude -> destroy -> return/suspend."
+  ],
+  "open_questions": [
+    "Is the destroyed item (BP+06h) the cobweb itself or the entity that struck the cobweb? The disassembly shows the first parameter is destroyed but calling convention context is not present in the excerpt.",
+    "What exact semantic meaning corresponds to the info id constant (0x20C / 0x210 inferred from related scripts)?",
+    "Does 'process exclude' prevent only AI processing or also player interactions and collisions for the marked object?",
+    "Is the second parameter (BP+08h / param_1) ever used in other variants of this handler (it is unused in the provided excerpt)?"
+  ],
+  "main_function": {
+    "name": "U8P_COBWEB::gotHit",
+    "execution_form": "process",
+    "purpose": "Handle the cobweb being struck: set an internal info/state on a target and exclude that target from further processing, then destroy the passed-in item/entity.",
+    "entry_conditions": [
+      "Event 6 (U8P_COBWEB::gotHit) — invoked when this cobweb process/object is hit by something"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_COBWEB::gotHit",
+      "kind": "main",
+      "role": "Event handler for the cobweb 'U8P_COBWEB::gotHit' event; updates target info/exclusion state and destroys the referenced item/entity",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::destroy",
+      "kind": "extern",
+      "role": "Engine/item API call to remove/destroy an item or object instance from the game world",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_COBWEB::gotHit",
+        "callee": "U8P_COBWEB::engine:set_info",
+        "purpose": "Attach/record an info/state value (observed constant pushed) on a target object so the engine or scripts can treat it differently",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_COBWEB::gotHit",
+        "callee": "U8P_COBWEB::engine:process_exclude",
+        "purpose": "Exclude the marked object from normal processing (likely prevents further AI/interaction); paired with the set_info call",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_COBWEB::gotHit",
+        "callee": "Item::destroy",
+        "purpose": "Remove/destroy the item/entity whose reference was passed in (parameter at BP+06h). This is the primary observable effect of the handler.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_COBWEB::gotHit",
+    "behavior_summary_one_liner": "When the cobweb object is hit (U8P_COBWEB::gotHit event), the script records/marks a target with an internal info key and excludes it from further processing, then destroys the provided item/entity reference.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

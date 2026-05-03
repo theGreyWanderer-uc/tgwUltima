@@ -1,0 +1,73 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_LEGGING.json",
+  "file": "U8P_LEGGING",
+  "behavior_summary": [
+    "U8P_LEGGING::look runs when the player/actor examines the leggings item and produces the item's descriptive text.",
+    "The routine prepares the short prefix string \"leggings \" and invokes Item::bark with the item (this) and that prefix to display the description.",
+    "Before calling Item::bark it appears to set object info/display processing state (inferred from set-info / process-exclude opcodes) to control how the bark/description is produced.",
+    "The return value from Item::bark is captured, used in a small logical/implication/pop step, and then the process suspends/returns."
+  ],
+  "notable_control_flow": [
+    "Entry on a U8P_LEGGING::look/examine trigger (Event 0) for the leggings item.",
+    "Set item info / process-exclude state (engine/display flags) prior to generating the description.",
+    "Call out to external Item::bark to build/show the text, capture its return value, then perform an implication/pop sequence before suspend/return."
+  ],
+  "open_questions": [
+    "Which concrete info key or flags are being set by the inferred 'set info / process exclude' sequence and how do they affect the emitted description (inference only).",
+    "What exact semantics and value range Item::bark returns here (boolean-like status inferred but not confirmed).",
+    "What is the intended effect of the implication/pop sequence that consumes the Item::bark return value — a control-flow decision, a UI suppression, or a scheduler hint?"
+  ],
+  "main_function": {
+    "name": "U8P_LEGGING::look",
+    "execution_form": "process",
+    "purpose": "Handle the 'U8P_LEGGING::look' (examine) action for the leggings item: prepare a short prefix string and invoke Item::bark to produce/display the item's descriptive text.",
+    "entry_conditions": [
+      "Event 0: invoked when the player/actor inspects or 'looks at' the leggings item (area/inspect trigger)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_LEGGING::look",
+      "kind": "main",
+      "role": "Examine/U8P_LEGGING::look handler for leggings that composes a prefix and delegates to Item::bark to show the description.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item-provided routine that composes/displays short item text (bark) when asked; called by the main function.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_LEGGING::look",
+        "callee": "Item::bark",
+        "purpose": "Produce and display the leggings item's descriptive text by combining the supplied prefix \"leggings \" with the item's data. The returned status is captured and used by the caller.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_LEGGING::look",
+    "behavior_summary_one_liner": "U8P_LEGGING::look runs when the player/actor examines the leggings item and produces the item's descriptive text.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

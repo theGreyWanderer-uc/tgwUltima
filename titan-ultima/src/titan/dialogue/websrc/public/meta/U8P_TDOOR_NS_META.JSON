@@ -1,0 +1,163 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_TDOOR_NS.json",
+  "file": "U8P_TDOOR_NS",
+  "behavior_summary": [
+    "Provides thin event-handler wrappers for a non-solid door object that set up the object context and delegate the real logic to shared DOOR_NS handlers.",
+    "Event 0 (TDOOR_NS::look) prepares object info, excludes the current process, then spawns DOOR_NS::00D0 to perform the 'look' (examine) behavior and returns its result.",
+    "Event 1 (TDOOR_NS::use) does the same setup, pushes an explicit byte flag value 1, then spawns DOOR_NS::08B4 to perform the 'use' behavior and returns its result.",
+    "Event 6 (TDOOR_NS::gotHit) forwards a hit/damage parameter (from BP+0Ah) along with the actor to DOOR_NS::0C82 after setting context and excluding the process.",
+    "No global flags are read or written by these wrappers; they exist to forward calls with a required context and exclusion step rather than implement game logic themselves."
+  ],
+  "notable_control_flow": [
+    "Each event handler follows the same sequence: push object-info constant -> push actor/context -> call 'set info' -> call 'process exclude' -> spawn the DOOR_NS handler -> pop spawn return into a temp -> return.",
+    "Spawn is used to invoke shared DOOR_NS logic; the spawn return value is captured and propagated back to the original caller.",
+    "'process exclude' is always invoked immediately after 'set info', indicating a required pre-spawn exclusion/guard step before delegating behavior."
+  ],
+  "open_questions": [
+    "What exact engine behavior does 'process exclude' perform (scheduler exclusion, notification suppression, or something else)?",
+    "What do the concrete object-info pointer constants (e.g., 0x0208, 0x0207, 0x020C observed in the disassembly) refer to in game data (different subtypes/variants of the door)?",
+    "What semantics does the leading byte flag = 1 passed to DOOR_NS::08B4 encode for 'use' (mode, interaction subtype, or caller identity)?",
+    "Are these event handlers invoked both by direct player actions and by area triggers (enterFastArea/leaveFastArea), and if so does that change the meaning of the actor parameter?"
+  ],
+  "main_function": {
+    "name": "U8P_TDOOR_NS::look (Event 0)",
+    "execution_form": "process",
+    "purpose": "Handle the player's 'look' (examine) interaction on a non-solid door by setting the appropriate object context, excluding the current process, and delegating the actual examine behavior to the shared DOOR_NS::00D0 handler. The wrapper captures and returns the spawn result from the delegated handler.",
+    "entry_conditions": [
+      "Invoked when an actor (player or other process) inspects or 'looks at' the door (Event 0).",
+      "Also likely invoked when the actor enters a trigger region associated with the door (enterFastArea semantics inferred)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_TDOOR_NS::look (Event 0)",
+      "kind": "main",
+      "role": "Prepare object context and delegate 'look' behavior to DOOR_NS::00D0; capture and return spawn retval.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_TDOOR_NS::use (Event 1)",
+      "kind": "helper",
+      "role": "Prepare object context and delegate 'use' behavior to DOOR_NS::08B4, passing an extra byte flag (1).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_TDOOR_NS::gotHit (Event 6)",
+      "kind": "helper",
+      "role": "Forward hit/damage notifications to DOOR_NS::0C82 after context setup; passes through hit parameter from the caller.",
+      "confidence": "high"
+    },
+    {
+      "name": "DOOR_NS::00D0",
+      "kind": "extern",
+      "role": "Shared implementation of door 'look' behavior invoked by the TDOOR_NS wrapper.",
+      "confidence": "high"
+    },
+    {
+      "name": "DOOR_NS::08B4",
+      "kind": "extern",
+      "role": "Shared implementation of door 'use' behavior; receives a leading byte flag (1) from the wrapper.",
+      "confidence": "high"
+    },
+    {
+      "name": "DOOR_NS::0C82",
+      "kind": "extern",
+      "role": "Shared implementation of door hit/damage behavior invoked by the wrapper.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_TDOOR_NS::set info",
+      "kind": "extern",
+      "role": "Engine call to set the current object/actor context for subsequent processing.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_TDOOR_NS::process exclude",
+      "kind": "extern",
+      "role": "Engine call that excludes or marks the current process prior to spawning the delegated handler (guard/cleanup step).",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_TDOOR_NS::look (Event 0)",
+        "callee": "U8P_TDOOR_NS::set info",
+        "purpose": "Establish the object info/context so the spawned handler operates on the correct door instance.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TDOOR_NS::look (Event 0)",
+        "callee": "U8P_TDOOR_NS::process exclude",
+        "purpose": "Exclude or mark the current process before spawning the DOOR_NS handler (pre-spawn guard).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_TDOOR_NS::look (Event 0)",
+        "callee": "spawn DOOR_NS::00D0",
+        "purpose": "Delegate the 'look' logic to the shared DOOR_NS::00D0 handler, passing the actor and prepared context; capture and return its retval.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TDOOR_NS::use (Event 1)",
+        "callee": "U8P_TDOOR_NS::set info",
+        "purpose": "Establish the object context for the use-handler to operate on the correct instance.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TDOOR_NS::use (Event 1)",
+        "callee": "U8P_TDOOR_NS::process exclude",
+        "purpose": "Pre-spawn exclusion/guard before delegating to the DOOR_NS use handler.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_TDOOR_NS::use (Event 1)",
+        "callee": "spawn DOOR_NS::08B4",
+        "purpose": "Delegate 'use' behavior to DOOR_NS::08B4, passing a leading byte flag (1), the actor, and context; capture and return retval.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TDOOR_NS::gotHit (Event 6)",
+        "callee": "U8P_TDOOR_NS::set info",
+        "purpose": "Set the object context for the hit/damage handler.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TDOOR_NS::gotHit (Event 6)",
+        "callee": "U8P_TDOOR_NS::process exclude",
+        "purpose": "Exclude or mark the process before delegating hit logic.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_TDOOR_NS::gotHit (Event 6)",
+        "callee": "spawn DOOR_NS::0C82",
+        "purpose": "Delegate hit/damage handling to the shared DOOR_NS::0C82, passing the hit parameter and actor along with context; capture and return retval.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "TDOOR_NS::look (Event 0)",
+    "behavior_summary_one_liner": "Provides thin event-handler wrappers for a non-solid door object that set up the object context and delegate the real logic to shared DOOR_NS handlers.",
+    "external_call_count": 9,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

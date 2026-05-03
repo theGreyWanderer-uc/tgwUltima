@@ -1,0 +1,284 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_ERTHSPEL.json",
+  "file": "U8P_ERTHSPEL",
+  "behavior_summary": [
+    "Implements an 'earth' spell family that can be triggered by area/use events. On activation the handler checks the caster's mana and either runs a low-mana visual-only sequence or consumes mana to produce gameplay effects (award intelligence, process the spell target, and possibly create/animate objects or NPCs).",
+    "When mana is sufficient the main flow subtracts the spell cost (1 or 2 depending on variant), grants intelligence XP, resolves the spell target (existing item/NPC or none), and applies special handling: calls an item's use if it's a special type (type 0x026F) under a temporary deathSpeakCast flag, or makes a dead NPC 'bark' a death noise.",
+    "If no explicit target is returned by the target resolution routine the complex placement routine creates/positions a new item (corpse/object), may populate it (Item::pop), can spawn and initialize an NPC (Npc::create + stat/hp setup), or falls back/cleans up if placement fails. Helper variants temporarily make the caster immortal or feign death and sequence additional timed spawns (including scheduling a firespell)."
+  ],
+  "notable_control_flow": [
+    "Entry guard: handler runs only when the script's activation/info byte equals 1 (fast-area/activation event).",
+    "Mana branch: read Npc::getMana(); if below threshold run visual-only path (spawn directional effects, return); else subtract cost via Npc::setMana and continue to effect path.",
+    "Sequenced effects: visual/motion spawns (METHOD::15E7 and FREE::29D8) are performed with suspends/delays (FREE::1A96/FREE::1C19) to pace the sequence.",
+    "Target processing branch: call 'process target()' -> if result==0 return; if item.type==0x026F set global deathSpeakCast=1 then call Item::use then clear flag; else if Item::isNpc && Npc::isDead then Item::bark(\"Arrrgghhh!\").",
+    "Placement fallbacks: complex placement loop uses canExistAt to find valid coordinates and will Item::destroy created objects on failure."
+  ],
+  "open_questions": [
+    "Exact numeric type meaning for item type 0x026F (inference: triggers a 'death speak' use) — behavior is observed but concrete type name is unknown.",
+    "Precise parameters and timing values for external FREE::* tasks and motion spawns (their gameplay durations/effects are inferred from usage but not enumerated).",
+    "Whether some variants are reachable only under particular game-mode conditions (e.g., avatar stasis and global stasis flags interaction are inferred but not exhaustively proven).",
+    "Full set of side-effects other systems read from deathSpeakCast (we see it written but not read here)."
+  ],
+  "main_function": {
+    "name": "U8P_ERTHSPEL::0080 (Func_80)",
+    "execution_form": "process",
+    "purpose": "Handle an earth-spell activation: check caster mana, run a visual-only sequence if mana is low or consume mana to award intelligence, resolve/process the spell target, and react to or create/animate targets (special-case item types and dead NPCs).",
+    "entry_conditions": [
+      "Triggered when the script's info byte/activation flag equals 1 (enterFastArea/activation event).",
+      "Requires a pid (process/player id) and an item_ptr parameter (triggering item) in context."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_ERTHSPEL::0080 (Func_80)",
+      "kind": "main",
+      "role": "Primary earth-spell activation handler that implements mana checks, effect spawning, target processing, and special-case reactions.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ERTHSPEL::01AF (Func_1AF)",
+      "kind": "helper",
+      "role": "Variant of the main handler which runs the same casting logic but sets the caster to feign-death at the end.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ERTHSPEL::0263 (Func_263)",
+      "kind": "helper",
+      "role": "Short helper that sets the caster immortal for a duration, delays, spawns effects, then clears immortal (used to protect the caster during sequences).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ERTHSPEL::02BF (Func_2BF)",
+      "kind": "helper",
+      "role": "Alt casting variant that uses a mana threshold of 2, consumes 2 mana on success, awards intelligence, and spawns the immortal helper at the end.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ERTHSPEL::0379 (Func_379)",
+      "kind": "helper",
+      "role": "Complex placement/creation routine invoked by the spell to create/populate items or spawn NPCs, including robust placement checks, initialization, SFX, and follow-up firespell scheduling.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_ERTHSPEL::02BF (Func_2BF)",
+        "callee": "U8P_ERTHSPEL::0263 (Func_263)",
+        "purpose": "Spawn/call the temporary-immortal helper after a successful 2-mana cast to protect the caster during subsequent sequences.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ERTHSPEL::0080 (Func_80)",
+        "callee": "U8P_ERTHSPEL::0379 (Func_379)",
+        "purpose": "The main handler or its variants may invoke the complex placement/creation routine when target processing indicates no existing target; this is the placement/summon path.",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_ERTHSPEL::0080 (Func_80)",
+        "callee": "Npc::getMana",
+        "purpose": "Read caster's current mana to decide low-mana visual-only path vs mana-consuming effect path.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ERTHSPEL::0080 (Func_80)",
+        "callee": "Npc::setMana",
+        "purpose": "Subtract spell cost from caster's mana when enough mana is available.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ERTHSPEL::0080 (Func_80)",
+        "callee": "Npc::getDir",
+        "purpose": "Get caster facing direction to orient directional visual/motion spawns.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ERTHSPEL::0080 (Func_80)",
+        "callee": "METHOD::15E7",
+        "purpose": "Spawn directional motion/visual effects oriented by caster direction.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ERTHSPEL::0080 (Func_80)",
+        "callee": "FREE::29D8",
+        "purpose": "Spawn a timed/generic effect used alongside directional spawns (particle/timed visual).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ERTHSPEL::0080 (Func_80)",
+        "callee": "FREE::36E7",
+        "purpose": "Small startup/free routine executed at activation for setup or animation preparation.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ERTHSPEL::0080 (Func_80)",
+        "callee": "FREE::1A96",
+        "purpose": "Short delay/sleep used before awarding intelligence or pacing effects.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ERTHSPEL::0080 (Func_80)",
+        "callee": "AccumulateIntelligence",
+        "purpose": "Grant intelligence experience/points to the caster when mana is consumed.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ERTHSPEL::0080 (Func_80)",
+        "callee": "U8P_ERTHSPEL::process target()",
+        "purpose": "Resolve the spell's target (returning an item/NPC handle or 0) to decide follow-up actions.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ERTHSPEL::0080 (Func_80)",
+        "callee": "Item::getType",
+        "purpose": "Inspect target item type to special-case behavior (e.g., type 0x026F death-speak).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ERTHSPEL::0080 (Func_80)",
+        "callee": "Item::use",
+        "purpose": "Invoke special item behavior under a temporary global context (deathSpeakCast).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ERTHSPEL::0080 (Func_80)",
+        "callee": "Item::isNpc",
+        "purpose": "Detect whether the processed target is an NPC to call NPC-specific checks/actions.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ERTHSPEL::0080 (Func_80)",
+        "callee": "Npc::isDead",
+        "purpose": "If the target NPC is dead, trigger a death bark (flavor reaction).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ERTHSPEL::0080 (Func_80)",
+        "callee": "Item::bark",
+        "purpose": "Emit short text from an item/NPC (used for the dead-NPC \"Arrrgghhh!\" line and other barks).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ERTHSPEL::01AF (Func_1AF)",
+        "callee": "Npc::setFeignDeath",
+        "purpose": "Put the caster into a feign-death state at the end of the variant's sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ERTHSPEL::0263 (Func_263)",
+        "callee": "Npc::setImmortal",
+        "purpose": "Temporarily mark caster as immortal at the start of the helper sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ERTHSPEL::0263 (Func_263)",
+        "callee": "FREE::1C19",
+        "purpose": "Delay/sleep while caster remains immortal.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ERTHSPEL::0263 (Func_263)",
+        "callee": "Npc::clrImmortal",
+        "purpose": "Clear the temporary immortal state at the end of the helper.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ERTHSPEL::0379 (Func_379)",
+        "callee": "Item::create",
+        "purpose": "Create a world item (e.g., corpse/object) to place if no explicit target exists.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ERTHSPEL::0379 (Func_379)",
+        "callee": "Item::pop",
+        "purpose": "Populate/place the created item into the world or container at chosen coordinates.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ERTHSPEL::0379 (Func_379)",
+        "callee": "U8P_ERTHSPEL::canExistAt",
+        "purpose": "Verify map placement validity for created items/NPCs and loop to find a valid spot.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ERTHSPEL::0379 (Func_379)",
+        "callee": "Item::destroy",
+        "purpose": "Cleanup created items if placement fails.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ERTHSPEL::0379 (Func_379)",
+        "callee": "Npc::create",
+        "purpose": "Spawn an NPC when the placement routine reanimates or summons a creature.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ERTHSPEL::0379 (Func_379)",
+        "callee": "Item::touch",
+        "purpose": "Notify/update engine state after creating/populating items.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ERTHSPEL::0379 (Func_379)",
+        "callee": "U8P_ERTHSPEL::playSFX",
+        "purpose": "Play sound effects tied to creation/impact events in the placement sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ERTHSPEL::0379 (Func_379)",
+        "callee": "FIRESPEL::1F65",
+        "purpose": "Schedule or spawn a fire-spell effect as a follow-up in compound spell behavior.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ERTHSPEL::0379 (Func_379)",
+        "callee": "Item::getDirToCoords",
+        "purpose": "Compute orientation for spawned NPCs/items relative to caster/target coordinates.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ERTHSPEL::0379 (Func_379)",
+        "callee": "U8P_ERTHSPEL::getAvatarInStasis",
+        "purpose": "Query global avatar stasis before optionally setting/clearing stasis during the sequence.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ERTHSPEL::0379 (Func_379)",
+        "callee": "U8P_ERTHSPEL::setAvatarInStasis",
+        "purpose": "Set the avatar into stasis to freeze movement during sensitive placement steps (inferred).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": [
+      {
+        "name": "deathSpeakCast (global [002A 01])",
+        "likely_effect": "Temporarily set to 1 to signal a 'death-speak' context immediately before calling Item::use on type 0x026F items, then cleared to 0 after the call. Used to influence item.use behavior across systems.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "ERTHSPEL::0080 (Func_80)",
+    "behavior_summary_one_liner": "Implements an 'earth' spell family that can be triggered by area/use events. On activation the handler checks the caster's mana and either runs a low-mana visual-only sequence or consumes mana to produce gameplay effects (award intelligence, process the spell target, and possibly create/animate objects or NPCs).",
+    "external_call_count": 29,
+    "flag_read_count": 0,
+    "flag_write_count": 1
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

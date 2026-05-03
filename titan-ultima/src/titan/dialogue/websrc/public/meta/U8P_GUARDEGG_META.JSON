@@ -1,0 +1,115 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_GUARDEGG.json",
+  "file": "U8P_GUARDEGG",
+  "behavior_summary": [
+    "GUARDEGG::hatch runs when the GUARD EGG item is used (inferred Event 7).",
+    "It checks the egg instance's internal id via Egg::getEggId() and only proceeds when that id equals 1.",
+    "When id == 1 the script clears the egg id by calling Egg::setEggId(this, 0).",
+    "If the global flag guard1met is true (inferred gate), the script sets the global xavierSitting flag to 1 and forwards the use to the engine item-use processor (process Item::use) with a mode/flag byte (inferred 0x04).",
+    "If the egg id is not 1 the function returns immediately without side effects."
+  ],
+  "notable_control_flow": [
+    "Early return unless Egg::getEggId(egg_item) == 1 — the id equality check is the primary gate (high confidence).",
+    "After clearing the egg id (set to 0), the flow checks the global guard1met flag; only when this flag is set does the script set xavierSitting = 1 and call process Item::use (medium confidence, inferred from conditional jump pattern).",
+    "The call to process Item::use runs after state mutation and its return value is stored into a local temp (high confidence)."
+  ],
+  "open_questions": [
+    "Exact gameplay meaning of Egg id == 1 (appears to represent a specific hatchable state) — confidence: medium.",
+    "Precise semantics of the mode/flag byte passed to process Item::use (inferred 0x04) and how it changes item-use processing — confidence: low.",
+    "Identity and broader role of 'Xavier' (xavierSitting flag is written but origin/usage is outside the script) — confidence: low.",
+    "Whether guard1met must be true for every execution path after id==1 or only for the xavierSitting side-effect (branching pattern inferred but not fully explicit) — confidence: medium."
+  ],
+  "main_function": {
+    "name": "U8P_GUARDEGG::hatch",
+    "execution_form": "process",
+    "purpose": "Handle using the Guard Egg item: if the egg's internal id equals 1, clear that id, optionally update NPC-related game state (xavierSitting) when the guard1met flag is set, and forward the use to the generic item-use processor.",
+    "entry_conditions": [
+      "Event 7 / item-use on the GUARD EGG (inferred).",
+      "Egg::getEggId(egg_item) must return 1 for the U8P_GUARDEGG::hatch behavior to run."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_GUARDEGG::hatch",
+      "kind": "main",
+      "role": "Entry handler for the GUARD EGG's U8P_GUARDEGG::hatch/use event; coordinates state checks, flag updates, and forwarding to item-use processing.",
+      "confidence": "high"
+    },
+    {
+      "name": "Egg::getEggId",
+      "kind": "extern",
+      "role": "Read the egg instance's internal id/state to determine whether U8P_GUARDEGG::hatch behavior should proceed.",
+      "confidence": "high"
+    },
+    {
+      "name": "Egg::setEggId",
+      "kind": "extern",
+      "role": "Set/clear the egg instance's internal id/state (used here to set the id to 0).",
+      "confidence": "high"
+    },
+    {
+      "name": "process Item::use",
+      "kind": "extern",
+      "role": "Invoke the engine's generic item-use processing for the egg after state changes; called with an inferred mode/flag byte.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_GUARDEGG::hatch",
+        "callee": "Egg::getEggId",
+        "purpose": "Query the egg object's internal id/state to decide whether to run U8P_GUARDEGG::hatch behavior (id == 1).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARDEGG::hatch",
+        "callee": "Egg::setEggId",
+        "purpose": "Clear the egg object's id/state by setting it to 0 after detecting id == 1.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARDEGG::hatch",
+        "callee": "process Item::use",
+        "purpose": "Forward the item-use to the engine's generic processor (called after state mutations); invoked with an inferred mode/flag (0x04) and the egg pointer; its return value is stored to a local.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "guard1met",
+        "likely_effect": "Used as a gate to determine whether to set xavierSitting and continue to process Item::use; if false the script likely skips those side-effects.",
+        "confidence": "medium"
+      }
+    ],
+    "writes": [
+      {
+        "name": "xavierSitting",
+        "likely_effect": "Set to 1 to mark the NPC 'Xavier' as sitting (game-state change triggered by using the egg when other conditions are met).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "GUARDEGG::hatch",
+    "behavior_summary_one_liner": "GUARDEGG::hatch runs when the GUARD EGG item is used (inferred Event 7).",
+    "external_call_count": 3,
+    "flag_read_count": 1,
+    "flag_write_count": 1
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

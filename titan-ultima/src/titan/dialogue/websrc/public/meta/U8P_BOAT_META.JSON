@@ -1,0 +1,111 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_BOAT.json",
+  "file": "U8P_BOAT",
+  "behavior_summary": [
+    "When an actor triggers the boat's 'U8P_BOAT::look' (examine) event, the script configures presentation/processing state for the boat and announces a short label for the boat to the viewer.",
+    "Specifically, the script writes a process/info value (0x0208) and issues a 'process exclude' action to adjust how the object is handled, then constructs the literal string \"boat \" and invokes Item::bark to display/emit that label for the boat's process/context.",
+    "Temporary resources (the constructed string) are freed after the call, and the script then completes (suspends/returns)."
+  ],
+  "notable_control_flow": [
+    "Event-driven: U8P_BOAT::look runs in response to the 'U8P_BOAT::look' (examine) event.",
+    "Pre-display guard: the script sets info (0x0208) and applies 'process exclude' before calling Item::bark, indicating a deliberate ordering to avoid re-entrancy or to alter presentation.",
+    "Single outward interaction: after preparing state, the function makes one external interaction (Item::bark) and then cleans up and returns; there are no loops or complex branches in the canonical flow."
+  ],
+  "open_questions": [
+    "Exact semantic meaning of the info value 0x0208 (what presentation or processing bits it encodes) — inferred but not certain.",
+    "Precise identity/meaning of the parameter at [BP+06] (appears to be the item/process PID or object pointer passed to Item::bark).",
+    "The role of the 'implies' / pop sequence observed after the Item::bark return — whether it affects game state or is merely a control-flow artifact.",
+    "Whether 'process exclude' prevents only re-entrancy for this call or also alters other engine processing for the object."
+  ],
+  "main_function": {
+    "name": "U8P_BOAT::look",
+    "execution_form": "process",
+    "purpose": "Handle the item's examine/U8P_BOAT::look event: prepare the object's presentation state and announce its short label to the viewer.",
+    "entry_conditions": [
+      "Event 0 — player/actor 'looks at' or examines the boat (entering the item's U8P_BOAT::look trigger)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_BOAT::look",
+      "kind": "main",
+      "role": "Process handler for the boat's 'U8P_BOAT::look' (examine) event; configures info/processing flags and invokes Item::bark to show the item's label.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine used to display/emit a short text label or message for an item/process. Called by U8P_BOAT::look with the string \"boat \" and the boat's process/context.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOAT::set info",
+      "kind": "extern",
+      "role": "Engine opcode used to write an info/flag value (here 0x0208) to a process/object to adjust presentation/processing.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_BOAT::process exclude",
+      "kind": "extern",
+      "role": "Engine opcode used to exclude or change how a process/object is further processed (likely to prevent recursion or modify visibility); invoked after set info.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_BOAT::look",
+        "callee": "Item::bark",
+        "purpose": "Display or announce the boat's short label string (\"boat \") to the target process/viewer (the BP+06 context passed).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BOAT::look",
+        "callee": "U8P_BOAT::set info",
+        "purpose": "Write the info value 0x0208 to the object/process to configure presentation/processing before announcing the label.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BOAT::look",
+        "callee": "U8P_BOAT::process exclude",
+        "purpose": "Modify the object's processing state right after setting info, likely to avoid re-entrancy or further processing during the display operation.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BOAT::look",
+        "callee": "U8P_BOAT::memory/free (inferred)",
+        "purpose": "Free the temporary string buffer constructed for the label after Item::bark returns.",
+        "confidence": "low"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": [
+      {
+        "name": "process info (0x0208)",
+        "likely_effect": "Configure how the object presents information or is processed by the engine (applied before calling Item::bark).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_BOAT::look",
+    "behavior_summary_one_liner": "When an actor triggers the boat's 'U8P_BOAT::look' (examine) event, the script configures presentation/processing state for the boat and announces a short label for the boat to the viewer.",
+    "external_call_count": 4,
+    "flag_read_count": 0,
+    "flag_write_count": 1
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

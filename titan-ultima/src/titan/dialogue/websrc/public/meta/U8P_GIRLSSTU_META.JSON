@@ -1,0 +1,86 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_GIRLSSTU.json",
+  "file": "U8P_GIRLSSTU",
+  "behavior_summary": [
+    "Handles the item's 'U8P_GIRLSSTU::look' (examine) event: when a player inspects the GIRLSSTU object the script reads the object's frame and emits a short descriptive message to that player.",
+    "The frame value is mapped to one of three short descriptor categories which are shown via Item::bark: frames 0–2 => 'perfume ', frames 3–5 => 'brush ', frames 6–7 => 'mirror '.",
+    "No global flags are read or written; the function's observable side-effect is producing a single short text bark directed at the inspecting player (pid)."
+  ],
+  "notable_control_flow": [
+    "Entry on a U8P_GIRLSSTU::look/examine trigger (Event 0) leads to a read of Item::getFrame and a small branching dispatch based on the returned frame value.",
+    "Each branch constructs a short string, calls Item::bark(pid, string), and immediately frees/cleans up the temporary string resource.",
+    "Function performs no global state changes and returns after the single bark; control-flow primitives (implies/suspend/pop) are present but do not alter the high-level effect."
+  ],
+  "open_questions": [
+    "Is 'pid' always the player who triggered the U8P_GIRLSSTU::look, or can other process PIDs trigger this handler (inferred to be the inspecting player)?",
+    "Are the frame ranges (0–2, 3–5, 6–7) exhaustive for all possible frames for this object, or are other frames possible but unused/ignored?",
+    "Are the short strings ('perfume ', 'brush ', 'mirror ') intended purely as labels for a UI tooltip, or also used by other game logic (e.g., keyword matching)?"
+  ],
+  "main_function": {
+    "name": "U8P_GIRLSSTU::look",
+    "execution_form": "process",
+    "purpose": "Respond to the object's examine/U8P_GIRLSSTU::look event by reading the item's frame and sending a short category string to the inspecting player.",
+    "entry_conditions": [
+      "Event 0 (U8P_GIRLSSTU::look) — invoked when a player or process examines/looks at the GIRLSSTU item."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_GIRLSSTU::look",
+      "kind": "main",
+      "role": "Event handler for 'U8P_GIRLSSTU::look' (examine) on the GIRLSSTU item; chooses and barks a short descriptive string based on the item's frame.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getFrame",
+      "kind": "extern",
+      "role": "Engine/item API used to query the item's current frame/index to decide which description to show.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item API used to send/display a short message (the built descriptor string) to a target PID.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_GIRLSSTU::look",
+        "callee": "Item::getFrame",
+        "purpose": "Retrieve the object's current frame/index (used to select which descriptor to display).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GIRLSSTU::look",
+        "callee": "Item::bark",
+        "purpose": "Deliver/display the chosen short descriptor string to the inspecting player PID.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "description",
+    "examine"
+  ],
+  "quick_facts": {
+    "main_function": "GIRLSSTU::look",
+    "behavior_summary_one_liner": "Handles the item's 'U8P_GIRLSSTU::look' (examine) event: when a player inspects the GIRLSSTU object the script reads the object's frame and emits a short descriptive message to that player.",
+    "external_call_count": 2,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

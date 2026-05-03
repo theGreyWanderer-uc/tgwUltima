@@ -1,0 +1,211 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_MORDEA.json",
+  "file": "U8P_MORDEA",
+  "behavior_summary": [
+    "Provides interaction and schedule management for the NPC Mordea. It implements the 'U8P_MORDEA::look' (inspect) response that composes and emits name/title fragments, a schedule driver that sets Mordea's daily state and coordinates schedules for Aramina and Salkind, fast-area entry/exit handlers that dispatch scheduled behaviors when the Avatar crosses Mordea's trigger region, and a theft-response hook for when the Avatar steals items.",
+    "MORDEA::look composes short text fragments (full name or combinations of short name, job/title, and the word 'woman') based on two global flags (mordeaName, mordeaJob) and directs those fragments to the inspecting process via Item::bark.",
+    "MORDEA::schedule guards against story/dead-state conditions (toranDead, secondexecution, Npc::isDead), queries a time/calendar service (FREE::28F9) to select a schedule, resets reference/time slots (resetRef), writes mordeaSchedule and related schedule globals for neighboring NPCs, and spawns asynchronous behavior methods selected by time/map checks.",
+    "enterFastArea/leaveFastArea are trigger handlers for the Avatar entering/leaving Mordea's fast trigger area: enterFastArea re-checks guards, resets refs, and spawns schedule-specific fast-entry behavior (based on mordeaSchedule); leaveFastArea cleans the same refs.",
+    "AvatarStoleSomething reacts to theft events: it tests the stolen item's type (Item::getType) and Mordea's current schedule (observed branch when mordeaSchedule==3) and, if conditions match, resets refs and initiates a reaction behavior."
+  ],
+  "notable_control_flow": [
+    "MORDEA::look: conditional branching on two globals mordeaName and mordeaJob to choose which set of Item::bark calls to perform (full name vs. component fragments).",
+    "U8P_MORDEA::schedule: early-exit if toranDead or secondexecution true or if Npc::isDead(pid) returns true; otherwise call FREE::28F9 repeatedly to select time-based branches, reset multiple refs, write mordeaSchedule (and araminaSchedule/SalkindSchedule), then spawn external methods conditionally depending on returned time and Npc::getMap(pid).",
+    "U8P_MORDEA::enterFastArea: same story/dead guards as schedule(), reset refs, then switch on mordeaSchedule to spawn schedule-specific fast-area handlers (notably branches for schedule==2 and schedule==3).",
+    "U8P_MORDEA::leaveFastArea: non-branching cleanup that calls resetRef on a set of reference slots to clear transient schedule/location state.",
+    "U8P_MORDEA::AvatarStoleSomething: checks stolen item type and mordeaSchedule; when matching (observed for schedule==3) clears refs and triggers a response (spawn or similar)."
+  ],
+  "open_questions": [
+    "Exact runtime semantics and return value meanings of FREE::28F9 (appears to be time-of-day or day-phase service) — mapping of its numeric returns to concrete times is not present.",
+    "Concrete behavior implemented by the spawned METHOD::143A, METHOD::133F, METHOD::15E7 and other METHOD:: IDs — these are referenced by spawn but their source/semantics are outside this script excerpt.",
+    "Precise meaning and scope of the reference slots cleared by resetRef (indices used) — whether they represent waypoints, timers, or linkages to other processes is inferred but not explicit.",
+    "Whether mordeaJob and mordeaName are mutually exclusive configuration flags or can both be set simultaneously in live data (U8P_MORDEA::look() handles both cases but intent is inferred)."
+  ],
+  "main_function": {
+    "name": "U8P_MORDEA::look",
+    "execution_form": "process",
+    "purpose": "Respond to an Avatar 'U8P_MORDEA::look' (inspect) event on the Mordea NPC by composing and emitting appropriate name/title text fragments to the inspecting process. The routine consults mordeaName and mordeaJob to choose full vs. component strings and calls Item::bark to display/speak them.",
+    "entry_conditions": [
+      "Event 0 (player/actor inspects Mordea)",
+      "Invoked with the inspecting process/player PID passed as the process parameter."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_MORDEA::schedule",
+      "kind": "helper",
+      "role": "Set Mordea's daily/behavior schedule: guard against story/dead flags, query time service (FREE::28F9), reset refs, write schedule globals (mordeaSchedule, araminaSchedule, SalkindSchedule), and spawn asynchronous movement/behavior methods depending on time/map.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MORDEA::enterFastArea",
+      "kind": "helper",
+      "role": "Fast-area entry trigger: when the Avatar enters Mordea's trigger region, guard by story/dead flags, reset refs, read mordeaSchedule and spawn the schedule-appropriate fast-entry behavior (distinct branches for schedule values such as 2 and 3).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MORDEA::leaveFastArea",
+      "kind": "helper",
+      "role": "Fast-area exit trigger: cleanup/reset the same reference/time slots used by schedule/enterFastArea to stop or clear transient behaviors when Avatar leaves the region.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MORDEA::AvatarStoleSomething",
+      "kind": "helper",
+      "role": "Theft-response handler: triggered when the Avatar steals an item (Event 13); tests the stolen item's type and mordeaSchedule and triggers a response when conditions match (observed branch for mordeaSchedule==3).",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_MORDEA::look",
+      "kind": "main",
+      "role": "Primary interaction entry for 'U8P_MORDEA::look' event; composes and barks name/title fragments based on mordeaName and mordeaJob flags.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_MORDEA::look",
+        "callee": "Item::bark",
+        "purpose": "Emit/display short textual fragments (NPC full name, short name, title, 'woman') to the inspecting process/player.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MORDEA::schedule",
+        "callee": "Npc::isDead",
+        "purpose": "Guard: skip scheduling if Mordea is dead.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MORDEA::schedule",
+        "callee": "FREE::28F9",
+        "purpose": "Query a global time/calendar service to select schedule branches based on time/day-phase.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MORDEA::schedule",
+        "callee": "U8P_MORDEA::resetRef",
+        "purpose": "Clear per-NPC reference/time slots (reset locations, timers, or linked process refs) before assigning new schedule state.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MORDEA::schedule",
+        "callee": "spawn",
+        "purpose": "Start asynchronous behavior/movement methods (METHOD::143A, METHOD::133F, METHOD::15E7 etc.) corresponding to the chosen schedule/time branch.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MORDEA::schedule",
+        "callee": "Npc::getMap",
+        "purpose": "Query Mordea's current map id to decide map-specific schedule/behavior spawning.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MORDEA::enterFastArea",
+        "callee": "U8P_MORDEA::resetRef",
+        "purpose": "Clear the same transient refs/timers when the Avatar enters the trigger before spawning schedule-specific fast-entry behaviors.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MORDEA::enterFastArea",
+        "callee": "spawn",
+        "purpose": "Spawn a fast-entry behavior method selected by mordeaSchedule (distinct handlers for schedule values).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MORDEA::leaveFastArea",
+        "callee": "U8P_MORDEA::resetRef",
+        "purpose": "Cleanup transient refs/timers on Avatar exit from Mordea's trigger region.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MORDEA::AvatarStoleSomething",
+        "callee": "Item::getType",
+        "purpose": "Determine the stolen item's type to decide whether Mordea should react.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MORDEA::AvatarStoleSomething",
+        "callee": "U8P_MORDEA::resetRef",
+        "purpose": "Clear refs/timers before triggering a theft reaction.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "mordeaName",
+        "likely_effect": "Controls whether MORDEA::look uses an extended/full name or falls back to short name fragments.",
+        "confidence": "high"
+      },
+      {
+        "name": "mordeaJob",
+        "likely_effect": "Controls whether MORDEA::look includes a job/title fragment when composing the U8P_MORDEA::look output.",
+        "confidence": "high"
+      },
+      {
+        "name": "toranDead",
+        "likely_effect": "Story/dead-state guard: when true schedule and fast-area behaviors are skipped to avoid running NPC behavior in that story state.",
+        "confidence": "high"
+      },
+      {
+        "name": "secondexecution",
+        "likely_effect": "Additional story guard used alongside toranDead to inhibit scheduling/behaviors under specific progression conditions.",
+        "confidence": "high"
+      },
+      {
+        "name": "mordeaSchedule",
+        "likely_effect": "Numeric schedule state (1,2,3,...) that drives which behavior/spawn branches are used on scheduling and fast-area entry.",
+        "confidence": "high"
+      },
+      {
+        "name": "araminaSchedule",
+        "likely_effect": "Written to by schedule() to coordinate Aramina's schedule with Mordea; likely read by Aramina's own scripts.",
+        "confidence": "medium"
+      },
+      {
+        "name": "SalkindSchedule",
+        "likely_effect": "Written to by schedule() to coordinate Salkind's schedule with Mordea; likely read by Salkind's scripts.",
+        "confidence": "medium"
+      }
+    ],
+    "writes": [
+      {
+        "name": "mordeaSchedule",
+        "likely_effect": "Set by U8P_MORDEA::schedule to a chosen numeric schedule state that downstream handlers (enterFastArea, theft reaction) read to determine behavior.",
+        "confidence": "high"
+      },
+      {
+        "name": "araminaSchedule",
+        "likely_effect": "Updated alongside mordeaSchedule to synchronize Aramina's activity schedule with Mordea's decisions.",
+        "confidence": "medium"
+      },
+      {
+        "name": "SalkindSchedule",
+        "likely_effect": "Updated alongside mordeaSchedule to synchronize Salkind's activity schedule with Mordea's decisions.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "MORDEA::look",
+    "behavior_summary_one_liner": "Provides interaction and schedule management for the NPC Mordea. It implements the 'U8P_MORDEA::look' (inspect) response that composes and emits name/title fragments, a schedule driver that sets Mordea's daily state and coordinates schedules for Aramina and Salkind, fast-area entry/exit handlers that dispatch scheduled behaviors when the Avatar crosses Mordea's trigger region, and a theft-response hook for when the Avatar steals items.",
+    "external_call_count": 11,
+    "flag_read_count": 7,
+    "flag_write_count": 3
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

@@ -1,0 +1,181 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_MOREFOOD.json",
+  "file": "U8P_MOREFOOD",
+  "behavior_summary": [
+    "Provides food-item behaviors: two helper handlers (look and use) for describing and consuming food, and a spawned background process that runs a repeating, randomized palette-fade 'mushroom' visual effect.",
+    "U8P_MOREFOOD::MOREFOOD::look examines the item frame and barks a short description string (e.g., 'mushroom', 'cheese', 'bread').",
+    "U8P_MOREFOOD::MOREFOOD::use handles eating: it barks an eating sound, inspects the item's frame to decide FeedAvatar healing amounts and special-case logic (NPC HP adjustments, item drops), may spawn the mushroom palette-effect process if a mushroom is eaten and shroomPaletteEffectsActive is not already set, and destroys/consumes the item.",
+    "U8P_MOREFOOD::MOREFOOD::0080 is a spawned process that sets shroomPaletteEffectsActive = 1, then loops: it chooses random palette indices (urandom), calls FadeToPalette targeting the current process to create psychedelic fades, suspends between fades, checks global storm flags to suppress/skip fades when storms are active, and occasionally (random chance) clears shroomPaletteEffectsActive = 0 and terminates."
+  ],
+  "notable_control_flow": [
+    "The mushroom effect is a persistent spawned process (execution_form = process) that explicitly sets and later clears a global guard flag (shroomPaletteEffectsActive) to prevent duplicates.",
+    "Each main loop iteration uses two urandom calls: one to pick which FadeToPalette variant to call, and another (range 0x10) to decide whether to terminate the process.",
+    "Before calling FadeToPalette the process observes two global storm flags (fireStormActive, rainStormActive) and will suppress or skip fading when storms are active (inferred behavior).",
+    "U8P_MOREFOOD::MOREFOOD::use acts as the trigger for spawning the effect process (via spawn) only when the food frame indicates a mushroom and the guard flag is not already set."
+  ],
+  "open_questions": [
+    "Exact palette indices and their visual mapping used by FadeToPalette (which palette index values correspond to which visible colors) — inferred but not concretely enumerated.",
+    "Precise condition and mask semantics used with Item::getStatus in certain use() branches (how status bits affect probabilistic outcomes).",
+    "Exact purpose of METHOD::0080 invoked from use() with a direction (appears to place or drop something, but details are unclear).",
+    "Whether FadeToPalette is always targeted at the calling process's pid (inferred from pid push) or sometimes at another target in other contexts.",
+    "Precise effect of fireStormActive and rainStormActive on the timing/strength of palette fades (appears to suppress effects but exact behavior is inferred)."
+  ],
+  "main_function": {
+    "name": "U8P_MOREFOOD::0080",
+    "execution_form": "process",
+    "purpose": "Run a background psychedelic palette-fade effect for mushroom food: set a guard flag, repeatedly choose random palette fades (FadeToPalette) with suspends between fades, respect global storm suppression flags, and eventually clear the guard and exit based on a random termination condition.",
+    "entry_conditions": [
+      "Spawned (via spawn) from U8P_MOREFOOD::MOREFOOD::use when a mushroom-type food is consumed and shroomPaletteEffectsActive is not already set.",
+      "No external parameters; runs as an independent process in the game engine."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_MOREFOOD::0080",
+      "kind": "main",
+      "role": "Spawned background process implementing repeated randomized palette fades for mushroom effects and managing shroomPaletteEffectsActive guard.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MOREFOOD::look",
+      "kind": "helper",
+      "role": "Handle 'look' (examine) event for a food item: read Item::getFrame and call Item::bark with a short descriptive string.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MOREFOOD::use",
+      "kind": "helper",
+      "role": "Handle 'use' (eat) event for a food item: bark 'Mmmm...', route per-frame FeedAvatar amounts and special behaviors, possibly spawn the mushroom palette-effect process, adjust NPC HP in some branches, drop or destroy the item.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_MOREFOOD::use",
+        "callee": "U8P_MOREFOOD::0080",
+        "purpose": "Spawn the background mushroom-palette-effect process when a mushroom food is consumed and shroomPaletteEffectsActive is not set (via spawn).",
+        "confidence": "high"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_MOREFOOD::0080",
+        "callee": "U8P_MOREFOOD::FadeToPalette (process)",
+        "purpose": "Apply a palette fade targeted at the running process (create psychedelic visual effect); called repeatedly with random palette indices.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MOREFOOD::0080",
+        "callee": "urandom",
+        "purpose": "Generate random numbers to choose palette variants and to probabilistically terminate the effect process.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MOREFOOD::0080",
+        "callee": "U8P_MOREFOOD::suspend (engine)",
+        "purpose": "Pause the process between palette fades to pace the visual effect.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MOREFOOD::use",
+        "callee": "Item::getFrame",
+        "purpose": "Determine the food item frame/type to choose description, feed amount, and special-case behavior.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MOREFOOD::use",
+        "callee": "Item::bark",
+        "purpose": "Make the item 'say' a short text (e.g., 'Mmmm...') when eaten.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MOREFOOD::use",
+        "callee": "FeedAvatar",
+        "purpose": "Heal/feed the avatar by an amount that depends on the food frame.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MOREFOOD::use",
+        "callee": "Item::getStatus",
+        "purpose": "Read item status bits used with a mask to influence probabilistic branches in use().",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_MOREFOOD::use",
+        "callee": "Npc::getHp / Npc::setHp",
+        "purpose": "Read and modify an NPC's HP in certain food-giving branches, using caps or formulas influenced by strength.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MOREFOOD::use",
+        "callee": "Npc::getStr",
+        "purpose": "Obtain NPC Strength used in HP-calculation logic for some food types.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MOREFOOD::use",
+        "callee": "Item::getDirFromItem",
+        "purpose": "Compute a direction from item data when placing or dropping something (used with METHOD::0080).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_MOREFOOD::use",
+        "callee": "METHOD::0080",
+        "purpose": "Perform an action using the item and a computed direction (inferred to be a spawn/place/drop); exact effect unknown.",
+        "confidence": "low"
+      },
+      {
+        "caller": "U8P_MOREFOOD::use",
+        "callee": "Item::destroy",
+        "purpose": "Remove/destroy the food item after it is consumed or used.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "fireStormActive",
+        "likely_effect": "When set, the mushroom palette-effect process suppresses or skips FadeToPalette calls (storm-driven visual suppression).",
+        "confidence": "medium"
+      },
+      {
+        "name": "rainStormActive",
+        "likely_effect": "When set, combined with fireStormActive it leads the palette-effect process to suppress or skip fades (inferred behavior).",
+        "confidence": "medium"
+      },
+      {
+        "name": "shroomPaletteEffectsActive",
+        "likely_effect": "Checked by U8P_MOREFOOD::MOREFOOD::use to avoid spawning duplicate palette-effect processes; also read by the effect process to know current state.",
+        "confidence": "high"
+      }
+    ],
+    "writes": [
+      {
+        "name": "shroomPaletteEffectsActive",
+        "likely_effect": "Set to 1 at the start of the mushroom palette-effect process and cleared to 0 when the process self-terminates, serving as a guard against duplicate spawns.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_MOREFOOD::MOREFOOD::0080",
+    "behavior_summary_one_liner": "Provides food-item behaviors: two helper handlers (look and use) for describing and consuming food, and a spawned background process that runs a repeating, randomized palette-fade 'mushroom' visual effect.",
+    "external_call_count": 12,
+    "flag_read_count": 3,
+    "flag_write_count": 1
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

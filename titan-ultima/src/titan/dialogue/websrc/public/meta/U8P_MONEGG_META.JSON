@@ -1,0 +1,134 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_MONEGG.json",
+  "file": "U8P_MONEGG",
+  "behavior_summary": [
+    "U8P_MONEGG::hatch is an area-triggered processing routine that scans nearby items when a per-item 'processing' bit (map_array bit 0x0080) is set on the subject item ('this').",
+    "For each nearby MonsterEgg item the routine compares the egg's stored monster id (MonsterEgg::getMonId) to the subject item's low 5 bits (Item::getMapArray() & 0x1F). On match it invokes MonsterEgg::hatch on that egg.",
+    "After hatching an egg it may destroy the egg if the egg's frame/state becomes 0 (Item::getFrame() == 0 → Item::destroy()).",
+    "If any egg hatched during the scan the routine leaves the subject item's 0x0080 bit cleared (so other code can clear it later); if no egg hatched it re-applies (ORs) the 0x0080 bit back into the subject item's map_array via Item::setMapArray to preserve the processing state.",
+    "U8P_MONEGG::leaveFastArea is a helper that runs on fast-area exit to clear the subject item's 0x0080 bit (Item::setMapArray(map_array & ~0x0080))."
+  ],
+  "notable_control_flow": [
+    "Early exit: U8P_MONEGG::hatch returns immediately if the subject item's map_array does not have bit 0x0080 set (guard).",
+    "Main loop: iterate nearby items (loopscr), filter MonsterEgg items, call MonsterEgg::getMonId and compare to subject map low 5 bits each iteration.",
+    "Branch on match: if ids match → call MonsterEgg::hatch, set local any_hatched flag, then check egg frame and optionally destroy the egg.",
+    "Final conditional: after the loop, if any_hatched == 0 then OR 0x0080 back into the subject item's map_array and write it; otherwise skip re-setting the bit."
+  ],
+  "open_questions": [
+    "Exact semantic meaning of the subject item's map_array bit 0x0080 (appears to be a per-item 'process me for egg hatching' flag but could also represent a specific trigger state).",
+    "Precise encoding/purpose of the low 5 bits (0x1F) of the subject item's map_array that are compared to MonsterEgg::getMonId (likely an id/index or zone match but not certain).",
+    "Whether MonsterEgg::hatch always spawns a monster immediately or can change egg frame/state asynchronously (affects when Item::getFrame returns 0).",
+    "Who is responsible for clearing the 0x0080 bit when an egg hatches (this code intentionally leaves it cleared if a U8P_MONEGG::hatch occurred; other systems likely finalize state)."
+  ],
+  "main_function": {
+    "name": "U8P_MONEGG::hatch",
+    "execution_form": "process",
+    "purpose": "When the subject item has its per-item processing bit set, scan nearby items for MonsterEggs with a matching stored monster id and trigger those eggs to U8P_MONEGG::hatch; optionally destroy eggs whose frame becomes 0; re-assert the processing bit only if nothing hatched.",
+    "entry_conditions": [
+      "Invoked as an area/trigger event when the subject item is marked for processing (Item::getMapArray() & 0x0080 != 0).",
+      "Runs as a loop over nearby items (loopscr) while the processing bit is set."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_MONEGG::hatch",
+      "kind": "main",
+      "role": "Area-triggered scanner that matches MonsterEggs to a subject item's map data and triggers hatching/removal behavior.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MONEGG::leaveFastArea",
+      "kind": "helper",
+      "role": "Fast-area exit handler that clears the subject item's map_array 0x0080 bit to stop further processing when the actor/item leaves the trigger region.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_MONEGG::hatch",
+        "callee": "Item::getMapArray",
+        "purpose": "Read the subject item's per-item map/status word; used to test the 0x0080 processing bit and to obtain low 5 bits masked with 0x1F for id matching.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MONEGG::hatch",
+        "callee": "MonsterEgg::getMonId",
+        "purpose": "Return the monster id stored in a MonsterEgg item for comparison against the subject item's masked map value to decide U8P_MONEGG::hatch eligibility.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MONEGG::hatch",
+        "callee": "MonsterEgg::hatch",
+        "purpose": "Trigger the egg's hatching behavior when a MonsterEgg's stored id matches the subject item's masked id.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MONEGG::hatch",
+        "callee": "Item::getFrame",
+        "purpose": "Read the egg item's frame/state after U8P_MONEGG::hatch to decide whether the egg should be destroyed (frame == 0 → destroy).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MONEGG::hatch",
+        "callee": "Item::destroy",
+        "purpose": "Destroy/remove a MonsterEgg item when its frame becomes 0 following U8P_MONEGG::hatch.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MONEGG::hatch",
+        "callee": "Item::setMapArray",
+        "purpose": "Re-apply (OR) the 0x0080 processing bit back into the subject item's map_array if no egg hatched during the scan.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MONEGG::leaveFastArea",
+        "callee": "Item::getMapArray",
+        "purpose": "Read the subject item's map_array to prepare clearing of the processing bit on area exit.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MONEGG::leaveFastArea",
+        "callee": "Item::setMapArray",
+        "purpose": "Write the subject item's map_array with bit 0x0080 cleared (map_array & ~0x0080) when leaving the fast-area trigger.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "item.map_array low 5 bits (mask 0x1F)",
+        "likely_effect": "Used as an id/index value compared to MonsterEgg::getMonId for deciding whether an egg should U8P_MONEGG::hatch now.",
+        "confidence": "high"
+      }
+    ],
+    "writes": [
+      {
+        "name": "item.map_array bit 0x0080",
+        "likely_effect": "Per-item processing/trigger flag: checked by U8P_MONEGG::hatch to allow scanning; cleared by U8P_MONEGG::leaveFastArea on exit; re-set by U8P_MONEGG::hatch only when no egg hatched so processing persists.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_MONEGG::hatch",
+    "behavior_summary_one_liner": "U8P_MONEGG::hatch is an area-triggered processing routine that scans nearby items when a per-item 'processing' bit (map_array bit 0x0080) is set on the subject item ('this').",
+    "external_call_count": 8,
+    "flag_read_count": 1,
+    "flag_write_count": 1
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

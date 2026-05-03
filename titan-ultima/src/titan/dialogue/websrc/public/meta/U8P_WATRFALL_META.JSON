@@ -1,0 +1,130 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_WATRFALL.json",
+  "file": "U8P_WATRFALL",
+  "behavior_summary": [
+    "This script manages a waterfall ambient sound tied to an in-game trigger region: when an actor enters the waterfall area the script marks/configures info state for that actor/area and starts a waterfall ambient SFX; when the actor leaves the area it mirrors the info/state changes and stops the previously started SFX.",
+    "U8P_WATRFALL::enterFastArea and leaveFastArea form an enter/exit pair for a fast-area trigger: both call engine operations to set an info key and exclude/process state for a referenced object and then call an audio routine to start/stop the waterfall sound instance identified by a constant channel/id.",
+    "No global game-state flags are read or written by this excerpt; behavior is local to the triggering entity/area and the ambient sound channel."
+  ],
+  "notable_control_flow": [
+    "Engine invokes U8P_WATRFALL::enterFastArea when an actor enters the fast-area trigger; it first performs set-info and process-exclude operations and then calls playAmbientSFX to begin the waterfall sound.",
+    "Engine invokes U8P_WATRFALL::leaveFastArea when an actor leaves the fast-area trigger; it performs analogous set-info/process-exclude operations and calls stopSFX to end the waterfall sound.",
+    "The enter handler pushes an extra byte parameter (0x32) when starting sound that is not present on stop, implying a start-only playback parameter (volume/priority/etc.)."
+  ],
+  "open_questions": [
+    "Precise meaning of the constants 0x021B and 0x021C used with 'set info' (appear to be enter/exit info keys but exact semantics unknown).",
+    "Exact interpretation of the 2-byte indirect value (indirect 02h bytes) — likely an info/resource pointer or position id associated with the waterfall but not definitively identified.",
+    "Exact role of the byte 0x32 passed to playAmbientSFX (likely volume/priority/playback flag) and the 0x00CA value used as the sound channel/instance id — both inferred from call patterns.",
+    "Whether the SFX is tracked per-entity or per-location (script appears to tie the sound to the triggering entity and the indirect 2-byte value but implementation detail is inferred)."
+  ],
+  "main_function": {
+    "name": "U8P_WATRFALL::enterFastArea",
+    "execution_form": "process",
+    "purpose": "Handle an actor entering the waterfall trigger region: set area/object info and exclusion state for the referenced entity/area and start the waterfall ambient sound tied to that entity/position/channel.",
+    "entry_conditions": [
+      "Event F: actor (Avatar or other) enters the waterfall fast-area trigger region (engine dispatch to U8P_WATRFALL::enterFastArea)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_WATRFALL::enterFastArea",
+      "kind": "main",
+      "role": "Enter-area handler that configures info/exclusion and starts waterfall ambient SFX.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_WATRFALL::leaveFastArea",
+      "kind": "helper",
+      "role": "Leave-area handler that configures info/exclusion and stops the waterfall ambient SFX.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_WATRFALL::playAmbientSFX",
+      "kind": "extern",
+      "role": "Engine/audio routine used to start an ambient sound instance (waterfall) tied to an entity/position and playback parameters.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_WATRFALL::stopSFX",
+      "kind": "extern",
+      "role": "Engine/audio routine used to stop the ambient sound instance/channel previously started for the waterfall.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_WATRFALL::set info",
+      "kind": "extern",
+      "role": "Engine operation used to set a named info/state key (e.g., 0x021B/0x021C) on a referenced object.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_WATRFALL::process exclude",
+      "kind": "extern",
+      "role": "Engine operation used to mark an object as excluded from normal processing (used here after setting info).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_WATRFALL::enterFastArea",
+        "callee": "U8P_WATRFALL::set info",
+        "purpose": "Set an info/state key (constant 0x021B) on a referenced object/area to record enter-state or other metadata.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WATRFALL::enterFastArea",
+        "callee": "U8P_WATRFALL::process exclude",
+        "purpose": "Mark the referenced object/area as excluded from normal processing after setting the info key (common engine pattern).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WATRFALL::enterFastArea",
+        "callee": "U8P_WATRFALL::playAmbientSFX",
+        "purpose": "Start the waterfall ambient sound for the triggering entity/position using parameters (entity, indirect-pointer, playback byte 0x32, channel/id 0x00CA).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_WATRFALL::leaveFastArea",
+        "callee": "U8P_WATRFALL::set info",
+        "purpose": "Set an info/state key (constant 0x021C) on the referenced object/area to record exit-state or other metadata.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WATRFALL::leaveFastArea",
+        "callee": "U8P_WATRFALL::process exclude",
+        "purpose": "Mark the referenced object/area as excluded from normal processing after setting the exit info key.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WATRFALL::leaveFastArea",
+        "callee": "U8P_WATRFALL::stopSFX",
+        "purpose": "Stop the waterfall ambient sound previously started (uses entity/indirect-pointer and channel/id 0x00CA to identify which sound to stop).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_WATRFALL::enterFastArea",
+    "behavior_summary_one_liner": "This script manages a waterfall ambient sound tied to an in-game trigger region: when an actor enters the waterfall area the script marks/configures info state for that actor/area and starts a waterfall ambient SFX; when the actor leaves the area it mirrors the info/state changes and stops the previously started SFX.",
+    "external_call_count": 6,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

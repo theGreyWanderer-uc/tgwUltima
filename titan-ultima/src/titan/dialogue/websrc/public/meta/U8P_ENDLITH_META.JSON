@@ -1,0 +1,231 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_ENDLITH.json",
+  "file": "U8P_ENDLITH",
+  "behavior_summary": [
+    "Orchestrates an ambush/U8P_ENDLITH::hatch sequence when an ENDLITH item triggers its U8P_ENDLITH::hatch event: plays music and SFX, shakes the camera, spawns multiple visual/effect helper processes, temporarily freezes the Avatar, creates enemy NPCs at/near the item's coordinates, sets those NPCs into combat targeting the Avatar, marks/removes the original item, and emits a creature bark line.",
+    "Sequence is driven by many asynchronous spawned helper scripts (FREE::*, LITHOS::*, ERTHSPEL::*, METHOD::*) responsible for timed visuals and creature behaviors; the main script sequences and coordinates them.",
+    "The Avatar is placed into stasis (setAvatarInStasis(1)) early in the sequence and restored (setAvatarInStasis(0)) after the dramatic effects conclude, ensuring the player cannot act during the event."
+  ],
+  "notable_control_flow": [
+    "Start: playMusic and setAvatarInStasis(1) to begin the cinematic/ambush state (U8P_ENDLITH::ENDLITH::hatch).",
+    "Query the triggering item for map and coordinates (Item::getZ/Y/X, Npc::getMap) and spawn multiple helper processes that use those coordinates to render effects (spawn FREE::*, LITHOS::*).",
+    "Camera shake and SFX are triggered concurrently (Camera::startQuake, playSFX); the quake is later stopped (Camera::stopQuake) and followed by a finishing spawn (ERTHSPEL::11F0).",
+    "Area iteration: the script scans/iterates around the item location and, for each suitable position, creates NPCs (Npc::create), marks the original item (Item::orStatus), removes or pops the item (Item::pop), spawns per-NPC helper METHOD::15E7, and configures the NPCs for combat (Npc::setInCombat, Npc::setTarget).",
+    "The item emits a bark line (Item::bark) during the sequence to convey story/dialogue.",
+    "Many operations are implemented as separate spawned processes (suspend/async); the main process initiates them and returns/resumes depending on spawn semantics."
+  ],
+  "open_questions": [
+    "Exact trigger semantics: whether this runs only on Event 7 ('U8P_ENDLITH::hatch') or also on entering a fast-area trigger — inferred as Event 7 but the mapping to area entry is not explicit.",
+    "Precise behavior, timing, and visual details of the spawned helper scripts (FREE::1C6D, FREE::29D8, LITHOS::09B2, etc.) — these are invoked but their internals are external to this script.",
+    "Which exact NPC types and how many are created for each spawn point — the script calls Npc::create with type ids but the concrete type values and counts are not shown in the disassembly summary.",
+    "Exact conditions used during the area iteration (shape filters, range limits) — the iteration mechanism and filters are inferred but not fully specified in the summary.",
+    "Whether the original item is always removed/populated (Item::pop) or only in specific cases (e.g., on successful spawn) — disassembly implies pop but branching details are not explicit."
+  ],
+  "main_function": {
+    "name": "U8P_ENDLITH::hatch",
+    "execution_form": "process",
+    "purpose": "Coordinate a dramatic U8P_ENDLITH::hatch/ambush cinematic: freeze the player, play music/SFX, shake the camera, spawn visual and creature processes, create enemy NPCs around the U8P_ENDLITH::hatch location, set them into combat targeting the Avatar, mark/remove the original item, and present a dialog/bark line.",
+    "entry_conditions": [
+      "Invoked on Event 7 (U8P_ENDLITH::hatch) for the ENDLITH object.",
+      "Appears to be triggered by the item's U8P_ENDLITH::hatch/activation (possibly tied to an area trigger); called with the triggering item pointer at BP+06h."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_ENDLITH::hatch",
+      "kind": "main",
+      "role": "Main event handler that sequences the U8P_ENDLITH::hatch/ambush cinematic and spawns helpers and NPCs.",
+      "confidence": "high"
+    },
+    {
+      "name": "METHOD::091C",
+      "kind": "extern",
+      "role": "Spawned helper (timing/visual controller) invoked early with map/item refs; coordinates an effect tied to the U8P_ENDLITH::hatch.",
+      "confidence": "medium"
+    },
+    {
+      "name": "METHOD::15E7",
+      "kind": "extern",
+      "role": "Per-NPC spawned helper to initialize or control NPC behavior immediately after creation.",
+      "confidence": "medium"
+    },
+    {
+      "name": "LITHOS::09B2",
+      "kind": "extern",
+      "role": "Creature-specific behavior/visual script spawned during the sequence.",
+      "confidence": "medium"
+    },
+    {
+      "name": "LITHOS::0D3C",
+      "kind": "extern",
+      "role": "Creature-specific behavior/visual script spawned during the sequence.",
+      "confidence": "medium"
+    },
+    {
+      "name": "LITHOS::0DDC",
+      "kind": "extern",
+      "role": "Creature-specific behavior/visual script spawned during the sequence.",
+      "confidence": "medium"
+    },
+    {
+      "name": "LITHOS::0A14",
+      "kind": "extern",
+      "role": "Creature-specific behavior/visual script spawned during the sequence.",
+      "confidence": "medium"
+    },
+    {
+      "name": "FREE::1C6D",
+      "kind": "extern",
+      "role": "Generic visual/timing helper spawned with map/coordinate args.",
+      "confidence": "medium"
+    },
+    {
+      "name": "FREE::29D8",
+      "kind": "extern",
+      "role": "Generic visual/timing helper spawned with map/coordinate args.",
+      "confidence": "medium"
+    },
+    {
+      "name": "FREE::1C8B",
+      "kind": "extern",
+      "role": "Generic visual/timing helper spawned with map/coordinate args.",
+      "confidence": "medium"
+    },
+    {
+      "name": "ERTHSPEL::11F0",
+      "kind": "extern",
+      "role": "Spawned at sequence end to produce earth/spell visual effects.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_ENDLITH::hatch",
+        "callee": "playMusic",
+        "purpose": "Start background music for the U8P_ENDLITH::hatch/ambush cinematic.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDLITH::hatch",
+        "callee": "U8P_ENDLITH::setAvatarInStasis",
+        "purpose": "Disable Avatar input/actions at sequence start (called with 1) and re-enable at end (called with 0).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDLITH::hatch",
+        "callee": "Npc::getMap",
+        "purpose": "Obtain the map context for spawning map-tied effects and helpers.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDLITH::hatch",
+        "callee": "Item::getZ",
+        "purpose": "Query the triggering item's Z (layer/height) coordinate for effect/NPC placement.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDLITH::hatch",
+        "callee": "Item::getY",
+        "purpose": "Query the triggering item's Y coordinate for effect/NPC placement.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDLITH::hatch",
+        "callee": "Item::getX",
+        "purpose": "Query the triggering item's X coordinate for effect/NPC placement.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDLITH::hatch",
+        "callee": "spawn",
+        "purpose": "Launch multiple helper processes (FREE::*, LITHOS::*, METHOD::*) to run visuals/timed behavior tied to the U8P_ENDLITH::hatch.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDLITH::hatch",
+        "callee": "Camera::startQuake",
+        "purpose": "Begin camera shake effect to dramatize the U8P_ENDLITH::hatch.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDLITH::hatch",
+        "callee": "U8P_ENDLITH::playSFX",
+        "purpose": "Play short SFX cues during the quake/sequence for audio feedback.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDLITH::hatch",
+        "callee": "Item::bark",
+        "purpose": "Emit the enemy/boss dialogue line from the triggering item/NPC during the sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDLITH::hatch",
+        "callee": "Camera::stopQuake",
+        "purpose": "End the camera shake after the dramatic portion of the sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDLITH::hatch",
+        "callee": "ERTHSPEL::11F0",
+        "purpose": "Spawn a finishing earth/spell visual effect after quake ends.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ENDLITH::hatch",
+        "callee": "Npc::create",
+        "purpose": "Create enemy NPC instances at/near the item's coordinates as part of the ambush.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDLITH::hatch",
+        "callee": "Item::orStatus",
+        "purpose": "Set status bits on the triggering item (mark it used/active to prevent re-triggering or denote state change).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDLITH::hatch",
+        "callee": "Item::pop",
+        "purpose": "Remove/pop the original item from the map visually and in world state at specified coordinates.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDLITH::hatch",
+        "callee": "Npc::setInCombat",
+        "purpose": "Mark newly created NPCs as in combat so they will act immediately.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDLITH::hatch",
+        "callee": "Npc::setTarget",
+        "purpose": "Set the created NPCs' combat target to the Avatar to initiate aggression.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_ENDLITH::ENDLITH::hatch",
+    "behavior_summary_one_liner": "Orchestrates an ambush/U8P_ENDLITH::hatch sequence when an ENDLITH item triggers its U8P_ENDLITH::hatch event: plays music and SFX, shakes the camera, spawns multiple visual/effect helper processes, temporarily freezes the Avatar, creates enemy NPCs at/near the item's coordinates, sets those NPCs into combat targeting the Avatar, marks/removes the original item, and emits a creature bark line.",
+    "external_call_count": 17,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

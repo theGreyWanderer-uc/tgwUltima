@@ -1,0 +1,70 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_CAULDRON.json",
+  "file": "U8P_CAULDRON",
+  "behavior_summary": [
+    "Provides the 'U8P_CAULDRON::look' (examine) handler for the cauldron item: when invoked it prepares a fixed textual prefix \"cauldron \", configures per-item processing flags, and then delegates the rest of the descriptive output to Item::bark.",
+    "The function passes the cauldron/object context and the constructed prefix to Item::bark, propagates Item::bark's return value as its own return, frees the temporary prefix string, and then performs a small implies/pop bookkeeping sequence before suspending/returning.",
+    "The 'set info' and 'process exclude' operations are applied before calling Item::bark and therefore likely influence how the bark/description is generated or how the item is temporarily treated by the engine during description."
+  ],
+  "notable_control_flow": [
+    "Create temporary string containing literal prefix \"cauldron \".",
+    "Apply per-object flags/state (inferred 'set info' and 'process exclude').",
+    "Push the object/context pointer and the prefix string and call external Item::bark.",
+    "Free the temporary prefix string after Item::bark returns.",
+    "Save Item::bark's return value as the function retval, perform an implies/pop bookkeeping sequence, then suspend/return."
+  ],
+  "open_questions": [
+    "Exact semantics and scope of the 'set info' (info id 0x210 observed elsewhere) and 'process exclude' operations — how they change bark output or processing for this object is inferred but not explicit.",
+    "Precise type/name of the BP+06h parameter (it appears to be the cauldron's item/process PID/context) and whether additional context (player PID) is implicitly supplied by the caller.",
+    "Meaning and consumers of Item::bark's return value in this context: whether it encodes success/failure or is purely informational for the engine's caller."
+  ],
+  "main_function": {
+    "name": "U8P_CAULDRON::look",
+    "execution_form": "process",
+    "purpose": "Handle the 'U8P_CAULDRON::look' event for the cauldron: produce a visible description by prefixing \"cauldron \" and delegating detailed text generation to Item::bark, while setting temporary processing flags and cleaning up temporaries.",
+    "entry_conditions": [
+      "Event 0 (U8P_CAULDRON::look) — invoked when an actor (typically the Avatar) looks at or examines the cauldron item"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_CAULDRON::look",
+      "kind": "main",
+      "role": "Look/examine event handler for the cauldron item; prepares prefix and delegates description.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_CAULDRON::look",
+        "callee": "Item::bark",
+        "purpose": "Provide the cauldron's descriptive output by passing the object context and the prefix string \"cauldron \". The cauldron handler delegates full text production to Item::bark and returns its result.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_CAULDRON::CAULDRON::look",
+    "behavior_summary_one_liner": "Provides the 'U8P_CAULDRON::look' (examine) handler for the cauldron item: when invoked it prepares a fixed textual prefix \"cauldron \", configures per-item processing flags, and then delegates the rest of the descriptive output to Item::bark.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

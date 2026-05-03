@@ -1,0 +1,276 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_ANCTONES.json",
+  "file": "U8P_ANCTONES",
+  "behavior_summary": [
+    "U8P_ANCTONES::hatch (Event 7) is a trigger that runs when an actor (typically the Avatar) enters the Ancient Ones' fast/trigger area. It marks the triggering actor with script info/process-exclude, scans nearby tokens/items to decide whether the encounter should proceed, and then either launches the main Ancient Ones interaction (U8P_ANCTONES::0116) or schedules a cleanup (external FREE::1C19).",
+    "The main interaction (U8P_ANCTONES::0116) orchestrates the multi-stage encounter: it gates first-time vs repeat visit behavior using global flags (ancientOnesMet, getPowerAO, gotObTip), sets/clears a startedConvo guard, plays encounter music, freezes the Avatar (stasis), creates temporary visual NPC/items (Item::create + Item::pop), makes those items 'speak' lines (Item::bark), spawns animation/movement helper processes (METHOD::091C and multiple U8P_ANCTONES::xxxx spawned helpers), awards or withholds an artifact under flag conditions, destroys temporary items, and restores Avatar control.",
+    "U8P_ANCTONES::leaveFastArea (Event 10) is a small cleanup handler invoked when the actor leaves the trigger area: it sets info/process-exclude for the leaving actor and calls external FREE::2A56 to finalize cleanup."
+  ],
+  "notable_control_flow": [
+    "hatch scan -> branch: a short loop sets a local flag (BP-01h). If the scan indicates the right condition and global startedConvo is clear, hatch spawns U8P_ANCTONES::0116; otherwise hatch spawns cleanup (FREE::1C19) and suspends.",
+    "U8P_ANCTONES::0116 sets startedConvo=1 at start and clears it when the scripted sequence finishes; ancientOnesMet is set on the first meeting to switch subsequent visits into a repeat branch.",
+    "During the interaction the Avatar is placed into stasis (setAvatarInStasis(1)), temporary items are created/popped and made to bark, then destroyed; many helper processes are spawned and run concurrently to produce animation/effects.",
+    "leaveFastArea is a defensive cleanup path to remove processing info and free any per-trigger resources via FREE::2A56."
+  ],
+  "open_questions": [
+    "What exact token/item criteria does the hatch scan loop (BP-01h) look for to permit the conversation branch? The scan's matching condition is inferred but not explicit.",
+    "What is the exact semantic meaning of the 'info' id (0x210 referenced by set-info) applied to the trigger actor/item?",
+    "What precise game effect does getPowerAO represent (granting a power, gating an artifact, or another progression flag)? Its use is inferred from context but not concretely labeled.",
+    "Which exact U8P_ANCTONES::xxxx helper processes are spawned by U8P_ANCTONES::0116 and what distinct visual/animation each implements?"
+  ],
+  "main_function": {
+    "name": "U8P_ANCTONES::hatch (Event 7)",
+    "execution_form": "process",
+    "purpose": "Entry trigger run when an actor enters the Ancient Ones' fast/trigger area. Prepares actor context (set info/process-exclude), scans nearby items/tokens to decide whether to launch the Ancient Ones' interaction (U8P_ANCTONES::0116) or to schedule a cleanup (FREE::1C19), and prevents reentrancy via startedConvo checks.",
+    "entry_conditions": [
+      "Actor entering the Ancient Ones' fast/trigger area (enterFastArea semantics).",
+      "Invoked with a trigger item/actor handle passed at BP+06h (indirect 02h usage)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_ANCTONES::hatch (Event 7)",
+      "kind": "main",
+      "role": "Trigger entry that decides whether to start the Ancient Ones encounter or do a cleanup",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ANCTONES::leaveFastArea (Event 10)",
+      "kind": "helper",
+      "role": "Cleanup when the actor leaves the area; removes processing info and calls FREE::2A56",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ANCTONES::0116",
+      "kind": "helper",
+      "role": "Primary interaction/dialog process: controls music, stasis, temporary manifests, dialog barks, spawned visual/animation sub-processes, and conditional reward giving",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::create",
+      "kind": "extern",
+      "role": "Create temporary visual/manifestation items used in the encounter",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::pop",
+      "kind": "extern",
+      "role": "Place created items in the world at computed X,Y,Z positions",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Make an item/NPC display or speak a dialog line to a process/player",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::destroy",
+      "kind": "extern",
+      "role": "Remove temporary items after use",
+      "confidence": "high"
+    },
+    {
+      "name": "playMusic",
+      "kind": "extern",
+      "role": "Start encounter background music (byte id)",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ANCTONES::setAvatarInStasis",
+      "kind": "extern",
+      "role": "Freeze/unfreeze player control during scripted sequence",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getX/Item::getY/Item::getZ",
+      "kind": "extern",
+      "role": "Read coordinates used to place/spawn temporary objects and schedule effects",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getDirToItem",
+      "kind": "extern",
+      "role": "Compute direction between items used to orient spawned movement/animation processes",
+      "confidence": "medium"
+    },
+    {
+      "name": "METHOD::091C (spawned)",
+      "kind": "extern",
+      "role": "Spawned movement/animation helper taking direction and an item pointer",
+      "confidence": "medium"
+    },
+    {
+      "name": "FREE::1C19 (spawned)",
+      "kind": "extern",
+      "role": "Spawned cleanup/free routine used by hatch when conversation branch does not run",
+      "confidence": "medium"
+    },
+    {
+      "name": "FREE::1C6D (spawned)",
+      "kind": "extern",
+      "role": "Spawned helper, likely a timed/delay cleanup at coordinates",
+      "confidence": "medium"
+    },
+    {
+      "name": "FREE::2A56",
+      "kind": "extern",
+      "role": "Cleanup/free routine called by leaveFastArea",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ANCTONES::(many spawned ANCTONES::xxxx)",
+      "kind": "helper",
+      "role": "Multiple short spawned sub-behaviors/animations invoked by U8P_ANCTONES::0116 for visuals/audio",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_ANCTONES::hatch (Event 7)",
+        "callee": "U8P_ANCTONES::0116",
+        "purpose": "Spawn the primary Ancient Ones interaction/dialog process when scan conditions and startedConvo guard permit",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ANCTONES::0116",
+        "callee": "U8P_ANCTONES::(many spawned ANCTONES::xxxx)",
+        "purpose": "Spawn multiple internal animation/visual helper processes to run concurrently during the encounter",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_ANCTONES::hatch (Event 7)",
+        "callee": "FREE::1C19",
+        "purpose": "Spawned cleanup/free routine used when conversation is not started",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ANCTONES::leaveFastArea (Event 10)",
+        "callee": "FREE::2A56",
+        "purpose": "Finalize cleanup when actor leaves trigger area",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ANCTONES::0116",
+        "callee": "playMusic",
+        "purpose": "Start encounter music at the beginning of the interaction",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ANCTONES::0116",
+        "callee": "U8P_ANCTONES::setAvatarInStasis",
+        "purpose": "Freeze and later unfreeze Avatar control for the scripted sequence",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ANCTONES::0116",
+        "callee": "Item::create",
+        "purpose": "Create temporary visual/NPC items used to deliver dialog and effects",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ANCTONES::0116",
+        "callee": "Item::pop",
+        "purpose": "Place created items into the world at computed coordinates",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ANCTONES::0116",
+        "callee": "Item::bark",
+        "purpose": "Have created items speak dialog lines to the player/process",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ANCTONES::0116",
+        "callee": "Item::destroy",
+        "purpose": "Remove temporary items after their dialog/effect completes",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ANCTONES::0116",
+        "callee": "Item::getDirToItem / METHOD::091C",
+        "purpose": "Compute orientation and spawn movement/animation helper to orient visual elements toward the trigger",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ANCTONES::0116",
+        "callee": "FREE::1C6D",
+        "purpose": "Spawned helper likely used for timed effects/cleanup at given coordinates",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "ancientOnesMet",
+        "likely_effect": "Used to detect first-time meeting vs repeat visit and select dialog/behavior branch",
+        "confidence": "high"
+      },
+      {
+        "name": "getPowerAO",
+        "likely_effect": "Gates an alternate branch related to awarding/denying a power or artifact during the encounter",
+        "confidence": "medium"
+      },
+      {
+        "name": "gotObTip",
+        "likely_effect": "Indicates whether the player already has the obelisk tip; used to avoid giving duplicate rewards or to choose dialog",
+        "confidence": "medium"
+      },
+      {
+        "name": "doneDefault",
+        "likely_effect": "Used in combination with gotObTip to prevent repeating certain default content",
+        "confidence": "low"
+      },
+      {
+        "name": "startedConvo",
+        "likely_effect": "Reentrancy guard: prevents starting the conversation if one is already in progress",
+        "confidence": "high"
+      }
+    ],
+    "writes": [
+      {
+        "name": "startedConvo",
+        "likely_effect": "Set to 1 at the start of U8P_ANCTONES::0116 to mark an active conversation and cleared when finished; prevents duplicate/concurrent runs",
+        "confidence": "high"
+      },
+      {
+        "name": "ancientOnesMet",
+        "likely_effect": "Set on the first meeting to ensure future visits use the repeat branch",
+        "confidence": "high"
+      },
+      {
+        "name": "getPowerAO",
+        "likely_effect": "Set in some branches to record that the player has become eligible for or received a power/artifact (inferred)",
+        "confidence": "medium"
+      },
+      {
+        "name": "gotObTip",
+        "likely_effect": "Set when the player receives the obelisk tip/Blackrock artifact to prevent re-awarding (inferred)",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_ANCTONES::hatch (Event 7)",
+    "behavior_summary_one_liner": "U8P_ANCTONES::hatch (Event 7) is a trigger that runs when an actor (typically the Avatar) enters the Ancient Ones' fast/trigger area. It marks the triggering actor with script info/process-exclude, scans nearby tokens/items to decide whether the encounter should proceed, and then either launches the main Ancient Ones interaction (U8P_ANCTONES::0116) or schedules a cleanup (external FREE::1C19).",
+    "external_call_count": 10,
+    "flag_read_count": 5,
+    "flag_write_count": 4
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

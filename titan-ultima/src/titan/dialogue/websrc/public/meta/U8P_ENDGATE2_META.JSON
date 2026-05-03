@@ -1,0 +1,80 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_ENDGATE2.json",
+  "file": "U8P_ENDGATE2",
+  "behavior_summary": [
+    "Provides the 'U8P_ENDGATE2::look' (examine) handler for the gate item: it prepares the item state, asks the item to 'bark' the short description \"gate \", observes the bark return value as a boolean-like result, then suspends/returns.",
+    "Operates locally on the passed item PID (no global flags are read or written in this script excerpt).",
+    "Uses engine-level operations to set per-item info and exclude the process from normal processing before producing the description."
+  ],
+  "notable_control_flow": [
+    "Entry on a U8P_ENDGATE2::look/examine event for the gate (Event 0).",
+    "Sequence: set item info / process-exclude -> call Item::bark(item_pid, \"gate \") -> capture return -> apply an 'implies' style boolean/op -> suspend/return.",
+    "The return from Item::bark is captured and used in an implication/pop step that appears to influence control flow or caller-side interpretation before the process suspends."
+  ],
+  "open_questions": [
+    "Precise semantics of the engine 'set info' + 'process exclude' ops here (what info id is set and what behavior exclusion means in-game).",
+    "Exact meaning of the 'implies' opcode observed after the bark return (is it a conditional flow, a flag propagation, or an internal convention for handling return values?).",
+    "Who is the intended recipient/target of Item::bark in this context (the item itself emitting text, or the player/process that initiated the U8P_ENDGATE2::look)?",
+    "What does Item::bark's return value encode (success/failure, visibility, or another state)?"
+  ],
+  "main_function": {
+    "name": "U8P_ENDGATE2::look",
+    "execution_form": "process",
+    "purpose": "Handle the player/actor 'U8P_ENDGATE2::look' (examine) action for the gate item by marking the item state, emitting the short description \"gate \", and propagating the bark result into a boolean-like flow before suspending.",
+    "entry_conditions": [
+      "Event 0: invoked when an actor/player looks at or examines the gate object (the 'U8P_ENDGATE2::look' command / area-entry semantics)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_ENDGATE2::look",
+      "kind": "main",
+      "role": "Examine/U8P_ENDGATE2::look handler for the gate item; prepares item state and requests a short description via Item::bark.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_ENDGATE2::look",
+        "callee": "Item::bark",
+        "purpose": "Ask the item/process to emit/display its short description string; here called with the literal \"gate \". The returned value is read and treated as a boolean-like result by the caller.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDGATE2::look",
+        "callee": "U8P_ENDGATE2::engine.set_info / engine.process_exclude",
+        "purpose": "Engine-level ops invoked before barking to set a per-item info/state and exclude the process from normal processing. Likely used to mark the item as having been examined or to prevent reprocessing.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ENDGATE2::look",
+        "callee": "U8P_ENDGATE2::engine.suspend",
+        "purpose": "Suspend or yield the process after handling the U8P_ENDGATE2::look event (end of handler lifecycle).",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_ENDGATE2::ENDGATE2::look",
+    "behavior_summary_one_liner": "Provides the 'U8P_ENDGATE2::look' (examine) handler for the gate item: it prepares the item state, asks the item to 'bark' the short description \"gate \", observes the bark return value as a boolean-like result, then suspends/returns.",
+    "external_call_count": 3,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

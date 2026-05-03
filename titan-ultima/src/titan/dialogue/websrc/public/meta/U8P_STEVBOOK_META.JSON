@@ -1,0 +1,149 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_STEVBOOK.json",
+  "file": "U8P_STEVBOOK",
+  "behavior_summary": [
+    "This script group provides per-item/book handlers that prepare and present discrete blocks of lore/text to the game's book-reading UI. Each handler builds a temporary string containing the book text, sets book context/info, invokes Book::read to display the text to the player/actor, frees the temporary string, and returns Book::read's result.",
+    "Handlers do not read or write global flags in this excerpt; their behavior is local to the call sequence and temporary string management.",
+    "Multiple helper functions correspond to different book entries (e.g., Expedition Journal, De-venoming the Kith, poems), all following the same allocate/push/context/call/free/return pattern."
+  ],
+  "notable_control_flow": [
+    "Allocate or convert a literal into a temporary string (string_temp).",
+    "Push context values (a constant 0x0001, the invoking actor/object, an indirect info pointer) and call an engine 'set info' style operation prior to reading.",
+    "Push pid and the prepared text string, call Book::read(text) to present UI and receive a retval.",
+    "Free the temporary string and return Book::read's retval to the caller."
+  ],
+  "open_questions": [
+    "What is the exact semantic meaning of the indirect 2-byte info pointer pushed before calling set info (a book metadata record? formatting flags?), and how Book::read consumes it?",
+    "What is the precise role of the constant 0x0001 pushed before the context—an access/permission flag, mode, or UI option?",
+    "Is the BP+06h parameter always the actor PID, the book object instance, or sometimes either depending on caller?",
+    "Does Book::read perform asynchronous UI suspension (suspend) or block until the player finishes reading, and does it return discrete status codes that downstream logic inspects?"
+  ],
+  "main_function": {
+    "name": "U8P_STEVBOOK::0080",
+    "execution_form": "process",
+    "purpose": "Prepare book context and pass a block of lore text to Book::read so the player/actor can read it; free temporary resources and return the read routine's result.",
+    "entry_conditions": [
+      "Invoked when the associated book/item is activated/read by the player or relevant actor (inferred from the set-info + Book::read call pattern)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_STEVBOOK::0080",
+      "kind": "main",
+      "role": "Primary handler that sets up book context, allocates the book text string, calls Book::read, frees the string, and returns Book::read's retval.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_STEVBOOK::07D7",
+      "kind": "helper",
+      "role": "Helper handler: prepare and present the 'Expedition Journal, Book II' text via Book::read (same control pattern as main).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_STEVBOOK::10E5",
+      "kind": "helper",
+      "role": "Helper handler: prepare and present 'De-venoming the Kith' text via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_STEVBOOK::17FE",
+      "kind": "helper",
+      "role": "Helper handler: present the poem 'The Beauty of Rhian' via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_STEVBOOK::1965",
+      "kind": "helper",
+      "role": "Helper handler: present 'The Voices of Mary' lyrical entry via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_STEVBOOK::1D0E",
+      "kind": "helper",
+      "role": "Helper handler: present a long lore entry ('Eye of the Boulder...') via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_STEVBOOK::2650",
+      "kind": "helper",
+      "role": "Helper handler: present a short report/lore entry (Captain's report) via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "Book::read",
+      "kind": "extern",
+      "role": "Engine/UI routine that displays the provided text string in the book-reading UI/flow and returns a status/result.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_STEVBOOK::0080",
+        "callee": "Book::read",
+        "purpose": "Display the prepared text string in the book-reading UI using the previously pushed context (actor/object, info pointer, pid); returns a status value that is forwarded to the caller.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STEVBOOK::07D7",
+        "callee": "Book::read",
+        "purpose": "Present the 'Expedition Journal, Book II' text to the player using Book::read.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STEVBOOK::10E5",
+        "callee": "Book::read",
+        "purpose": "Present the 'De-venoming the Kith' instructional text to the player.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STEVBOOK::17FE",
+        "callee": "Book::read",
+        "purpose": "Present 'The Beauty of Rhian' poem text to the player.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STEVBOOK::1965",
+        "callee": "Book::read",
+        "purpose": "Present 'The Voices of Mary' lyrical entry.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STEVBOOK::1D0E",
+        "callee": "Book::read",
+        "purpose": "Present the long lore entry 'Eye of the Boulder, the Runes of the Myth Drainer'.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STEVBOOK::2650",
+        "callee": "Book::read",
+        "purpose": "Present the short Captain's report via Book::read.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "STEVBOOK::0080",
+    "behavior_summary_one_liner": "This script group provides per-item/book handlers that prepare and present discrete blocks of lore/text to the game's book-reading UI. Each handler builds a temporary string containing the book text, sets book context/info, invokes Book::read to display the text to the player/actor, frees the temporary string, and returns Book::read's result.",
+    "external_call_count": 7,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

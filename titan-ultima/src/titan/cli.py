@@ -190,7 +190,8 @@ def cmd_flex_extract(args: SimpleNamespace) -> int:
 
         extracted += 1
 
-    print(f"Extracted {extracted} records from {flex_name} -> {outdir.rstrip('/\\')}/")
+    outdir_display = outdir.rstrip("/\\") + "/"
+    print(f"Extracted {extracted} records from {flex_name} -> {outdir_display}")
     if skipped > 0:
         print(f"  ({skipped} empty records skipped)")
     named_count = sum(1 for n in archive.record_names if n)
@@ -412,8 +413,9 @@ def cmd_music_batch(args: SimpleNamespace) -> int:
             print(f"  WARNING: Failed {xmi_file}: {e}", file=sys.stderr)
             failed += 1
 
-    print(f"Batch convert complete: {converted} MIDIs created, "
-          f"{failed} skipped -> {outdir.rstrip('/\\')}/")
+        outdir_display = outdir.rstrip("/\\") + "/"
+        print(f"Batch convert complete: {converted} MIDIs created, "
+            f"{failed} skipped -> {outdir_display}")
     return 0
 
 
@@ -454,22 +456,37 @@ def cmd_config(args: SimpleNamespace) -> int:
         return 0
 
     config = load_config(str(path))
-    game   = config.get("game", {})
-    paths  = config.get("paths", {})
+
+    def _print_kv_section(title: str, section: dict, check_exists: bool = False) -> None:
+        if not section:
+            return
+        print()
+        print(title)
+        for k, v in section.items():
+            if check_exists:
+                exists = Path(str(v)).exists() if v else False
+                flag = "OK" if exists else "NOT FOUND"
+                print(f"  {k:<12} = {v!r}  [{flag}]")
+            else:
+                print(f"  {k:<12} = {v!r}")
 
     print(f"Active config: {path.absolute()}")
-    if game:
-        print()
-        print("[game]")
-        for k, v in game.items():
-            print(f"  {k:<12} = {v!r}")
-    if paths:
-        print()
-        print("[paths]  (after base expansion)")
-        for k, v in sorted(paths.items()):
-            exists = Path(str(v)).exists() if v else False
-            flag = "OK" if exists else "NOT FOUND"
-            print(f"  {k:<12} = {v!r}  [{flag}]")
+
+    u8 = config.get("u8", {})
+    u7bg = config.get("u7bg", {})
+    u7si = config.get("u7si", {})
+    if any((u8, u7bg, u7si)):
+        _print_kv_section("[u8.game]", u8.get("game", {}))
+        _print_kv_section("[u8.paths]", u8.get("paths", {}), check_exists=True)
+        _print_kv_section("[u7bg.game]", u7bg.get("game", {}))
+        _print_kv_section("[u7bg.paths]", u7bg.get("paths", {}), check_exists=True)
+        _print_kv_section("[u7si.game]", u7si.get("game", {}))
+        _print_kv_section("[u7si.paths]", u7si.get("paths", {}), check_exists=True)
+    else:
+        game = config.get("game", {})
+        paths = config.get("paths", {})
+        _print_kv_section("[game]", game)
+        _print_kv_section("[paths]  (after base expansion)", paths, check_exists=True)
     return 0
 
 
@@ -477,30 +494,112 @@ def cmd_setup(args: SimpleNamespace) -> int:
     """Interactive first-time setup wizard \u2014 creates titan.toml."""
     print("TITAN Setup Wizard")
     print("=" * 55)
-    print("This will create titan.toml for Ultima 8: Pagan.\n")
+    print("This will create titan.toml for Ultima 8 and Ultima 7 installs.\n")
 
     # -- Auto-detect standard install locations --------------------
     candidates: list[Path] = []
+
+    def _add_candidate(path: Path) -> None:
+        if path not in candidates:
+            candidates.append(path)
+
+    def _is_u8_folder_name(name: str) -> bool:
+        lowered = name.lower()
+        if "ultima" not in lowered:
+            return False
+        # Avoid nearby U7/SI installs when dynamically scanning launcher roots.
+        if "serpent" in lowered:
+            return False
+        if "ultima 7" in lowered or "ultima7" in lowered:
+            return False
+        return any(token in lowered for token in ("ultima 8", "ultima8", "viii", "pagan"))
+
+    def _is_u7_folder_name(name: str) -> bool:
+        lowered = name.lower()
+        if "ultima" not in lowered:
+            return False
+        return any(token in lowered for token in ("ultima 7", "ultima7", "black gate", "serpent"))
+
+    def _looks_like_u7_root(path: Path) -> bool:
+        static_candidates = [
+            path / "STATIC",
+            path / "ULTIMA7" / "STATIC",
+            path / "SERPENT" / "STATIC",
+        ]
+        return any(static.is_dir() for static in static_candidates)
     # Windows: GOG Galaxy client (most common current install)
     for drive in "CDEFG":
-        candidates.append(Path(f"{drive}:\\Program Files (x86)\\GOG Galaxy\\Games\\Ultima 8"))
+        _add_candidate(Path(f"{drive}:\\Program Files (x86)\\GOG Galaxy\\Games\\Ultima 8"))
     # Windows: GOG Offline Installer + common manual redirects
     for drive in "CDEFG":
-        candidates += [
+        for path in [
             Path(f"{drive}:\\GOG Games\\Ultima 8"),
             Path(f"{drive}:\\ULTIMA8"),
             Path(f"{drive}:\\ultima8"),
-        ]
+        ]:
+            _add_candidate(path)
     # Windows: Legacy EA/Origin disc installs
-    candidates += [
+    for path in [
         Path(r"C:\Program Files\EA Games\Ultima 8 Gold Edition"),
         Path(r"C:\Program Files (x86)\Origin Games\Ultima 8 Gold Edition"),
+    ]:
+        _add_candidate(path)
+
+    # Linux: direct known paths
+    _add_candidate(Path.home() / "GOG Games" / "Ultima 8")
+    _add_candidate(Path.home() / "Games" / "Heroic" / "Ultima 8")
+
+    # Linux: dynamic launcher roots (discover all Ultima-* folders)
+    linux_roots = [
+        Path.home() / "GOG Games",
+        Path.home() / "Games" / "Heroic",
     ]
-    # Linux: GOG Galaxy client + Offline Installer (same default path)
-    candidates.append(Path.home() / "GOG Games" / "Ultima 8")
+    for root in linux_roots:
+        if not root.is_dir():
+            continue
+        try:
+            for item in root.iterdir():
+                if item.is_dir() and _is_u8_folder_name(item.name):
+                    _add_candidate(item)
+        except PermissionError:
+            continue
+
+    # U7 auto-detection candidates.
+    u7_candidates: list[Path] = []
+
+    def _add_u7_candidate(path: Path) -> None:
+        if path not in u7_candidates:
+            u7_candidates.append(path)
+
+    for drive in "CDEFG":
+        for path in [
+            Path(f"{drive}:\\GOG Games\\Ultima VII"),
+            Path(f"{drive}:\\GOG Games\\Ultima VII - Complete"),
+            Path(f"{drive}:\\ULTIMA7"),
+            Path(f"{drive}:\\SERPENT"),
+        ]:
+            _add_u7_candidate(path)
+
+    for path in [
+        Path.home() / "GOG Games" / "Ultima VII",
+        Path.home() / "Games" / "Heroic" / "Ultima 7",
+        Path.home() / "Games" / "Heroic" / "Ultima 7 - Serpent Isle",
+    ]:
+        _add_u7_candidate(path)
+
+    for root in linux_roots:
+        if not root.is_dir():
+            continue
+        try:
+            for item in root.iterdir():
+                if item.is_dir() and _is_u7_folder_name(item.name):
+                    _add_u7_candidate(item)
+        except PermissionError:
+            continue
 
     detected_base: Optional[Path] = None
     detected_lang = "ENGLISH"
+    detected_u8: list[tuple[Path, str]] = []
 
     print("Searching for Ultima 8 installation...")
     for base in candidates:
@@ -512,14 +611,15 @@ def cmd_setup(args: SimpleNamespace) -> int:
                     continue
                 static = item / "STATIC"
                 if static.exists() and (static / "FIXED.DAT").exists():
-                    detected_base = base
-                    detected_lang = item.name
-                    print(f"  Found: {base}  (language: {detected_lang})")
+                    detected_u8.append((base, item.name))
                     break
         except PermissionError:
             continue
-        if detected_base:
-            break
+
+    if detected_u8:
+        detected_base, detected_lang = detected_u8[0]
+        for base, lang_name in detected_u8:
+            print(f"  Found: {base}  (language: {lang_name})")
 
     if not detected_base:
         print("  No standard installation found.")
@@ -536,6 +636,32 @@ def cmd_setup(args: SimpleNamespace) -> int:
     lang = input(lang_prompt).strip()
     if lang == "":
         lang = default_lang  # keep detected; empty string IS flat mode only if nothing detected
+
+    # -- U7 install detection (BG + SI) ---------------------------
+    detected_u7bg: Optional[Path] = None
+    detected_u7si: Optional[Path] = None
+    print("\nSearching for Ultima 7 installations...")
+    for u7_base in u7_candidates:
+        if not u7_base.exists() or not _looks_like_u7_root(u7_base):
+            continue
+        lowered = u7_base.name.lower()
+        if "serpent" in lowered:
+            if detected_u7si is None:
+                detected_u7si = u7_base
+                print(f"  Found Serpent Isle: {u7_base}")
+        else:
+            if detected_u7bg is None:
+                detected_u7bg = u7_base
+                print(f"  Found Black Gate:   {u7_base}")
+
+    bg_default = str(detected_u7bg) if detected_u7bg else ""
+    si_default = str(detected_u7si) if detected_u7si else ""
+
+    u7bg_input = input(f"Ultima VII Black Gate base [{bg_default or 'optional'}]: ").strip()
+    u7si_input = input(f"Ultima VII Serpent Isle base [{si_default or 'optional'}]: ").strip()
+
+    u7bg_base = (u7bg_input or bg_default).replace("\\", "/")
+    u7si_base = (u7si_input or si_default).replace("\\", "/")
 
     # -- Third-party engine save detection -------------------------
     appdata = os.getenv("APPDATA")
@@ -558,28 +684,117 @@ def cmd_setup(args: SimpleNamespace) -> int:
         if ans not in ("n", "no"):
             nonfixed_value = str(engine_save_file).replace("\\", "/")
 
+    # -- Detection summary + confirmation -------------------------
+    u8_static_detected = (Path(base) / lang / "STATIC") if lang else Path(base)
+    u8_usecode_detected = (
+        (Path(base) / lang / "USECODE" / "EUSECODE.FLX")
+        if lang else (Path(base) / "USECODE" / "EUSECODE.FLX")
+    )
+    u7bg_static_detected = (Path(u7bg_base) / "STATIC") if u7bg_base else None
+    u7si_static_detected = (Path(u7si_base) / "STATIC") if u7si_base else None
+
+    print("\nDetected folders to write to titan.toml:")
+    print(f"  U8 base:      {base}")
+    print(f"  U8 language:  {lang or '(flat mode)'}")
+    print(f"  U8 STATIC:    {u8_static_detected}")
+    print(f"  U8 USECODE:   {u8_usecode_detected}")
+    print(f"  U7 BG base:   {u7bg_base or '(empty)'}")
+    print(f"  U7 BG STATIC: {u7bg_static_detected or '(empty)'}")
+    print(f"  U7 SI base:   {u7si_base or '(empty)'}")
+    print(f"  U7 SI STATIC: {u7si_static_detected or '(empty)'}")
+
+    confirm = input("Are these paths correct? [Y/n] ").strip().lower()
+
+    manual_u8_static = ""
+    manual_u8_usecode = ""
+    manual_u7bg_static = ""
+    manual_u7si_static = ""
+
+    if confirm in ("n", "no"):
+        print("\nClearing detected values and switching to manual STATIC path entry.")
+        base = ""
+        lang = ""
+        u7bg_base = ""
+        u7si_base = ""
+
+        manual_u8_static = input("U8 STATIC path [optional]: ").strip().replace("\\", "/")
+        manual_u8_usecode = input("U8 EUSECODE.FLX path [optional]: ").strip().replace("\\", "/")
+        manual_u7bg_static = input("U7 BG STATIC path [optional]: ").strip().replace("\\", "/")
+        manual_u7si_static = input("U7 SI STATIC path [optional]: ").strip().replace("\\", "/")
+
     # -- Build and write titan.toml --------------------------------
     base_toml = base.replace("\\", "/")
     nonfixed_is_abs = Path(nonfixed_value).is_absolute()
 
+    u8_static_manual_path = Path(manual_u8_static) if manual_u8_static else None
+    if manual_u8_usecode:
+        u8_usecode_path = manual_u8_usecode
+    elif u8_static_manual_path is not None:
+        u8_usecode_path = str(u8_static_manual_path.parent / "USECODE" / "EUSECODE.FLX").replace("\\", "/")
+    else:
+        u8_usecode_path = str(u8_usecode_detected).replace("\\", "/")
+
+    if u8_static_manual_path is not None:
+        u8_paths_fixed = str(u8_static_manual_path / "FIXED.DAT").replace("\\", "/")
+        u8_paths_palette = str(u8_static_manual_path / "U8PAL.PAL").replace("\\", "/")
+        u8_paths_typeflag = str(u8_static_manual_path / "TYPEFLAG.DAT").replace("\\", "/")
+        u8_paths_gumpage = str(u8_static_manual_path / "GUMPAGE.DAT").replace("\\", "/")
+        u8_paths_xformpal = str(u8_static_manual_path / "XFORMPAL.DAT").replace("\\", "/")
+        u8_paths_ecredits = str(u8_static_manual_path / "ECREDITS.DAT").replace("\\", "/")
+        u8_paths_quotes = str(u8_static_manual_path / "QUOTES.DAT").replace("\\", "/")
+        u8_paths_shapes_flx = str(u8_static_manual_path / "U8SHAPES.FLX").replace("\\", "/")
+        u8_paths_fonts_flx = str(u8_static_manual_path / "U8FONTS.FLX").replace("\\", "/")
+        u8_paths_gumps_flx = str(u8_static_manual_path / "U8GUMPS.FLX").replace("\\", "/")
+    else:
+        u8_paths_fixed = "FIXED.DAT"
+        u8_paths_palette = "U8PAL.PAL"
+        u8_paths_typeflag = "TYPEFLAG.DAT"
+        u8_paths_gumpage = "GUMPAGE.DAT"
+        u8_paths_xformpal = "XFORMPAL.DAT"
+        u8_paths_ecredits = "ECREDITS.DAT"
+        u8_paths_quotes = "QUOTES.DAT"
+        u8_paths_shapes_flx = "U8SHAPES.FLX"
+        u8_paths_fonts_flx = "U8FONTS.FLX"
+        u8_paths_gumps_flx = "U8GUMPS.FLX"
+
+    def _u7_section_from_manual(static_path: str, variant: str) -> list[str]:
+        static_norm = static_path.replace("\\", "/")
+        static_p = Path(static_norm)
+        base_guess = ""
+        if static_p.name.upper() == "STATIC" and static_p.parent != static_p:
+            base_guess = str(static_p.parent).replace("\\", "/")
+        section_name = "u7bg" if variant == "blackgate" else "u7si"
+        return [
+            "",
+            f"[{section_name}.game]",
+            f'base     = "{base_guess}"',
+            f'variant  = "{variant}"',
+            "",
+            f"[{section_name}.paths]",
+            f'static   = "{static_norm}"',
+            f'shapes   = "{static_norm}/SHAPES.VGA"',
+            f'palette  = "{static_norm}/PALETTES.FLX"',
+        ]
+
     lines = [
         "# titan.toml \u2014 created by `titan setup`",
-        "[game]",
+        "[u8.game]",
         f'base     = "{base_toml}"',
         f'language = "{lang}"',
         "",
-        "[paths]",
-        'fixed     = "FIXED.DAT"',
-        'palette   = "U8PAL.PAL"',
-        'typeflag  = "TYPEFLAG.DAT"',
-        'gumpage   = "GUMPAGE.DAT"',
-        'xformpal  = "XFORMPAL.DAT"',
-        'ecredits  = "ECREDITS.DAT"',
-        'quotes    = "QUOTES.DAT"',
+        "[u8.paths]",
+        f'fixed     = "{u8_paths_fixed}"',
+        f'palette   = "{u8_paths_palette}"',
+        f'typeflag  = "{u8_paths_typeflag}"',
+        f'gumpage   = "{u8_paths_gumpage}"',
+        f'xformpal  = "{u8_paths_xformpal}"',
+        f'ecredits  = "{u8_paths_ecredits}"',
+        f'quotes    = "{u8_paths_quotes}"',
         "",
-        'u8shapes  = "U8SHAPES.FLX"',
-        'u8fonts   = "U8FONTS.FLX"',
-        'u8gumps   = "U8GUMPS.FLX"',
+        f'u8shapes  = "{u8_paths_shapes_flx}"',
+        f'u8fonts   = "{u8_paths_fonts_flx}"',
+        f'u8gumps   = "{u8_paths_gumps_flx}"',
+        f'usecode   = "{u8_usecode_path}"',
         "",
         "# Pre-extracted directories (relative to where you run titan)",
         'shapes    = "shapes/"',
@@ -592,6 +807,36 @@ def cmd_setup(args: SimpleNamespace) -> int:
     else:
         lines.append(f'nonfixed  = "{nonfixed_value}"')
 
+    if manual_u7bg_static:
+        lines += _u7_section_from_manual(manual_u7bg_static, "blackgate")
+    elif u7bg_base:
+        lines += [
+            "",
+            "[u7bg.game]",
+            f'base     = "{u7bg_base}"',
+            'variant  = "blackgate"',
+            "",
+            "[u7bg.paths]",
+            'static   = "STATIC/"',
+            'shapes   = "STATIC/SHAPES.VGA"',
+            'palette  = "STATIC/PALETTES.FLX"',
+        ]
+
+    if manual_u7si_static:
+        lines += _u7_section_from_manual(manual_u7si_static, "serpentisle")
+    elif u7si_base:
+        lines += [
+            "",
+            "[u7si.game]",
+            f'base     = "{u7si_base}"',
+            'variant  = "serpentisle"',
+            "",
+            "[u7si.paths]",
+            'static   = "STATIC/"',
+            'shapes   = "STATIC/SHAPES.VGA"',
+            'palette  = "STATIC/PALETTES.FLX"',
+        ]
+
     toml_path = Path.cwd() / "titan.toml"
     toml_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"\n  Created: {toml_path.absolute()}")
@@ -599,9 +844,12 @@ def cmd_setup(args: SimpleNamespace) -> int:
     # -- Optional extraction ---------------------------------------
     ans = input("\nExtract shapes/ and globs/ now? [Y/n] ").strip().lower()
     if ans not in ("n", "no"):
-        static_dir = (
-            (Path(base) / lang / "STATIC") if lang else Path(base)
-        )
+        if manual_u8_static:
+            static_dir = Path(manual_u8_static)
+        else:
+            static_dir = (
+                (Path(base) / lang / "STATIC") if lang else Path(base)
+            )
         for flx, out in [("U8SHAPES.FLX", "shapes/"), ("GLOB.FLX", "globs/")]:
             src = static_dir / flx
             if src.exists():
@@ -737,9 +985,11 @@ def config_cmd(
 
 from titan.u8.cli import u8_app  # noqa: E402
 from titan.u7.cli import u7_app  # noqa: E402
+from titan.dialogue.cli import dialogue_app  # noqa: E402
 
 app.add_typer(u8_app)
 app.add_typer(u7_app)
+app.add_typer(dialogue_app)
 
 
 # ============================================================================
@@ -786,3 +1036,7 @@ def main() -> int:
     """CLI entry point."""
     app()
     return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

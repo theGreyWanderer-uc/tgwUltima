@@ -1,0 +1,212 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_LOGBOOK2.json",
+  "file": "U8P_LOGBOOK2",
+  "behavior_summary": [
+    "Runs a scripted multi-stage cutscene (an arrest/evidence scene) that freezes the player, plays scene music, spawns multiple NPCs and evidence items, positions/teleports them, sequences timed helper processes and delays, plays lines of dialog (barks), checks NPC survival to branch dialog/flow, manages a fade transition, and records that the scene has been executed so it will not run again."
+  ],
+  "notable_control_flow": [
+    "U8P_LOGBOOK2::0080 sets avatar into stasis immediately to prevent player input during the scene.",
+    "It starts scene music (playMusic) and spawns an internal choreography helper (U8P_LOGBOOK2::0ADB) to drive timed actions.",
+    "Creates multiple Item and Npc instances (Item::create, Npc::create), then places them with Item::pop and Npc::teleport while setting status bits (Item::orStatus) to control persistence/behavior.",
+    "After placing NPCs the routine repeatedly spawns helper/METHOD and FREE processes (METHOD::15E7, METHOD::091C, FREE::* family) as timers/animation schedulers, using imply/wait idioms to sequence.",
+    "Throughout the sequence it issues many Item::bark calls to deliver dialogue, and uses Npc::isDead checks to branch dialog and subsequent actions depending on which NPCs survive.",
+    "It calls FadeFromBlack at the appropriate time to reveal the scene, and at the end writes the global flag secondexecution to prevent replaying the scene in the future."
+  ],
+  "open_questions": [
+    "Exact trigger/entry condition semantics: whether the event is invoked by using a logbook item, entering a trigger area, or another interaction (inferred to be a logbook/trigger).",
+    "Precise meanings and parameter mappings for helper spawn functions (METHOD::15E7, METHOD::091C, FREE::2A56 and other FREE::*): these appear to be timers/animation schedulers but their exact effects are unclear.",
+    "Exact mapping of Item::pop and Npc::teleport parameters (which bytes correspond to tile, stack, orientation, or named markers).",
+    "Which specific NPC types and item shapes are created (only inferred from ID usage; exact type names are not present in the disassembly summary).",
+    "Detailed branching conditions around Npc::isDead checks (which narrative branches occur for each possible combination of NPC deaths)."
+  ],
+  "main_function": {
+    "name": "U8P_LOGBOOK2::0080",
+    "execution_form": "process",
+    "purpose": "Orchestrate a scripted arrest/evidence cutscene: freeze the avatar, play music, spawn and place NPCs and items, schedule timed helper processes and animations, run dialogue, conditionally branch on NPC deaths, fade into the scene, and mark the scene as executed to prevent replay.",
+    "entry_conditions": [
+      "Invoked by the game when the associated logbook/trigger is activated (appears when the player interacts with or activates the logbook/trigger).",
+      "Function runs as a scene/process rather than a pure callback; it spawns sub-processes and sequences timed waits."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_LOGBOOK2::0080",
+      "kind": "main",
+      "role": "Main scene process that coordinates the entire cutscene/arrest/evidence sequence.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_LOGBOOK2::0ADB",
+      "kind": "helper",
+      "role": "Spawned choreography/timing helper used by the main routine to pace animations and actions early in the scene (exact behavior in its own function).",
+      "confidence": "medium"
+    },
+    {
+      "name": "LOGBOOK4::10DD",
+      "kind": "extern",
+      "role": "External/logbook helper script spawned to handle a sub-scene or related behavior.",
+      "confidence": "medium"
+    },
+    {
+      "name": "LOGBOOK4::1196",
+      "kind": "extern",
+      "role": "Another external helper script spawned for coordinated sub-behaviors related to this logbook sequence.",
+      "confidence": "medium"
+    },
+    {
+      "name": "METHOD::15E7",
+      "kind": "extern",
+      "role": "Repeatedly spawned method/process that likely drives NPC post-teleport animation or movement scheduling.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_LOGBOOK2::0080",
+        "callee": "U8P_LOGBOOK2::0ADB",
+        "purpose": "Spawn a local choreography/timing helper to schedule the early sequence of the cutscene.",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_LOGBOOK2::0080",
+        "callee": "U8P_LOGBOOK2::setAvatarInStasis",
+        "purpose": "Freeze the player/avatar to prevent input and movement during the cinematic.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK2::0080",
+        "callee": "playMusic",
+        "purpose": "Start background music appropriate to the scene.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK2::0080",
+        "callee": "Item::create",
+        "purpose": "Create item or evidence objects used in the scene and retain handles for later placement and status changes.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK2::0080",
+        "callee": "Item::pop",
+        "purpose": "Instantiate/place created item graphics/instances at specific coordinates or tiles.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK2::0080",
+        "callee": "Npc::create",
+        "purpose": "Create NPC participants for the arrest/evidence scene and store handles for teleporting and checks.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK2::0080",
+        "callee": "Item::orStatus",
+        "purpose": "Set status bits on created items/NPCs (e.g., persistence, invisibility, special behavior flags).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK2::0080",
+        "callee": "Npc::teleport",
+        "purpose": "Position NPCs at desired map coordinates or named markers with orientation/flags for the scene composition.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK2::0080",
+        "callee": "METHOD::15E7",
+        "purpose": "Spawned repeatedly after teleports to drive NPC animation/movement scheduling.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LOGBOOK2::0080",
+        "callee": "Npc::isDead",
+        "purpose": "Query NPC survival state to branch dialogue and scene progression based on which participants survive.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK2::0080",
+        "callee": "U8P_LOGBOOK2::FadeFromBlack",
+        "purpose": "Reveal the scene to the player by removing the fade overlay during cinematic sequencing.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK2::0080",
+        "callee": "Item::bark",
+        "purpose": "Deliver lines of dialogue for NPCs/items; primary mechanism to convey scene narrative.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK2::0080",
+        "callee": "FREE::2A56",
+        "purpose": "Used as a scheduling/delay or resource spawn function to control timing of later actions in the sequence.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LOGBOOK2::0080",
+        "callee": "FREE::1C19",
+        "purpose": "Spawned utility/timed process likely for visual or timing effects.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LOGBOOK2::0080",
+        "callee": "FREE::1C6D",
+        "purpose": "Spawned utility/timed process likely for visual or timing effects.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LOGBOOK2::0080",
+        "callee": "FREE::29D8",
+        "purpose": "Spawned utility/timed process likely for visual or timing effects.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LOGBOOK2::0080",
+        "callee": "LOGBOOK4::10DD",
+        "purpose": "Spawn an external script to run a related sub-scene or helper routine.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LOGBOOK2::0080",
+        "callee": "LOGBOOK4::1196",
+        "purpose": "Spawn a second external script to coordinate additional sub-scene behavior.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LOGBOOK2::0080",
+        "callee": "METHOD::091C",
+        "purpose": "Generic helper method spawn used to drive animations/timed actions for NPCs with small timing/animation parameters.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": [
+      {
+        "name": "secondexecution",
+        "likely_effect": "Mark that the scene has already run so it will not be executed again.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_LOGBOOK2::0080",
+    "behavior_summary_one_liner": "Runs a scripted multi-stage cutscene (an arrest/evidence scene) that freezes the player, plays scene music, spawns multiple NPCs and evidence items, positions/teleports them, sequences timed helper processes and delays, plays lines of dialog (barks), checks NPC survival to branch dialog/flow, manages a fade transition, and records that the scene has been executed so it will not run again.",
+    "external_call_count": 18,
+    "flag_read_count": 0,
+    "flag_write_count": 1
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

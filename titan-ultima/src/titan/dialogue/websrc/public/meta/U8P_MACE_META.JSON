@@ -1,0 +1,87 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_MACE.json",
+  "file": "U8P_MACE",
+  "behavior_summary": [
+    "Provides the 'U8P_MACE::look' (examine) handler for the mace item. When an actor/process examines the mace, the routine marks item info and sets a process-exclude flag, builds the literal label \"mace \", calls Item::bark to present that label to the examining process, then frees the temporary string and suspends/returns.",
+    "The routine's primary visible effect is to emit the short text 'mace ' to the caller/process that triggered the U8P_MACE::look. The info and process-exclude state writes appear intended to control visibility/context of that message or the item's processing while the message is emitted.",
+    "Return value from Item::bark is captured and passed through an implies/pop sequence before the function suspends; the exact control effect of that value is inferred but not explicit in the snippet."
+  ],
+  "notable_control_flow": [
+    "Sequence: write item info flag -> write process-exclude flag -> allocate/prepare literal string \"mace \" -> push caller/process pointer (BP+06h) and string -> call Item::bark -> free string -> capture retval -> implies/pop on retval -> store temporary -> suspend/return.",
+    "The handler is invoked as an event-driven process (a short-lived process execution context that performs state updates and UI output then suspends)."
+  ],
+  "open_questions": [
+    "What exact info key (numeric id) is being set and what semantic meaning does it carry for this item?",
+    "How precisely does process-exclude affect recipients or processing of the item (scope/temporal effect)?",
+    "What does the captured return value from Item::bark represent and how should the implies/pop result be interpreted in gameplay terms?",
+    "Is BP+06h always the player/avatar process that should receive the bark, or can other processes invoke this U8P_MACE::look handler?",
+    "Are there any side effects on global quest/interaction flags (none observed in this snippet, but full script context may change that)?"
+  ],
+  "main_function": {
+    "name": "U8P_MACE::look",
+    "execution_form": "process",
+    "purpose": "Handle the examine/U8P_MACE::look event for the mace item: set item info and a process-exclude flag, then display the short label 'mace ' to the process that triggered the U8P_MACE::look (via Item::bark), and then suspend/return.",
+    "entry_conditions": [
+      "Event 0 (U8P_MACE::look) — an actor/process examines or inspects the mace, triggering this handler."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_MACE::look",
+      "kind": "main",
+      "role": "Event handler for the mace item's 'U8P_MACE::look' (examine) event.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item-provided routine used to display or emit a short text/sound message tied to an item (here used to present 'mace ' to a target process).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_MACE::look",
+        "callee": "Item::bark",
+        "purpose": "Emit/display the short label/message 'mace ' to the process that examined the item (BP+06h).",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": [
+      {
+        "name": "info",
+        "likely_effect": "Set an item info/state key on the mace before emitting the U8P_MACE::look text (likely marks that info was shown or modifies item metadata/state).",
+        "confidence": "medium"
+      },
+      {
+        "name": "process_exclude",
+        "likely_effect": "Exclude the item or its process from normal processing during this operation, likely to control who receives the bark or to prevent re-entrancy while showing the label.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "ui_feedback",
+    "cleanup",
+    "suspend"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_MACE::MACE::look",
+    "behavior_summary_one_liner": "Provides the 'U8P_MACE::look' (examine) handler for the mace item. When an actor/process examines the mace, the routine marks item info and sets a process-exclude flag, builds the literal label \"mace \", calls Item::bark to present that label to the examining process, then frees the temporary string and suspends/returns.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 2
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

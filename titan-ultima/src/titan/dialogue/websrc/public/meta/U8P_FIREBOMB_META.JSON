@@ -1,0 +1,163 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_FIREBOMB.json",
+  "file": "U8P_FIREBOMB",
+  "behavior_summary": [
+    "This script implements a one-time activation guard for a firebomb item: when the item is hit, it checks an internal quantity/flag (Item::getQ) and, if allowed, marks the item as activated/consumed (Item::setQ(1)) and may spawn a follow-up behavior (spawn METHOD::0676) that likely represents the bomb's explosion/effect.",
+    "Both U8P_FIREBOMB::FIREBOMB::gotHit and U8P_FIREBOMB::FIREBOMB::hit implement the same guard-and-trigger pattern and use the attacker parameter to decide whether to run the spawn: they query Item::isNpc(attacker) and Npc::isDead(attacker) as part of the decision.",
+    "The spawn's return value is captured into a temporary local but otherwise ignored; damage parameter is present in the signature but not used by the visible logic."
+  ],
+  "notable_control_flow": [
+    "Entry on a hit event leads to an early guard check via Item::getQ; if the guard blocks the activation the function returns without side effects.",
+    "If the guard allows activation, Item::setQ(1) is called immediately to prevent further activations (one-time use semantics).",
+    "Attacker-related checks (Item::isNpc and Npc::isDead) determine whether the spawn of METHOD::0676 occurs; exact boolean combination is inferred but the net effect is that only certain attacker states permit triggering.",
+    "Spawn of METHOD::0676 is invoked with a byte flag 0x01 and the firebomb item reference; execution continues after storing the spawn return value into a temp."
+  ],
+  "open_questions": [
+    "Exact semantic meaning of the Q field (Item::Q): is non-zero meaning \"armed\" or \"already triggered\"? The code sets Q=1 to mark state, so the intended initial values and transitions are inferred.",
+    "Precise attacker conditions that permit the spawn: control-flow shows tests for 'isNpc' and 'isDead' but the exact logical combination (AND/OR/negation) is ambiguous from disassembly.",
+    "What METHOD::0676 precisely does: likely explosion/effect animation and damage, but its exact gameplay effects are not present in this script.",
+    "Whether hit and U8P_FIREBOMB::gotHit are invoked from different engine contexts (e.g., melee vs scripted damage) or are duplicates wired to the same event pipeline."
+  ],
+  "main_function": {
+    "name": "U8P_FIREBOMB::gotHit",
+    "execution_form": "process",
+    "purpose": "Handle the firebomb item being struck: guard against repeated activation using the item's Q field and, if conditions about the attacker are satisfied, spawn a follow-up method (likely the explosion/effect) and mark the item as consumed.",
+    "entry_conditions": [
+      "Invoked by the engine on Event 6 'U8P_FIREBOMB::gotHit' when the item is struck.",
+      "Only proceeds past the guard when Item::getQ indicates the item is in the activatable state (inferred); otherwise returns early.",
+      "Requires an attacker parameter (uword) to evaluate attacker-related conditions (Item::isNpc / Npc::isDead)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_FIREBOMB::gotHit",
+      "kind": "main",
+      "role": "Primary hit handler that enforces one-time activation guard and conditionally spawns the firebomb effect.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FIREBOMB::hit",
+      "kind": "helper",
+      "role": "Alternate/duplicate hit handler mirroring U8P_FIREBOMB::gotHit behavior (same guard-and-trigger semantics).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getQ",
+      "kind": "extern",
+      "role": "Read the item's quantity/flag field used here as the one-time activation guard.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::setQ",
+      "kind": "extern",
+      "role": "Write the item's quantity/flag field (set to 1) to mark activation/consumption.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::isNpc",
+      "kind": "extern",
+      "role": "Test whether the attacker reference is an NPC; used to decide spawn eligibility.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::isDead",
+      "kind": "extern",
+      "role": "Test whether the attacker NPC is dead; used as an alternate condition that can permit spawning.",
+      "confidence": "medium"
+    },
+    {
+      "name": "spawn METHOD::0676",
+      "kind": "extern",
+      "role": "Spawn/dispatch a method (called with byte flag 0x01 and the firebomb item) that likely performs the explosion/effect.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_FIREBOMB::gotHit",
+        "callee": "Item::getQ",
+        "purpose": "Check the item's Q/quantity field to decide whether the firebomb can activate (guard against repeated use).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIREBOMB::gotHit",
+        "callee": "Item::setQ",
+        "purpose": "Set the item's Q to 1 to mark it as activated/consumed and prevent further triggers.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIREBOMB::gotHit",
+        "callee": "Item::isNpc",
+        "purpose": "Determine whether the attacker parameter refers to an NPC as part of the conditional logic that decides whether to spawn METHOD::0676.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIREBOMB::gotHit",
+        "callee": "Npc::isDead",
+        "purpose": "Check whether the attacker NPC is dead; used as an additional/alternative condition to permit spawning the effect.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FIREBOMB::gotHit",
+        "callee": "spawn METHOD::0676",
+        "purpose": "Trigger the firebomb's explosion/effect behavior with a flag (0x01) and the firebomb item as arguments; the return value is stored but unused.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIREBOMB::hit",
+        "callee": "Item::getQ",
+        "purpose": "Same as U8P_FIREBOMB::gotHit: guard check for one-time activation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIREBOMB::hit",
+        "callee": "Item::setQ",
+        "purpose": "Same as U8P_FIREBOMB::gotHit: mark item as activated/consumed.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIREBOMB::hit",
+        "callee": "Item::isNpc",
+        "purpose": "Same as U8P_FIREBOMB::gotHit: attacker NPC test for spawn eligibility.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIREBOMB::hit",
+        "callee": "Npc::isDead",
+        "purpose": "Same as U8P_FIREBOMB::gotHit: attacker-dead test used in condition.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FIREBOMB::hit",
+        "callee": "spawn METHOD::0676",
+        "purpose": "Same as U8P_FIREBOMB::gotHit: trigger the explosion/effect.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_FIREBOMB::FIREBOMB::gotHit",
+    "behavior_summary_one_liner": "This script implements a one-time activation guard for a firebomb item: when the item is hit, it checks an internal quantity/flag (Item::getQ) and, if allowed, marks the item as activated/consumed (Item::setQ(1)) and may spawn a follow-up behavior (spawn METHOD::0676) that likely represents the bomb's explosion/effect.",
+    "external_call_count": 10,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

@@ -1,0 +1,114 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_SKULTOSS.json",
+  "file": "U8P_SKULTOSS",
+  "behavior_summary": [
+    "When the SKULTOSS instance 'hatches' it searches the nearby area for world items and forcibly throws eligible items away from the U8P_SKULTOSS::hatch point.",
+    "A vertical threshold is computed from the U8P_SKULTOSS::hatch's Z coordinate (base_z = Item::getZ(U8P_SKULTOSS::hatch) - 0x20); only items with Z > base_z are considered for tossing.",
+    "For each candidate in the search area the script obtains the candidate Z, filters by the threshold, generates randomized components (via urandom and a helper FREE::1A96), and calls Item::hurl on the candidate to impart randomized velocity/offsets.",
+    "This produces an immediate outward-toss animation/physics effect on nearby items when the skull-like creature/item hatches."
+  ],
+  "notable_control_flow": [
+    "Entry on the 'U8P_SKULTOSS::hatch' event triggers immediate execution (no long-lived state retained).",
+    "Compute base_z from the U8P_SKULTOSS::hatch actor's Z, then run an item-iterator over a radius derived from a constant multiplication.",
+    "Per-item branch: if candidate.Z <= base_z then skip; otherwise compute random offsets/components and call Item::hurl(candidate, ...).",
+    "After hurling each qualifying item the loop continues until the search iterator is exhausted, then the handler returns."
+  ],
+  "open_questions": [
+    "Exact numeric interpretation of the search radius (derived from a constant multiplication in the disassembly) and which item types/shapes, if any, are filtered by the iterator tokens.",
+    "Precise semantics and mapping of FREE::1A96 (what kind of signed/normalized component it returns) and how its inputs map to hurl's intended velocity/angle axes.",
+    "Exact parameter ordering and units expected by Item::hurl(...) (x/y/z, force/angle mapping is inferred but not explicit).",
+    "Whether some categories of items (e.g., anchored/world-fixed objects) are implicitly excluded by the iterator or by Item::hurl failure modes."
+  ],
+  "main_function": {
+    "name": "U8P_SKULTOSS::hatch",
+    "execution_form": "process",
+    "purpose": "On U8P_SKULTOSS::hatch, scan the immediate area and forcibly throw nearby items that are above a computed vertical threshold to create a randomized toss effect.",
+    "entry_conditions": [
+      "Event 7 (U8P_SKULTOSS::hatch) — called when the SKULTOSS instance hatches or triggers its U8P_SKULTOSS::hatch behavior."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_SKULTOSS::hatch",
+      "kind": "main",
+      "role": "Event handler that implements the toss-on-U8P_SKULTOSS::hatch behavior for a SKULTOSS object.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getZ",
+      "kind": "extern",
+      "role": "Engine API to read an item's vertical (Z) coordinate; used to compute threshold and inspect candidates.",
+      "confidence": "high"
+    },
+    {
+      "name": "urandom",
+      "kind": "extern",
+      "role": "Random-number provider used to add variability to toss parameters.",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::1A96",
+      "kind": "extern",
+      "role": "Helper routine that transforms inputs into a signed/normalized toss component (inferred).",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::hurl",
+      "kind": "extern",
+      "role": "Engine API that applies a throw/hurl effect to an item instance (imparts motion/offsets).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_SKULTOSS::hatch",
+        "callee": "Item::getZ",
+        "purpose": "Read the U8P_SKULTOSS::hatch actor Z to compute base_z and read each candidate's Z to decide eligibility for tossing.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SKULTOSS::hatch",
+        "callee": "urandom",
+        "purpose": "Generate small random values used to vary the hurl parameters (adds unpredictability to push strength/direction).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SKULTOSS::hatch",
+        "callee": "FREE::1A96",
+        "purpose": "Compute/convert bytes/inputs into a signed component used as one or more hurl parameters (inferred mapping to velocity/angle components).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_SKULTOSS::hatch",
+        "callee": "Item::hurl",
+        "purpose": "Apply the computed/randomized throw to the qualifying candidate item so it visibly/tactically gets tossed from the U8P_SKULTOSS::hatch point.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_SKULTOSS::hatch",
+    "behavior_summary_one_liner": "When the SKULTOSS instance 'hatches' it searches the nearby area for world items and forcibly throws eligible items away from the U8P_SKULTOSS::hatch point.",
+    "external_call_count": 4,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

@@ -1,0 +1,282 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_BEREN.json",
+  "file": "U8P_BEREN",
+  "behavior_summary": [
+    "Controls NPC 'Beren' gameplay behavior: reactions to spell-casting, theft, player 'look' and 'use' interactions, timed scheduling, and fast-area triggers.",
+    "BEREN::cast dispatches either local guards (CALGUARD::0080) when on a specific map (0x29 / 41) or sets a global anger state (berenMad) and invokes spell-combat handling (SPELCMBT::084D) otherwise.",
+    "BEREN::AvatarStoleSomething implements an escalating theft-response: validate vertical range (Item::getZ), free stored references (FREE::2A56), warn the player (Item::bark) while incrementing berenWarned, apply stasis (setAvatarInStasis), set Beren's target (Npc::setTarget) and spawn guard/movement/combat routines to engage the thief when warnings escalate.",
+    "BEREN::look composes contextual description barks based on berenName, berenJob, and Npc::isDead to present appropriate flavor text.",
+    "BEREN::schedule toggles/maintains berenSchedule and launches timed behavior methods (METHOD::143A / METHOD::133F / METHOD::0BCF) depending on map and pyrosFree.",
+    "Fast-area handlers (enterFastArea, leaveFastArea) set up immediate targeting or movement toward the avatar and perform cleanup (FREE::2A56) when the avatar leaves."
+  ],
+  "notable_control_flow": [
+    "Map-conditional branching: many behaviors branch on Npc::getMap() (notably BEREN::cast and theft responses), producing different spawns and flag writes depending on location.",
+    "Escalation loop in BEREN::AvatarStoleSomething uses a berenWarned counter to change outputs and actions (warnings → stasis → setTarget → spawn guards → attack).",
+    "Spawn-and-suspend pattern: multiple handlers spawn external/process routines (CALGUARD::0080, SPELCMBT::084D, METHOD::* , MOVE::0080) and then suspend until those processes complete, ensuring synchronous reaction sequences.",
+    "Fast-area entry triggers immediate short-circuit behavior (setTarget or spawn MOVE) when certain globals (avatarMasterSorcerer, inDaemonScene) and map conditions are met."
+  ],
+  "open_questions": [
+    "Exact numeric semantics of the uword parameter to BEREN::cast — inferred as a spell id or caster action code but not provable from disassembly alone.",
+    "Precise effects and parameter contracts of spawned METHOD::* routines (METHOD::091C, METHOD::0BCF, METHOD::143A, METHOD::133F) — their internal behaviors are inferred (movement, timed behavior, scheduler) but not confirmed.",
+    "Meaning of some numeric constants pushed into schedule() spawn calls and exact timing semantics used to set berenSchedule.",
+    "Whether some global flags (pyrosFree, avatarMasterSorcerer) are shared game-wide or are scene-specific toggles in this mod's environment."
+  ],
+  "main_function": {
+    "name": "U8P_BEREN::cast",
+    "execution_form": "process",
+    "purpose": "Handle Beren being the source of a 'U8P_BEREN::cast' event: choose a location-appropriate reaction (spawn guards when on map 0x29, otherwise mark Beren angry and route to spell combat), coordinate spawned processes and wait for their completion.",
+    "entry_conditions": [
+      "Event 11 (U8P_BEREN::cast) delivered by the engine to Beren",
+      "Called with a uword parameter (likely a spell id / action code) pushed by the event dispatch"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_BEREN::cast",
+      "kind": "main",
+      "role": "Entry for handling U8P_BEREN::cast/spell events for Beren; decides guard vs spell-combat behavior and sets 'berenMad' when appropriate.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BEREN::AvatarStoleSomething",
+      "kind": "helper",
+      "role": "Respond to avatar/item theft: validates theft, issues escalating warnings using berenWarned, applies stasis, sets targets, and spawns guard/movement/combat processes.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BEREN::look",
+      "kind": "helper",
+      "role": "Produce descriptive bark text when the player 'looks' at Beren using berenName/berenJob and Npc::isDead.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BEREN::schedule",
+      "kind": "helper",
+      "role": "Periodic scheduler toggling berenSchedule and spawning timed behavior methods according to map and pyrosFree.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_BEREN::enterFastArea",
+      "kind": "helper",
+      "role": "Fast-area entry trigger: may set Beren's target to the avatar or spawn MOVE to approach depending on avatarMasterSorcerer, inDaemonScene and map checks.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_BEREN::leaveFastArea",
+      "kind": "helper",
+      "role": "Fast-area exit trigger: cleanup/unregister a stored reference via FREE::2A56.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_BEREN::use",
+      "kind": "helper",
+      "role": "Handle player 'use' interactions: different behavior when dead vs alive, toggles gumps, and spawns contextual reactions based on berenMad and acolyteKilled.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Npc::getMap",
+      "kind": "extern",
+      "role": "Engine function returning NPC's current map id; used to branch location-specific behavior.",
+      "confidence": "high"
+    },
+    {
+      "name": "CALGUARD::0080",
+      "kind": "extern",
+      "role": "Spawned guard/attack routine used to dispatch guards in response to casts or theft.",
+      "confidence": "high"
+    },
+    {
+      "name": "SPELCMBT::084D",
+      "kind": "extern",
+      "role": "Spell-combat handler invoked for off-map casts to resolve spell effects/combats.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_BEREN::cast",
+        "callee": "U8P_BEREN::spawn/CALGUARD::0080",
+        "purpose": "When Npc::getMap() == 0x29 spawn guard routine to respond to the U8P_BEREN::cast and suspend until it finishes.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEREN::cast",
+        "callee": "U8P_BEREN::spawn/SPELCMBT::084D",
+        "purpose": "When not on map 0x29, set berenMad and spawn spell-combat resolution passing the original uword parameter, then suspend until completion.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEREN::AvatarStoleSomething",
+        "callee": "U8P_BEREN::Npc::setTarget",
+        "purpose": "Set Beren's combat/interest target to the avatar when theft is detected or escalates.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEREN::AvatarStoleSomething",
+        "callee": "U8P_BEREN::spawn/METHOD::091C",
+        "purpose": "After computing direction with Item::getDirToItem, spawn a movement/attack method toward the stolen item/actor.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BEREN::enterFastArea",
+        "callee": "U8P_BEREN::spawn/MOVE::0080",
+        "purpose": "When conditions met (not inDaemonScene and map match), approach the avatar by spawning MOVE::0080.",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_BEREN::cast",
+        "callee": "Npc::getMap",
+        "purpose": "Query Beren's map id to decide whether to spawn CALGUARD or SPELCMBT.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEREN::cast",
+        "callee": "CALGUARD::0080",
+        "purpose": "Spawned as the guard response when U8P_BEREN::cast happens on map 0x29.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEREN::cast",
+        "callee": "SPELCMBT::084D",
+        "purpose": "Spawned to handle spell-combat when U8P_BEREN::cast occurs off-map; receives pid and the uword param.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEREN::AvatarStoleSomething",
+        "callee": "Item::getZ",
+        "purpose": "Check Z coordinate of item to validate theft vertical range before escalating.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEREN::AvatarStoleSomething",
+        "callee": "FREE::2A56",
+        "purpose": "Free or unregister a stored reference related to the theft (cleanup) before pursuing escalation actions.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEREN::AvatarStoleSomething",
+        "callee": "Item::getDirToItem",
+        "purpose": "Compute direction from Beren to the item/actor to pass to a movement/attack method.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEREN::AvatarStoleSomething",
+        "callee": "U8P_BEREN::setAvatarInStasis",
+        "purpose": "Temporarily freeze the avatar as part of a theft punishment/escalation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEREN::AvatarStoleSomething",
+        "callee": "Item::bark",
+        "purpose": "Emit warning/threat text to the player; used multiple times with escalating messages determined by berenWarned.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEREN::use",
+        "callee": "Item::getStatus",
+        "purpose": "Read item/NPC status bits to decide whether to open/close a gump (UI) when player uses Beren.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BEREN::use",
+        "callee": "Item::openGump",
+        "purpose": "Open a UI gump for interacting with Beren when conditions match.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BEREN::use",
+        "callee": "Item::closeGump",
+        "purpose": "Close Beren's UI gump when the use event indicates it should.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "pyrosFree",
+        "likely_effect": "Controls which scheduled behavior schedule() will run; read to pick between METHOD spawn variants.",
+        "confidence": "medium"
+      },
+      {
+        "name": "avatarMasterSorcerer",
+        "likely_effect": "If set, causes enterFastArea to immediately set Beren's target to the avatar (gives avatar privileged status).",
+        "confidence": "medium"
+      },
+      {
+        "name": "inDaemonScene",
+        "likely_effect": "Suppresses certain fast-area behaviors when true (enterFastArea short-circuits movement in daemon scenes).",
+        "confidence": "medium"
+      },
+      {
+        "name": "berenMad",
+        "likely_effect": "Read by use() and possibly other behaviors to change Beren's reactions; set by U8P_BEREN::cast when casting off the protected map.",
+        "confidence": "high"
+      },
+      {
+        "name": "acolyteKilled",
+        "likely_effect": "Read by use() to select alternate interaction sequences (different spawn path when an acolyte is dead).",
+        "confidence": "medium"
+      },
+      {
+        "name": "berenName",
+        "likely_effect": "Determines whether 'look' includes the NPC's proper name in the descriptive text.",
+        "confidence": "high"
+      },
+      {
+        "name": "berenJob",
+        "likely_effect": "Determines whether 'look' includes job/title information (Sorcerer/Mage) in the description.",
+        "confidence": "high"
+      },
+      {
+        "name": "berenWarned",
+        "likely_effect": "Tracks how many theft warnings have been issued; read to choose escalation branch in AvatarStoleSomething.",
+        "confidence": "high"
+      },
+      {
+        "name": "berenSchedule",
+        "likely_effect": "Indicates the current scheduled behavior state for Beren; read/checked and updated by schedule().",
+        "confidence": "medium"
+      }
+    ],
+    "writes": [
+      {
+        "name": "berenMad",
+        "likely_effect": "Set (written to a value like 3) when BEREN::cast runs off the protected map to mark Beren as angry and alter future interactions.",
+        "confidence": "high"
+      },
+      {
+        "name": "berenWarned",
+        "likely_effect": "Incremented on theft incidents to record how many warnings the player has received and drive escalation.",
+        "confidence": "high"
+      },
+      {
+        "name": "berenSchedule",
+        "likely_effect": "Toggled/updated by schedule() to reflect which timed sequence is active or to clear that state.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_BEREN::BEREN::cast",
+    "behavior_summary_one_liner": "Controls NPC 'Beren' gameplay behavior: reactions to spell-casting, theft, player 'look' and 'use' interactions, timed scheduling, and fast-area triggers.",
+    "external_call_count": 11,
+    "flag_read_count": 9,
+    "flag_write_count": 3
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

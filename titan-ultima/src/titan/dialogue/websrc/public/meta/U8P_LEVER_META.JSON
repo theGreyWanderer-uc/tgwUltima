@@ -1,0 +1,268 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_LEVER.json",
+  "file": "U8P_LEVER",
+  "behavior_summary": [
+    "This script implements the examine ('U8P_LEVER::look') and activation ('use') behaviors for a lever item used in puzzles and environmental interactions.",
+    "U8P_LEVER::LEVER::look: when a player inspects the lever it reads the lever's frame and barks either \"broken lever \" (for frames that indicate broken states) or \"lever \" otherwise.",
+    "U8P_LEVER::LEVER::use: a multi-state controller. Based on the lever's frame (Item::getFrame) and sometimes its quality (Item::getQuality), the lever performs a wide range of game actions: play sound effects, change frames/qualities of itself and many nearby items, spawn/move platform/slider scripts, pop items/NPCs, configure spawned NPCs, toggle or set puzzle-tracking globals (leverTest0..4, makePlatformAppear), call area/spawn routines (TonysBalls), invert the camera, and trigger helper spawned scripts for delayed/cleanup work.",
+    "The lever acts on groups of environment objects by enumerating item lists filtered by shape or quality so a single lever activation cascades changes across multiple objects."
+  ],
+  "notable_control_flow": [
+    "LEVER::look: simple conditional on Item::getFrame() to choose one of two bark strings and then return.",
+    "LEVER::use: branches on the lever's frame value (stored in local [BP-02h]); each branch implements distinct puzzle/environmental effects. Many branches iterate over returned item lists and apply identical operations (Item::setFrame, Item::setQuality, Item::use, spawning slider scripts).",
+    "Several branches check and toggle global puzzle flags (leverTest0..4) to gate one-time behaviors and to avoid repeating spawns/effects.",
+    "Some branches spawn helper scripts (SLIDER::*, FREE::1C19, METHOD::<id>) and suspend/wait on their return value to serialize multi-step changes (spawn/wait/modify).",
+    "Randomized selection is used (urandom + spawned METHOD) for varied NPC/item variants in spawn branches."
+  ],
+  "open_questions": [
+    "Exact semantic mapping of lever frame values to named states (which exact frame numbers correspond to 'on', 'off', 'broken', 'special puzzle state').",
+    "Precise behavior and effect of TonysBalls (name suggests area effect/spawn but its concrete semantics are inferred).",
+    "Which item shapes and quality values are targeted by each enumeration loop (shape constants and their in-game object types are not present in the excerpt).",
+    "Exact responsibilities and side-effects of spawned METHOD::<id>, SLIDER::<id>, and FREE::1C19 helper scripts (their roles are inferred from call patterns).",
+    "The intended persistence and lifecycle of toggled globals (leverTest0..4, makePlatformAppear): are they intended as permanent puzzle-state flags or temporary session flags?"
+  ],
+  "main_function": {
+    "name": "U8P_LEVER::look",
+    "execution_form": "process",
+    "purpose": "Present an examine/description message for a lever item depending on its current frame: emits 'broken lever ' for broken-state frames or 'lever ' otherwise.",
+    "entry_conditions": [
+      "Event 0 / 'U8P_LEVER::look' — triggered when the player (or relevant actor) inspects/examines the lever"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_LEVER::look",
+      "kind": "main",
+      "role": "Handles the 'U8P_LEVER::look' (examine) interaction: read frame and bark an appropriate description.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_LEVER::use",
+      "kind": "helper",
+      "role": "Handles the 'use' (activate) interaction: multi-branch state machine that manipulates environment, spawns entities/scripts, toggles puzzle flags, and provides audiovisual feedback.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_LEVER::look",
+        "callee": "Item::getFrame",
+        "purpose": "Read the lever's animation/frame/state to decide which examine string to show.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LEVER::look",
+        "callee": "Item::bark",
+        "purpose": "Emit the short examine string ('broken lever ' or 'lever ') to the player/process that looked at the item.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LEVER::use",
+        "callee": "Item::getFrame",
+        "purpose": "Determine the lever's current frame to select the activation branch.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LEVER::use",
+        "callee": "Item::getQuality",
+        "purpose": "Read lever/item quality to decide sub-branches or filter which items to act upon in loops.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LEVER::use",
+        "callee": "U8P_LEVER::playSFX",
+        "purpose": "Play sound effects to provide audio feedback for lever activations and associated actions.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LEVER::use",
+        "callee": "Item::setFrame",
+        "purpose": "Change the lever's and other items' frames to reflect new visual/functional states (open/closed/activated/etc.).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LEVER::use",
+        "callee": "Item::setQuality",
+        "purpose": "Modify item qualities used as secondary state or filters for subsequent operations.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LEVER::use",
+        "callee": "U8P_LEVER::TonysBalls",
+        "purpose": "Invoke an area/spawn/placement routine at coordinates derived from items (inferred to spawn or trigger area effects).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LEVER::use",
+        "callee": "Item::getZ",
+        "purpose": "Retrieve Z coordinate of items used when calling TonysBalls or when positioning pops.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LEVER::use",
+        "callee": "Item::getY",
+        "purpose": "Retrieve Y coordinate of items used when calling TonysBalls or when positioning pops.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LEVER::use",
+        "callee": "Item::getX",
+        "purpose": "Retrieve X coordinate of items used when calling TonysBalls or when positioning pops.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LEVER::use",
+        "callee": "Npc::create",
+        "purpose": "Spawn NPCs as part of certain activation branches.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LEVER::use",
+        "callee": "Item::pop",
+        "purpose": "Create/pop items or NPC instances at world coordinates during spawn branches.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LEVER::use",
+        "callee": "Item::orStatus",
+        "purpose": "Set status bits on spawned items/NPCs to configure initial state immediately after creation.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LEVER::use",
+        "callee": "urandom",
+        "purpose": "Generate random numbers to vary selection of spawned variants or to randomize behavior.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LEVER::use",
+        "callee": "spawn (METHOD::*, SLIDER::*, FREE::*)",
+        "purpose": "Start helper scripts to move sliders/platforms, handle delayed actions, or finalize spawn logic. Code often suspends/waits on their return value.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LEVER::use",
+        "callee": "Camera::invertScreen",
+        "purpose": "Toggle or apply a screen invert visual effect for certain branches.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LEVER::use",
+        "callee": "Npc::setTarget",
+        "purpose": "Set the AI target of spawned NPCs so they act immediately (attack player, roam, etc.).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LEVER::use",
+        "callee": "Npc::setAlignment",
+        "purpose": "Assign faction/alignment to spawned NPCs.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LEVER::use",
+        "callee": "Npc::setInCombat",
+        "purpose": "Mark spawned NPCs as in a combat state when relevant.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LEVER::use",
+        "callee": "Item::use",
+        "purpose": "Cascade activation to other nearby items by calling their use handlers within loops.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LEVER::use",
+        "callee": "AccumulateIntelligence",
+        "purpose": "Apply a global/stat bonus (+10 inferred) as a side-effect in at least one branch.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "makePlatformAppear (global [0244 01])",
+        "likely_effect": "Gates whether a platform-appearance branch will run; used as a toggle/test to decide platform-spawning behavior.",
+        "confidence": "high"
+      },
+      {
+        "name": "leverTest0 (global [0231])",
+        "likely_effect": "Used as a puzzle-state marker to prevent or allow a one-time sub-behavior; read to conditionally invoke LEVER::0B34-style logic.",
+        "confidence": "medium"
+      },
+      {
+        "name": "leverTest1 (global [0232])",
+        "likely_effect": "Same class as leverTest0: a per-subpuzzle gate for additional behavior.",
+        "confidence": "medium"
+      },
+      {
+        "name": "leverTest2 (global [0233])",
+        "likely_effect": "Same class as leverTest0: a per-subpuzzle gate for additional behavior.",
+        "confidence": "medium"
+      },
+      {
+        "name": "leverTest3 (global [0234])",
+        "likely_effect": "Same class as leverTest0: a per-subpuzzle gate for additional behavior.",
+        "confidence": "medium"
+      },
+      {
+        "name": "leverTest4 (global [0235])",
+        "likely_effect": "Same class as leverTest0: a per-subpuzzle gate for additional behavior.",
+        "confidence": "medium"
+      }
+    ],
+    "writes": [
+      {
+        "name": "makePlatformAppear (global [0244 01])",
+        "likely_effect": "Set to enable platform appearance in some branches (acts as persistent toggle for platform-related puzzle state).",
+        "confidence": "high"
+      },
+      {
+        "name": "leverTest0 (global [0231])",
+        "likely_effect": "Toggled/cleared/set to record that a lever sub-test/puzzle step has been activated or completed.",
+        "confidence": "medium"
+      },
+      {
+        "name": "leverTest1 (global [0232])",
+        "likely_effect": "Toggled/cleared/set to record that a lever sub-test/puzzle step has been activated or completed.",
+        "confidence": "medium"
+      },
+      {
+        "name": "leverTest2 (global [0233])",
+        "likely_effect": "Toggled/cleared/set to record that a lever sub-test/puzzle step has been activated or completed.",
+        "confidence": "medium"
+      },
+      {
+        "name": "leverTest3 (global [0234])",
+        "likely_effect": "Toggled/cleared/set to record that a lever sub-test/puzzle step has been activated or completed.",
+        "confidence": "medium"
+      },
+      {
+        "name": "leverTest4 (global [0235])",
+        "likely_effect": "Toggled/cleared/set to record that a lever sub-test/puzzle step has been activated or completed.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_LEVER::LEVER::look",
+    "behavior_summary_one_liner": "This script implements the examine ('U8P_LEVER::look') and activation ('use') behaviors for a lever item used in puzzles and environmental interactions.",
+    "external_call_count": 22,
+    "flag_read_count": 6,
+    "flag_write_count": 6
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

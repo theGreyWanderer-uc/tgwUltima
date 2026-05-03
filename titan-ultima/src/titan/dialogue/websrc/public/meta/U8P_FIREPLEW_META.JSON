@@ -1,0 +1,113 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_FIREPLEW.json",
+  "file": "U8P_FIREPLEW",
+  "behavior_summary": [
+    "Provides the in-game description for a fireplace when a player/actor 'looks' at it by invoking the item's bark/description routine with the string \"fireplace \".",
+    "Starts a looping ambient fireplace sound when an actor enters the fireplace's fast/trigger area.",
+    "Stops the fireplace ambient sound when the actor leaves the fast/trigger area.",
+    "Uses a consistent object/context parameter (BP+06h) to identify the fireplace instance for both description and sound control."
+  ],
+  "notable_control_flow": [
+    "U8P_FIREPLEW::look: set item/context (set info / process exclude inferred), call Item::bark(\"fireplace \", BP+06h), capture return, perform an implies/pop sequence, then suspend/return.",
+    "U8P_FIREPLEW::enterFastArea: set item/context (inferred), then call playAmbientSFX with SFX id 0x021B, the object/context, a byte 0x32 (flags/volume), and channel/slot 0x0086 to start looping ambient SFX.",
+    "U8P_FIREPLEW::leaveFastArea: set item/context (inferred), then call stopSFX with SFX id 0x021C and channel/slot 0x0086 to stop the ambient sound."
+  ],
+  "open_questions": [
+    "Is BP+06h always a process id (player PID) or is it the fireplace item instance PID? The code uses it as the object/context for both description and SFX; this is inferred but not explicitly recorded.",
+    "Precise meanings of constants 0x021B and 0x021C — they appear to be SFX identifiers/slots but could be indices into a table or resource handles.",
+    "Exact semantics of the pushed 0x32 argument to playAmbientSFX (volume, priority, flags?) and of 0x0086 (channel/slot id or object-context) remain inferred.",
+    "The 'set info / process exclude' operations are inferred engine operations; exact info key 0x210 usage (if present elsewhere) and their side-effects are not fully specified here."
+  ],
+  "main_function": {
+    "name": "U8P_FIREPLEW::look",
+    "execution_form": "process",
+    "purpose": "Handle the player's 'U8P_FIREPLEW::look' action on the fireplace: set up the fireplace context and invoke the item's bark routine to present the text \"fireplace \".",
+    "entry_conditions": [
+      "Event 0 (U8P_FIREPLEW::look) — triggered when the player/actor examines or looks at the fireplace"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_FIREPLEW::look",
+      "kind": "main",
+      "role": "Primary event handler for the 'U8P_FIREPLEW::look' event; produces the fireplace description via Item::bark.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FIREPLEW::enterFastArea",
+      "kind": "helper",
+      "role": "Fast-area entry handler; starts ambient fireplace SFX (calls playAmbientSFX) when an actor enters the fireplace trigger region.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FIREPLEW::leaveFastArea",
+      "kind": "helper",
+      "role": "Fast-area exit handler; stops the fireplace ambient SFX (calls stopSFX) when an actor leaves the fireplace trigger region.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine used to display or emit a short descriptive text for an item/process; called by U8P_FIREPLEW::look to show \"fireplace \".",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FIREPLEW::playAmbientSFX",
+      "kind": "extern",
+      "role": "Engine audio routine to start/play an ambient/looping sound effect associated with an object/context.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FIREPLEW::stopSFX",
+      "kind": "extern",
+      "role": "Engine audio routine to stop a previously started sound effect or channel.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_FIREPLEW::look",
+        "callee": "Item::bark",
+        "purpose": "Ask the item/process identified by BP+06h to emit the short description text \"fireplace \".",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIREPLEW::enterFastArea",
+        "callee": "U8P_FIREPLEW::playAmbientSFX",
+        "purpose": "Start a looping/ambient fireplace sound using SFX id 0x021B, the fireplace object/context, an argument 0x32 (likely volume/flags), and channel/slot 0x0086.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FIREPLEW::leaveFastArea",
+        "callee": "U8P_FIREPLEW::stopSFX",
+        "purpose": "Stop the fireplace ambient sound using SFX id 0x021C and channel/slot 0x0086.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "ambient-sound",
+    "description",
+    "cleanup"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_FIREPLEW::look",
+    "behavior_summary_one_liner": "Provides the in-game description for a fireplace when a player/actor 'looks' at it by invoking the item's bark/description routine with the string \"fireplace \".",
+    "external_call_count": 3,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

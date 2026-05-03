@@ -1,0 +1,241 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_GLOBSWAP.json",
+  "file": "U8P_GLOBSWAP",
+  "behavior_summary": [
+    "U8P_GLOBSWAP::enterFastArea is an enter-fast-area trigger handler that runs when an actor enters a region; it scans nearby items and performs two main gameplay actions: a cleanup pass that removes specific unwanted items on the same coarse tile, and an egg-swap/respawn pass that matches egg-like items and spawns replacement items.",
+    "Cleanup pass: iterate items in the provided area/list, compare coarse tile positions (X/Y masked with 0x7E00), skip items already marked with status bit 0x0080, and destroy items whose type equals 0x49 or 2.",
+    "Egg-swap/respawn pass: find egg-candidate items (filtered by Item::getUnkEggType compared to a constant that depends on global flag postEarthQuake), compute egg identifiers via Egg::getEggId, match pairs by bitwise AND of egg IDs, create a replacement Item::create preserving type and frame, Item::pop it at a computed (x,y) and at z+1, and mark the spawned item by ORing status bit 0x0080 so it won't be reprocessed."
+  ],
+  "notable_control_flow": [
+    "Handler sets iteration context (engine 'set info') and uses 'process exclude' to avoid processing the triggering actor/item.",
+    "Two distinct passes over area items: first a destruction/cleanup loop, then a nested search/compare loop to find egg matches and spawn replacements.",
+    "Branch on global flag postEarthQuake selects which egg-type constant is used for egg-candidate filtering (observed constants 0x2F vs 0x30).",
+    "Per-match behavior uses a found_flag to avoid duplicate spawns and only proceeds to create/pop a new item when a matching pair is identified."
+  ],
+  "open_questions": [
+    "What exact gameplay meaning do the type constants 0x49 and 2 have (specific item identities)?",
+    "What concrete semantics does status bit 0x0080 carry beyond 'marked to skip' (e.g., temporary spawn marker, persistent flag)?",
+    "What does Item::getUnkEggType return in domain terms (egg family, breed, or UI subtype) and what do the constants 0x2F / 0x30 represent?",
+    "Is the parameter at [BP+06h] strictly an item-list pointer, an area descriptor, or a combined iteration context (engine-specific)?",
+    "Are there any additional side effects (messages, animations) tied to the create/pop beyond the status bit OR that are not visible in the disassembly?"
+  ],
+  "main_function": {
+    "name": "U8P_GLOBSWAP::enterFastArea",
+    "execution_form": "process",
+    "purpose": "When an actor enters the fast-area trigger, tidy up unwanted items on the same tile and detect/match egg-like items to respawn or swap matching items by creating and popping replacement items while marking them to avoid reprocessing.",
+    "entry_conditions": [
+      "Triggered by an U8P_GLOBSWAP::enterFastArea event when an actor enters the region associated with this handler.",
+      "Requires an area/item-list pointer passed in (used as the iteration base)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_GLOBSWAP::enterFastArea",
+      "kind": "main",
+      "role": "Fast-area enter trigger that performs cleanup and egg-swap/respawn logic",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getX",
+      "kind": "extern",
+      "role": "Read item X coordinate for coarse/fine position comparisons and spawn X computation",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getY",
+      "kind": "extern",
+      "role": "Read item Y coordinate for coarse/fine position comparisons and spawn Y computation",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getZ",
+      "kind": "extern",
+      "role": "Read item Z/layer used to compute spawn layer (commonly source Z + 1)",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getStatus",
+      "kind": "extern",
+      "role": "Return status flags (handler tests bit 0x0080 to skip already-marked items)",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getType",
+      "kind": "extern",
+      "role": "Return item type id; used to identify destructible types and to pass to Item::create",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getFrame",
+      "kind": "extern",
+      "role": "Return item's frame/index to preserve visual appearance when creating replacements",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::destroy",
+      "kind": "extern",
+      "role": "Destroy/remove items found in cleanup pass",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::create",
+      "kind": "extern",
+      "role": "Create a new item instance by type/frame to be later popped into the world",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::pop",
+      "kind": "extern",
+      "role": "Place/pop the created item at computed (x,y,z) coordinates",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::orStatus",
+      "kind": "extern",
+      "role": "OR status bit(s) (notably 0x0080) into an item to mark it",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getUnkEggType",
+      "kind": "extern",
+      "role": "Return an egg-related subtype used to filter egg candidates (compared to constants conditioned on postEarthQuake)",
+      "confidence": "medium"
+    },
+    {
+      "name": "Egg::getEggId",
+      "kind": "extern",
+      "role": "Return an egg identifier used for matching two eggs by bitwise AND",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_GLOBSWAP::set info",
+      "kind": "extern",
+      "role": "Engine/usecode operation to set up iteration/processing context for the fast-area scan",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_GLOBSWAP::process exclude",
+      "kind": "extern",
+      "role": "Engine/usecode operation to exclude the triggering actor/item from iteration",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_GLOBSWAP::enterFastArea",
+        "callee": "U8P_GLOBSWAP::set info",
+        "purpose": "Establish iteration/handler context for scanning area items before loops begin",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GLOBSWAP::enterFastArea",
+        "callee": "U8P_GLOBSWAP::process exclude",
+        "purpose": "Exclude the fast-area trigger's actor/item from being scanned/processed",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GLOBSWAP::enterFastArea",
+        "callee": "Item::getX",
+        "purpose": "Compute coarse (masked) and spawn X coordinates for comparisons and Item::pop",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GLOBSWAP::enterFastArea",
+        "callee": "Item::getY",
+        "purpose": "Compute coarse (masked) and spawn Y coordinates for comparisons and Item::pop",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GLOBSWAP::enterFastArea",
+        "callee": "Item::getZ",
+        "purpose": "Read source Z to determine spawn Z (typically source Z + 1)",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GLOBSWAP::enterFastArea",
+        "callee": "Item::getStatus",
+        "purpose": "Check status flags and skip items already marked (test 0x0080)",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GLOBSWAP::enterFastArea",
+        "callee": "Item::getType",
+        "purpose": "Identify items to destroy (types 0x49 and 2) and to provide type to Item::create",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GLOBSWAP::enterFastArea",
+        "callee": "Item::destroy",
+        "purpose": "Remove items selected by the cleanup pass",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GLOBSWAP::enterFastArea",
+        "callee": "Item::getUnkEggType",
+        "purpose": "Filter egg candidates by comparing returned subtype to a constant (branch depends on postEarthQuake flag)",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GLOBSWAP::enterFastArea",
+        "callee": "Egg::getEggId",
+        "purpose": "Retrieve egg identifier used to test matching pairs (via bitwise AND)",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GLOBSWAP::enterFastArea",
+        "callee": "Item::getFrame",
+        "purpose": "Preserve visual frame when creating replacement items",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GLOBSWAP::enterFastArea",
+        "callee": "Item::create",
+        "purpose": "Create replacement item instance of matched type/frame before popping",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GLOBSWAP::enterFastArea",
+        "callee": "Item::pop",
+        "purpose": "Place the created item in world at computed (x,y,z) coordinates",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GLOBSWAP::enterFastArea",
+        "callee": "Item::orStatus",
+        "purpose": "Set status bit 0x0080 on spawned/created item to mark it (prevent reprocessing)",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "postEarthQuake",
+        "likely_effect": "Select which egg-type constant is used for egg candidate filtering (observed constants 0x2F when 0, 0x30 when 1), altering which eggs are matched/spawned",
+        "confidence": "high"
+      }
+    ],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_GLOBSWAP::enterFastArea",
+    "behavior_summary_one_liner": "U8P_GLOBSWAP::enterFastArea is an enter-fast-area trigger handler that runs when an actor enters a region; it scans nearby items and performs two main gameplay actions: a cleanup pass that removes specific unwanted items on the same coarse tile, and an egg-swap/respawn pass that matches egg-like items and spawns replacement items.",
+    "external_call_count": 14,
+    "flag_read_count": 1,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

@@ -1,0 +1,118 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_KOTHIUS.json",
+  "file": "U8P_KOTHIUS",
+  "behavior_summary": [
+    "This script implements event handlers for the NPC Kothius. For U8P_KOTHIUS::look, use, enterFastArea, leaveFastArea, and cast events it annotates the running process with identity/context for 'Kothius', excludes that process from normal processing, and forwards the interaction to shared handlers (SORCERER::* and SPELCMBT::084D) via spawn.",
+    "The handlers do not implement detailed dialogue, AI or spell logic themselves; they delegate to common engine modules. The spawn return value is captured and used as a condition (via an 'implies'-style op) before the handler suspends.",
+    "cast forwards a spell identifier (uword) along with actor context to SPELCMBT::084D to resolve and execute the spell."
+  ],
+  "notable_control_flow": [
+    "Event handler begins by setting process info (string 'Kothius') and calling a process-exclude operation — acting as a guard/annotation for the spawned routine.",
+    "Each handler pushes caller pid and the actor reference (and in cast the spell id), then performs spawn of an external routine. The spawn return value is used as a conditional ('implies' semantics) and then the handler suspends/returns.",
+    "Handlers are event-driven (U8P_KOTHIUS::look/use/enterFastArea/leaveFastArea/cast) and operate primarily as thin delegators to shared external code."
+  ],
+  "open_questions": [
+    "Exact semantics of the 'process exclude' operation and its long-term effects on the NPC (inferred to prevent further processing but not proven).",
+    "Precise behavior implemented by the referenced SORCERER routines (039C, 05EC, 258C, 25D2) — inferred to be dialogue/AI/greeting/farewell but not shown here.",
+    "Meaning of the spawn return value and how the 'implies' condition affects subsequent game state or control flow in the caller context.",
+    "Whether any global flags elsewhere depend on these handlers completing, since this fragment does not read or write globals."
+  ],
+  "main_function": {
+    "name": "U8P_KOTHIUS::look",
+    "execution_form": "process",
+    "purpose": "Handle the 'U8P_KOTHIUS::look' (examine) interaction directed at NPC Kothius by tagging the process/actor as Kothius, excluding the process, and delegating the detailed behavior to SORCERER::039C.",
+    "entry_conditions": [
+      "Event 0 — invoked when the player/avatar or another actor 'looks at' or examines Kothius."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_KOTHIUS::look",
+      "kind": "main",
+      "role": "Main 'U8P_KOTHIUS::look' event handler: tag process as 'Kothius', exclude process, push pid and actor ref, spawn SORCERER::039C to perform detailed behavior.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_KOTHIUS::use",
+      "kind": "helper",
+      "role": "Handle 'use' event: same tagging/exclusion pattern and spawn SORCERER::05EC to perform activation/interaction.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_KOTHIUS::enterFastArea",
+      "kind": "helper",
+      "role": "Handle fast-area entry: tag/exclude and spawn SORCERER::258C to perform fast-area entry behavior (greeting/trigger).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_KOTHIUS::leaveFastArea",
+      "kind": "helper",
+      "role": "Handle fast-area exit: tag/exclude and spawn SORCERER::25D2 for exit behavior (farewell/cleanup).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_KOTHIUS::cast",
+      "kind": "helper",
+      "role": "Handle 'cast' event (uword): tag/exclude, push pid, push spell id, push actor ref, and spawn SPELCMBT::084D to resolve/execute the spell.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_KOTHIUS::look",
+        "callee": "SORCERER::039C",
+        "purpose": "Perform NPC-specific 'U8P_KOTHIUS::look' interaction (dialogue/animation/behavior). The handler only prepares context and delegates the work.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KOTHIUS::use",
+        "callee": "SORCERER::05EC",
+        "purpose": "Perform NPC-specific 'use' interaction/activation behavior. Delegated by the use handler.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KOTHIUS::enterFastArea",
+        "callee": "SORCERER::258C",
+        "purpose": "Handle entry into a fast trigger area for the NPC (greeting/trigger effects or AI change).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KOTHIUS::leaveFastArea",
+        "callee": "SORCERER::25D2",
+        "purpose": "Handle leaving a fast trigger area for the NPC (farewell/cleanup or AI revert).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KOTHIUS::cast",
+        "callee": "SPELCMBT::084D",
+        "purpose": "Resolve and execute a spell cast directed at or by the NPC using the supplied spell id and context.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_KOTHIUS::look",
+    "behavior_summary_one_liner": "This script implements event handlers for the NPC Kothius. For U8P_KOTHIUS::look, use, enterFastArea, leaveFastArea, and cast events it annotates the running process with identity/context for 'Kothius', excludes that process from normal processing, and forwards the interaction to shared handlers (SORCERER::* and SPELCMBT::084D) via spawn.",
+    "external_call_count": 5,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

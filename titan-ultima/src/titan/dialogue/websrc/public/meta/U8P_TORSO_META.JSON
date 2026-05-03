@@ -1,0 +1,89 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_TORSO.json",
+  "file": "U8P_TORSO",
+  "behavior_summary": [
+    "Handles the 'U8P_TORSO::hit' event (Event 5) for the TORSO object: when the torso is U8P_TORSO::hit it sets up process/type filters and queries how many matching processes exist for the target entity.",
+    "If the query returns zero the handler does nothing further; if the query returns non-zero it spawns a BODYPART process (BODYPART::0431) for that same entity, likely to trigger a body-part-specific reaction or animation.",
+    "The second parameter passed into the event (likely U8P_TORSO::hit/damage info) is present but not used in the control flow observed; the decision is driven solely by whether matching processes exist."
+  ],
+  "notable_control_flow": [
+    "U8P_TORSO::hit executes in response to a U8P_TORSO::hit trigger (Event 5).",
+    "It configures process/ info filters (observed pushed constants 0x20B and 0x20A and 'process exclude' semantics) for the subject entity before the query.",
+    "Calls Kernel::getNumProcesses(entity, ProcessType/filter) and inspects the integer return (stored in local 'retval').",
+    "If retval == 0 the function returns immediately; otherwise it calls spawn to start BODYPART::0431 for that entity (spawn arg dword 0)."
+  ],
+  "open_questions": [
+    "What exact process types or semantics do the filter constants 0x20B and 0x20A represent (they determine which processes cause the spawn)?",
+    "What is the gameplay effect of BODYPART::0431 (animation, damage propagation, detachment, sound)?",
+    "Is the second parameter (the word passed into the handler) ever used by other code paths or future revisions of this handler?",
+    "Does 'process exclude' imply a temporary gating/lock on the entity, or is it merely configuration for Kernel::getNumProcesses' filter?"
+  ],
+  "main_function": {
+    "name": "U8P_TORSO::hit",
+    "execution_form": "process",
+    "purpose": "React to a U8P_TORSO::hit on the torso by conditionally spawning a body-part-specific process when other related processes are present on the same entity.",
+    "entry_conditions": [
+      "Event 5 (U8P_TORSO::hit) received by the TORSO object / process"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_TORSO::hit",
+      "kind": "main",
+      "role": "Event handler for 'U8P_TORSO::hit' that conditionally spawns a bodypart reaction process when other matching processes exist for the entity.",
+      "confidence": "high"
+    },
+    {
+      "name": "Kernel::getNumProcesses",
+      "kind": "extern",
+      "role": "Query the number of running processes matching the configured ProcessType/filter for a given entity; return used as a boolean-ish count.",
+      "confidence": "high"
+    },
+    {
+      "name": "spawn (BODYPART::0431)",
+      "kind": "extern",
+      "role": "Spawn/Create the BODYPART::0431 process for an entity to effect a body-part-specific reaction/animation.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_TORSO::hit",
+        "callee": "Kernel::getNumProcesses",
+        "purpose": "Return the number of processes matching the previously configured ProcessType/filter for the supplied entity; its integer return determines whether to spawn the bodypart process.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TORSO::hit",
+        "callee": "spawn (BODYPART::0431)",
+        "purpose": "Create/start the bodypart reaction/process for the target entity when matching process count is non-zero; spawn receives the entity pointer/id and a dword 0 argument.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "animation",
+    "guard",
+    "spawn"
+  ],
+  "quick_facts": {
+    "main_function": "TORSO::hit",
+    "behavior_summary_one_liner": "Handles the 'U8P_TORSO::hit' event (Event 5) for the TORSO object: when the torso is U8P_TORSO::hit it sets up process/type filters and queries how many matching processes exist for the target entity.",
+    "external_call_count": 2,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

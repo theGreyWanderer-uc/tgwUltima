@@ -1,0 +1,76 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_BRIBOOK3.json",
+  "file": "U8P_BRIBOOK3",
+  "behavior_summary": [
+    "When the book object is activated, prepare a long lore text and hand it to the engine's book-reading routine so the player sees the full book contents.",
+    "Before showing the text, set an info/metadata marker on the book object (small integer value pushed) — likely to mark that object information is present or updated.",
+    "Capture the return value from the Book::read call, apply an 'implies' style check, store the result into a temporary, then yield/suspend execution — the script yields after presenting the book."
+  ],
+  "notable_control_flow": [
+    "Push object parameter (BP+06) and other context (including a pid-like value), then invoke a set-info operation to update the object's metadata.",
+    "Convert an in-script literal string to a pointer and call Book::read with the object pointer and the string pointer to present the book text.",
+    "Receive Book::read return value, run an 'implies' opcode on it, pop/store result into a temp slot, then suspend/return — indicates the script yields while the read UI is active or records the outcome."
+  ],
+  "open_questions": [
+    "Exact semantics of opcode 77 ('set info'): which info key/index is being set and what visible gameplay effect that produces (inferred as marking object info).",
+    "Meaning and source of the two-byte 'indirect' data pushed to the set-info call — what object field or meta record does it reference?",
+    "Precise interpretation of the Book::read return value and the 'implies' opcode's usage in this context (what conditions cause different post-read behavior?).",
+    "Whether the pushed 'pid' value is always the player process id or a different interacting actor id in some contexts."
+  ],
+  "main_function": {
+    "name": "U8P_BRIBOOK3::0080",
+    "execution_form": "process",
+    "purpose": "Display a long lore/book text to the player when the book object is used and mark the object with a small info flag so its metadata reflects the read/available information.",
+    "entry_conditions": [
+      "Invoked when the book/book-object is activated by an actor (inferred from Book::read call and typical item-use handling)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_BRIBOOK3::0080",
+      "kind": "main",
+      "role": "Handle book activation: set object info and invoke Book::read to present a long text.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_BRIBOOK3::0080",
+        "callee": "Book::read",
+        "purpose": "Present/process the supplied book text string for the given book object so the player can read the long lore text.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BRIBOOK3::0080",
+        "callee": "U8P_BRIBOOK3::set info (opcode 77)",
+        "purpose": "Set a small info/metadata value on the book object (value pushed is 1) before presenting the text — likely to mark that the object has associated info or to attach a short info flag.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "display",
+    "guard",
+    "metadata"
+  ],
+  "quick_facts": {
+    "main_function": "BRIBOOK3::0080",
+    "behavior_summary_one_liner": "When the book object is activated, prepare a long lore text and hand it to the engine's book-reading routine so the player sees the full book contents.",
+    "external_call_count": 2,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

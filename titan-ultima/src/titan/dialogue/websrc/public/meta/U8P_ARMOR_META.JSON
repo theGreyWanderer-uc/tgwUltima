@@ -1,0 +1,78 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_ARMOR.json",
+  "file": "U8P_ARMOR",
+  "behavior_summary": [
+    "ARMOR::look is the armor item's handler for the 'U8P_ARMOR::look' (examine) event. When a player/actor inspects the armor it sets item context, prevents reentrant processing for that actor, and causes the item to emit a short descriptive message beginning with the literal \"armor \".",
+    "The routine constructs a temporary string (starts with \"armor \"), calls Item::bark to deliver that message to the inspecting process, frees the temporary string, and then inspects the bark return value before suspending/returning."
+  ],
+  "notable_control_flow": [
+    "Entry via Event 0 (U8P_ARMOR::look) for the armor object.",
+    "Calls an engine 'set info' operation for the target item (uses the item handle passed via indirect 02h and the caller PID at [BP+06h]) to establish context/state.",
+    "Executes a 'process exclude' step to guard against reentrancy/duplicate handling for the calling process.",
+    "Allocates/builds the literal message string (\"armor \"), passes it to Item::bark, and then frees the string.",
+    "Uses an implies/pop sequence to inspect Item::bark's return value before suspending/returning control."
+  ],
+  "open_questions": [
+    "What exact meaning or effect is associated with the concrete info id/context used when calling 'set info' (the constant appears as 0x0208 in the disassembly) — what game state or behavior does that flag represent?",
+    "What semantics does Item::bark's return value convey in this engine (success, interruption, or other)? The code checks it with implies/pop but the meaning is not explicit.",
+    "Are there additional localization or appended words beyond the literal prefix \"armor \" (e.g., shape/name concatenation) that are assembled elsewhere or by the bark call?",
+    "Does process-exclude only prevent immediate reentrancy, or does it persist longer for other systems/tasks tied to the same PID?"
+  ],
+  "main_function": {
+    "name": "U8P_ARMOR::look",
+    "execution_form": "process",
+    "purpose": "Respond to a player/actor examining an armor item: set item context, guard against reentrancy, and present a short descriptive message ('armor ...') to the inspecting process via Item::bark.",
+    "entry_conditions": [
+      "Event 0 (U8P_ARMOR::look) — invoked when the avatar or actor looks at/inspects the armor item",
+      "Inferred: triggered by the armor object's U8P_ARMOR::look/observe area or U8P_ARMOR::look event handler."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_ARMOR::look",
+      "kind": "main",
+      "role": "Armor item 'U8P_ARMOR::look' (examine) event handler that sets item context, excludes the calling process, constructs a descriptive message and calls Item::bark.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item API used to emit/display a short text message from an item/process to a target process/player.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_ARMOR::look",
+        "callee": "Item::bark",
+        "purpose": "Deliver the constructed descriptive text (starting with \"armor \") to the inspecting process/player so the item 'speaks' its short description.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "guard",
+    "cleanup",
+    "description"
+  ],
+  "quick_facts": {
+    "main_function": "ARMOR::look",
+    "behavior_summary_one_liner": "ARMOR::look is the armor item's handler for the 'U8P_ARMOR::look' (examine) event. When a player/actor inspects the armor it sets item context, prevents reentrant processing for that actor, and causes the item to emit a short descriptive message beginning with the literal \"armor \".",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

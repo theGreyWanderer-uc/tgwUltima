@@ -1,0 +1,60 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_FLAGS.json",
+  "file": "U8P_FLAGS",
+  "behavior_summary": [
+    "Provides a minimal initializer for this FLAGS usecode script: it sets a single local storage slot to 1 and then returns.",
+    "No external routines are invoked and no global flags are read or written in the available excerpt.",
+    "The effect is local to the FLAGS instance and appears intended to establish a default/active state for this FLAGS object when it is created or initialized."
+  ],
+  "notable_control_flow": [
+    "U8P_FLAGS::FLAGS::0080 executes a single write of constant 1 into the local variable [BP-02] and then returns immediately.",
+    "There are no conditionals, loops, calls, or side effects observed in this fragment; control flow is linear and trivial."
+  ],
+  "open_questions": [
+    "When exactly is U8P_FLAGS::FLAGS::0080 invoked in game flow (construction, spawn, first activation, or on a specific event)?",
+    "What higher-level meaning or game-state does the local slot [BP-02] map to (a boolean 'enabled' flag, an index, or part of a multi-field data structure)?",
+    "Is the value stored in [BP-02] later copied into a persistent object field or used only transiently by other FLAGS handlers not present in this excerpt?"
+  ],
+  "main_function": {
+    "name": "U8P_FLAGS::0080",
+    "execution_form": "process",
+    "purpose": "Initialize the FLAGS instance by setting a single local/state slot to 1, establishing a default or active state for this FLAGS object.",
+    "entry_conditions": [
+      "No explicit triggers in the disassembly excerpt; inferred to run when the FLAGS instance or script is initialized or invoked by game setup logic."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_FLAGS::0080",
+      "kind": "main",
+      "role": "initializer / default-state setter for this FLAGS script",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": []
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "initialization",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_FLAGS::FLAGS::0080",
+    "behavior_summary_one_liner": "Provides a minimal initializer for this FLAGS usecode script: it sets a single local storage slot to 1 and then returns.",
+    "external_call_count": 0,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

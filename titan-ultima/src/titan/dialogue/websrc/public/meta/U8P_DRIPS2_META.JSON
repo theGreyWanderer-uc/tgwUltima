@@ -1,0 +1,82 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_DRIPS2.json",
+  "file": "U8P_DRIPS2",
+  "behavior_summary": [
+    "DRIPS2::anim is a periodic animation handler for a dripping-related item: each tick it reads the item's current frame, increments it, and writes the new frame back.",
+    "If the incremented frame exceeds 0x12 (18 decimal) the frame is wrapped to 0, producing a looping animation cycle.",
+    "When the incremented frame equals 0x0B (11 decimal) the routine plays a drip sound (playSFX with literal 0x64) at/for the item's context.",
+    "The routine uses Item::getFrame to read and Item::setFrame to write the frame value, and stores the incremented value temporarily in a local (BP-02h)."
+  ],
+  "notable_control_flow": [
+    "Entry is a simple periodic/process handler (Event 2 / U8P_DRIPS2::anim).",
+    "Sequential steps: get frame -> frame_tmp = frame + 1 -> if frame_tmp > 0x12 then frame_tmp = 0 -> if frame_tmp == 0x0B then playSFX -> setFrame(frame_tmp).",
+    "Two conditional branches affect side-effects: one wraps the animation counter (pure animation state) and the other triggers an audio side-effect at a specific frame."
+  ],
+  "open_questions": [
+    "Is the first parameter passed to playSFX the item's instance/pid, a separate location token, or some positional identifier derived from the item (inferred but not explicit)?",
+    "What exact sound does literal 0x64 represent (sound id/type/volume) in-game?",
+    "Are there other events or engine conditions that stop or suspend this U8P_DRIPS2::anim handler outside the simple periodic invocation observed?"
+  ],
+  "main_function": {
+    "name": "U8P_DRIPS2::anim",
+    "execution_form": "process",
+    "purpose": "Advance the item's animation frame each animation tick, wrap the frame to 0 after frame 18, and play a drip sound at a specific animation frame before storing the new frame.",
+    "entry_conditions": [
+      "Event 2 (U8P_DRIPS2::anim) — periodic tick/animation update invoked by the engine for the item."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_DRIPS2::anim",
+      "kind": "main",
+      "role": "Periodic animation/tick handler for a dripping object; updates frame counter and triggers a sound at a designated frame.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_DRIPS2::anim",
+        "callee": "Item::getFrame",
+        "purpose": "Read the current animation frame/index of the item instance (used as the base for incrementing).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DRIPS2::anim",
+        "callee": "U8P_DRIPS2::playSFX",
+        "purpose": "Play a sound effect when the animation reaches frame 0x0B; the call passes 0x64 as a literal sound id/parameter and an item-derived context as the first arg (first-arg derivation is inferred).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DRIPS2::anim",
+        "callee": "Item::setFrame",
+        "purpose": "Write the updated (and possibly wrapped) animation frame back to the item instance.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "DRIPS2::anim",
+    "behavior_summary_one_liner": "DRIPS2::anim is a periodic animation handler for a dripping-related item: each tick it reads the item's current frame, increments it, and writes the new frame back.",
+    "external_call_count": 3,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

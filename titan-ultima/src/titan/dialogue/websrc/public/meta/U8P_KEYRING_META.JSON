@@ -1,0 +1,213 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_KEYRING.json",
+  "file": "U8P_KEYRING",
+  "behavior_summary": [
+    "Provides the in-game behaviour for a keyring item: describing it when examined and performing context-sensitive \"use\" interactions when applied to world objects.",
+    "U8P_KEYRING::KEYRING::look handles the Examine/Look event by preparing the item context and emitting a short description ('keyring ') to the inspecting actor via Item::bark.",
+    "U8P_KEYRING::KEYRING::use spawns a targeting flow (U8P_KEYRING::KEYRING::0119) that asks the player to pick a target, verifies reachability, identifies the target type (door, lock, container, freeable, etc.), inspects and toggles relevant quality/flag bits on that target, manipulates contained items (push/pop/touch), may call a world-freeing routine (FREE::2411), updates the keyring's visual selection/frame (U8P_KEYRING::KEYRING::05AE), and plays contextual SFX.",
+    "U8P_KEYRING::KEYRING::00C8 is a helper that reads and writes an item's quality word to set/clear a specific bit (inferred key/lock bit) and conditionally plays a short SFX.",
+    "U8P_KEYRING::KEYRING::05AE computes and sets a constrained key/frame index on the keyring item to reflect selection changes after use."
+  ],
+  "notable_control_flow": [
+    "KEYRING::use delegates the interactive flow to a spawned process (KEYRING::0119) and suspends waiting for that process' result.",
+    "KEYRING::0119 requests a target via the process-target mechanism and early-exits (with user feedback) on cancellation or unreachable targets.",
+    "Behavior branches heavily on Item::getType and Item::getQuality tests: doors/locks/containers are handled differently, including calls to DOOR_NS::05E4 and FREE::2411 for type-specific behavior.",
+    "When modifications are made to targets, the script updates both target quality (Item::setQuality) and the keyring's visual frame (Item::setFrame) through a dedicated routine; SFX plays are gated by isSFXPlaying checks to avoid overlap."
+  ],
+  "open_questions": [
+    "The exact semantic meaning of the specific quality bit manipulated (0x0400) in KEYRING::00C8 is inferred as a key/lock-related flag but not confirmed.",
+    "Precise mapping of Item::getType numeric codes to in-game categories (door vs lock vs container vs other) is inferred and may vary by engine data tables.",
+    "Exact SFX IDs and their intended player-perceived meaning (success/fail/lock toggle) are present but their descriptive mapping is assumed, not canonical.",
+    "Boundary behavior for key-frame/index selection (how many key slots are supported) is inferred from loops and constraining logic in KEYRING::05AE but not fully determined."
+  ],
+  "main_function": {
+    "name": "U8P_KEYRING::look",
+    "execution_form": "process",
+    "purpose": "Handle the 'U8P_KEYRING::look' (examine) interaction for a keyring item: set item context and emit a short descriptive message to the inspecting actor via Item::bark.",
+    "entry_conditions": [
+      "Invoked on Event 0 (player/actor examines/looks at the keyring).",
+      "Runs in the context of the actor/process that triggered the examine action (uses pid and item pointer passed in the process stack)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_KEYRING::look",
+      "kind": "main",
+      "role": "Examine/Look handler that barks a short description string and sets item context.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_KEYRING::use",
+      "kind": "helper",
+      "role": "Event-1 Use handler. Prepares context and spawns U8P_KEYRING::KEYRING::0119 to perform target-driven interactions.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_KEYRING::00C8",
+      "kind": "helper",
+      "role": "Manipulate a target item's quality word to set/clear a specific bit (inferred key/lock flag) and optionally trigger a short SFX.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_KEYRING::0119",
+      "kind": "helper",
+      "role": "Primary use-target interaction flow: request target, validate reach/type/quality, modify target and world state, update keyring selection, and play SFX.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_KEYRING::05AE",
+      "kind": "helper",
+      "role": "Compute and set the keyring's visual frame/index based on contained key slots (advance/adjust selected key).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine routine used to present short text messages from items/processes to players.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_KEYRING::process target",
+      "kind": "extern",
+      "role": "Engine targeting service used to solicit and return a target selection from the player/process.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_KEYRING::use",
+        "callee": "U8P_KEYRING::0119",
+        "purpose": "Delegate the interactive target-selection and application logic to a spawned process (separates input acquisition from effect processing).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KEYRING::0119",
+        "callee": "U8P_KEYRING::00C8",
+        "purpose": "Adjust or toggle a specific quality/flag bit on the target item as part of unlocking/opening logic.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KEYRING::0119",
+        "callee": "U8P_KEYRING::05AE",
+        "purpose": "Update the keyring's visual frame/selected-key after successful or attempted interactions.",
+        "confidence": "high"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_KEYRING::look",
+        "callee": "Item::bark",
+        "purpose": "Display the short description 'keyring ' to the inspecting actor.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KEYRING::0119",
+        "callee": "U8P_KEYRING::process target",
+        "purpose": "Solicit a target selection from the player/process to apply the keyring to an object in the world.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KEYRING::0119",
+        "callee": "Item::canReach",
+        "purpose": "Verify the invoking actor can physically/magically reach the selected target; abort with feedback if not reachable.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KEYRING::0119",
+        "callee": "Item::getType",
+        "purpose": "Determine the target's type (door, lock, chest, container, etc.) to select the appropriate action branch.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KEYRING::0119",
+        "callee": "Item::getQuality",
+        "purpose": "Read the target's quality/flags to test open/locked bits and other status before modifying.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KEYRING::00C8",
+        "callee": "Item::setQuality",
+        "purpose": "Write back a modified quality/flags word after toggling the key/lock-related bit.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KEYRING::0119",
+        "callee": "DOOR_NS::05E4",
+        "purpose": "Invoke door-specific checks or behavior when the target is door-like before applying key effects.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_KEYRING::0119",
+        "callee": "FREE::2411",
+        "purpose": "Attempt to 'free' or activate a nearby world object at coordinates when using the keyring should free something (e.g., free a trapped item or un-anchor an object).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_KEYRING::0119",
+        "callee": "Item::push",
+        "purpose": "Manipulate item stacks/containers (push keys or items into/out of containers) as part of key application.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_KEYRING::0119",
+        "callee": "Item::pop",
+        "purpose": "Remove items/keys from containers or stacks when transferring or using keys.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_KEYRING::0119",
+        "callee": "Item::touch",
+        "purpose": "Mark items/containers as changed so the engine updates inventory/visuals after manipulation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KEYRING::0119",
+        "callee": "U8P_KEYRING::isSFXPlaying",
+        "purpose": "Check for current SFX to avoid overlapping sounds before issuing playSFX.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KEYRING::0119",
+        "callee": "U8P_KEYRING::playSFX",
+        "purpose": "Play appropriate audio feedback for lock/unlock/open/fail events.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KEYRING::05AE",
+        "callee": "Item::setFrame",
+        "purpose": "Change the keyring item's visual frame to reflect the newly selected key/index.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KEYRING::0119",
+        "callee": "Item::getFrame",
+        "purpose": "Read keyring or target frame data to decide which key slot to use.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_KEYRING::KEYRING::look",
+    "behavior_summary_one_liner": "Provides the in-game behaviour for a keyring item: describing it when examined and performing context-sensitive \"use\" interactions when applied to world objects.",
+    "external_call_count": 15,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

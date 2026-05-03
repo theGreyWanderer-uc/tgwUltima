@@ -1,0 +1,77 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_DUMMY.json",
+  "file": "U8P_DUMMY",
+  "behavior_summary": [
+    "U8P_DUMMY::DUMMY::look is an Event 0 handler that runs when the object is 'looked at' by the avatar/actor.",
+    "On entry it appears to set a per-process/info flag and mark the target process/object as excluded from further processing (engine-level 'set info' / 'process exclude' operations).",
+    "It allocates the literal string \"dummy \", calls Item::bark on the target object/process passing that string so the item emits the short description, then frees the string.",
+    "After the bark call the routine examines the bark return value with an 'implies' style check, then performs a suspend/return sequence."
+  ],
+  "notable_control_flow": [
+    "Triggered by Event 0 (U8P_DUMMY::look) — one-shot trigger when the item is examined.",
+    "Per-process flags are set before producing speech, acting as a guard/one-time marker to modify behavior or prevent re-processing.",
+    "Calls Item::bark (external) with (this, \"dummy \") and frees the allocated message buffer afterwards.",
+    "Pushes the bark return value, evaluates it with an 'implies' check (used as a conditional), then suspends and returns; exact branching semantics of 'implies' are inferred."
+  ],
+  "open_questions": [
+    "What exact per-process meaning does the 'set info' / 'process exclude' pair have here (which info index is used and whether it prevents future U8P_DUMMY::look handling)?",
+    "What is the precise semantic of the 'implies' instruction in this engine and how the bark return value influences subsequent control flow or suspension?",
+    "Is the target parameter at BP+06h always the item/process PID of the object being looked at, or can it be another process context in some edge cases?"
+  ],
+  "main_function": {
+    "name": "U8P_DUMMY::look",
+    "execution_form": "process",
+    "purpose": "Handle the 'U8P_DUMMY::look' (examine) event for the dummy object: mark the process/info state, cause the object to emit the descriptive text \"dummy \", then handle return-value-based control and suspend/return.",
+    "entry_conditions": [
+      "Event 0 (U8P_DUMMY::look) — invoked when the avatar or an actor looks at/inspects the dummy object"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_DUMMY::look",
+      "kind": "main",
+      "role": "Event 0 handler for the dummy object; orchestrates per-process flagging, message allocation, and a call to Item::bark to present the description.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item runtime call used to make a process/item 'speak' or display a short text string to a player/process.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_DUMMY::look",
+        "callee": "Item::bark",
+        "purpose": "Make the referenced item/process emit/display the literal string \"dummy \"; used to show the item's description to the viewing process.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_DUMMY::DUMMY::look",
+    "behavior_summary_one_liner": "U8P_DUMMY::DUMMY::look is an Event 0 handler that runs when the object is 'looked at' by the avatar/actor.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

@@ -1,0 +1,160 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_WOUNDTOR.json",
+  "file": "U8P_WOUNDTOR",
+  "behavior_summary": [
+    "This script implements a world object 'WOUNDTOR' that visually toggles between two frames while an actor is inside its fast-area and responds to player inspection and hits.",
+    "When an actor enters the object's fast-area, the object spawns a background process that repeatedly reads the item's frame, flips it between two values (0 and 1), optionally plays a special SFX on one transition, and schedules a randomized delay before the next toggle.",
+    "When the actor leaves the fast-area the script invokes a cleanup helper to stop/remove the spawned background process.",
+    "When a player 'looks' (inspects) the object the script queries the current frame and issues a short bark describing the Torax as either wounded or healed depending on that frame.",
+    "When the object is hit (gotHit), it plays a hit sound effect."
+  ],
+  "notable_control_flow": [
+    "U8P_WOUNDTOR::enterFastArea: triggered by area entry; spawns U8P_WOUNDTOR::013A as a background process (spawn).",
+    "U8P_WOUNDTOR::013A: background loop — suspend, call Item::getFrame, compute and set the opposite frame via Item::setFrame, play SFX on one direction, compute randomized delay via urandom, spawn FREE::1C19 with that delay (acts as a timer), then suspend and loop until killed.",
+    "U8P_WOUNDTOR::leaveFastArea: triggered by area exit; calls FREE::2A56 to perform cleanup/stop of the spawned/timed behavior.",
+    "U8P_WOUNDTOR::look: on a U8P_WOUNDTOR::look event, calls Item::getFrame then Item::bark with either a 'Healed Torax ' or 'Wounded Torax ' message based on the frame.",
+    "U8P_WOUNDTOR::gotHit: on hit event, calls a small playSFX routine with fixed parameters.",
+    "Loop/frame progression inside U8P_WOUNDTOR::013A; treated as control-flow, not explicit internal call."
+  ],
+  "open_questions": [
+    "Which numeric frame value (0 or 1) definitively corresponds to 'wounded' vs 'healed' — the code branches, but the mapping is inferred and not explicitly labeled.",
+    "Exact behavior and interface of FREE::1C19 and FREE::2A56: they appear to be timer/spawn cleanup helpers, but their full semantics (arguments beyond delay and implicit pid usage) remain inferred.",
+    "Precise meanings and units of spawn delay calculation (urandom range and added offset) and how often the toggle runs in real time.",
+    "Full signature/semantics of U8P_WOUNDTOR::gotHit parameters (two numeric args seen) — are they damage and attacker id, and are they used elsewhere?"
+  ],
+  "main_function": {
+    "name": "U8P_WOUNDTOR::look",
+    "execution_form": "process",
+    "purpose": "Respond to a player/actor 'U8P_WOUNDTOR::look' (inspect) event by querying the item's display frame and emitting a short descriptive bark indicating a wounded or healed Torax state.",
+    "entry_conditions": [
+      "Event 0: player or relevant actor looks at / inspects the item (implicit 'this' at BP+06h)"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_WOUNDTOR::look",
+      "kind": "main",
+      "role": "Handle examine/U8P_WOUNDTOR::look events; decides and emits item description based on Item::getFrame.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_WOUNDTOR::enterFastArea",
+      "kind": "helper",
+      "role": "Area-entry trigger that sets up state and spawns the background toggling process.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_WOUNDTOR::leaveFastArea",
+      "kind": "helper",
+      "role": "Area-exit trigger that cleans up/stops the spawned background process.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_WOUNDTOR::gotHit",
+      "kind": "helper",
+      "role": "On-hit handler that plays a hit sound effect; accepts two numeric args (likely damage and attacker id).",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_WOUNDTOR::013A",
+      "kind": "helper",
+      "role": "Spawned background process that loops to toggle the item's frame, play SFX on some transitions, and schedule randomized delays via a timer spawn.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_WOUNDTOR::enterFastArea",
+        "callee": "U8P_WOUNDTOR::013A",
+        "purpose": "Spawn the background toggling behavior when actor enters fast-area.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WOUNDTOR::leaveFastArea",
+        "callee": "FREE::2A56",
+        "purpose": "Request cleanup/stop of the spawned background/timer behavior on area exit.",
+        "confidence": "high"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_WOUNDTOR::look",
+        "callee": "Item::getFrame",
+        "purpose": "Query the current display/animation frame to decide the bark text.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WOUNDTOR::look",
+        "callee": "Item::bark",
+        "purpose": "Emit a short text message ('Healed Torax ' or 'Wounded Torax ') to the player inspecting the item.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WOUNDTOR::013A",
+        "callee": "Item::getFrame",
+        "purpose": "Read current frame to determine whether to toggle.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WOUNDTOR::013A",
+        "callee": "Item::setFrame",
+        "purpose": "Set the item's frame to the alternate state (toggle 0<->1).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WOUNDTOR::013A",
+        "callee": "U8P_WOUNDTOR::playSFX (word,word,uword)",
+        "purpose": "Play a larger/special sound effect when switching frame in a particular direction.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WOUNDTOR::gotHit",
+        "callee": "U8P_WOUNDTOR::playSFX (word,ubyte)",
+        "purpose": "Play a small/hit sound effect when object is struck.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WOUNDTOR::013A",
+        "callee": "urandom",
+        "purpose": "Generate a pseudo-random value to vary the delay between frame toggles.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WOUNDTOR::013A",
+        "callee": "FREE::1C19 (spawned)",
+        "purpose": "Spawned as a timer/scheduler with a computed delay to suspend/resume or schedule the next toggle.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_WOUNDTOR::enterFastArea",
+        "callee": "spawn",
+        "purpose": "Spawn the background process (U8P_WOUNDTOR::013A).",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_WOUNDTOR::look",
+    "behavior_summary_one_liner": "This script implements a world object 'WOUNDTOR' that visually toggles between two frames while an actor is inside its fast-area and responds to player inspection and hits.",
+    "external_call_count": 9,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

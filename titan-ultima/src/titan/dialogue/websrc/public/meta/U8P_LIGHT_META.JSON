@@ -1,0 +1,230 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_LIGHT.json",
+  "file": "U8P_LIGHT",
+  "behavior_summary": [
+    "Provides runtime behavior for a transient light object: a long-running per-light process (LIGHT::0080) that increments an internal tick counter each suspend/tick, periodically causes a camera 'quake' effect, occasionally triggers a small randomized sub-effect, and terminates after a fixed lifetime.",
+    "Contains an event handler (LIGHT::gotHit) that guards against repeated hits, validates overlap with an attacker, branches on the light item's animation/frame to pick one of multiple responses (spawn the light process + play SFX, or trigger a LightningBolt effect + play different SFX), optionally queries an NPC's facing direction to parametrize a sub-call, and may destroy the item depending on the hit arguments.",
+    "A global guard flag alreadyHitLightBeam prevents re-entrant or duplicate hit handling while the gotHit handler runs.",
+    "Spawn and cleanup are coordinated: LIGHT::gotHit spawns the LIGHT::0080 process (the per-light runtime) and also spawns a FREE::1C19 helper with the returned pid (inferred to schedule freeing/cleanup)."
+  ],
+  "notable_control_flow": [
+    "U8P_LIGHT::LIGHT::0080 runs as a suspension-looping process: increment tick_counter each suspend, check for lifetime expiry (tick == 100) to call Camera::stopQuake() and exit.",
+    "Every 10 ticks LIGHT::0080 computes quake_index = tick / 10 (with a wrap adjustment when > 5) and calls Camera::startQuake(quake_index) to start a camera quake effect.",
+    "Each LIGHT::0080 loop performs an independent chance check (urandom(50) == 37) that, if true, computes small random args (urandom(4), urandom(8) variants) and calls METHOD::0080 with those args and the item/process reference for an occasional visual/behavioral sub-effect.",
+    "U8P_LIGHT::LIGHT::gotHit early-returns if alreadyHitLightBeam is set or if Item::overlaps(attacker) fails; otherwise it sets alreadyHitLightBeam=1, branches on Item::getFrame() to select behavior, spawns processes and schedules cleanup, then clears the guard before returning."
+  ],
+  "open_questions": [
+    "Exact semantics and side-effects of METHOD::0080 (called from both the random sub-effect in LIGHT::0080 and from gotHit) — appears to spawn/configure a visual or behavior sub-effect but details are not explicit.",
+    "Precise behavior of spawned FREE::1C19 helper (assumed to free/schedule cleanup of a pid) and whether it applies a timeout or immediate cleanup.",
+    "Meaning and game-impact of the camera quake intensity mapping (why quake_index wraps when >5) and whether other systems observe the quake state.",
+    "Exact interpretation of gotHit's second parameter (BP+0Ah) beyond the observed branches: value==1 triggers Npc::getDir+METHOD::0080, value>0 triggers Item::destroy; other values' intended use are inferred but not canonical."
+  ],
+  "main_function": {
+    "name": "U8P_LIGHT::0080",
+    "execution_form": "process",
+    "purpose": "Run-time controller for an individual light instance: maintain lifetime (tick-based), start periodic camera quakes with computed intensity, occasionally trigger randomized visual/behavioral sub-effects, and stop the quake and exit when lifetime ends.",
+    "entry_conditions": [
+      "Spawned by U8P_LIGHT::LIGHT::gotHit (spawn call observed) when the light should enter its active runtime state.",
+      "Registers process-item association and excludes the process from some default processing at start (engine 'set info / process exclude' calls)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_LIGHT::0080",
+      "kind": "main",
+      "role": "Per-light runtime process that manages lifetime, camera quake effects, and occasional randomized sub-effects.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_LIGHT::gotHit",
+      "kind": "helper",
+      "role": "Event handler for hit interactions on the light item: guards re-entrancy, validates overlap, selects response by item frame, plays SFX, spawns LIGHT::0080 or triggers LightningBolt, optionally calls METHOD::0080, and schedules cleanup.",
+      "confidence": "high"
+    },
+    {
+      "name": "Camera::startQuake",
+      "kind": "extern",
+      "role": "Engine call to start a camera quake with a signed intensity argument (used by LIGHT::0080 periodically).",
+      "confidence": "high"
+    },
+    {
+      "name": "Camera::stopQuake",
+      "kind": "extern",
+      "role": "Engine call to stop any active camera quake (called by LIGHT::0080 when lifetime ends).",
+      "confidence": "high"
+    },
+    {
+      "name": "urandom",
+      "kind": "extern",
+      "role": "Random number generator used to introduce chance into occasional sub-effects inside LIGHT::0080 and to derive random args for METHOD::0080.",
+      "confidence": "high"
+    },
+    {
+      "name": "METHOD::0080",
+      "kind": "extern",
+      "role": "An object/method call invoked to spawn or configure a visual/behavioral sub-effect for the item; purpose inferred from usage in both runtime and gotHit paths.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_LIGHT::playSFX",
+      "kind": "extern",
+      "role": "Play sound effects for different hit/frame outcomes in gotHit.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::overlaps",
+      "kind": "extern",
+      "role": "Check overlap between the item and an attacker/source; gating condition for gotHit handling.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getFrame",
+      "kind": "extern",
+      "role": "Query the item's current animation/frame index used to select branching behavior in gotHit.",
+      "confidence": "high"
+    },
+    {
+      "name": "spawn",
+      "kind": "extern",
+      "role": "Engine spawn used to start scripts/processes; used to spawn LIGHT::0080 and FREE::1C19 (cleanup helper) from gotHit.",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::1C19",
+      "kind": "extern",
+      "role": "Spawned helper that receives a pid (inferred to schedule freeing/cleanup of that pid); exact behavior inferred.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_LIGHT::process LightningBolt",
+      "kind": "extern",
+      "role": "Spawned by gotHit for a specific frame range to perform a lightning effect/damage routine instead of spawning LIGHT::0080.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::getDir",
+      "kind": "extern",
+      "role": "Query NPC facing/direction used by gotHit to compute an argument to METHOD::0080 when second param equals 1.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::destroy",
+      "kind": "extern",
+      "role": "Destroy the item instance; called by gotHit when the second parameter indicates immediate destruction.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_LIGHT::gotHit",
+        "callee": "U8P_LIGHT::0080",
+        "purpose": "Spawn the light's runtime process when a hit should activate the light behavior; returned pid is captured and passed to cleanup helper.",
+        "confidence": "high"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_LIGHT::0080",
+        "callee": "Camera::startQuake",
+        "purpose": "Start a camera quake effect periodically (every 10 ticks) with intensity derived from tick/10 (with wrap adjustment).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LIGHT::0080",
+        "callee": "Camera::stopQuake",
+        "purpose": "Stop the camera quake when the light's lifetime expires (tick == 100) before the process exits.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LIGHT::0080",
+        "callee": "urandom",
+        "purpose": "Perform a chance check each loop (urandom(50) == 37) and generate random args (urandom(4), urandom(8)) for occasional sub-effects.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LIGHT::0080",
+        "callee": "METHOD::0080",
+        "purpose": "Invoke a visual/behavioral sub-effect with computed/random small arguments and the item/process reference when the random check succeeds.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LIGHT::gotHit",
+        "callee": "Item::overlaps",
+        "purpose": "Verify the attacker/source overlaps the item as a prerequisite for processing the hit.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LIGHT::gotHit",
+        "callee": "Item::getFrame",
+        "purpose": "Read the item's animation/frame index to select the hit response branch (spawn LIGHT::0080 vs. spawn LightningBolt vs. other behavior).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LIGHT::gotHit",
+        "callee": "U8P_LIGHT::playSFX",
+        "purpose": "Play context-appropriate sound effects for different frame-based hit outcomes.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LIGHT::gotHit",
+        "callee": "spawn",
+        "purpose": "Spawn LIGHT::0080 (the runtime) and spawn FREE::1C19 with the returned pid for cleanup scheduling; spawn LightningBolt in certain frame cases.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LIGHT::gotHit",
+        "callee": "FREE::1C19",
+        "purpose": "Pass the spawned runtime pid to a cleanup helper (inferred to schedule freeing); used regardless of main branch to ensure proper cleanup.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LIGHT::gotHit",
+        "callee": "Npc::getDir",
+        "purpose": "When the second hit parameter equals 1, query NPC facing to compute a directional argument passed to METHOD::0080.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LIGHT::gotHit",
+        "callee": "Item::destroy",
+        "purpose": "Destroy the item instance when the second hit parameter indicates immediate destruction (value > 0 and not the special-case 1).",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "alreadyHitLightBeam",
+        "likely_effect": "Guard read to determine if a prior hit is being processed; prevents duplicate handling.",
+        "confidence": "high"
+      }
+    ],
+    "writes": [
+      {
+        "name": "alreadyHitLightBeam",
+        "likely_effect": "Set to 1 at the start of gotHit to prevent re-entrancy and cleared to 0 at the end of the handler; coordinates single-handling semantics for hit events.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_LIGHT::LIGHT::0080",
+    "behavior_summary_one_liner": "Provides runtime behavior for a transient light object: a long-running per-light process (LIGHT::0080) that increments an internal tick counter each suspend/tick, periodically causes a camera 'quake' effect, occasionally triggers a small randomized sub-effect, and terminates after a fixed lifetime.",
+    "external_call_count": 11,
+    "flag_read_count": 1,
+    "flag_write_count": 1
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

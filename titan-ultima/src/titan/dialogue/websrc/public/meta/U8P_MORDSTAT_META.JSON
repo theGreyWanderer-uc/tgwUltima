@@ -1,0 +1,76 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_MORDSTAT.json",
+  "file": "U8P_MORDSTAT",
+  "behavior_summary": [
+    "Implements the 'U8P_MORDSTAT::look' (examine) event handler for a Mordea statue object. When an actor (typically the Avatar) looks at the statue, the script builds a short literal description string \"statue of Mordea \" and asks the item/process to 'bark' that string to the viewer.",
+    "Performs small setup control ops prior to producing the message (inferred 'set info' and 'process exclude' to adjust item state or visibility), allocates a temporary string, calls Item::bark with the constructed string and the item/process id, then frees the temporary string.",
+    "Captures the return value from Item::bark and returns it from the handler. A brief pop/suspend sequence appears before the final return (likely engine control/synchronization)."
+  ],
+  "notable_control_flow": [
+    "Event entry: Event 0 (U8P_MORDSTAT::look) triggers U8P_MORDSTAT::look.",
+    "Pre-bark setup: set info and process-exclude style opcodes run (adjust item state/visibility) before string build.",
+    "Resource lifetime: allocate temporary string -> convert/obtain pointer -> push parameters -> call Item::bark -> free temporary string.",
+    "Result handling: return value from Item::bark is captured, pushed/used in an implies/pop pattern, then returned by the handler."
+  ],
+  "open_questions": [
+    "Exact semantics of the 'set info' and 'process exclude' operations observed before the bark — what engine-visible state or display behavior do they change?",
+    "Precise meaning and expected values of the returned value from Item::bark and how the engine uses it after being returned by this handler.",
+    "The pop + suspend sequence's concrete runtime effect in the engine (timing, yielding, or cleanup) — inferred but not certain."
+  ],
+  "main_function": {
+    "name": "U8P_MORDSTAT::look",
+    "execution_form": "process",
+    "purpose": "Respond to a 'U8P_MORDSTAT::look' (examine) event by presenting a short descriptive text for the Mordea statue to the viewer via the item's bark routine.",
+    "entry_conditions": [
+      "Event 0 (U8P_MORDSTAT::look) — triggered when an actor inspects or looks at the statue/object"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_MORDSTAT::look",
+      "kind": "main",
+      "role": "Event handler for the object's 'U8P_MORDSTAT::look' (examine) event; composes and dispatches a description via Item::bark.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item method used to display or emit a short text string on behalf of an item/process to a viewer/process.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_MORDSTAT::look",
+        "callee": "Item::bark",
+        "purpose": "Deliver/display the constructed description string (\"statue of Mordea \") to the viewer/process; the item/process id (pid from [BP+06h]) is passed as the target 'this'/process for the call.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "MORDSTAT::look",
+    "behavior_summary_one_liner": "Implements the 'U8P_MORDSTAT::look' (examine) event handler for a Mordea statue object. When an actor (typically the Avatar) looks at the statue, the script builds a short literal description string \"statue of Mordea \" and asks the item/process to 'bark' that string to the viewer.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

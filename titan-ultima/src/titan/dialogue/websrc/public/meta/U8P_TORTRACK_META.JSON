@@ -1,0 +1,75 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_TORTRACK.json",
+  "file": "U8P_TORTRACK",
+  "behavior_summary": [
+    "Implements the 'U8P_TORTRACK::look' (examine) behavior for the torture-rack object: when a player/actor inspects the object the script prepares context, calls the item's bark routine to present the description string \"torture rack \", and then uses the bark return value in a small logical sequence before suspending.",
+    "Before producing text it sets object info / process-exclude context (preparing or marking the object for this interaction), using the item pointer and the inspecting process id as context.",
+    "The textual description is constructed, passed to Item::bark(this, \"torture rack \"), and freed after the call; the bark return value is then consumed by an implies/pop sequence and the handler suspends/returns, allowing the engine to continue."
+  ],
+  "notable_control_flow": [
+    "Event-driven: runs on the object's U8P_TORTRACK::look event (Event 0) and executes as a process-style handler.",
+    "Sets object info / process-exclude state prior to emitting the description — acting as a guard/mark to avoid duplicate processing or to record the interaction.",
+    "Calls external Item::bark and immediately uses its return value in an implication-style test (inferred) before suspending; the exact effect of that implies/suspend chain is not fully spelled out but likely influences subsequent engine routing.",
+    "Cleans up the temporary description string after the bark call (explicit free/cleanup step)."
+  ],
+  "open_questions": [
+    "Exact semantic meaning of the 'set info' id used (0x210/inferred) and what state is recorded on the referenced object.",
+    "Precise semantics of the implies/pop sequence and how Item::bark's return value influences engine control flow here (signal, boolean, or process continuation token?).",
+    "Whether the process id pushed for context is the looking actor's pid or another engine process id (inference favors the actor but not proven from excerpt)."
+  ],
+  "main_function": {
+    "name": "U8P_TORTRACK::look",
+    "execution_form": "process",
+    "purpose": "Handle the 'U8P_TORTRACK::look' event for the torture-rack item by marking the object, emitting the description text 'torture rack ', and then using the bark return to drive a small post-call control step before suspending.",
+    "entry_conditions": [
+      "Event 0 (U8P_TORTRACK::look) for the TORTRACK object class — triggered when an actor/player examines or 'looks at' the torture rack."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_TORTRACK::look",
+      "kind": "main",
+      "role": "Event handler for the object's U8P_TORTRACK::look/examine action; orchestrates marking, description emission, and post-bark control handling.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine called to emit or queue a short descriptive message for a process/item (used to display 'torture rack ').",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_TORTRACK::look",
+        "callee": "Item::bark",
+        "purpose": "Emit or present the item's description string ('torture rack ') to the inspecting process/player; the return value is used by the caller in a subsequent logical/implies sequence.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_TORTRACK::TORTRACK::look",
+    "behavior_summary_one_liner": "Implements the 'U8P_TORTRACK::look' (examine) behavior for the torture-rack object: when a player/actor inspects the object the script prepares context, calls the item's bark routine to present the description string \"torture rack \", and then uses the bark return value in a small logical sequence before suspending.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

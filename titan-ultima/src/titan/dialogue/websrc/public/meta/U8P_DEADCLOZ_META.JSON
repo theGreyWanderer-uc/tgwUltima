@@ -1,0 +1,77 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_DEADCLOZ.json",
+  "file": "U8P_DEADCLOZ",
+  "behavior_summary": [
+    "DEADCLOZ::look responds to an actor 'looking' at the dead man's clothes by producing the short description \"dead man's clothes \".",
+    "The routine allocates or references a temporary string holding that literal, then calls Item::bark with the string and the viewer/process id to display the description to the actor.",
+    "After calling Item::bark the code frees the temporary string, captures the bark return value, and uses it in an implication/pop sequence before suspending/returning.",
+    "Surrounding opcodes set item-local info and apply a process exclusion; these appear to be local item-state or flow-control operations rather than writes to global quest flags."
+  ],
+  "notable_control_flow": [
+    "Entry triggered by the 'U8P_DEADCLOZ::look' event (Event 0) for the item.",
+    "Sequence: set item info / process exclude → build description string → push viewer pid → call Item::bark → free string → capture return value → implies/pop → suspend/return.",
+    "The return value from Item::bark is captured and used in an implies-style operation, suggesting the bark result influences immediate control flow/return semantics."
+  ],
+  "open_questions": [
+    "Exact semantics and side effects of the 'set info' and 'process exclude' opcodes in this handler — what item-local state 0x210 represents and whether it affects other scripts.",
+    "Precise meaning of the return value from Item::bark and how the subsequent 'implies' opcode affects higher-level game logic (treated as boolean flow control or procedural result).",
+    "Whether the temporary string is allocated on the heap or referenced from static data (disassembly shows allocation/free but not exact storage).",
+    "Whether there are additional conditionals (e.g., player state, visibility) that can prevent the bark from being executed (none observed here)."
+  ],
+  "main_function": {
+    "name": "U8P_DEADCLOZ::look",
+    "execution_form": "process",
+    "purpose": "Handle the 'U8P_DEADCLOZ::look' verb on the dead man's clothes: present a short description to the viewing actor by calling Item::bark, then process the bark result before returning.",
+    "entry_conditions": [
+      "Event 0 (U8P_DEADCLOZ::look) — triggered when an actor looks at this item (the dead man's clothes)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_DEADCLOZ::look",
+      "kind": "main",
+      "role": "Responds to U8P_DEADCLOZ::look/examine events for the dead man's clothes; builds and emits description via Item::bark.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine called to display/emit a short text message on behalf of an item/process.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_DEADCLOZ::look",
+        "callee": "Item::bark",
+        "purpose": "Send the short description string \"dead man's clothes \" to the viewer/process id so the actor sees the item's description.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "description",
+    "cleanup",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "DEADCLOZ::look",
+    "behavior_summary_one_liner": "DEADCLOZ::look responds to an actor 'looking' at the dead man's clothes by producing the short description \"dead man's clothes \".",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

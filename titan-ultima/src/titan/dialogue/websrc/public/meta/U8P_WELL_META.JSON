@@ -1,0 +1,87 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_WELL.json",
+  "file": "U8P_WELL",
+  "behavior_summary": [
+    "Handles the item's 'U8P_WELL::look' (examine) event: when a viewer inspects the well, the script marks the item with an info/process-exclude state, builds the short label string \"well  \", and asks the item system to 'bark' that string to the inspecting process (viewer).",
+    "After calling the bark routine it frees the ephemeral string, pushes the bark return value into an implies/pop sequence (likely for engine control) and then suspends/returns.",
+    "No global read/write flags are modified by this handler in the extracted snippet."
+  ],
+  "notable_control_flow": [
+    "Entry on Event 0 (U8P_WELL::look) causes immediate setup (set info / process exclude) to control processing while describing the item.",
+    "Construct ephemeral string literal for the short description, call Item::bark with that string and the viewer process id, then free the string.",
+    "Pushes the bark return value into an 'implies' operation and pops a temporary before suspending; this indicates a small control/return implication after the message delivery."
+  ],
+  "open_questions": [
+    "Exact parameter ordering and calling convention for Item::bark (which parameter is pid vs. message pointer) is inferred but not explicitly documented.",
+    "Precise semantics of the 'set info' opcode and the 'process exclude' flag in this context (what processing is excluded and for how long) are inferred from instruction patterns.",
+    "Meaning and impact of the 'implies' operation on the bark return value: is it used to change flow, suppress further processing, or purely bookkeeping?"
+  ],
+  "main_function": {
+    "name": "U8P_WELL::look",
+    "execution_form": "process",
+    "purpose": "Respond to an examine/U8P_WELL::look event by preparing and delivering the well's short description to the inspecting process and adjusting item processing state while the description is delivered.",
+    "entry_conditions": [
+      "Event 0 (U8P_WELL::look) — triggered when an actor/avatar looks at or examines the well"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_WELL::look",
+      "kind": "main",
+      "role": "Handles the item's U8P_WELL::look/examine event: set item info/exclude, construct description string, call Item::bark, cleanup, then suspend/return.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine used to deliver/display a short description or message originating from the item to a target process/player.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_WELL::look",
+        "callee": "U8P_WELL::set info / process exclude (engine opcode)",
+        "purpose": "Apply an info/state key to the item and exclude it from normal processing while preparing/delivering the description.",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_WELL::look",
+        "callee": "Item::bark",
+        "purpose": "Send or display the short label string \"well  \" to the inspecting process (viewer pid).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WELL::look",
+        "callee": "FREE::free",
+        "purpose": "Free the ephemeral string buffer allocated/used for the short description.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "WELL::look",
+    "behavior_summary_one_liner": "Handles the item's 'U8P_WELL::look' (examine) event: when a viewer inspects the well, the script marks the item with an info/process-exclude state, builds the short label string \"well  \", and asks the item system to 'bark' that string to the inspecting process (viewer).",
+    "external_call_count": 2,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

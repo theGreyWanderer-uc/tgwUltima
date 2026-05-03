@@ -1,0 +1,96 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_GRAVEII.json",
+  "file": "U8P_GRAVEII",
+  "behavior_summary": [
+    "Provides the gameplay behavior for a gravestone object: presenting a short descriptive label when inspected and delegating complex 'use' interactions to a spawned handler.",
+    "U8P_GRAVEII::look runs on the 'U8P_GRAVEII::look' (inspect) event, composes the literal string \"gravestone \", and invokes Item::bark so the inspecting actor sees/hears that label.",
+    "U8P_GRAVEII::use does minimal inline work and spawns a separate thread/script (GRAVE_NS::00CB) to perform the detailed use interaction, passing both the gravestone's pid and the caller's pid to the spawned routine.",
+    "Both handlers set per-item/process metadata (inferred set-info / process-exclude opcodes observed) and use returned values combined with an 'implies' opcode before suspending/returning; no global quest flags are read or written in this script fragment."
+  ],
+  "notable_control_flow": [
+    "Event-driven: U8P_GRAVEII::look is triggered by a U8P_GRAVEII::look/inspect event (Event 0).",
+    "Synchronous call: U8P_GRAVEII::look calls external Item::bark to deliver the text to the viewer, then uses the call's return value with an 'implies' opcode and suspends.",
+    "Asynchronous delegation: U8P_GRAVEII::use spawns GRAVE_NS::00CB (a separate script/thread) to handle the complex use logic, then incorporates the spawn's return via 'implies' before suspending.",
+    "Both routines perform small state/metadata writes on the item/process (inferred 'set info' and 'process exclude') prior to communication/spawn."
+  ],
+  "open_questions": [
+    "What exact behavior occurs inside the spawned handler GRAVE_NS::00CB (dialog, digging, reading an epitaph, animation)? The spawn target is observed but its implementation is outside this extract.",
+    "Precise semantics of the 'set info' + 'process exclude' opcodes seen: which info field (beyond the observed constant) is being set, and whether this is a visual, state, or processing exclusion.",
+    "Exact parameter ordering expected by Item::bark in engine API (push order implies caller PID then string, but this is inferred rather than canonical).",
+    "Whether any other game-state (global flags, quest state) is modified indirectly by the spawned script (not visible in this fragment)."
+  ],
+  "main_function": {
+    "name": "U8P_GRAVEII::look",
+    "execution_form": "process",
+    "purpose": "Handle the player's 'U8P_GRAVEII::look' (inspect) action on the gravestone by producing the descriptive label \"gravestone \" and emitting it to the inspecting actor via Item::bark; perform small per-item metadata setup then suspend.",
+    "entry_conditions": [
+      "Event 0 — invoked when an actor looks at/inspects the gravestone (the 'U8P_GRAVEII::look' verb)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_GRAVEII::look",
+      "kind": "main",
+      "role": "Inspect (U8P_GRAVEII::look) event handler for the gravestone: builds and barks the label to the inspecting actor.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_GRAVEII::use",
+      "kind": "helper",
+      "role": "Use event handler that delegates complex interaction by spawning GRAVE_NS::00CB after setting item metadata.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine routine used to emit a short string/message from an item/process to a target actor/process.",
+      "confidence": "high"
+    },
+    {
+      "name": "spawn GRAVE_NS::00CB",
+      "kind": "extern",
+      "role": "Spawn/launch a separate script/thread (namespace GRAVE_NS) to handle detailed 'use' interaction for the gravestone.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_GRAVEII::look",
+        "callee": "Item::bark",
+        "purpose": "Deliver the literal label \"gravestone \" to the inspecting actor/process so the item 'speaks' or displays that text.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GRAVEII::use",
+        "callee": "spawn GRAVE_NS::00CB",
+        "purpose": "Delegate the detailed 'use' behavior (dialog, action, or animation) to a dedicated script/thread, passing gravestone pid and caller pid.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_GRAVEII::look",
+    "behavior_summary_one_liner": "Provides the gameplay behavior for a gravestone object: presenting a short descriptive label when inspected and delegating complex 'use' interactions to a spawned handler.",
+    "external_call_count": 2,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

@@ -1,0 +1,101 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_GASP.json",
+  "file": "U8P_GASP",
+  "behavior_summary": [
+    "Handles the U8P_GASP::hatch event for a GASP egg: temporarily marks the egg item, obtains the egg's type/id, invokes a guardian-notification/bark routine referencing that id, clears the temporary mark, and destroys the egg item.",
+    "The temporary 'info' mark (info id 0x0210) and an immediate 'process exclude' call are used to alter processing state while U8P_GASP::hatch logic runs, ensuring the egg is processed in a special way during the notification.",
+    "Egg::getEggId supplies an identifier that is passed to Item::guardianBark (with a mode byte and a callback/address), which likely causes audio/notification or guardian behavior tied to the egg id."
+  ],
+  "notable_control_flow": [
+    "On Event 7 (U8P_GASP::hatch): set info(0x0210) on the egg item, then call process exclude to adjust processing state.",
+    "Call Egg::getEggId(this) and store return in a local (eggId).",
+    "Call Item::guardianBark(mode=0x01, eggId, callback/address) and save its return to a temporary local.",
+    "Clear info(0x0210) by writing 0 and call Item::destroy(this) to remove the egg."
+  ],
+  "open_questions": [
+    "What exact gameplay effect does info id 0x0210 represent? (temporary processing marker vs. state used by other systems) — inferred, not explicit.",
+    "What precise behavior does Item::guardianBark perform (plays a sound, spawns/alerts a guardian NPC, logs a notification)? This is inferred from name and arguments.",
+    "What is the nature and purpose of the pushed callback/address argument passed into Item::guardianBark (synchronous callback, script address, or context pointer)?",
+    "Does process exclude fully suspend other processing for this item or merely toggle a per-step filter? The exact engine semantics are not explicit here."
+  ],
+  "main_function": {
+    "name": "U8P_GASP::hatch",
+    "execution_form": "process",
+    "purpose": "Respond to an egg U8P_GASP::hatch by marking the egg temporarily, retrieving its identifier, triggering guardian-related notification/behavior using that identifier, clearing the temporary mark, and destroying the egg item.",
+    "entry_conditions": [
+      "Event 7 (U8P_GASP::hatch) — invoked when the GASP egg hatches"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_GASP::hatch",
+      "kind": "main",
+      "role": "Handle the U8P_GASP::hatch event for a GASP egg, orchestrating temporary state, guardian notification, and egg destruction.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_GASP::hatch",
+        "callee": "U8P_GASP::set info (0x0210)",
+        "purpose": "Write a temporary info/metadata field (id 0x0210) on the egg item to alter its processing while U8P_GASP::hatch logic runs.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GASP::hatch",
+        "callee": "U8P_GASP::process exclude",
+        "purpose": "Adjust the item's processing/exclusion state immediately after setting the info flag; likely prevents other standard processing during U8P_GASP::hatch handling.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GASP::hatch",
+        "callee": "Egg::getEggId",
+        "purpose": "Return the egg's identifier/type; the id is used to parameterize the guardian notification.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GASP::hatch",
+        "callee": "Item::guardianBark",
+        "purpose": "Trigger a guardian-related reaction/notification using a mode byte, the egg id, and a callback/address; inferred to play a sound or notify/spawn guardian behavior tied to the egg.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GASP::hatch",
+        "callee": "U8P_GASP::set info (0x0210) [clear]",
+        "purpose": "Clear the previously-set temporary info flag by writing 0 to info id 0x0210 before finalizing.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GASP::hatch",
+        "callee": "Item::destroy",
+        "purpose": "Destroy/remove the egg item from the world after U8P_GASP::hatch processing completes.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "GASP::hatch",
+    "behavior_summary_one_liner": "Handles the U8P_GASP::hatch event for a GASP egg: temporarily marks the egg item, obtains the egg's type/id, invokes a guardian-notification/bark routine referencing that id, clears the temporary mark, and destroys the egg item.",
+    "external_call_count": 6,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

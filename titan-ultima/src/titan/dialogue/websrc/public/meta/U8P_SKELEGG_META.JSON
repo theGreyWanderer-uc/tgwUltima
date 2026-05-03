@@ -1,0 +1,263 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_SKELEGG.json",
+  "file": "U8P_SKELEGG",
+  "behavior_summary": [
+    "This script implements egg hatching state management and the transformation of contained items into spawned NPCs.",
+    "U8P_SKELEGG::leaveFastArea runs when an actor leaves the egg's fast/trigger area and clears a 0x64 (100) marker from the eggId if the marker is currently set (interpreted as unflagging an activation/hatch bit).",
+    "U8P_SKELEGG::hatch (helper) inspects the eggId, optionally performs a probabilistic gate (when eggId == 1), marks the egg by adding 100 to eggId, then iterates contained item(s) and for each qualifying item creates an NPC (using the item's frame), transfers the item's coordinates to the spawned NPC, destroys the original item, pops the NPC into the world, and configures the NPC (in-combat, target set, alignment set)."
+  ],
+  "notable_control_flow": [
+    "U8P_SKELEGG::leaveFastArea: read Egg::getEggId; if eggId >= 100 return immediately; otherwise subtract 100 and write back via Egg::setEggId (clears the 100-flag branch).",
+    "U8P_SKELEGG::hatch: short-circuits for certain eggId values; when eggId == 1 performs urandom(10) <= 8 check (appears to allow ~90% chance to proceed); on proceeding, adds 100 via Egg::setEggId, then enters an iteration over contained item(s) where Item::isNpc and other conditions decide spawning branches.",
+    "Spawn loop: for each item that qualifies, call Item::getFrame -> Npc::create, set status (Item::orStatus with 0x80), read coordinates (Item::getX/Y/Z), destroy original item (Item::destroy), place spawned NPC into world (Item::pop) and configure it with Npc::setInCombat, Npc::setTarget(1), and Npc::setAlignment(0x40)."
+  ],
+  "open_questions": [
+    "Precise semantic meaning of eggId numeric values (beyond the observed +/-100 marker) — what each base eggId (e.g., 1) denotes in game content.",
+    "Whether the constant 1 passed to Npc::setTarget always maps to the player/avatar or to a different target type (inferred as avatar but not proven).",
+    "Exact meaning and gameplay effect of alignment 0x40 for spawned NPCs (likely hostility/faction but uncertain).",
+    "Whether all iterated contained items are child objects of the egg container or come from a linked spawn-list (iteration origin is inferred).",
+    "Which external event(s) trigger U8P_SKELEGG::hatch in normal gameplay (the disassembly shows hatch as Event 7 but the broader trigger context is not fully resolved)."
+  ],
+  "main_function": {
+    "name": "U8P_SKELEGG::leaveFastArea",
+    "execution_form": "process",
+    "purpose": "Respond to an actor leaving the egg's trigger area by clearing a hatch/activation marker on the egg (subtracts 100 from eggId if present).",
+    "entry_conditions": [
+      "Event 10: U8P_SKELEGG::leaveFastArea — triggered when an actor leaves the egg's fast/trigger region"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_SKELEGG::leaveFastArea",
+      "kind": "main",
+      "role": "Main event handler executed on area-leave that clears a 100-marker bit from the egg's eggId to unflag activation/hatch state.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_SKELEGG::hatch",
+      "kind": "helper",
+      "role": "Helper event that performs hatching: conditionally marks eggId (+100) and converts contained item(s) into spawned NPCs with positioning and combat initialization.",
+      "confidence": "high"
+    },
+    {
+      "name": "Egg::getEggId",
+      "kind": "extern",
+      "role": "Read the egg's internal id/state; used to decide hatch or unflag behavior.",
+      "confidence": "high"
+    },
+    {
+      "name": "Egg::setEggId",
+      "kind": "extern",
+      "role": "Write updated eggId/state; used to add or remove the 100 marker.",
+      "confidence": "high"
+    },
+    {
+      "name": "urandom",
+      "kind": "extern",
+      "role": "Provide a random value for probabilistic gating inside hatch.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::isNpc",
+      "kind": "extern",
+      "role": "Test if a contained item qualifies as an NPC template eligible for spawning.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getFrame",
+      "kind": "extern",
+      "role": "Obtain an item/frame id used to create the corresponding NPC via Npc::create.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::create",
+      "kind": "extern",
+      "role": "Instantiate a new NPC given a frame/type and parameter.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::orStatus",
+      "kind": "extern",
+      "role": "Apply a status bitmask (observed 0x80) to the created NPC/item instance.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getX",
+      "kind": "extern",
+      "role": "Retrieve X coordinate of the source item for spawn placement.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getY",
+      "kind": "extern",
+      "role": "Retrieve Y coordinate of the source item for spawn placement.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getZ",
+      "kind": "extern",
+      "role": "Retrieve Z/elevation (byte) of the source item for spawn placement.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::destroy",
+      "kind": "extern",
+      "role": "Destroy/remove the original contained item after creating the NPC.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::pop",
+      "kind": "extern",
+      "role": "Place the newly created NPC into the world at specified coordinates.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::setInCombat",
+      "kind": "extern",
+      "role": "Set the spawned NPC into combat state immediately after spawning.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::setTarget",
+      "kind": "extern",
+      "role": "Assign a target to the spawned NPC (constant 1 observed; likely the avatar).",
+      "confidence": "medium"
+    },
+    {
+      "name": "Npc::setAlignment",
+      "kind": "extern",
+      "role": "Assign an alignment/faction value to the spawned NPC (0x40 observed).",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_SKELEGG::leaveFastArea",
+        "callee": "Egg::getEggId",
+        "purpose": "Read the egg's current id/state to decide whether to clear the 100-marker.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SKELEGG::leaveFastArea",
+        "callee": "Egg::setEggId",
+        "purpose": "Write the decremented eggId (clearing the 100-marker) back to the egg when appropriate.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SKELEGG::hatch",
+        "callee": "Egg::getEggId",
+        "purpose": "Read egg state to determine whether to proceed with hatching and whether to apply probabilistic gating.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SKELEGG::hatch",
+        "callee": "urandom",
+        "purpose": "Perform a random check (urandom(10) <= 8 observed) to probabilistically permit hatching for specific eggId values (appears ~90% pass).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SKELEGG::hatch",
+        "callee": "Egg::setEggId",
+        "purpose": "Mark the egg as processed/hatched by adding 100 to eggId.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SKELEGG::hatch",
+        "callee": "Item::isNpc",
+        "purpose": "Filter contained items to select those that should be turned into NPCs.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SKELEGG::hatch",
+        "callee": "Item::getFrame",
+        "purpose": "Obtain the frame/type id from a contained item to pass to Npc::create.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SKELEGG::hatch",
+        "callee": "Npc::create",
+        "purpose": "Instantiate a new NPC using the contained item's frame/type.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SKELEGG::hatch",
+        "callee": "Item::orStatus",
+        "purpose": "Apply a status bit (0x80) to the created NPC/item immediately after creation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SKELEGG::hatch",
+        "callee": "Item::getX",
+        "purpose": "Read source item's X coordinate to place the spawned NPC.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SKELEGG::hatch",
+        "callee": "Item::getY",
+        "purpose": "Read source item's Y coordinate to place the spawned NPC.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SKELEGG::hatch",
+        "callee": "Item::getZ",
+        "purpose": "Read source item's Z/elevation byte to pass into Item::pop for placement.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SKELEGG::hatch",
+        "callee": "Item::destroy",
+        "purpose": "Remove the original contained item after creating its NPC clone.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SKELEGG::hatch",
+        "callee": "Item::pop",
+        "purpose": "Place the newly created NPC into the world at the recorded coordinates.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SKELEGG::hatch",
+        "callee": "Npc::setInCombat",
+        "purpose": "Mark the spawned NPC as immediately in combat.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SKELEGG::hatch",
+        "callee": "Npc::setTarget",
+        "purpose": "Set the spawned NPC's target to a specific id (1 observed; likely the avatar).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_SKELEGG::hatch",
+        "callee": "Npc::setAlignment",
+        "purpose": "Assign alignment/faction to the spawned NPC (0x40 observed; likely defines hostility).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_SKELEGG::leaveFastArea",
+    "behavior_summary_one_liner": "This script implements egg hatching state management and the transformation of contained items into spawned NPCs.",
+    "external_call_count": 17,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

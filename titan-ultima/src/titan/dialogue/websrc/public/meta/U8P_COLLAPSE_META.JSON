@@ -1,0 +1,205 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_COLLAPSE.json",
+  "file": "U8P_COLLAPSE",
+  "behavior_summary": [
+    "Implements a collapse animation and transformation for debris/items: a per-item animator steps the item's visual frame several times while spawning small particle effects, then converts the item into an NPC at the same tile, transfers the item data into that NPC, marks the NPC as in-combat and assigns a target, and finally removes the original item.",
+    "A separate 'gotHit' helper scans candidate items when a collapse-triggering hit occurs, filters by surface weight and hit-type, destroys the source block, spawns several debris fragments (Item::legal_create) with initial frames, and often spawns short animator coroutines for those fragments (including the main per-piece animator and a lighter stepping animator).",
+    "Particles/effects (FREE::1C19) are spawned at each animation step to produce dust/debris visuals accompanying the collapse."
+  ],
+  "notable_control_flow": [
+    "U8P_COLLAPSE::COLLAPSE::0080 runs as a process: loop over frame indices (1..7), call Item::setFrame each iteration, spawn FREE::1C19 after each frame change, and suspend between steps.",
+    "After the frame loop the routine reads the item's coordinates (Item::getX/Y/Z), calls Item::push(), creates an NPC (Npc::create), transfers/pops the item into the NPC at the item coordinates (Item::pop with the NPC pointer), calls Npc::setInCombat and Npc::setTarget, then destroys the original item (Item::destroy).",
+    "U8P_COLLAPSE::COLLAPSE::gotHit iterates items from an input collection/list, uses Item::getSurfaceWeight and a hit/type parameter to decide which items to collapse, computes fragment coordinates/frames, uses Item::legal_create to spawn fragments, and spawns animator coroutines (U8P_COLLAPSE::COLLAPSE::029D and sometimes U8P_COLLAPSE::COLLAPSE::0080) for created fragments.",
+    "U8P_COLLAPSE::COLLAPSE::029D is a short-lived stepping coroutine that increments a fragment's frame and spawns FREE::1C19 until a termination condition on the frame is met."
+  ],
+  "open_questions": [
+    "Exact meanings of several numeric constants (e.g., NPC type id 0x008E, the small constant passed to Npc::setTarget) — these are inferred from call patterns but not explicitly named.",
+    "Precise semantics of Item::push and Item::pop stack/context operations (how ownership/stack state is represented) — we infer they transfer item data into the NPC but implementation details are unknown.",
+    "Whether converted NPCs use the transferred item as inventory or as a representation of the collapsed object (behavior after conversion is inferred but not fully determined).",
+    "Boundary cases and timing details: exact suspension timing and how many ticks elapse between animation frames are not present in the excerpt."
+  ],
+  "main_function": {
+    "name": "U8P_COLLAPSE::0080",
+    "execution_form": "process",
+    "purpose": "Animate a debris item through a short frame sequence while spawning particle effects, then convert the item into an NPC at the same coordinates by transferring the item data into the new NPC, flag the NPC as in-combat with a target, and destroy the original item.",
+    "entry_conditions": [
+      "Spawned/called for a debris/item that should run its collapse animation (typically spawned from U8P_COLLAPSE::COLLAPSE::gotHit for each debris piece).",
+      "Not a direct event handler — used as a per-piece animator coroutine."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_COLLAPSE::0080",
+      "kind": "main",
+      "role": "Per-fragment collapse animator and final conversion of the fragment into an NPC; performs frame stepping, particle spawning, NPC creation, item transfer, and cleanup.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_COLLAPSE::gotHit",
+      "kind": "helper",
+      "role": "Handles hit/impact logic that decides which items/blocks should collapse; spawns debris via Item::legal_create and starts per-fragment animators (including COLLAPSE::029D and sometimes COLLAPSE::0080).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_COLLAPSE::029D",
+      "kind": "helper",
+      "role": "Short-lived fragment animator that increments a fragment's frame and spawns FREE::1C19 until a termination frame condition is met.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::setFrame",
+      "kind": "extern",
+      "role": "Engine API used to change an item's visual frame/index during animation.",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::1C19 (spawn)",
+      "kind": "extern",
+      "role": "Spawned particle/effect used for dust/debris visuals on frame steps.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_COLLAPSE::gotHit",
+        "callee": "U8P_COLLAPSE::029D",
+        "purpose": "Start a short animator coroutine for a newly created debris fragment so it advances frames and spawns particles.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_COLLAPSE::gotHit",
+        "callee": "U8P_COLLAPSE::0080",
+        "purpose": "Spawn/queue the more complex per-piece animator/converter for certain created items (propagates collapse behavior to nearby items).",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_COLLAPSE::0080",
+        "callee": "Item::setFrame",
+        "purpose": "Advance the item's visual frame during the collapse animation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_COLLAPSE::0080",
+        "callee": "FREE::1C19 (spawn)",
+        "purpose": "Create a short-lived particle/effect (dust/debris) after each frame change to enhance the visual collapse.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_COLLAPSE::0080",
+        "callee": "Item::getX",
+        "purpose": "Read item's X coordinate to place the new NPC and to pop/transfer the item at the correct tile.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_COLLAPSE::0080",
+        "callee": "Item::getY",
+        "purpose": "Read item's Y coordinate to place the new NPC and to pop/transfer the item at the correct tile.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_COLLAPSE::0080",
+        "callee": "Item::getZ",
+        "purpose": "Read item's Z (height/stack) coordinate for correct placement during transfer/pop.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_COLLAPSE::0080",
+        "callee": "Item::push",
+        "purpose": "Prepare the item context/stack before transferring it into the newly created NPC.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_COLLAPSE::0080",
+        "callee": "Npc::create",
+        "purpose": "Create an NPC (type observed ~0x008E) at which the item will be placed/transferred after animation completes.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_COLLAPSE::0080",
+        "callee": "Item::pop",
+        "purpose": "Transfer/pop the previously pushed item into/on the created NPC at computed coordinates.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_COLLAPSE::0080",
+        "callee": "Npc::setInCombat",
+        "purpose": "Mark the created NPC as being in combat to change its behavior/state after conversion.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_COLLAPSE::0080",
+        "callee": "Npc::setTarget",
+        "purpose": "Assign a target/state to the created NPC (small constant used, likely to initialize AI target).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_COLLAPSE::0080",
+        "callee": "Item::destroy",
+        "purpose": "Destroy the original item instance after conversion/transfer to clean up the world state.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_COLLAPSE::gotHit",
+        "callee": "Item::getSurfaceWeight",
+        "purpose": "Filter which items should respond to the hit/collapse (e.g., surface-placed or light items).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_COLLAPSE::gotHit",
+        "callee": "Item::legal_create",
+        "purpose": "Safely spawn debris/fragment items at computed offsets around the destroyed tile.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_COLLAPSE::029D",
+        "callee": "Item::getFrame",
+        "purpose": "Read the fragment's frame to decide whether to continue animating or to stop.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_COLLAPSE::029D",
+        "callee": "Item::setFrame",
+        "purpose": "Advance the fragment's frame as part of the per-fragment animation sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_COLLAPSE::029D",
+        "callee": "FREE::1C19 (spawn)",
+        "purpose": "Spawn particle effects at each step of the fragment's animation.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "pid",
+        "likely_effect": "Used as the spawning process id when calling FREE::1C19 (particle spawn) and possibly when scheduling/suspending coroutines.",
+        "confidence": "medium"
+      }
+    ],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "COLLAPSE::0080",
+    "behavior_summary_one_liner": "Implements a collapse animation and transformation for debris/items: a per-item animator steps the item's visual frame several times while spawning small particle effects, then converts the item into an NPC at the same tile, transfers the item data into that NPC, marks the NPC as in-combat and assigns a target, and finally removes the original item.",
+    "external_call_count": 16,
+    "flag_read_count": 1,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

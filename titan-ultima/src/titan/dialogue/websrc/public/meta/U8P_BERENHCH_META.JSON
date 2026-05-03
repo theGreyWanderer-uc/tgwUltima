@@ -1,0 +1,176 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_BERENHCH.json",
+  "file": "U8P_BERENHCH",
+  "behavior_summary": [
+    "Controls the NPC 'Beren' interaction: runs greeting and branching dialogue when the player interacts or enters the NPC area, and can transition into an immediately-hostile scripted attack sequence when a global hostility flag is set.",
+    "Uses two global flags to choose behavior: berenMet selects first-meeting vs repeat-dialogue branches; berenMad (threshold check) causes an aggressive rant, sets the player as target and performs a short combat-like effect/teleport sequence.",
+    "Presents multi-choice prompts (Item::ask) and displays lines via Item::bark to implement conversational branches; branches drive follow-up effects/spawns and small scripted animations.",
+    "Contains a helper 'hatch' event that temporarily stases the avatar, teleports entities, uses/destroys an item and likely spawns/activates an object — used for a hatch/activation cinematic."
+  ],
+  "notable_control_flow": [
+    "Entry checks berenMad first; if berenMad meets a hostile threshold an immediate hostile path is taken (insult -> Npc::setTarget -> spawn/teleport/effect sequence).",
+    "If not hostile, dialog branch selection depends on berenMet and on the player's Item::ask response string (string compares drive alternate replies).",
+    "Hostile path executes several teleports, effect spawns (FIRESPEL, FREE), camera centering and repeated METHOD_* spawns to create a short scripted combat/teleport vignette.",
+    "The hatch helper runs as Event 7 and performs avatar stasis, teleports and Item::use/Item::destroy; its effects are separate from the main dialogue flow but are used to animate an activation."
+  ],
+  "open_questions": [
+    "Is U8P_BERENHCH::hatch invoked directly from U8P_BERENHCH::0080 or only triggered externally by an Event 7 dispatch? (inferred but not explicit).",
+    "Exact gameplay consequences of the FIRESPEL::1F65 call: whether it deals damage or is purely visual is not explicit in the disassembly.",
+    "Precise numeric thresholds and full semantics of berenMad (is threshold >=3 constant or data-driven?) and whether other scripts modify these flags concurrently.",
+    "Meaning and purpose of the spawned METHOD::* calls (0113, 15E7, 091C, 1090) — likely animations/timers but exact effects are not annotated."
+  ],
+  "main_function": {
+    "name": "U8P_BERENHCH::0080",
+    "execution_form": "process",
+    "purpose": "Handle player interaction/fast-area entry with the Beren NPC: run greeting or accusation dialogue branches, present choice prompts, and, if global hostility indicates, immediately transition into a scripted hostile/attack sequence that targets the player and spawns effects/teleports.",
+    "entry_conditions": [
+      "Player (pid) interacts with or enters NPC fast-area/interaction region (inferred from pid and item parameter usage).",
+      "Script checks global flags berenMad and berenMet at start to choose branch behavior.",
+      "Player response to Item::ask choices drives some in-script branching."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_BERENHCH::0080",
+      "kind": "main",
+      "role": "Primary interaction/fast-area handler for the Beren NPC: drives dialogue, choice prompts and hostile scripted vignette.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BERENHCH::hatch",
+      "kind": "helper",
+      "role": "Event 7 hatch/activation sequence: places avatar in stasis, teleports actor(s), calls Item::use on a referenced object and destroys an item; used for a hatch cinematic or activation.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Display dialogue lines / NPC barks to the player.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::ask",
+      "kind": "extern",
+      "role": "Present multi-choice prompt and return player's selected string for branching.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_BERENHCH::0080",
+        "callee": "U8P_BERENHCH::hatch",
+        "purpose": "Associated hatch/activation sequence used in the NPC's scripted behavior (inferred helper event). May be used to animate or activate objects during interaction.",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_BERENHCH::0080",
+        "callee": "Item::bark",
+        "purpose": "Show NPC dialogue lines to the player for greetings, insults and replies throughout branches.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BERENHCH::0080",
+        "callee": "Item::ask",
+        "purpose": "Present branch choices to the player and obtain a selected response string to drive dialogue branching.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BERENHCH::0080",
+        "callee": "Npc::setTarget",
+        "purpose": "Mark the player as the NPC's combat target when the hostile branch is taken.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BERENHCH::0080",
+        "callee": "FIRESPEL::1F65",
+        "purpose": "Spawn/execute a fire spell/effect during the hostile sequence (likely damage or visual attack).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BERENHCH::0080",
+        "callee": "FREE::1C19",
+        "purpose": "Spawn temporary visual/effect placeholders used during scripted teleport/combat sequence.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BERENHCH::0080",
+        "callee": "Camera::setCenterOn",
+        "purpose": "Center camera on entity for dramatic focus during teleport/effect sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BERENHCH::0080",
+        "callee": "Npc::teleport",
+        "purpose": "Teleport NPC (and/or avatar) to computed X/Y/Z positions during the hostile/effect vignette.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BERENHCH::hatch",
+        "callee": "U8P_BERENHCH::setAvatarInStasis",
+        "purpose": "Place or remove avatar in stasis around the hatch/teleport operation to prevent player movement during the cinematic.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BERENHCH::hatch",
+        "callee": "Item::use",
+        "purpose": "Activate a referenced object as part of the hatch sequence (spawn or trigger behavior).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BERENHCH::hatch",
+        "callee": "Item::destroy",
+        "purpose": "Remove an item after hatch activation (cleanup/destruction).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BERENHCH::0080",
+        "callee": "Npc::getDir / Item::getDirToItem / Item::getX / Item::getY / Item::getZ / Npc::getMap",
+        "purpose": "Read spatial/orientation data to compute teleport offsets and orient spawned effects/animations.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BERENHCH::0080",
+        "callee": "METHOD::0113, METHOD::15E7, METHOD::091C, METHOD::1090",
+        "purpose": "Spawn or invoke timed animations/tasks to sequence effects and pauses between dialogue/effects (inferred animation/task calls).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "berenMad",
+        "likely_effect": "Controls aggression: tested at entry (threshold check, e.g. >=3) to decide whether to immediately become hostile and run attack/teleport/effect sequence.",
+        "confidence": "high"
+      },
+      {
+        "name": "berenMet",
+        "likely_effect": "Marks whether player has met Beren before; selects first-meeting greeting vs returning-acquaintance dialogue branches.",
+        "confidence": "high"
+      }
+    ],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_BERENHCH::0080",
+    "behavior_summary_one_liner": "Controls the NPC 'Beren' interaction: runs greeting and branching dialogue when the player interacts or enters the NPC area, and can transition into an immediately-hostile scripted attack sequence when a global hostility flag is set.",
+    "external_call_count": 12,
+    "flag_read_count": 2,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

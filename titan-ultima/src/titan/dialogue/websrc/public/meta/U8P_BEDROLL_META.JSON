@@ -1,0 +1,270 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_BEDROLL.json",
+  "file": "U8P_BEDROLL",
+  "behavior_summary": [
+    "Provides item behavior for a bedroll: a short 'U8P_BEDROLL::look' handler that makes the bedroll produce its short description, and a 'use' handler that implements resting mechanics with guards, a player prompt, time advancement, visual fade transitions, and recovery of HP/mana.",
+    "BEDROLL::look (Event 0) simply invokes Item::bark to show the item's short description to the inspecting process.",
+    "BEDROLL::use (Event 1) prevents resting while in combat or when enemies are nearby, otherwise asks the player how many rest periods (0–5) to take; if >0 it saves and sets avatar stasis, fades to black, advances in-game time by 4 * periods hours, spawns a background rest process, restores HP/mana (inferred from STR/INT), fades back, and restores previous stasis."
+  ],
+  "notable_control_flow": [
+    "U8P_BEDROLL::look: immediate linear flow — set minimal item info/exclusion, call Item::bark with literal \"bedroll \", then suspend/return.",
+    "U8P_BEDROLL::use: guarded entry — checks Npc::isInCombat OR Npc::areEnemiesNear and barks \"This is no time to rest!\" if true.",
+    "Prompt path — runs FREE::36E7 (pre-prompt housekeeping), barks prompt string, builds string list \"0\"..\"5\", calls Item::ask and maps returned string to numeric periods.",
+    "Early exit when chosen periods == 0.",
+    "Rest path — save avatar stasis (getAvatarInStasis), set stasis (setAvatarInStasis(1)), process FadeToBlack(pid), advance time by 4*periods (TimeInGameHours + 4*periods -> SetTimeInGameHours), spawn FREE::1C19(pid, 0x64, 0), restore HP/mana (Npc::getStr -> Npc::setHp(2*STR); Npc::getInt -> Npc::setMana(2*INT) inferred), process FadeFromBlack(pid), restore saved stasis, clean up and return."
+  ],
+  "open_questions": [
+    "FREE::36E7 and FREE::1C19 are observed but their exact runtime roles are not explicit — FREE::36E7 appears to be UI or prompt preparation/cleanup and FREE::1C19 appears to spawn a background rest handler/tick, but this is inferred.",
+    "Exact HP and Mana restoration formulas are inferred (code multiplies STR and INT by 2) but the precise intended game formula and caps (e.g., max HP/mana) are not explicit.",
+    "Precise semantics of setAvatarInStasis (which stasis bit(s) are set/cleared) and interactions with other systems during stasis are unknown and only partially inferred.",
+    "The exact units and wrap/overflow behavior of TimeInGameHours/SetTimeInGameHours (e.g., day rollover logic) are not shown here."
+  ],
+  "main_function": {
+    "name": "U8P_BEDROLL::look",
+    "execution_form": "process",
+    "purpose": "When a player/actor inspects the bedroll, emit the bedroll's short description via Item::bark.",
+    "entry_conditions": [
+      "Triggered by the 'U8P_BEDROLL::look' event (Event 0) when an actor examines or enters the item's U8P_BEDROLL::look area."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_BEDROLL::look",
+      "kind": "main",
+      "role": "Emit the bedroll's short description when inspected (calls Item::bark).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BEDROLL::use",
+      "kind": "helper",
+      "role": "Implement resting mechanics when the bedroll is used: guard against combat/enemies, prompt for periods, advance time, spawn rest handler, and restore HP/mana.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Display/speak short text associated with an item or process; used by both U8P_BEDROLL::look and use.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::ask",
+      "kind": "extern",
+      "role": "Present selectable string choices to the player and return the chosen string (used to ask how many periods to rest).",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::isInCombat",
+      "kind": "extern",
+      "role": "Query whether the avatar/NPC is in combat; used to block resting.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::areEnemiesNear",
+      "kind": "extern",
+      "role": "Check for nearby enemies to block resting if true.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BEDROLL::getAvatarInStasis",
+      "kind": "extern",
+      "role": "Read current avatar stasis state so it can be saved and restored around the rest operation.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BEDROLL::setAvatarInStasis",
+      "kind": "extern",
+      "role": "Set avatar stasis (freeze/unfreeze avatar); used to set stasis before fade and restore it afterwards.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BEDROLL::process FadeToBlack",
+      "kind": "extern",
+      "role": "Trigger fade-to-black visual transition prior to time advancement/rest.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BEDROLL::process FadeFromBlack",
+      "kind": "extern",
+      "role": "Trigger fade-from-black visual transition after rest completes.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BEDROLL::TimeInGameHours",
+      "kind": "extern",
+      "role": "Read current in-game hour count for computing new time after rest.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BEDROLL::SetTimeInGameHours",
+      "kind": "extern",
+      "role": "Set/advance in-game time to a new hour value after rest.",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::36E7",
+      "kind": "extern",
+      "role": "Observed pre-prompt housekeeping or UI prep call prior to Item::ask (purpose inferred).",
+      "confidence": "medium"
+    },
+    {
+      "name": "FREE::1C19",
+      "kind": "extern",
+      "role": "Spawned process during rest; likely a background rest handler or delayed resume routine (purpose inferred).",
+      "confidence": "medium"
+    },
+    {
+      "name": "Npc::getStr",
+      "kind": "extern",
+      "role": "Read the avatar's Strength attribute for computing HP restoration.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::setHp",
+      "kind": "extern",
+      "role": "Set avatar HP (used to apply healing/restoration after resting).",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::getInt",
+      "kind": "extern",
+      "role": "Read the avatar's Intelligence attribute for computing mana restoration.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::setMana",
+      "kind": "extern",
+      "role": "Set avatar mana (used to apply mana restoration after resting).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_BEDROLL::look",
+        "callee": "Item::bark",
+        "purpose": "Emit the short description string \"bedroll \"; direct player-facing message.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEDROLL::use",
+        "callee": "Npc::isInCombat",
+        "purpose": "Guard: check if avatar is in combat to block resting.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEDROLL::use",
+        "callee": "Npc::areEnemiesNear",
+        "purpose": "Guard: check for nearby enemies to block resting.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEDROLL::use",
+        "callee": "Item::bark",
+        "purpose": "Inform player when resting is blocked (\"This is no time to rest!\") and present prompt strings.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEDROLL::use",
+        "callee": "FREE::36E7",
+        "purpose": "Pre-prompt housekeeping / UI preparation before showing choices (inferred).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BEDROLL::use",
+        "callee": "Item::ask",
+        "purpose": "Present choice list (\"0\"..\"5\") and obtain selected periods as a string.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEDROLL::use",
+        "callee": "U8P_BEDROLL::getAvatarInStasis",
+        "purpose": "Save current avatar stasis state before entering rest sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEDROLL::use",
+        "callee": "U8P_BEDROLL::setAvatarInStasis",
+        "purpose": "Set avatar into stasis (freeze) for the rest transition.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEDROLL::use",
+        "callee": "U8P_BEDROLL::process FadeToBlack",
+        "purpose": "Perform fade-to-black visual transition prior to time advancement/rest.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEDROLL::use",
+        "callee": "U8P_BEDROLL::TimeInGameHours",
+        "purpose": "Read current time to compute new hour value after resting (base for +4*periods).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEDROLL::use",
+        "callee": "U8P_BEDROLL::SetTimeInGameHours",
+        "purpose": "Advance in-game time by adding 4 * chosen periods.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEDROLL::use",
+        "callee": "FREE::1C19",
+        "purpose": "Spawn a background process related to resting (observed spawn with args (pid, 0x64, 0); inferred to manage rest ticks or delayed resume).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BEDROLL::use",
+        "callee": "Npc::getStr",
+        "purpose": "Read Strength to compute HP restoration after rest.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEDROLL::use",
+        "callee": "Npc::setHp",
+        "purpose": "Apply healed HP value (inferred as 2 * STR based on code pattern).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BEDROLL::use",
+        "callee": "Npc::getInt",
+        "purpose": "Read Intelligence to compute mana restoration after rest.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEDROLL::use",
+        "callee": "Npc::setMana",
+        "purpose": "Apply restored mana value (inferred as 2 * INT based on code pattern).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BEDROLL::use",
+        "callee": "U8P_BEDROLL::process FadeFromBlack",
+        "purpose": "Perform fade-from-black visual transition after rest completes.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "BEDROLL::look",
+    "behavior_summary_one_liner": "Provides item behavior for a bedroll: a short 'U8P_BEDROLL::look' handler that makes the bedroll produce its short description, and a 'use' handler that implements resting mechanics with guards, a player prompt, time advancement, visual fade transitions, and recovery of HP/mana.",
+    "external_call_count": 17,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

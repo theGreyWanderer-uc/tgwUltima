@@ -1,0 +1,81 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_DEMNSTAT.json",
+  "file": "U8P_DEMNSTAT",
+  "behavior_summary": [
+    "Handles the 'U8P_DEMNSTAT::look' (examine) event for the demon statue. When the player/actor looks at the statue the script marks the object with an item/info state (0x0208), applies a process-exclude operation to alter processing for that object/process, and asks the item/process to emit the short text \"demon statue \" (via Item::bark) so the description is presented to the player.",
+    "The routine uses the object pointer passed in (BP+06h) as the target of the set-info and the bark call, pushes the current pid as the context for the bark, frees the temporary string, and then completes by performing a small implies/pop sequence before suspending/returning."
+  ],
+  "notable_control_flow": [
+    "Entry on Event 0 (U8P_DEMNSTAT::look) -> push info id 0x0208 and target object -> set info on object",
+    "Immediately follow with process-exclude opcode to change processing/delivery for the object/process",
+    "Allocate/push literal string \"demon statue \", push object pointer (BP+06h) and current pid, call Item::bark to present the string",
+    "Free temporary string, perform implies/pop on retval and then suspend/return"
+  ],
+  "open_questions": [
+    "Exact semantics and game meaning of item/info 0x0208 (appears to mark the object as examined or alter an inspect-related state) — confidence: medium",
+    "Precise effect scope of 'process exclude' here (appears to prevent further processing or re-triggering for this object/process) — confidence: medium",
+    "Whether Item::bark always displays text to the player or can also route text to other systems (inferred to be display/speak) — confidence: medium",
+    "Whether BP+06h is strictly the object PID for the statue in all call contexts or sometimes a different context pointer (inferred to be the statue PID) — confidence: high"
+  ],
+  "main_function": {
+    "name": "U8P_DEMNSTAT::look",
+    "execution_form": "process",
+    "purpose": "Respond to the player/actor looking at the demon statue: mark the object with an info/state flag, change its processing state, and emit a short description string to the viewer via Item::bark.",
+    "entry_conditions": [
+      "Event 0 (U8P_DEMNSTAT::look) — invoked when an actor looks at or examines the demon statue"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_DEMNSTAT::look",
+      "kind": "main",
+      "role": "Handle the 'U8P_DEMNSTAT::look' event for the demon statue (set info, process-exclude, and call Item::bark to show description).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_DEMNSTAT::look",
+        "callee": "Item::bark",
+        "purpose": "Request the item/process to emit/display the short text \"demon statue \" to the player/process context. Called with the literal string, the object pointer (BP+06h), and the current pid pushed as context.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": [
+      {
+        "name": "item/info 0x0208",
+        "likely_effect": "Marks the target object with a specific info/state bit (appears to record 'examined' or otherwise change object state relevant to future processing).",
+        "confidence": "medium"
+      },
+      {
+        "name": "process exclude (opcode)",
+        "likely_effect": "Excludes the calling object/process from normal processing or further event delivery (prevents repeated handling or further automatic processing).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "ui_message",
+    "process_control",
+    "cleanup"
+  ],
+  "quick_facts": {
+    "main_function": "DEMNSTAT::look",
+    "behavior_summary_one_liner": "Handles the 'U8P_DEMNSTAT::look' (examine) event for the demon statue. When the player/actor looks at the statue the script marks the object with an item/info state (0x0208), applies a process-exclude operation to alter processing for that object/process, and asks the item/process to emit the short text \"demon statue \" (via Item::bark) so the description is presented to the player.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 2
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

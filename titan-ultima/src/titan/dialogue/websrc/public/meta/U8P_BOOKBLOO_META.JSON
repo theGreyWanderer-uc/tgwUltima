@@ -1,0 +1,94 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_BOOKBLOO.json",
+  "file": "U8P_BOOKBLOO",
+  "behavior_summary": [
+    "BOOKBLOO::look handles the 'U8P_BOOKBLOO::look' (examine) event for the BOOKBLOO object: it marks/records an info state (info id 0x0208) on the target object and then causes the object to 'bark' the literal text \"blood \".",
+    "A temporary runtime string is allocated for the literal, passed to Item::bark with the object pointer, then freed. The bark return value is inspected (used with an 'implies' operation) and the process then suspends/returns.",
+    "This is a short, UI-facing handler: its visible effect is the displayed/emitted word \"blood \" when the object is examined; the info write and process/exclude calls are engine housekeeping steps around that action."
+  ],
+  "notable_control_flow": [
+    "On entry the handler pushes a constant info id (0x0208) and the object pointer argument to call a set_info-like operation, immediately followed by a process_exclude/housekeeping opcode.",
+    "The literal \"blood \" is converted to a runtime string pointer (allocate/str_to_ptr), then Item::bark is invoked with the object pointer and that string.",
+    "After the bark call the temporary string is freed, the bark return value is consumed with an 'implies' operation, and the process suspends/returns."
+  ],
+  "open_questions": [
+    "Exact semantic meaning of info id 0x0208 (what gameplay state or flag it represents) — inferred but not certain.",
+    "Whether the arg_ptr parameter ([BP+06h]) is always the item instance PID or occasionally a viewer/player PID in some engine call variants.",
+    "How the result of the 'implies' operation on the bark return value is used by the engine (flow-control, gating further processing, or purely boolean reporting).",
+    "Whether process_exclude here prevents further processing of this item or is simply an internal engine pattern used after set_info."
+  ],
+  "main_function": {
+    "name": "U8P_BOOKBLOO::look",
+    "execution_form": "process",
+    "purpose": "Responds to the object's 'U8P_BOOKBLOO::look' (examine) event by setting an object info/state (0x0208) and emitting the short descriptive message \"blood \", then suspending/returning.",
+    "entry_conditions": [
+      "Event 0: U8P_BOOKBLOO::look — invoked when the player/actor examines or 'looks at' the BOOKBLOO object (area/inspect trigger)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_BOOKBLOO::look",
+      "kind": "main",
+      "role": "Handle the 'U8P_BOOKBLOO::look' (examine) event for the BOOKBLOO object; perform info write and call Item::bark to display \"blood \".",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_BOOKBLOO::look",
+        "callee": "U8P_BOOKBLOO::set_info",
+        "purpose": "Record/configure an info/state key on the target object (info id 0x0208 is pushed). Appears to mark or annotate the object for engine state/flags.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BOOKBLOO::look",
+        "callee": "U8P_BOOKBLOO::process_exclude",
+        "purpose": "Engine housekeeping invoked immediately after set_info; likely adjusts processing/exclusion around the object instance.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BOOKBLOO::look",
+        "callee": "U8P_BOOKBLOO::str_to_ptr (string allocation for literal)",
+        "purpose": "Convert/allocate the literal string \"blood \" into a runtime string pointer suitable for Item::bark.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BOOKBLOO::look",
+        "callee": "Item::bark",
+        "purpose": "Ask the item/process to emit/display the provided text to the viewer/engine; here used to show the word \"blood \".",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BOOKBLOO::look",
+        "callee": "U8P_BOOKBLOO::free_string",
+        "purpose": "Free the temporary runtime string allocated for the bark call.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "BOOKBLOO::look",
+    "behavior_summary_one_liner": "BOOKBLOO::look handles the 'U8P_BOOKBLOO::look' (examine) event for the BOOKBLOO object: it marks/records an info state (info id 0x0208) on the target object and then causes the object to 'bark' the literal text \"blood \".",
+    "external_call_count": 5,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

@@ -1,0 +1,115 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_HIDPAD.json",
+  "file": "U8P_HIDPAD",
+  "behavior_summary": [
+    "Handles the 'U8P_HIDPAD::gotHit' event for a HIDPAD item. It examines an incoming event parameter and the item's stack quantity and then either initiates a teleport sequence, destroys the item, or does nothing.",
+    "When the incoming event parameter equals 1 and the item quantity is 0 or 1: clear/reset a reference (via Kernel::resetRef), spawn a teleport process (teleportToEgg) with arguments that vary by quantity (different small code and destination byte), then suspend the current process (the caller appears to wait for the teleport process).",
+    "When the item quantity is 0 or 1 but the incoming event parameter is not 1: the item is destroyed (Item::destroy).",
+    "When the item quantity is greater than 1: the handler returns without action."
+  ],
+  "notable_control_flow": [
+    "Initial check of the second parameter (BP+0Ah) gates main behavior: only the value '1' leads to teleport logic; other values follow a destroy-or-no-op path.",
+    "Quantity branching: Item::getQ() result (BP-04h) splits control into three cases: 0, 1, >1. Only the 0 and 1 branches lead to teleport-or-destroy behavior; >1 exits with no action.",
+    "Before spawning teleportToEgg the code calls Kernel::resetRef(..., ProcessType=0x06) — a preparatory/cleanup step that runs only on the teleport paths.",
+    "Teleport is started as an independent process (process teleportToEgg) and its return is pushed before the current process calls suspend, implying the current process yields/waits for the teleport flow."
+  ],
+  "open_questions": [
+    "Precise semantic meaning of the second parameter (BP+0Ah): it is inferred to be an event/hit flag or a process-type indicator but its canonical name and full semantics are not present.",
+    "Exact meaning of the small-word and destination-byte arguments passed to teleportToEgg (e.g., 0x03/0x3E vs 0x01/0x0F): they likely encode teleport subtype/destination but specifics are inferred from constants only.",
+    "What exact reference/id is being reset by Kernel::resetRef (the uword arg passed) and why ProcessType 0x06 is used — the reset's broader side effects are inferred but not proven.",
+    "Whether 'suspend' always waits for teleportToEgg completion or only yields until another engine condition — behaviour is inferred from call pattern but not explicitly documented."
+  ],
+  "main_function": {
+    "name": "U8P_HIDPAD::gotHit",
+    "execution_form": "process",
+    "purpose": "Respond to a 'U8P_HIDPAD::gotHit' event on a HIDPAD item by checking an event parameter and the item's quantity, then either trigger a teleport flow (for specific event+quantity combinations), destroy the item, or return with no action.",
+    "entry_conditions": [
+      "Invoked on the 'U8P_HIDPAD::gotHit' event (Event 6) for the HIDPAD item.",
+      "Receives two parameters: an item identifier/pointer (BP+06h) and an event/hit flag or mode value (BP+0Ah)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_HIDPAD::gotHit",
+      "kind": "main",
+      "role": "Event handler for HIDPAD 'U8P_HIDPAD::gotHit' (event 6). Orchestrates teleport or destroy behavior based on parameters and item quantity.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getQ",
+      "kind": "extern",
+      "role": "Query the item's quantity/stack count. Used to choose between teleport, destroy, or no-op paths.",
+      "confidence": "high"
+    },
+    {
+      "name": "Kernel::resetRef",
+      "kind": "extern",
+      "role": "Reset/clear a reference associated with the item/process before initiating teleport. Exact reference semantics are inferred.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_HIDPAD::process teleportToEgg",
+      "kind": "extern",
+      "role": "Spawned process that performs teleportation to an 'egg' destination. Called with (pid, small-code, destination-byte). The caller suspends after starting it.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::destroy",
+      "kind": "extern",
+      "role": "Remove/destroy the item when teleport conditions are not met.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_HIDPAD::gotHit",
+        "callee": "Item::getQ",
+        "purpose": "Return the item's quantity/stack count to decide branching (0, 1, >1).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_HIDPAD::gotHit",
+        "callee": "Kernel::resetRef",
+        "purpose": "Clear or reset a reference related to the item/process prior to teleporting. Likely a cleanup/guard to avoid stale references during teleport.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_HIDPAD::gotHit",
+        "callee": "U8P_HIDPAD::process teleportToEgg",
+        "purpose": "Spawn a teleport process targeting an 'egg' destination; different small-code and destination-byte values are supplied depending on the item's quantity (separate behavior for qty==0 vs qty==1).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_HIDPAD::gotHit",
+        "callee": "Item::destroy",
+        "purpose": "Destroy the item when the event parameter does not match the teleport-triggering value (and quantity is 0 or 1).",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_HIDPAD::gotHit",
+    "behavior_summary_one_liner": "Handles the 'U8P_HIDPAD::gotHit' event for a HIDPAD item. It examines an incoming event parameter and the item's stack quantity and then either initiates a teleport sequence, destroys the item, or does nothing.",
+    "external_call_count": 4,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

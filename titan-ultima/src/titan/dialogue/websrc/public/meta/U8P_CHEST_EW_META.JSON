@@ -1,0 +1,127 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_CHEST_EW.json",
+  "file": "U8P_CHEST_EW",
+  "behavior_summary": [
+    "CHEST_EW::look: When a player (or process) examines the chest, the chest emits a short identifying text ('chest ') via Item::bark and the handler yields/suspends (typical U8P_CHEST_EW::look behavior).",
+    "CHEST_EW::use: Toggles the chest between open and closed. On use it plays a chest sound, reads the current frame to determine open vs closed, and either requests opening (set open_request_flag) or closes the chest UI (Item::closeGump).",
+    "If the game loop is active, the use routine iterates contained tokens/items and invokes their use handlers (inferred via loopscr + calli/process) to update or notify contents when the chest opens/closes.",
+    "The use handler suspends (yields) to allow asynchronous/UI operations, then on resume it re-checks frame/state and either opens the chest UI gump (Item::openGump with parameter 7) if the open request still applies, or applies a computed frame change (Item::setFrame) to reflect the new open/closed state."
+  ],
+  "notable_control_flow": [
+    "Branch on current Item::getFrame to decide opening vs closing path.",
+    "When closing: immediately call Item::closeGump and prepare frame_delta = -1.",
+    "When opening: set an open_request_flag and prepare frame_delta = +1, then (after iterating contents and suspending) call Item::openGump only if the frame/state did not change while suspended.",
+    "Iterative loop over contained items only runs if isGameRunning() returns true (guarding content processing to live runtime).",
+    "Suspension/yield point in the use handler: state is saved (frame saved) before suspend and revalidated after resume to avoid racing with external changes."
+  ],
+  "open_questions": [
+    "What exact token/structure format is used by the loopscr iteration (the script iterates contained tokens but the token/address format is not explicit)?",
+    "How (if at all) the 'quality' value returned by Item::getQuality affects subsequent behavior or sound selection (quality is read but not otherwise used in the visible logic).",
+    "Exact meaning of the numeric parameter '7' passed to Item::openGump (gump id, mode, or layout variant) is inferred but not concretely documented here.",
+    "Whether additional external actors/processes can change the chest frame during suspension and what side effects those changes might have beyond skipping openGump (the script detects frame changes but downstream implications are unclear)."
+  ],
+  "main_function": {
+    "name": "U8P_CHEST_EW::look",
+    "execution_form": "process",
+    "purpose": "Provide the item's short description response when examined: push the literal 'chest ' and invoke Item::bark so the chest announces itself, then yield/suspend as a typical U8P_CHEST_EW::look handler.",
+    "entry_conditions": [
+      "Event 0: triggered when an actor/player looks at or examines the chest (the item's 'U8P_CHEST_EW::look' event)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_CHEST_EW::look",
+      "kind": "main",
+      "role": "Respond to examine/U8P_CHEST_EW::look by invoking Item::bark with 'chest ' and yielding; primary player-facing description handler.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CHEST_EW::use",
+      "kind": "helper",
+      "role": "Handle user 'use' on the chest: toggle open/closed, play SFX, close/open chest gump, iterate and notify contained items, suspend and finalize frame/Gump state after resume.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_CHEST_EW::look",
+        "callee": "Item::bark",
+        "purpose": "Emit the short identifying text 'chest ' to the viewer/process when examined.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CHEST_EW::use",
+        "callee": "Item::getQuality",
+        "purpose": "Read the item's quality/variant at use start; value stored for possible use/branching (observed but not used further in visible logic).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_CHEST_EW::use",
+        "callee": "Item::getFrame",
+        "purpose": "Obtain the current display/frame index to determine whether the chest is open or closed and to compute the frame update.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CHEST_EW::use",
+        "callee": "U8P_CHEST_EW::playSFX",
+        "purpose": "Play chest-use sound effect immediately when the chest is activated.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CHEST_EW::use",
+        "callee": "Item::closeGump",
+        "purpose": "Close the chest's UI gump when the chest is being closed.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CHEST_EW::use",
+        "callee": "U8P_CHEST_EW::isGameRunning",
+        "purpose": "Guard content-iteration so contained-item processing only happens while the game loop is active.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CHEST_EW::use",
+        "callee": "process Item::use (calli)",
+        "purpose": "Invoke the use handler on each contained token/item during iteration to update or notify contents when the chest toggles.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_CHEST_EW::use",
+        "callee": "Item::openGump",
+        "purpose": "Open the chest's UI gump (parameter 7) after resume if the open request condition still holds and the frame wasn't changed externally.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CHEST_EW::use",
+        "callee": "Item::setFrame",
+        "purpose": "Apply the computed frame change (frame + frame_delta) to visually reflect the chest's new open/closed state.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "CHEST_EW::look",
+    "behavior_summary_one_liner": "CHEST_EW::look: When a player (or process) examines the chest, the chest emits a short identifying text ('chest ') via Item::bark and the handler yields/suspends (typical U8P_CHEST_EW::look behavior).",
+    "external_call_count": 9,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

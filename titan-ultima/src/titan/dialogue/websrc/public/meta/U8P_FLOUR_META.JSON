@@ -1,0 +1,101 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_FLOUR.json",
+  "file": "U8P_FLOUR",
+  "behavior_summary": [
+    "Handles the 'look' (examine) event for a sack of flour item: when a viewer inspects the object, the script marks the item/process state, builds and presents a short description string \"sack of flour \" to the viewer via Item::bark, frees the temporary string, performs a small post-call logical/imply operation on the bark return value, then suspends and returns.",
+    "The script uses engine primitives (inferred 'set info' and 'process exclude') before producing the description, which likely mark the item as inspected or prevent duplicate processing while the description runs.",
+    "No global game-state flags are read or written by this snippet (no persistent quest/global side-effects inferred)."
+  ],
+  "notable_control_flow": [
+    "Entry: script invoked on Event 0 ('look') for the flour object.",
+    "Pre-bark: push viewer/process id and perform 'set info' and 'process exclude' primitives to adjust item/process metadata.",
+    "Action: allocate literal string \"sack of flour \", call Item::bark(target viewer/process, string) to present the description.",
+    "Post-action: free the temporary string, capture Item::bark return value, apply an 'implies' (logical) operation storing the result in a temp local.",
+    "Termination: suspend the script/process and return control."
+  ],
+  "open_questions": [
+    "What exact info key or numeric code is set by the 'set info' primitive (the script pushes a code but the concrete meaning of that code is not present here)?",
+    "What is the precise effect of the 'implies' operation applied to Item::bark's return value (control-flow guard, conditional suppression, or engine bookkeeping)?",
+    "Does 'process exclude' prevent only concurrent processing of this object or also prevent other event handlers from running on the same object during the bark?"
+  ],
+  "main_function": {
+    "name": "U8P_FLOUR::look (Func_80 / Event 0)",
+    "execution_form": "process",
+    "purpose": "Present a short item description for a sack of flour when an actor inspects it; mark the item/process state to reflect the inspection and avoid concurrent processing while the description is presented.",
+    "entry_conditions": [
+      "Triggered by Event 0 (the 'look' or examine action) on the flour item",
+      "Called when a viewer/process (player or actor) inspects the flour object (viewer/process id passed in)"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_FLOUR::look (Func_80 / Event 0)",
+      "kind": "main",
+      "role": "Event handler for the flour object's 'look' action; orchestrates state changes and presentation of the description string.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine used to deliver/display a short text message from an item to a process/viewer.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FLOUR::set info",
+      "kind": "extern",
+      "role": "Usecode primitive that writes an informational flag/state on the item or related object (inferred to mark 'inspected' or change processing state).",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_FLOUR::process exclude",
+      "kind": "extern",
+      "role": "Usecode primitive that excludes or adjusts processing of the current process/object while the description runs (inferred guard against reentry).",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_FLOUR::look (Func_80 / Event 0)",
+        "callee": "Item::bark",
+        "purpose": "Deliver the literal description string \"sack of flour \" to the viewer/process so the player sees the item description.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FLOUR::look (Func_80 / Event 0)",
+        "callee": "U8P_FLOUR::set info",
+        "purpose": "Set an item/process information flag before presenting the description (likely to mark as inspected or to change processing state).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FLOUR::look (Func_80 / Event 0)",
+        "callee": "U8P_FLOUR::process exclude",
+        "purpose": "Exclude or adjust processing for the current process/context while producing the description to prevent interference or reentrancy.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "FLOUR::look (Func_80 / Event 0)",
+    "behavior_summary_one_liner": "Handles the 'look' (examine) event for a sack of flour item: when a viewer inspects the object, the script marks the item/process state, builds and presents a short description string \"sack of flour \" to the viewer via Item::bark, frees the temporary string, performs a small post-call logical/imply operation on the bark return value, then suspends and returns.",
+    "external_call_count": 3,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

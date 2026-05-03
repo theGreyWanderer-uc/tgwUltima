@@ -1,0 +1,78 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_CUSION.json",
+  "file": "U8P_CUSION",
+  "behavior_summary": [
+    "Handles the 'U8P_CUSION::look' (examine) event for the cushion item. When triggered it establishes an info/context on a referenced object (push 0x208 + indirect object) and excludes the current process from that context, constructs a temporary string \"cushion \", calls Item::bark to present that text to the player/viewer, frees the temporary string, and then uses the bark return value in a short implies/pop sequence before suspending/returning."
+  ],
+  "notable_control_flow": [
+    "Entry via Event 0 (U8P_CUSION::look) — short, single-purpose handler.",
+    "Sets a contextual info key (0x208) on an object and issues a process-exclude operation — a guard or presentation-context setup before speaking.",
+    "Allocates/creates a temporary heap string ('cushion '), passes it to Item::bark, then frees the string (cleanup).",
+    "Captures Item::bark return value and immediately uses it in an implies/pop pattern prior to suspend/return (likely to propagate or handle the bark result)."
+  ],
+  "open_questions": [
+    "What exactly does the info id 0x208 represent in engine semantics (presentation context, logged metadata, or other)? (inferred)",
+    "Which PID is passed first to Item::bark (the item's PID as 'this' vs. the viewer/process PID) — parameter order is inferred from call pattern but not explicit.",
+    "What precise effect does the implies/pop sequence have here (flow control, return normalization, or interruption handling)?"
+  ],
+  "main_function": {
+    "name": "U8P_CUSION::look",
+    "execution_form": "process",
+    "purpose": "Respond to a player/actor examining the cushion by presenting a short descriptive bark ('cushion ') and cleaning up temporary resources after establishing a presentation/info context.",
+    "entry_conditions": [
+      "Event 0 — 'U8P_CUSION::look' (triggered when an actor/player examines the cushion item)"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_CUSION::look",
+      "kind": "main",
+      "role": "Event handler for the cushion object's 'U8P_CUSION::look' (examine) action; prepares context, invokes Item::bark with the text 'cushion ', and performs cleanup.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item API called to present/display short text or message originating from an item/process.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_CUSION::look",
+        "callee": "Item::bark",
+        "purpose": "Cause the cushion item to 'bark' / display the short descriptive string \"cushion \" to the appropriate process/player.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CUSION::look",
+        "callee": "FREE::free (inferred)",
+        "purpose": "Free the temporary heap string created to hold the literal 'cushion ' after it has been passed to Item::bark.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_CUSION::look",
+    "behavior_summary_one_liner": "Handles the 'U8P_CUSION::look' (examine) event for the cushion item. When triggered it establishes an info/context on a referenced object (push 0x208 + indirect object) and excludes the current process from that context, constructs a temporary string \"cushion \", calls Item::bark to present that text to the player/viewer, frees the temporary string, and then uses the bark return value in a short implies/pop sequence before suspending/returning.",
+    "external_call_count": 2,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

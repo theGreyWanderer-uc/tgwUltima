@@ -1,0 +1,149 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_TALLON.json",
+  "file": "U8P_TALLON",
+  "behavior_summary": [
+    "This script provides thin event-handler wrappers for the Tallon NPC that prepare context and delegate substantive behavior to shared sorcerer or spell/combat subsystems.",
+    "Handlers covered: U8P_TALLON::look (examine), use (interact), enterFastArea (area entry trigger), leaveFastArea (area exit trigger), and cast (spell targeted at Tallon).",
+    "Each wrapper typically sets an info id, applies a process-exclude/info operation on the actor/context, pushes the requesting pid and either a literal name or spell id, spawns an external handler (SORCERER::* or SPELCMBT::084D), evaluates the returned value with an 'implies' test, then suspends. The wrapper itself implements no substantive NPC logic."
+  ],
+  "notable_control_flow": [
+    "All visible handlers are 'spawn' wrappers: they push context and constants, spawn an external routine, consume/free pushed resources, then apply an 'implies' test to the spawned routine's return and suspend.",
+    "Return values from the spawned handlers are used only in an 'implies' test (influence on control flow is limited to that implication), and then the script suspends — indicating final behavior and messaging is handled by the external routine.",
+    "Event-driven: each function corresponds to a distinct engine event (U8P_TALLON::look/use/enter/leave/cast) rather than being invoked by other script functions."
+  ],
+  "open_questions": [
+    "Exact semantic meaning of the numeric info ids (0x0207, 0x0208, 0x021B, 0x021C, 0x021D) and the indirect data block pushed before spawning — these are inferred to be metadata/info keys but their concrete game meanings are unknown.",
+    "Precise role of the 'implies' test and what control/state it affects after the spawn (beyond consuming the return and suspending).",
+    "Whether [BP+06h] is strictly 'self' (the Tallon actor) or the requesting actor/process in every event (the pattern suggests actor/context but could vary by event).",
+    "What values are represented by the pushed 'pid' in each handler (likely the requesting process/player PID) and how it influences external handlers' behavior.",
+    "Detailed behavior implemented in the external SORCERER::* handlers and SPELCMBT::084D (only their interfaces/purposes are visible here)."
+  ],
+  "main_function": {
+    "name": "U8P_TALLON::look",
+    "execution_form": "process",
+    "purpose": "Handle the 'U8P_TALLON::look' (examine) event for the Tallon NPC by preparing context (info id, actor context, pid, name) and delegating the display/response logic to the shared handler SORCERER::039C. After the handler returns, run an 'implies' test on its return and then suspend.",
+    "entry_conditions": [
+      "Event 0 (U8P_TALLON::look) — triggered when the player or relevant actor examines Tallon (invokes the U8P_TALLON::look handler)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_TALLON::look",
+      "kind": "main",
+      "role": "Event handler for 'U8P_TALLON::look' that delegates to SORCERER::039C after setting info/context",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_TALLON::use",
+      "kind": "helper",
+      "role": "Event handler for 'use' that delegates to SORCERER::05EC after preparing context",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_TALLON::enterFastArea",
+      "kind": "helper",
+      "role": "Fast-area entry trigger handler that delegates to SORCERER::258C",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_TALLON::leaveFastArea",
+      "kind": "helper",
+      "role": "Fast-area exit trigger handler that delegates to SORCERER::25D2",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_TALLON::cast",
+      "kind": "helper",
+      "role": "Spell-cast handler that forwards a spell id and context to SPELCMBT::084D",
+      "confidence": "high"
+    },
+    {
+      "name": "SORCERER::039C",
+      "kind": "extern",
+      "role": "Shared external handler that implements the substantive 'U8P_TALLON::look' behavior for sorcerer-type NPCs",
+      "confidence": "high"
+    },
+    {
+      "name": "SORCERER::05EC",
+      "kind": "extern",
+      "role": "Shared external handler that implements the 'use' behavior for sorcerer-type NPCs",
+      "confidence": "high"
+    },
+    {
+      "name": "SORCERER::258C",
+      "kind": "extern",
+      "role": "Shared external handler for fast-area entry behavior for sorcerer-type NPCs",
+      "confidence": "high"
+    },
+    {
+      "name": "SORCERER::25D2",
+      "kind": "extern",
+      "role": "Shared external handler for fast-area exit behavior for sorcerer-type NPCs",
+      "confidence": "high"
+    },
+    {
+      "name": "SPELCMBT::084D",
+      "kind": "extern",
+      "role": "Spell/combat subsystem routine handling spell effects targeted at Tallon",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_TALLON::look",
+        "callee": "SORCERER::039C",
+        "purpose": "Perform the actual 'U8P_TALLON::look' response for Tallon (receives info id 0x0208, actor/context, an indirect data block, pid, string 'Tallon', and actor/context).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TALLON::use",
+        "callee": "SORCERER::05EC",
+        "purpose": "Perform the 'use' interaction logic for Tallon (receives info id 0x0207, actor/context, indirect data, pid, string 'Tallon', actor/context).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TALLON::enterFastArea",
+        "callee": "SORCERER::258C",
+        "purpose": "Handle enter-area behavior for Tallon (receives info id 0x021B, actor/context, indirect data, pid, actor/context).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TALLON::leaveFastArea",
+        "callee": "SORCERER::25D2",
+        "purpose": "Handle leave-area behavior for Tallon (receives info id 0x021C, actor/context, indirect data, pid, actor/context).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TALLON::cast",
+        "callee": "SPELCMBT::084D",
+        "purpose": "Resolve a spell cast at Tallon by forwarding the spell id (from [BP+0Ah]) plus actor/context and other pushed values to the spell/combat subsystem.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "TALLON::look",
+    "behavior_summary_one_liner": "This script provides thin event-handler wrappers for the Tallon NPC that prepare context and delegate substantive behavior to shared sorcerer or spell/combat subsystems.",
+    "external_call_count": 5,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

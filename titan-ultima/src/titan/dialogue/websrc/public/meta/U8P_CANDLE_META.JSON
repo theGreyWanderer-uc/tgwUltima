@@ -1,0 +1,101 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_CANDLE.json",
+  "file": "U8P_CANDLE",
+  "behavior_summary": [
+    "Provides simple gameplay behavior for a candle item: a short description when examined, a toggleable state (likely lit/unlit) when used, and an animation/process spawn to drive visual or timed behavior.",
+    "CANDLE::look (U8P_CANDLE::CANDLE::look) responds to the 'U8P_CANDLE::look' event by asking the item to 'bark' the literal string \"candle \", directing that message to the requesting process/player.",
+    "CANDLE::use (U8P_CANDLE::CANDLE::use) reads the item's frame, inspects the low two bits, and toggles them: if low bits == 0 it increments the frame by 1 (turns on); otherwise it clears the low two bits (turns off). The new frame is written back via Item::setFrame.",
+    "CANDLE::anim (U8P_CANDLE::CANDLE::anim) spawns a separate METHOD::0610 process (spawn) using the candle process pointer — used to run candle animation or timed behavior outside the current event."
+  ],
+  "notable_control_flow": [
+    "U8P_CANDLE::CANDLE::look: linear flow — prepare process context, push pid and literal string, call Item::bark, consume return and suspend/return.",
+    "U8P_CANDLE::CANDLE::use: branch on (Item::getFrame() & 0x03) == 0: true -> setFrame(frame + 1); false -> setFrame(frame & 0xFC). This encodes a binary toggle using the frame's low two bits.",
+    "U8P_CANDLE::CANDLE::anim: spawns an external METHOD::0610 process and then returns; spawn is used instead of inline animation logic, isolating timed/visual behavior."
+  ],
+  "open_questions": [
+    "Exact semantic meaning of the frame low two bits: appears to represent lit/unlit or a small multi-state (inferred) but not explicitly known (confidence: medium).",
+    "Precise behavior and parameters of METHOD::0610 (spawn) invoked by U8P_CANDLE::CANDLE::anim (likely animation/timer but the method's implementation is external) (confidence: medium).",
+    "Whether CANDLE::use is triggered by a specific use verb, a proximity trigger, or inventory action in-engine (the event number is inferred as 1/use; trigger semantics are not explicit) (confidence: low).",
+    "Any global or quest flags influenced by these handlers — none observed in canonical data, but game logic elsewhere might inspect the candle frame (confidence: medium)."
+  ],
+  "main_function": {
+    "name": "U8P_CANDLE::look",
+    "execution_form": "process",
+    "purpose": "When an actor/process examines the candle, emit the short description 'candle ' via Item::bark so the player sees the item name/description.",
+    "entry_conditions": [
+      "Event 0 (U8P_CANDLE::look) — triggered when the player/actor inspects or 'looks at' the candle"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_CANDLE::look",
+      "kind": "main",
+      "role": "Handle the 'U8P_CANDLE::look' (examine) event: prepare context and call Item::bark with the string \"candle \".",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CANDLE::use",
+      "kind": "helper",
+      "role": "Handle the 'use' event: read item frame and toggle low two bits to switch state (likely lit/unlit).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CANDLE::anim",
+      "kind": "helper",
+      "role": "Spawn a separate METHOD::0610 process to run candle animation or timed behavior.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_CANDLE::look",
+        "callee": "Item::bark",
+        "purpose": "Emit the item's short description text to the requesting process/player using the literal string \"candle \".",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CANDLE::use",
+        "callee": "Item::getFrame",
+        "purpose": "Read the current frame/index/state of the candle so the handler can decide how to toggle it.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CANDLE::use",
+        "callee": "Item::setFrame",
+        "purpose": "Write back the new frame/index after toggling the low two bits (apply the on/off state).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CANDLE::anim",
+        "callee": "METHOD::0610 (spawn)",
+        "purpose": "Spawn a separate process/method to run candle animation or timed behavior; decouples animation from the event handler.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_CANDLE::CANDLE::look",
+    "behavior_summary_one_liner": "Provides simple gameplay behavior for a candle item: a short description when examined, a toggleable state (likely lit/unlit) when used, and an animation/process spawn to drive visual or timed behavior.",
+    "external_call_count": 4,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

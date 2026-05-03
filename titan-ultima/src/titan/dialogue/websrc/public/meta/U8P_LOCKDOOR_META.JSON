@@ -1,0 +1,167 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_LOCKDOOR.json",
+  "file": "U8P_LOCKDOOR",
+  "behavior_summary": [
+    "When an actor enters the LOCKDOOR trigger area, the script iterates every item in that area (presumed door objects) and inspects/modifies each item's quality/flags.",
+    "For each item the script reads the item's quality word and if bit 0x0100 is clear and the item exists, it spawns a door behavior (DOOR_NS::08B4) for that item with the activator as argument — likely to open/activate the door.",
+    "The script decides whether to set or clear the item's 0x0400 bit using a combination of the activator's egg id (type), a single urandom(100) roll, and several global schedule/quest flags (rhianSchedule, araminaSchedule, korickSchedule, acolyteKilled, goToInnerSanctum).",
+    "A special branch for activator egg id == 10 requires acolyteKilled > 0 and goToInnerSanctum == 1; in that case the script sets 0x0400 on the item and also calls METHOD::0113 with argument 0x0080 on the activator (likely to trigger a sound/animation/effect).",
+    "After any bit changes the updated quality word is written back to the item via Item::setQuality and the script continues to the next item."
+  ],
+  "notable_control_flow": [
+    "Single-entry event handler (U8P_LOCKDOOR::enterFastArea) that first obtains activator identity (Egg::getEggId) and a random roll (urandom(100)).",
+    "Iterative loop over all items in the fast/trigger area, performing per-item checks and updates.",
+    "Per-item short-circuit spawn: if item_quality & 0x0100 == 0 and item pointer non-zero -> spawn DOOR_NS::08B4(activator, item) and suspend the spawner.",
+    "Switch-like branching by activator egg id (values observed: 1,2,3,5,10) to choose how to set/clear bit 0x0400; some branches use pure chance, others read schedule globals or quest flags.",
+    "Special-case branch for egg id 10 that both sets the bit and invokes METHOD::0113(0x0080) on the activator when quest conditions hold."
+  ],
+  "open_questions": [
+    "What are the precise gameplay meanings of the item-quality bits 0x0100 and 0x0400 (locked/open/animated/disabled states are inferred but not confirmed)?",
+    "What exact in-game effect does METHOD::0113(0x0080) have on the activator (sound, animation, state change)?",
+    "What does the spawned DOOR_NS::08B4 process do in detail (open animation, movement, state transition) and how does it interact with the 0x0400 flag?",
+    "Are the numeric egg id values mapped to specific NPCs/actor types in data elsewhere (names inferred from schedule globals but mapping is not present here)?",
+    "What are the intended probability thresholds (the code compares the random roll to a constant 0x32) in plain-percentage terms and why is the random roll shared across all items rather than per-item?"
+  ],
+  "main_function": {
+    "name": "U8P_LOCKDOOR::enterFastArea",
+    "execution_form": "process",
+    "purpose": "Handle an actor entering the LOCKDOOR trigger area by iterating nearby door items to possibly spawn door behavior and toggle a door-related quality flag (0x0400) based on actor identity, chance, and schedule/quest flags.",
+    "entry_conditions": [
+      "U8P_LOCKDOOR::enterFastArea — called when the Avatar or another actor enters the LOCKDOOR trigger/fast area"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_LOCKDOOR::enterFastArea",
+      "kind": "main",
+      "role": "Event handler for the LOCKDOOR area trigger; iterates items and modifies door state flags/spawns door scripts.",
+      "confidence": "high"
+    },
+    {
+      "name": "Egg::getEggId",
+      "kind": "extern",
+      "role": "Query the activator's egg id (actor identity/type) used to select behavior branches.",
+      "confidence": "high"
+    },
+    {
+      "name": "urandom",
+      "kind": "extern",
+      "role": "Produce a 0..99 random roll used for probabilistic branches.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getQuality",
+      "kind": "extern",
+      "role": "Read an item's quality/flags word to inspect bits such as 0x0100 and 0x0400.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::setQuality",
+      "kind": "extern",
+      "role": "Write back a modified quality/flags word to an item after bit changes.",
+      "confidence": "high"
+    },
+    {
+      "name": "spawn DOOR_NS::08B4",
+      "kind": "extern",
+      "role": "Spawn/activate a door behavior/script for a given item and activator (likely opens/activates the door).",
+      "confidence": "medium"
+    },
+    {
+      "name": "METHOD::0113",
+      "kind": "extern",
+      "role": "Invoke a method on the activator with argument 0x0080; likely triggers an effect (sound/animation) on the actor.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_LOCKDOOR::enterFastArea",
+        "callee": "Egg::getEggId",
+        "purpose": "Obtain the activator's egg id to choose per-actor behavior branches.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOCKDOOR::enterFastArea",
+        "callee": "urandom",
+        "purpose": "Get a 0–99 random value used for probabilistic decisions about toggling item flags.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOCKDOOR::enterFastArea",
+        "callee": "Item::getQuality",
+        "purpose": "Read each item's quality/flags word before testing/modifying bits.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOCKDOOR::enterFastArea",
+        "callee": "spawn DOOR_NS::08B4",
+        "purpose": "Spawn the door behavior/script for items that lack the 0x0100 bit and exist; likely to open or animate the door.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LOCKDOOR::enterFastArea",
+        "callee": "METHOD::0113",
+        "purpose": "Invoke an effect on the activator with argument 0x0080 in the egg id == 10 special case when quest flags allow it.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LOCKDOOR::enterFastArea",
+        "callee": "Item::setQuality",
+        "purpose": "Persist modified quality/flags words (notably changes to bit 0x0400) back to each item.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "rhianSchedule",
+        "likely_effect": "Used by the egg id == 2 branch to decide whether to set or clear the item's 0x0400 bit (schedule-based gating).",
+        "confidence": "high"
+      },
+      {
+        "name": "araminaSchedule",
+        "likely_effect": "Used by the egg id == 3 branch to decide whether to set or clear the item's 0x0400 bit.",
+        "confidence": "high"
+      },
+      {
+        "name": "korickSchedule",
+        "likely_effect": "Used by the egg id == 5 branch; specific bits of this schedule are tested (01 or 03) to decide the 0x0400 bit action.",
+        "confidence": "high"
+      },
+      {
+        "name": "acolyteKilled",
+        "likely_effect": "Read in the egg id == 10 branch and combined with goToInnerSanctum to gate the setting of 0x0400 and the METHOD::0113 call.",
+        "confidence": "high"
+      },
+      {
+        "name": "goToInnerSanctum",
+        "likely_effect": "Read in the egg id == 10 branch and used with acolyteKilled to conditionally enable door unlocking and activator effect.",
+        "confidence": "high"
+      }
+    ],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_LOCKDOOR::enterFastArea",
+    "behavior_summary_one_liner": "When an actor enters the LOCKDOOR trigger area, the script iterates every item in that area (presumed door objects) and inspects/modifies each item's quality/flags.",
+    "external_call_count": 6,
+    "flag_read_count": 5,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}
