@@ -1,0 +1,73 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_FIREGLOB.json",
+  "file": "U8P_FIREGLOB",
+  "behavior_summary": [
+    "U8P_FIREGLOB::look responds to an examine/U8P_FIREGLOB::look event on the fire globe item by producing a short descriptive message.",
+    "When an actor inspects the fire globe the script constructs the literal string \"fire globe \" and calls Item::bark to present that text to the inspecting actor (directed using the caller PID).",
+    "The routine does not read or write global flags or persistent state; its effect is purely descriptive/output and then it suspends/returns."
+  ],
+  "notable_control_flow": [
+    "Entry on Event 0 (U8P_FIREGLOB::look/examine).",
+    "Prepare a static string \"fire globe \", push the caller PID, and invoke the external call Item::bark.",
+    "A short implies/pop sequence follows the Item::bark return (small local/flow handling), then the process suspends/returns."
+  ],
+  "open_questions": [
+    "Exact semantics and side effects of the short implies/pop sequence after Item::bark — appears to be trivial control/return handling but exact engine effect is not explicit.",
+    "Whether there are any conditional behaviors or alternate messages for different callers (the disassembly shows only the single static string).",
+    "Confirmation of the exact identity and type of the caller PID parameter (inferred from stack location [BP+06h])."
+  ],
+  "main_function": {
+    "name": "U8P_FIREGLOB::look",
+    "execution_form": "process",
+    "purpose": "Handle the item's U8P_FIREGLOB::look/examine event by emitting a short descriptive text ('fire globe ') to the inspecting actor.",
+    "entry_conditions": [
+      "Event 0 - the item is looked at / inspected by an actor (caller PID supplied)"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_FIREGLOB::look",
+      "kind": "main",
+      "role": "Respond to the 'U8P_FIREGLOB::look' event for the fire globe item and produce a short bark/description.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine used to display a short text message (a 'bark') to a target process/player.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_FIREGLOB::look",
+        "callee": "Item::bark",
+        "purpose": "Display/send the literal string \"fire globe \" to the inspecting actor/process whose PID is passed as an argument.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "description"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_FIREGLOB::look",
+    "behavior_summary_one_liner": "U8P_FIREGLOB::look responds to an examine/U8P_FIREGLOB::look event on the fire globe item by producing a short descriptive message.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

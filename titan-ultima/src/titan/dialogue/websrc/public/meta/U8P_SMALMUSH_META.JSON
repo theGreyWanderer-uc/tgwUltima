@@ -1,0 +1,75 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_SMALMUSH.json",
+  "file": "U8P_SMALMUSH",
+  "behavior_summary": [
+    "Handles the 'U8P_SMALMUSH::look' (examine) event for a small mushroom item: it builds the textual prefix \"mushroom \", sets messaging/context state so the description is emitted with specific exclusions/targets, asks the item instance to produce or append its item-specific description via Item::bark, processes the bark return value with an implication-style test, and then suspends/returns.",
+    "The routine does not modify any global script flags in this excerpt; its effects are localized to producing a description message and interpreting the bark return value to influence a follow-up condition or outcome.",
+    "Parameter passed in ([BP+06h]) is the item instance (the callee/this) used by Item::bark to generate the item-specific text."
+  ],
+  "notable_control_flow": [
+    "Linear sequence: prepare string buffer \"mushroom \", set context (info/process exclusions/push pid), call Item::bark as an instance method, free the temporary string, capture bark's return value, evaluate that value with an implies/pop pattern, then suspend/return.",
+    "The function runs as a process-style handler (suspends at end) and therefore acts in the engine's event/process model rather than as a pure inline helper.",
+    "An implication-style operation is performed with the return value from Item::bark; this is used as a condition or signal for subsequent engine behavior (exact effect inferred)."
+  ],
+  "open_questions": [
+    "Precisely what semantics does the Item::bark return value encode and how does the implies operation affect game state or subsequent logic?",
+    "Does Item::bark append to a shared buffer, directly send text to the viewer, or both? The disassembly shows a prepared string passed in but exact output mechanics are inferred.",
+    "What exact context is established by the set-info / process-exclude / push-pid sequence (which actors/processes are excluded or targeted)?"
+  ],
+  "main_function": {
+    "name": "U8P_SMALMUSH::look",
+    "execution_form": "process",
+    "purpose": "Respond to an actor examining the small mushroom by producing the descriptive text. It composes the prefix \"mushroom \", delegates to the item instance to provide the item-specific suffix/description via Item::bark, and then uses the bark return value to influence a conditional/implication before suspending.",
+    "entry_conditions": [
+      "Event 0: triggered when an actor (typically the Avatar) looks at or examines the small mushroom object (enter/U8P_SMALMUSH::look event)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_SMALMUSH::look",
+      "kind": "main",
+      "role": "Event handler for the 'U8P_SMALMUSH::look' action on the small mushroom item; composes prefix text and delegates to Item::bark.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "External item-method invoked to produce or append item-specific description text and return a status/value consumed by the caller.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_SMALMUSH::look",
+        "callee": "Item::bark",
+        "purpose": "Provide the item-specific portion of the description or otherwise emit/display a short textual message using the prepared prefix string. The return value is used by the caller to influence a subsequent implication/condition.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "guard",
+    "message"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_SMALMUSH::SMALMUSH::look",
+    "behavior_summary_one_liner": "Handles the 'U8P_SMALMUSH::look' (examine) event for a small mushroom item: it builds the textual prefix \"mushroom \", sets messaging/context state so the description is emitted with specific exclusions/targets, asks the item instance to produce or append its item-specific description via Item::bark, processes the bark return value with an implication-style test, and then suspends/returns.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

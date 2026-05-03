@@ -1,0 +1,86 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_GRIMOIRE.json",
+  "file": "U8P_GRIMOIRE",
+  "behavior_summary": [
+    "Provides the 'U8P_GRIMOIRE::look' (examine) handler for a grimoire/book item. When an actor inspects the item the handler reads a small numeric code (item quality) and maps that value to a human-readable title or short description.",
+    "For each recognized code the routine asks the game process to 'speak' or display the chosen literal string by invoking Item::bark with the inspecting process (pid) and the item as context.",
+    "The routine is informational: it dispatches purely on the item's quality code to select text and does not appear to change persistent global flags or other game state in the extracted excerpt."
+  ],
+  "notable_control_flow": [
+    "Entry occurs on the item 'U8P_GRIMOIRE::look' event; control flow is a multi-way dispatch keyed on the return from Item::getQuality.",
+    "For each matched case the function prepares a literal string and issues a call to Item::bark (pushing pid, string, item).",
+    "There are repeated calls to Item::getQuality and repeated bark calls; no branching that modifies globals is observed in the excerpt."
+  ],
+  "open_questions": [
+    "Is the full mapping from quality codes to titles complete in the disassembly excerpt or are more cases handled elsewhere?",
+    "Which exact process id (pid) value is provided to the function (viewer vs. the item itself) in the engine's calling convention — inferred but not explicitly declared in the excerpt.",
+    "Are there any side effects of Item::bark beyond displaying text (e.g., logging, triggering dialogue state) that are not visible in this snippet?"
+  ],
+  "main_function": {
+    "name": "U8P_GRIMOIRE::look",
+    "execution_form": "process",
+    "purpose": "Handle the examine/U8P_GRIMOIRE::look event for a book/grimoire item: read the item's numeric quality/code and present a corresponding book title or short descriptive string to the inspecting actor via Item::bark.",
+    "entry_conditions": [
+      "Invoked when an actor examines (looks at) the grimoire item (Event 0 / U8P_GRIMOIRE::look).",
+      "Triggered when the engine dispatches a 'U8P_GRIMOIRE::look' event to the item's process; the item pointer is provided (inferred at BP+06h)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_GRIMOIRE::look",
+      "kind": "main",
+      "role": "Event handler for the grimoire's 'U8P_GRIMOIRE::look' (examine) event; maps item quality codes to human-readable strings and displays them.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getQuality",
+      "kind": "extern",
+      "role": "External accessor used to obtain the item quality/code used as the dispatch key.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "External routine used to deliver/display the prepared string to the target process/player (speaker PID) with the item as context.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_GRIMOIRE::look",
+        "callee": "Item::getQuality",
+        "purpose": "Return a small numeric code/quality value from the item that selects which book title/description to show.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GRIMOIRE::look",
+        "callee": "Item::bark",
+        "purpose": "Make the chosen string visible/audible to the inspecting actor by issuing a bark from the relevant process (pid) with the item as context.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "informational"
+  ],
+  "quick_facts": {
+    "main_function": "GRIMOIRE::look",
+    "behavior_summary_one_liner": "Provides the 'U8P_GRIMOIRE::look' (examine) handler for a grimoire/book item. When an actor inspects the item the handler reads a small numeric code (item quality) and maps that value to a human-readable title or short description.",
+    "external_call_count": 2,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

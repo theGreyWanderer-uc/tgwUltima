@@ -1,0 +1,252 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_XAVIER.json",
+  "file": "U8P_XAVIER",
+  "behavior_summary": [
+    "Defines Xavier NPC behavior: how he responds to being examined, how his routine/schedule is chosen and spawned, how he reacts to area entry/exit, theft, casting events, and simple item-search/encounter subroutines.",
+    "XAVIER::look: when a player 'looks' at Xavier, the script checks whether he is dead and produces an appropriate short bark. If alive it composes a name/job label based on two global flags (xavierName and xavierJob).",
+    "Scheduling: U8P_XAVIER::schedule queries system helpers to choose a schedule variant, writes xavierSchedule, and spawns asynchronous handlers to implement that schedule.",
+    "Area triggers: U8P_XAVIER::enterFastArea clears various reference slots and spawns the behavior matching xavierSchedule; U8P_XAVIER::leaveFastArea clears transient flags and, if the NPC is dead, teleports the corpse to random coordinates.",
+    "Reactive behaviors: U8P_XAVIER::AvatarStoleSomething pursues/reprimands the thief and spawns follow-up behavior; U8P_XAVIER::cast causes a flee/teleport sequence involving dialog, animation/frame changes, and clearing immortal state.",
+    "Auxiliary subroutines (U8P_XAVIER::0598, U8P_XAVIER::066F) implement item-search, pathfinding, greetings, and approach logic used by schedule-driven behaviors."
+  ],
+  "notable_control_flow": [
+    "XAVIER::look branches on Npc::isDead: corpse description vs composed live identification.",
+    "U8P_XAVIER::schedule repeatedly queries FREE::28F9 to select a schedule variant and only writes xavierSchedule after spawn synchronization; schedule determines which sub-behavior will be spawned by enterFastArea.",
+    "U8P_XAVIER::enterFastArea unconditionally resets multiple reference slots (resetRef) before reading xavierSchedule and spawning one of three subroutines (schedule==1 -> 0BA6, ==2 -> 0598, ==3 -> 1429).",
+    "U8P_XAVIER::leaveFastArea clears xavierJustHealed and invokes FREE::2A56 for cleanup; if Xavier is dead it generates two random coordinates (urandom) and calls Npc::teleport to move the corpse.",
+    "U8P_XAVIER::cast waits/polls for a target (loop with countdown), then clears timers/refs, barks 'I must flee!', adjusts animation/frames and immortal/dead flags, and spawns timed actions (METHOD::15E7, METHOD::0113) to implement fleeing/teleport behavior."
+  ],
+  "open_questions": [
+    "Exact meanings of schedule variants (values stored in xavierSchedule) beyond which handler they spawn—what game-time behaviors each schedule encodes remains inferred from spawn targets.",
+    "Precise semantics and side effects of free/system calls FREE::28F9, FREE::2A56, FREE::29D8, FREE::1C19 and METHOD::143A/METHOD::133F beyond their inferred roles as queries/timers/spawns.",
+    "What triggers U8P_XAVIER::cast in gameplay (player action, spell type, or scripted event) and the meaning/format of its implicit 'cast argument' parameter.",
+    "The concrete relationships between the item-search routine (U8P_XAVIER::0598) and world objects: which item shapes/frames are targeted and how prioritized selection works."
+  ],
+  "main_function": {
+    "name": "U8P_XAVIER::look",
+    "execution_form": "process",
+    "purpose": "Respond to an examine/U8P_XAVIER::look event on the Xavier NPC. If Xavier is dead, present a corpse description; otherwise produce a short identification string composed from global flags (xavierName and xavierJob).",
+    "entry_conditions": [
+      "Event 0 (U8P_XAVIER::look) invoked when a player or actor examines Xavier (process invoked with viewer pid)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_XAVIER::look",
+      "kind": "main",
+      "role": "Handle 'U8P_XAVIER::look' (examine) interactions: produce corpse or identification barks using xavierName/xavierJob globals.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_XAVIER::schedule",
+      "kind": "helper",
+      "role": "Decide and persist Xavier's schedule variant (writes xavierSchedule) and spawn schedule-specific handlers.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_XAVIER::enterFastArea",
+      "kind": "helper",
+      "role": "Area-entry trigger: reset refs and spawn the behavior corresponding to xavierSchedule.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_XAVIER::leaveFastArea",
+      "kind": "helper",
+      "role": "Area-exit trigger: cleanup refs and timers, clear xavierJustHealed, and teleport corpse if dead.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_XAVIER::cast",
+      "kind": "helper",
+      "role": "Handle a casting-related event: wait for a target, then perform a flee sequence (dialog, animation/frame changes, clear immortal/set dead, teleport) with timing spawns.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_XAVIER::AvatarStoleSomething",
+      "kind": "helper",
+      "role": "React when the avatar steals: locate stolen item, set activity to approach, bark a reprimand, and spawn follow-up behavior.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_XAVIER::0598",
+      "kind": "helper",
+      "role": "Item-search and pathfinding subroutine used by schedule 2 behavior to find and approach items, then spawn encounter handlers.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_XAVIER::066F",
+      "kind": "helper",
+      "role": "Encounter/micro-behavior helper: greeting logic, conditional dialog (dependent on xavierMet), and small movement/approach decisions.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_XAVIER::enterFastArea",
+        "callee": "U8P_XAVIER::0598",
+        "purpose": "Spawn the item-search routine when xavierSchedule == 2.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_XAVIER::enterFastArea",
+        "callee": "U8P_XAVIER::0BA6",
+        "purpose": "Spawn schedule-specific handler when xavierSchedule == 1 (inferred name/label used in binary).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_XAVIER::enterFastArea",
+        "callee": "U8P_XAVIER::1429",
+        "purpose": "Spawn schedule-specific handler when xavierSchedule == 3.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_XAVIER::0598",
+        "callee": "U8P_XAVIER::066F",
+        "purpose": "When an item/target is found and reachable, spawn the encounter/micro-behavior handler.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_XAVIER::schedule",
+        "callee": "METHOD::143A",
+        "purpose": "Spawn preliminary schedule activation/validation step before writing xavierSchedule.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_XAVIER::schedule",
+        "callee": "METHOD::133F",
+        "purpose": "Spawn the schedule enforcement/handler after xavierSchedule is set.",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_XAVIER::look",
+        "callee": "Npc::isDead",
+        "purpose": "Determine whether to show corpse description or live identification.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_XAVIER::look",
+        "callee": "Item::bark",
+        "purpose": "Produce short dialog/bark strings directed at the viewing player (e.g., 'the body of Xavier', 'Xavier the monk').",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_XAVIER::enterFastArea",
+        "callee": "U8P_XAVIER::resetRef",
+        "purpose": "Clear reference/target slots so the NPC forgets previous targets when entering the fast area.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_XAVIER::schedule",
+        "callee": "FREE::28F9",
+        "purpose": "Query system/free helper repeatedly to decide schedule variant and spawn parameters.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_XAVIER::leaveFastArea",
+        "callee": "FREE::2A56",
+        "purpose": "Clear timers/counters/flags related to references upon leaving the area.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_XAVIER::leaveFastArea",
+        "callee": "urandom",
+        "purpose": "Generate random coordinates used to teleport a dead NPC's corpse to a random location.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_XAVIER::leaveFastArea",
+        "callee": "Npc::teleport",
+        "purpose": "Teleport Xavier's corpse to the coordinates produced by urandom.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_XAVIER::cast",
+        "callee": "Npc::getTarget",
+        "purpose": "Poll for the presence of a target before initiating flee/teleport behavior.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_XAVIER::cast",
+        "callee": "Item::bark",
+        "purpose": "Make the NPC say 'I must flee!' as part of the cast reaction.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_XAVIER::cast",
+        "callee": "Npc::clrImmortal / Npc::setDead",
+        "purpose": "Clear immortal status and mark the NPC dead as part of the flee/teleport sequence (engine state changes).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_XAVIER::0598",
+        "callee": "Item::getFrame / Item::getStatus / Item::getDirToItem / Npc::pathfind",
+        "purpose": "Examine candidate items and pathfind toward reachable targets.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_XAVIER::066F",
+        "callee": "Item::bark",
+        "purpose": "Produce greeting or helpful messages; behavior varies with xavierMet flag.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "xavierName",
+        "likely_effect": "Controls whether Xavier's personal name is included in the live identification bark.",
+        "confidence": "high"
+      },
+      {
+        "name": "xavierJob",
+        "likely_effect": "Controls whether a job/title (e.g., 'monk' or 'man') is appended to Xavier's identification string.",
+        "confidence": "high"
+      },
+      {
+        "name": "xavierSchedule",
+        "likely_effect": "Determines which behavioral subroutine to spawn when entering the fast area and gates certain reactions.",
+        "confidence": "high"
+      },
+      {
+        "name": "xavierMet",
+        "likely_effect": "Toggles first-time vs repeat greeting dialog in encounter subroutines.",
+        "confidence": "medium"
+      }
+    ],
+    "writes": [
+      {
+        "name": "xavierSchedule",
+        "likely_effect": "Persist the schedule variant chosen by U8P_XAVIER::schedule so other handlers (enterFastArea, AvatarStoleSomething) can act accordingly.",
+        "confidence": "high"
+      },
+      {
+        "name": "xavierJustHealed",
+        "likely_effect": "Cleared on leaveFastArea to indicate the NPC is no longer in a transient 'just healed' state.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "XAVIER::look",
+    "behavior_summary_one_liner": "Defines Xavier NPC behavior: how he responds to being examined, how his routine/schedule is chosen and spawned, how he reacts to area entry/exit, theft, casting events, and simple item-search/encounter subroutines.",
+    "external_call_count": 12,
+    "flag_read_count": 4,
+    "flag_write_count": 2
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

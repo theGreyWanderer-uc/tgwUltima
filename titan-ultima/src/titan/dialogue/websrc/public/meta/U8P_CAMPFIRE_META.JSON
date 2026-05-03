@@ -1,0 +1,236 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_CAMPFIRE.json",
+  "file": "U8P_CAMPFIRE",
+  "behavior_summary": [
+    "Provides in-world interaction and ambient behavior for a campfire object: describing it when looked at, starting/stopping an ambient fire sound when actors enter/leave its proximity, responding to being hit (including spawning ember/particle effects and potentially reflecting small damage back), and running a spawned routine that periodically emits particle effects and can apply incidental damage to overlapping actors.",
+    "CAMPFIRE::look (U8P_CAMPFIRE::look) marks the item for info/exclusion and calls Item::bark to present the textual description beginning with \"campfire \".",
+    "U8P_CAMPFIRE::enterFastArea and U8P_CAMPFIRE::leaveFastArea toggle item info/exclusion and respectively start and stop an ambient SFX (sound id 0x0086).",
+    "U8P_CAMPFIRE::gotHit inspects the attacker: for non-NPC attackers it computes a direction and applies a small receiveHit back, then spawns a short-lived ember/particle spawner; for other attackers it checks the attacker's item type and either invokes that item's use() (for certain types) or triggers explode() if the item is explosive. Randomization (urandom) is used to vary timings and hit magnitudes.",
+    "U8P_CAMPFIRE::018C is a spawned looping routine that uses randomized waits to spawn FREE::1C19 particle effects and checks for overlapping entities; when overlap is detected it computes a direction and calls Item::receiveHit to inflict minor incidental damage."
+  ],
+  "notable_control_flow": [
+    "Event-driven: distinct handlers for 'U8P_CAMPFIRE::look' (U8P_CAMPFIRE::look), fast-area enter (U8P_CAMPFIRE::enterFastArea), fast-area leave (U8P_CAMPFIRE::leaveFastArea), and being hit (U8P_CAMPFIRE::gotHit).",
+    "U8P_CAMPFIRE::gotHit branches on Item::isNpc and on Item::getType / Item::isExplosive to choose between reflecting small hits, calling an attacker's use(), or triggering explode().",
+    "A spawned background process (U8P_CAMPFIRE::018C) loops with urandom-driven sleeps, spawns particle processes (FREE::1C19), and applies incidental damage to overlapping actors; this keeps visual/interactive effects decoupled from the synchronous hit handling.",
+    "Area enter/leave handlers set info and process-exclude state around their SFX calls, suggesting a pattern that prevents reentrancy or marks the item for UI focus while effects are active."
+  ],
+  "open_questions": [
+    "Which concrete internal type constants cause gotHit to call the attacker's Item::use() (type ids are compared but the exact constants are not documented here)?",
+    "What is the exact visual/functional content of the spawned FREE::1C19 process (inferred as ember/particle effects but not canonical)?",
+    "Exact numeric ranges and scaling used for reflected/incidental damage (urandom ranges and damage magnitudes are present but precise gameplay balance values are not specified).",
+    "Whether the reflection behavior targets only non-NPC players/objects or also certain NPC subclasses (Item::isNpc is used but downstream categorization is not fully enumerated)."
+  ],
+  "main_function": {
+    "name": "U8P_CAMPFIRE::look",
+    "execution_form": "process",
+    "purpose": "Handle the player/actor examining the campfire: mark item info/exclusion state and invoke Item::bark to display a description string starting with 'campfire '.",
+    "entry_conditions": [
+      "Event 0 (U8P_CAMPFIRE::look) — triggered when an actor examines or 'looks at' the campfire object in the game world"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_CAMPFIRE::look",
+      "kind": "main",
+      "role": "Examine handler: sets info/exclusion and calls Item::bark with the campfire description.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CAMPFIRE::enterFastArea",
+      "kind": "helper",
+      "role": "Fast-area entry handler: set info/exclude and start looping ambient SFX (sound id 0x0086).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CAMPFIRE::leaveFastArea",
+      "kind": "helper",
+      "role": "Fast-area exit handler: set info/exclude and stop ambient SFX (sound id 0x0086).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CAMPFIRE::gotHit",
+      "kind": "helper",
+      "role": "Hit response: inspect attacker, reflect or forward small damage via Item::receiveHit, spawn ember/particle routine, and handle special attacker item types (use/explode).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CAMPFIRE::018C",
+      "kind": "helper",
+      "role": "Spawned looping routine: periodically spawn particle effects (FREE::1C19), apply incidental damage to overlapping entities, and manage local state while active.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_CAMPFIRE::gotHit",
+        "callee": "U8P_CAMPFIRE::018C",
+        "purpose": "Spawn a background particle/damage routine after being hit so visual/ongoing effects and incidental damage occur asynchronously.",
+        "confidence": "high"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_CAMPFIRE::look",
+        "callee": "Item::bark",
+        "purpose": "Display a textual description for the campfire (string starting with 'campfire ').",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CAMPFIRE::enterFastArea",
+        "callee": "U8P_CAMPFIRE::playAmbientSFX",
+        "purpose": "Start a looping campfire ambient sound (sound id 0x0086) when an actor enters proximity.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CAMPFIRE::leaveFastArea",
+        "callee": "U8P_CAMPFIRE::stopSFX",
+        "purpose": "Stop the campfire ambient sound (sound id 0x0086) when an actor leaves proximity.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CAMPFIRE::gotHit",
+        "callee": "Item::isNpc",
+        "purpose": "Distinguish NPC attackers from other attacker types to select hit/response branch.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CAMPFIRE::gotHit",
+        "callee": "Item::getDirToItem",
+        "purpose": "Compute direction from the campfire to an attacker so reflected/forwarded hits can be aimed correctly.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CAMPFIRE::gotHit",
+        "callee": "Item::receiveHit",
+        "purpose": "Apply a small reflected hit to the attacker (direction and small damage magnitude).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CAMPFIRE::gotHit",
+        "callee": "Item::getType",
+        "purpose": "Read attacker's item type to detect special cases that should trigger Item::use().",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CAMPFIRE::gotHit",
+        "callee": "process Item::use",
+        "purpose": "Invoke use() on the attacking item when its type matches configured values (inferred tool/fuel interaction).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_CAMPFIRE::gotHit",
+        "callee": "Item::isExplosive",
+        "purpose": "Check if the attacking item is explosive so the campfire can trigger Item::explode().",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CAMPFIRE::gotHit",
+        "callee": "Item::explode",
+        "purpose": "Detonate an explosive attacking item when detected.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CAMPFIRE::gotHit",
+        "callee": "spawn",
+        "purpose": "Spawn FREE::1C19 (a particle/ember process) for immediate visual feedback when hit.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CAMPFIRE::018C",
+        "callee": "spawn",
+        "purpose": "Repeatedly spawn FREE::1C19 particle/ember effects on a randomized schedule while the spawned routine is active.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CAMPFIRE::018C",
+        "callee": "Item::overlaps",
+        "purpose": "Detect actors/items overlapping the campfire to decide whether to apply incidental damage.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CAMPFIRE::018C",
+        "callee": "Item::getDirToItem",
+        "purpose": "Compute direction toward overlapping actor/item so incidental receiveHit calls are aimed appropriately.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CAMPFIRE::018C",
+        "callee": "Item::receiveHit",
+        "purpose": "Apply small randomized incidental damage to overlapping actors/items.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CAMPFIRE::look",
+        "callee": "U8P_CAMPFIRE::set info",
+        "purpose": "Mark the item as presenting info / being focused before barking the description (likely affects UI state).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CAMPFIRE::enterFastArea",
+        "callee": "U8P_CAMPFIRE::set info",
+        "purpose": "Mark item info/exclusion state upon fast-area entry.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CAMPFIRE::leaveFastArea",
+        "callee": "U8P_CAMPFIRE::set info",
+        "purpose": "Set info/exclusion state when leaving fast area (cleanup/consistency).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CAMPFIRE::look",
+        "callee": "U8P_CAMPFIRE::process exclude",
+        "purpose": "Temporarily exclude the item from some processing queue while handling the U8P_CAMPFIRE::look interaction.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CAMPFIRE::enterFastArea",
+        "callee": "U8P_CAMPFIRE::process exclude",
+        "purpose": "Exclude the item from processing during area-entry handling (prevents reentrancy).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CAMPFIRE::leaveFastArea",
+        "callee": "U8P_CAMPFIRE::process exclude",
+        "purpose": "Exclude the item from processing during area-exit handling (cleanup).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CAMPFIRE::gotHit",
+        "callee": "urandom",
+        "purpose": "Introduce randomness to hit magnitudes and spawn/timing variation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CAMPFIRE::018C",
+        "callee": "urandom",
+        "purpose": "Randomize sleep durations and spawn offsets in the spawned routine.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_CAMPFIRE::look",
+    "behavior_summary_one_liner": "Provides in-world interaction and ambient behavior for a campfire object: describing it when looked at, starting/stopping an ambient fire sound when actors enter/leave its proximity, responding to being hit (including spawning ember/particle effects and potentially reflecting small damage back), and running a spawned routine that periodically emits particle effects and can apply incidental damage to overlapping actors.",
+    "external_call_count": 23,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

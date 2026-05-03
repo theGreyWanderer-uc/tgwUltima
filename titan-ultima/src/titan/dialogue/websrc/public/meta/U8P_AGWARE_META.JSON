@@ -1,0 +1,76 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_AGWARE.json",
+  "file": "U8P_AGWARE",
+  "behavior_summary": [
+    "AGWARE::look is a short process that runs when the player (or relevant actor) examines the silverware object. It prepares the object state, constructs the literal message \"silverware \", and asks the item/process system to 'bark' that string so the player sees the short description.",
+    "Before barking, the routine performs local object info/setup operations (set info and process-exclude opcodes inferred from the disassembly), then passes a target PID and the message to Item::bark.",
+    "After calling Item::bark it frees the constructed string and inspects the bark return value in an implies/pop sequence which influences the subsequent suspend/return behavior of the script."
+  ],
+  "notable_control_flow": [
+    "Entry on Event 0 ('U8P_AGWARE::look'): routine runs immediately when the object is looked at.",
+    "A call to external process method Item::bark is the core action; its return value is tested (pushed, used with 'implies', popped) and that test appears to affect whether/when the script suspends or continues.",
+    "The script executes some object-info and process-exclusion opcodes before the bark call (likely to mark state or prevent further immediate processing of the object).",
+    "The function frees the temporary string after the call and then suspends, so the visible effect is synchronous bark followed by script suspension."
+  ],
+  "open_questions": [
+    "Exact meaning and numeric id of the 'set info' opcode applied before barking (the disassembly shows an info/set and process-exclude but the specific info id and game semantic are not documented here).",
+    "Precise semantics of the implies/pop sequence using Item::bark's return value — does the return indicate success, a prompt, or a control flag for suspension? (inferred but not certain).",
+    "Clarify the exact identity of the parameter at BP+06h in all contexts: disassembly indicates it is the target PID for Item::bark (the item/process receiving the bark), but whether callers always supply a viewer PID or the item instance is not fully demonstrated in this snippet."
+  ],
+  "main_function": {
+    "name": "U8P_AGWARE::look",
+    "execution_form": "process",
+    "purpose": "Respond to the 'U8P_AGWARE::look' event by causing the silverware object to emit a short description message ('silverware ') via the item bark mechanism, performing brief object-state setup, and then suspending.",
+    "entry_conditions": [
+      "Event 0 ('U8P_AGWARE::look') — triggered when an actor (player or other process) looks at or inspects the object"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_AGWARE::look",
+      "kind": "main",
+      "role": "Handle the object's 'U8P_AGWARE::look' event; build and pass a description string to Item::bark and manage short-lived object state and suspension.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/process method invoked to present or emit a short text message on behalf of an item/process.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_AGWARE::look",
+        "callee": "Item::bark",
+        "purpose": "Request the item/process to produce/display the short message 'silverware ' to the target PID. The call is central to presenting the item's description to the player.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "AGWARE::look",
+    "behavior_summary_one_liner": "AGWARE::look is a short process that runs when the player (or relevant actor) examines the silverware object. It prepares the object state, constructs the literal message \"silverware \", and asks the item/process system to 'bark' that string so the player sees the short description.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

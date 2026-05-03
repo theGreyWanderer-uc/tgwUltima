@@ -1,0 +1,206 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_PYROS.json",
+  "file": "U8P_PYROS",
+  "behavior_summary": [
+    "Provides the in-game behavior for the NPC Pyros. When examined (U8P_PYROS::look), Pyros announces his title and sets NPC info/exclude flags.",
+    "Supports an interactive 'use' sequence (dialog + conditional escalation) that can spawn a fire spell, start continuous channeling/animation, and enter complex attack/summon routines.",
+    "Contains helper routines that produce repeated directional visual/sound effects (channel), create fire sprites and projectile-like items, and attempt legal spawning with retries before hurling created items.",
+    "Behavior varies by a small local state byte and by world state (global flag 'acolyteKilled'), allowing different dialog/attack variants."
+  ],
+  "notable_control_flow": [
+    "Event-driven: main entry PYROS::look is triggered by the player inspecting the NPC (Event 0) and unconditionally barks a title string then suspends.",
+    "Long interactive path: PYROS::use orchestrates many barks, spawns FIRESPEL::1CEB and several PYROS helper spawns, and conditionally transitions into attack/summon sequences.",
+    "Continuous loop: U8P_PYROS::PYROS::00F3 implements a repeating/channel loop that runs while global doChannel is true; it spawns short delays and directional effect spawns between iterations.",
+    "Retry/creation loop: U8P_PYROS::PYROS::018D computes offsets and repeatedly calls Item::legal_create with bounded retries (local byte counters) until spawn succeeds, then uses Item::hurl.",
+    "Many asynchronous behaviors are implemented via spawn (nonblocking) and suspend points rather than synchronous blocking calls."
+  ],
+  "open_questions": [
+    "Exact numerical IDs and semantics of many small mode/flag bytes passed to METHOD::15E7 and METHOD::091C (effects and animation variants are inferred but not confirmed).",
+    "Precise contents and side-effects of spawned helpers (e.g., PYROS::16FD, PYROS::178F, 17FE, 1914, 1883, 1EFA) referenced by use(); their high-level roles are inferred from usage but not listed in the excerpt.",
+    "Exact meaning of the local state byte comparisons (values like 0x1F and 0x20) and how those map to narrative/attack variants.",
+    "Detailed parameter semantics and return conventions of utility externals FREE::1A96 / FREE::1A85 (inferred as random/time utilities) remain uncertain."
+  ],
+  "main_function": {
+    "name": "U8P_PYROS::look",
+    "execution_form": "process",
+    "purpose": "Handle the player examining (looking at) the Pyros NPC: set NPC info/exclude state, make Pyros 'bark' his title string, free the temporary string, then yield/suspend.",
+    "entry_conditions": [
+      "Invoked by Event 0 (player/actor 'U8P_PYROS::look' or inspect action on the Pyros NPC).",
+      "No additional runtime gating observed in the excerpt — occurs whenever the U8P_PYROS::look event fires."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_PYROS::look",
+      "kind": "main",
+      "role": "Event handler for 'U8P_PYROS::look' (examine) that announces Pyros's title and sets info/exclude flags.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_PYROS::00B8",
+      "kind": "helper",
+      "role": "Utility wrapper that sets NPC info, spawns two follow-up helper spawns, and calls Item::bark with a supplied string (used by use() to present lines).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_PYROS::00F3",
+      "kind": "helper",
+      "role": "Channeling/loop routine that, while global doChannel is true, spawns short delays, plays SFX, queries facing, and repeatedly spawns directional visual/effect steps.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_PYROS::018D",
+      "kind": "helper",
+      "role": "Attack/summon helper: computes spawn coordinates, creates fire sprites, attempts Item::legal_create in a retry loop and on success calls Item::hurl; includes short barks and variant behavior based on a local state byte.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_PYROS::use (PYROS::0413)",
+      "kind": "helper",
+      "role": "Player 'use' interaction: runs an extended dialog sequence, checks map/global flags (acolyteKilled), spawns FIRESPEL::1CEB and several PYROS subroutines, and eventually starts active attack/spawn behaviors.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine function to display a line of dialog/text from an item/NPC; used heavily for Pyros's barks.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::legal_create",
+      "kind": "extern",
+      "role": "Attempt to create an item/creature at a map position; returns success/failure and created id used for subsequent hurl.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::hurl",
+      "kind": "extern",
+      "role": "Apply velocity/throw to an item created by legal_create (used to launch projectiles).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_PYROS::use (PYROS::0413)",
+        "callee": "U8P_PYROS::00B8",
+        "purpose": "Present dialog lines and set up short helper spawns; used repeatedly during the long 'use' interaction.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PYROS::use (PYROS::0413)",
+        "callee": "U8P_PYROS::00F3",
+        "purpose": "Start continuous channeling/animation (inferred: use() spawns continuous visual behavior via 00F3).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_PYROS::use (PYROS::0413)",
+        "callee": "U8P_PYROS::018D",
+        "purpose": "Spawn attack/summon sequences after dialog/effects; 018D handles coordinate computation, sprite creation, legal_create retry and hurl.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_PYROS::00B8",
+        "callee": "U8P_PYROS::16FD",
+        "purpose": "Spawn a short-lived helper/visual routine immediately after barking (exact role unclear from excerpt).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_PYROS::00B8",
+        "callee": "U8P_PYROS::178F",
+        "purpose": "Spawn another short-lived helper/visual routine; paired with 16FD following a bark.",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_PYROS::look",
+        "callee": "Item::bark",
+        "purpose": "Display the static title string 'Pyros, Lord of Flame ' to the examining player/process.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PYROS::00F3",
+        "callee": "FREE::1C19 (spawned)",
+        "purpose": "Create a short nonblocking delay between iterations of the channeling loop.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PYROS::00F3",
+        "callee": "METHOD::15E7 (spawned)",
+        "purpose": "Produce directional visual/effect steps based on the NPC's facing; called repeatedly per loop iteration.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PYROS::018D",
+        "callee": "Item::getX / Item::getY / Item::getZ",
+        "purpose": "Obtain base coordinates to place a fire sprite and to attempt legal_create spawn positions.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PYROS::018D",
+        "callee": "U8P_PYROS::createSprite",
+        "purpose": "Create a fire visual at computed coordinates as part of the summon/attack spectacle.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PYROS::018D",
+        "callee": "Item::legal_create",
+        "purpose": "Attempt to create a projectile/creature at adjusted coordinates; result is tested and retried if needed.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PYROS::018D",
+        "callee": "Item::hurl",
+        "purpose": "Launch the successfully created item as a projectile with computed velocities.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PYROS::018D",
+        "callee": "FREE::1A96 / FREE::1A85",
+        "purpose": "Compute random or timed offsets used to perturb spawn coordinates and delays (inferred utility role).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_PYROS::use (PYROS::0413)",
+        "callee": "FIRESPEL::1CEB (spawned)",
+        "purpose": "Trigger a fire spell routine as part of the use() escalation.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "doChannel",
+        "likely_effect": "Controls whether the channeling loop (U8P_PYROS::PYROS::00F3) continues running; a global toggle for continuous visual/attack channeling.",
+        "confidence": "high"
+      },
+      {
+        "name": "acolyteKilled",
+        "likely_effect": "Read during U8P_PYROS::PYROS::use to select dialog/behavior variants (influences which attack/spawn sequences run or how many acolytes/variants are produced).",
+        "confidence": "high"
+      }
+    ],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_PYROS::PYROS::look",
+    "behavior_summary_one_liner": "Provides the in-game behavior for the NPC Pyros. When examined (U8P_PYROS::look), Pyros announces his title and sets NPC info/exclude flags.",
+    "external_call_count": 9,
+    "flag_read_count": 2,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

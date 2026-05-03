@@ -1,0 +1,190 @@
+{
+  "MalchirTest": {
+    "bits": 3,
+    "max": 7
+  },
+  "SalkindSchedule": {
+    "bits": 2,
+    "max": 3
+  },
+  "acolyteKilled": {
+    "bits": 2,
+    "max": 3
+  },
+  "araminaSchedule": {
+    "bits": 2,
+    "max": 3
+  },
+  "arcadionMetBefore": {
+    "bits": 3,
+    "max": 7
+  },
+  "baneFalse": {
+    "bits": 2,
+    "max": 3
+  },
+  "baneMad": {
+    "bits": 2,
+    "max": 3
+  },
+  "baneWarned": {
+    "bits": 2,
+    "max": 3
+  },
+  "berenMad": {
+    "bits": 2,
+    "max": 3
+  },
+  "berenMet": {
+    "bits": 2,
+    "max": 3
+  },
+  "berenSchedule": {
+    "bits": 3,
+    "max": 7
+  },
+  "berenWarned": {
+    "bits": 2,
+    "max": 3
+  },
+  "corinthSchedule": {
+    "bits": 2,
+    "max": 3
+  },
+  "cost": {
+    "bits": 4,
+    "max": 15
+  },
+  "cyrrusSchedule": {
+    "bits": 2,
+    "max": 3
+  },
+  "darionSchedule": {
+    "bits": 4,
+    "max": 15
+  },
+  "devonJob": {
+    "bits": 2,
+    "max": 3
+  },
+  "gettingDrunk": {
+    "bits": 3,
+    "max": 7
+  },
+  "gorgrondMad": {
+    "bits": 2,
+    "max": 3
+  },
+  "gorgrondMet": {
+    "bits": 2,
+    "max": 3
+  },
+  "gorgrondWarned": {
+    "bits": 2,
+    "max": 3
+  },
+  "gwillimSchedule": {
+    "bits": 3,
+    "max": 7
+  },
+  "hanoiStairDown": {
+    "bits": 3,
+    "max": 7
+  },
+  "hydrosFree": {
+    "bits": 2,
+    "max": 3
+  },
+  "korickSchedule": {
+    "bits": 3,
+    "max": 7
+  },
+  "malchirMad": {
+    "bits": 2,
+    "max": 3
+  },
+  "malchirMet": {
+    "bits": 2,
+    "max": 3
+  },
+  "mordeaSchedule": {
+    "bits": 3,
+    "max": 7
+  },
+  "orlokTab": {
+    "bits": 5,
+    "max": 31
+  },
+  "rhianMoveCheck": {
+    "bits": 2,
+    "max": 3
+  },
+  "rhianSchedule": {
+    "bits": 2,
+    "max": 3
+  },
+  "screwUps": {
+    "bits": 2,
+    "max": 3
+  },
+  "shaanaMad": {
+    "bits": 2,
+    "max": 3
+  },
+  "shaanaSchedule": {
+    "bits": 2,
+    "max": 3
+  },
+  "spellsCast": {
+    "bits": 2,
+    "max": 3
+  },
+  "stellosSchedule": {
+    "bits": 2,
+    "max": 3
+  },
+  "ticked": {
+    "bits": 2,
+    "max": 3
+  },
+  "tickedOff": {
+    "bits": 2,
+    "max": 3
+  },
+  "torwinSchedule": {
+    "bits": 2,
+    "max": 3
+  },
+  "vardionFalse": {
+    "bits": 2,
+    "max": 3
+  },
+  "vardionHome": {
+    "bits": 3,
+    "max": 7
+  },
+  "vardionMad": {
+    "bits": 2,
+    "max": 3
+  },
+  "vardionOffer": {
+    "bits": 3,
+    "max": 7
+  },
+  "vardionWarned": {
+    "bits": 2,
+    "max": 3
+  },
+  "vividosSchedule": {
+    "bits": 2,
+    "max": 3
+  },
+  "whatDrink": {
+    "bits": 3,
+    "max": 7
+  },
+  "xavierSchedule": {
+    "bits": 2,
+    "max": 3
+  }
+}

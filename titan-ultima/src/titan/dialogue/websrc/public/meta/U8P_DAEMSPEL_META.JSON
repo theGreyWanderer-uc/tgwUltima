@@ -1,0 +1,239 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_DAEMSPEL.json",
+  "file": "U8P_DAEMSPEL",
+  "behavior_summary": [
+    "Handles a fast-area trigger for the Malchir summoning/test event: when invoked it may spawn a daemon NPC (or similar summoned entity), place it near the trigger, run staged animations/effects, produce barks (short dialogue), and update global test state.",
+    "Computes spawn placement by reading the triggering item's coordinates and direction, applies direction-based offsets, validates placement with canExistAt, and falls back to alternate offsets if necessary.",
+    "Configures the spawned NPC's stats (dexterity, HP) via a utility lookup, creates the NPC/item entity, pops it into the world, and runs visual/spell effects (FREE::29D8, FIRESPEL::*).",
+    "Implements Malchir test logic: reads the MalchirTest global to select a success/progression path or a failure/hostile path; increments MalchirTest on success and sets malchirMad on failure.",
+    "Manages avatar stasis around critical moments: checks getAvatarInStasis(), sets/unsets stasis as needed to freeze player during the sequence, and clears NPC in-combat flags during cleanup.",
+    "Schedules short delays and spawned helper tasks (inline suspended loops and small spawned follow-ups) to run repeated METHOD::15E7 animations and further NPC behavior."
+  ],
+  "notable_control_flow": [
+    "Initial branching by incoming event byte and an indirect parameter (used to distinguish enterFastArea / leaveFastArea or sub-events) determines whether to spawn effects or only run animations.",
+    "Placement selection: use trigger coordinates + direction-derived offsets -> call canExistAt -> if false, try alternative offsets; if still invalid, set placement-failed flag and skip spawn.",
+    "After a successful placement, create NPC and item, set stats (Npc::setDex, Npc::setHp using FREE::1A96), pop item (Item::pop), then spawn visual effects and a suspended animation sequence (METHOD::15E7 loops).",
+    "Malchir test branching: read MalchirTest global, if within progression/success range increment it and follow the 'friendly/progression' path (barks, cleanup), otherwise set malchirMad and make daemon hostile (Npc::setTarget) and bark failure lines.",
+    "Multiple spawned/inline helper sequences run asynchronously (e.g., U8P_DAEMSPEL::DAEMSPEL::08BF and ::0AD8 and two inline suspended blocks) to play animations and to clear flags after timed delays."
+  ],
+  "open_questions": [
+    "Exact semantics of the incoming event byte values (which numeric values correspond to enterFastArea, leaveFastArea, or sub-actions) — inferred but not explicit.",
+    "Precise numeric meanings or tables behind FREE::1A96 (stat lookup/randomization) and FREE::29D8 (visual effect parameters) — their effects are inferred from usage.",
+    "Exact strings and dialog text used by Item::bark in each branch (barks are observed but literal texts were not fully enumerated in the extraction).",
+    "Whether malchirMad distinguishes spawn origin (player vs NPC) in other systems beyond this script — name usage is inferred from context.",
+    "Full list of fallback offsets tried and the exact tile/collision rules influenced by canExistAt (tile map constraints were inferred but not enumerated)."
+  ],
+  "main_function": {
+    "name": "U8P_DAEMSPEL::0080",
+    "execution_form": "process",
+    "purpose": "Respond to a fast-area trigger to potentially summon and position a daemon NPC, play associated animations/effects, enforce avatar stasis during the sequence, run the MalchirTest success/failure logic (advance test or mark daemon hostile), and perform cleanup (dialogue, clear combat flags, destroy temporaries).",
+    "entry_conditions": [
+      "Invoked as a fast-area event handler (enter/leave/sub-event indicated by an incoming event byte).",
+      "Receives caller/process id and a pointer to a trigger item/NPC in BP+06h plus an indirect parameter identifying the triggering item or slot; behavior depends on these inputs.",
+      "Only spawns the daemon when specific event/sub-event values and/or indirect parameters match expected values (e.g., an indirect param equal to 1 or certain event bytes)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_DAEMSPEL::0080",
+      "kind": "main",
+      "role": "Primary fast-area event handler that runs the Malchir daemon summon/test sequence.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DAEMSPEL::08BF",
+      "kind": "helper",
+      "role": "Spawned/inline subroutine invoked to run a repeated sequence of METHOD::15E7 calls (NPC animations/actions) on the spawned daemon or target NPC.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DAEMSPEL::0AD8",
+      "kind": "helper",
+      "role": "Small spawned follow-up task executed after a bark to perform delayed behavior or further adjustments to the spawned NPC.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_DAEMSPEL::04A7_inline",
+      "kind": "helper",
+      "role": "Inline suspended animation/effect sequence that loops METHOD::15E7 calls and performs timed cleanup (clearing flags).",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_DAEMSPEL::0849_inline",
+      "kind": "helper",
+      "role": "Second inline suspended animation/effect loop used in another branch of the main routine for timed actions and cleanup.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_DAEMSPEL::0080",
+        "callee": "U8P_DAEMSPEL::08BF",
+        "purpose": "Run a spawned animation/action loop on the target NPC after spawn or as part of the sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMSPEL::0080",
+        "callee": "U8P_DAEMSPEL::0AD8",
+        "purpose": "Create a short delayed follow-up task executed after a bark to continue NPC behavior.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DAEMSPEL::0080",
+        "callee": "U8P_DAEMSPEL::04A7_inline",
+        "purpose": "Inline suspended sequence to run repeated METHOD::15E7 actions and then clear in-combat/stasis flags.",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_DAEMSPEL::0080",
+        "callee": "U8P_DAEMSPEL::process target()",
+        "purpose": "Obtain the process/actor that triggered the event to decide whether to spawn effects or treat caller specially.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMSPEL::0080",
+        "callee": "U8P_DAEMSPEL::getAvatarInStasis()",
+        "purpose": "Check whether the player's avatar is currently frozen to avoid double-stasis or to decide to set stasis.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMSPEL::0080",
+        "callee": "U8P_DAEMSPEL::setAvatarInStasis(word)",
+        "purpose": "Freeze/unfreeze the avatar around the summon/effect sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMSPEL::0080",
+        "callee": "Item::getX(), Item::getY(), Item::getZ()",
+        "purpose": "Read trigger item coordinates used as a base for spawn placement and canExistAt checks.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMSPEL::0080",
+        "callee": "Item::getDirToItem(uword)",
+        "purpose": "Compute direction from trigger to target to select facing and placement offsets for the spawned daemon.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMSPEL::0080",
+        "callee": "U8P_DAEMSPEL::canExistAt(uword,uword,uword,uword,ubyte,uword,word)",
+        "purpose": "Validate candidate spawn coordinates; used to accept or reject placement and to trigger fallback offsets.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMSPEL::0080",
+        "callee": "Npc::create(uword,uword)",
+        "purpose": "Create the NPC object for the daemon when placement succeeds.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMSPEL::0080",
+        "callee": "Npc::setDex(byte), Npc::setHp(ubyte)",
+        "purpose": "Set the spawned NPC's stats, typically drawing values from FREE::1A96.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMSPEL::0080",
+        "callee": "Item::create(uword,uword) and Item::pop(uword,uword,ubyte)",
+        "purpose": "Create the in-world item/entity for the daemon and place it at the computed coordinates with facing/flags.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMSPEL::0080",
+        "callee": "FREE::1A96",
+        "purpose": "Lookup or derive numeric stat values used when configuring the spawned NPC.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DAEMSPEL::0080",
+        "callee": "FREE::29D8, FIRESPEL::1F65 (variants)",
+        "purpose": "Spawn visual/particle/spell effects associated with the summon or branch-specific visuals.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DAEMSPEL::0080",
+        "callee": "METHOD::15E7",
+        "purpose": "Invoke NPC animation/action routines repeatedly (spawned) on the target or spawned daemon as part of the sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMSPEL::0080",
+        "callee": "METHOD::0113",
+        "purpose": "Set a per-item mode/state byte on the spawned item/NPC (configure behavior/state).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DAEMSPEL::0080",
+        "callee": "Item::touch(), Item::destroy(), Item::isNpc()",
+        "purpose": "Update interactions, clean up temporary items, and branch logic depending on whether a reference is an NPC.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMSPEL::0080",
+        "callee": "Npc::setTarget(uword), Npc::clrInCombat()",
+        "purpose": "On failure/hostile branch set daemon to attack a target and clear/reset combat flags during cleanup.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMSPEL::0080",
+        "callee": "process Item::bark(char*)",
+        "purpose": "Produce dialogue/bark strings to narrate success, progression, or failure to the player.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMSPEL::0080",
+        "callee": "FREE::1C19",
+        "purpose": "Schedule short delays between sequences (timing helper).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "MalchirTest (global [0165 03])",
+        "likely_effect": "Selects which Malchir test branch runs (success/progression or failure) based on its numeric value.",
+        "confidence": "high"
+      },
+      {
+        "name": "malchirMad (global [0162 02])",
+        "likely_effect": "Read to determine prior state about daemon hostility/spawn origin; affects branching for later behavior.",
+        "confidence": "medium"
+      }
+    ],
+    "writes": [
+      {
+        "name": "MalchirTest (global [0165 03])",
+        "likely_effect": "Incremented/modified during a successful test to advance the MalchirTest progress stage.",
+        "confidence": "high"
+      },
+      {
+        "name": "malchirMad (global [0162 02])",
+        "likely_effect": "Set when the test fails to mark the spawned daemon as 'mad' or hostile (used to trigger attack behavior).",
+        "confidence": "high"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_DAEMSPEL::DAEMSPEL::0080",
+    "behavior_summary_one_liner": "Handles a fast-area trigger for the Malchir summoning/test event: when invoked it may spawn a daemon NPC (or similar summoned entity), place it near the trigger, run staged animations/effects, produce barks (short dialogue), and update global test state.",
+    "external_call_count": 17,
+    "flag_read_count": 2,
+    "flag_write_count": 2
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

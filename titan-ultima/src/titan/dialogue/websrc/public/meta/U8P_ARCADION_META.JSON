@@ -1,0 +1,223 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_ARCADION.json",
+  "file": "U8P_ARCADION",
+  "behavior_summary": [
+    "This script implements the NPC Arcadion: it handles being examined (look), reacts when actors enter/leave a fast-trigger area, processes player 'use' interactions (opening gumps or starting dialog), runs complex area/item-handling behavior (patrol/quest logic), and performs spell casting by spawning a dedicated spell/combat process.",
+    "Dialog and service availability are gated by global flags (arcadionMet, gotTheSymbols, arcadionAvaName) and the NPC's alive/dead state; arcadionMet is set the first time the player receives Arcadion's introductory speech.",
+    "Cast actions (ARCADION::cast) prepare casting context (set info/process-exclude), push actor and parameters, spawn SPELCMBT::084D to perform the actual effect, and suspend until that spawned process finishes, returning its result.",
+    "enterFastArea responds to nearby actors: if the NPC is dead it does nothing; if avatarMasterSorcerer is set it sets the NPC's target to the entering actor, otherwise it spawns a MOVE behavior to make Arcadion move/respond.",
+    "A long behavior loop (ARCADION::0284) scans nearby items, builds temporary lists, pathfinds to found objects, possibly destroys or manipulates items, and issues barks (Item::bark) and METHOD::* spawns to effect environmental changes."
+  ],
+  "notable_control_flow": [
+    "U8P_ARCADION::cast spawns SPELCMBT::084D with prepared info and suspends the caster process until the spawned process completes.",
+    "U8P_ARCADION::enterFastArea conditionally calls Npc::setTarget (if avatarMasterSorcerer set) or spawns MOVE::0080 for normal actors; it early-exits if Npc::isDead() is true.",
+    "U8P_ARCADION::use branches on NPC alive/dead: alive toggles or opens gumps (UI); dead triggers dialog flow by spawning U8P_ARCADION::054B, U8P_ARCADION::1256 and METHOD::* routines.",
+    "U8P_ARCADION::054B is the primary dialog routine: it reads arcadionMet (writes it on first meeting), reads player choice via FREE::1A85, and branches based on gotTheSymbols and arcadionAvaName to provide context-sensitive replies or services.",
+    "U8P_ARCADION::0284 runs a persistent loop that creates temporary item lists ([BP-0Ah]), pathfinds (Npc::pathfind), conditionally destroys Item instances, and spawns METHOD::* handlers to complete scripted actions.",
+    "Loop/frame progression inside U8P_ARCADION::0284; treated as control-flow, not explicit internal call."
+  ],
+  "open_questions": [
+    "Exact behavior and side effects of spawned METHOD::* routines (METHOD::091C, METHOD::15E7, METHOD::0BCF, METHOD::1090) — they are likely to manipulate items/state or continue scripted sequences but their concrete effects are external to this script.",
+    "Precise meaning and game semantics of the 'info' id(s) set before spawning SPELCMBT::084D or during hatch-like operations (e.g., 0x210 referenced elsewhere) — inferred as state/exclusion markers but not fully documented here.",
+    "Exact semantics of avatarMasterSorcerer global flag (special player class/role?) and how it is set elsewhere in the game.",
+    "Detailed contents of the dialog text strings (Item::bark payloads) and how they map to quest progression beyond arcadionMet and gotTheSymbols."
+  ],
+  "main_function": {
+    "name": "U8P_ARCADION::cast",
+    "execution_form": "process",
+    "purpose": "Handle Arcadion initiating a spell/combat action: prepare casting info/state for the target, pass the caster and spell/parameter, spawn the SPELCMBT::084D process to resolve the spell/combat, suspend until that process returns, and forward its result.",
+    "entry_conditions": [
+      "Event 11 (U8P_ARCADION::cast) triggered by the engine when Arcadion attempts to U8P_ARCADION::cast/use a spell.",
+      "Requires a valid caster/process context (implicit PID passed in stack frame) and a spell_id parameter (uword) supplied by the caller."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_ARCADION::cast",
+      "kind": "main",
+      "role": "Spawn spell/combat handler for Arcadion's U8P_ARCADION::cast actions and wait for its result.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ARCADION::look",
+      "kind": "helper",
+      "role": "Produce Arcadion's examination/dialog bark; varies phrasing depending on arcadionName, arcadionJob, and Npc::isDead().",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ARCADION::enterFastArea",
+      "kind": "helper",
+      "role": "Trigger when an actor enters Arcadion's fast-trigger area: set target for master sorcerer or spawn MOVE behavior for others; no-op if Arcadion is dead.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ARCADION::leaveFastArea",
+      "kind": "helper",
+      "role": "Housekeeping/cleanup when an actor exits the fast-trigger area; calls FREE utilities to release area/process info.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ARCADION::use",
+      "kind": "helper",
+      "role": "Handle player 'use' interactions: toggles/opens UI gumps if alive; if dead, spawns dialog and additional scripted method handlers.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ARCADION::054B",
+      "kind": "helper",
+      "role": "Main dialog/meeting routine that delivers introductory speech (sets arcadionMet) or follows up based on player choices and flags (gotTheSymbols, arcadionAvaName).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ARCADION::0284",
+      "kind": "helper",
+      "role": "Long behavior loop implementing scanning of nearby items, building temporary lists, pathfinding to objects, destroying/manipulating items, and spawning methods — inferred patrol/quest logic.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_ARCADION::use",
+        "callee": "U8P_ARCADION::054B",
+        "purpose": "Start the main dialog/meeting routine when interacting with a dead Arcadion (dialog branch), or otherwise continue conversation flow.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ARCADION::use",
+        "callee": "U8P_ARCADION::1256",
+        "purpose": "Spawn an additional Arcadion dialog/handler as part of the dead-NPC interaction sequence (exact role inferred from spawn chaining).",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_ARCADION::cast",
+        "callee": "SPELCMBT::084D",
+        "purpose": "Spawn the dedicated spell/combat handler to resolve the U8P_ARCADION::cast action; receives caster pid, spell/target parameter, and prepared info/process-exclude settings.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ARCADION::look",
+        "callee": "Npc::isDead",
+        "purpose": "Check Arcadion's alive/dead state to choose appropriate description/dialog phrasing.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ARCADION::look",
+        "callee": "Item::bark",
+        "purpose": "Emit the chosen text string to the player/viewer (make Arcadion 'speak' the description).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ARCADION::enterFastArea",
+        "callee": "Npc::setTarget",
+        "purpose": "Set Arcadion's AI/combat target to the entering actor when avatarMasterSorcerer flag is set.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ARCADION::enterFastArea",
+        "callee": "MOVE::0080",
+        "purpose": "Spawn a movement behavior so Arcadion responds/moves toward the entering actor when they are not a special master sorcerer.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ARCADION::leaveFastArea",
+        "callee": "FREE::2A56",
+        "purpose": "Clean up area/process tracking resources when an actor leaves the fast area.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ARCADION::054B",
+        "callee": "FREE::1A85",
+        "purpose": "Read player dialog choice/input to branch conversation paths within the meeting routine.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ARCADION::0284",
+        "callee": "Npc::pathfind",
+        "purpose": "Request pathfinding/movement for Arcadion to approach items or locations discovered by the scan loop.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ARCADION::0284",
+        "callee": "Item::destroy",
+        "purpose": "Remove or consume items discovered by the behavior loop as part of scripted interactions.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ARCADION::0284",
+        "callee": "METHOD::*",
+        "purpose": "Spawn specialized handlers to perform further scripted actions on items or to complete multi-step behaviors; precise effects are external/inferred.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ARCADION::use",
+        "callee": "Item::openGump",
+        "purpose": "Open a UI gump for the player when using Arcadion while alive (toggle/display UI).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ARCADION::use",
+        "callee": "Item::closeGump",
+        "purpose": "Close the UI gump when toggling interactions (complements openGump behavior).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "arcadionName",
+        "likely_effect": "Controls whether Arcadion's full name form is used in look/dialog variants (affects phrasing).",
+        "confidence": "high"
+      },
+      {
+        "name": "arcadionJob",
+        "likely_effect": "Controls whether job/title text (e.g., 'daemon Sorcerer') is appended in look/dialog outputs.",
+        "confidence": "high"
+      },
+      {
+        "name": "avatarMasterSorcerer",
+        "likely_effect": "Determines special behavior in enterFastArea (whether to set target directly instead of spawning MOVE behavior).",
+        "confidence": "high"
+      },
+      {
+        "name": "gotTheSymbols",
+        "likely_effect": "Gates dialog/service branches in the main meeting routine (U8P_ARCADION::054B) and likely controls rewards/access.",
+        "confidence": "high"
+      },
+      {
+        "name": "arcadionAvaName",
+        "likely_effect": "If present, used to personalize dialog lines referencing the avatar's name.",
+        "confidence": "high"
+      }
+    ],
+    "writes": [
+      {
+        "name": "arcadionMet",
+        "likely_effect": "Set to true when the player receives Arcadion's long introductory speech; records that the meeting has occurred and alters future dialog branches.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_ARCADION::cast",
+    "behavior_summary_one_liner": "This script implements the NPC Arcadion: it handles being examined (look), reacts when actors enter/leave a fast-trigger area, processes player 'use' interactions (opening gumps or starting dialog), runs complex area/item-handling behavior (patrol/quest logic), and performs spell casting by spawning a dedicated spell/combat process.",
+    "external_call_count": 12,
+    "flag_read_count": 5,
+    "flag_write_count": 1
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

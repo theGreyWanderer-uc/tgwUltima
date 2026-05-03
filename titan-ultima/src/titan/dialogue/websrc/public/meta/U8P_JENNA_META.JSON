@@ -1,0 +1,275 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_JENNA.json",
+  "file": "U8P_JENNA",
+  "behavior_summary": [
+    "Provides Jenna NPC runtime behavior: presentation when inspected, area-entry/exit housekeeping, a continuous patrol/interaction loop, reactive conversation barks, and simple combat/alert behavior.",
+    "U8P_JENNA::look(): When a player inspects Jenna, returns a short descriptive bark that varies by whether Jenna is dead and by two global presentation flags (jennaName, jennaJob) to choose between full name+title, name-only, job-only, or a generic descriptor.",
+    "enterFastArea (U8P_JENNA::enterFastArea): Clears stored references and spawns a continuous behavior process (U8P_JENNA::0321) to run Jenna's patrol/interaction logic while the player is nearby.",
+    "leaveFastArea (U8P_JENNA::leaveFastArea): Frees references, checks sendJennaToLunch; if zero marks Jenna dead (Npc::setDead) otherwise teleports her to a randomized nearby location (Npc::teleport).",
+    "cast (U8P_JENNA::cast): Reaction to being targeted/attacked: examines current target (Npc::getTarget), may pause (spawn FREE::1C19) or call for help (spawn CALGUARD::0080) and bark different help lines chosen via randomness.",
+    "0321 (U8P_JENNA::0321): Long-running spawned behavior: iterates scripted tokens/nearby items, issues pathfinds (Npc::pathfind), spawns small sub-behaviors (U8P_JENNA::0B16, U8P_JENNA::0BA9, U8P_JENNA::04B8) and uses timed FREE helpers as delays — implements patrol/interact loop.",
+    "04B8 (U8P_JENNA::04B8): Conversation/proximity-response routine: if nobody is talking, orients Jenna toward targets, picks randomized barks influenced by orlokMet/global somebodyTalking, spawns orientation/animation helpers, and issues Item::bark lines."
+  ],
+  "notable_control_flow": [
+    "Inspection flow (U8P_JENNA::look): check Npc::isDead(self) -> branch to corpse wording or alive wording -> consult jennaName and jennaJob globals to select the exact string -> Item::bark(pid,self,string).",
+    "Area lifecycle: enterFastArea resets refs and starts U8P_JENNA::0321; leaveFastArea frees refs and either sets Jenna dead (sendJennaToLunch == 0) or computes random coords and teleports her away.",
+    "Behavior loop spawns subroutines: U8P_JENNA::0321 runs continuously while spawned and conditionally spawns U8P_JENNA::04B8 (conversation) and short sub-behaviors (U8P_JENNA::0B16/U8P_JENNA::0BA9) to modularize actions.",
+    "Reactive combat/targeting: U8P_JENNA::cast inspects Npc::getTarget to decide whether to call guards (CALGUARD::0080) and which help-bark to play; randomness is used to vary responses."
+  ],
+  "open_questions": [
+    "Exact text variants and their localization keys/IDs are inferred from disassembly strings but not enumerated here; what are the precise string IDs used?",
+    "Precise roles of spawned sub-behaviors U8P_JENNA::0B16 and U8P_JENNA::0BA9 are inferred as short interactions/animations but their concrete effects are not fully reconstructed.",
+    "How sendJennaToLunch is managed elsewhere (who/when sets it) and whether setting Jenna 'dead' via Npc::setDead triggers quest or persistence side-effects beyond removal from active area?"
+  ],
+  "main_function": {
+    "name": "U8P_JENNA::look",
+    "execution_form": "process",
+    "purpose": "Produce the short descriptive text (bark) shown when a player inspects Jenna, choosing wording based on whether Jenna is dead and on presentation flags controlling name and job/title inclusion.",
+    "entry_conditions": [
+      "Event 0 (U8P_JENNA::look) — triggered when a player/actor inspects or 'looks' at the Jenna NPC."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_JENNA::look",
+      "kind": "main",
+      "role": "Inspection handler returning a short descriptive bark based on dead/alive and name/job flags.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_JENNA::enterFastArea",
+      "kind": "helper",
+      "role": "Area-entry housekeeping: reset references and spawn continuous behavior (U8P_JENNA::0321).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_JENNA::leaveFastArea",
+      "kind": "helper",
+      "role": "Area-exit cleanup: free references, maybe mark dead (send to lunch) or teleport to a random nearby location.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_JENNA::cast",
+      "kind": "helper",
+      "role": "Handle being targeted/attacked: check target, optionally spawn guards or delayed helpers, and issue help barks influenced by randomness.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_JENNA::0321",
+      "kind": "helper",
+      "role": "Spawned continuous patrol/interaction loop: pathfinding to items/points, spawning conversation/interaction subroutines and delays.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_JENNA::04B8",
+      "kind": "helper",
+      "role": "Conversation/proximity-response routine that orients Jenna, chooses randomized lines, and issues barks unless somebodyTalking suppresses them.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_JENNA::0B16",
+      "kind": "helper",
+      "role": "Short spawned sub-behavior invoked by 0321 (likely an animation/movement or micro-interaction).",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_JENNA::0BA9",
+      "kind": "helper",
+      "role": "Short spawned sub-behavior invoked by 0321 (likely an animation/movement or micro-interaction).",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_JENNA::enterFastArea",
+        "callee": "U8P_JENNA::0321",
+        "purpose": "Spawn Jenna's continuous patrol/interaction behavior when player enters area.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_JENNA::0321",
+        "callee": "U8P_JENNA::04B8",
+        "purpose": "Spawn conversation/proximity-response when conditions in the patrol loop trigger an interaction.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_JENNA::0321",
+        "callee": "U8P_JENNA::0B16",
+        "purpose": "Spawn short sub-behavior from the patrol loop (timed/conditional micro-action).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_JENNA::0321",
+        "callee": "U8P_JENNA::0BA9",
+        "purpose": "Spawn another short sub-behavior from the patrol loop (timed/conditional micro-action).",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_JENNA::look",
+        "callee": "Npc::isDead",
+        "purpose": "Test whether Jenna is dead to select corpse vs alive description.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_JENNA::look",
+        "callee": "Item::bark",
+        "purpose": "Present the chosen short descriptive text to the inspecting player (pid).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_JENNA::enterFastArea",
+        "callee": "U8P_JENNA::resetRef",
+        "purpose": "Clear stored references/markers for Jenna on area entry.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_JENNA::leaveFastArea",
+        "callee": "FREE::2A56",
+        "purpose": "Free/clear previously set references when leaving the fast area.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_JENNA::leaveFastArea",
+        "callee": "Npc::setDead",
+        "purpose": "Mark Jenna dead when sendJennaToLunch indicates she should be sent off-duty.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_JENNA::leaveFastArea",
+        "callee": "urandom",
+        "purpose": "Generate randomness to compute a random teleport destination.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_JENNA::leaveFastArea",
+        "callee": "Npc::teleport",
+        "purpose": "Teleport Jenna to a computed random nearby coordinate when exiting area and not sent to lunch.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_JENNA::cast",
+        "callee": "Npc::getTarget",
+        "purpose": "Check who is targeting Jenna to decide reactive behavior (guard call, pause, or bark).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_JENNA::cast",
+        "callee": "FREE::1C19",
+        "purpose": "Spawn a short delay/helper when no active target or as a paced reaction.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_JENNA::cast",
+        "callee": "CALGUARD::0080",
+        "purpose": "Spawn/notify guards to assist Jenna when targeted by a hostile player.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_JENNA::cast",
+        "callee": "Item::bark",
+        "purpose": "Issue help/alert barks (e.g., 'Help me, Beren' or 'Town Sorcerer!').",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_JENNA::0321",
+        "callee": "Npc::pathfind",
+        "purpose": "Move Jenna toward scripted points, tokens, or items as part of her patrol loop.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_JENNA::0321",
+        "callee": "FREE::1C19",
+        "purpose": "Use as a timed delay between patrol/interaction actions.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_JENNA::04B8",
+        "callee": "FREE::1D62",
+        "purpose": "Get a small random index to pick among dialogue lines.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_JENNA::04B8",
+        "callee": "Item::getDirToItem",
+        "purpose": "Compute facing direction to orient Jenna toward a target before speaking/animating.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_JENNA::04B8",
+        "callee": "METHOD::091C",
+        "purpose": "Animate or set Jenna's facing/direction as part of orientation logic.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_JENNA::04B8",
+        "callee": "METHOD::15E7",
+        "purpose": "Another orientation/animation method used after computing direction.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_JENNA::04B8",
+        "callee": "Item::bark",
+        "purpose": "Deliver proximity/conversation bark lines to the nearby player/process.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_JENNA::cast",
+        "callee": "urandom",
+        "purpose": "Select between different reactive barks or guard/spawn variants probabilistically.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "jennaName (global [01EA])",
+        "likely_effect": "Controls whether Jenna's personal name is used in U8P_JENNA::look() or whether a fallback descriptor is used.",
+        "confidence": "high"
+      },
+      {
+        "name": "jennaJob (global [01EB])",
+        "likely_effect": "Controls whether job/title (e.g., 'barmaid') is shown in U8P_JENNA::look() or whether a generic 'woman' is used.",
+        "confidence": "high"
+      },
+      {
+        "name": "sendJennaToLunch (global [01EF])",
+        "likely_effect": "If zero on leaveFastArea triggers marking Jenna dead (send off-duty); otherwise triggers teleport behavior.",
+        "confidence": "high"
+      },
+      {
+        "name": "somebodyTalking (global [000F])",
+        "likely_effect": "Suppresses conversation barks from U8P_JENNA::04B8 to avoid interrupting ongoing dialogue.",
+        "confidence": "high"
+      },
+      {
+        "name": "orlokMet (global [0137])",
+        "likely_effect": "Alters which conversation lines are chosen in U8P_JENNA::04B8 depending on player's prior state (met Orlok or not).",
+        "confidence": "high"
+      }
+    ],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_JENNA::look",
+    "behavior_summary_one_liner": "Provides Jenna NPC runtime behavior: presentation when inspected, area-entry/exit housekeeping, a continuous patrol/interaction loop, reactive conversation barks, and simple combat/alert behavior.",
+    "external_call_count": 19,
+    "flag_read_count": 5,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

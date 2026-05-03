@@ -1,0 +1,163 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_ERTHITEM.json",
+  "file": "U8P_ERTHITEM",
+  "behavior_summary": [
+    "Represents an earth-themed consumable item whose 'U8P_ERTHITEM::use' activates a spell/effect determined by the item's frame value (treated as a spell id).",
+    "On U8P_ERTHITEM::use the script reads the item instance's frame and world coordinates (X,Y,Z), optionally prepares a small variant/flag byte, then spawns a corresponding spell/effect script (mostly ERTHSPEL variants, one ETHRSPEL) passing coordinates or numeric parameters as needed.",
+    "After spawning the appropriate spell script, the item is destroyed (consumed).",
+    "Separately, the item provides a 'look' handler that maps frame values to human-readable spell names and calls Item::bark to display that description; this is purely descriptive and does not alter game state."
+  ],
+  "notable_control_flow": [
+    "Entry on a U8P_ERTHITEM::use event causes Item::getFrame to determine a branch (frame acts as a spell id selector).",
+    "Item::getX, Item::getY, Item::getZ are called to supply positional parameters to the spawned scripts; the Z value is sometimes inspected to choose a spawn variant.",
+    "A temporary variant/flag byte is set to 0 or 1 and passed to some spawn calls to select sub-variants or modes of the spell.",
+    "A spawn call is issued for the selected spell script with varying pushed parameters; its return value is discarded.",
+    "Finally Item::destroy is called to remove the item from the world (consumption/cleanup)."
+  ],
+  "open_questions": [
+    "Precise semantic meaning of the frame values (beyond the looked-up names) — which exact gameplay effects each spawned ERTHSPEL/ETHRSPEL variant applies is not encoded here.",
+    "Exact interpretation of the small numeric/flag parameter passed to some spawn calls (BP-04h) — appears to indicate a variant or caster flag but the runtime meaning is inferred.",
+    "Meaning and effect of spawn flags/variant counts passed to spawn (engine-level behavior and how they affect the spawned script's lifecycle).",
+    "Why one frame spawns ETHRSPEL instead of ERTHSPEL — whether that implies a fundamentally different system or just naming."
+  ],
+  "main_function": {
+    "name": "U8P_ERTHITEM::use",
+    "execution_form": "process",
+    "purpose": "Implement the item's activation: read its spell id (frame) and position, start the corresponding earth-spell/effect script with appropriate parameters, then consume (destroy) the item.",
+    "entry_conditions": [
+      "Invoked by the engine when the item is 'used' (Event: U8P_ERTHITEM::use/activation)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_ERTHITEM::use",
+      "kind": "main",
+      "role": "Handle item activation: read item frame and coords, spawn corresponding spell script, destroy item.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ERTHITEM::look",
+      "kind": "helper",
+      "role": "Provide descriptive text for the item by mapping the frame to a spell name and calling Item::bark; purely descriptive (examine/look handler).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getFrame",
+      "kind": "extern",
+      "role": "Return the item's frame/spell id used to select which spell to spawn.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getX",
+      "kind": "extern",
+      "role": "Return item X coordinate for passing to spawned spells.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getY",
+      "kind": "extern",
+      "role": "Return item Y coordinate for passing to spawned spells.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getZ",
+      "kind": "extern",
+      "role": "Return item Z (height) used both as a parameter and to select spawn variants.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Display a short descriptive string to the viewer (used by look handler).",
+      "confidence": "high"
+    },
+    {
+      "name": "spawn",
+      "kind": "extern",
+      "role": "Engine call to start a spell/effect script (ERTHSPEL/ETHRSPEL) with pushed parameters; primary mechanism to produce in-world effects.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::destroy",
+      "kind": "extern",
+      "role": "Remove/consume the item after U8P_ERTHITEM::use.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_ERTHITEM::use",
+        "callee": "Item::getFrame",
+        "purpose": "Obtain the frame/spell id which selects which spell script to spawn.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ERTHITEM::use",
+        "callee": "Item::getX",
+        "purpose": "Obtain the item's X coordinate to pass to spawned spell scripts that require a world position.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ERTHITEM::use",
+        "callee": "Item::getY",
+        "purpose": "Obtain the item's Y coordinate to pass to spawned spell scripts that require a world position.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ERTHITEM::use",
+        "callee": "Item::getZ",
+        "purpose": "Obtain the item's Z (height) to pass to spawned scripts and to select between spawn variants.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ERTHITEM::use",
+        "callee": "spawn",
+        "purpose": "Start the spell/effect script corresponding to the frame, passing coordinates or numeric variant flags as parameters.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ERTHITEM::use",
+        "callee": "Item::destroy",
+        "purpose": "Consume/delete the item after spawning the spell (cleanup).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ERTHITEM::look",
+        "callee": "Item::getFrame",
+        "purpose": "Read frame to select the human-readable spell name for the bark/description.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ERTHITEM::look",
+        "callee": "Item::bark",
+        "purpose": "Display the spell name string associated with the item's frame to the viewer.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "spawn",
+    "cleanup",
+    "position"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_ERTHITEM::use",
+    "behavior_summary_one_liner": "Represents an earth-themed consumable item whose 'U8P_ERTHITEM::use' activates a spell/effect determined by the item's frame value (treated as a spell id).",
+    "external_call_count": 8,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

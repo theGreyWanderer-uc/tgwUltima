@@ -1,0 +1,112 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_LAVABUB.json",
+  "file": "U8P_LAVABUB",
+  "behavior_summary": [
+    "This script manages a lava-bubble area trigger: when an actor enters the fast-area it marks/updates info on a target and starts a looping ambient bubbling SFX; when the actor leaves it updates info and stops that SFX.",
+    "Entry sequence: set an info key (0x021B) on a referenced object, exclude that object from further processing (engine-level 'process exclude'), then call playAmbientSFX with parameters including sound id 0x57 and a modifier 0x32 — inferred to start the bubbling sound at the trigger location.",
+    "Exit sequence: set a different info key (0x021C) on the referenced object, apply the same process-exclude behavior, and call stopSFX for id 0x57 to stop the bubbling sound."
+  ],
+  "notable_control_flow": [
+    "Event-driven: runs in response to area trigger events (U8P_LAVABUB::enterFastArea and leaveFastArea).",
+    "Deterministic, short sequences: each handler performs a small, fixed series of engine calls (set-info, process-exclude, SFX start/stop) with no loops or complex branching.",
+    "State-driven: uses info identifiers (0x021B/0x021C) to record or toggle object/area state when entering or leaving the area."
+  ],
+  "open_questions": [
+    "What exact game-state fields or semantics do info ids 0x021B and 0x021C represent (e.g., flag names or UI state)?",
+    "What does the activator's indirect +02h two-byte field precisely reference (a tile id, object id, or SFX location handle)?",
+    "What is the meaning of the 0x32 parameter passed to playAmbientSFX (volume, priority, variation, or distance attenuation)?",
+    "Are set-info and process-exclude also altering other systems (AI, rendering, or persistence) beyond preventing further processing?"
+  ],
+  "main_function": {
+    "name": "U8P_LAVABUB::enterFastArea",
+    "execution_form": "process",
+    "purpose": "Handle an actor entering the lava-bubble trigger: update object/area info, exclude the target from further processing, and start an ambient lava-bubbling sound effect at the target/location.",
+    "entry_conditions": [
+      "Triggered by the engine when an Avatar (or relevant actor) enters this object's fast-area region (U8P_LAVABUB::enterFastArea event)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_LAVABUB::enterFastArea",
+      "kind": "main",
+      "role": "Area-entry handler that sets area state and starts ambient SFX.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_LAVABUB::leaveFastArea",
+      "kind": "helper",
+      "role": "Area-exit handler that sets area state and stops ambient SFX.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_LAVABUB::playAmbientSFX",
+      "kind": "extern",
+      "role": "Engine routine to start/play a localized ambient sound effect (called by U8P_LAVABUB::enterFastArea).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_LAVABUB::stopSFX",
+      "kind": "extern",
+      "role": "Engine routine to stop a sound effect previously started (called by leaveFastArea).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_LAVABUB::set info + process exclude",
+      "kind": "extern",
+      "role": "Engine operations used to set an info key on an object and exclude it from processing; observed in both enter and leave handlers.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_LAVABUB::enterFastArea",
+        "callee": "U8P_LAVABUB::set info + process exclude",
+        "purpose": "Record an info value (0x021B) on a referenced object and mark it to be excluded from further processing; used to update internal state on entry.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LAVABUB::enterFastArea",
+        "callee": "U8P_LAVABUB::playAmbientSFX",
+        "purpose": "Start the lava-bubbling ambient SFX at the referenced location/object. Observed pushed args include the activator/object reference, its indirect +02h 2-byte field, a byte 0x32 (parameter), and a byte 0x57 (SFX id).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LAVABUB::leaveFastArea",
+        "callee": "U8P_LAVABUB::set info + process exclude",
+        "purpose": "Record an info value (0x021C) on the referenced object and mark it to be excluded from further processing; used to update internal state on exit.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LAVABUB::leaveFastArea",
+        "callee": "U8P_LAVABUB::stopSFX",
+        "purpose": "Stop the previously started lava-bubbling SFX (id 0x57) for the referenced location/object.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_LAVABUB::enterFastArea",
+    "behavior_summary_one_liner": "This script manages a lava-bubble area trigger: when an actor enters the fast-area it marks/updates info on a target and starts a looping ambient bubbling SFX; when the actor leaves it updates info and stops that SFX.",
+    "external_call_count": 4,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

@@ -1,0 +1,86 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_OFFSUP.json",
+  "file": "U8P_OFFSUP",
+  "behavior_summary": [
+    "Handles the 'U8P_OFFSUP::look' (inspect) event for office-supplies items: determine the item's subtype (frame) and present a short descriptive string to the player.",
+    "Calls Item::getFrame() on the item to obtain a frame/index, maps that index into a small set of human-readable descriptors (e.g. \"quill pen \", \"ink bottle \", \"seal \", \"parchment \", \"balance scale \", default \"office supplies \"), and calls Item::bark(pid, description) to deliver the text to the viewer.",
+    "Uses a sequence of range checks on the frame index to select the appropriate description string and then frees/returns after the bark call (with VM/engine housekeeping around the call)."
+  ],
+  "notable_control_flow": [
+    "Execution is triggered as a U8P_OFFSUP::look/inspect handler and performs a linear sequence: get frame -> series of if/range checks -> call Item::bark with chosen string.",
+    "Frame-selection is implemented as multiple grouped comparisons (0..3, 4..5, 6..7, 8..9, 10, default).",
+    "Each selected branch constructs or references a short literal string, invokes Item::bark(pid, string) on the item, then follows an imply/suspend-like VM housekeeping sequence before returning."
+  ],
+  "open_questions": [
+    "Whether the frame ranges exactly correspond to distinct game item types beyond those listed (frames >10) and whether additional frames map to other descriptions (inferred mapping is based on observed ranges).",
+    "Precise runtime types and naming of parameters: pid and item are inferred from calling convention but not explicitly typed in the disassembly.",
+    "The precise semantics of the imply/suspend sequence after Item::bark (VM scheduling/return handling) — appears to be engine housekeeping but exact effect is not shown here."
+  ],
+  "main_function": {
+    "name": "U8P_OFFSUP::look",
+    "execution_form": "process",
+    "purpose": "When a player/actor looks at an office-supplies item, determine its visual subtype (frame) and produce an appropriate short description text that the item 'barks' to the player.",
+    "entry_conditions": [
+      "Triggered on the U8P_OFFSUP::look/inspect event for items handled by this script (Event 0 semantics / area-entry U8P_OFFSUP::look).",
+      "Runs when the game requests a description for an office-supplies item (player inspects the item)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_OFFSUP::look",
+      "kind": "main",
+      "role": "Main handler for the U8P_OFFSUP::look/inspect event of office-supplies items; selects and emits a short description string.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getFrame",
+      "kind": "extern",
+      "role": "Returns the numeric frame/index identifying an item's visual subtype; used to decide which description to show.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Emit/display a short text string to a target player/process on behalf of the item (used to show the description).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_OFFSUP::look",
+        "callee": "Item::getFrame",
+        "purpose": "Obtain an integer frame/index that identifies the item's visual subtype for lookup.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_OFFSUP::look",
+        "callee": "Item::bark",
+        "purpose": "Send the chosen descriptive string to the player/process that inspected the item (display the item's short description).",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_OFFSUP::look",
+    "behavior_summary_one_liner": "Handles the 'U8P_OFFSUP::look' (inspect) event for office-supplies items: determine the item's subtype (frame) and present a short descriptive string to the player.",
+    "external_call_count": 2,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

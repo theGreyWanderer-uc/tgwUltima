@@ -1,0 +1,287 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_GUARD5.json",
+  "file": "U8P_GUARD5",
+  "behavior_summary": [
+    "This script implements a guard NPC that can be examined, interacted with (talked to), revived/respawned by area entry and scheduled logic, and runs small asynchronous behaviors.",
+    "GUARD5::look reports a short descriptor: if the NPC is dead it barks 'dead guardsman', otherwise 'guardsman'.",
+    "U8P_GUARD5::enterFastArea acts as an area-entry trigger: if the guard is dead it clears the dead/combat state and teleports the guard to fixed coordinates; if alive it launches asynchronous behavior spawns so the guard can resume active behaviors.",
+    "U8P_GUARD5::schedule is a periodic/scheduling handler that may spawn a recovery/respawn behavior and clear the dead flag when schedule conditions are met.",
+    "U8P_GUARD5::use implements a multi-branch dialog/interact routine: it plays an initial bark, inspects several global flags to form an interaction counter, branches into panic/doomsday vs. normal dialog, updates persistent guard flags (guard5Met, guard5Pissed, guard5Thanked), presents a question menu (Item::ask) and responds to player choices, and spawns follow-up asynchronous behaviors."
+  ],
+  "notable_control_flow": [
+    "GUARD5::look: single conditional branch on Npc::isDead -> two bark outcomes then suspend/return.",
+    "U8P_GUARD5::enterFastArea: conditional on Npc::isDead. If dead -> Npc::clrDead, Npc::clrInCombat, Npc::teleport to fixed coords. Else -> spawn two behavior methods asynchronously.",
+    "U8P_GUARD5::schedule: prepares spawn parameters for a scheduled behavior (METHOD::143A), inspects the spawn result, and if a particular result is observed clears dead state and spawns a recovery handler (METHOD::133F).",
+    "U8P_GUARD5::use: complex, multi-stage branching. It builds an interaction counter from global flags (hydrosFree, hasHeart, pyrosFree) — if counter>1 or missing hasHeart triggers panic/doom branches that bark alarming lines and spawn METHOD::1090. Otherwise performs friendlier dialog, uses randomness for variation, conditionally sets/clears guard5Pissed and guard5Met, offers a question menu via Item::ask, and sets guard5Thanked in the thank-you branch."
+  ],
+  "open_questions": [
+    "The precise behavior/purpose of spawn targets (METHOD::091C, ::15E7, ::143A, ::133F, ::0BCF, ::1090) is inferred (animations/AI/respawn) but not explicitly known.",
+    "FREE::1C19 and FREE::2A56 are invoked during GUARD5::use; their exact side-effects or data they manipulate are unclear (they appear to influence the local interaction counter or global state).",
+    "Exact timing/coordinate semantics and parameter meanings for Npc::teleport parameters (param1, param2) and schedule spawn parameter layout are not fully documented.",
+    "The full set of dialog text strings (bark content beyond summarized tokens) and language/localization boundaries are not exhaustively enumerated from the disassembly."
+  ],
+  "main_function": {
+    "name": "U8P_GUARD5::look",
+    "execution_form": "process",
+    "purpose": "Respond to a player 'U8P_GUARD5::look' action by announcing a short descriptor for the guard: 'dead guardsman' if the NPC is flagged dead, otherwise 'guardsman'.",
+    "entry_conditions": [
+      "Event 0: triggered when a player/actor looks at or inspects this guard NPC (area-of-interest/U8P_GUARD5::look interaction)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_GUARD5::look",
+      "kind": "main",
+      "role": "Examine/U8P_GUARD5::look handler that reports a brief descriptor depending on NPC dead state.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_GUARD5::enterFastArea",
+      "kind": "helper",
+      "role": "Area-entry fast trigger: revives/teleports a dead guard or spawns alive-behavior routines when an actor enters the trigger area.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_GUARD5::schedule",
+      "kind": "helper",
+      "role": "Periodic scheduler: manages timed respawn/recovery behaviors and clears dead state when schedule conditions are met.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_GUARD5::use",
+      "kind": "helper",
+      "role": "Player interaction/talk handler: complex dialog tree, state flag updates, question menu, and spawn follow-ups.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::isDead",
+      "kind": "extern",
+      "role": "Engine/GM API: query whether a given NPC is flagged as dead.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/GM API: make an NPC/item emit a short text line to a target process/player.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::clrDead",
+      "kind": "extern",
+      "role": "Engine/GM API: clear the dead flag on an NPC (revive).",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::clrInCombat",
+      "kind": "extern",
+      "role": "Engine/GM API: clear an NPC's in-combat flag/state.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::teleport",
+      "kind": "extern",
+      "role": "Engine/GM API: teleport the NPC to given coordinates/orientation with extra params.",
+      "confidence": "high"
+    },
+    {
+      "name": "spawn",
+      "kind": "extern",
+      "role": "Engine/GM API: asynchronously start another method/process (used to run AI/animation/respawn behaviors).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::ask",
+      "kind": "extern",
+      "role": "Engine/GM API: present a choice list to the player and return the selected string.",
+      "confidence": "high"
+    },
+    {
+      "name": "urandom",
+      "kind": "extern",
+      "role": "Utility: provide random numbers for dialog variation.",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::1C19",
+      "kind": "extern",
+      "role": "Project-specific external routine invoked during interaction; purpose inferred to affect interaction counter or inventory/global manager.",
+      "confidence": "medium"
+    },
+    {
+      "name": "FREE::2A56",
+      "kind": "extern",
+      "role": "Project-specific external routine invoked during interaction; purpose inferred to affect interaction counter or inventory/global manager.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_GUARD5::look",
+        "callee": "Npc::isDead",
+        "purpose": "Check whether the guard is dead to select the appropriate bark string.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD5::look",
+        "callee": "Item::bark",
+        "purpose": "Emit the short description string to the player ('dead guardsman' or 'guardsman').",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD5::enterFastArea",
+        "callee": "Npc::isDead",
+        "purpose": "Decide whether to revive/teleport the guard or to spawn alive behaviors when an actor enters the area.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD5::enterFastArea",
+        "callee": "Npc::clrDead",
+        "purpose": "Clear the NPC dead flag (revive) on area entry if dead.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD5::enterFastArea",
+        "callee": "Npc::clrInCombat",
+        "purpose": "Clear in-combat status when reviving the guard on area entry.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD5::enterFastArea",
+        "callee": "Npc::teleport",
+        "purpose": "Teleport the revived guard to a fixed location/orientation after reviving.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD5::enterFastArea",
+        "callee": "spawn",
+        "purpose": "Launch asynchronous behavior methods (e.g., METHOD::091C, METHOD::15E7) to resume NPC activity when alive.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD5::schedule",
+        "callee": "spawn",
+        "purpose": "Schedule or spawn a periodic behavior (METHOD::143A) and later spawn a recovery handler (METHOD::133F) when conditions are met.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD5::schedule",
+        "callee": "Npc::clrDead",
+        "purpose": "Clear dead state as part of scheduled recovery/respawn workflow if spawn result indicates recovery should occur.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD5::use",
+        "callee": "Item::bark",
+        "purpose": "Play initial and branch-specific dialog lines during player interaction.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD5::use",
+        "callee": "spawn",
+        "purpose": "Start follow-up asynchronous behaviors (METHOD::0BCF, METHOD::1090 and other METHOD::XXXX) as a result of dialog branches and interaction.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD5::use",
+        "callee": "FREE::1C19",
+        "purpose": "Project-specific call used during interaction; likely influences the interaction counter or checks/consumes a free-state resource.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GUARD5::use",
+        "callee": "FREE::2A56",
+        "purpose": "Project-specific call used during interaction; likely influences the interaction counter or checks/consumes a free-state resource.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GUARD5::use",
+        "callee": "Item::ask",
+        "purpose": "Present a choice menu to the player and obtain the selected question string for dialog branching.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD5::use",
+        "callee": "urandom",
+        "purpose": "Introduce small random variation in greeting/dialog selection.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "hydrosFree",
+        "likely_effect": "Used to increment the local interaction counter in GUARD5::use; indicates an external/freeable status affecting dialog tone.",
+        "confidence": "medium"
+      },
+      {
+        "name": "hasHeart",
+        "likely_effect": "Checked in GUARD5::use to influence panic/doomsday branches and to increment the interaction counter.",
+        "confidence": "high"
+      },
+      {
+        "name": "pyrosFree",
+        "likely_effect": "Used to increment the interaction counter in GUARD5::use; signals another free-related condition affecting dialog.",
+        "confidence": "medium"
+      },
+      {
+        "name": "guard5Met",
+        "likely_effect": "Read to determine whether to use first-meet dialog; persists whether the player has previously met this guard.",
+        "confidence": "high"
+      },
+      {
+        "name": "guard5Pissed",
+        "likely_effect": "Read to choose an angry/pissed dialog branch; influences subsequent dialog states.",
+        "confidence": "high"
+      },
+      {
+        "name": "devonInRule",
+        "likely_effect": "Used in the 'Where am I?' response to determine whether to mention the palace/Devon-specific location.",
+        "confidence": "medium"
+      },
+      {
+        "name": "guard5Thanked",
+        "likely_effect": "Read to avoid re-running a thank-you dialog sequence when the player has already triggered it.",
+        "confidence": "high"
+      }
+    ],
+    "writes": [
+      {
+        "name": "guard5Pissed",
+        "likely_effect": "Set or cleared by dialog branches in GUARD5::use to remember whether the guard is angry at the player for future interactions.",
+        "confidence": "high"
+      },
+      {
+        "name": "guard5Met",
+        "likely_effect": "Set to 1 when the player triggers first-meet dialog branches; marks that the guard has been met before and changes future greetings.",
+        "confidence": "high"
+      },
+      {
+        "name": "guard5Thanked",
+        "likely_effect": "Set when the guard thanks the player for a deed (inferred: removal of Mordea); prevents repeating the thank-you sequence.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "GUARD5::look",
+    "behavior_summary_one_liner": "This script implements a guard NPC that can be examined, interacted with (talked to), revived/respawned by area entry and scheduled logic, and runs small asynchronous behaviors.",
+    "external_call_count": 15,
+    "flag_read_count": 7,
+    "flag_write_count": 3
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

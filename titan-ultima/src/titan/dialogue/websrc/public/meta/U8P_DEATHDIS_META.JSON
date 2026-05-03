@@ -1,0 +1,232 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_DEATHDIS.json",
+  "file": "U8P_DEATHDIS",
+  "behavior_summary": [
+    "This script implements a throwable/usable object called the 'death disk' with simple inspect text, a use action that places/launches the disk into the world as a projectile, and on-hit reactions that can retaliate against attackers.",
+    "U8P_DEATHDIS::look is the 'U8P_DEATHDIS::look' handler: it makes the item produce the short description string \"death disk \" via Item::bark.",
+    "U8P_DEATHDIS::use resolves the process' target, computes a direction and placement offset, verifies placement with canExistAt, spawns helper/visual methods, pushes and configures the world object, fires the disk via Item::shoot, and clears the per-item Q flag (setQ(0)).",
+    "U8P_DEATHDIS::0281 is a small spawned helper that queries the owner's facing direction (Npc::getDir) and spawns directional visual/effect METHOD::15E7 calls (twice with different args).",
+    "U8P_DEATHDIS::gotHit and U8P_DEATHDIS::hit check a per-item Q flag (Item::getQ). If Q is nonzero they set Q to 1 and, when an attacker is present and is a live NPC, spawn METHOD::0676 (likely a retaliatory effect) targeting the attacker."
+  ],
+  "notable_control_flow": [
+    "U8P_DEATHDIS::look: single-entry path that calls Item::bark and returns (high confidence).",
+    "U8P_DEATHDIS::use: resolve process target -> read item/target coords (Item::getX/Y/Z) -> compute dir/offset (Item::getDirToCoords) -> per-direction adjustments -> canExistAt check -> if allowed spawn visual helpers and U8P_DEATHDIS::0281, Item::push to world, spawn cleanup FREE routines, Item::orStatus to set item flags, call Item::shoot to launch projectile, and finally Item::setQ(0) (medium-high confidence).",
+    "U8P_DEATHDIS::0281: query owner direction (Npc::getDir) and spawn METHOD::15E7 twice using the direction to select parameters (medium confidence).",
+    "U8P_DEATHDIS::gotHit / U8P_DEATHDIS::hit: read Item::getQ and early-return if zero; otherwise Item::setQ(1) and conditionally spawn METHOD::0676 when an attacker param exists, Item::isNpc returns true and Npc::isDead returns false (medium-high confidence).",
+    "Multiple spawn calls create asynchronous visual/effect and cleanup processes; Item::push/pop wrap lifecycle transitions for the placed world object (high confidence).",
+    "Loop/frame progression inside U8P_DEATHDIS::use; treated as control-flow, not explicit internal call."
+  ],
+  "open_questions": [
+    "What exact gameplay semantics does the per-item Q field represent (armed, active, already-exploded, or cooldown)? (inferred, medium confidence).",
+    "What are the precise parameter meanings and gameplay effects of the spawned METHOD::0676 and METHOD::15E7 routines (visuals vs damage vs status effects)? (inferred, low-medium confidence).",
+    "Which exact status bits are set by Item::orStatus in use(), and how do those bits affect subsequent engine/AI behavior? (inferred, medium confidence).",
+    "Are the numeric offsets/flags passed into canExistAt and Item::shoot tuned for special collision/height behavior (e.g., ignoring actors, area effects)? (uncertain, low confidence)."
+  ],
+  "main_function": {
+    "name": "U8P_DEATHDIS::look",
+    "execution_form": "process",
+    "purpose": "Present the item's description when examined by a player/actor; produces the short string 'death disk ' via Item::bark.",
+    "entry_conditions": [
+      "Event 0 (U8P_DEATHDIS::look) triggered when an actor examines/looks at the item."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_DEATHDIS::look",
+      "kind": "main",
+      "role": "Item 'U8P_DEATHDIS::look' handler; emits description string via Item::bark.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DEATHDIS::use",
+      "kind": "helper",
+      "role": "Handle using/activating the death disk: resolve target, compute placement/direction, validate placement, spawn helpers, place and shoot the disk, clear per-item Q.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_DEATHDIS::0281",
+      "kind": "helper",
+      "role": "Small spawned routine that reads NPC facing and spawns directional visual/effect METHOD::15E7 calls.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_DEATHDIS::gotHit",
+      "kind": "helper",
+      "role": "Respond to damage: gate on per-item Q, set Q to 1, and possibly spawn METHOD::0676 to affect the attacker.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_DEATHDIS::hit",
+      "kind": "helper",
+      "role": "Same as gotHit: on-hit reaction using per-item Q and optional spawning of METHOD::0676 against attacker.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_DEATHDIS::use",
+        "callee": "U8P_DEATHDIS::0281",
+        "purpose": "Spawn a directional visual/effect helper tied to the owner's facing direction after placement/shoot (inferred from spawn usage).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DEATHDIS::gotHit",
+        "callee": "U8P_DEATHDIS::hit",
+        "purpose": "Behavior overlap: both implement the on-hit reaction pattern and call the same external retaliatory METHOD::0676 logic (independent routines but mirrored behavior).",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_DEATHDIS::look",
+        "callee": "Item::bark",
+        "purpose": "Display/vocalize the item's short description string to the inspecting process/player.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DEATHDIS::use",
+        "callee": "U8P_DEATHDIS::process target",
+        "purpose": "Resolve the intended use/aim target for the invoking process so coordinates/target item can be read.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DEATHDIS::use",
+        "callee": "Item::getX",
+        "purpose": "Read source or item X coordinate as part of placement/shoot computation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DEATHDIS::use",
+        "callee": "Item::getY",
+        "purpose": "Read source or item Y coordinate as part of placement/shoot computation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DEATHDIS::use",
+        "callee": "Item::getZ",
+        "purpose": "Read source or item Z coordinate (height) used in placement/shooting calculations.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DEATHDIS::use",
+        "callee": "Item::getDirToCoords",
+        "purpose": "Compute direction/WorldPoint toward the resolved target coordinates to orient the disk projectile and drive per-direction offsets.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DEATHDIS::use",
+        "callee": "U8P_DEATHDIS::canExistAt",
+        "purpose": "Collision/terrain check to verify if the disk can be placed/launched from the computed coordinates and orientation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DEATHDIS::use",
+        "callee": "spawn",
+        "purpose": "Start asynchronous visual/effect and FREE cleanup routines tied to the placed/shooting disk.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DEATHDIS::use",
+        "callee": "Item::push",
+        "purpose": "Place the disk item into the world (convert inventory/held item to a world object instance) before shooting.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DEATHDIS::use",
+        "callee": "Item::pop",
+        "purpose": "Restore or adjust item stack/placement parameters after push/spawn operations (used around lifecycle transitions).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DEATHDIS::use",
+        "callee": "Item::orStatus",
+        "purpose": "Set status bits on the placed item (marking state like 'in-world' or other engine flags).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DEATHDIS::use",
+        "callee": "Item::shoot",
+        "purpose": "Emit/fire the disk as a projectile toward the computed WorldPoint with given parameters.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DEATHDIS::use",
+        "callee": "Item::setQ",
+        "purpose": "Clear or reset the per-item Q state at end of use (observed as setQ(0)).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DEATHDIS::gotHit",
+        "callee": "Item::getQ",
+        "purpose": "Read the per-item Q flag to decide whether to respond to the hit.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DEATHDIS::gotHit",
+        "callee": "Item::setQ",
+        "purpose": "Set the per-item Q flag to 1 when reacting to a hit (marks changed state).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DEATHDIS::gotHit",
+        "callee": "Item::isNpc",
+        "purpose": "Check if the attacker parameter references an NPC before further checks or retaliation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DEATHDIS::gotHit",
+        "callee": "Npc::isDead",
+        "purpose": "Ensure the attacker NPC is alive before spawning the retaliatory METHOD::0676.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DEATHDIS::gotHit",
+        "callee": "spawn",
+        "purpose": "Spawn METHOD::0676 as a retaliation/effect targeted at the attacker when conditions are met.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DEATHDIS::0281",
+        "callee": "Npc::getDir",
+        "purpose": "Query owner/NPC facing direction to choose directional visual parameters.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DEATHDIS::0281",
+        "callee": "spawn",
+        "purpose": "Spawn METHOD::15E7 twice with arguments derived from the owner's facing direction to produce directional visual/effects.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DEATHDIS::use",
+        "callee": "FREE::<...>",
+        "purpose": "Spawn cleanup/free helper routines to manage lifetime of the pushed world object (FREE::1C19, FREE::2A12 observed).",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_DEATHDIS::look",
+    "behavior_summary_one_liner": "This script implements a throwable/usable object called the 'death disk' with simple inspect text, a use action that places/launches the disk into the world as a projectile, and on-hit reactions that can retaliate against attackers.",
+    "external_call_count": 21,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

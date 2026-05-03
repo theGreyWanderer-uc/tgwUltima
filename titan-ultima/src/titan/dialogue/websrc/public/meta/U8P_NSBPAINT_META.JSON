@@ -1,0 +1,80 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_NSBPAINT.json",
+  "file": "U8P_NSBPAINT",
+  "behavior_summary": [
+    "U8P_NSBPAINT::look responds to the player/actor 'U8P_NSBPAINT::look' (examine) event for a painting item by preparing and emitting a short one-line description (a 'bark').",
+    "Before barking, the routine sets per-item info/state (pushes a constant 0x0208) and runs a 'process exclude' operation — likely to mark or protect the item from other processing while the bark is emitted.",
+    "The handler constructs a temporary string beginning with the literal \"painting \" (then appends item-specific data, inferred), passes that string and the painting item reference to Item::bark so the item presents the message, then frees the temporary string.",
+    "The return value from Item::bark is inspected (used with an 'implies' opcode), popped into a small temporary local, and the routine suspends/returns."
+  ],
+  "notable_control_flow": [
+    "Entry on Event 0 (U8P_NSBPAINT::look/examine) for the painting actor.",
+    "Push pid/item and constant 0x0208 -> set info / process exclude (marks item state before message).",
+    "Construct ephemeral message string starting with \"painting \".",
+    "Call external Item::bark with (item, constructed string).",
+    "Free the constructed string after the call.",
+    "Apply an 'implies' check to the bark return value, pop into a temp, then suspend/return."
+  ],
+  "open_questions": [
+    "What exact suffix or item-specific data is concatenated to the literal \"painting \" (the disassembly shows a constructed string but not the precise content)?",
+    "What is the precise game-engine meaning of the set-info id 0x0208 and of the 'process exclude' opcode in this context?",
+    "What semantic effect does the return value from Item::bark have when used with the 'implies' opcode (control flow or player-facing consequence)?",
+    "Is there any additional side-effect on global state or quest flags that is not visible in the extracted snippet?"
+  ],
+  "main_function": {
+    "name": "U8P_NSBPAINT::look",
+    "execution_form": "process",
+    "purpose": "Handle the actor/item 'U8P_NSBPAINT::look' (examine) event for a painting: mark the item state, build and present a short descriptive bark that begins with \"painting \", then clean up and return.",
+    "entry_conditions": [
+      "Event 0: triggered when the player/actor examines or looks at the painting (entering the item's U8P_NSBPAINT::look/observe area)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_NSBPAINT::look",
+      "kind": "main",
+      "role": "Event handler for the painting 'U8P_NSBPAINT::look' (examine) event; prepares state and invokes an item bark to show a one-line description.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine used to emit a short text message (bark) to the player/process; invoked with the painting item and constructed message.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_NSBPAINT::look",
+        "callee": "Item::bark",
+        "purpose": "Display a short descriptive message for the painting (one-line 'bark') using the constructed string that starts with 'painting '.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_NSBPAINT::look",
+    "behavior_summary_one_liner": "U8P_NSBPAINT::look responds to the player/actor 'U8P_NSBPAINT::look' (examine) event for a painting item by preparing and emitting a short one-line description (a 'bark').",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

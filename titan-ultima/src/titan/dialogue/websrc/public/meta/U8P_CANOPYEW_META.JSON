@@ -1,0 +1,125 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_CANOPYEW.json",
+  "file": "U8P_CANOPYEW",
+  "behavior_summary": [
+    "When the canopy object is 'looked' at (Event 0), the script makes the object produce a short description by calling Item::bark with the literal string \"canopy \".",
+    "Before calling bark it sets object/info state and toggles a processing-exclude state (likely to control presentation or prevent reentrant processing).",
+    "The temporary string used for the description is freed after the call, the bark return value is inspected, and the process yields/suspends execution.",
+    "Overall effect at gameplay level: provide the player a short descriptive message for the canopy and avoid interfering processing while the message runs."
+  ],
+  "notable_control_flow": [
+    "Entry on a U8P_CANOPYEW::look/inspect trigger (Event 0) for the canopy object.",
+    "Write/update of object/info flags and toggle of a processing-exclude state immediately before calling Item::bark.",
+    "Call to external routine Item::bark to emit/display the text \"canopy \".",
+    "Cleanup of the temporary string buffer, a test/inspection of the bark return value, then suspend/yield of the process."
+  ],
+  "open_questions": [
+    "Precise semantics and identifiers of the 'set info' opcode (which info key is written and what exact behavior that enables or disables).",
+    "Exact effect of the 'process exclude' opcode — whether it prevents reentrancy, hides the object from certain subsystems, or changes dispatch routing.",
+    "Meaning and use of the return value from Item::bark (the script inspects it but does not clearly branch on it).",
+    "Whether the suspend is used to wait for player acknowledgment, to yield the engine scheduler, or for another engine-specific synchronization purpose."
+  ],
+  "main_function": {
+    "name": "U8P_CANOPYEW::look",
+    "execution_form": "process",
+    "purpose": "Handle the 'U8P_CANOPYEW::look' event for the canopy object: prepare and emit a short descriptive message ('canopy ') via Item::bark while temporarily adjusting object/info and processing-exclusion state, then clean up and suspend.",
+    "entry_conditions": [
+      "Event 0 (U8P_CANOPYEW::look) — invoked when the player or relevant actor inspects/looks at the canopy object."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_CANOPYEW::look",
+      "kind": "main",
+      "role": "Event handler for the canopy object's U8P_CANOPYEW::look/examine action.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Emit/display a short text or message associated with an item/object.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CANOPYEW::set info",
+      "kind": "extern",
+      "role": "Engine opcode used to write an object/info flag prior to emitting the bark; exact info key is inferred.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_CANOPYEW::process exclude",
+      "kind": "extern",
+      "role": "Engine opcode used to toggle processing-exclusion state around the bark call (likely prevents reentry or changes processing routing).",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_CANOPYEW::free string",
+      "kind": "extern",
+      "role": "Free temporary string buffer created for the bark call.",
+      "confidence": "high"
+    },
+    {
+      "name": "suspend",
+      "kind": "extern",
+      "role": "Yield/suspend the process after handling the U8P_CANOPYEW::look event.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_CANOPYEW::look",
+        "callee": "Item::bark",
+        "purpose": "Make the canopy item produce/display the short description string 'canopy ' to the viewer/process.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CANOPYEW::look",
+        "callee": "U8P_CANOPYEW::set info",
+        "purpose": "Write an object/info flag before barking—appears to alter how the bark is handled or mark state on the object.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_CANOPYEW::look",
+        "callee": "U8P_CANOPYEW::process exclude",
+        "purpose": "Toggle processing exclusion for the object around the bark call to avoid certain processing while the message is emitted.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_CANOPYEW::look",
+        "callee": "U8P_CANOPYEW::free string",
+        "purpose": "Release the temporary string buffer 'canopy ' after Item::bark completes.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CANOPYEW::look",
+        "callee": "suspend",
+        "purpose": "Yield/suspend the process after completing the U8P_CANOPYEW::look handling (likely to let the engine continue and/or wait for further input).",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "CANOPYEW::look",
+    "behavior_summary_one_liner": "When the canopy object is 'looked' at (Event 0), the script makes the object produce a short description by calling Item::bark with the literal string \"canopy \".",
+    "external_call_count": 5,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

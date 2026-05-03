@@ -1,0 +1,269 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_ENCHANT.json",
+  "file": "U8P_ENCHANT",
+  "behavior_summary": [
+    "Implements the enchant action applied to a passed item: validates the item's Q field, maps it into an enchant category (Q-0x50), and returns early for reserved Q values (0x51..0x56).",
+    "Scans the acting NPC's equipment and nearby/related items to classify candidate reagents/targets and builds a bitmask describing which reagent/target classes are present.",
+    "Consumes reagent stacks (decrementing or destroying Item instances), creates new item instances (Item::create) and places them into the world (Item::pop) at positions computed from the enchanted item's X/Y/Z, incrementing an internal offset per created item.",
+    "Enforces mana cost on the actor (checks Npc::getMana and applies Npc::setMana), plays sound effects, spawns multiple short-lived visual/timing helper processes (METHOD::15E7, METHOD::091C, FREE::*), and calls AccumulateIntelligence on success.",
+    "Cleans up temporaries and spawned helper objects (Item::destroy and FREE helpers) and returns when preconditions (valid equip/reagent or supported Q category) are not met."
+  ],
+  "notable_control_flow": [
+    "Early-guard: if Item::getQ returns a value in 0x51..0x56 the routine bypasses enchant processing and returns immediately (guard path).",
+    "Category dispatch: Q-0x50 is used as a small index (1..5 inferred) to select parameter mappings (BP-0A/BP-0C) and which reagent/target classes to look for.",
+    "Scan-and-classify loop: iterates NPC equipment and an item list, calling Item::getType, Item::getFrame and a predicate (PENT::0F4B) on each candidate to set bits in a BP-19 bitmask that govern which enchant outcome(s) are allowed.",
+    "Consume-or-create sequence: when a matching reagent/target is found, code decrements Item::getQuantity or destroys the item, then creates new items and pops them into the world while spawning visual/sound effects and applying mana/stat changes.",
+    "Multiple helper spawns and delayed/free helpers are used to sequence visual effects and cleanup (METHOD::15E7 / METHOD::091C / FREE::1A96 / FREE::29D8 / FREE::1C19)."
+  ],
+  "open_questions": [
+    "Exact semantics of Item Q values: what in-game item actions correspond to each Q-0x50 category index (numeric mapping inferred but not identified to gameplay labels).",
+    "Precise behavior of PENT::0F4B: the predicate's classification rules are inferred from usage (mapping to specific bit flags) but its exact checks are unknown.",
+    "Meaning of the numeric BP-0A and BP-0C parameters derived from the switch: are they spawn counts, frame modifiers, or Z-offsets for created items?",
+    "Which equip slots or inventory subsets Npc::getEquip is scanning (slot range inferred but not explicit) and whether multi-slot scanning affects the bitmask build order.",
+    "Fine-grained timing and visual composition of spawned helpers (METHOD::15E7, METHOD::091C, FREE::*): are they particle effects, UI flashes, or other animation types?"
+  ],
+  "main_function": {
+    "name": "U8P_ENCHANT::ENCHANT",
+    "execution_form": "process",
+    "purpose": "Handle a player's/NPC's enchant action on an item: validate and classify the requested enchant, locate and consume necessary reagents/targets, spawn created items and visual/sound effects, deduct mana, and award intelligence/stat progression on success.",
+    "entry_conditions": [
+      "Called when an enchant action is attempted on an item (item pointer passed in BP+06h).",
+      "Requires the item's Q field to be outside the reserved bypass range (0x51..0x56).",
+      "Requires at least one valid equipped item or candidate reagent/target to be present; otherwise the function returns early."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_ENCHANT::ENCHANT",
+      "kind": "main",
+      "role": "Main handler for the enchant action on an item (process entry that performs validation, scanning, consumption/creation, effects, and stat/mana updates).",
+      "confidence": "high"
+    },
+    {
+      "name": "METHOD::15E7",
+      "kind": "helper",
+      "role": "Spawned visual-effect spawner used repeatedly during successful enchant sequences (particle/animation helper).",
+      "confidence": "medium"
+    },
+    {
+      "name": "METHOD::091C",
+      "kind": "helper",
+      "role": "Spawned short-lived helper invoked early in the enchant sequence (likely a brief visual or UI helper).",
+      "confidence": "medium"
+    },
+    {
+      "name": "FREE::1A96",
+      "kind": "helper",
+      "role": "Delay/timing helper called before AccumulateIntelligence to sequence stat accumulation or delayed effects.",
+      "confidence": "medium"
+    },
+    {
+      "name": "FREE::29D8",
+      "kind": "helper",
+      "role": "Spawned helper for an additional global visual/sound effect after parts of the enchant flow.",
+      "confidence": "medium"
+    },
+    {
+      "name": "FREE::1C19",
+      "kind": "helper",
+      "role": "Delayed cleanup/freer helper used to free temporaries or manage timed object cleanup.",
+      "confidence": "medium"
+    },
+    {
+      "name": "PENT::0F4B",
+      "kind": "extern",
+      "role": "Predicate/function used to classify candidate items during scanning; its return maps candidates to bitmask flags used by the enchant decision logic.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::*",
+      "kind": "extern",
+      "role": "Collection of item-instance methods used heavily (getQ/getX/getY/getZ/getType/getFrame/getQuantity/setQuantity/create/pop/destroy/bark etc.) to inspect, modify, spawn and move item objects.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::*",
+      "kind": "extern",
+      "role": "NPC methods used to read equip and mana state (Npc::getEquip, Npc::getMana, Npc::setMana, Npc::getDir) used for reagent lookup and effect/mana enforcement.",
+      "confidence": "high"
+    },
+    {
+      "name": "AccumulateIntelligence",
+      "kind": "extern",
+      "role": "Applies or records intelligence/stat increases after a successful enchant operation.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_ENCHANT::playSFX",
+      "kind": "extern",
+      "role": "Plays sound effects associated with enchant initiation or outcomes.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_ENCHANT::ENCHANT",
+        "callee": "Item::getQ",
+        "purpose": "Read the enchanted item's Q/quality field and map Q-0x50 into the enchant category; used as an early guard and category index.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENCHANT::ENCHANT",
+        "callee": "Item::getX",
+        "purpose": "Obtain the item's X coordinate to compute spawn/pop positions for created items.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENCHANT::ENCHANT",
+        "callee": "Item::getY",
+        "purpose": "Obtain the item's Y coordinate to compute spawn/pop positions for created items (BP-0F stores item Y plus offset).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENCHANT::ENCHANT",
+        "callee": "Item::getZ",
+        "purpose": "Obtain the item's Z coordinate (stored in BP-0D) for world spawning/pop placement.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENCHANT::ENCHANT",
+        "callee": "Npc::getEquip",
+        "purpose": "Retrieve equipped items to search for reagents/targets; absence triggers early return.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENCHANT::ENCHANT",
+        "callee": "Item::getType",
+        "purpose": "Read candidate item type during scan to classify reagent/target eligibility.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENCHANT::ENCHANT",
+        "callee": "Item::getFrame",
+        "purpose": "Read candidate item frame during scan to classify reagent/target eligibility.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENCHANT::ENCHANT",
+        "callee": "PENT::0F4B",
+        "purpose": "Call a predicate on candidate items; its boolean/return value is used to map candidates to specific bitmask flags for enchant decisions.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ENCHANT::ENCHANT",
+        "callee": "Item::getQuantity",
+        "purpose": "Read reagent stack counts to determine whether to decrement or destroy the reagent item.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENCHANT::ENCHANT",
+        "callee": "Item::setQuantity",
+        "purpose": "Decrement reagent stacks after consumption by the enchant.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENCHANT::ENCHANT",
+        "callee": "Item::create",
+        "purpose": "Instantiate new items (enchanted outcome or temporary pop targets) with supplied type/frame derived from category mapping.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENCHANT::ENCHANT",
+        "callee": "Item::pop",
+        "purpose": "Place created items into the world at computed X/Y/Z coordinates; used for spawned results/visuals.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENCHANT::ENCHANT",
+        "callee": "Item::destroy",
+        "purpose": "Destroy temporary items or reagent items when their quantity reaches zero after consumption.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENCHANT::ENCHANT",
+        "callee": "U8P_ENCHANT::playSFX",
+        "purpose": "Play sound effects to accompany enchant start, reagent consumption, or outcome events.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENCHANT::ENCHANT",
+        "callee": "Npc::getMana",
+        "purpose": "Check the actor's mana pool to determine if the enchant can proceed under mana cost constraints.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENCHANT::ENCHANT",
+        "callee": "Npc::setMana",
+        "purpose": "Deduct mana cost from the actor after a successful enchant operation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENCHANT::ENCHANT",
+        "callee": "Npc::getDir",
+        "purpose": "Read actor direction and pass it to spawned visual/effect helpers for directional visuals.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ENCHANT::ENCHANT",
+        "callee": "AccumulateIntelligence",
+        "purpose": "Apply or record intelligence/stat gain after successful enchant sequences.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ENCHANT::ENCHANT",
+        "callee": "METHOD::15E7",
+        "purpose": "Spawned repeatedly to produce per-frame visual effects at the actor's position/direction during the enchant outcome.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ENCHANT::ENCHANT",
+        "callee": "METHOD::091C",
+        "purpose": "Spawned early in the sequence as a brief visual/UI helper invoked during enchant initiation.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ENCHANT::ENCHANT",
+        "callee": "FREE::1A96",
+        "purpose": "Timing/delay helper invoked prior to calling AccumulateIntelligence to sequence stat gain.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ENCHANT::ENCHANT",
+        "callee": "FREE::29D8",
+        "purpose": "Spawned helper for additional global visual/sound effect after some operations in the enchant flow.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ENCHANT::ENCHANT",
+        "callee": "FREE::1C19",
+        "purpose": "Spawned cleanup/timer helper used to free temporaries or handle delayed cleanup of created objects/effects.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_ENCHANT::ENCHANT",
+    "behavior_summary_one_liner": "Implements the enchant action applied to a passed item: validates the item's Q field, maps it into an enchant category (Q-0x50), and returns early for reserved Q values (0x51..0x56).",
+    "external_call_count": 23,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

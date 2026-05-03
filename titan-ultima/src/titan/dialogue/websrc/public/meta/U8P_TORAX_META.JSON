@@ -1,0 +1,95 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_TORAX.json",
+  "file": "U8P_TORAX",
+  "behavior_summary": [
+    "Handles the 'U8P_TORAX::look' (examine) event for the Torax object. When an actor inspects the object the script prepares process/item context, emits a short textual message (a 'bark') containing the literal string \"torax \", then suspends and returns.",
+    "Before calling the bark routine it runs engine opcodes that set item/process info and apply a process-exclude behavior — likely to control messaging context or prevent recursion while emitting the bark.",
+    "The return value from Item::bark is captured, used in a boolean implication operation, and the script then suspends (allowing the message to persist) before finishing."
+  ],
+  "notable_control_flow": [
+    "Entry on a U8P_TORAX::look/examine event -> execute 'set info' opcode and 'process exclude' opcode to adjust context -> allocate/build temporary string \"torax \" -> call Item::bark(process/item_ptr, \"torax \") -> capture bark return value -> compute boolean via an 'implies' operation on the return -> suspend and return."
+  ],
+  "open_questions": [
+    "What exact info key and semantics are applied by the 'set info' opcode in this context (the disassembly shows a set but the meaning of the specific info id is not present)?",
+    "What precise meaning does the bark return encode (true/false, message displayed, ownership) and how the 'implies' operation's result is used by the engine after the suspend?",
+    "Does the 'process exclude' opcode temporarily remove the process from some scheduler/list, or does it alter which listeners receive the bark (intent is inferred but not proven)?"
+  ],
+  "main_function": {
+    "name": "U8P_TORAX::look",
+    "execution_form": "process",
+    "purpose": "Respond to an actor looking at the Torax object by emitting a short textual description/name and managing process context to ensure the bark is produced correctly.",
+    "entry_conditions": [
+      "Event 0 — the in-game 'U8P_TORAX::look' (examine) action on the Torax object; invoked when the Avatar or another actor inspects the object."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_TORAX::look",
+      "kind": "main",
+      "role": "Event handler for the object's U8P_TORAX::look/examine action; constructs and issues a bark describing the object.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine to display/emit short text from an item/process to a target process or the world; used here to show 'torax '.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_TORAX::engine opcode: set info",
+      "kind": "extern",
+      "role": "Engine operation that sets an info/state flag on the process/item; used to prepare context before barking (inferred role).",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_TORAX::engine opcode: process exclude",
+      "kind": "extern",
+      "role": "Engine operation that excludes the process from certain processing or listeners while barking (inferred role).",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_TORAX::look",
+        "callee": "Item::bark",
+        "purpose": "Emit the object's short message/name string ('torax ') to the inspecting process or display subsystem.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TORAX::look",
+        "callee": "U8P_TORAX::engine opcode: set info",
+        "purpose": "Adjust item/process info bits prior to barking (likely affects how or whether the bark is routed or displayed).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_TORAX::look",
+        "callee": "U8P_TORAX::engine opcode: process exclude",
+        "purpose": "Temporarily exclude or alter processing of the calling process to prevent recursion or interference while the bark runs (inferred).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "TORAX::look",
+    "behavior_summary_one_liner": "Handles the 'U8P_TORAX::look' (examine) event for the Torax object. When an actor inspects the object the script prepares process/item context, emits a short textual message (a 'bark') containing the literal string \"torax \", then suspends and returns.",
+    "external_call_count": 3,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

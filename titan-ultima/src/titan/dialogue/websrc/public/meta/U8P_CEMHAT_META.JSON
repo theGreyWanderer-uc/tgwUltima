@@ -1,0 +1,225 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_CEMHAT.json",
+  "file": "U8P_CEMHAT",
+  "behavior_summary": [
+    "U8P_CEMHAT::hatch is an area/trigger handler that scans the area's item list and performs story-driven scene setup and cleanup when the event fires.",
+    "It contains multiple gated flows keyed to global story flags: a 'told dagger' flow (create/destroy dagger-related items and mark toldDaggerDone), a ceremony flow (teleport NPCs, set ceremonySoon, spawn a follow-up routine), a Lithos meeting setup (create and place many items, set lithosMetDone), and tomb/Loth interment handling (destroy/create tomb items).",
+    "Selection of targets is done by iterating items, testing item shape/frame and position (Item::getZ/getX/getY), treating NPCs specially (Item::isNpc => Npc::teleport) and otherwise using Item::push/Item::create/Item::pop and engine helpers (FREE::*) to assemble and place scene objects.",
+    "The function modifies persistent story state (sets toldDaggerDone, ceremonySoon, lithosMetDone) to prevent repeating sequences and to schedule follow-up behavior."
+  ],
+  "notable_control_flow": [
+    "Iterate over the area's item list and for each item: read Z/X/Y, test shape/frame/coords, then branch to destroy/create/teleport logic.",
+    "If toldDagger flag is set and toldDaggerDone is not set: remove existing dagger-related items, create/place new dagger items, and set toldDaggerDone.",
+    "If haveDagger is set: call resetRef for small refs, set ceremonySoon, teleport NPC(s) to ceremony coords (using FREE::1A85 to obtain/encode coordinates), and spawn U8P_CEMHAT::METHOD::15E7 to continue the ceremony asynchronously.",
+    "If lithosMet is set and lithosMetDone is not set: run a bulk item-creation flow using repeated Item::create + FREE::24A7 + Item::pop calls to populate many placed objects, then set lithosMetDone.",
+    "If lothInterred is relevant: scan for tomb/Loth items, destroy or replace them as appropriate (inferred tomb cleanup/creation)."
+  ],
+  "open_questions": [
+    "Exact semantics and data layout of FREE::24A7 and FREE::1A85: they appear to assemble multi-field placement/configuration records but their precise fields and side effects are not fully determined.",
+    "Concrete item type IDs, shapes, and frames used in matching/creation steps (the disassembly shows constants but the mapping to in-game item types is inferred rather than canonical).",
+    "Precise coordinate mapping and whether Item::pop(uword,uword,ubyte) uses map-tile ids, local XY, or encoded location values returned from FREE::1A85.",
+    "Whether METHOD::15E7 is defined in the same script module or another module (it appears to be a follow-up/spawn routine tied to the ceremony but its code is not included here).",
+    "Edge conditions around multiple NPCs in the area: whether all matching NPCs are teleported or only the first/closest (looping implies multiple can be handled but exact selection rules need verification)."
+  ],
+  "main_function": {
+    "name": "U8P_CEMHAT::hatch",
+    "execution_form": "process",
+    "purpose": "Area/trigger handler that prepares, schedules, or cleans up scene objects and NPC positions to progress multiple story beats (dagger reveal, ceremony, Lithos meeting, Loth interment) when the event fires.",
+    "entry_conditions": [
+      "Triggered by an area/fast-area event (area entry/trigger).",
+      "Behavior gated by global story flags such as toldDagger, haveDagger, lithosMet, and lothInterred."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_CEMHAT::hatch",
+      "kind": "main",
+      "role": "Primary area event handler that scans area items and executes story flows (dagger, ceremony, lithos, tomb).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CEMHAT::METHOD::15E7",
+      "kind": "helper",
+      "role": "Spawned continuation/finalizer for the ceremony sequence (invoked asynchronously after NPC teleportation).",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::*",
+      "kind": "extern",
+      "role": "Engine item API (destroy/create/push/pop/getX/getY/getZ/isNpc) used to detect, remove, create and place items and to test coordinates and NPC status.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::teleport",
+      "kind": "extern",
+      "role": "Engine API used to move NPCs to ceremony/meeting coordinates.",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::24A7",
+      "kind": "extern",
+      "role": "Engine helper that assembles/configures multi-field structures for complex item placement; invoked during bulk placement (lithos/tomb flows).",
+      "confidence": "medium"
+    },
+    {
+      "name": "FREE::1A85",
+      "kind": "extern",
+      "role": "Engine helper that computes/returns an encoded coordinate or placement value used for teleport/pop placement.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_CEMHAT::resetRef",
+      "kind": "extern",
+      "role": "Reset/initialize small reference slots prior to scheduling the ceremony.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_CEMHAT::hatch",
+        "callee": "U8P_CEMHAT::METHOD::15E7",
+        "purpose": "Spawn an asynchronous continuation to proceed with or finalize the ceremony after NPCs have been teleported and ceremonySoon set.",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_CEMHAT::hatch",
+        "callee": "Item::destroy",
+        "purpose": "Remove existing items that conflict with or precede creation of new story objects (cleanup).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CEMHAT::hatch",
+        "callee": "Item::create",
+        "purpose": "Allocate new item instances used to populate the scene (dagger, lithos, tomb pieces).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CEMHAT::hatch",
+        "callee": "Item::push",
+        "purpose": "Push an item state onto an internal stack for later Item::pop placement or transformation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CEMHAT::hatch",
+        "callee": "Item::pop(uword,uword,ubyte)",
+        "purpose": "Finalize placement of a created item at specific coordinates/flags (commonly used after Item::create or FREE::* assembly).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CEMHAT::hatch",
+        "callee": "Item::pop(uword)",
+        "purpose": "Consume or restore pushed item state; used in some placement/transform sequences.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_CEMHAT::hatch",
+        "callee": "Item::getZ / Item::getX / Item::getY",
+        "purpose": "Query item elevation and coordinates to filter which items to act on during the area scan.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CEMHAT::hatch",
+        "callee": "Item::isNpc",
+        "purpose": "Detect NPC items so that teleportation (Npc::teleport) is used instead of static item placement/destruction.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CEMHAT::hatch",
+        "callee": "Npc::teleport",
+        "purpose": "Move found NPCs to ceremony or meeting coordinates determined by FREE::1A85/constructed values.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CEMHAT::hatch",
+        "callee": "U8P_CEMHAT::resetRef",
+        "purpose": "Clear or initialize small reference slots before scheduling ceremony-related state.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_CEMHAT::hatch",
+        "callee": "FREE::24A7",
+        "purpose": "Assemble a complex multi-field placement/configuration record used repeatedly in the lithos/tomb item creation flow.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_CEMHAT::hatch",
+        "callee": "FREE::1A85",
+        "purpose": "Compute/encode a coordinate or placement id used for teleport/pop placement of NPCs or items.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "toldDagger",
+        "likely_effect": "Gate whether the 'told dagger' creation/cleanup flow should run; read to decide entry into dagger flow.",
+        "confidence": "high"
+      },
+      {
+        "name": "toldDaggerDone",
+        "likely_effect": "Checked to avoid repeating the dagger flow if already completed.",
+        "confidence": "high"
+      },
+      {
+        "name": "haveDagger",
+        "likely_effect": "If set, triggers ceremony scheduling and NPC teleportation flow.",
+        "confidence": "high"
+      },
+      {
+        "name": "lithosMet",
+        "likely_effect": "Gate whether the Lithos meeting item-creation setup should run.",
+        "confidence": "high"
+      },
+      {
+        "name": "lithosMetDone",
+        "likely_effect": "Checked to avoid repeating the Lithos meeting setup.",
+        "confidence": "high"
+      },
+      {
+        "name": "lothInterred",
+        "likely_effect": "Indicates Loth interment state; read to drive tomb-related cleanup/creation flows.",
+        "confidence": "medium"
+      }
+    ],
+    "writes": [
+      {
+        "name": "toldDaggerDone",
+        "likely_effect": "Set to mark dagger flow as completed so it does not rerun.",
+        "confidence": "high"
+      },
+      {
+        "name": "ceremonySoon",
+        "likely_effect": "Set to signal that a ceremony has been scheduled/should occur soon (used to coordinate later behavior).",
+        "confidence": "high"
+      },
+      {
+        "name": "lithosMetDone",
+        "likely_effect": "Set to mark the Lithos meeting setup as complete and prevent repetition.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_CEMHAT::hatch",
+    "behavior_summary_one_liner": "U8P_CEMHAT::hatch is an area/trigger handler that scans the area's item list and performs story-driven scene setup and cleanup when the event fires.",
+    "external_call_count": 11,
+    "flag_read_count": 6,
+    "flag_write_count": 3
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

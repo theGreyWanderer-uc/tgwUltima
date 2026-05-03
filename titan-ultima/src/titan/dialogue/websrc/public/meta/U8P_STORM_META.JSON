@@ -1,0 +1,219 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_STORM.json",
+  "file": "U8P_STORM",
+  "behavior_summary": [
+    "Implements autonomous, long-lived weather processes (a rain storm and a fire storm) that drive visual particle effects, occasional lightning and sound effects, and transient screen-palette changes.",
+    "The rain-storm main process (U8P_STORM::STORM::0080) sets a rainStormActive flag, enters a randomized loop that spawns repeated particle effects (spawn FREE::1C19), occasionally triggers lightning (process LightningBolt) and thunder SFX (playSFX), and clears the rainStormActive flag when its randomized lifetime ends.",
+    "A parallel fire-storm process (U8P_STORM::STORM::021E) behaves analogously: it sets fireStormActive, spawns periodic effects/debris, may create/throw items (Item::legal_create + Item::hurl), and clears fireStormActive when finished.",
+    "Starter helpers (U8P_STORM::STORM::0372 and U8P_STORM::STORM::03C2) guard against duplicate spawns by checking guard flags (rainStorm and fireStorm) before spawning the respective storm process and setting the guard flag.",
+    "Stopper/cleanup helpers (U8P_STORM::STORM::0392 and U8P_STORM::STORM::03E2) clear the guard flags, optionally call cleanup helper FREE::2A56 and conditionally restore palettes via FadeToPalette depending on the global stormsActive flag and the presence of the other storm type."
+  ],
+  "notable_control_flow": [
+    "U8P_STORM::STORM::0080 is structured as a process (sleep/suspend loop) that repeatedly: sleep, urandom-driven decision making, spawn particle process (spawn FREE::1C19) with randomized params, maybe spawn LightningBolt and play thunder SFX, then eventually break to shutdown behavior when urandom indicates end of duration.",
+    "Palette transitions (process FadeToPalette) are conditionally invoked at storm start and stop depending on stormsActive and the other stormActive flag; this creates coordinated visual transitions when multiple storms interact.",
+    "Starter functions check boolean guard flags (rainStorm / fireStorm) to prevent multiple concurrent spawns; stopper functions perform a guarded cleanup and clear those guards.",
+    "Randomization (urandom) is used both for timing (delays) and branching (which sound to play, whether to spawn lightning, when to end the storm), making the processes nondeterministic but bounded by their randomized lifetime."
+  ],
+  "open_questions": [
+    "Exact numeric palette ids and fade parameters passed to process FadeToPalette are not documented here — what concrete palette transitions correspond to the fade calls?",
+    "The purpose of FREE::2A56 (called during cleanup) is inferred from usage pattern as a cleanup/registration call but its exact semantics are unknown.",
+    "Precise parameter meanings pushed before spawn FREE::1C19 (position, velocity, lifetime) are inferred but not fully reconstructed from the disassembly.",
+    "Whether other game systems observe the rainStormActive and fireStormActive flags to alter gameplay (beyond visuals/audio) is not visible here."
+  ],
+  "main_function": {
+    "name": "U8P_STORM::0080",
+    "execution_form": "process",
+    "purpose": "Run and manage a rain-storm visual/audio process: set rainStormActive, loop with urandom-driven sleeps to spawn particle effects (rain), occasionally trigger lightning and thunder SFX, apply conditional palette fades, and clear rainStormActive when the storm ends.",
+    "entry_conditions": [
+      "Spawned when a rain storm is initiated (via starter helper U8P_STORM::STORM::0372 or other code that spawns this process).",
+      "Assumes long-running process semantics (suspend/sleep) that persist until a randomized termination condition occurs."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_STORM::0080",
+      "kind": "main",
+      "role": "Rain-storm process: orchestrates rain particle spawns, lightning, SFX, and palette transitions while setting/clearing rainStormActive.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_STORM::021E",
+      "kind": "helper",
+      "role": "Fire-storm process analogous to U8P_STORM::STORM::0080: manages fire/debris spawns, item creation/hurling, SFX, and palette transitions; sets/clears fireStormActive.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_STORM::0372",
+      "kind": "helper",
+      "role": "Rain-storm starter: checks guard flag (rainStorm), spawns U8P_STORM::STORM::0080 if not already running, sets rainStorm guard flag to prevent duplicates.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_STORM::0392",
+      "kind": "helper",
+      "role": "Rain-storm stopper/cleanup: if rainStorm guard present, optionally restore palette (when stormsActive set), call cleanup helper FREE::2A56, and clear rainStorm flag.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_STORM::03C2",
+      "kind": "helper",
+      "role": "Fire-storm starter: checks fireStorm guard and spawns U8P_STORM::STORM::021E if not running; sets fireStorm guard.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_STORM::03E2",
+      "kind": "helper",
+      "role": "Fire-storm stopper/cleanup: mirrors rain-storm stopper behavior for fire storms, restoring palette conditionally and clearing fireStorm guard.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_STORM::0372",
+        "callee": "U8P_STORM::0080",
+        "purpose": "Starter spawns the rain-storm process if the guard flag is not set.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STORM::03C2",
+        "callee": "U8P_STORM::021E",
+        "purpose": "Starter spawns the fire-storm process if the guard flag is not set.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STORM::0392",
+        "callee": "U8P_STORM::0080",
+        "purpose": "Stopper coordinates cleanup for the rain-storm (clearing guard flag and calling cleanup routines); caller/callee relationship is conceptual (stopper controls lifecycle of the process instance).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_STORM::03E2",
+        "callee": "U8P_STORM::021E",
+        "purpose": "Stopper coordinates cleanup for the fire-storm (clearing guard and invoking cleanup helper).",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_STORM::0080",
+        "callee": "U8P_STORM::urandom(word)",
+        "purpose": "Drive randomized delays, effect parameters, sound selection, and termination timing for the rain-storm loop.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STORM::0080",
+        "callee": "spawn FREE::1C19",
+        "purpose": "Create repeated rain/particle visual effects with randomized parameters each tick.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STORM::0080",
+        "callee": "U8P_STORM::process LightningBolt()",
+        "purpose": "Spawn a lightning visual effect occasionally during rain storms (conditioned on stormsActive and random chance).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STORM::0080",
+        "callee": "U8P_STORM::playSFX(word, ubyte)",
+        "purpose": "Play thunder/impact sound effects chosen by urandom to vary audio feedback during storm ticks.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STORM::0080",
+        "callee": "U8P_STORM::process FadeToPalette(word, word)",
+        "purpose": "Apply palette fades when a storm starts or ends, depending on stormsActive and presence of the other storm type.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STORM::021E",
+        "callee": "Item::getX() / Item::getY()",
+        "purpose": "Query an origin position to compute where to attempt debris/item spawns during a fire storm.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STORM::021E",
+        "callee": "Item::legal_create(uword, uword, uword, uword, uword)",
+        "purpose": "Attempt to create debris/items at computed random positions during the fire-storm process.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STORM::021E",
+        "callee": "process Item::hurl(word, word, word, word)",
+        "purpose": "Apply velocities to newly created debris so they behave like hurled projectiles.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STORM::0392",
+        "callee": "FREE::2A56",
+        "purpose": "Invoke a cleanup/registration helper during storm shutdown; exact effect is inferred to finalize/unregister storm-related state.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "stormsActive (00EB)",
+        "likely_effect": "Gate whether global storm visual transitions (palette fades) and some lightning/spawn behaviors should occur; when false, some visual transitions and LightningBolt spawns are suppressed.",
+        "confidence": "high"
+      },
+      {
+        "name": "fireStormActive (00E9 / 00E8)",
+        "likely_effect": "Read by the rain-storm process and starter/stopper logic to coordinate palette behavior and to determine interactions between rain and fire visuals.",
+        "confidence": "high"
+      },
+      {
+        "name": "rainStormActive (00E7)",
+        "likely_effect": "Read by other storm logic to decide palette transitions and mutual interactions; represents that a rain-storm visual state is currently active.",
+        "confidence": "high"
+      },
+      {
+        "name": "rainStorm (00E6) / fireStorm (00E8)",
+        "likely_effect": "Guard flags read by starter helpers to avoid spawning duplicate storm processes.",
+        "confidence": "high"
+      }
+    ],
+    "writes": [
+      {
+        "name": "rainStormActive (00E7)",
+        "likely_effect": "Set to 1 when the rain-storm process begins and cleared to 0 when it ends; signals other code that rain visuals are currently active.",
+        "confidence": "high"
+      },
+      {
+        "name": "fireStormActive (00E9)",
+        "likely_effect": "Set to 1 when the fire-storm process begins and cleared at its end; signals that fire visuals are active.",
+        "confidence": "high"
+      },
+      {
+        "name": "rainStorm (00E6)",
+        "likely_effect": "Starter helper sets this guard flag when spawning the rain process to prevent duplicate spawns; stopper clears it on cleanup.",
+        "confidence": "high"
+      },
+      {
+        "name": "fireStorm (00E8)",
+        "likely_effect": "Analogous guard flag for fire-storm spawn/stop control.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_STORM::STORM::0080",
+    "behavior_summary_one_liner": "Implements autonomous, long-lived weather processes (a rain storm and a fire storm) that drive visual particle effects, occasional lightning and sound effects, and transient screen-palette changes.",
+    "external_call_count": 9,
+    "flag_read_count": 4,
+    "flag_write_count": 4
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

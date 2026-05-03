@@ -1,0 +1,77 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_ARMGUARD.json",
+  "file": "U8P_ARMGUARD",
+  "behavior_summary": [
+    "Responds to the 'U8P_ARMGUARD::look' (examine) event on an arm guard object by producing a short descriptive message.",
+    "Constructs the literal message \"arm guards \" and invokes the object's Item::bark routine so the viewer/process sees or hears that message.",
+    "Performs a small amount of event bookkeeping (set-info / process-exclude style operations inferred from the disassembly), frees the constructed string after use, then suspends/returns."
+  ],
+  "notable_control_flow": [
+    "Entry on Event 0 (U8P_ARMGUARD::look) for the arm guard process.",
+    "Push viewer/process pointer (BP+06h) and the constructed string, call Item::bark.",
+    "Free the constructed message string after the bark call.",
+    "Use the bark return value in an implies/pop sequence, then suspend and return."
+  ],
+  "open_questions": [
+    "Whether Item::bark presents text as a speech bubble, tooltip, or audible bark is not explicit (UI modality is inferred).",
+    "Exact semantics and target of the inferred 'set info' and 'process exclude' bookkeeping ops are uncertain.",
+    "The practical effect of the bark return value and the implies/pop sequence on higher-level game logic is unclear."
+  ],
+  "main_function": {
+    "name": "U8P_ARMGUARD::look",
+    "execution_form": "process",
+    "purpose": "Handle the 'U8P_ARMGUARD::look' interaction for the arm guard: assemble a short description string and request the item/process to display that text to the viewer, then perform cleanup and return.",
+    "entry_conditions": [
+      "Event 0 (U8P_ARMGUARD::look) invoked when an actor inspects the arm guard.",
+      "Viewer/process pointer passed in at BP+06h is used as the bark call receiver."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_ARMGUARD::look",
+      "kind": "main",
+      "role": "Handle the object's U8P_ARMGUARD::look/examine event and emit a short descriptive message.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item-provided routine to display or emit a short text message on behalf of an item/process.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_ARMGUARD::look",
+        "callee": "Item::bark",
+        "purpose": "Cause the arm guard (via the viewer/process pointer) to display/emit the message \"arm guards \".",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_ARMGUARD::look",
+    "behavior_summary_one_liner": "Responds to the 'U8P_ARMGUARD::look' (examine) event on an arm guard object by producing a short descriptive message.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

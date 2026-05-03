@@ -1,0 +1,115 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_MYTHAUS.json",
+  "file": "U8P_MYTHAUS",
+  "behavior_summary": [
+    "U8P_MYTHAUS::hatch runs when an egg item triggers its U8P_MYTHAUS::hatch event and, under certain conditions, teleports the player/avatar to the egg while playing fade and effect animations and disabling player control during the sequence.",
+    "If Egg::getEggId(egg_item) == 1 the teleport sequence always runs; which vertical offset is used for the teleport depends on the global flag mythranMet.",
+    "If Egg::getEggId(egg_item) != 1 then the function checks Item::getZ(egg_item) and only runs the teleport sequence when the egg's Z < 0x30 (48).",
+    "The visible sequence is: setAvatarInStasis(1) → FadeToBlack(pid) → spawn FREE::29D8(effect params) → teleportToEgg(pid, x=0, y_offset, flags=0x08) → FadeFromBlack(pid) → setAvatarInStasis(0)."
+  ],
+  "notable_control_flow": [
+    "Branch on Egg::getEggId(egg_item) == 1 to select unconditional-teleport path vs. height-guarded path.",
+    "In the Egg-id==1 branch an additional read of global mythranMet chooses one of two Y-offsets (short or long) for teleportToEgg.",
+    "In the non-id-1 branch the teleport only proceeds if Item::getZ(egg_item) < 0x30 (48); otherwise the function does nothing visible.",
+    "Process calls (FadeToBlack, teleportToEgg, FadeFromBlack) are invoked and awaited/synchronized in order; the avatar is put into stasis for the duration."
+  ],
+  "open_questions": [
+    "Exact gameplay meaning of the numeric teleport parameters (the three observed Y-offsets 0x04, 0x14, 0x16) and how they map to in-world positions.",
+    "Precise visual/audio content and gameplay effect of the spawned FREE::29D8 effect (parameters observed but semantic meaning is inferred).",
+    "Whether the U8P_MYTHAUS::hatch event is always triggered by direct player interaction or can be triggered by other actors/processes in some contexts.",
+    "Purpose of the init_local_0 local (initialized but unused in the excerpt) — is it a required ABI/init slot or reserved for future logic?"
+  ],
+  "main_function": {
+    "name": "U8P_MYTHAUS::hatch",
+    "execution_form": "process",
+    "purpose": "Coordinate a guarded teleport/fade/effect sequence to move the avatar to an egg when that egg 'hatches' or is activated, temporarily disabling avatar control during the sequence.",
+    "entry_conditions": [
+      "Triggered by the egg item's Event 7 (U8P_MYTHAUS::hatch).",
+      "Runs whenever the U8P_MYTHAUS::hatch event occurs, but the actual teleport may be gated by egg type (Egg::getEggId) or egg height (Item::getZ)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_MYTHAUS::hatch",
+      "kind": "main",
+      "role": "Orchestrates the U8P_MYTHAUS::hatch teleport/fade/effect flow and reads condition flags/state from the egg and a global flag.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_MYTHAUS::hatch",
+        "callee": "Egg::getEggId",
+        "purpose": "Read the egg's type/id to decide which branch of the U8P_MYTHAUS::hatch logic to take (id==1 forces teleport sequence).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MYTHAUS::hatch",
+        "callee": "Item::getZ",
+        "purpose": "Read the egg's Z (height) to gate the teleport sequence in the non-id-1 branch (only proceed if Z < 0x30).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MYTHAUS::hatch",
+        "callee": "U8P_MYTHAUS::setAvatarInStasis",
+        "purpose": "Disable avatar control at the start of the teleport/fade sequence (called with 1) and re-enable afterwards (called with 0).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MYTHAUS::hatch",
+        "callee": "U8P_MYTHAUS::process FadeToBlack",
+        "purpose": "Fade the player's screen to black and synchronize before spawning effects/teleporting the avatar.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MYTHAUS::hatch",
+        "callee": "spawn FREE::29D8",
+        "purpose": "Spawn a transient effect during the U8P_MYTHAUS::hatch/teleport sequence (observed params: 0x64, 0x07, 0x00000000); likely a visual or audio flourish associated with hatching.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_MYTHAUS::hatch",
+        "callee": "U8P_MYTHAUS::process teleportToEgg",
+        "purpose": "Teleport the specified pid to the egg's location using a small x-byte (often 0) and a branch-dependent Y-offset and flags (0x08).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MYTHAUS::hatch",
+        "callee": "U8P_MYTHAUS::process FadeFromBlack",
+        "purpose": "Fade the player's screen back in after the teleport completes and synchronize before restoring control.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "mythranMet",
+        "likely_effect": "Selects which Y-offset teleportToEgg uses when Egg::getEggId(egg_item) == 1 (affects final avatar placement).",
+        "confidence": "high"
+      }
+    ],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "MYTHAUS::hatch",
+    "behavior_summary_one_liner": "U8P_MYTHAUS::hatch runs when an egg item triggers its U8P_MYTHAUS::hatch event and, under certain conditions, teleports the player/avatar to the egg while playing fade and effect animations and disabling player control during the sequence.",
+    "external_call_count": 7,
+    "flag_read_count": 1,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

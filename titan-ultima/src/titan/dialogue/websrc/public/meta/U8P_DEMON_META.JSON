@@ -1,0 +1,98 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_DEMON.json",
+  "file": "U8P_DEMON",
+  "behavior_summary": [
+    "Handles the 'U8P_DEMON::look' (examine) event for a demon entity: when a process/actor examines the demon it sets a small piece of process/item info, adjusts process-exclusion/recipient state, and emits a short spoken/text message (the literal string \"daemon \") directed at the examining process. After emitting the bark it captures the call result, performs a small conditional/stack cleanup sequence, then suspends/returns.",
+    "The handler does not alter persistent globals visible in the disassembly; its effects are localized to per-process/item info and the emitted message.",
+    "The sequence suggests the demon controls who receives the bark via a 'process exclude' operation and records or annotates the interaction with the pushed info id (0x0208) before speaking."
+  ],
+  "notable_control_flow": [
+    "Entry -> push info id (0x0208) and caller pid -> call set info (records per-process/item state) -> execute process exclude (adjust recipients/visibility) -> build literal string \"daemon \" -> call Item::bark(target_pid, \"daemon \") -> free temporary string -> capture return and apply an 'implies' operation -> pop result -> suspend/return.",
+    "No loops, no branching visible beyond the implied handling of the bark return value; control returns to the engine after suspension.",
+    "All observed operations act on the calling process/item and ephemeral resources (temporary string), indicating this is a short-lived, localized reaction to the 'U8P_DEMON::look' trigger."
+  ],
+  "open_questions": [
+    "What concrete data or semantic meaning is associated with info id 0x0208 (what state/message does it represent)?",
+    "Exactly how 'process exclude' modifies recipients: does it exclude the demon itself, the caller, or a broader listener set?",
+    "What is the practical effect of the captured Item::bark return value and the subsequent 'implies' opcode in-game (e.g., interrupt/suppression or branching not visible in the disassembly)?"
+  ],
+  "main_function": {
+    "name": "U8P_DEMON::look",
+    "execution_form": "process",
+    "purpose": "Respond to an examine/U8P_DEMON::look event by recording a small info flag and emitting a short bark ('daemon ') targeted at the examining process, then suspend/return.",
+    "entry_conditions": [
+      "Event 0 — invoked when an actor/process 'looks at' or examines the demon (inferred from naming and usecode conventions)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_DEMON::look",
+      "kind": "main",
+      "role": "Examine/U8P_DEMON::look event handler for the demon; sets per-process info, adjusts recipient/exclusion mask, and emits a short bark.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine used to emit/display a short message from an item/process to a target process or nearby listeners.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DEMON::set info",
+      "kind": "extern",
+      "role": "Engine operation that records/sets an info/state key for a process/item (0x0208 is pushed prior to call).",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_DEMON::process exclude",
+      "kind": "extern",
+      "role": "Engine operation that adjusts process exclusion/recipient masks to control which processes receive subsequent effects or messages.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_DEMON::look",
+        "callee": "U8P_DEMON::set info",
+        "purpose": "Record or annotate per-process/item state prior to producing the bark (0x0208 pushed as the info id).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DEMON::look",
+        "callee": "U8P_DEMON::process exclude",
+        "purpose": "Modify recipient/exclusion masks so the upcoming bark or side-effects target/exclude specific processes/listeners.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DEMON::look",
+        "callee": "Item::bark",
+        "purpose": "Emit the literal message \"daemon \" from the demon, directed at the examining process (parameter passed from [BP+06h]).",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "speech",
+    "recipient-filter"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_DEMON::DEMON::look",
+    "behavior_summary_one_liner": "Handles the 'U8P_DEMON::look' (examine) event for a demon entity: when a process/actor examines the demon it sets a small piece of process/item info, adjusts process-exclusion/recipient state, and emits a short spoken/text message (the literal string \"daemon \") directed at the examining process. After emitting the bark it captures the call result, performs a small conditional/stack cleanup sequence, then suspends/returns.",
+    "external_call_count": 3,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

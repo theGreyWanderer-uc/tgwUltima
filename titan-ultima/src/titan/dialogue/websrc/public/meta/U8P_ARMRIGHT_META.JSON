@@ -1,0 +1,94 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_ARMRIGHT.json",
+  "file": "U8P_ARMRIGHT",
+  "behavior_summary": [
+    "ARMRIGHT::use marks the referenced object with an info key (0x0207), prevents further processing of that object (process-exclude), and spawns a BODYPART process (id 0x0270) for the object — likely to attach or animate the right arm on U8P_ARMRIGHT::use.",
+    "ARMRIGHT::hit handles a hit/damage event: it sets a different info key (0x020B) and process-excludes the object, frees/clears a resource identified by 0x0202 on that object, queries how many processes of type 0x020A exist for the object, and if that query indicates presence it spawns a BODYPART process (id 0x0431) — likely a hit reaction or visual effect.",
+    "The script uses info flags (0x0207 / 0x020B) as state markers, process-exclude to prevent concurrent processing, and spawn/free/getNumProcesses engine primitives to manage per-object body-part behaviors and cleanup."
+  ],
+  "notable_control_flow": [
+    "On 'U8P_ARMRIGHT::use' event: set info 0x0207 on the target -> set process-exclude -> spawn BODYPART::0270(target, 0). The spawn return value is popped/stored then ignored.",
+    "On 'hit' event: set info 0x020B on the target -> set process-exclude -> call FREE::2A56(0x0202, target) to remove a resource -> call Kernel::getNumProcesses(target, 0x020A) -> if result indicates existing processes (inferred: >0) then spawn BODYPART::0431(target, 0).",
+    "No global flags are written or read by these functions in this script excerpt — behavior is confined to per-object state and processes."
+  ],
+  "open_questions": [
+    "Exact semantic meaning of info keys 0x0207 and 0x020B (they appear to be per-object state markers related to 'used' and 'hit' but exact game-state implications are unknown).",
+    "Precise interpretation of ProcessType 0x020A and resource id 0x0202 (what kinds of processes/resources they represent at gameplay level).",
+    "Whether BP+06 is always the object's own PID ('self') or sometimes another target object (inferred as the object this body-part belongs to but not proven).",
+    "The exact condition tested on Kernel::getNumProcesses (inferred to be >0) that gates spawning BODYPART::0431."
+  ],
+  "main_function": {
+    "name": "U8P_ARMRIGHT::use",
+    "execution_form": "process",
+    "purpose": "Respond to a 'U8P_ARMRIGHT::use' interaction on the right-arm body-part by marking the target object (info 0x0207), excluding it from further automatic processing, and spawning a BODYPART::0270 process to create the visual/behavioral effect (attachment/animation) for that object.",
+    "entry_conditions": [
+      "Event 1 (U8P_ARMRIGHT::use) — invoked when the actor/player 'uses' or activates the right-arm body part."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_ARMRIGHT::use",
+      "kind": "main",
+      "role": "Handle 'U8P_ARMRIGHT::use' on right-arm body part: set per-object state and spawn body-part process (BODYPART::0270).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ARMRIGHT::hit",
+      "kind": "helper",
+      "role": "Handle 'hit' on right-arm: set hit state, free/clear an attached resource (0x0202), query process counts (0x020A), and conditionally spawn a hit-response body-part process (BODYPART::0431).",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_ARMRIGHT::use",
+        "callee": "spawn (BODYPART::0270)",
+        "purpose": "Create/start a body-part process (id 0x0270) for the target object to produce attach/animation/effect on U8P_ARMRIGHT::use.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ARMRIGHT::hit",
+        "callee": "FREE::2A56",
+        "purpose": "Free or clear a resource/attachment identified by id 0x0202 on the target object as part of hit cleanup.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ARMRIGHT::hit",
+        "callee": "Kernel::getNumProcesses",
+        "purpose": "Query the number of processes of ProcessType 0x020A for the object to decide whether to spawn a hit-response process.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ARMRIGHT::hit",
+        "callee": "spawn (BODYPART::0431)",
+        "purpose": "Conditionally create/start a body-part process (id 0x0431) for the object — likely a visual/damage reaction spawned when processes of type 0x020A exist.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "ARMRIGHT::use",
+    "behavior_summary_one_liner": "ARMRIGHT::use marks the referenced object with an info key (0x0207), prevents further processing of that object (process-exclude), and spawns a BODYPART process (id 0x0270) for the object — likely to attach or animate the right arm on U8P_ARMRIGHT::use.",
+    "external_call_count": 4,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

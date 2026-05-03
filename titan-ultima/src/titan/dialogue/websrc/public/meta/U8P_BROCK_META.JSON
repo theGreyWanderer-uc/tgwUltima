@@ -1,0 +1,151 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_BROCK.json",
+  "file": "U8P_BROCK",
+  "behavior_summary": [
+    "Provides an examination ('U8P_BROCK::look') handler for the BROCK object that reports a short identifying string based on the item's current frame/state (maps frames 0..4 to specific artifact piece names).",
+    "Contains a complex helper activation routine that appears to implement multi-stage artifact interactions or a dramatic scripted event: scanning references, applying damage to nearby targets, spawning visual/sound effects, creating/destroying temporary items, changing the BROCK item's frame/type, and performing camera/fade/teleport operations.",
+    "The U8P_BROCK::look handler is read-only and presentation-focused (text bark). The helper performs gameplay-affecting changes and large-scale scene effects (damage, teleport, stasis, camera quake).",
+    "Most external engine routines (Item::*, spawn, playSFX, process LightningBolt, Camera::startQuake, FadeToBlack/FadeFromBlack, Npc::teleport, etc.) are used by the helper to stage visual and mechanical outcomes."
+  ],
+  "notable_control_flow": [
+    "BROCK::look branches on Item::getFrame(item_ptr) (frame 0..4) to select the bark string, then suspends — straightforward event-to-text mapping.",
+    "U8P_BROCK::BROCK::0197 (helper) branches heavily on the item's type/frame and on the triggering process state, iterates item reference slots (Item::push / loopscr / Item::getQ), and uses loop counters to apply repeated effects (Item::receiveHit with urandom-based damage) to enumerated targets.",
+    "The helper interleaves asynchronous visual processes (spawn PYROS/LITHOS/FREE), synchronous operations (Item::create/Item::destroy, Item::setFrame), and global scene transitions (FadeToBlack/FadeFromBlack, Camera quakes, setAvatarInStasis) to construct a multi-step scripted sequence.",
+    "Reference resets (Kernel::resetRef) and pop/popToEnd calls are used to manage and clean up referenced helper items created during sequences."
+  ],
+  "open_questions": [
+    "What exact game-state conditions or item type constants trigger each distinct branch inside U8P_BROCK::BROCK::0197 (the disassembly shows many branches but not the high-level design intent for artifact progression vs. defeat sequence)?",
+    "Which external spawn processes (FREE::1C19, PYROS::1914, LITHOS::0CCD, etc.) correspond to specific visual effects, and how do their parameters alter the appearance/behavior of the sequence?",
+    "Does BROCK::0197 get invoked by a player 'use' action, another event type, or an external script? The entry event for the helper routine isn't explicit in the disassembly summary.",
+    "Are there global quest flags or persistent state changes outside the script's local item frame/type changes that should be set during the activation sequence (no global flags were observed being written in the provided extract)?"
+  ],
+  "main_function": {
+    "name": "U8P_BROCK::look",
+    "execution_form": "process",
+    "purpose": "Handle 'U8P_BROCK::look' (examine) events for the BROCK object and emit a short identifying line describing which artifact piece the item currently represents, based on its frame value.",
+    "entry_conditions": [
+      "Triggered by the object's 'U8P_BROCK::look' / examine event (Event 0 or equivalent engine 'U8P_BROCK::look' trigger).",
+      "Requires the viewer/trigger process id (pid) and the item instance reference (item_ptr)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_BROCK::look",
+      "kind": "main",
+      "role": "Examine handler that reads the item's frame (Item::getFrame) and uses Item::bark to display a descriptive string (frames 0..4 map to specific artifact piece names).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BROCK::0197",
+      "kind": "helper",
+      "role": "Complex activation/interaction routine: inspects equipment/target, branches on item type/frame, enumerates and manipulates referenced items, applies hits/damage, spawns visual processes, creates/destroys items, sets frames/types, and orchestrates camera/fade/teleport effects for a scripted event.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::getFrame",
+      "kind": "extern",
+      "role": "Engine call returning an item's current frame/state used for branching and presentation.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Emit a short text line (dialogue/description) on behalf of an item/process to a player/process.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_BROCK::look",
+        "callee": "Item::getFrame",
+        "purpose": "Read the BROCK item's frame/state to decide which description to display.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BROCK::look",
+        "callee": "Item::bark",
+        "purpose": "Display a short identifying string to the viewer (pid) describing the artifact piece.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BROCK::0197",
+        "callee": "Npc::getEquip",
+        "purpose": "Inspect an NPC equip slot to guard or conditionally alter behavior based on the actor's equipment/state.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BROCK::0197",
+        "callee": "Item::getType",
+        "purpose": "Query the item's type id to route to different scripted outcomes.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BROCK::0197",
+        "callee": "Item::push / Item::pop / Item::popToEnd / Kernel::resetRef / Item::getQ",
+        "purpose": "Enumerate and manage the item's referenced slots/contained items in order to find targets and to create/clean up helper objects.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BROCK::0197",
+        "callee": "Item::create / Item::destroy / Item::setFrame / Item::setType",
+        "purpose": "Create temporary helper items at the BROCK's coordinates, update their state or the BROCK's frame/type, and destroy temporary objects during cleanup.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BROCK::0197",
+        "callee": "spawn (FREE::1C19, PYROS::1914, LITHOS::0CCD, etc.)",
+        "purpose": "Start asynchronous visual/effect processes to accompany scripted events (explosions, flames, rock effects).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BROCK::0197",
+        "callee": "Item::receiveHit / process LightningBolt / urandom",
+        "purpose": "Apply damage/hits to targeted referenced entities with randomized damage values and trigger lightning/damage effects.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BROCK::0197",
+        "callee": "U8P_BROCK::playSFX",
+        "purpose": "Play sound effects at key moments of the scripted sequence for dramatic feedback.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BROCK::0197",
+        "callee": "Item::getX / Item::getY / Item::getZ",
+        "purpose": "Query the BROCK item's coordinates to position created helper items and effects appropriately.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BROCK::0197",
+        "callee": "process FadeToBlack / FadeFromBlack / Camera::startQuake / Camera::stopQuake / setAvatarInStasis / Npc::teleport",
+        "purpose": "Perform scene-level transitions (fade, camera quake, stasis) and teleportation to deliver a cinematic scripted outcome.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_BROCK::BROCK::look",
+    "behavior_summary_one_liner": "Provides an examination ('U8P_BROCK::look') handler for the BROCK object that reports a short identifying string based on the item's current frame/state (maps frames 0..4 to specific artifact piece names).",
+    "external_call_count": 11,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

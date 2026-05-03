@@ -1,0 +1,136 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_BONES4.json",
+  "file": "U8P_BONES4",
+  "behavior_summary": [
+    "BONES4::look: When a player examines the bones/skeleton item, the script marks the item with standard 'U8P_BONES4::look' info/processing state and causes the item to emit the short description string \"skeleton \" to the examining player (via Item::bark). The handler then suspends/returns.",
+    "BONES4::use: When a player uses the bones/skeleton item, the script checks an item status word (Item::getStatus). If the 0x0100 bit is set the script closes the item's UI gump (Item::closeGump) and returns. If the bit is not set it performs a random roll (urandom(0x64)); on the common branch it barks the warning text \"Disturb my rest not, mortal!\" to the player, while on a low-probability branch it opens a special gump for the item (Item::openGump with parameter 0x0C).",
+    "Decisions and behaviors are driven by the item's internal status bits and a probabilistic random roll; no global game flags are read or written by this script fragment."
+  ],
+  "notable_control_flow": [
+    "Event-driven: BONES4::look runs on the 'U8P_BONES4::look' (examine) event and is a simple linear handler that ends after barking.",
+    "Conditional guard in BONES4::use: a status-bit guard (0x0100) short-circuits to Item::closeGump.",
+    "Randomized branching in BONES4::use: urandom(0x64) compared against 0x5F produces a low-probability path that opens a gump; the common path yields a bark message.",
+    "Both handlers use suspend/return semantics after performing their visible action (bark or gump open/close)."
+  ],
+  "open_questions": [
+    "Exact numeric semantics of urandom(0x64) (range and inclusive/exclusive bounds) — affects the precise probability of the special gump branch.",
+    "Precise meaning of status bit 0x0100 in the item's status word (inferred to indicate an open gump or related UI state).",
+    "Whether the string literals include trailing spaces intentionally (e.g., \"skeleton \") and whether that affects in-game display formatting."
+  ],
+  "main_function": {
+    "name": "U8P_BONES4::look",
+    "execution_form": "process",
+    "purpose": "Present the item's short description when examined: set item info/processing state and have the item emit the text 'skeleton ' to the examining player.",
+    "entry_conditions": [
+      "Event 0 — the player/actor examines (looks at) the bones/skeleton item"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_BONES4::look",
+      "kind": "main",
+      "role": "Handle the 'U8P_BONES4::look' (examine) event; set item info flags and call Item::bark with the description string.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BONES4::use",
+      "kind": "helper",
+      "role": "Handle the 'use' event: close gump if status bit set, otherwise either bark a warning or open a special gump based on a random roll.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine-provided routine used to make an item display/speak a text message to a player/process.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getStatus",
+      "kind": "extern",
+      "role": "Return the item's status word/flags used for testing bits such as 0x0100.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::closeGump",
+      "kind": "extern",
+      "role": "Close the UI gump/window associated with the item.",
+      "confidence": "high"
+    },
+    {
+      "name": "urandom",
+      "kind": "extern",
+      "role": "Random number provider used to branch probabilistically in BONES4::use.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::openGump",
+      "kind": "extern",
+      "role": "Open a UI gump/window for the item (called with parameter 0x0C in the special branch).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_BONES4::look",
+        "callee": "Item::bark",
+        "purpose": "Emit the short description string 'skeleton ' to the examining player.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BONES4::use",
+        "callee": "Item::getStatus",
+        "purpose": "Retrieve the item's status word to test whether bit 0x0100 is set (guard for closing gump).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BONES4::use",
+        "callee": "Item::closeGump",
+        "purpose": "Close the item's gump when the 0x0100 status bit is set.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BONES4::use",
+        "callee": "urandom",
+        "purpose": "Generate a random value (called with 0x64) used to decide between barking or opening the special gump.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BONES4::use",
+        "callee": "Item::bark",
+        "purpose": "Emit the warning message 'Disturb my rest not, mortal!' to the player on the common branch.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BONES4::use",
+        "callee": "Item::openGump",
+        "purpose": "Open a special UI gump (parameter 0x0C) on the low-probability/random branch.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "BONES4::look",
+    "behavior_summary_one_liner": "BONES4::look: When a player examines the bones/skeleton item, the script marks the item with standard 'U8P_BONES4::look' info/processing state and causes the item to emit the short description string \"skeleton \" to the examining player (via Item::bark). The handler then suspends/returns.",
+    "external_call_count": 6,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

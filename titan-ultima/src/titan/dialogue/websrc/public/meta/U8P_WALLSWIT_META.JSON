@@ -1,0 +1,133 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_WALLSWIT.json",
+  "file": "U8P_WALLSWIT",
+  "behavior_summary": [
+    "WALLSWIT::look: When the player examines the wall switch item it displays the label \"switch \" by calling Item::bark. This is a simple examine/description handler.",
+    "WALLSWIT::use: When the player uses the wall switch the script reads the item's graphic frame and a 'quality' mode field, updates the frame to represent a toggled/stepped switch position, plays feedback SFX, and spawns short helper routines (FREE) to stage multi-step visual changes or timing.",
+    "Quality acts as a mode selector: quality==0/1 behaves as a binary invert toggle (calls Camera::invertScreen and flips the stored quality between 0 and 1); quality values >=2 enter configuration branches that iterate data tables and spawn slider UI processes (SLIDER::0080 or SLIDER::01A1) to let the player configure related values.",
+    "Frame values drive whether use increments or decrements the visual frame (distinct branches for frames like 0,1,2,3,5 observed) and determine which slider-table entries match for spawning sliders.",
+    "No global flags are read or written by this script; behavior is driven by item-local fields (frame and quality) and transient local/process state."
+  ],
+  "notable_control_flow": [
+    "Event-driven: U8P_WALLSWIT::look is bound to Event 0 (U8P_WALLSWIT::look). U8P_WALLSWIT::use is the Event 1 (use) handler that runs on player interaction.",
+    "Use handler first reads item frame (BP-06h) and item quality (BP-08h), then selects a branch: for certain frames (e.g., 0 or 3) it increments the frame; for other frames (e.g., 2 or 5) it decrements the frame. Each frame change sequence plays a SFX and spawns FREE::1C19 for timed/multi-step behavior.",
+    "After changing frame, the handler inspects quality: if quality == 0 or 1 it toggles Camera::invertScreen and flips the stored quality (0 <-> 1) while playing an SFX; if quality >= 2 it enters table-driven loops that compare entries to the frame/quality and spawn slider UIs (SLIDER::0080 or SLIDER::01A1).",
+    "Table-driven slider branches iterate a pointer/index (BP-04h) and use a small byte (BP-09h) as a spawn flag to track whether a slider was launched."
+  ],
+  "open_questions": [
+    "Exact runtime behavior of the spawned FREE::1C19 routine: inferred to be a short animation/timer helper but its concrete effects are not present in this script.",
+    "Precise meanings of the numeric frame values (which frame numbers correspond to 'on' vs 'off' or intermediate positions) and full mapping of all possible frame states.",
+    "Exact structure and content of the slider parameter tables referenced in the quality>=2 branches (what values are being configured and how they map to game systems).",
+    "Whether any external game state beyond item-local fields (e.g., world-level visual effects) is affected by the slider spawns or FREE routine (not visible in this script)."
+  ],
+  "main_function": {
+    "name": "U8P_WALLSWIT::look",
+    "execution_form": "process",
+    "purpose": "Handle the player 'U8P_WALLSWIT::look' (examine) event for the wall switch item by emitting a short descriptive text ('switch ') via Item::bark.",
+    "entry_conditions": [
+      "Event 0 (U8P_WALLSWIT::look) — triggered when the player or actor inspects the switch instance"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_WALLSWIT::look",
+      "kind": "main",
+      "role": "Examine/description handler that calls Item::bark to present the item's label.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_WALLSWIT::use",
+      "kind": "helper",
+      "role": "Use/interaction handler: toggles the switch visual frame, plays SFX, may spawn a FREE helper for timing/animation, and dispatches slider UI spawns when in configuration modes (quality>=2).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_WALLSWIT::look",
+        "callee": "Item::bark",
+        "purpose": "Display the item's descriptive string ('switch ') to the examining process/player.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WALLSWIT::use",
+        "callee": "Item::getFrame",
+        "purpose": "Read the item's current graphic frame/state to decide whether to increment or decrement and to match slider-table entries.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WALLSWIT::use",
+        "callee": "Item::setFrame",
+        "purpose": "Write the item's new graphic frame/state to reflect toggled/stepped positions after use.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WALLSWIT::use",
+        "callee": "Item::getQuality",
+        "purpose": "Read the item's 'quality' field used as a mode selector (invert toggle vs slider/config modes).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WALLSWIT::use",
+        "callee": "Item::setQuality",
+        "purpose": "Update the quality field when toggling invert modes (flip between 0 and 1).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WALLSWIT::use",
+        "callee": "U8P_WALLSWIT::playSFX",
+        "purpose": "Play auditory feedback for frame toggles and mode toggles (different SFX ids observed).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WALLSWIT::use",
+        "callee": "spawn (FREE::1C19)",
+        "purpose": "Spawn a short/timed helper routine after changing frame—likely to stage multi-step animation or a delayed effect.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_WALLSWIT::use",
+        "callee": "Camera::invertScreen",
+        "purpose": "Invert or restore screen/camera visual effect when flipping the quality invert mode (quality 0/1).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_WALLSWIT::use",
+        "callee": "spawn (SLIDER::0080)",
+        "purpose": "Launch a slider UI/process to configure a numeric value when the switch is in a slider/configuration mode (quality branch, table-driven spawn).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_WALLSWIT::use",
+        "callee": "spawn (SLIDER::01A1)",
+        "purpose": "Alternate slider spawn used from a different configuration table branch — launches a different slider UI instance.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_WALLSWIT::look",
+    "behavior_summary_one_liner": "WALLSWIT::look: When the player examines the wall switch item it displays the label \"switch \" by calling Item::bark. This is a simple examine/description handler.",
+    "external_call_count": 10,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

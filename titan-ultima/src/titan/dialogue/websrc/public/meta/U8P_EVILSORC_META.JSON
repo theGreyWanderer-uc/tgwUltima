@@ -1,0 +1,173 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_EVILSORC.json",
+  "file": "U8P_EVILSORC",
+  "behavior_summary": [
+    "U8P_EVILSORC::cast is the sorcerer's spell-casting entry: it prepares process metadata (set info / process exclude), forwards a 2-byte spell descriptor plus caster, caller pid and target, and spawns a SPELCMBT combat/spell handler to execute the spell. After spawning it propagates the spawn return value (implies), performs cleanup and suspends.",
+    "U8P_EVILSORC::look handles examination: it queries Npc::isDead(self) and barks either a dead or alive short description (\"dead Sorcerer \" vs \"Sorcerer \") to the requesting pid, then cleans up and suspends.",
+    "U8P_EVILSORC::use handles player interaction/theft: if the NPC is alive and not already in combat it becomes aggressive toward the activator by calling Npc::setTarget. On a specific map (map id 0x0E) it first emits a threatening bark and suspends briefly (likely a dramatic pause) before setting the target."
+  ],
+  "notable_control_flow": [
+    "U8P_EVILSORC::cast: set process info / exclude -> push spell descriptor (2 bytes), push caster (self), push pid, push target -> spawn SPELCMBT::084D -> propagate retval via implies -> pop temp -> suspend.",
+    "U8P_EVILSORC::look: set process info / exclude -> call Npc::isDead(self) -> choose between two static bark strings -> call Item::bark -> free string -> implies/pop -> suspend.",
+    "U8P_EVILSORC::use: set process info / exclude -> if Npc::isDead(self) == 0 and Npc::isInCombat(self) == 0 then: if Npc::getMap(self) == 0x0E then bark threatening line to pid and suspend; afterwards (or if not map 0x0E) call Npc::setTarget(self, 0x01) to become aggressive."
+  ],
+  "open_questions": [
+    "Exact binary encoding and semantic meaning of the 2-byte spell descriptor forwarded by U8P_EVILSORC::cast (which bits indicate spell id, power, or target behavior) — appears as a packed descriptor but format is not present in this script.",
+    "Precise text of the theft-threat bark in U8P_EVILSORC::use (only inferred as a threatening line), and whether the suspend after barking has gameplay timing effects beyond flavor (e.g., interrupts player actions).",
+    "Whether any global 'info id' values set by the 'set info' primitive (used across handlers) have wider stateful effects for this NPC type (the script uses set info / process exclude but the exact keys/meanings are not present here).",
+    "Whether the 'target' parameter passed to SPELCMBT is always a player id or can be other NPC/process ids (target type inferred but not guaranteed)."
+  ],
+  "main_function": {
+    "name": "U8P_EVILSORC::cast",
+    "execution_form": "process",
+    "purpose": "Accept a spell-U8P_EVILSORC::cast request from this NPC, prepare process metadata and exclusion, then spawn the spell-combat handler (SPELCMBT) with the spell descriptor, caster, caller pid and target so the spell effect is resolved by a separate combat process.",
+    "entry_conditions": [
+      "Event 11 (U8P_EVILSORC::cast) — invoked when the sorcerer attempts to U8P_EVILSORC::cast a spell (external trigger)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_EVILSORC::cast",
+      "kind": "main",
+      "role": "Spawn and dispatch a spell-combat process using a forwarded 2-byte spell descriptor, caster (self), pid and target.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_EVILSORC::look",
+      "kind": "helper",
+      "role": "Describe/examine the NPC: query life state (Npc::isDead) and bark the appropriate short description to the viewer pid.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_EVILSORC::use",
+      "kind": "helper",
+      "role": "React to player 'use' action: if alive and not in combat, optionally bark (map-dependent) and set the NPC's combat target to the activator (make the NPC aggressive).",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::isDead",
+      "kind": "extern",
+      "role": "Query whether the NPC instance is dead; used to gate look and use behaviors.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Emit/display a short text message/dialogue from this NPC/item to a target pid; used by look and use to communicate messages.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::isInCombat",
+      "kind": "extern",
+      "role": "Check whether this NPC is currently engaged in combat; prevents redundant aggression.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::getMap",
+      "kind": "extern",
+      "role": "Return current map id for the NPC; used to trigger map-specific behavior (map 0x0E special-case).",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::setTarget",
+      "kind": "extern",
+      "role": "Set the NPC's combat target (effectively making it aggressive toward the given id).",
+      "confidence": "high"
+    },
+    {
+      "name": "SPELCMBT::084D",
+      "kind": "extern",
+      "role": "Spawn/entry point for the spell-combat process which executes the actual spell effect using the passed descriptor, caster, pid and target.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_EVILSORC::usecode primitives (set info / process exclude /spawn /implies /suspend /free string)",
+      "kind": "extern",
+      "role": "Engine-level primitives used to set process metadata, prevent interference, spawn subprocesses, propagate return values, pause execution, and manage temporary strings.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_EVILSORC::cast",
+        "callee": "SPELCMBT::084D",
+        "purpose": "Spawn the separate spell-combat process that resolves the U8P_EVILSORC::cast using the passed spell descriptor, caster, pid and target.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_EVILSORC::look",
+        "callee": "Npc::isDead",
+        "purpose": "Decide whether to bark the dead or alive short description.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_EVILSORC::look",
+        "callee": "Item::bark",
+        "purpose": "Emit the short examination string to the requesting pid (either \"dead Sorcerer \" or \"Sorcerer \").",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_EVILSORC::use",
+        "callee": "Npc::isDead",
+        "purpose": "Ensure the NPC is alive before reacting aggressively to being used/stealed from.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_EVILSORC::use",
+        "callee": "Npc::isInCombat",
+        "purpose": "Avoid setting a new target if the NPC is already in combat.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_EVILSORC::use",
+        "callee": "Npc::getMap",
+        "purpose": "Check for map-specific behavior (map id 0x0E) to decide whether to bark and suspend before engaging.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_EVILSORC::use",
+        "callee": "Item::bark",
+        "purpose": "Emit a threatening line to the activator on map 0x0E prior to engagement.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_EVILSORC::use",
+        "callee": "Npc::setTarget",
+        "purpose": "Set the NPC's combat target to the activator/player (make NPC hostile).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_EVILSORC::cast",
+        "callee": "U8P_EVILSORC::usecode primitives (set info / process exclude /implies /suspend /free string)",
+        "purpose": "Manage process metadata, prevent interference from other processes, propagate spawn return values and suspend execution for timing/control.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "spawn",
+    "dialog",
+    "combat",
+    "aggression"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_EVILSORC::cast",
+    "behavior_summary_one_liner": "U8P_EVILSORC::cast is the sorcerer's spell-casting entry: it prepares process metadata (set info / process exclude), forwards a 2-byte spell descriptor plus caster, caller pid and target, and spawns a SPELCMBT combat/spell handler to execute the spell. After spawning it propagates the spawn return value (implies), performs cleanup and suspends.",
+    "external_call_count": 9,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

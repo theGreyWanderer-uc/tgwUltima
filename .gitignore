@@ -27,3 +27,6 @@ exult/
 
 # Reference
 .github/reference/
+
+# Local helper scripts
+.github/scripts/

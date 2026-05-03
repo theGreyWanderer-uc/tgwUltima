@@ -1,0 +1,112 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_FLAMSTNG.json",
+  "file": "U8P_FLAMSTNG",
+  "behavior_summary": [
+    "When the object is examined (U8P_FLAMSTNG::look event), the script marks the object with an info/flag word (0x0208), adjusts process participation (via a process-exclude operation), and makes the object emit the short text 'Flame Sting '.",
+    "The string used for the message is constructed/converted to a pointer, passed to the item's bark routine, then cleaned up (freed).",
+    "After performing these actions the handler suspends/returns (typical for a U8P_FLAMSTNG::look event)."
+  ],
+  "notable_control_flow": [
+    "Triggered by Event 0 (U8P_FLAMSTNG::look) for the object.",
+    "Sequence: set object info flags (0x0208) -> process_exclude modification for the process context -> allocate/obtain pointer to literal 'Flame Sting ' -> call Item::bark(target, 'Flame Sting ') -> free string -> suspend/return.",
+    "No global game flags appear to be read or written by this handler; its effects are local to the object/process and player-facing text."
+  ],
+  "open_questions": [
+    "What exact semantic meaning does the object info flags word 0x0208 convey (visual state, inventory/inspectability, or other engine metadata)?",
+    "What precisely does the process_exclude operation change about the object's processing lifecycle (temporary exclusion, removal from scheduler, or a one-shot guard)?",
+    "Which process id or context is passed to process_exclude (the object's own pid or the viewer's pid) and does that influence visibility or permissions for the bark?",
+    "Is the 'Flame Sting ' string purely cosmetic (UI text) or does it tie into other gameplay systems (e.g., item keywords, dialog triggers)?"
+  ],
+  "main_function": {
+    "name": "U8P_FLAMSTNG::look",
+    "execution_form": "process",
+    "purpose": "Handle the object's 'U8P_FLAMSTNG::look' (examine) event: annotate the object with info flags, adjust process participation, and emit the descriptive message 'Flame Sting ' to the viewer before suspending.",
+    "entry_conditions": [
+      "Event 0 (U8P_FLAMSTNG::look) — invoked when the avatar or other relevant actor inspects/looks at the object."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_FLAMSTNG::look",
+      "kind": "main",
+      "role": "Event handler for the object's 'U8P_FLAMSTNG::look' (examine) action; performs info flagging and emits a short descriptive message.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FLAMSTNG::set_info",
+      "kind": "extern",
+      "role": "Engine routine to write info/flag bits on an object (here used to set 0x0208 on the target).",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_FLAMSTNG::process_exclude",
+      "kind": "extern",
+      "role": "Engine routine that modifies process participation/exclusion for a pid/context; used here before the bark call.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Make the item/object produce a short text message visible to the player (called with the target and 'Flame Sting ').",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::free",
+      "kind": "extern",
+      "role": "Runtime free/cleanup used to release the constructed string pointer after Item::bark returns.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_FLAMSTNG::look",
+        "callee": "U8P_FLAMSTNG::set_info",
+        "purpose": "Annotate the target object with info bits (0x0208) to reflect an inspected/updated state.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FLAMSTNG::look",
+        "callee": "U8P_FLAMSTNG::process_exclude",
+        "purpose": "Modify process participation/exclusion for the current process/context prior to or during the bark; likely prevents further automatic processing or interaction while being inspected.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FLAMSTNG::look",
+        "callee": "Item::bark",
+        "purpose": "Display the literal string 'Flame Sting ' coming from the item to the player/viewer.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FLAMSTNG::look",
+        "callee": "FREE::free",
+        "purpose": "Release the temporary string pointer allocated/created for the bark call.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_FLAMSTNG::look",
+    "behavior_summary_one_liner": "When the object is examined (U8P_FLAMSTNG::look event), the script marks the object with an info/flag word (0x0208), adjusts process participation (via a process-exclude operation), and makes the object emit the short text 'Flame Sting '.",
+    "external_call_count": 4,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

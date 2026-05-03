@@ -1,0 +1,229 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_REGWIPER.json",
+  "file": "U8P_REGWIPER",
+  "behavior_summary": [
+    "When an actor enters the region represented by the passed area_item, REGWIPER::enterFastArea checks a global progress flag 'talkedToDeadDudes'. If that flag is zero the routine returns immediately.",
+    "If 'talkedToDeadDudes' is set, the routine scans the nearby area (using the area's X/Y extents) and removes nearby objects that match a combined predicate: either an NPC or an item of type 0x49, and also either having status bit 0x0080 set or belonging to family == 3. Matching items/NPCs are destroyed.",
+    "After the cleanup pass the routine spawns a rectangular grid of new items around the trigger point. It iterates X and Y offsets in fixed steps (offsets initialized near 0x81 and incremented by 0x80 each step), for each grid cell choosing a random small index (urandom(4)), adding 0x0C to form a create-type id, creating an item with a constant second parameter (0x015D), and placing it at computed (X+offset, Y+offset, Z) coordinates taken from the area_item."
+  ],
+  "notable_control_flow": [
+    "Early-exit guard: immediate return if global flag 'talkedToDeadDudes' == 0.",
+    "Two-phase behavior: (1) targeted destruction/clean-up of nearby items/NPCs using a combined condition; (2) deterministic grid-based spawning with per-cell randomness for type selection.",
+    "Destruction predicate is conjunctive: (is NPC OR item.type == 0x49) AND (status bit 0x0080 set OR family == 3).",
+    "Spawn loops are nested (Y outer, X inner) with fixed step increments (0x80) and bounded by the area's X/Y extents (Egg::getEggXRange/YRange); each cell uses urandom(4) to pick among a small set of spawn types."
+  ],
+  "open_questions": [
+    "What concrete game objects correspond to type 0x49 and family == 3 (meaning of those numeric constants is inferred but not confirmed).",
+    "What exactly does status bit 0x0080 denote (e.g. flagged/owned/activated)?",
+    "What are the precise item types produced by Item::create when passing (urandom(4) + 0x0C) and the meaning of the second create parameter 0x015D?",
+    "Exact numeric spawn bounds and the visual/logic spacing effects of offsets initialized at 0x81 and stepped by 0x80 (how that maps to tile/grid units).",
+    "How this routine interacts gameplay-wise with scripts that set 'talkedToDeadDudes' (e.g., U8P_AFTERNEC) — timing and story implications are inferred but not explicitly linked here."
+  ],
+  "main_function": {
+    "name": "U8P_REGWIPER::enterFastArea",
+    "execution_form": "process",
+    "purpose": "Respond to area-entry by optionally cleaning nearby flagged objects/NPCs and populating the area with a randomized grid of items, gated by a global progress flag.",
+    "entry_conditions": [
+      "Triggered by U8P_REGWIPER::enterFastArea event when an actor enters the region represented by the passed area_item.",
+      "Continues only if global flag 'talkedToDeadDudes' is non-zero (otherwise returns immediately)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_REGWIPER::enterFastArea",
+      "kind": "main",
+      "role": "Area-entry handler that performs conditional cleanup and spawning around the passed area/trigger item.",
+      "confidence": "high"
+    },
+    {
+      "name": "Egg::getEggXRange",
+      "kind": "extern",
+      "role": "Query area X extent to bound scanning and spawning loops.",
+      "confidence": "high"
+    },
+    {
+      "name": "Egg::getEggYRange",
+      "kind": "extern",
+      "role": "Query area Y extent to bound scanning and spawning loops.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::isNpc",
+      "kind": "extern",
+      "role": "Predicate used when deciding whether a found item is an NPC (part of destruction condition).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getType",
+      "kind": "extern",
+      "role": "Returns item type id; compared against 0x49 in destruction predicate.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getStatus",
+      "kind": "extern",
+      "role": "Returns status flags used to test bit 0x0080 for destruction eligibility.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getFamily",
+      "kind": "extern",
+      "role": "Returns family id used to test equality to 3 for destruction eligibility.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::destroy",
+      "kind": "extern",
+      "role": "Remove/destroy an item/NPC instance that meets the combined predicate.",
+      "confidence": "high"
+    },
+    {
+      "name": "urandom",
+      "kind": "extern",
+      "role": "Generates small random numbers (called with 4) to pick spawn variants.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::create",
+      "kind": "extern",
+      "role": "Create a new item instance with a computed type id and a constant parameter before placement.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getX",
+      "kind": "extern",
+      "role": "Get base X coordinate of the area_item for spawn placement.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getY",
+      "kind": "extern",
+      "role": "Get base Y coordinate of the area_item for spawn placement.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getZ",
+      "kind": "extern",
+      "role": "Get base Z coordinate of the area_item for spawn placement.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::pop",
+      "kind": "extern",
+      "role": "Place the created item instance into the world at computed coordinates.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_REGWIPER::enterFastArea",
+        "callee": "Egg::getEggXRange",
+        "purpose": "Determine X extent of the area to bound scanning and spawning loops.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_REGWIPER::enterFastArea",
+        "callee": "Egg::getEggYRange",
+        "purpose": "Determine Y extent of the area to bound scanning and spawning loops.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_REGWIPER::enterFastArea",
+        "callee": "Item::isNpc",
+        "purpose": "Test whether candidate objects are NPCs as part of the destruction predicate.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_REGWIPER::enterFastArea",
+        "callee": "Item::getType",
+        "purpose": "Read item type to compare against constant 0x49 for destruction eligibility.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_REGWIPER::enterFastArea",
+        "callee": "Item::getStatus",
+        "purpose": "Read status flags and test bit 0x0080 as part of destruction criteria.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_REGWIPER::enterFastArea",
+        "callee": "Item::getFamily",
+        "purpose": "Read family id and compare against 3 as part of destruction criteria.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_REGWIPER::enterFastArea",
+        "callee": "Item::destroy",
+        "purpose": "Remove items/NPCs that match the combined predicate from the world.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_REGWIPER::enterFastArea",
+        "callee": "urandom",
+        "purpose": "Choose one of a small set of spawn variants for each grid cell (urandom(4)).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_REGWIPER::enterFastArea",
+        "callee": "Item::create",
+        "purpose": "Create a new item instance using a type id computed as (urandom_result + 0x0C) and a constant parameter (0x015D) prior to placement.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_REGWIPER::enterFastArea",
+        "callee": "Item::getX",
+        "purpose": "Get base X for spawn placement.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_REGWIPER::enterFastArea",
+        "callee": "Item::getY",
+        "purpose": "Get base Y for spawn placement.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_REGWIPER::enterFastArea",
+        "callee": "Item::getZ",
+        "purpose": "Get base Z for spawn placement; used unchanged for spawned items' Z coordinate.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_REGWIPER::enterFastArea",
+        "callee": "Item::pop",
+        "purpose": "Place the newly created item into the world at the computed (X+offset, Y+offset, Z) location.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "talkedToDeadDudes",
+        "likely_effect": "Acts as a gating/quest-progress flag. If zero, U8P_REGWIPER::enterFastArea returns immediately and performs no cleanup or spawning; if non-zero the routine proceeds.",
+        "confidence": "high"
+      }
+    ],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "spawn",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_REGWIPER::enterFastArea",
+    "behavior_summary_one_liner": "When an actor enters the region represented by the passed area_item, REGWIPER::enterFastArea checks a global progress flag 'talkedToDeadDudes'. If that flag is zero the routine returns immediately.",
+    "external_call_count": 13,
+    "flag_read_count": 1,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

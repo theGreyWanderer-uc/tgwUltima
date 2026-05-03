@@ -1,0 +1,68 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_MAGARMS.json",
+  "file": "U8P_MAGARMS",
+  "behavior_summary": [
+    "Handles the 'U8P_MAGARMS::look' (examine) event for the Magic Arm Guards item: when a player (or relevant actor) inspects the item, the script marks the item/process as informational/excluded from further immediate processing, emits a short descriptive text \"magic arm guards \", and indicates the U8P_MAGARMS::look event was handled so no further default processing occurs."
+  ],
+  "notable_control_flow": [
+    "On entry (Event 0 / U8P_MAGARMS::look): push the item/process pointer and perform an engine 'set info' / 'process exclude' sequence to mark the instance as informational and exclude it from further processing (inferred).",
+    "Allocate/prepare a temporary string containing the literal \"magic arm guards \".",
+    "Call Item::bark with the item/process pointer and the string to display the description to the player.",
+    "Free the temporary string, capture the return value from Item::bark, use an 'implies' operation to mark the event as handled, then pop a small temp and suspend/return."
+  ],
+  "open_questions": [
+    "What exact info key/value is being set by the 'set info' operation (the disassembly implies an info id but it is not documented here)?",
+    "Does the process-exclude step persist beyond the immediate event (i.e., is the item permanently excluded or only suppressed for the current processing pass)?",
+    "Is the return value from Item::bark used by other systems, or only consumed locally for the implies/handled sequence?"
+  ],
+  "main_function": {
+    "name": "U8P_MAGARMS::look",
+    "execution_form": "process",
+    "purpose": "Respond to the 'U8P_MAGARMS::look' event for the Magic Arm Guards by displaying a short description and marking the item as informational/handled to suppress further default processing.",
+    "entry_conditions": [
+      "Event 0 (U8P_MAGARMS::look) — triggered when the Avatar or relevant actor examines/looks at the Magic Arm Guards item."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_MAGARMS::look",
+      "kind": "main",
+      "role": "Handle the U8P_MAGARMS::look/examine event for the Magic Arm Guards item; perform set-info/process-exclude, call Item::bark to show \"magic arm guards \", then mark the event handled.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_MAGARMS::look",
+        "callee": "Item::bark",
+        "purpose": "Emit/display the provided short text string (\"magic arm guards \") from the item/process to the player/process that looked at it.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_MAGARMS::look",
+    "behavior_summary_one_liner": "Handles the 'U8P_MAGARMS::look' (examine) event for the Magic Arm Guards item: when a player (or relevant actor) inspects the item, the script marks the item/process as informational/excluded from further immediate processing, emits a short descriptive text \"magic arm guards \", and indicates the U8P_MAGARMS::look event was handled so no further default processing occurs.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

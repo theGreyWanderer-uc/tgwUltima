@@ -1,0 +1,115 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_CODEW.json",
+  "file": "U8P_CODEW",
+  "behavior_summary": [
+    "U8P_CODEW::CODEW::look responds to an inspect/U8P_CODEW::look trigger by causing the item to 'bark' the short description string \"chest of drawers \" to the inspecting actor/process. This produces the short on-screen/item label when a player examines the object.",
+    "U8P_CODEW::CODEW::use inspects the item's status word (via Item::getStatus) and tests bit 0x0100. If that bit is set the script opens a UI gump (Item::openGump with gump id 0x0D) for the item; if the bit is not set it closes the gump (Item::closeGump). This implements context-sensitive UI opening/closing for the chest-of-drawers."
+  ],
+  "notable_control_flow": [
+    "U8P_CODEW::CODEW::look is an event handler invoked on the item's 'U8P_CODEW::look' (inspect) event. Its flow is single-shot: prepare minimal VM state then call Item::bark to present the description.",
+    "U8P_CODEW::CODEW::use reads the item's status word and conditionally branches on bit 0x0100 to either open or close a gump. The branch determines which external UI call is made (openGump vs closeGump)."
+  ],
+  "open_questions": [
+    "What exact gameplay semantics does status bit 0x0100 represent for this item (e.g., 'is open', 'is toggled', or 'has UI active')? This is inferred but not explicit.",
+    "Which PID is passed as the target/recipient to Item::bark in this VM's calling convention (the disassembly implies the inspecting actor's pid is pushed implicitly but the exact parameter ordering is inferred).",
+    "Is U8P_CODEW::CODEW::use triggered by player double-click, a context menu 'use', or some other engine event? The disassembly shows a 'use' handler but not the external trigger semantics."
+  ],
+  "main_function": {
+    "name": "U8P_CODEW::look",
+    "execution_form": "process",
+    "purpose": "Produce the item's short description when an actor inspects/looks at the chest-of-drawers by invoking the item's bark/display routine with the literal string \"chest of drawers \".",
+    "entry_conditions": [
+      "Event 0 (U8P_CODEW::look) — invoked when a player/actor inspects or looks at the item (fast-area/inspect trigger)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_CODEW::look",
+      "kind": "main",
+      "role": "Inspect/U8P_CODEW::look event handler that emits the item's short description via Item::bark.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CODEW::use",
+      "kind": "helper",
+      "role": "Use event handler that checks an item status flag and opens or closes the item's UI gump accordingly.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine-provided routine to present a short text message or label from an item/process to a player/process.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getStatus",
+      "kind": "extern",
+      "role": "Engine routine returning the item's status flags (word) used for bitwise tests.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::openGump",
+      "kind": "extern",
+      "role": "Engine routine to open a UI gump/window for the item (used with gump id 0x0D).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::closeGump",
+      "kind": "extern",
+      "role": "Engine routine to close the item's UI gump/window.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_CODEW::look",
+        "callee": "Item::bark",
+        "purpose": "Display the static short description string \"chest of drawers \" to the inspecting actor/process.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CODEW::use",
+        "callee": "Item::getStatus",
+        "purpose": "Retrieve the item's status word for testing of bit 0x0100 to decide UI behavior.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CODEW::use",
+        "callee": "Item::openGump",
+        "purpose": "Open the item's UI gump (gump id 0x0D) when the status bit 0x0100 is set.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CODEW::use",
+        "callee": "Item::closeGump",
+        "purpose": "Close the item's UI gump when the status bit 0x0100 is not set.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_CODEW::CODEW::look",
+    "behavior_summary_one_liner": "U8P_CODEW::CODEW::look responds to an inspect/U8P_CODEW::look trigger by causing the item to 'bark' the short description string \"chest of drawers \" to the inspecting actor/process. This produces the short on-screen/item label when a player examines the object.",
+    "external_call_count": 4,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

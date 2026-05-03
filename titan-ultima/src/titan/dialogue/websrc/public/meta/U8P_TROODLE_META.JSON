@@ -1,0 +1,83 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_TROODLE.json",
+  "file": "U8P_TROODLE",
+  "behavior_summary": [
+    "TROODLE::look runs when the Troodle is 'looked at' by the player/actor. It marks/configures the target process (the Troodle instance) with an info key and a process-exclude flag, then causes the Troodle to 'speak' a short description beginning with the literal \"changeling \".",
+    "To produce the speech it allocates/constructs the string \"changeling \", passes the string pointer and the target process PID to Item::bark, frees the temporary string, captures the bark call's return value, applies an 'implies' operation to that return value and stores the result in a temporary local, and finally suspends the script.",
+    "Overall effect in gameplay: when examined, the Troodle will announce itself with the word 'changeling' (or similar message) and the script prepares/excludes the object from certain processing, likely to avoid repeated handling or to set an internal state."
+  ],
+  "notable_control_flow": [
+    "Entry: Event 0 ('U8P_TROODLE::look') triggers TROODLE::look and supplies the target process/item PID as a parameter.",
+    "The routine performs two engine-state operations in sequence (push info id 0x0208 with a referenced object, then a 'process exclude') before invoking Item::bark.",
+    "After calling Item::bark, the routine frees the allocated string, inspects the bark return via an 'implies' opcode, pops that result into a temp local, and then suspends — so the script does not continue running immediately after the U8P_TROODLE::look handler completes.",
+    "No branching or loops are present; the flow is linear and ends with suspension."
+  ],
+  "open_questions": [
+    "Exact semantic meaning of the 'set info' id 0x0208 used here: what game state or flag does 0x0208 represent for this object?",
+    "Precise effect and intended scope of 'process exclude' in this context — does it prevent further events for this object or only certain engine processing?",
+    "Meaning and purpose of the 'implies' opcode applied to Item::bark's return value: is it a boolean test, a propagation of success, or a control hint?",
+    "The indirect two-byte value pushed before 'set info' — which specific referenced object does it denote (the Troodle itself or another related instance)?"
+  ],
+  "main_function": {
+    "name": "U8P_TROODLE::look",
+    "execution_form": "process",
+    "purpose": "Handle the examine/U8P_TROODLE::look event for a Troodle instance: set object info/exclusion state and make the item emit a short descriptive message ('changeling ').",
+    "entry_conditions": [
+      "Event 0 (U8P_TROODLE::look) — triggered when the player/actor looks at or inspects the Troodle (the engine invokes this handler with the target process PID)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_TROODLE::look",
+      "kind": "main",
+      "role": "Event handler for 'U8P_TROODLE::look' examine behavior; sets object info/exclusion then triggers Item::bark to present a short description.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/external routine invoked to make a process/item emit/display a short text message; called with (target_pid, char* message).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_TROODLE::look",
+        "callee": "U8P_TROODLE::engine:set info + process exclude",
+        "purpose": "Configure object info (id 0x0208) on a referenced object and mark the process with an exclusion flag to alter further processing; prevents or changes subsequent handling of the object (inferred).",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_TROODLE::look",
+        "callee": "Item::bark",
+        "purpose": "Request the target process/item to emit/display a short description string starting with 'changeling '. This is the gameplay-facing speech/description shown when the object is examined.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "speech",
+    "cleanup"
+  ],
+  "quick_facts": {
+    "main_function": "TROODLE::look",
+    "behavior_summary_one_liner": "TROODLE::look runs when the Troodle is 'looked at' by the player/actor. It marks/configures the target process (the Troodle instance) with an info key and a process-exclude flag, then causes the Troodle to 'speak' a short description beginning with the literal \"changeling \".",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

@@ -1,0 +1,234 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_ETHEREAG.json",
+  "file": "U8P_ETHEREAG",
+  "behavior_summary": [
+    "Provides the gameplay logic for a reagent/jar-like item family: inspecting (U8P_ETHEREAG::look) maps internal frame values to human-readable reagent/item names and displays them to the player; using (use) may apply an effect via an external routine and can consume/change the item's frame based on random rolls (eventually becoming an empty jar); entering and leaving a proximity (fast) area spawns and cleans up an associated transient effect/process and normalizes stored frame/state values.",
+    "Frame values encode subtype/state (different reagents, jar contents, or empty jar). The script uses Item::getFrame / Item::setFrame to read and write that state and branches on frame ranges and specific frames to decide messaging, state changes, and proximity behavior.",
+    "Proximity handlers (enterFastArea/leaveFastArea) tie the physical presence of an actor to spawning a short-lived process/effect (FREE::1C19) and perform cleanup (FREE::2A56) on exit; they also normalize or remap certain frame values when the area is entered."
+  ],
+  "notable_control_flow": [
+    "U8P_ETHEREAG::look: switch-like branching on Item::getFrame() with explicit mappings: frame==1 -> \"eye of newt \"; frame==2 or 3 -> \"bat wing \"; frame in 4..9 -> \"snake skin \"; frame in 10..16 -> \"dragon blood \" (with special cases frames 11/12 -> \"jar of newt eyes \", frame==13 -> \"jar \").",
+    "U8P_ETHEREAG::use: guards out frames 11 and 12 (no further action there), otherwise reads item position, generates randoms (urandom) to compute a value passed to FREE::24A7, then with another random roll may increment the item's frame (consumption/aging); if frame==13 barks \"empty \".",
+    "U8P_ETHEREAG::enterFastArea: read-and-normalize frame value (e.g., remap frame 16 to 10 and increment frames in 10..15), spawn FREE::1C19 for the player with code 02, then write possibly-updated frame back via Item::setFrame.",
+    "U8P_ETHEREAG::leaveFastArea: invoke FREE::2A56 with the fast-area info/handle to undo or notify about the spawned proximity effect."
+  ],
+  "open_questions": [
+    "Exact semantics of FREE::24A7 called by U8P_ETHEREAG::use — it is inferred to apply an effect or lookup based on item type and a random-derived value, but the precise behavior is unknown.",
+    "Precise meaning of each numeric frame value beyond human-readable strings (e.g., whether ranges represent different qualities, stack counts, or grouped reagent types).",
+    "The exact content and lifecycle of the process/effect created by FREE::1C19 (visual, sound, or mechanic) and how it uses the pid and code arguments.",
+    "Whether other scripts or engine systems mutate the same frame values concurrently (possible race/consistency considerations when normalizing frames on enterFastArea)."
+  ],
+  "main_function": {
+    "name": "U8P_ETHEREAG::look",
+    "execution_form": "process",
+    "purpose": "Handle the 'U8P_ETHEREAG::look' (examine) event: read the item's frame and present a context-appropriate reagent or jar description string to the player via Item::bark.",
+    "entry_conditions": [
+      "Event 0 (U8P_ETHEREAG::look) invoked when a player or actor examines the item."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_ETHEREAG::look",
+      "kind": "main",
+      "role": "Map item frame/state to a human-readable reagent/jar description and emit it to the viewer (Item::bark).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ETHEREAG::use",
+      "kind": "helper",
+      "role": "Handle activation/use of the item: possibly apply an effect (FREE::24A7), perform random-based consumption/state change (increment frame), and bark 'empty ' when appropriate.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ETHEREAG::enterFastArea",
+      "kind": "helper",
+      "role": "Proximity entry handler: normalize/adjust frame state, spawn a proximity effect/process (FREE::1C19) for the entering player, and persist any frame changes.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ETHEREAG::leaveFastArea",
+      "kind": "helper",
+      "role": "Proximity exit handler: call cleanup/notification routine (FREE::2A56) to undo or deregister the proximity effect/process.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getFrame",
+      "kind": "extern",
+      "role": "Engine-provided accessor returning the item's frame/state identifier.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::setFrame",
+      "kind": "extern",
+      "role": "Engine-provided mutator for the item's frame/state.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Emit a short text/message for the item to a player/process.",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::24A7",
+      "kind": "extern",
+      "role": "External routine invoked with item type and a random-derived value; likely applies an effect or resolves type-dependent behavior.",
+      "confidence": "medium"
+    },
+    {
+      "name": "FREE::1C19",
+      "kind": "extern",
+      "role": "Spawn or create a transient process/effect associated with proximity (used in enterFastArea).",
+      "confidence": "medium"
+    },
+    {
+      "name": "FREE::2A56",
+      "kind": "extern",
+      "role": "Cleanup/notification routine called when leaving a fast area to undo or cancel the spawned effect/process.",
+      "confidence": "medium"
+    },
+    {
+      "name": "urandom",
+      "kind": "extern",
+      "role": "Random number generator used to determine consumption/behavior on use.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getX",
+      "kind": "extern",
+      "role": "Return item X coordinate (used by use to collect position context).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getY",
+      "kind": "extern",
+      "role": "Return item Y coordinate (used by use to collect position context).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getZ",
+      "kind": "extern",
+      "role": "Return item Z (stack/level) coordinate (used by use).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getType",
+      "kind": "extern",
+      "role": "Return the item type identifier (passed to FREE::24A7).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_ETHEREAG::look",
+        "callee": "Item::getFrame",
+        "purpose": "Read the item's frame/state to decide which description string to show.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ETHEREAG::look",
+        "callee": "Item::bark",
+        "purpose": "Display the selected reagent/jar description to the player/viewer.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ETHEREAG::use",
+        "callee": "Item::getFrame",
+        "purpose": "Inspect current state/frame to decide behavior and whether to proceed with use logic.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ETHEREAG::use",
+        "callee": "Item::getX",
+        "purpose": "Obtain item X coordinate for contextual/randomized effect computation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ETHEREAG::use",
+        "callee": "Item::getY",
+        "purpose": "Obtain item Y coordinate for contextual/randomized effect computation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ETHEREAG::use",
+        "callee": "Item::getZ",
+        "purpose": "Obtain item Z coordinate for contextual/randomized effect computation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ETHEREAG::enterFastArea",
+        "callee": "Item::getFrame",
+        "purpose": "Read and then normalize or remap frame state before spawning proximity effects.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ETHEREAG::enterFastArea",
+        "callee": "Item::setFrame",
+        "purpose": "Persist the possibly-updated/normalized frame state back to the item.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ETHEREAG::leaveFastArea",
+        "callee": "FREE::2A56",
+        "purpose": "Notify/cleanup the proximity effect/process associated with the fast-area handle.",
+        "confidence": "high"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_ETHEREAG::use",
+        "callee": "urandom",
+        "purpose": "Produce random values used both to compute an argument for FREE::24A7 and to decide whether to increment the item's frame (consume).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ETHEREAG::use",
+        "callee": "FREE::24A7",
+        "purpose": "Apply or compute an effect based on the item's type and a random-derived value (inferred to be an effect/resolution routine).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ETHEREAG::use",
+        "callee": "Item::setFrame",
+        "purpose": "Increment the item's frame to represent consumption/usage when random roll indicates.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ETHEREAG::enterFastArea",
+        "callee": "FREE::1C19",
+        "purpose": "Spawn a proximity-associated process/effect for the entering player (pid) with code 02 and arg 0 (likely visual/audio/interaction).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ETHEREAG::look",
+        "callee": "Item::bark",
+        "purpose": "Emit a text string describing the reagent/jar to the player.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_ETHEREAG::look",
+    "behavior_summary_one_liner": "Provides the gameplay logic for a reagent/jar-like item family: inspecting (U8P_ETHEREAG::look) maps internal frame values to human-readable reagent/item names and displays them to the player; using (use) may apply an effect via an external routine and can consume/change the item's frame based on random rolls (eventually becoming an empty jar); entering and leaving a proximity (fast) area spawns and cleans up an associated transient effect/process and normalizes stored frame/state values.",
+    "external_call_count": 5,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

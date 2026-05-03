@@ -1,0 +1,74 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_FISH2.json",
+  "file": "U8P_FISH2",
+  "behavior_summary": [
+    "Handles the 'U8P_FISH2::look' (examine) event for the FISH2 object. When a process (likely the player/avatar) looks at the object the handler prepares the literal string \"fish \", sets some per-object/process info and an exclusion state, asks the target process/item to 'bark' that string (Item::bark), then performs a small return/status computation and suspends/returns.",
+    "The handler appears intended only to produce the short descriptive text and mark the object/process state so it will not be processed further (via the inferred 'process exclude' op)."
+  ],
+  "notable_control_flow": [
+    "Entry on Event 0 ('U8P_FISH2::look') — interpreted as an area/inspect trigger that runs the handler (confidence: high).",
+    "Set info and process-exclude opcodes are invoked before producing text; this likely marks state or excludes the object from further processing (confidence: medium).",
+    "Constructs/pushes the string literal \"fish \", pushes the process pointer from BP+06h, and calls Item::bark to emit the message (confidence: high).",
+    "Frees the temporary string buffer after the bark call, performs an implies/pop sequence storing result into a temp local, then suspends and returns (confidence: high for sequence, medium for the control effect of the implies result)."
+  ],
+  "open_questions": [
+    "Does Item::bark cause the viewer process (BP+06h) or the FISH2 item itself to display the text? The call pattern suggests the viewer/process PID is passed, but this is inferred (confidence: medium).",
+    "What exact info key/meaning is set by the 'set info' opcode (the numeric id and semantic effect are not explicit) and which object is the precise target of the info/set-exclude sequence (confidence: low).",
+    "What effect does the implies/pop result have on subsequent engine behavior after suspend (is it purely a return code or used for branching by the engine)? (confidence: low)"
+  ],
+  "main_function": {
+    "name": "U8P_FISH2::look",
+    "execution_form": "process",
+    "purpose": "Respond to a U8P_FISH2::look/examine event by emitting the short description text \"fish \" via Item::bark and marking object/process state (info + exclude), then suspend/return.",
+    "entry_conditions": [
+      "Event 0 — the object's 'U8P_FISH2::look' (examine) event; triggered when an avatar or process inspects the object."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_FISH2::look",
+      "kind": "main",
+      "role": "Event handler for the object's 'U8P_FISH2::look' (examine) event; prepares text, sets object/process info/exclusion, and calls Item::bark.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine to emit/display a short message (a 'bark') from a process or item to a player/process.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_FISH2::look",
+        "callee": "Item::bark",
+        "purpose": "Request that the given process/item emit/display the short string \"fish \". Used to present the object's description to the viewer (confidence: high).",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_FISH2::FISH2::look",
+    "behavior_summary_one_liner": "Handles the 'U8P_FISH2::look' (examine) event for the FISH2 object. When a process (likely the player/avatar) looks at the object the handler prepares the literal string \"fish \", sets some per-object/process info and an exclusion state, asks the target process/item to 'bark' that string (Item::bark), then performs a small return/status computation and suspends/returns.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

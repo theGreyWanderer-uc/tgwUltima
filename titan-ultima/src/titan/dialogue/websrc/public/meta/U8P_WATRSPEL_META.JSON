@@ -1,0 +1,128 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_WATRSPEL.json",
+  "file": "U8P_WATRSPEL",
+  "behavior_summary": [
+    "This script implements the runtime behavior of a 'water spell' process: when the spell process executes it checks the process's target result and either spawns a standalone/free effect or makes a targeted item be hurled away and then triggers a follow-up handler.",
+    "If the process target query returns zero (no valid item/target), the routine spawns a FREE effect (FREE::29D8) with fixed constants and returns — acting as a cleanup/visual fallback.",
+    "If there is a target, it calls Item::getDirToItem to compute a cardinal/octile direction toward the target and to obtain an item/address out-parameter, maps that direction to hard-coded X/Y delta bytes (hurl velocities), calls Item::hurl to throw the item with those deltas, then calls a follow-up METHOD::0080 with the direction and the item/out parameter to handle animation/state chaining."
+  ],
+  "notable_control_flow": [
+    "Entry as a process handler: implicit pid is used to call process target().",
+    "Immediate branch on process target() == 0: spawn FREE::29D8(0x64,0x7C,0) and return (guard/cleanup path).",
+    "Otherwise: call Item::getDirToItem(1, target, &out) to obtain a direction index (0..7) and an out/address; store direction in BP-08 and item/out in BP-02.",
+    "Direction-driven switch: translate direction value into a pair of hard-coded byte deltas assigned to BP-04 (x) and BP-06 (y).",
+    "Invoke Item::hurl(pid, 0x02, 0x0C, y-delta, x-delta, &BP-02) to launch the target; then call METHOD::0080(0x01, direction, 0x01, &BP-02) for follow-up.",
+    "Several calls are wrapped with the engine's implies/pop/suspend idiom (suspension points) — inferred to allow asynchronous action or cooperative scheduling during the process."
+  ],
+  "open_questions": [
+    "What exact visual/side-effect behavior does FREE::29D8 produce (visual splash, damage, or a simple cleanup)? — appears to be an effect but exact semantics are not certain.",
+    "Does BP-02 hold an item instance pointer or an item identifier/index after Item::getDirToItem and/or Item::hurl (the code treats it as an address/out param but exact type is inferred)?",
+    "What internal behavior does METHOD::0080 (called at 057C:U8P_WATRSPEL::0080) perform after hurling — animation, state change, linking to other spell effects, or queued processing?",
+    "Are the hard-coded delta bytes strictly velocity components in engine coordinates, and how do negative/overflow values map to actual direction/physics in the runtime?"
+  ],
+  "main_function": {
+    "name": "U8P_WATRSPEL::0080",
+    "execution_form": "process",
+    "purpose": "Implement the run-time effect of the water spell when the process executes: determine whether there is a valid target; if none, spawn a free effect; if present, compute direction and throw the target item and then trigger a follow-up handler.",
+    "entry_conditions": [
+      "Invoked when the water-spell process runs (implicit pid of the process is used).",
+      "Triggered by the spell's runtime processing (likely on impact or area affect)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_WATRSPEL::0080",
+      "kind": "main",
+      "role": "Process handler for the water-spell effect; decides spawn vs. hurl and orchestrates follow-up.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_WATRSPEL::process target",
+      "kind": "extern",
+      "role": "Query current process's target/result (used to decide spawn vs operate on item).",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::29D8",
+      "kind": "extern",
+      "role": "Spawn a free/standalone effect (called on no-target path); likely a visual/sound effect or cleanup.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::getDirToItem",
+      "kind": "extern",
+      "role": "Compute the direction (0..7) toward a target item and provide an out/address value used for subsequent actions.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::hurl",
+      "kind": "extern",
+      "role": "Cause the specified item to be hurled/thrown with given x/y deltas and flags; updates the item/out param.",
+      "confidence": "high"
+    },
+    {
+      "name": "METHOD::0080",
+      "kind": "extern",
+      "role": "Follow-up handler invoked after hurl to manage further state/animation/processing of the item or effect.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_WATRSPEL::0080",
+        "callee": "U8P_WATRSPEL::process target",
+        "purpose": "Determine the current spell/process target; its zero/non-zero result controls the primary branch (spawn vs operate on item).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WATRSPEL::0080",
+        "callee": "FREE::29D8",
+        "purpose": "Spawn a free effect with constants (0x64, 0x7C, 0) when there is no valid target — acts as visual/cleanup fallback.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_WATRSPEL::0080",
+        "callee": "Item::getDirToItem",
+        "purpose": "Compute direction index (0..7) toward the target and fill an out/address parameter (used for hurl).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WATRSPEL::0080",
+        "callee": "Item::hurl",
+        "purpose": "Throw/hurl the identified item using computed x/y deltas and flags to create the physical displacement/animation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WATRSPEL::0080",
+        "callee": "METHOD::0080",
+        "purpose": "Trigger post-hurl handling/processing for the item (likely animation/state update or chaining additional effects).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_WATRSPEL::WATRSPEL::0080",
+    "behavior_summary_one_liner": "This script implements the runtime behavior of a 'water spell' process: when the spell process executes it checks the process's target result and either spawns a standalone/free effect or makes a targeted item be hurled away and then triggers a follow-up handler.",
+    "external_call_count": 5,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

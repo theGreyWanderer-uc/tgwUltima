@@ -1,0 +1,195 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_AVATAR.json",
+  "file": "U8P_AVATAR",
+  "behavior_summary": [
+    "Provides two avatar-facing handlers: AVATAR::use toggles an item's UI (gump) based on an item status bit; AVATAR::look presents a developer/demo menu that can enable cheat/demo features, prompt the player for inputs, spawn helper scripts, and create items around a targeted location.",
+    "AVATAR::use: reads the item's status flags (Item::getStatus) and either opens the item's gump (Item::openGump(item,1)) when a specific bit (0x0100) is set, or closes it (Item::closeGump) when not set.",
+    "AVATAR::look: interactive debug/demo menu. It checks AvatarCanCheat(), can call MakeAvatarACheater(), plays feedback sounds, builds string menus (Item::ask), collects numeric inputs (Item::getSliderInput), asks the player to pick a target (process target) and obtains coordinates (Item::getX/Y/Z), then attempts many Item::legal_create calls (with coordinate offsets computed by FREE::1A96 and orchestrated by other FREE::* helpers) to spawn items/fragments around that target. It sets demo-related global flags (afterDaemonScene, MalchirTest, malchirMet) for specific demo flows."
+  ],
+  "notable_control_flow": [
+    "AVATAR::use is a simple conditional toggle: call Item::getStatus(item); if (status & 0x0100) != 0 then call Item::openGump(item, 1) else call Item::closeGump(item).",
+    "AVATAR::look gates demo flows on AvatarCanCheat(); if not a cheater it may flip afterDaemonScene and call MakeAvatarACheater(), then continues to show a multi-entry menu (Item::ask) driving branches like 'Create', 'Demo', 'EndGame', and 'Malchir Death'.",
+    "Create/EndGame branches collect numeric inputs with Item::getSliderInput, request a target with process target, read target coords (Item::getX/Y/Z), compute offsets (FREE::1A96), and perform many Item::legal_create attempts; failures are reported via Item::bark.",
+    "AVATAR::look frequently spawns other scripts/processes (spawn) and calls FREE::* helpers to manage complex placement patterns; many call results are checked and can abort or continue creation loops."
+  ],
+  "open_questions": [
+    "What exact semantic meaning does the item status bit 0x0100 have (inferred to indicate 'gump open' or 'UI-ready' but not explicitly named)?",
+    "What are the precise behaviors and algorithms inside FREE::1A96 and FREE::24A7 (they appear to compute coordinate offsets and orchestrate spawn patterns but their exact outputs and failure conditions are unknown)?",
+    "Are any persistence or permission side-effects beyond MakeAvatarACheater() set by AVATAR::look (e.g., does enabling cheat mode persist across sessions or affect other subsystems)?",
+    "Which specific item type ids and frame numbers are expected/valid in the Create flows (menu obtains these from the player but acceptable ranges/validation are not fully documented here)?"
+  ],
+  "main_function": {
+    "name": "U8P_AVATAR::use",
+    "execution_form": "process",
+    "purpose": "When the player uses/activates an item, toggle its UI gump: open the gump if the item's status bit 0x0100 is set, otherwise close the gump.",
+    "entry_conditions": [
+      "Event: U8P_AVATAR::use (player activates/uses an item). The item/process instance is passed as the function parameter."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_AVATAR::use",
+      "kind": "main",
+      "role": "Handle the avatar 'U8P_AVATAR::use' event for an item; test status flags and open/close item UI (gump).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_AVATAR::look",
+      "kind": "helper",
+      "role": "Interactive developer/demo menu for the avatar: presents choices, gathers input, spawns scripts, toggles cheat/demo flags, and creates items around targets.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_AVATAR::use",
+        "callee": "Item::getStatus",
+        "purpose": "Read the item's status flags in order to decide whether its gump should be opened or closed.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AVATAR::use",
+        "callee": "Item::openGump",
+        "purpose": "Open the item's UI/gump (called with parameter 1 when status bit 0x0100 is present).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AVATAR::use",
+        "callee": "Item::closeGump",
+        "purpose": "Close the item's UI/gump when the status bit 0x0100 is not present.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AVATAR::look",
+        "callee": "U8P_AVATAR::AvatarCanCheat",
+        "purpose": "Check whether the avatar already has cheat/demo permissions to decide menu options and flows.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AVATAR::look",
+        "callee": "U8P_AVATAR::MakeAvatarACheater",
+        "purpose": "Grant cheat/demo permissions to the avatar when the demo menu requests it.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AVATAR::look",
+        "callee": "U8P_AVATAR::playSFX",
+        "purpose": "Play feedback sound(s) when entering the menu or toggling cheat/demo state.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AVATAR::look",
+        "callee": "Item::bark",
+        "purpose": "Display prompt and feedback text to the player for menu labels, errors, and numeric prompts.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AVATAR::look",
+        "callee": "Item::ask",
+        "purpose": "Present a list-based menu to the player and receive the chosen option (string).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AVATAR::look",
+        "callee": "Item::getSliderInput",
+        "purpose": "Collect numeric parameters (frame, quality, quantity, guardian selection) from the player via slider dialogs.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AVATAR::look",
+        "callee": "U8P_AVATAR::process target",
+        "purpose": "Request the player to pick a target object/location; returned process/item used as anchor for item creation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AVATAR::look",
+        "callee": "Item::getX",
+        "purpose": "Read the X coordinate of the selected target for placement calculations.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AVATAR::look",
+        "callee": "Item::getY",
+        "purpose": "Read the Y coordinate of the selected target for placement calculations.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AVATAR::look",
+        "callee": "Item::getZ",
+        "purpose": "Read the Z/plane of the selected target for placement calculations.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AVATAR::look",
+        "callee": "FREE::1A96",
+        "purpose": "Compute or apply an offset to coordinates before each Item::legal_create call (used to place multiple pieces/fragments around target).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_AVATAR::look",
+        "callee": "Item::legal_create",
+        "purpose": "Attempt to create/place an item of a given type at computed coordinates; called repeatedly to spawn fragments/created items.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AVATAR::look",
+        "callee": "FREE::24A7",
+        "purpose": "Higher-level spawn/placement helper used to coordinate complex creation patterns or checks before/after Item::legal_create calls.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_AVATAR::look",
+        "callee": "spawn",
+        "purpose": "Start auxiliary scripts/processes (demo tasks or helper routines) asynchronously from the menu flow.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "afterDaemonScene",
+        "likely_effect": "Gate whether a post-daemon demo action should run (prevents re-running the same demo action if already set).",
+        "confidence": "high"
+      }
+    ],
+    "writes": [
+      {
+        "name": "afterDaemonScene",
+        "likely_effect": "Set to 1 to mark that the after-daemon demo action has been triggered (prevents re-triggering).",
+        "confidence": "high"
+      },
+      {
+        "name": "MalchirTest",
+        "likely_effect": "Written when 'Malchir Death' demo option is chosen; likely drives demo/test sequences related to Malchir.",
+        "confidence": "medium"
+      },
+      {
+        "name": "malchirMet",
+        "likely_effect": "Flag set when Malchir-related demo action is invoked to mark progress in the demo/test flow.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "AVATAR::use",
+    "behavior_summary_one_liner": "Provides two avatar-facing handlers: AVATAR::use toggles an item's UI (gump) based on an item status bit; AVATAR::look presents a developer/demo menu that can enable cheat/demo features, prompt the player for inputs, spawn helper scripts, and create items around a targeted location.",
+    "external_call_count": 17,
+    "flag_read_count": 1,
+    "flag_write_count": 3
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

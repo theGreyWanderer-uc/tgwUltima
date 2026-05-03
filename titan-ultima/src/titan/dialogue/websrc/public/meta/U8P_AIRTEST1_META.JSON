@@ -1,0 +1,270 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_AIRTEST1.json",
+  "file": "U8P_AIRTEST1",
+  "behavior_summary": [
+    "AIRTEST1::hatch implements an egg-hatching choreography: it gates whether hatching occurs, marks egg state, plays sound and visual effects (lightning and particle helpers), spawns one or more items (hatchlings/fragments), and scatters or places those items around the egg with randomized offsets and timings.",
+    "The routine uses randomness (urandom) to vary spawn offsets, timings and sound variants, and delegates per-item creation/placement to helper processes that set frames, move/hurl items, or destroy them when out of bounds.",
+    "A global flag passedCenteredTest is read at entry and written in one branch (likely to record a centered/hit outcome); passedWisdomTest is read (negated) to influence the entry gate. Egg state is read via Egg::getEggId and updated via Egg::setEggId to indicate U8P_AIRTEST1::hatch progress."
+  ],
+  "notable_control_flow": [
+    "Entry gate: AIRTEST1::hatch proceeds only if (passedCenteredTest OR NOT passedWisdomTest OR Egg::getEggId(egg) > 0). If this combined condition is false the function returns early.",
+    "On proceed, U8P_AIRTEST1::hatch sets the egg id (Egg::setEggId) and spawns multiple visual/sound helpers and short suspend/timed waits to drive the multi-step U8P_AIRTEST1::hatch sequence.",
+    "Item creation and placement is split into helper processes: U8P_AIRTEST1::0639 handles creating/popping items and animation/frame decisions; U8P_AIRTEST1::0392 computes target offsets and either moves or hurls items with bounds checking; U8P_AIRTEST1::035F plays one of two short U8P_AIRTEST1::hatch sounds selected at random.",
+    "Loops/iterations: local counters (BP-02, BP-04) throttle repeated spawn attempts and change branching after a few iterations (used to vary number/behavior of spawned fragments)."
+  ],
+  "open_questions": [
+    "Exact meaning and numeric values used for Egg::getEggId/Egg::setEggId (what id values represent which egg states) are not explicit in the disassembly.",
+    "Precise game-facing semantics of passedCenteredTest and passedWisdomTest beyond their gating role: e.g., what gameplay checks set those flags earlier and how they should be interpreted by designers.",
+    "Exact item types created by Item::create in this sequence (which shape/item ids correspond to hatchlings vs fragments) are not enumerated here.",
+    "Some free processes (FREE::29D8, FREE::1C6D, FREE::1C19, FREE::1C8B) are inferred to be visual/timer helpers; their internal behaviors and parameters are unknown."
+  ],
+  "main_function": {
+    "name": "U8P_AIRTEST1::hatch",
+    "execution_form": "process",
+    "purpose": "Manage the egg-hatching event: check gating conditions, mark egg state, spawn layered audiovisual effects, create and place resulting items (hatchlings/fragments), and orchestrate timing/randomization for a multi-step U8P_AIRTEST1::hatch sequence.",
+    "entry_conditions": [
+      "Triggered by Event 7 (U8P_AIRTEST1::hatch) invoked for an egg item instance.",
+      "Sequence continues only if (passedCenteredTest OR NOT passedWisdomTest OR Egg::getEggId(egg) > 0). Otherwise returns early."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_AIRTEST1::hatch",
+      "kind": "main",
+      "role": "Primary event handler that coordinates egg U8P_AIRTEST1::hatch sequence, spawns effects and delegates item creation/placement.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_AIRTEST1::035F",
+      "kind": "helper",
+      "role": "Plays one of two short U8P_AIRTEST1::hatch sound effect variants selected via urandom and playSFX to add audio variation.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_AIRTEST1::0392",
+      "kind": "helper",
+      "role": "Compute and clamp target offsets/positions and either move or hurl a spawned item to a computed map tile; enforces bounds and chooses movement method.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_AIRTEST1::0639",
+      "kind": "helper",
+      "role": "Create/pop a new item at an offset from the egg, set its animation frame or destroy if invalid, and drive per-item placement/animation until finished.",
+      "confidence": "high"
+    },
+    {
+      "name": "Egg::getEggId",
+      "kind": "extern",
+      "role": "Query egg state/id to decide whether U8P_AIRTEST1::hatch should run or to pick behavior.",
+      "confidence": "high"
+    },
+    {
+      "name": "Egg::setEggId",
+      "kind": "extern",
+      "role": "Set egg state/id to mark that hatching is underway or completed.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::create",
+      "kind": "extern",
+      "role": "Allocate a new item instance (hatchling or fragment).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::pop",
+      "kind": "extern",
+      "role": "Place a created item into the world at given coordinates.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::move",
+      "kind": "extern",
+      "role": "Move an item to a tile when placement is direct and in-bounds.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::hurl",
+      "kind": "extern",
+      "role": "Throw/launch an item to a destination tile to create scattering motion.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::destroy",
+      "kind": "extern",
+      "role": "Remove an item instance (used when placement/frame is invalid or out-of-bounds).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_AIRTEST1::playSFX",
+      "kind": "extern",
+      "role": "Play a U8P_AIRTEST1::hatch-related sound effect variant.",
+      "confidence": "high"
+    },
+    {
+      "name": "urandom",
+      "kind": "extern",
+      "role": "Produce random values used to vary offsets, timing, and effect selection.",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::00E1h (LightningBolt)",
+      "kind": "extern",
+      "role": "Spawn lightning/visual effect processes anchored to the egg location during U8P_AIRTEST1::hatch.",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::29D8, FREE::1C6D, FREE::1C19, FREE::1C8B",
+      "kind": "extern",
+      "role": "Spawn miscellaneous visual/timer helper processes used to layer effects and spacing in the U8P_AIRTEST1::hatch choreography.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_AIRTEST1::hatch",
+        "callee": "U8P_AIRTEST1::035F",
+        "purpose": "Trigger a short randomized U8P_AIRTEST1::hatch sound effect during the sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AIRTEST1::hatch",
+        "callee": "U8P_AIRTEST1::0639",
+        "purpose": "Spawn per-item creation/pop helper to instantiate a hatchling/fragment at a computed offset from the egg.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AIRTEST1::hatch",
+        "callee": "U8P_AIRTEST1::0392",
+        "purpose": "Spawn scatter/movement helper to compute destination and move/hurl spawned fragments to nearby tiles.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AIRTEST1::0639",
+        "callee": "U8P_AIRTEST1::0392",
+        "purpose": "Delegate final placement/movement of created items to the movement/hurling helper when appropriate.",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_AIRTEST1::hatch",
+        "callee": "Egg::getEggId",
+        "purpose": "Read egg state to decide whether the U8P_AIRTEST1::hatch sequence should run or be altered.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AIRTEST1::hatch",
+        "callee": "Egg::setEggId",
+        "purpose": "Mark or change the egg's id/state to indicate hatching progress.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AIRTEST1::hatch",
+        "callee": "FREE::00E1h (LightningBolt)",
+        "purpose": "Spawn lightning visual effects at the egg during U8P_AIRTEST1::hatch sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AIRTEST1::hatch",
+        "callee": "FREE::29D8 / FREE::1C6D / FREE::1C19 / FREE::1C8B",
+        "purpose": "Spawn layered visual/timer helper processes to create particle effects and timing delays.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_AIRTEST1::035F",
+        "callee": "U8P_AIRTEST1::playSFX",
+        "purpose": "Play a chosen U8P_AIRTEST1::hatch sound variant based on urandom output.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AIRTEST1::hatch",
+        "callee": "urandom",
+        "purpose": "Produce randomized offsets, timings, and selection of effect variants to make U8P_AIRTEST1::hatch non-deterministic.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AIRTEST1::0639",
+        "callee": "Item::create",
+        "purpose": "Allocate a new item instance (likely a hatchling or fragment) for placement.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AIRTEST1::0639",
+        "callee": "Item::pop",
+        "purpose": "Place the newly created item into the world at computed x,y,z coordinates.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AIRTEST1::0639",
+        "callee": "Item::setFrame",
+        "purpose": "Set the visual frame or animation state of the spawned item; destroy it if frame/position invalid.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AIRTEST1::0392",
+        "callee": "Item::move",
+        "purpose": "Move an item to a computed destination when the destination is in-bounds and direct placement is appropriate.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AIRTEST1::0392",
+        "callee": "Item::hurl",
+        "purpose": "Throw/launch an item to a destination tile to create scattering motion when appropriate.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AIRTEST1::0392",
+        "callee": "Item::destroy",
+        "purpose": "Destroy items that fall outside allowed placement bounds or otherwise invalid.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AIRTEST1::0639",
+        "callee": "Item::getX / Item::getY / Item::getZ",
+        "purpose": "Read egg coordinates to compute spawn/pop positions and anchor visual effects.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "passedCenteredTest",
+        "likely_effect": "Read to determine if the U8P_AIRTEST1::hatch sequence should run or choose a centered outcome branch; influences spawn branching.",
+        "confidence": "high"
+      },
+      {
+        "name": "passedWisdomTest",
+        "likely_effect": "Read (negated) as part of the gate that allows the U8P_AIRTEST1::hatch sequence to proceed when wisdom test not passed.",
+        "confidence": "high"
+      }
+    ],
+    "writes": [
+      {
+        "name": "passedCenteredTest",
+        "likely_effect": "Set to 1 in one branch to record that a centered test/outcome occurred during U8P_AIRTEST1::hatch (used to gate later behavior).",
+        "confidence": "high"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "AIRTEST1::hatch",
+    "behavior_summary_one_liner": "AIRTEST1::hatch implements an egg-hatching choreography: it gates whether hatching occurs, marks egg state, plays sound and visual effects (lightning and particle helpers), spawns one or more items (hatchlings/fragments), and scatters or places those items around the egg with randomized offsets and timings.",
+    "external_call_count": 13,
+    "flag_read_count": 2,
+    "flag_write_count": 1
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

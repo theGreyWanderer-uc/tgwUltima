@@ -1,0 +1,196 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_VANISH.json",
+  "file": "U8P_VANISH",
+  "behavior_summary": [
+    "Implements a vanishing floating platform item that: (a) shows a static examine text when looked at, (b) responds to actors entering/leaving a small trigger region by starting/stopping a multi-stage vanish/animation sequence, and (c) on release may grant a dexterity bonus if the item reports zero surface weight.",
+    "U8P_VANISH::look (Event 0) makes the item 'bark' the string \"floating platform \" to the viewer.",
+    "U8P_VANISH::enterFastArea sets the item's type/frame into an initial vanish state and spawns the timed animation/vanish routine U8P_VANISH::0136.",
+    "U8P_VANISH::0136 drives the visible vanish sequence: it queries Item::getQuality to scale effect counts, spawns short-delay/effect helpers (FREE::1C19) multiple times, plays a sound (playSFX), cycles item frames (Item::setFrame), switches item types (Item::setType) at branch points, spawns U8P_VANISH::02CC to make attached pieces fall, and finally sets a terminal type/frame.",
+    "U8P_VANISH::02CC iterates over attached/related entries and calls Item::fall on each to drop parts after the vanish transition.",
+    "U8P_VANISH::leaveFastArea resets the item's type/frame to a default and invokes a cleanup/free spawn (FREE::2A56) on the item info.",
+    "U8P_VANISH::release checks Item::getSurfaceWeight and, if zero, calls AccumulateDexterity(0x0F) to award dexterity."
+  ],
+  "notable_control_flow": [
+    "Event-driven: core behaviors are tied to discrete events (U8P_VANISH::look, enterFastArea, leaveFastArea, release).",
+    "Asynchronous/timed sequencing: U8P_VANISH::0136 spawns repeated short-delay/effect helpers (FREE::1C19) to create timing between frame changes and spawns additional helper processes (U8P_VANISH::02CC) mid-sequence.",
+    "Branching during the animation: the animation routine changes item type at a decision/branch point and continues a different frame cycle path depending on that branch.",
+    "Looping: U8P_VANISH::0136 and U8P_VANISH::02CC both iterate using a local loop/index ([BP-02h]) — the former to repeat effects proportional to item quality, the latter to call Item::fall for each related entry."
+  ],
+  "open_questions": [
+    "What concrete game meanings do the numeric item type IDs set by Item::setType represent (e.g., what visible forms or collision/behavior states correspond to the type changes)?",
+    "Are FREE::1C19 and FREE::2A56 pure timing/effect spawners or do they also mutate game state (they're inferred as delays/effects based on usage but exact behavior is unknown)?",
+    "What exact set of attached/related entries does U8P_VANISH::02CC iterate over (inventory contents, linked parts, or adjacent tiles)?",
+    "What branching condition inside U8P_VANISH::0136 determines the alternate type/frame path (is it based on quality, external state, or a random/temporal condition)?"
+  ],
+  "main_function": {
+    "name": "U8P_VANISH::look",
+    "execution_form": "process",
+    "purpose": "Handle the 'U8P_VANISH::look' (examine) event for the vanishing floating platform by emitting a descriptive bark string so the player sees 'floating platform '.",
+    "entry_conditions": [
+      "Event 0 (U8P_VANISH::look) — triggered when the player/actor examines or looks at the item."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_VANISH::look",
+      "kind": "main",
+      "role": "Examine/U8P_VANISH::look handler that calls Item::bark to display 'floating platform '.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_VANISH::enterFastArea",
+      "kind": "helper",
+      "role": "Trigger on actor entering the item's fast-area; initialize type/frame and spawn the vanish animation (U8P_VANISH::0136).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_VANISH::leaveFastArea",
+      "kind": "helper",
+      "role": "Trigger on actor leaving the fast-area; reset type/frame and invoke cleanup/free spawn (FREE::2A56).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_VANISH::release",
+      "kind": "helper",
+      "role": "Handle item release/drop; check surface weight and award dexterity via AccumulateDexterity if weight == 0.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_VANISH::0136",
+      "kind": "helper",
+      "role": "Main vanish/animation sequence: spawn visual effects/timers scaled by quality, play sound, cycle frames, change types and spawn U8P_VANISH::02CC mid-sequence, finalize type/frame.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_VANISH::02CC",
+      "kind": "helper",
+      "role": "Iterate related/attached entries and call Item::fall on each to drop parts after a vanish transition.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::*",
+      "kind": "extern",
+      "role": "Engine/item instance methods (bark, setType, setFrame, getQuality, getSurfaceWeight, fall) used to control visuals, state, and physics of the item.",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::* / spawn",
+      "kind": "extern",
+      "role": "Spawned helper routines used as short delays, visual-effect spawners (FREE::1C19) and cleanup/free operations (FREE::2A56); used heavily to time U8P_VANISH::0136.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_VANISH::playSFX",
+      "kind": "extern",
+      "role": "Play a sound effect at the item's location during the vanish/animation.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_VANISH::AccumulateDexterity",
+      "kind": "extern",
+      "role": "Award dexterity/stat increments to the avatar; invoked on release when surface weight == 0.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_VANISH::enterFastArea",
+        "callee": "U8P_VANISH::0136",
+        "purpose": "Start the asynchronous vanish/animation sequence when an actor enters the fast-area trigger.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VANISH::0136",
+        "callee": "U8P_VANISH::02CC",
+        "purpose": "Spawn a helper that makes attached parts/items fall at a specific point in the animation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VANISH::02CC",
+        "callee": "Item::fall",
+        "purpose": "Invoke physics/fall behavior on each iterated attached/related entry.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VANISH::leaveFastArea",
+        "callee": "FREE::2A56",
+        "purpose": "Spawn cleanup/free helper to tidy item info/state when leaving the fast-area.",
+        "confidence": "high"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_VANISH::look",
+        "callee": "Item::bark",
+        "purpose": "Display the player's examine text 'floating platform '.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VANISH::enterFastArea",
+        "callee": "Item::setType",
+        "purpose": "Switch the item's type/identity into an initial vanish/interaction state.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VANISH::enterFastArea",
+        "callee": "Item::setFrame",
+        "purpose": "Set initial animation/frame for the vanish sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VANISH::0136",
+        "callee": "Item::getQuality",
+        "purpose": "Read item quality to scale number of visual effect spawns/delays (quality * 2 inferred).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VANISH::0136",
+        "callee": "spawn (FREE::1C19)",
+        "purpose": "Create repeated short-delay/effect helpers driving timed frame changes and visual effects during the animation.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_VANISH::0136",
+        "callee": "U8P_VANISH::playSFX",
+        "purpose": "Play a sound effect at a key point in the vanish animation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VANISH::release",
+        "callee": "Item::getSurfaceWeight",
+        "purpose": "Check whether the item has surface weight to decide whether to award dexterity.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_VANISH::release",
+        "callee": "U8P_VANISH::AccumulateDexterity",
+        "purpose": "Grant a dexterity increment (0x0F) when the surface weight is zero.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_VANISH::look",
+    "behavior_summary_one_liner": "Implements a vanishing floating platform item that: (a) shows a static examine text when looked at, (b) responds to actors entering/leaving a small trigger region by starting/stopping a multi-stage vanish/animation sequence, and (c) on release may grant a dexterity bonus if the item reports zero surface weight.",
+    "external_call_count": 8,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

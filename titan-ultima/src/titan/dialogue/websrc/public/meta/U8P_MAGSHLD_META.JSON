@@ -1,0 +1,86 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_MAGSHLD.json",
+  "file": "U8P_MAGSHLD",
+  "behavior_summary": [
+    "Responds to the 'U8P_MAGSHLD::look' event for the magic shield item. When inspected (or when a viewer enters its U8P_MAGSHLD::look/fast-area trigger), the item produces a short text bark: \"magic shield \".",
+    "The handler builds or references the literal string, calls Item::bark with the item/viewer pointer and that string to display it, frees the temporary string, and then suspends/returns.",
+    "No global flags or persistent game state are read or written; this is a purely presentational/feedback script tied to the item's U8P_MAGSHLD::look trigger."
+  ],
+  "notable_control_flow": [
+    "Entry on Event 0 (U8P_MAGSHLD::look) / fast-area entry triggers the routine.",
+    "String literal \"magic shield \" is prepared and pushed as an argument.",
+    "Item::bark is invoked with the BP+06h pointer and the string.",
+    "Temporary string memory is released after the call; the bark return value is inspected (used in an implies/pop sequence) before suspending/returning."
+  ],
+  "open_questions": [
+    "Is BP+06h strictly the item instance PID or sometimes the viewing process? It is used as the first arg to Item::bark and is inferred to be the relevant item/viewer pointer (confidence: medium).",
+    "The script inspects the return from Item::bark with an implies operation — what in-engine semantics are expected from that return here (control-flow influence vs. ignored value)? (confidence: low).",
+    "Exact mechanics of the temporary string allocation/deallocation (which runtime allocator/deallocator is used) are inferred from usage rather than explicitly named in the extracted data. (confidence: medium)"
+  ],
+  "main_function": {
+    "name": "U8P_MAGSHLD::look",
+    "execution_form": "process",
+    "purpose": "Handle the item's 'U8P_MAGSHLD::look' event by presenting the short description for the magic shield to the player/viewer via Item::bark.",
+    "entry_conditions": [
+      "Event 0 (U8P_MAGSHLD::look) — triggered when a player inspects the item or when an actor enters the object's U8P_MAGSHLD::look/fast-area trigger region"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_MAGSHLD::look",
+      "kind": "main",
+      "role": "Main event handler for the magic shield's U8P_MAGSHLD::look/inspect behavior; produces the item's short description via Item::bark.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine-provided routine used to display or emit a short text message from an item/process to a target viewer/process.",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::free",
+      "kind": "extern",
+      "role": "Deallocate temporary string memory (appears to be called after the bark); presence inferred from cleanup behavior.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_MAGSHLD::look",
+        "callee": "Item::bark",
+        "purpose": "Display the literal string \"magic shield \" to the viewer/process so the item can present its short description.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MAGSHLD::look",
+        "callee": "FREE::free",
+        "purpose": "Release the temporary string buffer used to hold \"magic shield \" after Item::bark returns (inferred from observed free/cleanup).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_MAGSHLD::look",
+    "behavior_summary_one_liner": "Responds to the 'U8P_MAGSHLD::look' event for the magic shield item. When inspected (or when a viewer enters its U8P_MAGSHLD::look/fast-area trigger), the item produces a short text bark: \"magic shield \".",
+    "external_call_count": 2,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

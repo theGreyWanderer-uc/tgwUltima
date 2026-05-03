@@ -1,0 +1,73 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_MAGLEGS.json",
+  "file": "U8P_MAGLEGS",
+  "behavior_summary": [
+    "Handles the 'U8P_MAGLEGS::look' (examine) event for the Magic Leggings item. When a player/actor examines the item the script makes the item 'speak' a short descriptive string to the viewer.",
+    "Builds the literal message \"magic leggings \", calls the engine/item messaging routine to display that text to the target process/player, then frees the temporary string and returns.",
+    "Performs a small amount of item/process setup immediately before the bark call (pushes that appear to set item info/process-exclude context) and then processes the bark return value with a brief implies/pop sequence before suspending."
+  ],
+  "notable_control_flow": [
+    "Linear event handler: prepare context -> allocate/construct literal string -> call Item::bark -> free string -> handle return value -> suspend/return.",
+    "There is a short pre-call setup (push 0x0208 and an indirect 2-byte push, and a set-info/process-exclude pattern) that appears to configure object info or processing exclusion for the operation.",
+    "After Item::bark returns the code uses an 'implies' style push/pop sequence to move the return into a temporary slot; no branching or looping is observed in this function."
+  ],
+  "open_questions": [
+    "What exactly do the pre-call pushes (the 0x0208 constant and the indirect 2-byte push) set on the object/process? (inferred as info/process-exclude but not certain.)",
+    "What semantic meaning does the short implies/pop sequence have for game logic (is it a convention to propagate return flags, or a no-op cleanup pattern)?",
+    "Is the pushed pid/process id ordering (which process receives the bark) exactly as inferred from the disassembly, or is there an additional caller-side convention affecting target selection?"
+  ],
+  "main_function": {
+    "name": "U8P_MAGLEGS::look",
+    "execution_form": "process",
+    "purpose": "Respond to the 'U8P_MAGLEGS::look' (examine) event by producing the item's descriptive text so the player sees the name/description of the Magic Leggings.",
+    "entry_conditions": [
+      "Event 0 (U8P_MAGLEGS::look) — invoked when a player/actor examines/looks at the Magic Leggings item"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_MAGLEGS::look",
+      "kind": "main",
+      "role": "Event handler for the item's examine/U8P_MAGLEGS::look action; constructs and emits the item's short description.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item-provided routine used to display/emote text from an item/process to a target pid/process.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_MAGLEGS::look",
+        "callee": "Item::bark",
+        "purpose": "Deliver/display the literal string message (\"magic leggings \") from the item to the target pid/process so the player sees the item description.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup"
+  ],
+  "quick_facts": {
+    "main_function": "MAGLEGS::look",
+    "behavior_summary_one_liner": "Handles the 'U8P_MAGLEGS::look' (examine) event for the Magic Leggings item. When a player/actor examines the item the script makes the item 'speak' a short descriptive string to the viewer.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

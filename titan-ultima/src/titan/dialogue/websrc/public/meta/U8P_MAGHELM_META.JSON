@@ -1,0 +1,72 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_MAGHELM.json",
+  "file": "U8P_MAGHELM",
+  "behavior_summary": [
+    "When the magic helm is examined (U8P_MAGHELM::look event), the script prepares the item/process context and asks the item to 'bark' the fixed label \"magic helm \" to the examining process/player.",
+    "The routine constructs and passes a short literal string, targets the bark to the item's instance and the examiner's PID, frees the temporary string, and then suspends/returns. No global game state is modified."
+  ],
+  "notable_control_flow": [
+    "Entry on the 'U8P_MAGHELM::look' event triggers a sequence that sets item/process context (inferred set-info/process-exclude steps), calls Item::bark, then runs a small implies/pop sequence on the bark return value before suspending.",
+    "Control ends with the script suspending/returning after the bark and cleanup; there are no loops or conditional branches of gameplay significance in the excerpt."
+  ],
+  "open_questions": [
+    "Exactly which engine info key(s) are set by the preparatory opcodes (inferred set-info ID and process-exclude behavior) and whether those change future processing of the item.",
+    "Whether any localization/alternate string paths exist for the helm name (the excerpt shows a single literal \"magic helm \").",
+    "Whether the bark return value influences any higher-level logic outside this short handler (the implies/pop is local and its broader effect is unclear)."
+  ],
+  "main_function": {
+    "name": "U8P_MAGHELM::look",
+    "execution_form": "process",
+    "purpose": "Handle the 'U8P_MAGHELM::look' (examine) event for the magic helm: present the item's name to the examining process/player by invoking Item::bark with a fixed literal and then finish.",
+    "entry_conditions": [
+      "Event 0 / 'U8P_MAGHELM::look' — invoked when an actor (typically the Avatar) examines or looks at the magic helm item."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_MAGHELM::look",
+      "kind": "main",
+      "role": "Entry handler for the magic helm's 'U8P_MAGHELM::look' (examine) event; orchestrates display of the item's short label.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine used to emit/display a short text message from an item/process to a target PID.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_MAGHELM::look",
+        "callee": "Item::bark",
+        "purpose": "Request the item instance to emit/display the short label string \"magic helm \" to the examining process/player PID.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "MAGHELM::look",
+    "behavior_summary_one_liner": "When the magic helm is examined (U8P_MAGHELM::look event), the script prepares the item/process context and asks the item to 'bark' the fixed label \"magic helm \" to the examining process/player.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

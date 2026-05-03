@@ -1,0 +1,302 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_MAPTELE.json",
+  "file": "U8P_MAPTELE",
+  "behavior_summary": [
+    "Implements the 'U8P_MAPTELE::hatch' (Event 7 / enterFastArea) handler for a map-teleport item: when an actor triggers the item's area, the script chooses a destination based on the item's stored map/X/Y/Z and several global game-state flags, runs visual/sound/camera transition effects, optionally freezes the Avatar, teleports the Avatar (or NPC), and prevents immediate re-triggering.",
+    "Uses multiple conditional branches keyed by the item's stored map id, item frame (Z byte), and globals (MalchirTest, goToInnerSanctum, gotTheSymbols, arcadionMet, hydrosFree) to select among preset destination maps and coordinates and to alter side effects (for example, setting gotTheSymbols in one branch).",
+    "Guards re-entry via the global justTeleported (early return when set), sets justTeleported around the teleport to block immediate retriggers, and calls Item::touch and small helper spawns to complete item-side effects and pacing."
+  ],
+  "notable_control_flow": [
+    "Early-exit guard: reads global justTeleported at function start and returns immediately if true (prevents retrigger).",
+    "Destination selection is a multi-way branch: primary discriminator is the item's map id (Npc::getMap) and secondary tests use Item::getX/Item::getY/Item::getZ plus global flags to pick presets.",
+    "Before teleport: optional setAvatarInStasis if Avatar not already in stasis, multiple spawn calls (FREE::1C19, FIRESPEL::1F65), and FadeToBlack to hide the map switch.",
+    "Teleport call: Npc::teleport(map,x,y,z/flags) performs the move; after teleport the script manipulates Camera (setCenterOn, move_to), FadeFromBlack, runs more spawns, calls Item::touch and sets/clears quest flags like gotTheSymbols in specific branches.",
+    "justTeleported is written (set) to block immediate re-trigger; some branches clear or set other globals (inferred behavior) depending on quest state."
+  ],
+  "open_questions": [
+    "Exact mapping of itemZ (Item::getZ) frame values to individual teleport presets and appearance/frame meanings — frames are used as discriminators but the concrete mapping to places is inferred, not explicit.",
+    "Precise numeric teleport destination coordinates and map ids used in each branch (the disassembly indicates constants but the human-meaning of those constants is uncertain).",
+    "Exact runtime purpose of METHOD::0113 invocations (likely a short delay/animation helper) and the semantics of some repeated spawn/parameter patterns.",
+    "Whether the teleport affects NPCs other than the Avatar in every branch (behavior appears Avatar-focused but may apply to other actors).",
+    "Full gameplay intent behind writing gotTheSymbols in one branch (inferred quest progression) and the detailed effect of MalchirTest and goToInnerSanctum flags on destination selection."
+  ],
+  "main_function": {
+    "name": "U8P_MAPTELE::hatch",
+    "execution_form": "process",
+    "purpose": "Respond to an actor entering the teleport item's trigger region: choose a destination (map/x/y/z) from the item's stored fields and game flags, perform transition effects (stasis, effects, fades, camera movement), teleport the actor, and manage re-trigger guards and quest-related flags.",
+    "entry_conditions": [
+      "Event 7 (U8P_MAPTELE::hatch) — invoked when an actor enters the item's fast-area trigger (enterFastArea).",
+      "Function checks global justTeleported and returns early if that flag is set (prevents immediate retrigger)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_MAPTELE::hatch",
+      "kind": "main",
+      "role": "Event handler for the teleport item's area-enter; implements the teleport sequence and related side effects.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::getMap",
+      "kind": "extern",
+      "role": "Read the item's/NPC's map id (used to pick teleport preset).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getX",
+      "kind": "extern",
+      "role": "Read stored item X (used to choose destination preset or coordinate).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getY",
+      "kind": "extern",
+      "role": "Read stored item Y (used to choose destination preset or coordinate).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getZ",
+      "kind": "extern",
+      "role": "Read stored item Z/frame byte (used as discriminator for variants).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MAPTELE::getAvatarInStasis",
+      "kind": "extern",
+      "role": "Query whether Avatar is already frozen to avoid re-freezing.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MAPTELE::setAvatarInStasis",
+      "kind": "extern",
+      "role": "Freeze/unfreeze Avatar during teleport transitions.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::isBusy",
+      "kind": "extern",
+      "role": "Check Actor busy state to coordinate helper spawns/delays.",
+      "confidence": "medium"
+    },
+    {
+      "name": "spawn FREE::1C19",
+      "kind": "extern",
+      "role": "Spawn short-lived helper/timer processes for pacing effects.",
+      "confidence": "high"
+    },
+    {
+      "name": "spawn FIRESPEL::1F65",
+      "kind": "extern",
+      "role": "Spawn visual teleport flare/effect at coordinates.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MAPTELE::process FadeToBlack",
+      "kind": "extern",
+      "role": "Fade screen to black prior to teleport transition.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MAPTELE::process FadeFromBlack",
+      "kind": "extern",
+      "role": "Fade screen back after teleport and camera positioning.",
+      "confidence": "high"
+    },
+    {
+      "name": "Camera::setCenterOn",
+      "kind": "extern",
+      "role": "Adjust camera centering target during teleport sequence.",
+      "confidence": "high"
+    },
+    {
+      "name": "Camera::move_to",
+      "kind": "extern",
+      "role": "Animate camera to the teleport destination coordinates.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::teleport",
+      "kind": "extern",
+      "role": "Perform the actual teleport of the NPC/Avatar to the chosen map and coordinates.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::touch",
+      "kind": "extern",
+      "role": "Trigger item-specific post-teleport side effects or consumption.",
+      "confidence": "high"
+    },
+    {
+      "name": "METHOD::0113",
+      "kind": "extern",
+      "role": "Appears to be a short delay/animation helper used in timing the effect sequence.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_MAPTELE::hatch",
+        "callee": "Npc::getMap",
+        "purpose": "Get the item/NPC's map id to decide which teleport preset to use.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MAPTELE::hatch",
+        "callee": "Item::getX",
+        "purpose": "Read stored X coordinate used to select destination presets and compute camera/effect offsets.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MAPTELE::hatch",
+        "callee": "Item::getY",
+        "purpose": "Read stored Y coordinate used to select destination presets and compute camera/effect offsets.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MAPTELE::hatch",
+        "callee": "Item::getZ",
+        "purpose": "Read the item's frame/shape byte used as a discriminator among teleport variants.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MAPTELE::hatch",
+        "callee": "U8P_MAPTELE::getAvatarInStasis",
+        "purpose": "Check whether Avatar is already frozen before applying stasis for the teleport.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MAPTELE::hatch",
+        "callee": "U8P_MAPTELE::setAvatarInStasis",
+        "purpose": "Freeze the Avatar to prevent movement during the teleport transition (then unset later).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MAPTELE::hatch",
+        "callee": "Npc::isBusy",
+        "purpose": "Decide whether to spawn helper processes or wait; coordinates pacing if actor is busy.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_MAPTELE::hatch",
+        "callee": "spawn FREE::1C19",
+        "purpose": "Spawn short helper/timer processes between visual steps to pace the sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MAPTELE::hatch",
+        "callee": "spawn FIRESPEL::1F65",
+        "purpose": "Spawn a visual teleport flare at computed coordinates before/after teleport.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MAPTELE::hatch",
+        "callee": "U8P_MAPTELE::process FadeToBlack",
+        "purpose": "Fade out before switching maps to provide a smooth visual transition.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MAPTELE::hatch",
+        "callee": "Npc::teleport",
+        "purpose": "Move the NPC/Avatar to the chosen destination map and coordinates.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MAPTELE::hatch",
+        "callee": "Camera::setCenterOn",
+        "purpose": "Adjust camera centering target as part of the teleport transition (often cleared or set to new target).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MAPTELE::hatch",
+        "callee": "Camera::move_to",
+        "purpose": "Animate the camera to the post-teleport coordinates to reveal the new location correctly.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MAPTELE::hatch",
+        "callee": "U8P_MAPTELE::process FadeFromBlack",
+        "purpose": "Fade the screen back in after the teleport and camera movement.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MAPTELE::hatch",
+        "callee": "Item::touch",
+        "purpose": "Trigger item-specific behavior or consumption after teleport completes.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MAPTELE::hatch",
+        "callee": "METHOD::0113",
+        "purpose": "Used as a short timed helper/delay during the effect sequence (inferred).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "justTeleported",
+        "likely_effect": "Guard against immediate re-triggering; if true the U8P_MAPTELE::hatch handler exits early.",
+        "confidence": "high"
+      },
+      {
+        "name": "MalchirTest",
+        "likely_effect": "Used as a numeric threshold to select a special-case teleport branch (alters destination/behavior).",
+        "confidence": "medium"
+      },
+      {
+        "name": "goToInnerSanctum",
+        "likely_effect": "When set forces use of an inner-sanctum destination preset, overriding other choices.",
+        "confidence": "medium"
+      },
+      {
+        "name": "gotTheSymbols",
+        "likely_effect": "Read to influence branch behavior; in at least one branch it is set to indicate quest progression tied to this teleport.",
+        "confidence": "medium"
+      },
+      {
+        "name": "arcadionMet",
+        "likely_effect": "Used to choose between alternative teleport destinations based on plot progression.",
+        "confidence": "medium"
+      },
+      {
+        "name": "hydrosFree",
+        "likely_effect": "Used to select among variant teleport destinations for a specific item/map case.",
+        "confidence": "medium"
+      }
+    ],
+    "writes": [
+      {
+        "name": "justTeleported",
+        "likely_effect": "Set around the teleport to prevent the item from immediately re-triggering the teleport (cleared in some branches).",
+        "confidence": "high"
+      },
+      {
+        "name": "gotTheSymbols",
+        "likely_effect": "Set in at least one branch as a quest/flag marker when the teleport grants or records 'symbols'.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "MAPTELE::hatch",
+    "behavior_summary_one_liner": "Implements the 'U8P_MAPTELE::hatch' (Event 7 / enterFastArea) handler for a map-teleport item: when an actor triggers the item's area, the script chooses a destination based on the item's stored map/X/Y/Z and several global game-state flags, runs visual/sound/camera transition effects, optionally freezes the Avatar, teleports the Avatar (or NPC), and prevents immediate re-triggering.",
+    "external_call_count": 16,
+    "flag_read_count": 6,
+    "flag_write_count": 2
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

@@ -1,0 +1,242 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_GUARD_EW.json",
+  "file": "U8P_GUARD_EW",
+  "behavior_summary": [
+    "This script implements a town guard NPC that (a) responds to being examined with a short identification bark, (b) reacts briefly when the player enters its fast trigger area by spawning short-lived animations/behaviors, (c) runs a scheduled handler that can clear a dead state (revive/reset) and spawn activation behavior, and (d) provides a multi-branch interactive dialog on Use which can interrogate the player, read world-state flags to adapt answers, move or face the NPC, and transition to combat if the player responds hostilely.",
+    "Dialog behavior reads several global flags (hydrosFree, pyrosFree, hasHeart, benticCacked, devonInRule, guardEWMet, benticMet, askedAboutEWRoad, interrogEW) to choose greetings, alarm/taunt lines, and available question lists. The interrogation branch sets interrogEW to prevent repetition. A specific player reply ('No!' / hostile reply) causes an explicit combat transition (setEnemyAlignment, setInCombat, setTarget and spawn of a combat method).",
+    "Fast-area and schedule handlers primarily spawn helper methods (METHOD::091C, METHOD::15E7, METHOD::143A, METHOD::133F) to orchestrate animations, timing, and possible revival behavior; these are spawned rather than implemented inline."
+  ],
+  "notable_control_flow": [
+    "U8P_GUARD_EW::look: immediate branch on Npc::isDead(self) — dead => bark 'dead guardsman', alive => bark 'guardsman'.",
+    "U8P_GUARD_EW::enterFastArea: returns immediately if Npc::isDead(self); otherwise spawns short animation/behavior via METHOD::091C and METHOD::15E7 to react to the entering actor.",
+    "U8P_GUARD_EW::schedule: spawns METHOD::143A (timing/patrol). If spawn result indicates revival condition, it calls Npc::clrDead(self) and spawns METHOD::133F as follow-up activation.",
+    "U8P_GUARD_EW::use: spawns METHOD::0BCF to set up interaction, builds a list of question strings (slist) for Item::ask, then performs strcmp-based branching on the returned string. Branches read or update multiple global flags and may call Npc::pathfind/Npc::getDir and spawn METHOD::15E7 to make the guard move/facing changes. Hostile player input triggers enemy alignment and combat setup plus spawn of METHOD::1090."
+  ],
+  "open_questions": [
+    "Exact semantics and parameter meanings of the various METHOD::* spawn helpers (METHOD::091C, METHOD::15E7, METHOD::143A, METHOD::133F, METHOD::0BCF, METHOD::1090) — their names are unknown and behavior is inferred from usage patterns.",
+    "Precise conditions returned by METHOD::143A that cause schedule() to call Npc::clrDead() (what return code corresponds to revival?), and whether schedule is also used for other timed behaviors besides revival.",
+    "Whether any side-effects beyond dialogue occur for specific branches (e.g., reputation changes, quest progression) because only reads/writes of a subset of global flags are visible in the disassembly excerpt."
+  ],
+  "main_function": {
+    "name": "U8P_GUARD_EW::look",
+    "execution_form": "process",
+    "purpose": "Handle examine/U8P_GUARD_EW::look events: provide an immediate identification bark; say 'dead guardsman' if the NPC is dead, otherwise 'guardsman'.",
+    "entry_conditions": [
+      "Event 0 (player/actor looks at this guard object)"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_GUARD_EW::look",
+      "kind": "main",
+      "role": "Examine handler that barks a short identification line and branches on death state.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_GUARD_EW::enterFastArea",
+      "kind": "helper",
+      "role": "Fast-area trigger: when an actor enters the guard's trigger region spawn short reaction behaviors unless the guard is dead.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_GUARD_EW::schedule",
+      "kind": "helper",
+      "role": "Periodic/scheduled handler: spawn scheduling behavior, inspect result, possibly clear dead state (revive) and spawn follow-up activation.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_GUARD_EW::use",
+      "kind": "helper",
+      "role": "Main interaction handler (Use): orchestrates dialog trees, question lists, world-state dependent answers, movement/facing actions, interrogation-state writes, and combat transition on hostile response.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_GUARD_EW::look",
+        "callee": "Npc::isDead",
+        "purpose": "Check whether the NPC is dead to choose which bark to emit.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD_EW::look",
+        "callee": "Item::bark",
+        "purpose": "Emit a short text line to the examining player ('dead guardsman' or 'guardsman').",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD_EW::enterFastArea",
+        "callee": "Npc::isDead",
+        "purpose": "Skip fast-area reactions if the NPC is dead.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD_EW::enterFastArea",
+        "callee": "spawn (METHOD::091C)",
+        "purpose": "Trigger a short animation/action helper for area-entry reactions (inferred behavior).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GUARD_EW::enterFastArea",
+        "callee": "spawn (METHOD::15E7)",
+        "purpose": "Trigger a facing/timed action after area entry (inferred from parameters and usage).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GUARD_EW::schedule",
+        "callee": "spawn (METHOD::143A)",
+        "purpose": "Start scheduled/timed behavior (patrol/idle/timer) with multiple timing/control parameters.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD_EW::schedule",
+        "callee": "Npc::clrDead",
+        "purpose": "Clear the NPC dead flag (revive/reset) when schedule's spawn result indicates the need to revive.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GUARD_EW::schedule",
+        "callee": "spawn (METHOD::133F)",
+        "purpose": "Spawn follow-up activation/animation after clearing dead state.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GUARD_EW::use",
+        "callee": "spawn (METHOD::0BCF)",
+        "purpose": "Set up dialog/interaction context (sound, facing, short preparatory action) before asking questions.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GUARD_EW::use",
+        "callee": "Item::ask",
+        "purpose": "Present a list of questions/options to the player and receive the chosen string for branching.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD_EW::use",
+        "callee": "Item::bark",
+        "purpose": "Have the guard speak lines to the player in many dialog branches (greetings, alarms, accusations).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD_EW::use",
+        "callee": "Npc::pathfind",
+        "purpose": "Move the guard to a nearby tile in some dialog branches (e.g., to reposition during interrogation or action).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GUARD_EW::use",
+        "callee": "Npc::getDir",
+        "purpose": "Obtain the guard's facing so spawned facing/timed actions match direction.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GUARD_EW::use",
+        "callee": "spawn (METHOD::15E7)",
+        "purpose": "Trigger facing/timed action using the direction returned by Npc::getDir.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GUARD_EW::use",
+        "callee": "Npc::setEnemyAlignment",
+        "purpose": "Mark the NPC hostile toward the player when the dialog transitions to combat.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD_EW::use",
+        "callee": "Npc::setInCombat",
+        "purpose": "Set combat state on the NPC to enable attacking behavior.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD_EW::use",
+        "callee": "Npc::setTarget",
+        "purpose": "Assign the player as the NPC's combat target so attacks begin.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARD_EW::use",
+        "callee": "spawn (METHOD::1090)",
+        "purpose": "Initiate the scripted combat/attack behavior after hostility is triggered.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "hydrosFree",
+        "likely_effect": "Contributes to a local counter used to choose alarm/taunt lines referencing freed Titans; affects greeting/alarm dialogue selection.",
+        "confidence": "high"
+      },
+      {
+        "name": "hasHeart",
+        "likely_effect": "Influences alarm/taunt dialogue selection and local conversation state.",
+        "confidence": "high"
+      },
+      {
+        "name": "pyrosFree",
+        "likely_effect": "Contributes to alarm/taunt selection similar to hydrosFree/hasHeart.",
+        "confidence": "high"
+      },
+      {
+        "name": "benticCacked",
+        "likely_effect": "Used to choose interrogation/dialogue branches related to Bentic (accusations or knowledge checks).",
+        "confidence": "medium"
+      },
+      {
+        "name": "interrogEW",
+        "likely_effect": "Read to determine which set of interrogation questions/options to present (tracks if interrogation already occurred).",
+        "confidence": "high"
+      },
+      {
+        "name": "devonInRule",
+        "likely_effect": "Select among alternative answers about who/what the guard protects (Devon vs Lady Mordea).",
+        "confidence": "medium"
+      },
+      {
+        "name": "guardEWMet",
+        "likely_effect": "Choose greeting lines for first-time vs repeat meetings and affect subsequent dialog choices.",
+        "confidence": "high"
+      },
+      {
+        "name": "benticMet",
+        "likely_effect": "Influence whether the guard accuses the player of lying about knowing Bentic; affects interrogation dialog.",
+        "confidence": "medium"
+      },
+      {
+        "name": "askedAboutEWRoad",
+        "likely_effect": "Prevent repeating the same answer about where the road leads; gates one dialog reply.",
+        "confidence": "medium"
+      }
+    ],
+    "writes": [
+      {
+        "name": "interrogEW",
+        "likely_effect": "Set to 1 when the player chooses the interrogation path to mark that interrogation has occurred and avoid repeating the same option set later.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_GUARD_EW::look",
+    "behavior_summary_one_liner": "This script implements a town guard NPC that (a) responds to being examined with a short identification bark, (b) reacts briefly when the player enters its fast trigger area by spawning short-lived animations/behaviors, (c) runs a scheduled handler that can clear a dead state (revive/reset) and spawn activation behavior, and (d) provides a multi-branch interactive dialog on Use which can interrogate the player, read world-state flags to adapt answers, move or face the NPC, and transition to combat if the player responds hostilely.",
+    "external_call_count": 18,
+    "flag_read_count": 9,
+    "flag_write_count": 1
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

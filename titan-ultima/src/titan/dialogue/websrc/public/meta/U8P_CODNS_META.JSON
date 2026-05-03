@@ -1,0 +1,118 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_CODNS.json",
+  "file": "U8P_CODNS",
+  "behavior_summary": [
+    "This script implements object interaction handlers for a 'chest of drawers' item. When a player/actor inspects the object (U8P_CODNS::look event) the item emits a short descriptive text 'chest of drawers '.",
+    "When the item is used, the script reads an item status word and treats bit 0x0100 as a toggle for an associated UI gump: if the bit is set the script calls Item::closeGump on the item; otherwise it calls Item::openGump with gump id 0x0D to open the UI.",
+    "All state modifications are local to the item (via Item API calls); no global game flags are read or written by these handlers in the extracted snippet."
+  ],
+  "notable_control_flow": [
+    "U8P_CODNS::look: Straight-line behavior — set up context, call Item::bark(item, \"chest of drawers \"), free temporary/string, then return/suspend.",
+    "U8P_CODNS::use: Query-then-branch — call Item::getStatus(item), test status & 0x0100, branch to either Item::closeGump(item) if set or Item::openGump(item, 0x0D) if not set.",
+    "The 'use' handler therefore implements a gump open/close toggle based on a per-item status bit."
+  ],
+  "open_questions": [
+    "Which exact parameter(s) are passed in by the engine to these handlers (exact register/stack layout)? The item object pointer is inferred but not explicitly named by the engine output.",
+    "What is the canonical meaning of status bit 0x0100? It appears to represent 'gump open' state but that interpretation is inferred from the toggle behavior.",
+    "Does Item::openGump always take 0x0D for this object type, or is 0x0D an index that maps to different UI pages elsewhere in data?",
+    "Are these handlers tied to particular engine events beyond the conventional 'U8P_CODNS::look' (Event 0) and 'use' (Event 1) semantics (e.g., area triggers like enterFastArea)?"
+  ],
+  "main_function": {
+    "name": "U8P_CODNS::look",
+    "execution_form": "process",
+    "purpose": "When the object is inspected by an actor, produce a short descriptive text ('chest of drawers ') for that actor via the Item::bark API.",
+    "entry_conditions": [
+      "Event 0 (U8P_CODNS::look/examine) — invoked when a player/actor looks at or inspects the object"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_CODNS::look",
+      "kind": "main",
+      "role": "Handle the U8P_CODNS::look/examine event and display the item's short description via Item::bark.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CODNS::use",
+      "kind": "helper",
+      "role": "Handle the use event; read the item's status word and toggle the associated UI gump (open/close).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item API: display/emote a short text message associated with an item/process.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getStatus",
+      "kind": "extern",
+      "role": "Engine/item API: return a status/flags word for the item; used to test bit flags.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::closeGump",
+      "kind": "extern",
+      "role": "Engine/item UI API: close an item's UI gump.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::openGump",
+      "kind": "extern",
+      "role": "Engine/item UI API: open an item's UI gump (called here with gump id 0x0D).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_CODNS::look",
+        "callee": "Item::bark",
+        "purpose": "Show the short description string 'chest of drawers ' to the viewing actor/process.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CODNS::use",
+        "callee": "Item::getStatus",
+        "purpose": "Retrieve the item's status/flags word to decide UI gump state.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CODNS::use",
+        "callee": "Item::closeGump",
+        "purpose": "Close the item's UI gump when the status bit 0x0100 is set (interpreted as gump-open state).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_CODNS::use",
+        "callee": "Item::openGump",
+        "purpose": "Open the item's UI gump (gump id 0x0D) when status bit 0x0100 is not set.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_CODNS::look",
+    "behavior_summary_one_liner": "This script implements object interaction handlers for a 'chest of drawers' item. When a player/actor inspects the object (U8P_CODNS::look event) the item emits a short descriptive text 'chest of drawers '.",
+    "external_call_count": 4,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

@@ -1,0 +1,117 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_ARMLEFT.json",
+  "file": "U8P_ARMLEFT",
+  "behavior_summary": [
+    "This script manages the lifecycle of visual/behavioral sub-processes (body-part processes) for the left-arm object.",
+    "U8P_ARMLEFT::use (Event 1) marks the object with a process-info/process-exclude state and spawns a BODYPART process (class 0x0270) associated with the object, returning the spawned handle.",
+    "U8P_ARMLEFT::hit (Event 5) marks the object with a different process-info/process-exclude state, calls FREE::2A56 to remove a related resource/process (ProcessType 0x0202) for the object, then queries Kernel::getNumProcesses for ProcessType 0x020A. If no processes of that type remain, it spawns a fallback/supplemental BODYPART process (class 0x0431)."
+  ],
+  "notable_control_flow": [
+    "U8P_ARMLEFT::use always sets process-info/process-exclude and then spawns BODYPART::0270; the spawn retval is captured into a local temp and returned (direct create-and-return flow).",
+    "U8P_ARMLEFT::hit performs cleanup (FREE::2A56) then conditionally spawns BODYPART::0431 only when Kernel::getNumProcesses returns zero for the checked ProcessType (guarded fallback spawn)."
+  ],
+  "open_questions": [
+    "Exact semantic meaning of numeric process-info identifiers and process-type codes (e.g., 0x0207, 0x020B, 0x0202, 0x020A) — they are inferred from call patterns but not documented here.",
+    "Precise effect of the FREE::2A56 call: appears to remove/unregister a related process/resource for the entity but internal semantics (destroy, detach, decrement reference) are not certain.",
+    "Whether the indirection '2-byte deref from [BP+06h]' represents an item PID, entity handle, or a nested object pointer in all use-cases — inference is strong but not absolutely proven.",
+    "What in-game visuals/animations the spawned classes 0x0270 and 0x0431 correspond to (assumed body-part visual/effect but unknown)."
+  ],
+  "main_function": {
+    "name": "U8P_ARMLEFT::use (Event 1)",
+    "execution_form": "process",
+    "purpose": "Handle the player/actor 'use' (activate) event on the left-arm object by marking the object with process-info/process-exclude and spawning a BODYPART process (class 0x0270) tied to that object; capture and return the spawned process handle.",
+    "entry_conditions": [
+      "Event 1: Use/activate event invoked when the actor/avatar uses or activates this object."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_ARMLEFT::use (Event 1)",
+      "kind": "main",
+      "role": "On-use handler: set process info/exclude and spawn primary BODYPART process (class 0x0270); returns spawned handle.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ARMLEFT::hit (Event 5)",
+      "kind": "helper",
+      "role": "On-hit handler: set process info/exclude, free a related resource/process (FREE::2A56), check remaining processes of a type, and conditionally spawn fallback BODYPART (class 0x0431) if none remain.",
+      "confidence": "high"
+    },
+    {
+      "name": "spawn BODYPART::0270",
+      "kind": "extern",
+      "role": "Spawn/instantiate a body-part process class (used by use handler).",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::2A56",
+      "kind": "extern",
+      "role": "Free/unregister a resource/process associated with an entity and ProcessType (used by hit handler).",
+      "confidence": "medium"
+    },
+    {
+      "name": "Kernel::getNumProcesses",
+      "kind": "extern",
+      "role": "Query the kernel for the number of running processes of a given ProcessType for the target entity (used as a guard in hit handler).",
+      "confidence": "high"
+    },
+    {
+      "name": "spawn BODYPART::0431",
+      "kind": "extern",
+      "role": "Spawn fallback/supplemental body-part process when no processes of the checked type remain (used by hit handler).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_ARMLEFT::use (Event 1)",
+        "callee": "spawn BODYPART::0270",
+        "purpose": "Create/attach a body-part process instance associated with the object after setting process-info/exclude; retval is captured and returned.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ARMLEFT::hit (Event 5)",
+        "callee": "FREE::2A56",
+        "purpose": "Remove or unregister a related process/resource for the entity using ProcessType 0x0202 — cleanup step before evaluating whether to spawn fallback.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ARMLEFT::hit (Event 5)",
+        "callee": "Kernel::getNumProcesses",
+        "purpose": "Obtain the count of processes of ProcessType 0x020A for the entity; used to decide whether to spawn fallback BODYPART::0431 when count is zero.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ARMLEFT::hit (Event 5)",
+        "callee": "spawn BODYPART::0431",
+        "purpose": "Spawn a fallback/supplemental body-part process only if Kernel::getNumProcesses reports zero remaining processes of the checked type.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_ARMLEFT::use (Event 1)",
+    "behavior_summary_one_liner": "This script manages the lifecycle of visual/behavioral sub-processes (body-part processes) for the left-arm object.",
+    "external_call_count": 4,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

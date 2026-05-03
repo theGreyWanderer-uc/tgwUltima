@@ -1,0 +1,93 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_BENCHEW.json",
+  "file": "U8P_BENCHEW",
+  "behavior_summary": [
+    "BENCHEW::look: When the bench item is examined (U8P_BENCHEW::look event), the handler creates the literal string \"bench \", asks the item to 'bark' that string (display/speak its short description), frees the string, inspects the bark return value briefly, then yields/suspends. This is a short UI/feedback handler with no global side-effects.",
+    "BENCHEW::gotHit: When the item receives a hit event, the handler examines the second argument (a signed/word parameter). If a particular condition on that argument is satisfied (the exact test is inferred from bytecode tests), the item’s visual frame is changed to frame index 1 via Item::setFrame; otherwise no action is taken. The first argument is present but not used in the observed sequence."
+  ],
+  "notable_control_flow": [
+    "U8P_BENCHEW::BENCHEW::look performs a simple call sequence: allocate/push string, call external Item::bark, free the string, push/pop the bark return value, then suspend/yield before returning — indicating a U8P_BENCHEW::look/inspect interaction that yields to the engine.",
+    "U8P_BENCHEW::BENCHEW::gotHit contains a conditional branch based on the second parameter (arg2). On match it performs a single external call Item::setFrame(item, 1); otherwise it returns without side effects.",
+    "No global flags are read or written by either handler in the provided excerpt; effects are localized to the item instance and its visual state or to transient UI output."
+  ],
+  "open_questions": [
+    "What exact predicate is used in the gotHit test on arg2 (the disassembled conditional's precise semantics are inferred but not explicit)?",
+    "What is the meaning of the first gotHit parameter (arg1) — it is present but unused in the observed code; does it convey damage source/type elsewhere?",
+    "What does the bark routine return and how (if at all) should the return value influence subsequent logic — the U8P_BENCHEW::look handler inspects it briefly before suspending but takes no visible further action.",
+    "Are there other event handlers (e.g., enterFastArea/leaveFastArea) for this item in the full script not included in the excerpt that alter behavior or global flags?"
+  ],
+  "main_function": {
+    "name": "U8P_BENCHEW::look",
+    "execution_form": "process",
+    "purpose": "Provide a short descriptive response when the bench is examined: produce the string \"bench \" and invoke the item's bark/display routine to show or speak that text, then yield.",
+    "entry_conditions": [
+      "Event 0 / 'U8P_BENCHEW::look' (triggered when an actor/player inspects or looks at the bench item)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_BENCHEW::look",
+      "kind": "main",
+      "role": "Handle the 'U8P_BENCHEW::look' (examine) event for the bench: produce/display the bench's short description via Item::bark.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BENCHEW::gotHit",
+      "kind": "helper",
+      "role": "Handle the 'gotHit' event: inspect hit parameters and set the item's frame to 1 when a specific condition on the second parameter holds.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine routine used to display/speak short text from an item/process to a target/process/player.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::setFrame",
+      "kind": "extern",
+      "role": "Engine routine to change an item's visual/animation frame index.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_BENCHEW::look",
+        "callee": "Item::bark",
+        "purpose": "Present the static string \"bench \" to the viewer/process (display or speak the item name/description).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BENCHEW::gotHit",
+        "callee": "Item::setFrame",
+        "purpose": "Change the item's visual/animation frame to index 1 when the inferred hit condition is met.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "BENCHEW::look",
+    "behavior_summary_one_liner": "BENCHEW::look: When the bench item is examined (U8P_BENCHEW::look event), the handler creates the literal string \"bench \", asks the item to 'bark' that string (display/speak its short description), frees the string, inspects the bark return value briefly, then yields/suspends. This is a short UI/feedback handler with no global side-effects.",
+    "external_call_count": 2,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

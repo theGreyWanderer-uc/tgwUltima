@@ -1,0 +1,86 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_CLOTHING.json",
+  "file": "U8P_CLOTHING",
+  "behavior_summary": [
+    "Handles the 'U8P_CLOTHING::look' (examine) event for a clothing item. When the player (or relevant actor) looks at the item the script sets an item info bit (0x0208) and marks the item for processing exclusion, then emits a short descriptive label ('clothing') via the item's bark routine so the player sees the label. The temporary string used for the bark is freed, the bark return value is captured and used to set the script result, and the script suspends/returns."
+  ],
+  "notable_control_flow": [
+    "On Event 0 (U8P_CLOTHING::look) the handler sets an info code (0x0208) on the item and performs a process-exclude operation (appears to prevent further processing).",
+    "Allocates the literal string \"clothing  \", calls Item::bark(this, \"clothing  \") to present the label, then frees the temporary string.",
+    "The return value from Item::bark is captured and used via an implies/pop sequence to set the script's result, then the script suspends and returns."
+  ],
+  "open_questions": [
+    "What exact semantics does info code 0x0208 represent (display-only flag, examined state, or other engine metadata)?",
+    "What precise effect does the 'process-exclude' operation have for this item in gameplay (temporary suppression vs. permanent exclusion)?",
+    "What does the implies/pop sequence concretely represent here (control-flow decision, result propagation, or engine bookkeeping)?",
+    "Is the parameter at BP+06h strictly a PID/process id, an item instance pointer, or an engine-specific reference type (the code treats it as 'this' item but low-level type is inferred)?"
+  ],
+  "main_function": {
+    "name": "U8P_CLOTHING::look",
+    "execution_form": "process",
+    "purpose": "Respond to a 'U8P_CLOTHING::look' (examine) action on a clothing item: set item info/exclusion state and present a short descriptive label to the player via Item::bark.",
+    "entry_conditions": [
+      "Event 0 (U8P_CLOTHING::look) — invoked when the Avatar or relevant actor examines/looks at the clothing item."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_CLOTHING::look",
+      "kind": "main",
+      "role": "Main event handler for the clothing item's 'U8P_CLOTHING::look' event.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine used to emit/display a short text label or message associated with an item.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CLOTHING::set info / process-exclude (engine op)",
+      "kind": "extern",
+      "role": "Engine operations invoked to set an info bit (0x0208) on the item and exclude it from normal processing.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_CLOTHING::look",
+        "callee": "Item::bark",
+        "purpose": "Make the item emit/display the short label string 'clothing' to the player or process that triggered the U8P_CLOTHING::look.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CLOTHING::look",
+        "callee": "U8P_CLOTHING::set info / process-exclude (engine op)",
+        "purpose": "Set the item info bit 0x0208 and exclude the item from further processing (likely to mark it as examined or to alter processing flow).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_CLOTHING::CLOTHING::look",
+    "behavior_summary_one_liner": "Handles the 'U8P_CLOTHING::look' (examine) event for a clothing item. When the player (or relevant actor) looks at the item the script sets an item info bit (0x0208) and marks the item for processing exclusion, then emits a short descriptive label ('clothing') via the item's bark routine so the player sees the label. The temporary string used for the bark is freed, the bark return value is captured and used to set the script result, and the script suspends/returns.",
+    "external_call_count": 2,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

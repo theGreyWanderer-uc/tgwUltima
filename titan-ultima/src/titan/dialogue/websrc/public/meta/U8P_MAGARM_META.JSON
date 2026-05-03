@@ -1,0 +1,187 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_MAGARM.json",
+  "file": "U8P_MAGARM",
+  "behavior_summary": [
+    "MAGARM::look (Event 0) makes the item produce a short descriptive bark 'magic armor ' when examined.",
+    "When an actor enters the item's fast-area trigger (enterFastArea), the script checks an item-local status bit (0x04). If that bit is clear it spawns a persistent behavior (U8P_MAGARM::00F4) to automate attacks/throws while the actor remains in range.",
+    "When the actor leaves the fast-area (leaveFastArea) a cleanup routine (FREE::2A56) is invoked to cancel or free resources/timers associated with the spawned behavior.",
+    "The spawned behavior U8P_MAGARM::00F4 clears the 'armed/active' status bit (0x04), repeatedly computes randomized target offsets within the item's range, validates candidate targets with Item::legal_move, and calls Item::hurl to launch the magic armor toward valid targets. It biases distances via multiple urandom calls, clamps offsets, and schedules a FREE::* timer (FREE::1C19) for delayed cleanup or re-arm before suspending/looping."
+  ],
+  "notable_control_flow": [
+    "Event-driven: MAGARM::look responds to Event 0 by calling Item::bark and suspending.",
+    "Trigger-driven: U8P_MAGARM::enterFastArea tests Item::getStatus & 0x04; if clear, spawn U8P_MAGARM::00F4.",
+    "Cleanup-driven: U8P_MAGARM::leaveFastArea calls FREE::2A56(item, 0x00F0) to cancel/clean spawned state.",
+    "Behavior loop (U8P_MAGARM::00F4): clear status bit via Item::andStatus, read Item::getRange and coordinates, compute candidate dx/dy using urandom and helper FREE::1C52, clamp and sign-adjust offsets, call Item::legal_move until a legal target is found, then call Item::hurl; finally spawn FREE::1C19 (delay/cleanup) and suspend/loop."
+  ],
+  "open_questions": [
+    "Exact semantic meanings of the item-local status bits (0x04, 0x08, 0x10) beyond their inferred roles (armed/active, alternate randomization branch) remain unconfirmed.",
+    "Precise timing and behavior of the spawned FREE::* helpers (FREE::1C19 and FREE::2A56) — whether they re-arm the item, free resources immediately, or schedule reactivation — is inferred but not certain.",
+    "Exact numeric bounds used for offset clamping (approx. ±64 inferred) and the interpretation of some temporary constants are approximate based on disassembly patterns.",
+    "Whether U8P_MAGARM::00F4 targets the avatar specifically or arbitrary nearby squares (using avatar-relative CX/CY vs. item X/Y) is inferred from calls to Item::getCX/getCY but not explicitly documented."
+  ],
+  "main_function": {
+    "name": "U8P_MAGARM::look",
+    "execution_form": "process",
+    "purpose": "When the item is examined (U8P_MAGARM::look event) produce a short description/bark string identifying it as 'magic armor'.",
+    "entry_conditions": [
+      "Event 0 (U8P_MAGARM::look) — triggered when a player or actor inspects the item."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_MAGARM::look",
+      "kind": "main",
+      "role": "Handle 'U8P_MAGARM::look' event: call Item::bark with the static string 'magic armor ' and suspend.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MAGARM::enterFastArea",
+      "kind": "helper",
+      "role": "Fast-area entry trigger: test item status bit 0x04 and spawn U8P_MAGARM::00F4 if the bit is clear.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MAGARM::leaveFastArea",
+      "kind": "helper",
+      "role": "Fast-area exit trigger: invoke FREE::2A56 to cancel/cleanup timers or spawned behavior associated with the item.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MAGARM::00F4",
+      "kind": "helper",
+      "role": "Spawned persistent behavior: clear the 0x04 status bit, compute randomized target offsets within range, validate targets with Item::legal_move, call Item::hurl to throw the magic armor, and schedule FREE::1C19 before suspending/looping.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_MAGARM::enterFastArea",
+        "callee": "U8P_MAGARM::00F4",
+        "purpose": "Spawn the persistent attack/throw behavior when the item becomes active for a nearby actor.",
+        "confidence": "high"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_MAGARM::look",
+        "callee": "Item::bark",
+        "purpose": "Display the item's short description 'magic armor ' to the inspecting process/player.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MAGARM::enterFastArea",
+        "callee": "Item::getStatus",
+        "purpose": "Read item status flags and test bit 0x04 to decide whether to spawn the behavior.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MAGARM::enterFastArea",
+        "callee": "spawn",
+        "purpose": "Engine spawn primitive used to start U8P_MAGARM::00F4 with the item as argument.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MAGARM::leaveFastArea",
+        "callee": "FREE::2A56",
+        "purpose": "Cleanup/cancel resources or timers associated with the spawned behavior (called with item and a numeric argument).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MAGARM::00F4",
+        "callee": "Item::andStatus",
+        "purpose": "Clear the item status bit 0x04 (bitwise-and with inverse mask) as the behavior begins.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MAGARM::00F4",
+        "callee": "Item::getRange",
+        "purpose": "Obtain the item's effective range value used as a maximum radius for computing target offsets.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MAGARM::00F4",
+        "callee": "Item::getCX",
+        "purpose": "Read a container/avatar-relative X coordinate used as the basis for some offset computations (inferred to bias toward the avatar).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_MAGARM::00F4",
+        "callee": "Item::getCY",
+        "purpose": "Read a container/avatar-relative Y coordinate used as the basis for some offset computations (inferred to bias toward the avatar).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_MAGARM::00F4",
+        "callee": "Item::getX",
+        "purpose": "Read the item's world X coordinate to compute absolute target world X = item X + dx.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MAGARM::00F4",
+        "callee": "Item::getY",
+        "purpose": "Read the item's world Y coordinate to compute absolute target world Y = item Y + dy.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MAGARM::00F4",
+        "callee": "Item::getZ",
+        "purpose": "Read the item's Z-plane/height for legal_move/hurl calls.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MAGARM::00F4",
+        "callee": "urandom",
+        "purpose": "Generate random values used repeatedly to bias distance, sign, and perturbation of target offsets.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MAGARM::00F4",
+        "callee": "FREE::1C52",
+        "purpose": "Small utility called to convert/compare random-derived values during offset selection and branching.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_MAGARM::00F4",
+        "callee": "Item::legal_move",
+        "purpose": "Check whether a computed WorldPoint is a legal target for throwing; reject and try alternate candidates if false.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MAGARM::00F4",
+        "callee": "Item::hurl",
+        "purpose": "Perform the throwing/hurling of the magic armor toward the validated target (passes dx, dy, dz and flags/speed).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MAGARM::00F4",
+        "callee": "spawn",
+        "purpose": "Spawn FREE::1C19 (a timer/cleanup helper) after launching, likely to schedule re-arming or delayed cleanup.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "MAGARM::look",
+    "behavior_summary_one_liner": "MAGARM::look (Event 0) makes the item produce a short descriptive bark 'magic armor ' when examined.",
+    "external_call_count": 16,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

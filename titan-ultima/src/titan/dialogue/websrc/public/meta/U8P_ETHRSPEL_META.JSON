@@ -1,0 +1,174 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_ETHRSPEL.json",
+  "file": "U8P_ETHRSPEL",
+  "behavior_summary": [
+    "ETHRSPEL::0080 is an area/ethereal short-range spell process invoked with an entity/item reference at [BP+06h] (the caster or origin).",
+    "When run it displays a chant/visual tied to the caster (via METHOD::087D), invokes the LightningBolt spell process, and waits on those visual/spell spawns.",
+    "After the visual/spell resolves it iterates nearby NPCs/items and, for any NPC currently targeting the caster, clears their in-combat flag (Npc::clrInCombat) and resets their activity (Npc::cSetActivity(0)) — effectively stopping or pacifying foes that were attacking the caster.",
+    "U8P_ETHRSPEL::0114 produces scattered physical debris by randomizing offsets around an origin and creating/hurling items (Item::legal_create, Item::hurl).",
+    "U8P_ETHRSPEL::01CE is a chant-wrapper that displays a different chant, runs LightningBolt, and then spawns U8P_ETHRSPEL::0114 to produce debris.",
+    "U8P_ETHRSPEL::0225 is a more complex summon/command routine: it displays a chant, computes spawn coordinates, optionally prompts for a target, creates and initializes a summoned NPC with randomized stats (Npc::create and setStr/setInt/setDex/setHp), sets orientation/animations and assigns a target; it may temporarily set avatar stasis during parts of this routine."
+  ],
+  "notable_control_flow": [
+    "Start: accept entity/item parameter at [BP+06h] representing the caster/origin.",
+    "Spawn a METHOD::087D instance to display chant text associated with the caster and spawn the LightningBolt process; await these spawned processes before continuing.",
+    "Iterate over a list/area of nearby objects (loop variable stored in [BP-02h]). For each object: check Npc::isInCombat and Npc::getTarget; if the target equals the caster then call Npc::clrInCombat and Npc::cSetActivity(0).",
+    "Helpers: U8P_ETHRSPEL::0114 computes random offsets around the origin and uses Item::legal_create and Item::hurl to produce thrown debris; U8P_ETHRSPEL::01CE triggers a chant + LightningBolt and then spawns the debris helper; U8P_ETHRSPEL::0225 follows a sequence of placement checks, SFX, item frame setup and NPC creation/configuration, optionally prompting the player to pick a victim.",
+    "Many branches depend on external call results (LightningBolt return, canExistAt/legal_create outcomes, target() return) and on randomized values from urandom."
+  ],
+  "open_questions": [
+    "Is ETHRSPEL::0080 used as both a castable spell and as an enterFastArea trigger (the disassembly suggests both usages but exact in-game event bindings are not explicit)?",
+    "What exact item types/frames are created and hurled by U8P_ETHRSPEL::0114 (the code randomizes types/frames but the specific shape ids are not documented here)?",
+    "What are the precise conditions or range used to enumerate 'nearby' NPCs/items in the main loop (how the list is sourced is inferred but not explicitly represented)?",
+    "In U8P_ETHRSPEL::0225, what are the specific NPC types and SFX ids used for the summoned creature, and what fallback behavior does FIRESPEL::1F4F represent when target() returns certain values?",
+    "Does clearing an NPC's in-combat flag fully prevent future hostility or only reset current engagement state (i.e., do NPCs re-engage immediately after)?"
+  ],
+  "main_function": {
+    "name": "U8P_ETHRSPEL::0080",
+    "execution_form": "process",
+    "purpose": "Perform a short-range ethereal/area spell effect for the provided caster/origin: show chant/visuals, run LightningBolt, then neutralize nearby NPCs that are targeting the caster by clearing their combat state and resetting activity.",
+    "entry_conditions": [
+      "Invoked as a spell process (likely when the spell is cast) or when an actor enters a fast-area trigger region tied to the spell.",
+      "Requires an entity/item reference passed at [BP+06h] identifying the caster/origin."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_ETHRSPEL::0080",
+      "kind": "main",
+      "role": "Main ethereal-area spell process that displays chant/visuals, invokes LightningBolt, and clears combat state on nearby NPCs targeting the caster.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ETHRSPEL::0114",
+      "kind": "helper",
+      "role": "Create and hurl several items at randomized offsets around an origin to produce scattered debris/projectile effects.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ETHRSPEL::01CE",
+      "kind": "helper",
+      "role": "Variant spell wrapper: display a different chant, run LightningBolt, then spawn U8P_ETHRSPEL::0114 to scatter debris.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ETHRSPEL::0225",
+      "kind": "helper",
+      "role": "Summon/command routine: place a summoned object/NPC, initialize randomized stats, optionally prompt for a target, and assign the summoned creature a target and activity/animations.",
+      "confidence": "medium"
+    },
+    {
+      "name": "METHOD::087D",
+      "kind": "extern",
+      "role": "Engine-spawned method to display chant text/speech or a visual tied to a process/pid.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ETHRSPEL::LightningBolt (process)",
+      "kind": "extern",
+      "role": "External spell/effect process invoked by the chant wrappers; core visual/damage/effect of the spell sequence.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_ETHRSPEL::01CE",
+        "callee": "U8P_ETHRSPEL::0114",
+        "purpose": "After displaying its chant and invoking LightningBolt, spawn the debris/hurl helper to produce scattered physical effects.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ETHRSPEL::0080",
+        "callee": "U8P_ETHRSPEL::0114",
+        "purpose": "Not directly called by U8P_ETHRSPEL::0080 in canonical trace, but 01CE (a variant) delegates to 0114; relationship exists between variant wrappers and the debris helper.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ETHRSPEL::0225",
+        "callee": "U8P_ETHRSPEL::0114",
+        "purpose": "0225 may coordinate with item/frame setup helpers to establish summoned item visuals; linking is inferred from similar creation/pop patterns.",
+        "confidence": "low"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_ETHRSPEL::0080",
+        "callee": "METHOD::087D (spawned)",
+        "purpose": "Display chant text or a speech bubble tied to the caster/process (e.g., 'In Quas Wis!').",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ETHRSPEL::0080",
+        "callee": "U8P_ETHRSPEL::LightningBolt (process)",
+        "purpose": "Execute the LightningBolt spell/effect as part of the ethereal/area spell sequence; return value is used to gate later actions.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ETHRSPEL::0080",
+        "callee": "Npc::isInCombat / Npc::getTarget / Npc::clrInCombat / Npc::cSetActivity",
+        "purpose": "Detect NPCs in combat that are targeting the caster, clear their combat state and reset their activity to stop hostilities toward the caster.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ETHRSPEL::0114",
+        "callee": "U8P_ETHRSPEL::urandom(word)",
+        "purpose": "Generate random offsets and selection indices used to decide where to create and hurl debris items.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ETHRSPEL::0114",
+        "callee": "Item::legal_create / Item::hurl / Item::create / Item::pop",
+        "purpose": "Check placement legality, create item instances and throw them with randomized offsets to produce scattered debris visuals/impacts.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ETHRSPEL::0225",
+        "callee": "Npc::create / Npc::setStr / Npc::setInt / Npc::setDex / Npc::setHp",
+        "purpose": "Instantiate a summoned NPC and initialize its attributes with randomized values as part of the summon routine.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ETHRSPEL::0225",
+        "callee": "U8P_ETHRSPEL::process target() / getAvatarInStasis / setAvatarInStasis",
+        "purpose": "Optionally prompt the player to select a target for the summoned creature and temporarily change player stasis during that interaction.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ETHRSPEL::0225",
+        "callee": "METHOD::091C / METHOD::15E7 / Item::getDirToCoords / Item::getDirToItem / Npc::getDir",
+        "purpose": "Compute facing/direction and spawn orientation/animation methods for summoned items/NPCs so they are oriented and animated toward targets.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ETHRSPEL::0114",
+        "callee": "U8P_ETHRSPEL::playSFX",
+        "purpose": "Play short sound effects when items are created/popped or hurled to enhance the visual debris effect.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_ETHRSPEL::0080",
+    "behavior_summary_one_liner": "ETHRSPEL::0080 is an area/ethereal short-range spell process invoked with an entity/item reference at [BP+06h] (the caster or origin).",
+    "external_call_count": 9,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

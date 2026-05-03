@@ -1,0 +1,91 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_WTABLE.json",
+  "file": "U8P_WTABLE",
+  "behavior_summary": [
+    "U8P_WTABLE::look: When the table object is examined (Event 0) it sets item-level bookkeeping (an info key and process-exclude state), constructs the literal string \"table \", and invokes Item::bark to present that string to the requesting process/player. After the bark it performs the VM/handler cleanup (stack/implies/pop) and returns the normal U8P_WTABLE::look-handler result.",
+    "U8P_WTABLE::gotHit: On hit (Event 6) the table sets item bookkeeping (info and process-exclude), inspects the second event parameter and, if that parameter matches a specific sentinel condition (inferred to be -1 / 0xFFFF), calls Item::setFrame to change the table's displayed frame to 1 — i.e., modify appearance after a particular hit condition."
+  ],
+  "notable_control_flow": [
+    "Look handler flow: initialize frame/info bookkeeping -> push/construct literal \"table \" -> push caller PID -> call Item::bark -> free temporary string -> implies/pop -> suspend/return (high confidence).",
+    "GotHit flow: initialize frame/info bookkeeping -> read two incoming parameters -> test second parameter (bitwise NOT then conditional) -> if condition met call Item::setFrame(frame=1) -> continue return (medium confidence)."
+  ],
+  "open_questions": [
+    "Exact semantic meaning of the numeric info identifier(s) set by the handlers (the 'info' pushed prior to process-exclude) — inferred as bookkeeping but not concretely named (low confidence).",
+    "Precise interpretation of the gotHit second parameter and its full set of triggering values beyond the observed sentinel (-1 / 0xFFFF) check (medium confidence).",
+    "Whether any other scripts rely on the process-exclude set by these handlers for broader game flow (inferred effect only; medium confidence)."
+  ],
+  "main_function": {
+    "name": "U8P_WTABLE::look",
+    "execution_form": "process",
+    "purpose": "Respond to 'U8P_WTABLE::look' (Event 0) by preparing item bookkeeping state and emitting the short description string \"table \" to the requesting process via Item::bark.",
+    "entry_conditions": [
+      "Event 0 (U8P_WTABLE::look) triggered when an actor/player examines the table object; caller PID is supplied as the incoming parameter."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_WTABLE::look",
+      "kind": "main",
+      "role": "Handle Event 0: set item info/process-exclude and call Item::bark to show 'table ' to the caller.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_WTABLE::gotHit",
+      "kind": "helper",
+      "role": "Handle Event 6: set item info/process-exclude and, when the second parameter matches a sentinel, change the item's frame to 1 (visual change).",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Present/display a short text message coming from the item to a specified process/player.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::setFrame",
+      "kind": "extern",
+      "role": "Change the visual frame/appearance of the item instance.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_WTABLE::look",
+        "callee": "Item::bark",
+        "purpose": "Deliver the short U8P_WTABLE::look-description string (\"table \") to the requesting process/player identified by caller PID.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WTABLE::gotHit",
+        "callee": "Item::setFrame",
+        "purpose": "Set the item's display frame to 1 when a specific got-hit parameter condition is met (visual/animation change).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_WTABLE::look",
+    "behavior_summary_one_liner": "U8P_WTABLE::look: When the table object is examined (Event 0) it sets item-level bookkeeping (an info key and process-exclude state), constructs the literal string \"table \", and invokes Item::bark to present that string to the requesting process/player. After the bark it performs the VM/handler cleanup (stack/implies/pop) and returns the normal U8P_WTABLE::look-handler result.",
+    "external_call_count": 2,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

@@ -1,0 +1,129 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_LAMP2.json",
+  "file": "U8P_LAMP2",
+  "behavior_summary": [
+    "This script implements the in-game behavior for a wall lamp object. When the object is examined (U8P_LAMP2::look), it prepares the item and emits a short descriptive text 'wall lamp '.",
+    "When the object is used/activated, it reads the lamp's world coordinates (X, Y, Z), adjusts the Y coordinate downward by 0x20 (32 units), and calls an engine/free routine (FREE::2411) with the adjusted coordinates, a mode/flag of 1, a code 0x25E, and the lamp object data — inferred to spawn or trigger a lamp-related spatial effect (light, flame, or visual animation) at that location."
+  ],
+  "notable_control_flow": [
+    "Event-driven: handlers run as short processes in response to actor interactions (Event 0 = U8P_LAMP2::look/examine, Event 1 = use/activate).",
+    "U8P_LAMP2::look sets local item info/exclusion flags and calls Item::bark(item_ptr, \"wall lamp \") to present the description, then suspends/returns.",
+    "U8P_LAMP2::use queries Item::getZ/getY/getX in that order, subtracts 0x20 from the Y return value, and then calls FREE::2411(x, y-0x20, z, 1, 0x25E, item_ptr)."
+  ],
+  "open_questions": [
+    "What exact effect FREE::2411 implements for code 0x25E (visual light, flame, persistent object, or transient effect)? This is inferred but not explicit.",
+    "Why is the Y coordinate adjusted by exactly 0x20 (32) units before spawning the effect — to align with sprite origin, place the effect lower on the wall, or for engine coordinate conventions?",
+    "What is the meaning of the small temporary/local 'temp' used after the implies/pop in the U8P_LAMP2::look handler (control/flow-only artifact vs. signaling return)?",
+    "Are there any global flags or broader state changes associated with toggling the lamp (e.g., toggling light on/off) elsewhere in the system that interact with this script?"
+  ],
+  "main_function": {
+    "name": "U8P_LAMP2::look",
+    "execution_form": "process",
+    "purpose": "Handle 'U8P_LAMP2::look' (examine) interactions for the wall lamp: set up item info/exclusion, and present a short descriptive string 'wall lamp ' via Item::bark to the inspecting actor/process.",
+    "entry_conditions": [
+      "Event 0: triggered when a player or actor examines/looks at the lamp (examine/observe interaction)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_LAMP2::look",
+      "kind": "main",
+      "role": "Examine/U8P_LAMP2::look event handler for the wall lamp; produces the descriptive text and completes the U8P_LAMP2::look interaction.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_LAMP2::use",
+      "kind": "helper",
+      "role": "Use/activate event handler for the wall lamp; collects coordinates, adjusts Y, and invokes an engine routine to spawn or trigger a spatial effect tied to the lamp.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item API used to emit or present a short text message associated with an item/process (used for the U8P_LAMP2::look description).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getX",
+      "kind": "extern",
+      "role": "Return the lamp's X coordinate for spatial operations.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getY",
+      "kind": "extern",
+      "role": "Return the lamp's Y coordinate for spatial operations (subsequently adjusted by -0x20).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getZ",
+      "kind": "extern",
+      "role": "Return the lamp's Z coordinate (height/level) for spatial operations.",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::2411",
+      "kind": "extern",
+      "role": "Engine/free routine invoked with coordinates, mode/flag, a type/code (0x25E), and item data; likely creates or triggers the lamp's visual/spatial effect.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_LAMP2::look",
+        "callee": "Item::bark",
+        "purpose": "Present the short descriptive string 'wall lamp ' to the inspector/process. Used to display the examine text.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LAMP2::use",
+        "callee": "Item::getZ",
+        "purpose": "Obtain the lamp's Z coordinate (height) to pass as the Z argument to the engine free-routine.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LAMP2::use",
+        "callee": "Item::getY",
+        "purpose": "Obtain the lamp's Y coordinate; result is then decremented by 0x20 before being passed to FREE::2411 (position adjustment for effect placement).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LAMP2::use",
+        "callee": "Item::getX",
+        "purpose": "Obtain the lamp's X coordinate to pass as the X argument to the engine free-routine.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LAMP2::use",
+        "callee": "FREE::2411",
+        "purpose": "Invoke an engine routine with (x, y-0x20, z, mode=1, code=0x25E, item_ptr) to create or trigger a spatial effect (inferred: lamp-related light/animation) at the adjusted location.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "animation",
+    "spawn",
+    "description"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_LAMP2::look",
+    "behavior_summary_one_liner": "This script implements the in-game behavior for a wall lamp object. When the object is examined (U8P_LAMP2::look), it prepares the item and emits a short descriptive text 'wall lamp '.",
+    "external_call_count": 5,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

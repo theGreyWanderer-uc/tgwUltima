@@ -1,0 +1,108 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_MIRROR.json",
+  "file": "U8P_MIRROR",
+  "behavior_summary": [
+    "When the mirror is struck (U8P_MIRROR::gotHit), the script prepares a process context and schedules a separate 'release' handler instead of performing the full effect inline.",
+    "The scheduled MIRROR::release scans a collection of nearby/related items to detect whether any NPCs are present.",
+    "If any NPC is found, release updates a subset of items by setting a visual/state bit (frame |= 0x04) on each matched item; if no NPC is present it masks frames to keep only low bits (frame &= 0x03).",
+    "Overall effect appears to toggle or update visual frames/states of nearby items based on NPC presence when the mirror 'releases' after being hit."
+  ],
+  "notable_control_flow": [
+    "Entry via Event 6 (U8P_MIRROR::gotHit) — prepares process info and excludes the process from normal processing, then spawns the release handler and returns/suspends.",
+    "U8P_MIRROR::MIRROR::release performs two passes: a scan to detect NPC presence (sets a local flag), then a second loop that updates item frames with one of two branches (OR with 0x04 vs AND with 0x03) based on that flag.",
+    "The heavy work (iteration + frame updates) is offloaded to a spawned process (spawn) rather than executed in the initial hit handler, preventing inline blocking."
+  ],
+  "open_questions": [
+    "What exact set/collection of items is iterated by release (nearby tile, container, the mirror's children, or global registry)?",
+    "What concrete gameplay semantics do the frame bit 0x04 and the mask 0x03 represent visually or mechanically?",
+    "What precisely do the U8P_MIRROR::gotHit parameters represent (attacker id, damage, hit type)? They are forwarded to the spawned release but their use inside release is not visible in the excerpt.",
+    "Are there additional side-effects or global flags outside this excerpt that interact with the mirror's release sequence (e.g., quest flags, persistent state)?"
+  ],
+  "main_function": {
+    "name": "U8P_MIRROR::gotHit",
+    "execution_form": "process",
+    "purpose": "Respond to the mirror being hit by preparing a dedicated process context and spawning MIRROR::release to perform the release effect asynchronously.",
+    "entry_conditions": [
+      "Event 6 (U8P_MIRROR::gotHit) — invoked when the mirror receives a hit/attack."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_MIRROR::gotHit",
+      "kind": "main",
+      "role": "Handle incoming hit events, set up process context/process exclusion and spawn the release handler instead of executing the release inline.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MIRROR::release",
+      "kind": "helper",
+      "role": "Scan related items for NPC presence and update those items' frames to either set bit 0x04 (if NPC present) or mask with 0x03 (if no NPC), then finish.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_MIRROR::gotHit",
+        "callee": "U8P_MIRROR::release",
+        "purpose": "Schedule/spawn the release handler to run the mirror's release behavior asynchronously under the current process context.",
+        "confidence": "high"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_MIRROR::release",
+        "callee": "Item::isNpc",
+        "purpose": "Detect whether an iterated item is an NPC; used to set a local flag controlling which frame-update branch runs.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MIRROR::release",
+        "callee": "Item::getFrame",
+        "purpose": "Read the current frame/index of an item so it can be modified before writing back.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MIRROR::release",
+        "callee": "Item::setFrame",
+        "purpose": "Write the modified frame/index back to the item (applies OR 0x04 or AND 0x03 result).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MIRROR::gotHit",
+        "callee": "spawn",
+        "purpose": "System call to create/schedule the MIRROR::release process instead of running the release inline.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MIRROR::gotHit",
+        "callee": "U8P_MIRROR::set info / process exclude",
+        "purpose": "Engine-level operations used to set up execution context and exclude the process from normal processing before or while spawning the release handler.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "MIRROR::gotHit",
+    "behavior_summary_one_liner": "When the mirror is struck (U8P_MIRROR::gotHit), the script prepares a process context and schedules a separate 'release' handler instead of performing the full effect inline.",
+    "external_call_count": 5,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

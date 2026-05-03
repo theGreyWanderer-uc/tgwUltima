@@ -1,0 +1,71 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_TROLL.json",
+  "file": "U8P_TROLL",
+  "behavior_summary": [
+    "On the 'U8P_TROLL::look' event, the troll presents a short descriptive label to the viewer: it constructs the string \"troll \", calls the engine/item routine to emit that text to the target process, frees the temporary string, evaluates the bark return value via a small implies/pop check, and then suspends the script.",
+    "Before calling the bark routine the handler sets an object info/process-exclude state (inferred) to control context or prevent recursive handling; this state is not persisted to any global flags in this script.",
+    "The primary visible effect in gameplay is that when a player/actor examines the troll, they see the label 'troll ' originating from the object."
+  ],
+  "notable_control_flow": [
+    "Prepare temporary string 'troll ' and convert/obtain pointer for calling Item::bark.",
+    "Set object info and apply a process-exclude operation immediately prior to the bark call (appears to change processing/context for the call).",
+    "Invoke external call Item::bark(target_pid, 'troll ').",
+    "Free the ephemeral string after the bark call to avoid leaking the temporary.",
+    "Push bark return, evaluate via an implies (01 01) then pop into a temp slot — an implied conditional/guard pattern with unclear side effects.",
+    "Suspend the script (execution_form = process) after completing the above steps."
+  ],
+  "open_questions": [
+    "What exact engine semantics does the 'set info + process exclude' pair implement here (what info id 0x210 does, and whether it prevents only reentrancy or also changes visibility of subsequent operations)?",
+    "What does the return value of Item::bark represent in practice (success, continuation, message suppressed), and how should the implies/pop pattern influence higher-level logic elsewhere?",
+    "Is BP+06h always a player process id (PID) in all contexts where this item is used, or can it sometimes be a different engine process type (inferred as viewer PID but not 100% explicit)?"
+  ],
+  "main_function": {
+    "name": "U8P_TROLL::look",
+    "execution_form": "process",
+    "purpose": "Handle examine/U8P_TROLL::look interactions for the troll by presenting a short textual label to the inspecting process and then suspending execution.",
+    "entry_conditions": [
+      "Event 0 — 'U8P_TROLL::look' (triggered when an actor/player inspects or 'looks at' the troll)"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_TROLL::look",
+      "kind": "main",
+      "role": "Event handler for the troll's 'U8P_TROLL::look' (examine) event; coordinates text emission and local cleanup.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_TROLL::look",
+        "callee": "Item::bark",
+        "purpose": "Request that the item/process emit/display the short label string to the provided target process/pid (used to show the troll's description 'troll ').",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "TROLL::look",
+    "behavior_summary_one_liner": "On the 'U8P_TROLL::look' event, the troll presents a short descriptive label to the viewer: it constructs the string \"troll \", calls the engine/item routine to emit that text to the target process, frees the temporary string, evaluates the bark return value via a small implies/pop check, and then suspends the script.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

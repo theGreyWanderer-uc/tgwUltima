@@ -1,0 +1,214 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_LOGBOOK3.json",
+  "file": "U8P_LOGBOOK3",
+  "behavior_summary": [
+    "Orchestrates a multi-actor scripted scene about the 'rightful Tempest' (dialogue accusing Mordea or claiming Devon as heir).",
+    "Optionally prompts the player for a phrase (via Item::ask) and branches the conversation based on three exact input lines: 'Devon is the rightful heir!', 'The tyrant Mordea has no birthright!', and 'I have proof!'.",
+    "Sequences dialogue (Item::bark) across several NPC actors, interleaving short spawned action primitives (gesture/animation helpers) and suspend/wait points to pace the scene.",
+    "Checks NPC life state (Npc::isDead) to skip or alter lines/animations for missing actors and to avoid acting on dead NPCs.",
+    "Triggers dramatic effects in branches: spawns FREE helpers, invokes LightningBolt, reads Npc::getHp and applies Item::receiveHit damage, and spawns a related LOGBOOK4 subscene; performs cleanup calls (FREE::2A56) on actor pointers."
+  ],
+  "notable_control_flow": [
+    "Early conditional on a local flag (BP-1Ah): when clear, the script builds a string list (BP-15h) and calls Item::ask to obtain BP-17h; when set, the Item::ask branch is skipped.",
+    "Main branching depends on strcmp comparisons of BP-17h against the three key phrases to select distinct dialogue/effect sequences.",
+    "Multiple branches guard actions by checking Npc::isDead(actor) before barking, spawning gestures, or applying hits.",
+    "Between many bark calls the routine suspends/waits (implied timing) while spawned helper processes perform animations/effects; helper spawns are used extensively rather than inline animation logic.",
+    "Certain branches compute or read an NPC's HP (Npc::getHp) and then call Item::receiveHit to forcibly apply damage, enabling a scripted 'combat/effect' beat in the scene."
+  ],
+  "open_questions": [
+    "Exact semantics and parameter meanings of internal spawn helpers (U8P_LOGBOOK3::METHOD::091C, U8P_LOGBOOK3::METHOD::15E7) — they appear to be short/long animation or gesture primitives but specifics are unknown.",
+    "Precise meaning of local bytes BP-10h (initialised to 3) and BP-11h (initialised to 0x30) — likely counters/timing flags passed to helper spawns but not fully determined.",
+    "Whether any global game-state flags are intended to be written by this scene (no globals were observed written in the disassembly, but story-state side-effects are possible elsewhere).",
+    "Complete trigger conditions that call LOGBOOK3::0080 (which processes/types of in-game events provide pid and the four actor parameters)."
+  ],
+  "main_function": {
+    "name": "U8P_LOGBOOK3::0080",
+    "execution_form": "process",
+    "purpose": "Scene controller that runs a scripted conversation/encounter about the rightful Tempest, branching on player input and NPC alive/dead state, sequencing dialogue, animations, effects, and occasional forced damage or subscene spawns.",
+    "entry_conditions": [
+      "Invoked when a player/actor provides or selects one of the key phrases (inferred because the routine compares an input string against 'Devon is the rightful heir!', 'The tyrant Mordea has no birthright!', and 'I have proof!').",
+      "Also can be entered with a local skip-ask flag (BP-1Ah) set so the Item::ask prompt is bypassed and the routine proceeds directly into a branch."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_LOGBOOK3::0080",
+      "kind": "main",
+      "role": "Scene/dialogue controller for the Tempest/heir confrontation",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_LOGBOOK3::METHOD::091C",
+      "kind": "helper",
+      "role": "Short action/gesture spawn primitive used to animate or queue small NPC behaviors during dialog (appears to take small byte params and an actor pointer)",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_LOGBOOK3::METHOD::15E7",
+      "kind": "helper",
+      "role": "Longer action/gesture spawn primitive used for queued actor behaviors (appears to take 3–4 bytes and an actor pointer)",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_LOGBOOK3::LOGBOOK4::11F2",
+      "kind": "helper",
+      "role": "Spawns or transitions to a related logbook subscene/scene object (invoked once with coordinates and context)",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_LOGBOOK3::FREE::1C19",
+      "kind": "helper",
+      "role": "Utility effect/spawn (visual/sound) used during dramatic beats",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_LOGBOOK3::FREE::29D8",
+      "kind": "helper",
+      "role": "Utility effect/spawn (numeric params) used elsewhere in scene",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_LOGBOOK3::FREE::2A56",
+      "kind": "helper",
+      "role": "Cleanup/destruct helper called with 0x200 and actor pointer — likely a despawn/free finalizer",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::ask",
+      "kind": "extern",
+      "role": "Present a string list to the player/process and return the chosen string (used to select the dialog branch)",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Emit dialogue lines from NPCs/items to players/processes",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::isDead",
+      "kind": "extern",
+      "role": "Query NPC life state to guard dialogue and actions",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::getHp",
+      "kind": "extern",
+      "role": "Read NPC HP to compute or decide damage applied during the scripted beat",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::receiveHit",
+      "kind": "extern",
+      "role": "Apply damage/hit to an NPC in a scripted way (used to force damage based on getHp)",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_LOGBOOK3::process LightningBolt",
+      "kind": "extern",
+      "role": "Invoke a lightning spell/effect as part of a dramatic scene action",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_LOGBOOK3::0080",
+        "callee": "U8P_LOGBOOK3::METHOD::091C",
+        "purpose": "Spawn short actor gestures/facing/timing actions repeatedly to animate NPC lines",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LOGBOOK3::0080",
+        "callee": "U8P_LOGBOOK3::METHOD::15E7",
+        "purpose": "Spawn longer or different queued actor behaviors tied to dialogue beats",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LOGBOOK3::0080",
+        "callee": "U8P_LOGBOOK3::LOGBOOK4::11F2",
+        "purpose": "Spawn or transition to a related logbook subscene using actor coordinates and context",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LOGBOOK3::0080",
+        "callee": "U8P_LOGBOOK3::FREE::1C19",
+        "purpose": "Spawn a general visual/sound effect at a dramatic moment",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LOGBOOK3::0080",
+        "callee": "U8P_LOGBOOK3::FREE::29D8",
+        "purpose": "Spawn another utility effect with numeric parameters",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LOGBOOK3::0080",
+        "callee": "U8P_LOGBOOK3::FREE::2A56",
+        "purpose": "Perform cleanup/despawn on actor pointers at the end of sequences",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_LOGBOOK3::0080",
+        "callee": "Item::ask",
+        "purpose": "Prompt the player with a constructed string list (BP-15h) and receive the chosen string (BP-17h) to drive major branches",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK3::0080",
+        "callee": "Item::bark",
+        "purpose": "Deliver dialogue lines from multiple actors to the player; used extensively to sequence the scene's exposition",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK3::0080",
+        "callee": "Npc::isDead",
+        "purpose": "Check if an NPC is dead and skip/alter barking, animation spawns, or damage application accordingly",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK3::0080",
+        "callee": "Npc::getHp",
+        "purpose": "Read an NPC's HP to compute the amount of scripted damage to apply via Item::receiveHit",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK3::0080",
+        "callee": "Item::receiveHit",
+        "purpose": "Apply forced damage/hit to an NPC as part of a scripted effect or 'punishment' beat",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK3::0080",
+        "callee": "U8P_LOGBOOK3::process LightningBolt",
+        "purpose": "Invoke a LightningBolt effect during a dramatic branch of the scene",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "LOGBOOK3::0080",
+    "behavior_summary_one_liner": "Orchestrates a multi-actor scripted scene about the 'rightful Tempest' (dialogue accusing Mordea or claiming Devon as heir).",
+    "external_call_count": 6,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

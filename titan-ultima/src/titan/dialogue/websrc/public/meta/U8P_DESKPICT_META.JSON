@@ -1,0 +1,77 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_DESKPICT.json",
+  "file": "U8P_DESKPICT",
+  "behavior_summary": [
+    "Responds to the 'U8P_DESKPICT::look' event for the desk-picture item by preparing and delivering a short description string ('painting ') to the viewer via the item's bark/display routine.",
+    "Before emitting the description it sets an info/config mask (constant 0x0208) and applies a process-exclude-like state to the object, likely to control how the bark/display is handled or to prevent re-entrance while the message is shown.",
+    "The routine constructs the literal string, calls Item::bark with the item and the string (targeted at the invoking PID), frees the constructed string, uses the bark return value in an implies operation, then suspends/returns."
+  ],
+  "notable_control_flow": [
+    "Event trigger: runs on Event 0 (U8P_DESKPICT::look) for the desk-picture item.",
+    "Set info (constant 0x0208) then set process-exclude state on the object — acts as a guard/behavior modifier prior to output.",
+    "Construct string 'painting ', push PID and string, call external Item::bark, capture return value.",
+    "Free the temporary string, apply an implies operation using the bark return value, then suspend/return the process."
+  ],
+  "open_questions": [
+    "Exact semantics of info mask 0x0208: what precise display/behavior options it encodes is inferred but not confirmed.",
+    "Precise mapping of stack/frame params: BP+06h is inferred to be the desk-picture object instance ('this') and a pushed pid directs the bark, but exact calling convention details are not explicit.",
+    "Whether the process-exclude state is permanent or temporary for the duration of the bark operation, and whether it prevents only this object's processing or broader interactions.",
+    "Meaning and effect of the implies operation on the bark return value — inferred to influence control flow but exact semantics remain uncertain."
+  ],
+  "main_function": {
+    "name": "U8P_DESKPICT::look",
+    "execution_form": "process",
+    "purpose": "Handle an item 'U8P_DESKPICT::look' event by presenting a short textual description ('painting ') to the viewing actor, with brief state/config adjustments around that action.",
+    "entry_conditions": [
+      "Event 0 — 'U8P_DESKPICT::look' invoked when a player or actor examines the desk picture (area/inspect trigger)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_DESKPICT::look",
+      "kind": "main",
+      "role": "Event handler for the desk-picture object's 'U8P_DESKPICT::look' action; prepares and emits the description string and manages temporary info/processing flags.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine used to display or emit a short message on behalf of an item/process; invoked to show 'painting '.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_DESKPICT::look",
+        "callee": "Item::bark",
+        "purpose": "Deliver the short description string ('painting ') to the specified pid/viewer via the item's display/bark mechanism.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "guard",
+    "animation"
+  ],
+  "quick_facts": {
+    "main_function": "DESKPICT::look",
+    "behavior_summary_one_liner": "Responds to the 'U8P_DESKPICT::look' event for the desk-picture item by preparing and delivering a short description string ('painting ') to the viewer via the item's bark/display routine.",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

@@ -1,0 +1,90 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_FIREREAG.json",
+  "file": "U8P_FIREREAG",
+  "behavior_summary": [
+    "U8P_FIREREAG::look runs when a player or actor 'looks at' (examines) a fire reagent item. It reads a single byte property/subtype from the item and, depending on that byte's value (0..5), causes the item/process to emit a short identifying material name to the viewer.",
+    "Values 0..5 map to six material names that are barked to the player: 'volcanic ash', 'pumice', 'obsidian', 'iron', 'brimstone', 'daemon bone' (order inferred from disassembly).",
+    "The routine uses a small test helper (PENT::0F4B) to compare the stored subtype byte against the literal values and then invokes the item's bark routine to display the chosen string."
+  ],
+  "notable_control_flow": [
+    "On entry (LOOK event), the code reads one byte from the item into local [BP-02h].",
+    "It sequentially tests that byte against constants 0 through 5 using PENT::0F4B; each successful test triggers a conditional path that calls process Item::bark with the corresponding material string.",
+    "Bark calls are wrapped with engine-level 'implies/suspend' style sequencing (inferred engine semantics) to queue/sequence the display; return/call cleanup uses a small temp slot.",
+    "After attempting all comparisons and possible bark calls, the function returns."
+  ],
+  "open_questions": [
+    "PENT::0F4B appears to be a byte equality/test helper; is it a simple equality comparison or does it perform a masked/tested comparison with other side effects?",
+    "Are the six material strings fixed per subtype across all contexts of this reagent, or can other game data override the mapping?",
+    "Exact semantics of the implied/suspend handshake around Item::bark: does it only control sequencing or can it affect whether subsequent game ticks/processes run?",
+    "Precise identity of the caller PID passed into Item::bark and whether the bark is visible to multiple processes (inferred as the examining player)."
+  ],
+  "main_function": {
+    "name": "U8P_FIREREAG::look",
+    "execution_form": "process",
+    "purpose": "Handle the LOOK (examine) event for a fire reagent item: read the item's subtype byte and, for values 0..5, cause the item to 'bark' a short material name to the viewer.",
+    "entry_conditions": [
+      "Triggered by the LOOK event (Event 0) when an actor/player examines the reagent item.",
+      "Runs when the engine requests an item's description (player inspects the item)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_FIREREAG::look",
+      "kind": "main",
+      "role": "LOOK/event handler for fire reagent items; maps a stored subtype byte to a human-readable material string and emits it.",
+      "confidence": "high"
+    },
+    {
+      "name": "PENT::0F4B",
+      "kind": "extern",
+      "role": "Helper used to test/compare the stored byte against literal values; returns a boolean-like result used to gate bark calls (appears to be an equality/test function).",
+      "confidence": "medium"
+    },
+    {
+      "name": "process Item::bark",
+      "kind": "extern",
+      "role": "Cause the item/process to emit/display a short text message to the specified process/player (used to show the reagent's material name).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_FIREREAG::look",
+        "callee": "PENT::0F4B",
+        "purpose": "Compare the byte read from the item ([BP-02h]) against constants 0..5; returns a boolean-like value to decide whether to bark the corresponding string.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FIREREAG::look",
+        "callee": "process Item::bark",
+        "purpose": "Emit a short descriptive string (material name) to the examining player/process when a subtype match is found.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_FIREREAG::look",
+    "behavior_summary_one_liner": "U8P_FIREREAG::look runs when a player or actor 'looks at' (examines) a fire reagent item. It reads a single byte property/subtype from the item and, depending on that byte's value (0..5), causes the item/process to emit a short identifying material name to the viewer.",
+    "external_call_count": 2,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

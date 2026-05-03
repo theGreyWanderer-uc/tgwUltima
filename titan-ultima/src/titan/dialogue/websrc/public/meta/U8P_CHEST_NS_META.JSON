@@ -1,0 +1,178 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_CHEST_NS.json",
+  "file": "U8P_CHEST_NS",
+  "behavior_summary": [
+    "Provides game logic for a chest item: a 'U8P_CHEST_NS::look' handler that produces a short descriptive bark and a 'use' handler that toggles the chest's open/closed state, plays a sound, manipulates the chest's animation frame, may open/close the chest UI (gump), and (when the game is running) iterates contained/embedded entries to invoke their use handlers.",
+    "The U8P_CHEST_NS::look handler (CHEST_NS::look) is triggered when an actor examines the chest and makes the item 'speak' the fixed prefix \"chest \".",
+    "The use handler (CHEST_NS::use) inspects chest quality and frame, decides whether to open or close, plays a sound effect, possibly closes the gump when closing, and — if the engine is active — parses stored chest data to process contained items by calling their use handlers. After a suspend/yield point it completes the open/close animation or opens the gump if appropriate."
+  ],
+  "notable_control_flow": [
+    "U8P_CHEST_NS::CHEST_NS::look: single-entry examine event -> sets info state -> Item::bark(\"chest \") -> suspend/return (simple linear flow).",
+    "U8P_CHEST_NS::CHEST_NS::use: read quality and frame -> playSFX -> branch on frame == 0 (closed) to prepare open sequence (set open_flag, target frame=4, delta=+1) else prepare close sequence (Item::closeGump, clear open_flag, target frame=0, delta=0xFF) -> if isGameRunning true then parse chest contents and call process Item::use on each discovered entry -> suspend/yield -> re-read frame -> if frame equals target and open_flag set then Item::openGump(param 7) else Item::setFrame(frame + delta) -> return.",
+    "The use flow includes a guarded iteration over contained entries only when isGameRunning is true, and a suspend point that defers final animation/gump decision until after the yield."
+  ],
+  "open_questions": [
+    "Exact semantics and encoding of the chest's internal data/loopscr format (how contained entries are stored and identified).",
+    "Meaning and usage of the chest 'quality' value read by Item::getQuality (it is read but not used here).",
+    "Why the open sequence compares frame == target after a suspend to decide between opening the gump vs applying a frame delta (precise animation/timing semantics).",
+    "Precise meanings of numeric constants used (target frame 4, openGump parameter 7, delta 0xFF) and whether they map to specific art/animation frames or UI variants."
+  ],
+  "main_function": {
+    "name": "U8P_CHEST_NS::look",
+    "execution_form": "process",
+    "purpose": "Respond to an actor examining the chest by producing a short descriptive bark/prefix (\"chest \"), updating item/process info, and returning to the engine.",
+    "entry_conditions": [
+      "Event-driven examine/U8P_CHEST_NS::look trigger (actor inspects or 'looks at' the chest)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_CHEST_NS::look",
+      "kind": "main",
+      "role": "Handle the 'U8P_CHEST_NS::look' (examine) event for the chest; call Item::bark with literal \"chest \".",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CHEST_NS::use",
+      "kind": "helper",
+      "role": "Handle the 'use' event for the chest: play sound, toggle open/close state via frame checks, open/close gump, and process contained items' use handlers when appropriate.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Emit a short text/message from the item to a player/process (used for descriptions and feedback).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getQuality",
+      "kind": "extern",
+      "role": "Return the item's quality property (read but not acted on in this script).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getFrame",
+      "kind": "extern",
+      "role": "Return the item's current frame/state for animation/logic branching.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CHEST_NS::playSFX",
+      "kind": "extern",
+      "role": "Play a sound effect associated with chest use (open/close).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::closeGump",
+      "kind": "extern",
+      "role": "Close the chest's UI/gump during a closing sequence.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CHEST_NS::isGameRunning",
+      "kind": "extern",
+      "role": "Engine guard: indicates whether it is safe to iterate/process contained items now.",
+      "confidence": "high"
+    },
+    {
+      "name": "process Item::use",
+      "kind": "extern",
+      "role": "Invoke contained items' use handlers discovered in chest data (performed via a process/loop call).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::openGump",
+      "kind": "extern",
+      "role": "Open the chest UI/gump (display contents) when an open sequence completes.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::setFrame",
+      "kind": "extern",
+      "role": "Change the item's animation frame/state (used to advance open/close animation).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_CHEST_NS::look",
+        "callee": "Item::bark",
+        "purpose": "Display/emote the chest description 'chest ' to the examining actor/process.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CHEST_NS::use",
+        "callee": "Item::getQuality",
+        "purpose": "Read chest quality (stored locally, not otherwise used in this script).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CHEST_NS::use",
+        "callee": "Item::getFrame",
+        "purpose": "Read current chest frame/state to decide open vs close behavior and for later comparison after suspend.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CHEST_NS::use",
+        "callee": "U8P_CHEST_NS::playSFX",
+        "purpose": "Play a chest-specific sound effect when the chest is used.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CHEST_NS::use",
+        "callee": "Item::closeGump",
+        "purpose": "Close the chest UI if the chest is being closed.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CHEST_NS::use",
+        "callee": "U8P_CHEST_NS::isGameRunning",
+        "purpose": "Guard whether to parse and process contained items (only iterate if the engine/game loop is active).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CHEST_NS::use",
+        "callee": "process Item::use",
+        "purpose": "Invoke contained items' use handlers discovered in stored chest data (cascading use effects).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CHEST_NS::use",
+        "callee": "Item::openGump",
+        "purpose": "Open the chest UI/gump (with parameter 7) after an open animation completes.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CHEST_NS::use",
+        "callee": "Item::setFrame",
+        "purpose": "Advance or retreat the chest's frame by delta to animate open/close when not opening the gump directly.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_CHEST_NS::CHEST_NS::look",
+    "behavior_summary_one_liner": "Provides game logic for a chest item: a 'U8P_CHEST_NS::look' handler that produces a short descriptive bark and a 'use' handler that toggles the chest's open/closed state, plays a sound, manipulates the chest's animation frame, may open/close the chest UI (gump), and (when the game is running) iterates contained/embedded entries to invoke their use handlers.",
+    "external_call_count": 9,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_GHOST.json",
+  "file": "U8P_GHOST",
+  "behavior_summary": [
+    "GHOST::look runs when an actor 'looks' at a ghost. It marks the target with info and process-exclude flags and causes the relevant process to emit the short label \"ghost \".",
+    "The routine uses the triggering process id (inferred from BP+06h) as the context for Item::bark, allocates a temporary string \"ghost \", calls Item::bark(pid, \"ghost \"), frees the temporary string, inspects the bark return value, then suspends/returns.",
+    "Overall effect at gameplay level: provide the player (or other inspecting process) with the visible/audible description of a ghost and mark the ghost object so it won't be reprocessed or will show info-state."
+  ],
+  "notable_control_flow": [
+    "Entry on Event 0 / U8P_GHOST::look (treated as an area-entry style trigger).",
+    "Set object info and process-exclude flags immediately on entry (guarding further processing).",
+    "Allocate/push a short literal string \"ghost \", convert to pointer and call external Item::bark in the inspector's process context.",
+    "After Item::bark returns, free the temporary string, push the return value, perform an implies/pop style check and then suspend/return — the bark return value is inspected to influence flow (exact effect inferred)."
+  ],
+  "open_questions": [
+    "Exact encoding and semantics of the 'info' write performed by the handler (which info id/value is set is not explicit).",
+    "Precise identity and semantics of BP+06h (inferred as the triggering process/pid) — this is very likely but not byte-level proven here.",
+    "What the implies/pop sequence does with the Item::bark return value (control-flow or interrupt handling) and whether any side effects depend on that value."
+  ],
+  "main_function": {
+    "name": "U8P_GHOST::look",
+    "execution_form": "process",
+    "purpose": "Respond to the 'U8P_GHOST::look' (examine) event for a ghost: mark the ghost with info/exclusion state and make the inspecting process emit/display the label \"ghost \".",
+    "entry_conditions": [
+      "Event 0 (U8P_GHOST::look) triggered when an actor inspects the ghost",
+      "Fast-area/trigger region entry semantics apply (function runs on U8P_GHOST::look/area-enter)"
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_GHOST::look",
+      "kind": "main",
+      "role": "Event handler for the 'U8P_GHOST::look' action on a ghost; coordinates state writes and a descriptive bark to the inspecting process.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_GHOST::look",
+        "callee": "Item::bark",
+        "purpose": "Cause the inspecting process (pid inferred from BP+06h) to emit/display the short description string \"ghost \".",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": [
+      {
+        "name": "info",
+        "likely_effect": "Set a display/inspection info-state on the ghost object so that it records being looked-at or changes how it is presented.",
+        "confidence": "medium"
+      },
+      {
+        "name": "process exclude",
+        "likely_effect": "Mark the object as excluded from normal processing (prevents further AI/processing until cleared or permanently), likely to avoid repeated handling immediately after U8P_GHOST::look.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "GHOST::look",
+    "behavior_summary_one_liner": "GHOST::look runs when an actor 'looks' at a ghost. It marks the target with info and process-exclude flags and causes the relevant process to emit the short label \"ghost \".",
+    "external_call_count": 1,
+    "flag_read_count": 0,
+    "flag_write_count": 2
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

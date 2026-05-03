@@ -1,0 +1,118 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_WARDEW.json",
+  "file": "U8P_WARDEW",
+  "behavior_summary": [
+    "WARDEW::look: When the wardrobe is examined (U8P_WARDEW::look event) the script composes the literal string \"wardrobe \" and asks the item to 'bark' that string to the viewer/player so the player sees the object's short description.",
+    "WARDEW::use: When the wardrobe is used/activated the script reads the item's status word, tests bit 0x0100 and uses that to decide whether to open or close the wardrobe UI/gump: bit set -> open gump with parameter 0x0D, bit clear -> close gump.",
+    "Behavior is localized to item operations (Item::bark, Item::getStatus, Item::openGump, Item::closeGump) and does not modify global flags in this excerpt."
+  ],
+  "notable_control_flow": [
+    "Event-driven: WARDEW::look runs on the 'U8P_WARDEW::look' (examine) event and returns after sending the bark; a small returned-value check and control-flow/suspend/pop sequence occurs after the bark call.",
+    "WARDEW::use performs a synchronous read of Item::getStatus, masks bit 0x0100, and conditionally calls Item::openGump(0x0D) or Item::closeGump based on that bit.",
+    "No inter-function control transfers between the two handlers in this excerpt; each event handler operates independently on the item instance parameter."
+  ],
+  "open_questions": [
+    "Which PID (viewer) is passed into WARDEW::look at runtime — the disassembly shows a pid pushed but the exact source/process is not explicit.",
+    "What exact semantic meaning does status bit 0x0100 represent for this item (inferred to indicate a gump/open state but not formally documented)?",
+    "What is the user-visible content/structure of the gump opened with parameter 0x0D (0x0D meaning inferred but not described here)?",
+    "Are there any side-effects (animation, sounds, or linked global state changes) when the gump opens/closes that are handled elsewhere?"
+  ],
+  "main_function": {
+    "name": "U8P_WARDEW::look",
+    "execution_form": "process",
+    "purpose": "Provide the wardrobe's short description to a viewer by composing the literal \"wardrobe \" and invoking the item's bark routine so the viewer/player sees that text.",
+    "entry_conditions": [
+      "Event 0 / U8P_WARDEW::look: triggered when an actor/avatar examines or 'looks' at the wardrobe object (fast-area/U8P_WARDEW::look event)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_WARDEW::look",
+      "kind": "main",
+      "role": "Event handler for 'U8P_WARDEW::look' that composes the text \"wardrobe \" and calls Item::bark to display it to the inspecting player/process.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_WARDEW::use",
+      "kind": "helper",
+      "role": "Event handler for 'use' that reads the item's status word and toggles the wardrobe gump: open (Item::openGump(0x0D)) when bit 0x0100 is set, otherwise close (Item::closeGump()).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine that displays or sends a short descriptive message (bark) to a player/process; used by U8P_WARDEW::look handlers to show item descriptions.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getStatus",
+      "kind": "extern",
+      "role": "Returns the item's status flags/word; used to inspect bit 0x0100 in the use handler.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::openGump",
+      "kind": "extern",
+      "role": "Opens the item's UI/gump with a provided parameter; called with 0x0D when status bit 0x0100 is set.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::closeGump",
+      "kind": "extern",
+      "role": "Closes the item's UI/gump; called when status bit 0x0100 is clear.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_WARDEW::look",
+        "callee": "Item::bark",
+        "purpose": "Send/display the wardrobe's short description string (\"wardrobe \") to the viewer/player.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WARDEW::use",
+        "callee": "Item::getStatus",
+        "purpose": "Retrieve the item's status flags to test bit 0x0100 which determines gump state.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WARDEW::use",
+        "callee": "Item::openGump",
+        "purpose": "Open the wardrobe's UI/gump with parameter 0x0D when the status bit 0x0100 is set.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WARDEW::use",
+        "callee": "Item::closeGump",
+        "purpose": "Close the wardrobe's UI/gump when the status bit 0x0100 is clear.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "WARDEW::look",
+    "behavior_summary_one_liner": "WARDEW::look: When the wardrobe is examined (U8P_WARDEW::look event) the script composes the literal string \"wardrobe \" and asks the item to 'bark' that string to the viewer/player so the player sees the object's short description.",
+    "external_call_count": 4,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

@@ -1,0 +1,265 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_MARBLE.json",
+  "file": "U8P_MARBLE",
+  "behavior_summary": [
+    "Provides gameplay behaviour for a marble item: describing itself when examined, allowing being thrown by a player/process, and responding to collisions/hits by being launched.",
+    "MARBLE::look displays a short description string (\"rolling sphere \") to the examiner and then returns per the U8P_MARBLE::look-event convention.",
+    "MARBLE::use computes a throw vector from the marble to a supplied target (using Item::getCX/getCY), normalizes axes into small steps (-1/0/1), injects randomness (urandom) as jitter and sign variation, and calls Item::hurl to launch the marble.",
+    "MARBLE::hit marks the item with a status bit (OR 0x4000) when it is the source of a hit and, if the item type equals the marble type (0x00D7), clears another status bit (AND with bit_not 0x0400).",
+    "MARBLE::gotHit converts an incoming strike/impulse into movement: if magnitude > 0 it computes scaled displacement/velocity components from striker vs marble positions, calls Item::hurl to apply motion, and for MARBLE-type items may invoke a second hurl with adjusted params."
+  ],
+  "notable_control_flow": [
+    "Event-driven: main entry is a 'U8P_MARBLE::look' event (MARBLE::look). Other behaviours are implemented as helpers invoked on use, hit, and gotHit events.",
+    "MARBLE::use contains normalization branches that map raw deltas to discrete direction steps and branches applying random jitter before the final hurl call.",
+    "MARBLE::hit unconditionally sets a status bit then conditionally clears another bit only when Item::getType == 0x00D7 (marble-specific branch).",
+    "MARBLE::gotHit early-exits if incoming magnitude/strike is zero; otherwise it computes and scales components, conditionally performs hurl, and has a type-specific duplicate-hurl branch for type 0x00D7."
+  ],
+  "open_questions": [
+    "Exact semantics and field ordering of Item::hurl parameters (what each numeric arg represents: x/y velocity, z, flags/pid) — inferred but not canonical.",
+    "Precise meaning of the event argument slots passed into use/hit/gotHit (BP+0Ah/BP+0Ch) — inferred as target coords or strike/magnitude but not firmly documented.",
+    "Why MARBLE-type (0x00D7) triggers a secondary hurl in gotHit — likely a special-case behaviour but exact gameplay intent is not explicit.",
+    "Whether additional global flags or world state are affected by these routines beyond the per-item status bits shown (no globals read/written in disassembly)."
+  ],
+  "main_function": {
+    "name": "U8P_MARBLE::look",
+    "execution_form": "process",
+    "purpose": "Handle the item's 'U8P_MARBLE::look' (examine) event by displaying a short description string to the examiner and then suspending/returning according to the U8P_MARBLE::look-event convention.",
+    "entry_conditions": [
+      "Event 0 — triggered when the Avatar or a process examines/looks at the marble item (examine/inspect action)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_MARBLE::look",
+      "kind": "main",
+      "role": "Entry point for the item's examine/U8P_MARBLE::look event; calls Item::bark with the description string and returns.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MARBLE::use",
+      "kind": "helper",
+      "role": "Handle a player/process 'use' action to throw the marble: compute deltas to a target, normalize directions, add random jitter, and call Item::hurl.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MARBLE::hit",
+      "kind": "helper",
+      "role": "Handle the marble being the source of a hit: set status bits and clear a bit for MARBLE-type items.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MARBLE::gotHit",
+      "kind": "helper",
+      "role": "Handle the marble receiving an external impulse: compute push vector from striker, scale by magnitude, and call Item::hurl; has a MARBLE-type special-case.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "External UI/display call used to show the item's description/message to a process/player.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::hurl",
+      "kind": "extern",
+      "role": "Engine function to launch/move the item with supplied numeric components/flags.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getCX",
+      "kind": "extern",
+      "role": "Return the item's X coordinate used for delta/trajectory computation.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getCY",
+      "kind": "extern",
+      "role": "Return the item's Y coordinate used for delta/trajectory computation.",
+      "confidence": "high"
+    },
+    {
+      "name": "urandom",
+      "kind": "extern",
+      "role": "Provide random values for jitter and sign/randomization in throw computations.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::orStatus",
+      "kind": "extern",
+      "role": "Set a status bit(s) on the item (used in hit to set 0x4000).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::andStatus",
+      "kind": "extern",
+      "role": "Apply AND to item status (used to clear specific bits by AND with bit_not mask).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getType",
+      "kind": "extern",
+      "role": "Return the item's type id; code compares to 0x00D7 to detect marble-specific behaviour.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_MARBLE::look",
+        "callee": "Item::bark",
+        "purpose": "Display the short description string 'rolling sphere ' to the examining process.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MARBLE::use",
+        "callee": "Item::getCX",
+        "purpose": "Read marble X coordinate to compute delta to target for throw.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MARBLE::use",
+        "callee": "Item::getCY",
+        "purpose": "Read marble Y coordinate to compute delta to target for throw.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MARBLE::use",
+        "callee": "U8P_MARBLE::urandom",
+        "purpose": "Add randomized jitter and occasional sign/step flipping to the computed throw vector.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MARBLE::use",
+        "callee": "Item::hurl",
+        "purpose": "Launch the marble using the computed/normalized/randomized components and context pid.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MARBLE::hit",
+        "callee": "Item::orStatus",
+        "purpose": "Set the item's status bit 0x4000 when the item is a hit source.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MARBLE::hit",
+        "callee": "Item::getType",
+        "purpose": "Check whether the item type equals 0x00D7 so the code can apply a marble-specific status clear.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MARBLE::hit",
+        "callee": "Item::andStatus",
+        "purpose": "Clear status bit 0x0400 for MARBLE-type items by ANDing with bit_not mask.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MARBLE::gotHit",
+        "callee": "Item::getCX",
+        "purpose": "Read marble X coordinate to compute push vector from striker.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MARBLE::gotHit",
+        "callee": "Item::getCY",
+        "purpose": "Read marble Y coordinate to compute push vector from striker.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MARBLE::gotHit",
+        "callee": "Item::hurl",
+        "purpose": "Apply computed impulse/movement to the marble; may be called twice for MARBLE-type items with adjusted parameters.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MARBLE::gotHit",
+        "callee": "Item::getType",
+        "purpose": "Detect marble type (0x00D7) to decide on the secondary hurl special-case.",
+        "confidence": "high"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_MARBLE::look",
+        "callee": "Item::bark",
+        "purpose": "UI bark to show the description string to the viewer.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MARBLE::use",
+        "callee": "Item::getCX",
+        "purpose": "Get X coordinate of item for throw calculations.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MARBLE::use",
+        "callee": "Item::getCY",
+        "purpose": "Get Y coordinate of item for throw calculations.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MARBLE::use",
+        "callee": "urandom",
+        "purpose": "Introduce randomness into throw direction and magnitude.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MARBLE::use",
+        "callee": "Item::hurl",
+        "purpose": "Perform the in-world throw/move of the marble.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MARBLE::hit",
+        "callee": "Item::orStatus",
+        "purpose": "Set hit-related item status flags.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MARBLE::hit",
+        "callee": "Item::andStatus",
+        "purpose": "Clear status flags conditionally when the item is a marble type.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MARBLE::hit",
+        "callee": "Item::getType",
+        "purpose": "Identify item type to apply marble-specific logic.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MARBLE::gotHit",
+        "callee": "Item::hurl",
+        "purpose": "Apply physics-like impulse: move the marble in response to hits.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MARBLE::gotHit",
+        "callee": "Item::getType",
+        "purpose": "Check for marble type to possibly perform a second hurl.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "MARBLE::look",
+    "behavior_summary_one_liner": "Provides gameplay behaviour for a marble item: describing itself when examined, allowing being thrown by a player/process, and responding to collisions/hits by being launched.",
+    "external_call_count": 10,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

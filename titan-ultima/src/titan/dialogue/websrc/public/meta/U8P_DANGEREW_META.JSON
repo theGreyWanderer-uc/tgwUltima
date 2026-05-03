@@ -1,0 +1,194 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_DANGEREW.json",
+  "file": "U8P_DANGEREW",
+  "behavior_summary": [
+    "When this entity is hit (Event 6 / U8P_DANGEREW::gotHit) the script inspects the incoming item/attack and a numeric parameter to decide between two primary reaction paths.",
+    "If the incoming parameter is zero or the attacking item fails scripted property checks, the function returns early and does nothing.",
+    "If the attacking item and parameter match a scripted condition, the script sets the attacker's visible frame and spawns a short-lived helper process that animates the frame over time (cycling frames and spawning a small visual/timing effect).",
+    "If the match fails, the script plays a fallback sound effect and — for non-dead NPC targets — computes a small random offset, obtains a direction from the item, and invokes a game METHOD (METHOD::0080) to apply a directional reaction (likely knockback or similar)."
+  ],
+  "notable_control_flow": [
+    "Early exit when the numeric parameter (BP+0Ah) is zero.",
+    "A guarded matching sequence reads item properties (quality, frame, shape) and branches: success -> set item frame + spawn helper; failure -> playSFX then NPC-specific reaction.",
+    "NPC branch checks Item::isNpc and Npc::isDead to avoid reacting to dead NPCs.",
+    "Helper process (U8P_DANGEREW::DANGEREW::0165) loops, incrementing/decrementing a small frame counter between bounds and suspending between steps until the animation completes."
+  ],
+  "open_questions": [
+    "Exact semantic meaning of the incoming numeric parameter at BP+0Ah (damage, type code, or frame/index) — inferred but not certain.",
+    "Precise purpose of METHOD::0080 (appears to apply movement/knockback or a directional effect) and details of how its parameters influence behavior.",
+    "Exact constant meanings used in the matching checks (shape/frame/quality constants) and whether they map to specific in-game item types.",
+    "What visual or gameplay effect FREE::1C19 spawns each animation step (likely a visual spark/timer) and whether it affects gameplay beyond visuals."
+  ],
+  "main_function": {
+    "name": "U8P_DANGEREW::gotHit",
+    "execution_form": "process",
+    "purpose": "Handle an entity being struck: inspect the attacking item and an incoming numeric parameter, change item frame and spawn an animation helper if matched; otherwise play a sound and (for living NPCs) invoke a directional reaction (likely knockback).",
+    "entry_conditions": [
+      "Event 6 (U8P_DANGEREW::gotHit) — runs when the entity is hit.",
+      "Requires a non-zero numeric parameter (BP+0Ah) to proceed past early guard."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_DANGEREW::gotHit",
+      "kind": "main",
+      "role": "Event handler for 'U8P_DANGEREW::gotHit' that dispatches between animation-spawn and fallback reaction paths.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DANGEREW::0165",
+      "kind": "helper",
+      "role": "Spawned animation routine: iterates a frame counter (bounds 1..5), sets item frames, spawns FREE::1C19 each step and suspends between steps; ends by resetting frame to 0.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getQuality",
+      "kind": "extern",
+      "role": "Query the attacking item's quality/quantity field to match scripted conditions.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::setFrame",
+      "kind": "extern",
+      "role": "Change the visible frame of an item (used both by the main handler and the helper animation).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DANGEREW::playSFX",
+      "kind": "extern",
+      "role": "Play a fallback sound effect when the primary match route is not taken.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::isNpc",
+      "kind": "extern",
+      "role": "Detect whether the target is an NPC to guard NPC-specific reaction logic.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::isDead",
+      "kind": "extern",
+      "role": "Check NPC liveness to avoid applying reactions to dead NPCs.",
+      "confidence": "high"
+    },
+    {
+      "name": "urandom",
+      "kind": "extern",
+      "role": "Provide a small random offset used in NPC reaction parameterization.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getDirFromItem",
+      "kind": "extern",
+      "role": "Extract a direction byte/value from the item used for directional reactions.",
+      "confidence": "high"
+    },
+    {
+      "name": "METHOD::0080",
+      "kind": "extern",
+      "role": "Apply a direction-based effect to the target (likely knockback or movement); called with direction, item pointer, and a local address.",
+      "confidence": "medium"
+    },
+    {
+      "name": "FREE::1C19",
+      "kind": "extern",
+      "role": "Spawned repeatedly by the helper animation; likely a short-lived visual/timing effect.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_DANGEREW::gotHit",
+        "callee": "U8P_DANGEREW::0165",
+        "purpose": "Spawn an animation process to cycle item frames after a successful match.",
+        "confidence": "high"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_DANGEREW::gotHit",
+        "callee": "Item::getQuality",
+        "purpose": "Read the attacking item's quality/quantity for conditional matching.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DANGEREW::gotHit",
+        "callee": "Item::setFrame",
+        "purpose": "Set the attacking item's frame once when the scripted condition matches (prepares/marks it for animation).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DANGEREW::gotHit",
+        "callee": "U8P_DANGEREW::playSFX",
+        "purpose": "Play a fallback sound when the match route is not taken.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DANGEREW::gotHit",
+        "callee": "Item::isNpc",
+        "purpose": "Decide whether to perform NPC-specific reaction logic.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DANGEREW::gotHit",
+        "callee": "Npc::isDead",
+        "purpose": "Guard against reacting to dead NPC targets.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DANGEREW::gotHit",
+        "callee": "urandom",
+        "purpose": "Add randomness to the NPC reaction parameter (small offset to the value passed to METHOD::0080).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DANGEREW::gotHit",
+        "callee": "Item::getDirFromItem",
+        "purpose": "Obtain a direction value from the item to pass to METHOD::0080.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DANGEREW::gotHit",
+        "callee": "METHOD::0080",
+        "purpose": "Apply the directional/knockback-like effect to the NPC using the computed params.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DANGEREW::0165",
+        "callee": "Item::setFrame",
+        "purpose": "Update the item's visible frame each animation step.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DANGEREW::0165",
+        "callee": "FREE::1C19",
+        "purpose": "Spawn a short-lived visual/timing effect each time the helper steps the frame counter.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_DANGEREW::DANGEREW::gotHit",
+    "behavior_summary_one_liner": "When this entity is hit (Event 6 / U8P_DANGEREW::gotHit) the script inspects the incoming item/attack and a numeric parameter to decide between two primary reaction paths.",
+    "external_call_count": 10,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

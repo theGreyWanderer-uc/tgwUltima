@@ -1,0 +1,161 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_HYDHAT.json",
+  "file": "U8P_HYDHAT",
+  "behavior_summary": [
+    "HYDHAT::hatch is a fast-area (Event 7) trigger handler that attempts to spawn a world item and a small free script near that item to drive post-spawn behavior, then activates the item.",
+    "On entry the function checks a global guard hydrosFree and immediately returns if hydrosFree == 2, preventing any U8P_HYDHAT::hatch activity when that global is set.",
+    "If allowed, the function creates an item instance (Item::create with params 0x00,0x50), finalizes/populates it (Item::pop), queries its world coordinates (Item::getZ, Item::getY, Item::getX), offsets Z and X by 0x32, spawns a free/standalone script (FREE::1C6D) at (Z+0x32, Y, X+0x32, 0), waits/suspends, then calls Item::use on the created item to trigger its behavior."
+  ],
+  "notable_control_flow": [
+    "Early-exit guard: read global hydrosFree and return immediately if value == 2.",
+    "Linear sequence when guard allows: create -> pop -> query coordinates -> spawn free script -> suspend/wait -> call Item::use on created item.",
+    "Spawned free script is placed at computed offsets relative to the created item's coordinates, suggesting synchronized visual/behavioral accompaniment."
+  ],
+  "open_questions": [
+    "What exact gameplay meaning and domain of hydrosFree is (why value 2 disables hatching) — only its read semantics are observed.",
+    "What behavior FREE::1C6D implements for the spawned script (animation/effect or logic tied to the hatched item) — only spawn parameters and identity are known.",
+    "The precise meaning of the numeric parameters passed to Item::pop (0x60, 0x3609, 0x4D4B) is not explicit (template id, graphics, flags are inferred but not confirmed).",
+    "Exact parameter order/meaning for Item::getZ when called with pid and 0x14 context is inferred but not fully confirmed."
+  ],
+  "main_function": {
+    "name": "U8P_HYDHAT::hatch",
+    "execution_form": "process",
+    "purpose": "Handle a U8P_HYDHAT::hatch-area trigger by creating and placing a new item in the world, spawning a short-lived free script near it (offset in X/Z), then activating the item (Item::use). Acts as the in-game mechanic that performs 'hatching' visuals/activation unless disabled by a global guard.",
+    "entry_conditions": [
+      "Invoked as Event 7 (fast-area entry / U8P_HYDHAT::hatch trigger).",
+      "Proceeds only if global hydrosFree != 2 (function returns immediately when hydrosFree == 2)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_HYDHAT::hatch",
+      "kind": "main",
+      "role": "Area-trigger handler that implements U8P_HYDHAT::hatch spawn-and-activate sequence",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::create",
+      "kind": "extern",
+      "role": "Allocate/create an item instance (called with 0x00,0x50); returned handle used for subsequent operations",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::pop",
+      "kind": "extern",
+      "role": "Finalize/populate the created item into world/engine with template/flags (0x60,0x3609,0x4D4B used)",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getZ",
+      "kind": "extern",
+      "role": "Query item's Z coordinate (called with pid and context 0x14 in this script)",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getY",
+      "kind": "extern",
+      "role": "Query item's Y coordinate",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getX",
+      "kind": "extern",
+      "role": "Query item's X coordinate",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::1C6D",
+      "kind": "extern",
+      "role": "Free/standalone script spawned to accompany the hatched item (spawned at computed coordinates)",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::use",
+      "kind": "extern",
+      "role": "Activate/process the created item after spawn/wait, likely to trigger the item's gameplay effect",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_HYDHAT::hatch",
+        "callee": "Item::create",
+        "purpose": "Allocate a new item instance of subtype/type 0x50 for the U8P_HYDHAT::hatch result",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_HYDHAT::hatch",
+        "callee": "Item::pop",
+        "purpose": "Populate/configure the newly created item with the provided template/flags (params 0x60,0x3609,0x4D4B); prepare it to exist in the world",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_HYDHAT::hatch",
+        "callee": "Item::getZ",
+        "purpose": "Obtain item's Z coordinate; result is incremented by 0x32 and used as spawn Z for the free script",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_HYDHAT::hatch",
+        "callee": "Item::getY",
+        "purpose": "Obtain item's Y coordinate for spawn location of the free script",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_HYDHAT::hatch",
+        "callee": "Item::getX",
+        "purpose": "Obtain item's X coordinate; result is incremented by 0x32 and used as spawn X for the free script",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_HYDHAT::hatch",
+        "callee": "FREE::1C6D",
+        "purpose": "Spawn a free/standalone script at (Z+0x32, Y, X+0x32, 0) to manage visual/temporal behavior tied to the U8P_HYDHAT::hatch",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_HYDHAT::hatch",
+        "callee": "U8P_HYDHAT::suspend/wait",
+        "purpose": "Pause/synchronize so the spawned free script or item placement can proceed before activating the item",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_HYDHAT::hatch",
+        "callee": "Item::use",
+        "purpose": "Activate/use the created item after spawn/wait; likely triggers the final gameplay effect of hatching",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "hydrosFree",
+        "likely_effect": "Acts as a guard that disables U8P_HYDHAT::hatch behavior when equal to 2; read at function start to early-exit if set",
+        "confidence": "high"
+      }
+    ],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "HYDHAT::hatch",
+    "behavior_summary_one_liner": "HYDHAT::hatch is a fast-area (Event 7) trigger handler that attempts to spawn a world item and a small free script near that item to drive post-spawn behavior, then activates the item.",
+    "external_call_count": 8,
+    "flag_read_count": 1,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

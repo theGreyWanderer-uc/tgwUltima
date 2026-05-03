@@ -1,0 +1,147 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_BLANK03.json",
+  "file": "U8P_BLANK03",
+  "behavior_summary": [
+    "This script pair implements a simple area-triggered spawn-and-flag mechanism tied to an object's 'egg id'.",
+    "U8P_BLANK03::enterFastArea (helper) runs when an actor/object enters the fast-area. It reads the object's Egg::getEggId(), performs a probabilistic check, and -- depending on the egg id mapping and random rolls -- may create an item (type 0x018B) with a small random quantity and place it at the object's X,Y,Z. If an item is spawned the script adds 100 to the object's egg id via Egg::setEggId(uword) to mark the object as having been processed.",
+    "U8P_BLANK03::leaveFastArea (main) runs when the actor/object leaves the fast-area. It reads Egg::getEggId(); if the value indicates the +100 marker is set (egg id >= 100) it subtracts 100 and writes the result back with Egg::setEggId(uword) to clear the marker."
+  ],
+  "notable_control_flow": [
+    "Entry/exit are driven by area triggers: enterFastArea executes on area entry and may early-return if the probabilistic test fails; U8P_BLANK03::leaveFastArea executes on area exit and only modifies the egg id if the +100 marker is present.",
+    "enterFastArea contains a mapping from low egg-id values (observed 0..6) to explicit min/max ranges, uses urandom to choose a value in that range, and only then creates and places the item. The spawn path sets quantity to 1 + urandom(2).",
+    "The pair uses Egg::setEggId to add/remove a 100-valued offset as a per-object flag to prevent repeated spawns while the marker is set (inferred guard)."
+  ],
+  "open_questions": [
+    "Exact semantic meaning of the second argument passed into Item::create(0x018B, value) — inferred as subtype/count/value but not certain.",
+    "Whether the +100 modification to egg id is exclusively used as a single-bit/marker flag or also encodes other state when combined with the base egg id.",
+    "Precise conditions of the combined probabilistic test in enterFastArea (interaction between egg id and urandom(100) threshold) — mapping and threshold are inferred from disassembly patterns."
+  ],
+  "main_function": {
+    "name": "U8P_BLANK03::leaveFastArea",
+    "execution_form": "process",
+    "purpose": "On area-exit, clear the per-object '+100' marker in the object's egg id if present by reading Egg::getEggId(), subtracting 100 when the value is >= 100, and writing the result back with Egg::setEggId(uword). This undoes the enter-time marker set when a spawn occurred.",
+    "entry_conditions": [
+      "Event 10: invoked when the actor/object leaves the configured fast-area trigger region."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_BLANK03::leaveFastArea",
+      "kind": "main",
+      "role": "Area-exit handler that clears the enter-time '+100' egg-id marker to allow future spawns.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BLANK03::enterFastArea",
+      "kind": "helper",
+      "role": "Area-entry handler that may spawn an item near the object based on Egg::getEggId(), a random chance test, and an egg-id -> min/max mapping; sets a '+100' marker on the object's egg id after spawning.",
+      "confidence": "medium"
+    },
+    {
+      "name": "Egg::getEggId",
+      "kind": "extern",
+      "role": "Read per-object egg id/state used as input to spawn logic and marker checks.",
+      "confidence": "high"
+    },
+    {
+      "name": "Egg::setEggId",
+      "kind": "extern",
+      "role": "Write updated egg id/state back to the object; used to add/remove the +100 marker.",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_BLANK03::leaveFastArea",
+        "callee": "Egg::getEggId",
+        "purpose": "Read the object's egg id/state to decide whether the +100 marker is present.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BLANK03::leaveFastArea",
+        "callee": "Egg::setEggId",
+        "purpose": "Write back the egg id with 100 subtracted to clear the marker when present.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BLANK03::enterFastArea",
+        "callee": "Egg::getEggId",
+        "purpose": "Read the object's egg id/state to select a spawn range and decide spawn behavior.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BLANK03::enterFastArea",
+        "callee": "urandom",
+        "purpose": "Perform chance checks (urandom(100) <= threshold), choose a random offset inside a mapped min..max range, and compute item quantity (urandom(2)).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BLANK03::enterFastArea",
+        "callee": "Item::create",
+        "purpose": "Instantiate an item of hard-coded type 0x018B using a computed secondary argument derived from the egg-id-based mapping/random selection.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BLANK03::enterFastArea",
+        "callee": "Item::setQuantity",
+        "purpose": "Set the spawned item's stack quantity to 1 + urandom(2) (resulting in 1 or 2).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BLANK03::enterFastArea",
+        "callee": "Item::getX",
+        "purpose": "Read the triggering object's X coordinate for item placement.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BLANK03::enterFastArea",
+        "callee": "Item::getY",
+        "purpose": "Read the triggering object's Y coordinate for item placement.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BLANK03::enterFastArea",
+        "callee": "Item::getZ",
+        "purpose": "Read the triggering object's Z coordinate for item placement.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BLANK03::enterFastArea",
+        "callee": "Item::pop",
+        "purpose": "Place/drop the created item at the object's coordinates in the world.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BLANK03::enterFastArea",
+        "callee": "Egg::setEggId",
+        "purpose": "Add 100 to the object's egg id to mark that the spawn action has occurred (preventing immediate repeat spawns while marked).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "spawn",
+    "flag-toggle",
+    "probabilistic"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_BLANK03::leaveFastArea",
+    "behavior_summary_one_liner": "This script pair implements a simple area-triggered spawn-and-flag mechanism tied to an object's 'egg id'.",
+    "external_call_count": 11,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

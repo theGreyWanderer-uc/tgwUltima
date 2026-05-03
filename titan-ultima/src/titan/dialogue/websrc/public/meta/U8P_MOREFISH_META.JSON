@@ -1,0 +1,108 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_MOREFISH.json",
+  "file": "U8P_MOREFISH",
+  "behavior_summary": [
+    "This script implements the game behavior for a consumable fish item. When a player 'looks' at the fish, the item emits a short description ('fish ').",
+    "When the player 'uses' (consumes) the fish, the item emits a consumption message ('Mmmm... '), is removed/destroyed from the world/inventory, and the player/avatar is fed (small numeric amount inferred).",
+    "BP+06h is the item/process identifier passed into handlers and is used as the target for Item::bark and Item::destroy calls. Temporary strings are allocated for messages and freed after use."
+  ],
+  "notable_control_flow": [
+    "U8P_MOREFISH::MOREFISH::look: constructs the literal 'fish ' string, calls Item::bark with the item PID, frees the string, sets an implied return/handled flag (implies pattern), then suspends/returns. (confidence: high)",
+    "U8P_MOREFISH::MOREFISH::use: sets item/process info state (engine opcodes), constructs 'Mmmm... ' and calls Item::bark, frees the string, calls Item::destroy on the same item/process, then calls FeedAvatar with an immediate 0x02 to restore hunger, and returns. (confidence: high)"
+  ],
+  "open_questions": [
+    "Exact semantic meaning of the 'implies' sequence used in the U8P_MOREFISH::look handler (how the engine interprets the pushed retval/implied flag) — inferred only from bytecode (confidence: medium).",
+    "Precise numeric unit/value semantics for the pushed 0x02 passed to FeedAvatar (likely hunger points but exact scale is inferred) — inferred (confidence: medium).",
+    "Whether any other engine-side state changes (beyond destroy and FeedAvatar) occur implicitly when the use handler sets process/info state prior to barking — observed but not fully identified (confidence: low)."
+  ],
+  "main_function": {
+    "name": "U8P_MOREFISH::look",
+    "execution_form": "process",
+    "purpose": "Respond to the 'U8P_MOREFISH::look' (inspect) event for the fish item by presenting a short description to the player and marking the event as handled.",
+    "entry_conditions": [
+      "Event 0 ('U8P_MOREFISH::look') dispatched by the game engine when an actor inspects or examines the fish item."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_MOREFISH::look",
+      "kind": "main",
+      "role": "Handle the 'U8P_MOREFISH::look' event: emit descriptive text and set handler return/handled state.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MOREFISH::use",
+      "kind": "helper",
+      "role": "Handle the 'use' (consume) event: play consumption text, destroy the item, and feed the avatar.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine/item routine to emit short text/dialog originating from an item/process.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::destroy",
+      "kind": "extern",
+      "role": "Engine routine to remove/destroy an item instance.",
+      "confidence": "high"
+    },
+    {
+      "name": "FeedAvatar",
+      "kind": "extern",
+      "role": "Engine routine to increase the avatar's food/hunger meter by a supplied amount.",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_MOREFISH::look",
+        "callee": "Item::bark",
+        "purpose": "Show a short descriptive string ('fish ') to the player/process that inspected the item.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MOREFISH::use",
+        "callee": "Item::bark",
+        "purpose": "Play the consumption message ('Mmmm... ') when the fish is used.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MOREFISH::use",
+        "callee": "Item::destroy",
+        "purpose": "Remove/consume the fish item after it has been used.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MOREFISH::use",
+        "callee": "FeedAvatar",
+        "purpose": "Restore a small amount of the avatar's hunger/food meter (immediate 0x02 observed; numeric unit inferred).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup"
+  ],
+  "quick_facts": {
+    "main_function": "MOREFISH::look",
+    "behavior_summary_one_liner": "This script implements the game behavior for a consumable fish item. When a player 'looks' at the fish, the item emits a short description ('fish ').",
+    "external_call_count": 4,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

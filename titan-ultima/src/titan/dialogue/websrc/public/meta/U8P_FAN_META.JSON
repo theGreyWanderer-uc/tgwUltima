@@ -1,0 +1,132 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_FAN.json",
+  "file": "U8P_FAN",
+  "behavior_summary": [
+    "Provides gameplay behavior for a fan item: a short 'U8P_FAN::look' handler that displays the item's label and a 'use' handler that toggles and animates the fan's visual frame while playing a sound.",
+    "FAN::look (entry event 0) causes the fan item to 'bark' the string \"fan \" to the triggering process/player — i.e., show its name/description.",
+    "FAN::use plays a fan sound effect, reads the item's current animation frame, and then animates the fan either forward (0 → 5) or backward (current → 0) by setting frames stepwise.",
+    "Each frame change in the animation calls Item::setFrame and spawns a short helper (FREE::1C19) with the triggering pid and a small byte argument; the script suspends between steps, producing a paced animation sequence."
+  ],
+  "notable_control_flow": [
+    "Event-driven: U8P_FAN::FAN::look runs on the 'U8P_FAN::look' event and does one fast bark/display action then returns.",
+    "U8P_FAN::FAN::use is conditional on the current frame value: if frame == 0 it increments through frames 0..5; otherwise it decrements toward 0. The branching decides animation direction.",
+    "Per-frame loop pattern: for each step call Item::setFrame, then spawn FREE::1C19 (pid, 0x05, 0) to create a short delay/continuation, then suspend — repeating until the end frame is reached.",
+    "playSFX is invoked once at the start of the 'use' handler to produce the fan sound cue prior to the frame-by-frame animation."
+  ],
+  "open_questions": [
+    "What exact behavior FREE::1C19 implements when spawned (appears to be a short delay/continuation helper but its precise effect/timing is not present here).",
+    "Which concrete sound id/parameters are passed to playSFX (the script calls playSFX but the specific sound constant and its in-game meaning are not shown).",
+    "Whether the pid passed/pushed into Item::bark and spawn is always the player/avatar process or sometimes another process (inferred as the triggering actor but not explicit).",
+    "Exact semantics of the byte argument 0x05 passed to spawn (inferred to be a short wait/time or action code)."
+  ],
+  "main_function": {
+    "name": "U8P_FAN::look",
+    "execution_form": "process",
+    "purpose": "Respond to the 'U8P_FAN::look' event by presenting the fan's short descriptive label to the triggering process/player via Item::bark.",
+    "entry_conditions": [
+      "Event 0 (U8P_FAN::look) triggered when a player or relevant actor examines/inspects the fan object."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_FAN::look",
+      "kind": "main",
+      "role": "Show item name/description when the fan is examined (calls Item::bark with \"fan \").",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FAN::use",
+      "kind": "helper",
+      "role": "Animate the fan on use: play SFX, read current frame, step frames up or down with per-step setFrame+spawn delays to produce an animated toggle.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "Engine item API used to present short text/labels from an item/process to a player/process.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FAN::playSFX",
+      "kind": "extern",
+      "role": "Play a sound effect when the fan is activated.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getFrame",
+      "kind": "extern",
+      "role": "Query the item's current animation/frame index used to decide animation direction.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::setFrame",
+      "kind": "extern",
+      "role": "Set the item's visible animation/frame index for each step of the fan animation.",
+      "confidence": "high"
+    },
+    {
+      "name": "spawn FREE::1C19",
+      "kind": "extern",
+      "role": "Spawn a short helper/timeout script after each frame change (likely used to pace the animation).",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_FAN::look",
+        "callee": "Item::bark",
+        "purpose": "Display the fan's name/description string \"fan \" to the triggering process/player.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FAN::use",
+        "callee": "U8P_FAN::playSFX",
+        "purpose": "Play the fan-use sound effect before animating frames.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FAN::use",
+        "callee": "Item::getFrame",
+        "purpose": "Retrieve the current frame index to decide whether to animate forward or backward.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FAN::use",
+        "callee": "Item::setFrame",
+        "purpose": "Set the item's frame after each step of the animation sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FAN::use",
+        "callee": "spawn FREE::1C19",
+        "purpose": "Queue a short helper/delay after setting a frame (used to pace the per-frame animation); called with (pid, 0x05, 0).",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [],
+    "writes": []
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_FAN::FAN::look",
+    "behavior_summary_one_liner": "Provides gameplay behavior for a fan item: a short 'U8P_FAN::look' handler that displays the item's label and a 'use' handler that toggles and animates the fan's visual frame while playing a sound.",
+    "external_call_count": 5,
+    "flag_read_count": 0,
+    "flag_write_count": 0
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

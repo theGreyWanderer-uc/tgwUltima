@@ -1,0 +1,230 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_KEYONEC.json",
+  "file": "U8P_KEYONEC",
+  "behavior_summary": [
+    "Provides item event handlers for a special key object: a simple on-U8P_KEYONEC::look handler that describes the key variant, and a complex on-use handler that can either perform a one-time interment ritual or fall back to alternate behavior (open keyring/other fallback).",
+    "On U8P_KEYONEC::look (KEYONEC::look) the script reads the key's frame and emits a short identifying text (bark) appropriate to that variant (e.g., 'Key of the Caretaker', 'Key of the Scion', 'Key of the Necromancer').",
+    "On use (KEYONEC::use) the script branches by the key's frame. For a particular frame (inferred frame==3) it checks a global guard (lothInterred). If not already set it validates the player target (inferred altar type), verifies reachability, scans nearby containers/tiles for required components (building a temporary list and counting variants), consumes/destroys chosen items, and runs a scripted, multi-stage interment ceremony: freezes the avatar (setAvatarInStasis), spawns timed/visual effects (FREE::*), animates NPCs (Npc::doAnim), plays sounds and camera quake, creates temporary sprites at world coordinates, updates the key's frame (Item::setFrame), and (inferred) sets lothInterred to mark completion.",
+    "If preconditions fail (lothInterred already set, wrong target, out of reach, or missing components) the use handler falls back to alternative behavior such as spawning KEYRING::0119 or printing short bark messages to inform the player."
+  ],
+  "notable_control_flow": [
+    "KEYONEC::look: single branch based on Item::getFrame() selecting which bark string to emit (deterministic mapping of frames to name strings).",
+    "KEYONEC::use: early branch on Item::getFrame() to select ritual vs fallback paths.",
+    "In ritual path there is a guard read of global lothInterred that short-circuits ritual if already performed.",
+    "Target validation path: obtain process target(), check Item::getType() equals the expected altar type, then call Item::canReach() to ensure the player can reach the target.",
+    "Resource-gathering loop: scan nearby tiles/containers, append candidates to a temporary slist, maintain per-variant accumulators, then select and destroy required items.",
+    "Scripted sequence: sequence of visual/sound/camera/NPC animation calls executed in order with stasis set around them; side effects include spawn of multiple FREE::* processes and Item::setFrame() to update visuals."
+  ],
+  "open_questions": [
+    "Exact numeric type id of the validated target is inferred (appears to be an altar) but not explicitly documented here; confirmation of type id (0x0274) is inferred.",
+    "Precise names, counts, and variant identities of the component items required by the ritual (how many of each frame/class must be present) are inferred from accumulation loops but not explicitly enumerated.",
+    "The explicit instruction that writes the global lothInterred flag is not shown in the excerpt but is inferred to occur at ritual completion; the exact write location and any additional side effects are not fully visible.",
+    "Behavior of spawned processes (KEYRING::0119, FREE::1C6D, FREE::1C19, FREE::1C8B) and the precise sprite ids/visual parameters used by createSprite are inferred by name but not fully specified."
+  ],
+  "main_function": {
+    "name": "U8P_KEYONEC::look",
+    "execution_form": "process",
+    "purpose": "Handle the 'U8P_KEYONEC::look' (examine) event for the key item: read the item's frame and emit a short identifying message corresponding to the key variant.",
+    "entry_conditions": [
+      "Event 0 / on-U8P_KEYONEC::look handler invoked when a player/actor examines the key item (enterFastArea semantics apply as area-trigger of a U8P_KEYONEC::look event)."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_KEYONEC::look",
+      "kind": "main",
+      "role": "on-U8P_KEYONEC::look handler that reads Item::getFrame() and calls Item::bark() with a name string for the key variant",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_KEYONEC::use",
+      "kind": "helper",
+      "role": "on-use handler that performs reach/target validation, resource scanning/consumption, and a scripted interment ritual (or falls back to spawning KEYRING::0119 / showing barks)",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getFrame",
+      "kind": "extern",
+      "role": "query the item's frame/variant used to select behavior and text",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::bark",
+      "kind": "extern",
+      "role": "emit a short text/dialog message associated with the item/process",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_KEYONEC::process target",
+      "kind": "extern",
+      "role": "retrieve the object the player targeted when using the item",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getType",
+      "kind": "extern",
+      "role": "return the target object's type id for validation (used to check for the altar)",
+      "confidence": "high"
+    },
+    {
+      "name": "spawn KEYRING::0119",
+      "kind": "extern",
+      "role": "fallback spawn when the ritual cannot proceed (inferred to open a keyring UI or alternate handling)",
+      "confidence": "medium"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [],
+    "external_calls": [
+      {
+        "caller": "U8P_KEYONEC::look",
+        "callee": "Item::getFrame",
+        "purpose": "Determine which key variant is being examined to choose the name string",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KEYONEC::look",
+        "callee": "Item::bark",
+        "purpose": "Display the variant-specific short name/description to the player",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KEYONEC::use",
+        "callee": "Item::getFrame",
+        "purpose": "Branch use behavior between ritual-capable variant(s) and fallback variants",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KEYONEC::use",
+        "callee": "U8P_KEYONEC::process target",
+        "purpose": "Obtain the player's current target for validation (ensure the use is applied to the correct altar/object)",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KEYONEC::use",
+        "callee": "Item::getType",
+        "purpose": "Verify the targeted object is the expected ritual altar/type before proceeding",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KEYONEC::use",
+        "callee": "Item::canReach",
+        "purpose": "Check reachability of the target to prevent out-of-range use",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KEYONEC::use",
+        "callee": "Npc::doAnim",
+        "purpose": "Animate NPC(s) involved in the ritual sequence",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KEYONEC::use",
+        "callee": "U8P_KEYONEC::setAvatarInStasis",
+        "purpose": "Temporarily freeze the player/avatar during the scripted ceremony",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KEYONEC::use",
+        "callee": "spawn FREE::1C6D",
+        "purpose": "Spawn a visual/timed effect used during the interment sequence",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_KEYONEC::use",
+        "callee": "spawn FREE::1C19",
+        "purpose": "Spawn an additional visual/timed effect during the ritual",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_KEYONEC::use",
+        "callee": "spawn FREE::1C8B",
+        "purpose": "Spawn an additional visual/timed effect during the ritual",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_KEYONEC::use",
+        "callee": "U8P_KEYONEC::createSprite",
+        "purpose": "Create a temporary ritual sprite at the key/altar coordinates for visual feedback",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KEYONEC::use",
+        "callee": "Item::setFrame",
+        "purpose": "Update the key item's visual frame after parts of the ritual (reflecting consumed/changed state)",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KEYONEC::use",
+        "callee": "U8P_KEYONEC::playSFX",
+        "purpose": "Play sound effects to emphasize key moments in the ceremony (quake, completion)",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KEYONEC::use",
+        "callee": "Camera::startQuake",
+        "purpose": "Begin a camera quake effect to dramatize the ritual",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KEYONEC::use",
+        "callee": "Camera::stopQuake",
+        "purpose": "Stop the camera quake effect after the dramatic moment",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KEYONEC::use",
+        "callee": "spawn KEYRING::0119",
+        "purpose": "Fallback behavior when ritual cannot proceed (lothInterred set or other early failures)",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_KEYONEC::use",
+        "callee": "Item::getX / Item::getY / Item::getZ",
+        "purpose": "Query world coordinates to place effects and sprites at the key/altar location",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KEYONEC::use",
+        "callee": "Item::getQuantity / Item::destroy",
+        "purpose": "Examine quantities of candidate items and consume/destroy chosen components as part of the ritual",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "lothInterred",
+        "likely_effect": "Guard preventing re-running the Lothian interment ritual; read early in U8P_KEYONEC::use to take a fallback path when set",
+        "confidence": "high"
+      }
+    ],
+    "writes": [
+      {
+        "name": "lothInterred",
+        "likely_effect": "Set to mark that the interment ritual has completed successfully, preventing future repetitions of the ceremony (inferred from surrounding code and control flow)",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_KEYONEC::look",
+    "behavior_summary_one_liner": "Provides item event handlers for a special key object: a simple on-U8P_KEYONEC::look handler that describes the key variant, and a complex on-use handler that can either perform a one-time interment ritual or fall back to alternate behavior (open keyring/other fallback).",
+    "external_call_count": 19,
+    "flag_read_count": 1,
+    "flag_write_count": 1
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}

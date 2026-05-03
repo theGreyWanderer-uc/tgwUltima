@@ -1,0 +1,207 @@
+{
+  "sidecar_schema_version": "1.1.0",
+  "source_of_truth": "dialogue/json/U8P_CONTWATR.json",
+  "file": "U8P_CONTWATR",
+  "behavior_summary": [
+    "Provides a continuous-water area effect: when an actor/trigger enters a designated fast-area the script (unless globally disabled) starts a background conversion/animation process that replaces certain static items in the area with animated water/splash items and drives per-item animation until completion.",
+    "U8P_CONTWATR::enterFastArea is the entry point that guards startup with a global restart guard (reStartedFall) and a global disable flag (hydrosFree). When allowed it marks the guard and spawns an area-scanner/initializer.",
+    "The area-scanner (U8P_CONTWATR::02C9) enumerates items in the area, records their coordinates, destroys originals, creates replacement water-animation items, pops them into the world and attaches a short-lived per-item updater (U8P_CONTWATR::0249) to each created item.",
+    "The per-item updater (U8P_CONTWATR::0249) watches an item's animation frame and — on a start frame — spawns the full per-item animator (U8P_CONTWATR::00E7) exactly once for that item; it also advances frames and triggers timed cleanup jobs as items finish.",
+    "The animator (U8P_CONTWATR::00E7) creates additional ephemeral items at offsets, pops them into the world, steps through animation frames while repeatedly spawning short cleanup jobs (FREE::1C19), and sets a one-time global flag (doneKeepFallEnd) when a terminal frame condition is reached.",
+    "On fast-area exit (U8P_CONTWATR::leaveFastArea) the script clears the restart guard (reStartedFall = 0), plays a sound/music cue (playMusic(0x66)), and invokes an external cleanup/free routine (FREE::2A56) on the area data."
+  ],
+  "notable_control_flow": [
+    "U8P_CONTWATR::enterFastArea immediately returns if global hydrosFree is non-zero (global disable).",
+    "U8P_CONTWATR::enterFastArea checks global reStartedFall; it only spawns the initializer U8P_CONTWATR::02C9 if reStartedFall == 0 and then sets reStartedFall = 1 to prevent duplicate spawns while the effect is active.",
+    "U8P_CONTWATR::02C9 loops over area contents and for each matched item does: record coords -> Item::destroy(original) -> Item::create(new water item) -> Item::pop(new, coords) -> spawn U8P_CONTWATR::0249(new).",
+    "U8P_CONTWATR::0249 conditionally spawns U8P_CONTWATR::00E7 when a specific start frame is observed (guarded by a per-instance byte) and otherwise advances frames toward a terminal frame, spawning FREE::1C19 as items reach or pass specific frames.",
+    "U8P_CONTWATR::00E7 runs a per-item animation loop: create/pop ephemeral items at offsets, step frames using Item::setFrame/getFrame, spawn FREE::1C19 periodically, and set doneKeepFallEnd = 1 once on a particular terminal condition."
+  ],
+  "open_questions": [
+    "Exact item type IDs and shape predicates used by U8P_CONTWATR::02C9 to select and replace area items are not explicit; the precise visual types of replacement items are inferred from create/pop patterns.",
+    "Precise semantics and timing of FREE::1C19 and FREE::2A56 (their internal behavior and lifetime) are external to the script and only inferred from usage.",
+    "The visual/aural effect intended by playMusic(0x66) on leaveFastArea is known to be a cue but the player-facing meaning (music vs short sound) is not explicit.",
+    "Whether multiple distinct animator instances interact via doneKeepFallEnd (beyond setting it once) and the intended global gameplay implication of doneKeepFallEnd is inferred but not fully certain."
+  ],
+  "main_function": {
+    "name": "U8P_CONTWATR::enterFastArea",
+    "execution_form": "process",
+    "purpose": "Start the continuous-water initialization for the area when an actor enters the fast-area trigger, unless globally disabled or already started. Spawn the area scanner/initializer and set a restart guard to prevent duplicate starts.",
+    "entry_conditions": [
+      "Event: fast-area entry (the function is invoked on area/trigger entry).",
+      "Global hydrosFree must be zero (if non-zero the function returns immediately).",
+      "If global reStartedFall == 0 then the function proceeds to set reStartedFall = 1 and spawn U8P_CONTWATR::02C9 with the area item reference parameter."
+    ],
+    "confidence": "high"
+  },
+  "function_map": [
+    {
+      "name": "U8P_CONTWATR::enterFastArea",
+      "kind": "main",
+      "role": "Area entry handler that guards and spawns the area-scanner; sets the global restart guard.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CONTWATR::leaveFastArea",
+      "kind": "helper",
+      "role": "Area exit handler that clears the restart guard, plays an audio cue (playMusic(0x66)), and invokes area cleanup (FREE::2A56).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CONTWATR::00E7",
+      "kind": "helper",
+      "role": "Per-item animator/particle controller: creates ephemeral items, drives frame animation, spawns timed cleanup jobs (FREE::1C19), and sets a one-time end flag (doneKeepFallEnd).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CONTWATR::0249",
+      "kind": "helper",
+      "role": "Short-lived per-item updater/frame watcher: detects start frames to spawn the animator (U8P_CONTWATR::00E7) once per item and advances/finishes item frames, spawning cleanup jobs as frames complete.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CONTWATR::02C9",
+      "kind": "helper",
+      "role": "Area scanner / item converter: enumerates items in the area, destroys originals, creates and pops replacement water-animation items, and spawns per-item updaters (U8P_CONTWATR::0249).",
+      "confidence": "high"
+    }
+  ],
+  "call_analysis": {
+    "internal_calls": [
+      {
+        "caller": "U8P_CONTWATR::enterFastArea",
+        "callee": "U8P_CONTWATR::02C9",
+        "purpose": "Spawn the area scanner/initializer to convert area items into animated water items when the area is entered.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CONTWATR::02C9",
+        "callee": "U8P_CONTWATR::0249",
+        "purpose": "Spawn a per-item updater for each newly-created water item so the item animation is advanced and the animator can be started later.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CONTWATR::0249",
+        "callee": "U8P_CONTWATR::00E7",
+        "purpose": "Start the full per-item animator exactly once when a created item's frame reaches a specific start frame (guarded by a per-instance byte).",
+        "confidence": "high"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_CONTWATR::leaveFastArea",
+        "callee": "playMusic",
+        "purpose": "Play an audio cue (called with 0x66) when the area is left.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CONTWATR::leaveFastArea",
+        "callee": "FREE::2A56",
+        "purpose": "Invoke external cleanup/free routine on the area/object when leaving the area.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CONTWATR::00E7",
+        "callee": "FREE::1C19",
+        "purpose": "Spawn short-lived cleanup/timer jobs while animating an item; used repeatedly during the animation loop.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CONTWATR::0249",
+        "callee": "FREE::1C19",
+        "purpose": "Spawn a cleanup/timer job as items reach terminal frames during per-item update.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CONTWATR::02C9",
+        "callee": "Item::destroy",
+        "purpose": "Remove original static items from the area before creating replacement animated water items.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CONTWATR::02C9",
+        "callee": "Item::create",
+        "purpose": "Create new animated water/splash items to replace destroyed originals.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CONTWATR::02C9",
+        "callee": "Item::pop",
+        "purpose": "Place the newly-created water items into the world at recorded coordinates.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CONTWATR::00E7",
+        "callee": "Item::create",
+        "purpose": "Create ephemeral temporary items used during animation (e.g., splashes) at offsets from the main item.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CONTWATR::00E7",
+        "callee": "Item::pop",
+        "purpose": "Place ephemeral animation items at computed offsets from the animated item.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CONTWATR::00E7",
+        "callee": "Item::getX / Item::getY / Item::getZ",
+        "purpose": "Read the animated item's coordinates to compute offsets for ephemeral items.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CONTWATR::0249",
+        "callee": "Item::getFrame / Item::setFrame",
+        "purpose": "Read and change item frames to detect start conditions and advance animations toward completion.",
+        "confidence": "high"
+      }
+    ]
+  },
+  "global_flags": {
+    "reads": [
+      {
+        "name": "hydrosFree",
+        "likely_effect": "A global disable: when non-zero, U8P_CONTWATR::enterFastArea returns immediately and no initialization/spawn occurs.",
+        "confidence": "high"
+      },
+      {
+        "name": "reStartedFall",
+        "likely_effect": "A global restart guard read to decide whether to spawn the area-scanner; combined with writes it functions as a global restart guard preventing duplicate startups.",
+        "confidence": "high"
+      },
+      {
+        "name": "doneKeepFallEnd",
+        "likely_effect": "Read by the animator to gate a one-time end-of-animation action; its exact gameplay semantics are inferred (marks that an end action was performed).",
+        "confidence": "medium"
+      }
+    ],
+    "writes": [
+      {
+        "name": "reStartedFall",
+        "likely_effect": "Set to 1 by U8P_CONTWATR::enterFastArea when starting the background process and cleared to 0 by U8P_CONTWATR::leaveFastArea on exit — acts as a global restart guard.",
+        "confidence": "high"
+      },
+      {
+        "name": "doneKeepFallEnd",
+        "likely_effect": "Set to 1 by U8P_CONTWATR::00E7 when a particular terminal frame condition is reached, preventing repetition of that end-of-animation action.",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "ui_tags": [
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
+  ],
+  "quick_facts": {
+    "main_function": "U8P_CONTWATR::enterFastArea",
+    "behavior_summary_one_liner": "Provides a continuous-water area effect: when an actor/trigger enters a designated fast-area the script (unless globally disabled) starts a background conversion/animation process that replaces certain static items in the area with animated water/splash items and drives per-item animation until completion.",
+    "external_call_count": 11,
+    "flag_read_count": 3,
+    "flag_write_count": 2
+  },
+  "hypotheses": {
+    "parameters_and_data_flow": [],
+    "local_variable_inference": []
+  }
+}
