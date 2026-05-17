@@ -5,6 +5,8 @@ import { LookPanel } from './LookPanel';
 import { ShopPanel } from './ShopPanel';
 import { BookPanel } from './BookPanel';
 import { UtilPanel } from './UtilPanel';
+import { FEATURE_DIALOGUE_WALKER_EXPORT_BUTTON } from './featureFlags';
+import { downloadDialogueWalkMarkdown } from './exportDialogueWalker';
 import type { DialogueMessage, NPCFile, DialogueNode, VariableHint } from './types';
 
 const OPEN_GLOBAL_FLAGS_EVENT = 'open-global-flags';
@@ -23,6 +25,7 @@ export function DialoguePlayer() {
     endConversation,
     conditionPolicy,
     setConditionPolicy,
+    npcIndex,
   } = useWorldState();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [lookOpen, setLookOpen] = useState(false);
@@ -84,6 +87,8 @@ export function DialoguePlayer() {
     && !hasLook
     && !hasShop
     && Object.values(selectedNpc.functions).some(f => f.type === 'behavior' || f.type === 'utility');
+  const canExportDialogueWalk = FEATURE_DIALOGUE_WALKER_EXPORT_BUTTON && hasTalk;
+  const exportDialogueWalk = () => downloadDialogueWalkMarkdown(selectedNpc, npcIndex);
 
   if (!engine) {
     return (
@@ -127,6 +132,17 @@ export function DialoguePlayer() {
             {hasTalk && (
               <button className="btn btn-primary" onClick={() => startTalking(selectedNpc)}>
                 Talk to {selectedNpc.npc}
+              </button>
+            )}
+            {canExportDialogueWalk && (
+              <button
+                className="btn"
+                onClick={exportDialogueWalk}
+                type="button"
+                title="Export dialogue walk markdown"
+                aria-label={`Export ${selectedNpc.npc} dialogue walk markdown`}
+              >
+                Export
               </button>
             )}
             {hasLook && (
@@ -215,6 +231,17 @@ export function DialoguePlayer() {
             </button>
           </div>
           <button className="btn btn-small" onClick={endConversation}>New Conversation</button>
+          {canExportDialogueWalk && (
+            <button
+              className="btn btn-small"
+              onClick={exportDialogueWalk}
+              type="button"
+              title="Export dialogue walk markdown"
+              aria-label={`Export ${selectedNpc.npc} dialogue walk markdown`}
+            >
+              Export
+            </button>
+          )}
           <div className="policy-controls">
             <span className="policy-label">Flags:</span>
             <button className="btn btn-tiny" onClick={resetCurrentNpcFlags} type="button">
