@@ -10,6 +10,35 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ---
 
+## [0.6.4]
+
+### Added
+
+- **U7 loose NPC schedule exports** — added `titan u7 npc-dump` for loose
+  `npc.dat` / `GAMEDAT` data and `titan u7 schedule-dump` for loose
+  `schedule.dat`, including automatic sibling `npc.dat` name resolution.
+- **U7 TFA reference notes** — added a source-checked reference for
+  `TFA.DAT`, `SHPDIMS.DAT`, `WGTVOL.DAT`, `OCCLUDE.DAT`, shape classes, and
+  BG/SI animation nibbles.
+
+### Fixed
+
+- Corrected U7 NPC inventory skipping for IREG special entries, allowing
+  `npc.dat` parsing to continue past Avatar inventory and export all declared
+  NPC records.
+- Removed duplicate raw type-flag columns from U7 NPC CSV exports.
+- Corrected U7 TFA parsing so BG/SI animation bytes at offset `3 * 1024` are
+  decoded as packed animation nibbles instead of extra shape records.
+- Corrected U7 SHPDIMS decoding/export labels to expose raw `dimY, dimX`
+  bytes, X/Y obstacle bits, and decoded dimension payloads.
+
+### Known Issues
+
+- U7 NPC sex is exported as `UNKNOWN` for loose original `npc.dat` files,
+  because the available type-flag field is not reliable in these source files.
+
+---
+
 ## [0.6.3]
 
 ### Added

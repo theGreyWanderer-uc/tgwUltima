@@ -880,6 +880,12 @@ titan dialogue launch --host 127.0.0.1 --port 4173
 
 > Ultima 7 support is under active development. Commands listed below are
 > available now; more will be added in future releases.
+>
+> Unless otherwise noted, U7 `.dat` inspection commands target the Exult
+> loose-file flavor of the data (`GAMEDAT/`, `STATIC/`, and Exult save
+> entries). They are useful for original data extracted into Exult-compatible
+> files and for Exult-generated saves, but are not intended as generic parsers
+> for every untouched commercial archive/container layout.
 
 ### U7 shape commands
 
@@ -1256,6 +1262,12 @@ Three output formats:
 > format (3 bytes × 1024 shapes + 512 animation nibbles).  The structure
 > is identical — only the per-shape flag values differ between games.
 > Run `typeflag-dump` on each game's `STATIC/` to compare.
+>
+> **Format note:** TITAN follows Exult's interpretation of the static metadata
+> set: `TFA.DAT`, `SHPDIMS.DAT`, `WGTVOL.DAT`, `OCCLUDE.DAT`, and the
+> 512-byte TFA animation tail at offset `3 * 1024`. Exult-only text metadata
+> such as `shape_info.txt` flags is separate; for example `on_fire` is stored
+> in Exult's `Shape_info::shape_flags`, not in `TFA.DAT`.
 
 ```
 titan u7 typeflag-dump [static] [--game bg|si] [-o FILE] [-f FORMAT]
@@ -1412,6 +1424,32 @@ titan u7 save-info exult01si.sav -o save_report.txt
 
 ---
 
+#### `u7 npc-dump`
+
+Dump NPC data from a loose Exult `npc.dat` file or a `GAMEDAT/` directory.
+This is the non-save equivalent of `u7 save-npcs`.
+
+```
+titan u7 npc-dump <npc.dat|GAMEDAT_DIR> [--game bg|si] [--static DIR] [-o FILE] [-f FORMAT]
+```
+
+If a directory is supplied, TITAN reads `<dir>/npc.dat`. For reliable
+inventory skipping, it uses `--static`, `titan.toml`, or a sibling `STATIC/`
+directory to load `TFA.DAT`.
+
+> **Format note:** This command is aimed at Exult-style loose `GAMEDAT/` plus
+> `STATIC/` layouts. For loose original `npc.dat` exports, the `female` column
+> is reported as `UNKNOWN` because the available type-flag field is not
+> reliable in this Exult-compatible file flow.
+
+**Examples**
+```bash
+titan u7 npc-dump gamedat/ -f detail
+titan u7 npc-dump gamedat/npc.dat --static STATIC/ -f csv -o npcs.csv
+```
+
+---
+
 #### `u7 save-npcs`
 
 Dump NPC data from `npc.dat` inside an Exult savegame.  Parses each NPC's
@@ -1458,11 +1496,35 @@ titan u7 save-npcs exult01si.sav --game si -f detail
 
 ---
 
+#### `u7 schedule-dump`
+
+Dump NPC daily schedules from a loose Exult `schedule.dat` file or a directory.
+If a sibling `npc.dat` is present, NPC names are resolved automatically.
+
+> **Format note:** This command is aimed at Exult-style loose `GAMEDAT/`
+> schedule files. Original 4-byte schedule entries are decoded through the
+> same Exult-compatible flow used by the NPC schedule export tooling.
+
+```
+titan u7 schedule-dump <schedule.dat|DIR> [--npc-file NPC_DAT] [--game bg|si] [--static DIR] [-o FILE] [-f FORMAT]
+```
+
+**Examples**
+```bash
+titan u7 schedule-dump gamedat/ -f detail
+titan u7 schedule-dump STATIC/schedule.dat --npc-file gamedat/npc.dat -f csv -o schedules.csv
+```
+
+---
+
 #### `u7 save-schedules`
 
 Dump NPC daily schedules from `schedule.dat` inside an Exult savegame.
 Auto-detects the schedule format: original U7 4-byte entries, Exult 8-byte
 entries, or Exult 8-byte with script names.
+
+NPC names are automatically resolved from `npc.dat` in the same save archive
+when possible.
 
 Each schedule entry specifies a 3-hour time period (0 = midnight–2am …
 7 = 9pm–11pm), an activity type (e.g. `sleep`, `eat`, `tend_shop`,
@@ -1474,12 +1536,14 @@ Three output formats:
 - **csv** — machine-readable CSV
 
 ```
-titan u7 save-schedules <file> [-o FILE] [-f FORMAT]
+titan u7 save-schedules <file> [--game bg|si] [--static DIR] [-o FILE] [-f FORMAT]
 ```
 
 | Argument | Description |
 |----------|-------------|
 | `file` | Exult `.sav` file |
+| `--game bg|si` | Select config section for default STATIC lookup (`bg` default) |
+| `--static DIR` | Override STATIC directory for reliable `npc.dat` inventory parsing |
 | `-o FILE`, `--output FILE` | Write dump to this file |
 | `-f FORMAT`, `--format FORMAT` | Output format: `summary` (default), `detail`, `csv` |
 
@@ -1824,7 +1888,9 @@ A value on the command line always wins.
 | `u7 save-extract` | Extract entries from an Exult U7 savegame |
 | `u7 gflag-dump` | Dump global flags from a U7 save or `flaginit` file |
 | `u7 save-info` | Show save metadata: identity, timestamp, party, game state |
+| `u7 npc-dump` | Dump NPC data from loose Exult `npc.dat` / `GAMEDAT` |
 | `u7 save-npcs` | Dump NPC data from an Exult U7 savegame |
+| `u7 schedule-dump` | Dump schedules from loose Exult `schedule.dat` / `GAMEDAT` |
 | `u7 save-schedules` | Dump NPC schedules from an Exult U7 savegame |
 | `u7 font-create` | Interactive wizard for creating U7 font shapes from TTF |
 | `dialogue prepare` | Generate dialogue runtime artifacts |
