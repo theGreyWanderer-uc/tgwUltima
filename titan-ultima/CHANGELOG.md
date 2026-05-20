@@ -17,9 +17,10 @@ This project uses [Semantic Versioning](https://semver.org/):
 - **U7 loose NPC schedule exports** — added `titan u7 npc-dump` for loose
   `npc.dat` / `GAMEDAT` data and `titan u7 schedule-dump` for loose
   `schedule.dat`, including automatic sibling `npc.dat` name resolution.
-- **U7 TFA reference notes** — added a source-checked reference for
-  `TFA.DAT`, `SHPDIMS.DAT`, `WGTVOL.DAT`, `OCCLUDE.DAT`, shape classes, and
-  BG/SI animation nibbles.
+- **U7 TFA reference output and notes** — added
+  `u7 typeflag-dump --format detail` output plus source-checked parser notes
+  for `TFA.DAT`, `SHPDIMS.DAT`, `WGTVOL.DAT`, `OCCLUDE.DAT`, shape classes,
+  and BG/SI animation nibbles.
 
 ### Fixed
 
