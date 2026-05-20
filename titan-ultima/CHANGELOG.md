@@ -31,6 +31,9 @@ This project uses [Semantic Versioning](https://semver.org/):
   decoded as packed animation nibbles instead of extra shape records.
 - Corrected U7 SHPDIMS decoding/export labels to expose raw `dimY, dimX`
   bytes, X/Y obstacle bits, and decoded dimension payloads.
+- Corrected the U8 dialogue web engine loop safety guard so long valid
+  conversations that pause at an `Ask` no longer force-end after ten topic
+  choices, while no-pause runaway loops are still capped.
 
 ### Known Issues
 

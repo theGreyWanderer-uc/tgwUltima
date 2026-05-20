@@ -14,7 +14,6 @@ export interface BlockState {
   exitWhenMatched?: boolean;
   menuVar?: string;
   handlerModifiedMenu?: boolean;
-  loopIterations?: number;
 }
 
 export interface CallFrame {
@@ -522,6 +521,7 @@ state: EngineState, npcIndex: Record<string, NPCFile>): EngineState {
     if (!t) return s.activeMenuVar ?? '__menu';
     return t;
   };
+  const loopRestartsThisStep = new WeakMap<BlockState, number>();
 
   while (limit-- > 0) {
     const frame = currentFrame(s);
@@ -553,13 +553,14 @@ state: EngineState, npcIndex: Record<string, NPCFile>): EngineState {
         if (shouldExit) {
            frame.blocks.pop();
         } else {
-           // RF-17: safety limit — in the original game, repeated defiance triggers
-           // combat (screwUps counter) or other scene-exit logic that the web engine
-           // can't replicate.  Cap loop iterations to prevent infinite cycling.
-           block.loopIterations = (block.loopIterations ?? 0) + 1;
-           if (block.loopIterations > LOOP_SAFETY_LIMIT) {
-             dbg.warn('step:block', `Loop safety limit reached (${block.loopIterations} iterations) for loopId=${block.loopId} — force-exiting`);
-             s.history.push({ speaker: 'system', text: `⚠ Loop exhausted (${block.loopIterations} iterations) — continuing` });
+           // RF-17: safety limit — cap only consecutive loop restarts that happen
+           // within one engine step.  A real Ask returns from step(), so normal
+           // long conversations do not accumulate toward this runaway guard.
+           const loopIterations = (loopRestartsThisStep.get(block) ?? 0) + 1;
+           loopRestartsThisStep.set(block, loopIterations);
+           if (loopIterations > LOOP_SAFETY_LIMIT) {
+             dbg.warn('step:block', `Loop safety limit reached (${loopIterations} iterations) for loopId=${block.loopId} — force-exiting`);
+             s.history.push({ speaker: 'system', text: `⚠ Loop exhausted (${loopIterations} iterations) — continuing` });
              frame.blocks.pop();
              continue;
            }
