@@ -98,5 +98,8 @@ exclude = [
     "src/titan/dialogue/websrc/test-results/**",
 ]
 
+[tool.hatch.build.targets.sdist.force-include]
+"src/titan/dialogue/webbundle" = "src/titan/dialogue/webbundle"
+
 [project.scripts]
 titan = "titan.cli:main"
