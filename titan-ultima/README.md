@@ -192,6 +192,10 @@ titan u7 gflag-dump exult00bg.sav -f csv -o bg_gflags.csv
 # Show save metadata: identity, party, game clock, state
 titan u7 save-info exult00bg.sav
 
+# Dump loose GAMEDAT NPC stats and schedules
+titan u7 npc-dump gamedat/ --static STATIC/ -f detail
+titan u7 schedule-dump gamedat/ -f csv -o schedules.csv
+
 # Dump all NPC stats (use --static for reliable container detection)
 titan u7 save-npcs exult00bg.sav --static STATIC/ -f detail
 
