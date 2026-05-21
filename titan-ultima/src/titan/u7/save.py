@@ -758,13 +758,19 @@ class U7Schedules:
         return sched
 
     @classmethod
+    def from_file(cls, filepath: str) -> "U7Schedules":
+        """Read a loose ``schedule.dat`` file from disk."""
+        with open(filepath, "rb") as f:
+            return cls.from_bytes(f.read())
+
+    @classmethod
     def from_save(cls, save: U7Save) -> "U7Schedules":
         data = save.get_data("schedule.dat")
         if data is None:
             raise ValueError("Save does not contain 'schedule.dat'")
         return cls.from_bytes(data)
 
-    def dump_summary(self) -> str:
+    def dump_summary(self, npc_names: dict[int, str] | None = None) -> str:
         total = sum(len(v) for v in self.entries.values())
         return (
             f"Schedules: {self.num_npcs} NPCs tracked, "
@@ -772,7 +778,7 @@ class U7Schedules:
             f"{total} total entries ({self.format} format)"
         )
 
-    def dump_detail(self) -> str:
+    def dump_detail(self, npc_names: dict[int, str] | None = None) -> str:
         lines = [
             f"=== Schedules ({self.format} format, "
             f"{self.num_npcs} NPCs) ===",
@@ -780,7 +786,12 @@ class U7Schedules:
         ]
         for npc_idx in sorted(self.entries):
             ents = self.entries[npc_idx]
-            lines.append(f"NPC {npc_idx:4d}: {len(ents)} schedule(s)")
+            label = ""
+            if npc_names:
+                name = npc_names.get(npc_idx, "")
+                if name:
+                    label = f" {name:<16s}"
+            lines.append(f"NPC {npc_idx:4d}{label}: {len(ents)} schedule(s)")
             for e in ents:
                 lines.append(
                     f"  time={e.time} "
@@ -795,15 +806,28 @@ class U7Schedules:
         )
         return "\n".join(lines)
 
-    def dump_csv(self) -> str:
-        lines = ["npc,time,type,type_name,tx,ty,tz,days"]
+    def dump_csv(self, npc_names: dict[int, str] | None = None) -> str:
+        lines = ["npc,name,time,type,type_name,tx,ty,tz,days"]
         for npc_idx in sorted(self.entries):
             for e in self.entries[npc_idx]:
+                name = npc_names.get(npc_idx, "") if npc_names else ""
                 lines.append(
-                    f"{npc_idx},{e.time},{e.type},{e.type_name},"
+                    f"{npc_idx},{_csv_cell(name)},{e.time},{e.type},{e.type_name},"
                     f"{e.tx},{e.ty},{e.tz},0x{e.days:02X}"
                 )
         return "\n".join(lines)
+
+
+def _csv_cell(value: str) -> str:
+    """Return a minimal CSV-safe field."""
+    if any(ch in value for ch in ',\"\n\r'):
+        return '"' + value.replace('"', '""') + '"'
+    return value
+
+
+def _clean_ascii_text(value: str) -> str:
+    """Keep decoded game text console-safe on Windows terminals."""
+    return value.encode("ascii", errors="replace").decode("ascii")
 
 
 # ============================================================================
@@ -846,11 +870,17 @@ def _skip_ireg_inventory(
             entry_len = data[pos]
             pos += 1
         elif entry_len == 0xFF:
-            # Special IREG: type(1) + len(2) + data(len)
-            if pos + 3 > len(data):
+            # Special IREG: type(1), then either ENDMARK(2) or len(2)+data.
+            if pos >= len(data):
                 break
-            sp_len = struct.unpack_from("<H", data, pos + 1)[0]
-            pos += 3 + sp_len
+            sp_type = data[pos]
+            pos += 1
+            if sp_type == 2:
+                return pos
+            if pos + 2 > len(data):
+                break
+            sp_len = struct.unpack_from("<H", data, pos)[0]
+            pos += 2 + sp_len
             continue
 
         # Regular or extended entry: consume entry_len bytes
@@ -897,15 +927,16 @@ def _skip_special_ireg(data: bytes, pos: int) -> int:
 
         if pos >= len(data):
             break
-        if data[pos] == 0x01:  # IREG_ENDMARK
+        if data[pos] == 0x02:  # IREG_ENDMARK
             pos += 1
             return pos
 
         # type(1) + len(2) + data(len)
         if pos + 3 > len(data):
             break
-        sp_len = struct.unpack_from("<H", data, pos + 1)[0]
-        pos += 3 + sp_len
+        pos += 1
+        sp_len = struct.unpack_from("<H", data, pos)[0]
+        pos += 2 + sp_len
     return pos
 
 
@@ -947,7 +978,7 @@ class U7NPC:
     rflags: int = 0
     # Derived booleans
     in_party: bool = False
-    is_female: bool = False
+    is_female: bool | None = False
     has_inventory: bool = False
     unused: bool = False
 
@@ -999,6 +1030,7 @@ class U7NPCData:
         cls,
         data: bytes,
         container_shapes: Union[set, None] = None,
+        sex_unknown: bool = False,
     ) -> "U7NPCData":
         if len(data) < 4:
             raise ValueError("npc.dat too short")
@@ -1014,7 +1046,7 @@ class U7NPCData:
                 break
             try:
                 npc, pos = cls._read_one_npc(
-                    data, pos, npc_idx, container_shapes
+                    data, pos, npc_idx, container_shapes, sex_unknown
                 )
                 npcs.append(npc)
             except (struct.error, IndexError, ValueError):
@@ -1032,6 +1064,35 @@ class U7NPCData:
             raise ValueError("Save does not contain 'npc.dat'")
         return cls.from_bytes(data, container_shapes)
 
+    @classmethod
+    def from_file(
+        cls,
+        filepath: str,
+        container_shapes: Union[set, None] = None,
+        sex_unknown: bool = False,
+    ) -> "U7NPCData":
+        """Read a loose ``npc.dat`` file from disk."""
+        with open(filepath, "rb") as f:
+            return cls.from_bytes(
+                f.read(),
+                container_shapes,
+                sex_unknown,
+            )
+
+    @classmethod
+    def npc_name_map(
+        cls,
+        save: U7Save,
+        container_shapes: Union[set, None] = None,
+    ) -> dict[int, str]:
+        """Extract ``{npc_index: name}`` from ``npc.dat`` in a save."""
+        npc_data = cls.from_save(save, container_shapes)
+        return npc_data.name_map()
+
+    def name_map(self) -> dict[int, str]:
+        """Return ``{npc_index: name}`` for named NPCs."""
+        return {n.npc_num: n.name for n in self.npcs if n.name}
+
     # ---- internal NPC reader ---------------------------------------------
 
     @classmethod
@@ -1041,6 +1102,7 @@ class U7NPCData:
         pos: int,
         npc_idx: int,
         container_shapes: Union[set, None],
+        sex_unknown: bool,
     ) -> tuple:
         """Parse one NPC record.  Returns ``(U7NPC, new_pos)``."""
         # -- fixed header (78 bytes) ----------------------------------------
@@ -1110,7 +1172,9 @@ class U7NPCData:
         p += 1
         p += 7   # skip 7
         name_raw = data[p : p + 16]
-        name = name_raw.split(b"\x00")[0].decode("ascii", errors="replace").strip()
+        name = _clean_ascii_text(
+            name_raw.split(b"\x00")[0].decode("ascii", errors="replace")
+        ).strip()
         p += 16
 
         # -- decode fields -------------------------------------------------
@@ -1129,8 +1193,8 @@ class U7NPCData:
         has_contents = bool(iflag1 & 1)
         has_sched_usecode = bool(iflag1 & 2)
         in_party_rf = bool(rflags & (1 << 0xB))
-        in_party_tf = bool(type_flags & (1 << 4))
-        is_female = bool(type_flags & (1 << 5))
+        in_party_tf = bool(type_flags & (1 << 12))
+        is_female = None if sex_unknown else bool(type_flags & (1 << 9))
         unused = iflag2 == 0 and npc_idx > 0
 
         sc_x = schunk % 12
@@ -1198,7 +1262,7 @@ class U7NPCData:
         ]
         for n in self.npcs:
             party = " [PARTY]" if n.in_party else ""
-            sex = "F" if n.is_female else "M"
+            sex = "?" if n.is_female is None else ("F" if n.is_female else "M")
             inv = " [INV]" if n.has_inventory else ""
             dead = " [DEAD]" if n.is_dead else ""
             un = " [UNUSED]" if n.unused else ""
@@ -1223,10 +1287,12 @@ class U7NPCData:
             "npc_num,name,shape,frame,tile_x,tile_y,lift,map,"
             "health,str,dex,int,cmb,magic,mana,exp,training,food,"
             "schedule,schedule_name,attack_mode,alignment,"
-            "face,type_flags,in_party,female,has_inventory,dead,unused"
+            "face,type_flags,type_flags_hex,in_party,female,has_inventory,"
+            "dead,unused"
         )
         lines = [hdr]
         for n in self.npcs:
+            female = "UNKNOWN" if n.is_female is None else str(n.is_female)
             lines.append(
                 f"{n.npc_num},{n.name},{n.shape},{n.frame},"
                 f"{n.tile_x},{n.tile_y},{n.lift},{n.map_num},"
@@ -1235,7 +1301,7 @@ class U7NPCData:
                 f"{n.experience},{n.training},{n.food},"
                 f"{n.schedule_type},{n.schedule_name},{n.attack_mode},"
                 f"{n.alignment},{n.face_num},{n.type_flags},"
-                f"{n.in_party},{n.is_female},{n.has_inventory},"
+                f"0x{n.type_flags:04X},{n.in_party},{female},{n.has_inventory},"
                 f"{n.is_dead},{n.unused}"
             )
         return "\n".join(lines)

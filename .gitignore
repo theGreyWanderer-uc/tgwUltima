@@ -28,5 +28,9 @@ exult/
 # Reference
 .github/reference/
 
+# Local game/runtime data
+u7data/
+u8data/
+
 # Local helper scripts
 .github/scripts/

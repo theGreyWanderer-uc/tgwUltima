@@ -31,7 +31,8 @@ class U7TypeFlags:
     """
     U7 shape metadata from TFA.DAT, SHPDIMS.DAT, and WGTVOL.DAT.
 
-    TFA.DAT — 3 bytes per shape::
+    TFA.DAT — 3 bytes per shape for the first 1024 shapes.
+    BG/SI append 512 bytes of packed animation nibbles at offset 3072::
 
         Byte 0:
           bit 0  — has_sfx
@@ -42,9 +43,10 @@ class U7TypeFlags:
           bits 5–7 — Z dimension (height in tiles, 0–7)
 
         Byte 1:
-          bits 0–3 — shape_class (0=unusable, 2=quality,
-                     4=has_quantity, 5=has_quality, 6=container,
-                     7=egg, 12=monster, 13=human, 14=building/roof)
+          bits 0–3 — shape_class (0=unusable, 2=quality, 3=quantity,
+                     4=has_hp, 5=quality_flags, 6=container,
+                     7=hatchable, 8=spellbook, 9=barge,
+                     11=virtue_stone, 12=monster, 13=human, 14=building)
           bit 4  — is_poisonous / is_field
           bit 5  — is_door
           bit 6  — is_barge_part
@@ -56,10 +58,12 @@ class U7TypeFlags:
           bit 6  — is_light_source
           bit 7  — has_translucency
 
-    SHPDIMS.DAT — 2 bytes per shape (starting at shape 0x96 = 150)::
+    SHPDIMS.DAT — 2 bytes per object shape, starting at shape 0x96 = 150.
+    Exult stores them as raw ``dimY, dimX`` bytes; bit 0 is the
+    obstacle flag for that axis and bits 1–7 are the dimension payload::
 
-        Byte 0: pixel width of representative frame
-        Byte 1: pixel height of representative frame
+        Byte 0: Y dimension/obstacle byte
+        Byte 1: X dimension/obstacle byte
 
     WGTVOL.DAT — 2 bytes per shape::
 
@@ -78,8 +82,8 @@ class U7TypeFlags:
     SHAPE_CLASS_UNUSABLE   = 0
     SHAPE_CLASS_QUALITY    = 2
     SHAPE_CLASS_QUANTITY   = 3
-    SHAPE_CLASS_HAS_QUANT  = 4
-    SHAPE_CLASS_HAS_QUAL   = 5
+    SHAPE_CLASS_HAS_HP     = 4
+    SHAPE_CLASS_QUALITY_FLAGS = 5
     SHAPE_CLASS_CONTAINER  = 6
     SHAPE_CLASS_EGG        = 7
     SHAPE_CLASS_SPELLBOOK  = 8
@@ -176,7 +180,14 @@ class U7TypeFlags:
         dims_y: int = 1  # Y footprint in tiles (1–8)
         dims_z: int = 0  # Height in tiles (0–7)
 
-        # Pixel dimensions (from SHPDIMS.DAT, only for shape >= 150)
+        # SHPDIMS raw bytes (from SHPDIMS.DAT, only for shape >= 150).
+        # Exult names these dimY/dimX; bit 0 is obstacle, bits 1-7 are size.
+        shpdims_y_raw: int = 0
+        shpdims_x_raw: int = 0
+        shpdims_y: int = 0
+        shpdims_x: int = 0
+
+        # Backward-compatible aliases kept for existing callers/CSV consumers.
         pixel_w: int = 0
         pixel_h: int = 0
 
@@ -245,6 +256,14 @@ class U7TypeFlags:
             return bool(self.tfa[2] & 0x80)
 
         @property
+        def is_x_obstacle(self) -> bool:
+            return bool(self.shpdims_x_raw & 0x01)
+
+        @property
+        def is_y_obstacle(self) -> bool:
+            return bool(self.shpdims_y_raw & 0x01)
+
+        @property
         def shape_class_name(self) -> str:
             """Human-readable shape class name."""
             return U7TypeFlags.SHAPE_CLASS_NAMES.get(
@@ -274,6 +293,10 @@ class U7TypeFlags:
             for bit, name in U7TypeFlags.BYTE2_FLAG_NAMES.items():
                 if self.tfa[2] & bit:
                     names.append(name)
+            if self.is_x_obstacle:
+                names.append("x_obstacle")
+            if self.is_y_obstacle:
+                names.append("y_obstacle")
             if self.anim_type >= 0:
                 names.append(f"anim:{self.anim_type_name}")
             return names
@@ -358,7 +381,8 @@ class U7TypeFlags:
         Parameters
         ----------
         tfa_data:
-            Contents of TFA.DAT (3 bytes per shape).
+            Contents of TFA.DAT. The first 3072 bytes are 1024 three-byte
+            shape records; BG/SI may append a 512-byte animation table.
         shpdims_data:
             Contents of SHPDIMS.DAT (2 bytes per shape, starting at
             shape 0x96 = 150).
@@ -367,7 +391,7 @@ class U7TypeFlags:
         occlude_data:
             Contents of OCCLUDE.DAT (bit array, 1 bit per shape).
         """
-        num_tfa = len(tfa_data) // 3
+        num_tfa = min(len(tfa_data), 3 * 1024) // 3
         num_shpdims = len(shpdims_data) // 2
         num_wgtvol = len(wgtvol_data) // 2
 
@@ -397,8 +421,12 @@ class U7TypeFlags:
             shp_idx = i - cls.FIRST_OBJ_SHAPE
             if 0 <= shp_idx < num_shpdims:
                 off = shp_idx * 2
-                entry.pixel_w = shpdims_data[off]
-                entry.pixel_h = shpdims_data[off + 1]
+                entry.shpdims_y_raw = shpdims_data[off]
+                entry.shpdims_x_raw = shpdims_data[off + 1]
+                entry.shpdims_y = entry.shpdims_y_raw >> 1
+                entry.shpdims_x = entry.shpdims_x_raw >> 1
+                entry.pixel_w = entry.shpdims_x
+                entry.pixel_h = entry.shpdims_y
 
             # WGTVOL
             if i < num_wgtvol:
@@ -422,7 +450,7 @@ class U7TypeFlags:
         # Animation nibbles — stored at offset 3072 in TFA.DAT
         # (512 bytes = 1024 shapes × 4-bit packed).
         # Only present if the file is larger than the base 3*1024 bytes.
-        anim_offset = num_tfa * 3
+        anim_offset = 3 * 1024
         anim_end = anim_offset + 512
         if len(tfa_data) >= anim_end:
             anim_data = tfa_data[anim_offset:anim_end]
@@ -528,7 +556,7 @@ class U7TypeFlags:
         lines.append("#   Byte 2: bits 0-2 = X dim-1, bits 3-5 = Y dim-1, bits 6-7 = flags")
         lines.append("#")
         lines.append("# Companion files:")
-        lines.append("#   SHPDIMS.DAT — pixel width/height (shapes >= 150)")
+        lines.append("#   SHPDIMS.DAT — raw dimY/dimX + obstacle bits (shapes >= 150)")
         lines.append("#   WGTVOL.DAT  — weight/volume (2 bytes/shape)")
         lines.append("#   OCCLUDE.DAT — bit-packed occlusion flags")
         lines.append("#   TFA.DAT[3072..3583] — animation nibbles (4 bits/shape)")
@@ -546,7 +574,7 @@ class U7TypeFlags:
         lines.append("## Per-Shape Data")
         lines.append("")
         hdr = (f"{'shape':>5s}  {'hex':>6s}  {'tfa_raw':8s}  "
-               f"{'dims':7s}  {'class':15s}  {'pxl':9s}  "
+               f"{'dims':7s}  {'class':15s}  {'shpdims':12s}  "
                f"{'wt':>3s}  {'vol':>3s}  {'occ':>3s}  "
                f"{'anim':20s}  flags")
         lines.append(hdr)
@@ -556,13 +584,17 @@ class U7TypeFlags:
             tfa_hex = f"{e.tfa[0]:02X} {e.tfa[1]:02X} {e.tfa[2]:02X}"
             dims = f"{e.dims_x}x{e.dims_y}x{e.dims_z}"
             cls_name = e.shape_class_name if e.shape_class != 0 else "-"
-            pxl = f"{e.pixel_w}x{e.pixel_h}" if e.pixel_w or e.pixel_h else "-"
+            shpdims = (
+                f"{e.shpdims_x}x{e.shpdims_y}"
+                f"/{e.shpdims_x_raw:02X}:{e.shpdims_y_raw:02X}"
+                if e.shpdims_x_raw or e.shpdims_y_raw else "-"
+            )
             occ = "yes" if e.occludes else "-"
             anim = e.anim_type_name or "-"
             flags = ", ".join(e.flag_names()) or "-"
             lines.append(
                 f"{e.shape_num:5d}  0x{e.shape_num:04X}  {tfa_hex}  "
-                f"{dims:<7s}  {cls_name:<15s}  {pxl:<9s}  "
+                f"{dims:<7s}  {cls_name:<15s}  {shpdims:<12s}  "
                 f"{e.weight:3d}  {e.volume:3d}  {occ:>3s}  "
                 f"{anim:<20s}  {flags}"
             )
@@ -576,7 +608,8 @@ class U7TypeFlags:
             "shape,hex,tfa0,tfa1,tfa2,"
             "dims_x,dims_y,dims_z,"
             "shape_class,shape_class_name,"
-            "pixel_w,pixel_h,weight,volume,occludes,"
+            "shpdims_x,shpdims_y,shpdims_x_raw,shpdims_y_raw,"
+            "x_obstacle,y_obstacle,pixel_w,pixel_h,weight,volume,occludes,"
             "anim_type,anim_type_name,"
             "has_sfx,strange_movement,animated,solid,water,"
             "poisonous,door,barge_part,transparent,"
@@ -590,6 +623,10 @@ class U7TypeFlags:
                 f"0x{e.tfa[0]:02X},0x{e.tfa[1]:02X},0x{e.tfa[2]:02X},"
                 f"{e.dims_x},{e.dims_y},{e.dims_z},"
                 f"{e.shape_class},{cls_name},"
+                f"{e.shpdims_x},{e.shpdims_y},"
+                f"0x{e.shpdims_x_raw:02X},0x{e.shpdims_y_raw:02X},"
+                f"{1 if e.is_x_obstacle else 0},"
+                f"{1 if e.is_y_obstacle else 0},"
                 f"{e.pixel_w},{e.pixel_h},{e.weight},{e.volume},"
                 f"{1 if e.occludes else 0},"
                 f"{e.anim_type},{anim_name},"

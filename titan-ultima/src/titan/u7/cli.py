@@ -57,6 +57,50 @@ def _resolve_u7_paths(game: str) -> tuple[Optional[str], Optional[str]]:
     return static, palette
 
 
+def _resolve_loose_data_file(path: str, filename: str) -> str:
+    """Resolve either a direct file path or a directory containing *filename*."""
+    candidate = Path(path)
+    if candidate.is_dir():
+        candidate = candidate / filename
+    return str(candidate)
+
+
+def _infer_static_dir_for_data_file(filepath: str) -> str | None:
+    """Infer a sibling STATIC directory from a loose GAMEDAT file path."""
+    parent = Path(filepath).resolve().parent
+    candidates = [
+        parent.with_name("STATIC"),
+        parent.parent / "STATIC",
+    ]
+    for candidate in candidates:
+        if (candidate / "TFA.DAT").is_file() or (candidate / "tfa.dat").is_file():
+            return str(candidate)
+    return None
+
+
+def _load_container_shapes(
+    args: SimpleNamespace,
+    fallback_static: str | None = None,
+) -> set[int] | None:
+    """Load TFA container shape IDs for reliable NPC inventory skipping."""
+    static_dir = getattr(args, "static", None)
+    if not static_dir:
+        static_dir, _ = _resolve_u7_paths(getattr(args, "game", "bg"))
+    if not static_dir:
+        static_dir = fallback_static
+    if static_dir:
+        from titan.u7.typeflag import U7TypeFlags
+        tfa = U7TypeFlags.from_dir(static_dir)
+        container_shapes = {
+            entry.shape_num for entry in tfa.entries if entry.shape_class == 6
+        }
+        print(f"TFA:    {len(container_shapes)} container shapes loaded")
+        return container_shapes
+
+    print("TFA:    (no --static, using heuristic container detection)")
+    return None
+
+
 # ============================================================================
 # CMD_* IMPLEMENTATION FUNCTIONS — PALETTE
 # ============================================================================
@@ -807,6 +851,107 @@ def cmd_typeflag_dump(args: SimpleNamespace) -> int:
 
 
 # ============================================================================
+# CMD_* IMPLEMENTATION FUNCTIONS — LOOSE GAMEDAT FILES
+# ============================================================================
+
+def cmd_npc_dump(args: SimpleNamespace) -> int:
+    """Dump NPC data from a loose npc.dat file or GAMEDAT directory."""
+    from titan.u7.save import U7NPCData
+
+    filepath = _resolve_loose_data_file(args.file, "npc.dat")
+    if not os.path.isfile(filepath):
+        print(f"ERROR: npc.dat not found: {filepath}", file=sys.stderr)
+        return 1
+
+    print(f"Source: {filepath} (loose npc.dat)")
+    container_shapes = _load_container_shapes(
+        args,
+        fallback_static=_infer_static_dir_for_data_file(filepath),
+    )
+    print("Sex:    UNKNOWN (loose original npc.dat type flag is not reliable)")
+    npcs = U7NPCData.from_file(
+        filepath,
+        container_shapes=container_shapes,
+        sex_unknown=True,
+    )
+
+    fmt = getattr(args, "format", "summary") or "summary"
+
+    if fmt == "csv":
+        content = npcs.dump_csv()
+    elif fmt == "detail":
+        content = npcs.dump_detail()
+    else:
+        content = npcs.dump_summary()
+
+    if args.output:
+        with open(args.output, "w") as f:
+            f.write(content)
+            f.write("\n")
+        print(f"\n{fmt.title()} dump written to: {args.output}")
+    else:
+        print()
+        print(content)
+    return 0
+
+
+def cmd_schedule_dump(args: SimpleNamespace) -> int:
+    """Dump NPC schedules from a loose schedule.dat file or directory."""
+    from titan.u7.save import U7NPCData, U7Schedules
+
+    filepath = _resolve_loose_data_file(args.file, "schedule.dat")
+    if not os.path.isfile(filepath):
+        print(f"ERROR: schedule.dat not found: {filepath}", file=sys.stderr)
+        return 1
+
+    print(f"Source: {filepath} (loose schedule.dat)")
+    sched = U7Schedules.from_file(filepath)
+
+    npc_names: dict[int, str] | None = None
+    npc_file = getattr(args, "npc_file", None)
+    if npc_file:
+        npc_file = _resolve_loose_data_file(npc_file, "npc.dat")
+    else:
+        sibling = Path(filepath).with_name("npc.dat")
+        npc_file = str(sibling) if sibling.is_file() else None
+
+    if npc_file:
+        try:
+            container_shapes = _load_container_shapes(
+                args,
+                fallback_static=_infer_static_dir_for_data_file(npc_file),
+            )
+            npc_names = U7NPCData.from_file(
+                npc_file,
+                container_shapes=container_shapes,
+            ).name_map()
+            print(f"Names:  {len(npc_names)} NPC names loaded from {npc_file}")
+        except (OSError, ValueError) as exc:
+            print(f"Names:  unavailable ({exc})")
+    else:
+        print("Names:  (no sibling npc.dat or --npc-file)")
+
+    fmt = getattr(args, "format", "summary") or "summary"
+
+    if fmt == "csv":
+        content = sched.dump_csv(npc_names)
+    elif fmt == "detail":
+        content = sched.dump_detail(npc_names)
+    else:
+        content = sched.dump_summary(npc_names)
+
+    if args.output:
+        with open(args.output, "w") as f:
+            f.write(content)
+            f.write("\n")
+        print(f"\n{fmt.title()} dump written to: {args.output}")
+    else:
+        print()
+        print(content)
+    return 0
+
+
+# ============================================================================
 # CMD_* IMPLEMENTATION FUNCTIONS — SAVE
 # ============================================================================
 
@@ -1011,22 +1156,7 @@ def cmd_save_npcs(args: SimpleNamespace) -> int:
     print(f"Source: {filepath} ({save.container_format.upper()} save)")
     print(f"Title:  {save.title}")
 
-    # Load TFA for container detection if STATIC path provided
-    container_shapes: set[int] | None = None
-    static_dir = getattr(args, "static", None)
-    if not static_dir:
-        static_dir, _ = _resolve_u7_paths(getattr(args, "game", "bg"))
-    if static_dir:
-        from titan.u7.typeflag import U7TypeFlags
-        tfa = U7TypeFlags.from_dir(static_dir)
-        container_shapes = set()
-        for entry in tfa.entries:
-            if entry.shape_class == 6:
-                container_shapes.add(entry.shape)
-        print(f"TFA:    {len(container_shapes)} container shapes loaded")
-    else:
-        print("TFA:    (no --static, using heuristic container detection)")
-
+    container_shapes = _load_container_shapes(args)
     npcs = U7NPCData.from_save(save, container_shapes=container_shapes)
 
     fmt = getattr(args, "format", "summary") or "summary"
@@ -1051,7 +1181,7 @@ def cmd_save_npcs(args: SimpleNamespace) -> int:
 
 def cmd_save_schedules(args: SimpleNamespace) -> int:
     """Dump NPC schedules from a savegame."""
-    from titan.u7.save import U7Save, U7Schedules
+    from titan.u7.save import U7Save, U7NPCData, U7Schedules
 
     filepath = args.file
     if not os.path.isfile(filepath):
@@ -1063,15 +1193,24 @@ def cmd_save_schedules(args: SimpleNamespace) -> int:
     print(f"Title:  {save.title}")
 
     sched = U7Schedules.from_save(save)
+    npc_names: dict[int, str] | None = None
+    try:
+        container_shapes = _load_container_shapes(args)
+        npc_names = U7NPCData.npc_name_map(
+            save,
+            container_shapes=container_shapes,
+        )
+    except (ValueError, KeyError):
+        pass
 
     fmt = getattr(args, "format", "summary") or "summary"
 
     if fmt == "csv":
-        content = sched.dump_csv()
+        content = sched.dump_csv(npc_names)
     elif fmt == "detail":
-        content = sched.dump_detail()
+        content = sched.dump_detail(npc_names)
     else:
-        content = sched.dump_summary()
+        content = sched.dump_summary(npc_names)
 
     if args.output:
         with open(args.output, "w") as f:
@@ -1393,6 +1532,72 @@ def typeflag_dump_cmd(
 # TYPER COMMAND WRAPPERS — SAVE
 # ============================================================================
 
+@u7_app.command("npc-dump")
+def npc_dump_cmd(
+    file: Annotated[str, typer.Argument(
+        help="Path to npc.dat or a GAMEDAT directory containing npc.dat")],
+    static: Annotated[
+        Optional[str],
+        typer.Option("--static",
+                     help="Path to STATIC directory (default: from titan.toml u7bg/u7si)"),
+    ] = None,
+    game: Annotated[
+        Literal["bg", "si"],
+        typer.Option("--game", help="Use config section for BG or SI defaults"),
+    ] = "bg",
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output",
+                     help="Write dump to this file"),
+    ] = None,
+    format: Annotated[
+        Optional[str],
+        typer.Option("-f", "--format",
+                     help="Output format: summary (default), detail, csv"),
+    ] = None,
+) -> None:
+    """Dump NPC data from loose Exult GAMEDAT npc.dat."""
+    raise SystemExit(cmd_npc_dump(SimpleNamespace(
+        file=file, game=game, static=static, output=output, format=format,
+    )))
+
+
+@u7_app.command("schedule-dump")
+def schedule_dump_cmd(
+    file: Annotated[str, typer.Argument(
+        help="Path to schedule.dat or a directory containing schedule.dat")],
+    npc_file: Annotated[
+        Optional[str],
+        typer.Option("--npc-file",
+                     help="Optional npc.dat file or directory for NPC names"),
+    ] = None,
+    static: Annotated[
+        Optional[str],
+        typer.Option("--static",
+                     help="Path to STATIC directory for npc.dat inventory parsing"),
+    ] = None,
+    game: Annotated[
+        Literal["bg", "si"],
+        typer.Option("--game", help="Use config section for BG or SI defaults"),
+    ] = "bg",
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output",
+                     help="Write dump to this file"),
+    ] = None,
+    format: Annotated[
+        Optional[str],
+        typer.Option("-f", "--format",
+                     help="Output format: summary (default), detail, csv"),
+    ] = None,
+) -> None:
+    """Dump NPC schedules from loose Exult schedule.dat."""
+    raise SystemExit(cmd_schedule_dump(SimpleNamespace(
+        file=file, npc_file=npc_file, game=game, static=static,
+        output=output, format=format,
+    )))
+
+
 @u7_app.command("save-list")
 def save_list_cmd(
     file: Annotated[str, typer.Argument(
@@ -1494,6 +1699,15 @@ def save_npcs_cmd(
 def save_schedules_cmd(
     file: Annotated[str, typer.Argument(
         help="Path to Exult .sav file")],
+    static: Annotated[
+        Optional[str],
+        typer.Option("--static",
+                     help="Path to STATIC directory for npc.dat inventory parsing"),
+    ] = None,
+    game: Annotated[
+        Literal["bg", "si"],
+        typer.Option("--game", help="Use config section for BG or SI defaults"),
+    ] = "bg",
     output: Annotated[
         Optional[str],
         typer.Option("-o", "--output",
@@ -1507,7 +1721,7 @@ def save_schedules_cmd(
 ) -> None:
     """Dump NPC schedules from an Exult U7 savegame."""
     raise SystemExit(cmd_save_schedules(SimpleNamespace(
-        file=file, output=output, format=format,
+        file=file, game=game, static=static, output=output, format=format,
     )))
 
 
