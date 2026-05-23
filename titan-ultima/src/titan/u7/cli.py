@@ -59,6 +59,41 @@ def _resolve_u7_paths(game: str) -> tuple[Optional[str], Optional[str]]:
     return static, palette
 
 
+def _resolve_u7_text_flx(game: str, static_dir: Optional[str] = None) -> Optional[str]:
+    """Resolve TEXT.FLX path from config, with fallback to STATIC dir."""
+    cfg = get_config() or {}
+    section_key = "u7bg" if game.lower() == "bg" else "u7si"
+    section = cfg.get(section_key, {}) if isinstance(cfg, dict) else {}
+    game_cfg = section.get("game", {}) if isinstance(section, dict) else {}
+    paths_cfg = section.get("paths", {}) if isinstance(section, dict) else {}
+
+    base = game_cfg.get("base") if isinstance(game_cfg, dict) else None
+    base_path = Path(str(base)).expanduser() if base else None
+
+    configured = paths_cfg.get("text") if isinstance(paths_cfg, dict) else None
+    if configured:
+        p = Path(str(configured)).expanduser()
+        if p.is_absolute() or base_path is None:
+            candidate = p
+        else:
+            candidate = base_path / p
+        if candidate.exists():
+            return str(candidate)
+
+    # Fall back to STATIC directory discovery
+    search_dirs: list[Path] = []
+    if static_dir:
+        search_dirs.append(Path(static_dir))
+    if base_path:
+        search_dirs.append(base_path / "STATIC")
+    for d in search_dirs:
+        for name in ("TEXT.FLX", "text.flx"):
+            p = d / name
+            if p.exists():
+                return str(p)
+    return None
+
+
 def _resolve_u7_gamedat(game: str) -> Optional[str]:
     """Resolve loose GAMEDAT path from multi-game config for BG/SI."""
     cfg = get_config() or {}
@@ -2223,3 +2258,499 @@ def font_create_cmd(
     raise SystemExit(cmd_font_create(SimpleNamespace(
         config=config, output=output,
     )))
+
+
+# ============================================================================
+# TYPER COMMAND WRAPPERS — WORLD QUERY
+# ============================================================================
+
+@u7_app.command("world-query")
+def world_query_cmd(
+    static: Annotated[
+        Optional[str],
+        typer.Argument(
+            help="Path to STATIC directory (default: from titan.toml u7bg/u7si)",
+        ),
+    ] = None,
+    game: Annotated[
+        Literal["bg", "si"],
+        typer.Option("--game", help="Use config section for BG or SI"),
+    ] = "bg",
+    gamedat: Annotated[
+        Optional[str],
+        typer.Option("--gamedat", help="Path to gamedat/ directory for IREG dynamic objects"),
+    ] = None,
+    text: Annotated[
+        Optional[str],
+        typer.Option("--text", help="Path to TEXT.FLX for shape name lookup"),
+    ] = None,
+    # ── Non-interactive filters ──────────────────────────────────────────────
+    shape_class: Annotated[
+        Optional[list[str]],
+        typer.Option("--class", help="Shape class filter (repeatable): container, human, monster, …"),
+    ] = None,
+    shape_num: Annotated[
+        Optional[list[str]],
+        typer.Option("--shape", help="Shape number filter, hex or decimal (repeatable): 522, 0x20A"),
+    ] = None,
+    name: Annotated[
+        Optional[str],
+        typer.Option("--name", help="Shape name substring filter (case-insensitive)"),
+    ] = None,
+    flag: Annotated[
+        Optional[list[str]],
+        typer.Option("--flag", help="TFA flag filter (repeatable): solid, animated, door, …"),
+    ] = None,
+    tile_rect: Annotated[
+        Optional[str],
+        typer.Option("--tile-rect", help="Tile rectangle filter: tx0,ty0,tx1,ty1"),
+    ] = None,
+    sc: Annotated[
+        Optional[list[str]],
+        typer.Option("--sc", help="Superchunk number filter, hex or decimal (repeatable): 0x55"),
+    ] = None,
+    ireg: Annotated[
+        bool,
+        typer.Option("--ireg/--no-ireg", help="Include IREG dynamic objects (default: auto)"),
+    ] = False,
+    format: Annotated[
+        Optional[str],
+        typer.Option("-f", "--format", help="Output format: summary (default), full_text, csv"),
+    ] = None,
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Write output to this file"),
+    ] = None,
+) -> None:
+    """Query world object placements from IFIX and IREG.
+
+    With no filter flags, launches an interactive wizard (requires questionary).
+    Supply any filter flag to run non-interactively.
+
+    \\b
+    Non-interactive examples:
+      titan u7 world-query STATIC/ --gamedat gamedat/ --class container --tile-rect 512,512,2048,2048
+      titan u7 world-query STATIC/ --name "locked chest" --ireg --gamedat gamedat/ -f csv -o out.csv
+      titan u7 world-query STATIC/ --shape 522 --ireg --gamedat gamedat/ -f full_text
+    """
+    from titan.u7.world import run_wizard as _world_wizard, WorldQueryParams, run_query, format_result
+    from titan.u7.typeflag import U7TypeFlags
+
+    static_dir = static
+    if not static_dir:
+        resolved, _ = _resolve_u7_paths(game)
+        static_dir = resolved
+
+    gamedat_dir = gamedat
+    if not gamedat_dir:
+        gamedat_dir = _resolve_u7_gamedat(game)
+
+    text_flx = text or _resolve_u7_text_flx(game, static_dir)
+
+    # Non-interactive mode when any filter flag is supplied
+    _non_interactive = any([shape_class, shape_num, name, flag, tile_rect, sc, format, output, ireg])
+
+    if not _non_interactive:
+        raise SystemExit(_world_wizard(
+            static_dir=static_dir,
+            gamedat_dir=gamedat_dir,
+            text_flx=text_flx,
+        ))
+
+    # ── Parse CLI filters ────────────────────────────────────────────────────
+    shape_class_ids: list[int] = []
+    if shape_class:
+        _class_map = {v: k for k, v in U7TypeFlags.SHAPE_CLASS_NAMES.items()}
+        for cls_name in shape_class:
+            cid = _class_map.get(cls_name.lower())
+            if cid is not None:
+                shape_class_ids.append(cid)
+            else:
+                typer.echo(f"Unknown shape class: {cls_name!r}. Valid: {', '.join(_class_map)}", err=True)
+                raise SystemExit(1)
+
+    shape_nums: list[int] = []
+    if shape_num:
+        for token in shape_num:
+            try:
+                shape_nums.append(int(token, 0))
+            except ValueError:
+                typer.echo(f"Invalid shape number: {token!r}", err=True)
+                raise SystemExit(1)
+
+    superchunks: list[int] = []
+    if sc:
+        for token in sc:
+            try:
+                superchunks.append(int(token, 0))
+            except ValueError:
+                typer.echo(f"Invalid superchunk number: {token!r}", err=True)
+                raise SystemExit(1)
+
+    parsed_rect: Optional[tuple[int, int, int, int]] = None
+    if tile_rect:
+        parts = tile_rect.split(",")
+        if len(parts) != 4:
+            typer.echo("--tile-rect must be tx0,ty0,tx1,ty1", err=True)
+            raise SystemExit(1)
+        try:
+            tx0, ty0, tx1, ty1 = (int(p.strip(), 0) for p in parts)
+            parsed_rect = (min(tx0, tx1), min(ty0, ty1), max(tx0, tx1), max(ty0, ty1))
+        except ValueError:
+            typer.echo("--tile-rect values must be integers", err=True)
+            raise SystemExit(1)
+
+    use_ireg = ireg or bool(gamedat_dir and any([
+        cls in (6, 7, 12, 13) for cls in shape_class_ids
+    ]))
+
+    params = WorldQueryParams(
+        static_dir=static_dir or "",
+        gamedat_dir=gamedat_dir if use_ireg else None,
+        shape_classes=shape_class_ids,
+        shape_nums=shape_nums,
+        name_filter=name or "",
+        text_flx_path=text_flx,
+        tfa_flags=list(flag) if flag else [],
+        superchunks=superchunks,
+        tile_rect=parsed_rect,
+        include_ifix=True,
+        include_ireg=use_ireg,
+        output_format=format or "summary",
+        output_path=output,
+    )
+
+    result = run_query(params)
+    out = format_result(result)
+
+    if output:
+        from pathlib import Path as _Path
+        _Path(output).write_text(out, encoding="utf-8")
+        typer.echo(f"Wrote {result.count} result(s) to {output}")
+    else:
+        typer.echo(out)
+
+
+@u7_app.command("container-browse")
+def container_browse_cmd(
+    static: Annotated[
+        Optional[str],
+        typer.Argument(
+            help="Path to STATIC directory (default: from titan.toml u7bg/u7si)",
+        ),
+    ] = None,
+    game: Annotated[
+        Literal["bg", "si"],
+        typer.Option("--game", help="Use config section for BG or SI"),
+    ] = "bg",
+    gamedat: Annotated[
+        Optional[str],
+        typer.Option("--gamedat", help="Path to gamedat/ directory (required for IREG)"),
+    ] = None,
+    text: Annotated[
+        Optional[str],
+        typer.Option("--text", help="Path to TEXT.FLX for shape name lookup"),
+    ] = None,
+    # ── Container identity filters ───────────────────────────────────────────
+    container_shape: Annotated[
+        Optional[list[str]],
+        typer.Option("--container-shape", help="Container shape number(s), hex or decimal (repeatable)"),
+    ] = None,
+    container_name: Annotated[
+        Optional[str],
+        typer.Option("--container-name", help="Container name substring filter (case-insensitive)"),
+    ] = None,
+    # ── Contents filters ─────────────────────────────────────────────────────
+    contains_shape: Annotated[
+        Optional[list[str]],
+        typer.Option("--contains-shape", help="Only show containers holding item with this shape (repeatable)"),
+    ] = None,
+    contains_name: Annotated[
+        Optional[str],
+        typer.Option("--contains-name", help="Only show containers holding item matching name substring"),
+    ] = None,
+    # ── Area filters ─────────────────────────────────────────────────────────
+    tile_rect: Annotated[
+        Optional[str],
+        typer.Option("--tile-rect", help="Tile rectangle filter: tx0,ty0,tx1,ty1"),
+    ] = None,
+    sc: Annotated[
+        Optional[list[str]],
+        typer.Option("--sc", help="Superchunk number filter, hex or decimal (repeatable)"),
+    ] = None,
+    # ── Output ───────────────────────────────────────────────────────────────
+    format: Annotated[
+        Optional[str],
+        typer.Option("-f", "--format", help="Output format: tree (default), csv"),
+    ] = None,
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Write output to this file"),
+    ] = None,
+) -> None:
+    """Browse container contents from IREG, with full nesting support.
+
+    With no filter flags, launches an interactive wizard (requires questionary).
+    Supply any filter flag to run non-interactively.
+
+    \\b
+    Non-interactive examples:
+      titan u7 container-browse STATIC/ --gamedat gamedat/
+      titan u7 container-browse STATIC/ --gamedat gamedat/ --container-name chest
+      titan u7 container-browse STATIC/ --gamedat gamedat/ --container-shape 522
+      titan u7 container-browse STATIC/ --gamedat gamedat/ --contains-name sword -f csv -o containers.csv
+      titan u7 container-browse STATIC/ --gamedat gamedat/ --tile-rect 512,512,2048,2048 -f tree
+    """
+    from titan.u7.container import (
+        browse_containers,
+        ContainerQueryParams,
+        format_results,
+        run_wizard as _container_wizard,
+    )
+    from titan.u7.names import U7ShapeNames
+
+    static_dir = static
+    if not static_dir:
+        resolved, _ = _resolve_u7_paths(game)
+        static_dir = resolved
+
+    gamedat_dir = gamedat
+    if not gamedat_dir:
+        gamedat_dir = _resolve_u7_gamedat(game)
+
+    text_flx = text or _resolve_u7_text_flx(game, static_dir)
+
+    _non_interactive = any([
+        container_shape, container_name, contains_shape, contains_name,
+        tile_rect, sc, format, output,
+    ])
+
+    if not _non_interactive:
+        raise SystemExit(_container_wizard(
+            static_dir=static_dir,
+            gamedat_dir=gamedat_dir,
+            text_flx=text_flx,
+        ))
+
+    # ── Parse filters ────────────────────────────────────────────────────────
+    container_shape_nums: list[int] = []
+    if container_shape:
+        for token in container_shape:
+            try:
+                container_shape_nums.append(int(token, 0))
+            except ValueError:
+                typer.echo(f"Invalid shape number: {token!r}", err=True)
+                raise SystemExit(1)
+
+    contains_shape_nums: list[int] = []
+    if contains_shape:
+        for token in contains_shape:
+            try:
+                contains_shape_nums.append(int(token, 0))
+            except ValueError:
+                typer.echo(f"Invalid shape number: {token!r}", err=True)
+                raise SystemExit(1)
+
+    superchunks: list[int] = []
+    if sc:
+        for token in sc:
+            try:
+                superchunks.append(int(token, 0))
+            except ValueError:
+                typer.echo(f"Invalid superchunk number: {token!r}", err=True)
+                raise SystemExit(1)
+
+    parsed_rect: Optional[tuple[int, int, int, int]] = None
+    if tile_rect:
+        parts = tile_rect.split(",")
+        if len(parts) != 4:
+            typer.echo("--tile-rect must be tx0,ty0,tx1,ty1", err=True)
+            raise SystemExit(1)
+        try:
+            tx0, ty0, tx1, ty1 = (int(p.strip(), 0) for p in parts)
+            parsed_rect = (min(tx0, tx1), min(ty0, ty1), max(tx0, tx1), max(ty0, ty1))
+        except ValueError:
+            typer.echo("--tile-rect values must be integers", err=True)
+            raise SystemExit(1)
+
+    if not gamedat_dir:
+        typer.echo("Error: --gamedat is required for container-browse (containers live in IREG)", err=True)
+        raise SystemExit(1)
+
+    names: Optional[U7ShapeNames] = None
+    if text_flx:
+        try:
+            names = U7ShapeNames.from_file(text_flx)
+        except (FileNotFoundError, OSError):
+            pass
+    if names is None and static_dir:
+        names = U7ShapeNames.from_static_dir(static_dir)
+
+    params = ContainerQueryParams(
+        static_dir=static_dir or "",
+        gamedat_dir=gamedat_dir,
+        container_shape_nums=container_shape_nums,
+        container_name_filter=container_name or "",
+        contains_shape_nums=contains_shape_nums,
+        contains_name_filter=contains_name or "",
+        superchunks=superchunks,
+        tile_rect=parsed_rect,
+        text_flx_path=text_flx,
+        output_format=format or "tree",
+        output_path=output,
+    )
+
+    results = browse_containers(params)
+    out = format_results(results, params, names)
+
+    if output:
+        from pathlib import Path as _Path
+        _Path(output).write_text(out, encoding="utf-8")
+        typer.echo(f"Wrote {len(results)} container(s) to {output}")
+    else:
+        typer.echo(out)
+
+
+@u7_app.command("egg-query")
+def egg_query_cmd(
+    static: Annotated[
+        Optional[str],
+        typer.Argument(
+            help="Path to STATIC directory (default: from titan.toml u7bg/u7si)",
+        ),
+    ] = None,
+    game: Annotated[
+        Literal["bg", "si"],
+        typer.Option("--game", help="Use config section for BG or SI"),
+    ] = "bg",
+    gamedat: Annotated[
+        Optional[str],
+        typer.Option("--gamedat", help="Path to gamedat/ directory (required)"),
+    ] = None,
+    egg_type: Annotated[
+        Optional[list[str]],
+        typer.Option("--type", help="Egg type filter (repeatable): usecode, monster, teleport, …"),
+    ] = None,
+    fn: Annotated[
+        Optional[str],
+        typer.Option("--fn", help="Usecode function number filter, hex or decimal: 0x06BC"),
+    ] = None,
+    tile_rect: Annotated[
+        Optional[str],
+        typer.Option("--tile-rect", help="Tile rectangle filter: tx0,ty0,tx1,ty1"),
+    ] = None,
+    sc: Annotated[
+        Optional[list[str]],
+        typer.Option("--sc", help="Superchunk number filter, hex or decimal (repeatable)"),
+    ] = None,
+    format: Annotated[
+        Optional[str],
+        typer.Option("-f", "--format", help="Output format: table (default), csv"),
+    ] = None,
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Write output to this file"),
+    ] = None,
+) -> None:
+    """Query egg trigger objects from IREG, showing type, function, and location.
+
+    With no filter flags, launches an interactive wizard (requires questionary).
+    Supply any filter flag to run non-interactively.
+
+    \\b
+    Non-interactive examples:
+      titan u7 egg-query STATIC/ --gamedat gamedat/
+      titan u7 egg-query STATIC/ --gamedat gamedat/ --type usecode
+      titan u7 egg-query STATIC/ --gamedat gamedat/ --fn 0x06BC
+      titan u7 egg-query STATIC/ --gamedat gamedat/ --type monster --tile-rect 512,512,2048,2048
+      titan u7 egg-query STATIC/ --gamedat gamedat/ --type usecode -f csv -o eggs.csv
+    """
+    from titan.u7.eggs import (
+        query_eggs,
+        EggQueryParams,
+        format_results,
+        run_wizard as _egg_wizard,
+    )
+
+    static_dir = static
+    if not static_dir:
+        resolved, _ = _resolve_u7_paths(game)
+        static_dir = resolved
+
+    gamedat_dir = gamedat
+    if not gamedat_dir:
+        gamedat_dir = _resolve_u7_gamedat(game)
+
+    _non_interactive = any([egg_type, fn, tile_rect, sc, format, output])
+
+    if not _non_interactive:
+        raise SystemExit(_egg_wizard(
+            static_dir=static_dir,
+            gamedat_dir=gamedat_dir,
+        ))
+
+    # ── Validate --type values ───────────────────────────────────────────────
+    from titan.u7.map import EGG_TYPE_NAMES as _ETN
+    _valid_types = set(_ETN.values())
+    for t in (egg_type or []):
+        if t not in _valid_types:
+            typer.echo(f"Unknown egg type: {t!r}. Valid: {', '.join(sorted(_valid_types))}", err=True)
+            raise SystemExit(1)
+
+    # ── Parse --fn ───────────────────────────────────────────────────────────
+    fn_filter: Optional[int] = None
+    if fn:
+        try:
+            fn_filter = int(fn, 0)
+        except ValueError:
+            typer.echo(f"Invalid function number: {fn!r}", err=True)
+            raise SystemExit(1)
+
+    # ── Parse --sc ───────────────────────────────────────────────────────────
+    superchunks: list[int] = []
+    if sc:
+        for token in sc:
+            try:
+                superchunks.append(int(token, 0))
+            except ValueError:
+                typer.echo(f"Invalid superchunk number: {token!r}", err=True)
+                raise SystemExit(1)
+
+    # ── Parse --tile-rect ────────────────────────────────────────────────────
+    parsed_rect: Optional[tuple[int, int, int, int]] = None
+    if tile_rect:
+        parts = tile_rect.split(",")
+        if len(parts) != 4:
+            typer.echo("--tile-rect must be tx0,ty0,tx1,ty1", err=True)
+            raise SystemExit(1)
+        try:
+            tx0, ty0, tx1, ty1 = (int(p.strip(), 0) for p in parts)
+            parsed_rect = (min(tx0, tx1), min(ty0, ty1), max(tx0, tx1), max(ty0, ty1))
+        except ValueError:
+            typer.echo("--tile-rect values must be integers", err=True)
+            raise SystemExit(1)
+
+    if not gamedat_dir:
+        typer.echo("Error: --gamedat is required for egg-query (eggs live in IREG)", err=True)
+        raise SystemExit(1)
+
+    params = EggQueryParams(
+        static_dir=static_dir or "",
+        gamedat_dir=gamedat_dir,
+        egg_types=list(egg_type) if egg_type else [],
+        fn_filter=fn_filter,
+        superchunks=superchunks,
+        tile_rect=parsed_rect,
+        output_format=format or "table",
+        output_path=output,
+    )
+
+    results = query_eggs(params)
+    out = format_results(results, params)
+
+    if output:
+        from pathlib import Path as _Path
+        _Path(output).write_text(out, encoding="utf-8")
+        typer.echo(f"Wrote {len(results)} egg(s) to {output}")
+    else:
+        typer.echo(out)

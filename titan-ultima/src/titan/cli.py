@@ -887,6 +887,7 @@ def cmd_setup(args: SimpleNamespace) -> int:
             f'static   = "{static_norm}"',
             f'shapes   = "{static_norm}/SHAPES.VGA"',
             f'palette  = "{static_norm}/PALETTES.FLX"',
+            f'text     = "{static_norm}/TEXT.FLX"',
             f'gamedat  = "{gamedat_guess}"',
         ]
 
@@ -934,6 +935,7 @@ def cmd_setup(args: SimpleNamespace) -> int:
             'static   = "STATIC/"',
             'shapes   = "STATIC/SHAPES.VGA"',
             'palette  = "STATIC/PALETTES.FLX"',
+            'text     = "STATIC/TEXT.FLX"',
             f'gamedat  = "{u7bg_gamedat}"',
         ]
         for item in u7bg_mod_sources:
@@ -963,6 +965,7 @@ def cmd_setup(args: SimpleNamespace) -> int:
             'static   = "STATIC/"',
             'shapes   = "STATIC/SHAPES.VGA"',
             'palette  = "STATIC/PALETTES.FLX"',
+            'text     = "STATIC/TEXT.FLX"',
             f'gamedat  = "{u7si_gamedat}"',
         ]
         for item in u7si_mod_sources:

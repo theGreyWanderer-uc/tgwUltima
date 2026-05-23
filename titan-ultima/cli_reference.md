@@ -1790,6 +1790,235 @@ a vertical colour gradient fill. You can specify colours in two ways:
 
 ---
 
+#### `u7 world-query`
+
+Search IFIX (static) and optionally IREG (runtime) world object placements
+by shape class, name, shape number, TFA flags, and area. Runs as an
+interactive wizard when no filter flags are supplied; runs non-interactively
+when any filter flag is present. Requires `questionary>=2.0` for wizard mode.
+
+```
+titan u7 world-query [STATIC] [OPTIONS]
+```
+
+| Argument / Option | Description |
+|-------------------|-------------|
+| `STATIC` | Path to STATIC directory. Defaults to configured path from `titan.toml`. |
+| `--game bg\|si` | Use config section for Black Gate or Serpent Isle (default: `bg`) |
+| `--gamedat DIR` | Path to GAMEDAT directory for IREG dynamic objects |
+| `--text FILE` | Path to `TEXT.FLX` for shape name lookup (auto-discovered from STATIC if omitted) |
+| `--class NAME` | Shape class filter, repeatable (e.g. `container`, `human`, `monster`) |
+| `--shape N` | Shape number filter, hex or decimal, repeatable (e.g. `522`, `0x20A`) |
+| `--name TEXT` | Shape name substring filter, case-insensitive (e.g. `"locked chest"`) |
+| `--flag NAME` | TFA flag filter, repeatable (e.g. `solid`, `animated`, `door`) |
+| `--tile-rect tx0,ty0,tx1,ty1` | Restrict search to a tile rectangle (0–3071 per axis) |
+| `--sc N` | Superchunk number filter, hex or decimal, repeatable (e.g. `0x55`) |
+| `--ireg / --no-ireg` | Force-include or force-exclude IREG objects |
+| `-f, --format TEXT` | Output format: `summary` (default), `full_text`, `csv` |
+| `-o, --output FILE` | Write output to a file instead of stdout |
+
+**Notes:**
+- Containers, NPCs, eggs, and monsters live in IREG only. The wizard auto-defaults
+  `--ireg` to Yes when those classes are selected.
+- `--tile-rect` coordinates are normalised (top-left is always the smaller value).
+- `--name` and `--shape` can be combined; both filters must match.
+- When `TEXT.FLX` is available, shape names appear in all output as `522 (locked chest)`.
+- If `titan setup` has been run, `TEXT.FLX` is recorded in `titan.toml` and resolved automatically.
+
+**Interactive wizard steps** (no filter flags supplied):
+
+1. Shape class checkbox — leave blank for no filter.
+2. Include IREG? — auto-defaults to Yes for IREG-only classes.
+3. Name search — substring; matching shape numbers shown as hints.
+4. Shape number — comma-separated, hex or decimal; leave blank for all.
+5. TFA flag checkbox — leave blank for no filter.
+6. Area — entire world, superchunk list, or tile rectangle (top-left XY + bottom-right XY).
+7. Output format — `summary`, `full_text`, or `csv`.
+8. Save to file? — optional output path.
+
+**Non-interactive examples:**
+```bash
+# All containers in a tile rectangle (the large central area of the BG world).
+titan u7 world-query STATIC/ --gamedat gamedat/ --class container --tile-rect 512,512,2048,2048
+
+# All placements of shape 522 (locked chest) across the entire world, CSV output.
+titan u7 world-query STATIC/ --gamedat gamedat/ --shape 522 --ireg -f csv -o locked_chests.csv
+
+# All shapes whose name contains "chest" (any variant), full text.
+titan u7 world-query STATIC/ --gamedat gamedat/ --name chest --ireg -f full_text
+
+# All doors in superchunk 0x55 (Britain area).
+titan u7 world-query STATIC/ --flag door --sc 0x55
+
+# Containers and humans in two adjacent superchunks, saved to a file.
+titan u7 world-query STATIC/ --gamedat gamedat/ --class container --class human --sc 0x55 --sc 0x56 -o area_objects.txt
+
+# Configured BG paths — wizard mode.
+titan u7 world-query --game bg
+
+# Explicit paths — wizard mode.
+titan u7 world-query STATIC/ --gamedat gamedat/
+```
+
+**Output formats:**
+
+- `summary` — total match count + unique shape count + per-shape count table with names.
+- `full_text` — one line per placement: source, shape name, hex, tile coords, lift, class, flags.
+- `csv` — columns: `source, shape, shape_hex, shape_name, frame, quality, tx, ty, tz, shape_class, shape_class_name, flags`.
+
+---
+
+#### `u7 container-browse`
+
+Browse and inspect container contents from IREG with full nesting support (e.g. Ship's Hold → Backpack → Bag → items). With no filter flags, launches an interactive wizard; supply any filter flag to run non-interactively.
+
+```
+titan u7 container-browse [STATIC] [OPTIONS]
+```
+
+| Option | Description |
+|---|---|
+| `STATIC` | Path to STATIC directory (positional, optional if configured) |
+| `--game bg\|si` | Use config section for BG or SI (default: `bg`) |
+| `--gamedat PATH` | Path to gamedat/ directory — required |
+| `--text PATH` | Explicit TEXT.FLX path for shape name lookup |
+| `--container-shape N` | Container shape filter, hex or decimal (repeatable) |
+| `--container-name STR` | Container name substring filter (case-insensitive) |
+| `--contains-shape N` | Only show containers holding item with this shape (repeatable) |
+| `--contains-name STR` | Only show containers holding item matching name substring |
+| `--tile-rect tx0,ty0,tx1,ty1` | Restrict to tile rectangle |
+| `--sc N` | Restrict to superchunk, hex or decimal (repeatable) |
+| `-f / --format` | Output format: `tree` (default) or `csv` |
+| `-o / --output FILE` | Write output to file instead of stdout |
+
+**Notes:**
+- Containers must be in IREG (runtime gamedat), not IFIX.
+- Empty containers (no items recorded at runtime) are included by default; use `--contains-*` to require specific contents.
+- Tree format shows the full nesting hierarchy with `├─`/`└─`/`│` branches, item counts, and quality multipliers.
+- CSV format emits one row per item at any nesting depth with a `path` column like `819 (barrel) > 801 (backpack) > item`.
+- Shape names come from TEXT.FLX (auto-discovered from STATIC if not given via `--text`).
+
+**Wizard steps (interactive):**
+1. STATIC directory path (if not supplied)
+2. Gamedat directory path (if not supplied)
+3. Container name substring filter (leave blank for all containers)
+4. Container shape number filter (comma-separated, leave blank for all)
+5. Contains-item name filter (leave blank to skip)
+6. Contains-item shape filter (comma-separated, leave blank to skip)
+7. Area: entire world, specific superchunks, or tile rectangle
+8. Output format (tree / csv) + optional file save
+
+**Non-interactive examples:**
+
+```bash
+# All containers in the entire world (wizard mode).
+titan u7 container-browse STATIC/ --gamedat gamedat/
+
+# All containers in a tile rectangle.
+titan u7 container-browse STATIC/ --gamedat gamedat/ --tile-rect 512,512,2048,2048
+
+# Show only locked chests (shape 522).
+titan u7 container-browse STATIC/ --gamedat gamedat/ --container-shape 522
+
+# Show containers whose name includes "chest".
+titan u7 container-browse STATIC/ --gamedat gamedat/ --container-name chest
+
+# Show containers that hold at least one sword (by name).
+titan u7 container-browse STATIC/ --gamedat gamedat/ --contains-name sword
+
+# Export to CSV, only in superchunk 0x27.
+titan u7 container-browse STATIC/ --gamedat gamedat/ --sc 0x27 -f csv -o sc27_containers.csv
+
+# Configured BG paths — wizard mode.
+titan u7 container-browse --game bg
+```
+
+**Output format (tree):**
+
+```
+Container browse: 3 container(s) found.
+
+  522 (locked chest)              0x020A  @ (649,856)  lift=1  sc=0x26  [4 item(s), depth=1]
+    ├─ 573 (plate armour)
+    ├─ 340 (/potion//s)
+    ├─ 340 (/potion//s)
+    └─ 549 (lightning whip)
+
+  522 (locked chest)              0x020A  @ (2081,581)  lift=0  sc=0x20  [3 item(s), depth=1]
+    ├─ 815 (stone chips)
+    ├─ 815 (stone chips)
+    └─ 549 (lightning whip)
+
+  802 (bag)                       0x0322  @ (1204,2805)  lift=0  sc=0x7C  [7 item(s), depth=1]
+    ├─ 644 (/gold coin//s)  ×228
+    ├─ 627 (/lockpick//s)  ×134
+    └─ 549 (lightning whip)  ×8
+```
+
+When `--contains-*` is active, each result is the container that **directly** holds
+the matching item. Without `--contains-*`, results are all root-level IREG containers
+shown with their full contents tree.
+
+**CSV columns:** `sc, container_shape, container_hex, container_name, tx, ty, tz, depth, item_shape, item_hex, item_name, item_frame, item_quality, path`
+
+---
+
+---
+
+#### `u7 egg-query`
+
+Query egg trigger objects from IREG. Surfaces each egg's type, usecode function number, trigger probability, distance, criteria, and flags. With no filter flags, launches an interactive wizard; supply any filter flag to run non-interactively.
+
+```
+titan u7 egg-query [STATIC] [OPTIONS]
+```
+
+| Option | Description |
+|---|---|
+| `STATIC` | Path to STATIC directory (positional, optional if configured) |
+| `--game bg\|si` | Use config section for BG or SI (default: `bg`) |
+| `--gamedat PATH` | Path to gamedat/ directory — required |
+| `--type NAME` | Egg type filter (repeatable): `monster`, `usecode`, `teleport`, `jukebox`, `soundsfx`, `voice`, `missile`, `weather`, `path`, `button`, `intermap` |
+| `--fn N` | Usecode function number filter, hex or decimal (only matches type=usecode) |
+| `--tile-rect tx0,ty0,tx1,ty1` | Restrict to tile rectangle |
+| `--sc N` | Restrict to superchunk, hex or decimal (repeatable) |
+| `-f / --format` | Output format: `table` (default) or `csv` |
+| `-o / --output FILE` | Write output to file instead of stdout |
+
+**Wizard steps (interactive):**
+1. STATIC directory path (if not supplied)
+2. Gamedat directory path (if not supplied)
+3. Egg type checkbox (leave blank for all types)
+4. Usecode function number filter (shown only when usecode type is selected or no type filter)
+5. Area: entire world, specific superchunks, or tile rectangle
+6. Output format + optional file save
+
+**Non-interactive examples:**
+
+```bash
+# All eggs in the world.
+titan u7 egg-query STATIC/ --gamedat gamedat/
+
+# All usecode eggs.
+titan u7 egg-query STATIC/ --gamedat gamedat/ --type usecode
+
+# Find every placement of a specific function.
+titan u7 egg-query STATIC/ --gamedat gamedat/ --fn 0x06BC
+
+# Monster eggs in a tile region.
+titan u7 egg-query STATIC/ --gamedat gamedat/ --type monster --tile-rect 512,512,2048,2048
+
+# Export all usecode eggs to CSV.
+titan u7 egg-query STATIC/ --gamedat gamedat/ --type usecode -f csv -o usecode_eggs.csv
+
+# Configured BG paths — wizard mode.
+titan u7 egg-query --game bg
+```
+
+**CSV columns:** `sc, tx, ty, tz, egg_type, egg_type_name, fn, probability, distance, criteria, criteria_name, once, nocturnal, auto_reset, hatched, data1, data2`
+
+---
+
 ### Configuration commands (shared)
 
 ---
@@ -1978,6 +2207,9 @@ A value on the command line always wins.
 | `u7 schedule-dump` | Dump schedules from loose Exult `schedule.dat` / `GAMEDAT` |
 | `u7 save-schedules` | Dump NPC schedules from an Exult U7 savegame |
 | `u7 font-create` | Interactive wizard for creating U7 font shapes from TTF |
+| `u7 world-query` | Interactive wizard to filter IFIX/IREG world object placements |
+| `u7 container-browse` | Browse container contents from IREG with full nesting support |
+| `u7 egg-query` | Query egg trigger objects from IREG — type, usecode function, location |
 | `dialogue prepare` | Generate dialogue runtime artifacts |
 | `dialogue validate` | Validate dialogue runtime artifacts (`--content-lint` is unfinished) |
 | `dialogue launch` | Launch local dialogue web viewer (`--host/--port` optional advanced overrides) |

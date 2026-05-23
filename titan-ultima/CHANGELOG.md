@@ -14,6 +14,22 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Added
 
+- **`titan u7 world-query` command** — interactive questionary-based wizard
+  to filter IFIX and IREG world object placements by shape class, TFA flags,
+  shape number, and area (whole world or specific superchunks). Outputs a
+  summary table, full per-placement text, or CSV. Requires
+  `questionary>=2.0` (added as a project dependency).
+- **`titan u7 egg-query` command** — interactive wizard and non-interactive CLI
+  to query egg trigger objects from IREG. Decodes and displays egg type,
+  usecode function number, probability, distance, trigger criteria, and flags
+  (once, nocturnal, auto_reset, hatched). Filter by type, function number,
+  area (tile rectangle or superchunks). Table and CSV output formats.
+- **`titan u7 container-browse` command** — interactive wizard and
+  non-interactive CLI to browse container contents from IREG, including
+  arbitrary nesting (Ship's Hold → Backpack → Bag → items). Filter by
+  container identity, required contents, shape number, name substring, area
+  (tile rectangle or superchunks). Tree and CSV output formats. Shape names
+  from TEXT.FLX (auto-discovered from STATIC).
 - **Expanded Titan setup path discovery** — setup and U7 helper commands now
   account for Exult profile paths in `%LOCALAPPDATA%/Exult`, including
   initialized base-game and mod `gamedat` folders, mod-specific save roots,

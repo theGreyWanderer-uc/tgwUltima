@@ -24,6 +24,7 @@ Requirements:
 - NumPy >= 1.24
 - Pillow >= 10.0
 - Typer >= 0.15
+- questionary >= 2.0
 - tomli >= 2.0 on Python < 3.11, for `titan.toml` support
 
 ---
@@ -77,6 +78,7 @@ place for command options, longer examples, and format notes.
 | Type data | Decode U8 `TYPEFLAG.DAT` | Decode U7 `TFA.DAT`, `SHPDIMS.DAT`, `WGTVOL.DAT` | `titan u7 typeflag-dump STATIC/ -f csv -o tfa_data.csv` | [U8 data commands](cli_reference.md#u8-data-inspection-commands), [U7 type flag commands](cli_reference.md#u7-type-flag-commands) |
 | Saves and runtime data | List/extract U8 save archives | Read Exult `.sav`; inspect loose `gamedat/`; dump NPCs, schedules, flags | `titan u7 save-info exult00bg.sav` | [U8 save commands](cli_reference.md#u8-save-archive-commands), [U7 save commands](cli_reference.md#u7-save-commands) |
 | Fonts | U8 font archives can be extracted as Flex data | U7 `font-create` wizard for Exult-compatible font shapes | `titan u7 font-create` | [U7 font-create](cli_reference.md#u7-font-create) |
+| World query | Not applicable | Interactive wizard to filter IFIX/IREG object placements by shape class, number, TFA flags, and area | `titan u7 world-query --game bg` | [U7 world-query](cli_reference.md#u7-world-query) |
 | Text and misc data | Gump layout, XOR credits, quotes, transform palettes | Global flags and selected runtime metadata | `titan u8 credits-decrypt ECREDITS.DAT` | [U8 data commands](cli_reference.md#u8-data-inspection-commands) |
 
 ---
@@ -122,6 +124,23 @@ titan u7 map-render STATIC/ --full -o u7_world.png
 # Minimap sample with grid.
 titan u7 map-sample STATIC/ --scale 4 --grid -o minimap.png
 ```
+
+### U7 World Query
+
+```bash
+# Interactive wizard — walks through shape class, flag, and area filters.
+titan u7 world-query --game bg
+
+# With explicit paths (no titan.toml required).
+titan u7 world-query STATIC/ --gamedat gamedat/
+
+# Pre-set STATIC from config, add a runtime GAMEDAT for IREG objects.
+titan u7 world-query --game si --gamedat /path/to/serpentisle/gamedat
+```
+
+The wizard prompts for shape-class checkboxes, optional shape numbers, TFA flag
+checkboxes, area (all or specific superchunks), and output format (summary /
+full text / CSV). Output can be printed or saved to a file.
 
 ### U8 Map Rendering
 

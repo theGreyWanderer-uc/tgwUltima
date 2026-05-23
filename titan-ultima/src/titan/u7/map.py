@@ -50,7 +50,7 @@ __all__ = ["U7MapObject", "U7TileRectOverlay", "U7MapRenderer", "U7MapSampler"]
 
 import os
 import struct
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable
 
 import numpy as np
@@ -137,6 +137,83 @@ def _frame_to_rgba(
 
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Egg metadata constants and dataclass
+# ---------------------------------------------------------------------------
+
+_EGG_SHAPE = 275
+
+EGG_TYPE_NAMES: dict[int, str] = {
+    1: "monster",
+    2: "jukebox",
+    3: "soundsfx",
+    4: "voice",
+    5: "usecode",
+    6: "missile",
+    7: "teleport",
+    8: "weather",
+    9: "path",
+    10: "button",
+    11: "intermap",
+    128: "fire_field",
+    129: "sleep_field",
+    130: "poison_field",
+    131: "caltrops_field",
+    132: "campfire_field",
+    133: "mirror_object",
+}
+
+EGG_CRITERIA_NAMES: dict[int, str] = {
+    0: "cached_in",
+    1: "party_near",
+    2: "avatar_near",
+    3: "avatar_far",
+    4: "avatar_footpad",
+    5: "party_footpad",
+    6: "something_on",
+    7: "external",
+}
+
+
+@dataclass
+class EggMeta:
+    """Decoded egg-specific fields from an IREG entry."""
+    egg_type: int
+    criteria: int
+    probability: int
+    distance: int
+    nocturnal: bool
+    once: bool
+    hatched: bool
+    auto_reset: bool
+    data1: int
+    data2: int    # usecode function number when egg_type == 5
+
+    @property
+    def type_name(self) -> str:
+        return EGG_TYPE_NAMES.get(self.egg_type, f"type_{self.egg_type}")
+
+    @property
+    def criteria_name(self) -> str:
+        return EGG_CRITERIA_NAMES.get(self.criteria, f"criteria_{self.criteria}")
+
+    def summary(self) -> str:
+        """Short human-readable string for display."""
+        parts = [f"type={self.type_name}"]
+        if self.egg_type == 5:            # usecode
+            parts.append(f"fn=0x{self.data2:04X}")
+        parts.append(f"prob={self.probability}%")
+        if self.distance:
+            parts.append(f"dist={self.distance}")
+        if self.once:
+            parts.append("once")
+        if self.nocturnal:
+            parts.append("nocturnal")
+        if self.auto_reset:
+            parts.append("auto_reset")
+        return "  ".join(parts)
+
+
 # MapObject — a resolved object ready for rendering
 # ---------------------------------------------------------------------------
 @dataclass
@@ -153,6 +230,13 @@ class U7MapObject:
     # Screen coordinates (set during projection)
     screen_x: int = 0
     screen_y: int = 0
+
+    # Data source: "ifix" for STATIC, "ireg" for gamedat runtime objects
+    source: str = "ifix"
+    # Child objects (items inside a container, etc.)
+    children: list["U7MapObject"] = field(default_factory=list)
+    # Egg-specific metadata (only set for shape 275 root-level objects)
+    egg_meta: "EggMeta | None" = None
 
 
 @dataclass(frozen=True)
@@ -528,6 +612,172 @@ class U7MapRenderer:
             ))
 
         return objects
+
+    # ------------------------------------------------------------------
+    # Deep IREG parser — full recursive container traversal
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def parse_ireg_deep(
+        ireg_path: str,
+        schunk_num: int,
+        tfa: "U7TypeFlags | None" = None,
+    ) -> "list[U7MapObject]":
+        """
+        Parse a u7iregNN file with full recursive container nesting.
+
+        Returns top-level objects; containers have their contents in
+        ``U7MapObject.children``.  Children inside a container use gump
+        slot coordinates in tx/ty (not world tiles).
+
+        ``tfa`` is optional but improves accuracy — without it, containers
+        are still detected by entry-length (testlen == 12) as Exult writes
+        them, and bodies/barges with children are also handled.
+        """
+        if not os.path.isfile(ireg_path):
+            return []
+
+        with open(ireg_path, "rb") as f:
+            data = f.read()
+
+        scx = C_CHUNKS_PER_SCHUNK * (schunk_num % C_NUM_SCHUNKS)
+        scy = C_CHUNKS_PER_SCHUNK * (schunk_num // C_NUM_SCHUNKS)
+        dlen = len(data)
+
+        pos: list[int] = [0]
+
+        def _skip_special() -> None:
+            """Skip one 0xFF special entry: type(1) + len(2) + data."""
+            if pos[0] + 3 > dlen:
+                pos[0] = dlen
+                return
+            pos[0] += 1                              # type byte
+            slen = data[pos[0]] + data[pos[0] + 1] * 256
+            pos[0] += 2 + slen
+
+        def _parse_entries(in_container: bool) -> "list[U7MapObject]":
+            objects: list[U7MapObject] = []
+
+            while pos[0] < dlen:
+                entlen = data[pos[0]]
+                pos[0] += 1
+
+                if entlen == 0 or entlen == 1:
+                    if in_container:
+                        break           # 0x01 = end-of-container
+                    continue            # 0x00 = padding at top level
+
+                if entlen == 2:         # 2-byte index ID
+                    pos[0] += 2
+                    continue
+
+                if entlen == 0xFF:      # special entry (usecode/attribs/string)
+                    _skip_special()
+                    continue
+
+                extended = False
+                if entlen in (0xFE, 0xFD):   # extended shape / extended lift
+                    extended = (entlen == 0xFE)
+                    if pos[0] >= dlen:
+                        break
+                    entlen = data[pos[0]]
+                    pos[0] += 1
+
+                if pos[0] + entlen > dlen:
+                    break
+
+                payload = data[pos[0]:pos[0] + entlen]
+                pos[0] += entlen
+
+                testlen = entlen - (1 if extended else 0)
+                if testlen not in (6, 10, 12, 13, 14, 18):
+                    continue
+
+                if len(payload) < 4:
+                    continue
+
+                # ── Shape and frame ─────────────────────────────────────
+                if extended:
+                    if len(payload) < 5:
+                        continue
+                    shnum = payload[2] + payload[3] * 256
+                    frnum = payload[4]
+                    adj = 1           # ++entry shift in Exult
+                else:
+                    shnum = payload[2] + (payload[3] & 0x03) * 256
+                    frnum = (payload[3] >> 2) & 0x3F
+                    adj = 0
+
+                # ── World or gump coordinates ────────────────────────────
+                if in_container:
+                    # Children store gump (inventory slot) coords
+                    abs_tx = payload[0]
+                    abs_ty = payload[1]
+                else:
+                    chunk_cx = (payload[0] >> 4) & 0x0F
+                    tile_x   = payload[0] & 0x0F
+                    chunk_cy = (payload[1] >> 4) & 0x0F
+                    tile_y   = payload[1] & 0x0F
+                    abs_tx   = (scx + chunk_cx) * C_TILES_PER_CHUNK + tile_x
+                    abs_ty   = (scy + chunk_cy) * C_TILES_PER_CHUNK + tile_y
+
+                # ── Lift and quality (simple objects) ────────────────────
+                lift    = (payload[4 + adj] >> 4) & 0x0F if len(payload) > 4 + adj else 0
+                quality = payload[5 + adj] if len(payload) > 5 + adj else 0
+
+                obj = U7MapObject(
+                    tx=abs_tx, ty=abs_ty, tz=lift,
+                    shape=shnum, frame=frnum, quality=quality,
+                    source="ireg",
+                )
+
+                # ── Container / body with nested contents ────────────────
+                # testlen 12 = container; 13/14 = body (also can have children)
+                # Eggs (shape 275) also have testlen==12 but are NOT containers —
+                # bytes 4-5 hold the egg type word, not a has_children field.
+                # Treating them as containers causes subsequent top-level IREG
+                # entries to be incorrectly consumed as the egg's children.
+                has_children_field = False
+                if shnum != _EGG_SHAPE and testlen in (12, 13, 14) and len(payload) >= 6 + adj:
+                    type_word = payload[4 + adj] + payload[5 + adj] * 256
+                    has_children_field = (type_word != 0)
+
+                    if testlen == 12:
+                        # Override lift/quality from correct container offsets
+                        if len(payload) > 9 + adj:
+                            lift = (payload[9 + adj] >> 4) & 0x0F
+                        if len(payload) > 7 + adj:
+                            quality = payload[7 + adj]
+                        obj.tz      = lift
+                        obj.quality = quality
+
+                if has_children_field:
+                    obj.children = _parse_entries(in_container=True)
+
+                # ── Egg-specific metadata (shape 275 at root level) ──────────
+                if shnum == _EGG_SHAPE and not in_container and testlen in (12, 14):
+                    tword = payload[4 + adj] + payload[5 + adj] * 256 if len(payload) > 5 + adj else 0
+                    prob  = payload[6 + adj] if len(payload) > 6 + adj else 100
+                    d1    = (payload[7 + adj] + payload[8 + adj] * 256) if len(payload) > 8 + adj else 0
+                    d2    = (payload[10 + adj] + payload[11 + adj] * 256) if len(payload) > 11 + adj else 0
+                    obj.egg_meta = EggMeta(
+                        egg_type   = tword & 0xF,
+                        criteria   = (tword >> 4) & 0x7,
+                        probability= prob,
+                        distance   = (tword >> 10) & 0x1F,
+                        nocturnal  = bool((tword >> 7) & 1),
+                        once       = bool((tword >> 8) & 1),
+                        hatched    = bool((tword >> 9) & 1),
+                        auto_reset = bool((tword >> 15) & 1),
+                        data1      = d1,
+                        data2      = d2,
+                    )
+
+                objects.append(obj)
+
+            return objects
+
+        return _parse_entries(in_container=False)
 
     # ------------------------------------------------------------------
     # Load all objects for a superchunk
