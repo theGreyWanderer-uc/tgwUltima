@@ -57,6 +57,8 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Fixed
 
+- Replaced CSV serialisation in `typeflag.py`, `save.py`,
+  and `cli.py` with Python's standard `csv.writer` module.
 - Corrected U7 NPC inventory skipping for IREG special entries, allowing
   `npc.dat` parsing to continue past Avatar inventory and export all declared
   NPC records.

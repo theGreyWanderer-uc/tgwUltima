@@ -51,7 +51,7 @@ __all__ = ["U7MapObject", "U7TileRectOverlay", "U7MapRenderer", "U7MapSampler"]
 import os
 import struct
 from dataclasses import dataclass
-from typing import Optional
+from typing import Callable
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
@@ -938,6 +938,56 @@ class U7MapRenderer:
         return [objects[i] for i in order]
 
     # ------------------------------------------------------------------
+    # Frame-getter factory (shared by render_superchunk / render_region)
+    # ------------------------------------------------------------------
+
+    def _make_frame_getter(
+        self,
+        flat_rgb: bytes | list[int],
+    ) -> Callable[[int, int], tuple[Image.Image, int, int] | None]:
+        """Return a cached (shnum, frnum) → (RGBA image, xoff, yoff) lookup.
+
+        Each call creates fresh shape/frame caches scoped to one render pass,
+        so callers get per-render isolation without sharing mutable state.
+        """
+        shape_cache: dict[int, U7Shape | None] = {}
+        frame_cache: dict[tuple[int, int], tuple[Image.Image, int, int] | None] = {}
+
+        def _get_frame(shnum: int, frnum: int) -> tuple[Image.Image, int, int] | None:
+            key = (shnum, frnum)
+            if key in frame_cache:
+                return frame_cache[key]
+
+            if shnum not in shape_cache:
+                rec = (self.shapes_vga.get_record(shnum)
+                       if shnum < len(self.shapes_vga.records) else None)
+                if rec:
+                    try:
+                        shape_cache[shnum] = U7Shape.from_data(
+                            rec, is_tile=(shnum < FIRST_OBJ_SHAPE))
+                    except Exception:
+                        shape_cache[shnum] = None
+                else:
+                    shape_cache[shnum] = None
+
+            shape = shape_cache[shnum]
+            if shape is None or frnum >= len(shape.frames):
+                frame_cache[key] = None
+                return None
+
+            fr = shape.frames[frnum]
+            if fr.pixels is None or fr.width == 0 or fr.height == 0:
+                frame_cache[key] = None
+                return None
+
+            tfa_entry = self.tfa.get(shnum)
+            has_trans = tfa_entry.has_translucency if tfa_entry else False
+            frame_cache[key] = _frame_to_rgba(fr, flat_rgb, has_translucency=has_trans)
+            return frame_cache[key]
+
+        return _get_frame
+
+    # ------------------------------------------------------------------
     # Render a superchunk
     # ------------------------------------------------------------------
 
@@ -1028,41 +1078,7 @@ class U7MapRenderer:
         # Palette for rendering
         flat_rgb = palette.to_flat_rgb()
 
-        # Shape/frame cache
-        shape_cache: dict[int, U7Shape | None] = {}
-        frame_cache: dict[tuple[int, int], tuple[Image.Image, int, int] | None] = {}
-
-        def _get_frame(shnum: int, frnum: int) -> tuple[Image.Image, int, int] | None:
-            key = (shnum, frnum)
-            if key in frame_cache:
-                return frame_cache[key]
-
-            if shnum not in shape_cache:
-                rec = self.shapes_vga.get_record(shnum) if shnum < len(self.shapes_vga.records) else None
-                if rec:
-                    try:
-                        shape_cache[shnum] = U7Shape.from_data(
-                            rec, is_tile=(shnum < FIRST_OBJ_SHAPE))
-                    except Exception:
-                        shape_cache[shnum] = None
-                else:
-                    shape_cache[shnum] = None
-
-            shape = shape_cache[shnum]
-            if shape is None or frnum >= len(shape.frames):
-                frame_cache[key] = None
-                return None
-
-            fr = shape.frames[frnum]
-            if fr.pixels is None or fr.width == 0 or fr.height == 0:
-                frame_cache[key] = None
-                return None
-
-            tfa_entry = self.tfa.get(shnum)
-            has_trans = (tfa_entry.has_translucency if tfa_entry else False)
-            frame_cache[key] = _frame_to_rgba(
-                fr, flat_rgb, has_translucency=has_trans)
-            return frame_cache[key]
+        _get_frame = self._make_frame_getter(flat_rgb)
 
         # --- 1. Paint ground tiles ---
         # RLE terrain shapes (shape >= FIRST_OBJ_SHAPE) are promoted to
@@ -1303,40 +1319,7 @@ class U7MapRenderer:
         canvas = Image.new("RGBA", (canvas_w, canvas_h), background)
         flat_rgb = palette.to_flat_rgb()
 
-        shape_cache: dict[int, U7Shape | None] = {}
-        frame_cache: dict[tuple[int, int], tuple[Image.Image, int, int] | None] = {}
-
-        def _get_frame(shnum: int, frnum: int) -> tuple[Image.Image, int, int] | None:
-            key = (shnum, frnum)
-            if key in frame_cache:
-                return frame_cache[key]
-
-            if shnum not in shape_cache:
-                rec = self.shapes_vga.get_record(shnum) if shnum < len(self.shapes_vga.records) else None
-                if rec:
-                    try:
-                        shape_cache[shnum] = U7Shape.from_data(
-                            rec, is_tile=(shnum < FIRST_OBJ_SHAPE))
-                    except Exception:
-                        shape_cache[shnum] = None
-                else:
-                    shape_cache[shnum] = None
-
-            shape = shape_cache[shnum]
-            if shape is None or frnum >= len(shape.frames):
-                frame_cache[key] = None
-                return None
-
-            fr = shape.frames[frnum]
-            if fr.pixels is None or fr.width == 0 or fr.height == 0:
-                frame_cache[key] = None
-                return None
-
-            tfa_entry = self.tfa.get(shnum)
-            has_trans = (tfa_entry.has_translucency if tfa_entry else False)
-            frame_cache[key] = _frame_to_rgba(
-                fr, flat_rgb, has_translucency=has_trans)
-            return frame_cache[key]
+        _get_frame = self._make_frame_getter(flat_rgb)
 
         origin_sx = sx_fn(base_tx, base_ty, 0)
         origin_sy = sy_fn(base_tx, base_ty, 0)

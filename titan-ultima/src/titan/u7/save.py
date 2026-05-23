@@ -38,6 +38,7 @@ __all__ = [
     "U7ScheduleEntry", "U7NPCData", "U7NPC",
 ]
 
+import csv
 import io
 import os
 import struct
@@ -365,11 +366,13 @@ class U7GlobalFlags:
         """
         CSV with every set flag (index_dec, index_hex, value_dec, value_hex).
         """
-        lines = ["index,index_hex,value,value_hex"]
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(["index", "index_hex", "value", "value_hex"])
         for i, v in enumerate(self.raw):
             if v != 0:
-                lines.append(f"{i},0x{i:04X},{v},0x{v:02x}")
-        return "\n".join(lines)
+                writer.writerow([i, f"0x{i:04X}", v, f"0x{v:02x}"])
+        return buf.getvalue()
 
 
 # ============================================================================
@@ -1047,22 +1050,17 @@ class U7Schedules:
         return "\n".join(lines)
 
     def dump_csv(self, npc_names: dict[int, str] | None = None) -> str:
-        lines = ["npc,name,time,type,type_name,tx,ty,tz,days"]
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(["npc", "name", "time", "type", "type_name", "tx", "ty", "tz", "days"])
         for npc_idx in sorted(self.entries):
             for e in self.entries[npc_idx]:
                 name = npc_names.get(npc_idx, "") if npc_names else ""
-                lines.append(
-                    f"{npc_idx},{_csv_cell(name)},{e.time},{e.type},{e.type_name},"
-                    f"{e.tx},{e.ty},{e.tz},0x{e.days:02X}"
-                )
-        return "\n".join(lines)
-
-
-def _csv_cell(value: str) -> str:
-    """Return a minimal CSV-safe field."""
-    if any(ch in value for ch in ',\"\n\r'):
-        return '"' + value.replace('"', '""') + '"'
-    return value
+                writer.writerow([
+                    npc_idx, name, e.time, e.type, e.type_name,
+                    e.tx, e.ty, e.tz, f"0x{e.days:02X}",
+                ])
+        return buf.getvalue()
 
 
 def _clean_ascii_text(value: str) -> str:
@@ -1606,25 +1604,26 @@ class U7NPCData:
         return "\n".join(lines)
 
     def dump_csv(self) -> str:
-        hdr = (
-            "npc_num,name,shape,frame,tile_x,tile_y,lift,map,"
-            "health,str,dex,int,cmb,magic,mana,exp,training,food,"
-            "schedule,schedule_name,attack_mode,alignment,"
-            "face,type_flags,type_flags_hex,in_party,female,has_inventory,"
-            "dead,unused"
-        )
-        lines = [hdr]
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow([
+            "npc_num", "name", "shape", "frame", "tile_x", "tile_y", "lift", "map",
+            "health", "str", "dex", "int", "cmb", "magic", "mana", "exp", "training", "food",
+            "schedule", "schedule_name", "attack_mode", "alignment",
+            "face", "type_flags", "type_flags_hex", "in_party", "female", "has_inventory",
+            "dead", "unused",
+        ])
         for n in self.npcs:
             female = "UNKNOWN" if n.is_female is None else str(n.is_female)
-            lines.append(
-                f"{n.npc_num},{n.name},{n.shape},{n.frame},"
-                f"{n.tile_x},{n.tile_y},{n.lift},{n.map_num},"
-                f"{n.health},{n.strength},{n.dexterity},"
-                f"{n.intelligence},{n.combat},{n.magic},{n.mana},"
-                f"{n.experience},{n.training},{n.food},"
-                f"{n.schedule_type},{n.schedule_name},{n.attack_mode},"
-                f"{n.alignment},{n.face_num},{n.type_flags},"
-                f"0x{n.type_flags:04X},{n.in_party},{female},{n.has_inventory},"
-                f"{n.is_dead},{n.unused}"
-            )
-        return "\n".join(lines)
+            writer.writerow([
+                n.npc_num, n.name, n.shape, n.frame,
+                n.tile_x, n.tile_y, n.lift, n.map_num,
+                n.health, n.strength, n.dexterity,
+                n.intelligence, n.combat, n.magic, n.mana,
+                n.experience, n.training, n.food,
+                n.schedule_type, n.schedule_name, n.attack_mode,
+                n.alignment, n.face_num, n.type_flags,
+                f"0x{n.type_flags:04X}", n.in_party, female, n.has_inventory,
+                n.is_dead, n.unused,
+            ])
+        return buf.getvalue()

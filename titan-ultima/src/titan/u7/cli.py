@@ -9,6 +9,8 @@ from __future__ import annotations
 
 __all__ = ["u7_app"]
 
+import csv
+import io
 import os
 import sys
 from pathlib import Path
@@ -1105,12 +1107,6 @@ def cmd_schedule_dump(args: SimpleNamespace) -> int:
     return 0
 
 
-def _csv_cell(value: object) -> str:
-    """Return a minimal CSV-safe cell for CLI reports."""
-    text = "" if value is None else str(value)
-    if any(ch in text for ch in ',\"\n\r'):
-        return '"' + text.replace('"', '""') + '"'
-    return text
 
 
 def cmd_gamedat_info(args: SimpleNamespace) -> int:
@@ -1355,11 +1351,11 @@ def cmd_gamedat_info(args: SimpleNamespace) -> int:
 
     fmt = getattr(args, "format", "summary") or "summary"
     if fmt == "csv":
-        content_lines = ["file,size,status,note"]
-        content_lines.extend(
-            ",".join(_csv_cell(cell) for cell in row) for row in rows
-        )
-        content = "\n".join(content_lines)
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(["file", "size", "status", "note"])
+        writer.writerows(rows)
+        content = buf.getvalue()
     elif fmt == "detail":
         lines.append("")
         lines.append("--- File Coverage ---")

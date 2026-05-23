@@ -22,6 +22,8 @@ from __future__ import annotations
 
 __all__ = ["U7TypeFlags"]
 
+import csv
+import io
 import os
 import struct
 from dataclasses import dataclass, field
@@ -603,46 +605,55 @@ class U7TypeFlags:
 
     def dump_csv(self) -> str:
         """Return CSV output of all shape entries."""
-        lines: list[str] = []
-        lines.append(
-            "shape,hex,tfa0,tfa1,tfa2,"
-            "dims_x,dims_y,dims_z,"
-            "shape_class,shape_class_name,"
-            "shpdims_x,shpdims_y,shpdims_x_raw,shpdims_y_raw,"
-            "x_obstacle,y_obstacle,pixel_w,pixel_h,weight,volume,occludes,"
-            "anim_type,anim_type_name,"
-            "has_sfx,strange_movement,animated,solid,water,"
-            "poisonous,door,barge_part,transparent,"
-            "light_source,translucency"
-        )
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+
+        writer.writerow([
+            "shape", "hex", "tfa0", "tfa1", "tfa2",
+            "dims_x", "dims_y", "dims_z",
+            "shape_class", "shape_class_name",
+            "shpdims_x", "shpdims_y", "shpdims_x_raw", "shpdims_y_raw",
+            "x_obstacle", "y_obstacle", "pixel_w", "pixel_h",
+            "weight", "volume", "occludes",
+            "anim_type", "anim_type_name",
+            "has_sfx", "strange_movement", "animated", "solid", "water",
+            "poisonous", "door", "barge_part", "transparent",
+            "light_source", "translucency",
+        ])
+
         for e in self.entries:
-            cls_name = e.shape_class_name if e.shape_class != 0 else ""
-            anim_name = e.anim_type_name
-            lines.append(
-                f"{e.shape_num},0x{e.shape_num:04X},"
-                f"0x{e.tfa[0]:02X},0x{e.tfa[1]:02X},0x{e.tfa[2]:02X},"
-                f"{e.dims_x},{e.dims_y},{e.dims_z},"
-                f"{e.shape_class},{cls_name},"
-                f"{e.shpdims_x},{e.shpdims_y},"
-                f"0x{e.shpdims_x_raw:02X},0x{e.shpdims_y_raw:02X},"
-                f"{1 if e.is_x_obstacle else 0},"
-                f"{1 if e.is_y_obstacle else 0},"
-                f"{e.pixel_w},{e.pixel_h},{e.weight},{e.volume},"
-                f"{1 if e.occludes else 0},"
-                f"{e.anim_type},{anim_name},"
-                f"{1 if e.has_sfx else 0},"
-                f"{1 if e.has_strange_movement else 0},"
-                f"{1 if e.is_animated else 0},"
-                f"{1 if e.is_solid else 0},"
-                f"{1 if e.is_water else 0},"
-                f"{1 if e.is_poisonous else 0},"
-                f"{1 if e.is_door else 0},"
-                f"{1 if e.is_barge_part else 0},"
-                f"{1 if e.is_transparent else 0},"
-                f"{1 if e.is_light_source else 0},"
-                f"{1 if e.has_translucency else 0}"
-            )
-        return "\n".join(lines)
+            writer.writerow([
+                e.shape_num,
+                f"0x{e.shape_num:04X}",
+                f"0x{e.tfa[0]:02X}",
+                f"0x{e.tfa[1]:02X}",
+                f"0x{e.tfa[2]:02X}",
+                e.dims_x, e.dims_y, e.dims_z,
+                e.shape_class,
+                e.shape_class_name if e.shape_class != 0 else "",
+                e.shpdims_x, e.shpdims_y,
+                f"0x{e.shpdims_x_raw:02X}",
+                f"0x{e.shpdims_y_raw:02X}",
+                1 if e.is_x_obstacle else 0,
+                1 if e.is_y_obstacle else 0,
+                e.pixel_w, e.pixel_h, e.weight, e.volume,
+                1 if e.occludes else 0,
+                e.anim_type,
+                e.anim_type_name,
+                1 if e.has_sfx else 0,
+                1 if e.has_strange_movement else 0,
+                1 if e.is_animated else 0,
+                1 if e.is_solid else 0,
+                1 if e.is_water else 0,
+                1 if e.is_poisonous else 0,
+                1 if e.is_door else 0,
+                1 if e.is_barge_part else 0,
+                1 if e.is_transparent else 0,
+                1 if e.is_light_source else 0,
+                1 if e.has_translucency else 0,
+            ])
+
+        return buf.getvalue()
 
     def _compute_stats(self) -> list[tuple[str, int]]:
         """Compute flag/class/animation statistics."""
