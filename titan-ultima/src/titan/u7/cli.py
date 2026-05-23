@@ -57,6 +57,107 @@ def _resolve_u7_paths(game: str) -> tuple[Optional[str], Optional[str]]:
     return static, palette
 
 
+def _resolve_u7_gamedat(game: str) -> Optional[str]:
+    """Resolve loose GAMEDAT path from multi-game config for BG/SI."""
+    cfg = get_config() or {}
+    section_key = "u7bg" if game.lower() == "bg" else "u7si"
+    section = cfg.get(section_key, {}) if isinstance(cfg, dict) else {}
+    game_cfg = section.get("game", {}) if isinstance(section, dict) else {}
+    paths_cfg = section.get("paths", {}) if isinstance(section, dict) else {}
+
+    base = game_cfg.get("base") if isinstance(game_cfg, dict) else None
+    base_path = Path(str(base)).expanduser() if base else None
+
+    configured = paths_cfg.get("gamedat") if isinstance(paths_cfg, dict) else None
+    if configured:
+        path = Path(str(configured)).expanduser()
+        if path.is_absolute() or base_path is None:
+            return str(path)
+        return str(base_path / path)
+
+    if base_path is not None:
+        for name in ("gamedat", "GAMEDAT"):
+            candidate = base_path / name
+            if candidate.is_dir():
+                return str(candidate)
+    return None
+
+
+def _exult_profile_root() -> Optional[Path]:
+    """Return the standard per-user Exult profile root, if it exists."""
+    local_appdata = os.getenv("LOCALAPPDATA")
+    if not local_appdata:
+        return None
+    root = Path(local_appdata) / "Exult"
+    return root if root.is_dir() else None
+
+
+def _exult_game_slug(game: str) -> str:
+    return "blackgate" if game.lower() == "bg" else "serpentisle"
+
+
+def _resolve_u7_mod_gamedat(game: str, mod: Optional[str]) -> Optional[str]:
+    """Resolve per-user Exult runtime GAMEDAT for a base game or mod."""
+    cfg = get_config() or {}
+    section_key = "u7bg" if game.lower() == "bg" else "u7si"
+    section = cfg.get(section_key, {}) if isinstance(cfg, dict) else {}
+    game_cfg = section.get("game", {}) if isinstance(section, dict) else {}
+    mods_cfg = section.get("mods", {}) if isinstance(section, dict) else {}
+    if mod and isinstance(mods_cfg, dict):
+        mod_cfg = mods_cfg.get(mod, {})
+        if isinstance(mod_cfg, dict):
+            paths_cfg = mod_cfg.get("paths", {})
+            if isinstance(paths_cfg, dict):
+                configured = paths_cfg.get("gamedat")
+                if configured:
+                    path = Path(str(configured)).expanduser()
+                    if (path / "npc.dat").is_file():
+                        return str(path)
+
+    root = _exult_profile_root()
+    if root is None:
+        return None
+    base = root / _exult_game_slug(game)
+    candidate = base / "gamedat" if not mod else base / "mods" / mod / "gamedat"
+    if (candidate / "npc.dat").is_file():
+        return str(candidate)
+
+    base_path = game_cfg.get("base") if isinstance(game_cfg, dict) else None
+    if mod and base_path:
+        install_candidate = Path(str(base_path)).expanduser() / "mods" / mod / "gamedat"
+        if (install_candidate / "npc.dat").is_file():
+            return str(install_candidate)
+    return None
+
+
+def _resolve_u7_mod_archive(game: str, mod: Optional[str]) -> Optional[str]:
+    """Resolve configured Exult mod archive data, such as patch/initgame.dat."""
+    if not mod:
+        return None
+    cfg = get_config() or {}
+    section_key = "u7bg" if game.lower() == "bg" else "u7si"
+    section = cfg.get(section_key, {}) if isinstance(cfg, dict) else {}
+    game_cfg = section.get("game", {}) if isinstance(section, dict) else {}
+    mods_cfg = section.get("mods", {}) if isinstance(section, dict) else {}
+    mod_cfg = mods_cfg.get(mod, {}) if isinstance(mods_cfg, dict) else {}
+    paths_cfg = mod_cfg.get("paths", {}) if isinstance(mod_cfg, dict) else {}
+    archive = paths_cfg.get("archive") if isinstance(paths_cfg, dict) else None
+    if archive:
+        path = Path(str(archive)).expanduser()
+        if path.is_file():
+            return str(path)
+    base_path = game_cfg.get("base") if isinstance(game_cfg, dict) else None
+    if base_path:
+        mod_root = Path(str(base_path)).expanduser() / "mods" / mod
+        for candidate in (
+            mod_root / "patch" / "initgame.dat",
+            mod_root / "data" / "initgame.dat",
+        ):
+            if candidate.is_file():
+                return str(candidate)
+    return None
+
+
 def _resolve_loose_data_file(path: str, filename: str) -> str:
     """Resolve either a direct file path or a directory containing *filename*."""
     candidate = Path(path)
@@ -855,25 +956,78 @@ def cmd_typeflag_dump(args: SimpleNamespace) -> int:
 # ============================================================================
 
 def cmd_npc_dump(args: SimpleNamespace) -> int:
-    """Dump NPC data from a loose npc.dat file or GAMEDAT directory."""
-    from titan.u7.save import U7NPCData
+    """Dump NPC data from loose npc.dat, GAMEDAT, or INITGAME.DAT."""
+    from titan.u7.flex import U7FlexArchive
+    from titan.u7.save import U7NPCData, U7Save
 
-    filepath = _resolve_loose_data_file(args.file, "npc.dat")
-    if not os.path.isfile(filepath):
-        print(f"ERROR: npc.dat not found: {filepath}", file=sys.stderr)
+    input_path = Path(args.file)
+    looks_like_initgame = (
+        input_path.is_file()
+        and input_path.name.lower() == "initgame.dat"
+    )
+    initgame_source = looks_like_initgame and U7FlexArchive.is_u7_flex(
+        str(input_path)
+    )
+    archive_source = False
+    archive: Optional[U7Save] = None
+    if looks_like_initgame and not initgame_source:
+        try:
+            archive = U7Save.from_file(str(input_path))
+            archive_source = archive.has_entry("npc.dat")
+        except ValueError:
+            archive_source = False
+        if not archive_source:
+            print(
+                "ERROR: INITGAME.DAT is neither a U7 Flex archive nor an "
+                f"Exult ZIP archive with npc.dat: {input_path}",
+                file=sys.stderr,
+            )
+            return 1
+    filepath = str(input_path) if initgame_source else _resolve_loose_data_file(
+        args.file,
+        "npc.dat",
+    )
+    if not archive_source and not os.path.isfile(filepath):
+        print(
+            f"ERROR: npc.dat or INITGAME.DAT not found: {filepath}",
+            file=sys.stderr,
+        )
         return 1
 
-    print(f"Source: {filepath} (loose npc.dat)")
+    if initgame_source:
+        source_note = "INITGAME.DAT Flex:npc.dat"
+    elif archive_source:
+        source_note = "Exult archive:npc.dat"
+        filepath = str(input_path)
+    else:
+        source_note = "loose npc.dat"
+    print(f"Source: {filepath} ({source_note})")
     container_shapes = _load_container_shapes(
         args,
-        fallback_static=_infer_static_dir_for_data_file(filepath),
+        fallback_static=(
+            str(Path(filepath).resolve().parent)
+            if initgame_source
+            else _infer_static_dir_for_data_file(filepath)
+        ),
     )
-    print("Sex:    UNKNOWN (loose original npc.dat type flag is not reliable)")
-    npcs = U7NPCData.from_file(
-        filepath,
-        container_shapes=container_shapes,
-        sex_unknown=True,
-    )
+    if initgame_source:
+        print("Sex:    decoded from original new-game data (raw bit 9 inverted)")
+        npcs = U7NPCData.from_initgame_file(
+            filepath,
+            container_shapes=container_shapes,
+        )
+    elif archive_source and archive is not None:
+        print("Sex:    decoded from Exult runtime type_flags bit 9")
+        npcs = U7NPCData.from_save(
+            archive,
+            container_shapes=container_shapes,
+        )
+    else:
+        print("Sex:    decoded from Exult runtime type_flags bit 9")
+        npcs = U7NPCData.from_file(
+            filepath,
+            container_shapes=container_shapes,
+        )
 
     fmt = getattr(args, "format", "summary") or "summary"
 
@@ -885,7 +1039,7 @@ def cmd_npc_dump(args: SimpleNamespace) -> int:
         content = npcs.dump_summary()
 
     if args.output:
-        with open(args.output, "w") as f:
+        with open(args.output, "w", encoding="utf-8") as f:
             f.write(content)
             f.write("\n")
         print(f"\n{fmt.title()} dump written to: {args.output}")
@@ -947,6 +1101,281 @@ def cmd_schedule_dump(args: SimpleNamespace) -> int:
         print(f"\n{fmt.title()} dump written to: {args.output}")
     else:
         print()
+        print(content)
+    return 0
+
+
+def _csv_cell(value: object) -> str:
+    """Return a minimal CSV-safe cell for CLI reports."""
+    text = "" if value is None else str(value)
+    if any(ch in text for ch in ',\"\n\r'):
+        return '"' + text.replace('"', '""') + '"'
+    return text
+
+
+def cmd_gamedat_info(args: SimpleNamespace) -> int:
+    """Inspect a loose Exult GAMEDAT directory or Exult archive."""
+    from titan.u7.map import U7MapRenderer
+    from titan.u7.save import (
+        U7FrameFlags, U7GameState, U7GlobalFlags, U7Identity, U7Keyring,
+        U7NPCData, U7Save, U7SaveInfo, U7Schedules, U7UsecodeData,
+        U7UsecodeVars,
+    )
+    from titan.u7.shape import U7Shape
+
+    source = getattr(args, "directory", None)
+    mod = getattr(args, "mod", None)
+    if not source:
+        source = _resolve_u7_mod_gamedat(getattr(args, "game", "bg"), mod)
+    if not source:
+        source = _resolve_u7_mod_archive(getattr(args, "game", "bg"), mod)
+    if not source:
+        source = _resolve_u7_gamedat(getattr(args, "game", "bg"))
+    if not source:
+        print(
+            "ERROR: GAMEDAT source not supplied and no configured/default "
+            f"[u7{getattr(args, 'game', 'bg')}] source was found.",
+            file=sys.stderr,
+        )
+        return 1
+
+    root = Path(source)
+    archive: Optional[U7Save] = None
+    if root.is_file():
+        try:
+            archive = U7Save.from_file(str(root))
+        except ValueError as exc:
+            print(f"ERROR: GAMEDAT source is not a directory or Exult archive: {exc}", file=sys.stderr)
+            return 1
+    elif not root.is_dir():
+        print(f"ERROR: GAMEDAT source not found: {root}", file=sys.stderr)
+        return 1
+
+    def data_for(name: str) -> Optional[bytes]:
+        if archive is not None:
+            return archive.get_data(name)
+        path = root / name
+        return path.read_bytes() if path.is_file() else None
+
+    def source_size(name: str) -> int:
+        if archive is not None:
+            data = archive.get_data(name)
+            return len(data) if data is not None else 0
+        path = root / name
+        return path.stat().st_size if path.exists() else 0
+
+    def entry_names() -> list[str]:
+        if archive is not None:
+            return sorted(name for name, _ in archive.list_entries())
+        return sorted(path.name for path in root.iterdir() if path.is_file())
+
+    container_shapes = _load_container_shapes(
+        args,
+        fallback_static=(
+            None if archive is not None
+            else _infer_static_dir_for_data_file(str(root / "npc.dat"))
+        ),
+    )
+
+    rows: list[tuple[str, int, str, str]] = []
+
+    def add_row(name: str, status: str, note: str = "") -> None:
+        rows.append((name, source_size(name), status, note))
+
+    source_kind = f"{archive.container_format.upper()} archive" if archive else "directory"
+    lines: list[str] = [
+        "=== Loose GAMEDAT Info ===",
+        f"Source: {root} ({source_kind})",
+        "",
+    ]
+
+    identity_data = data_for("identity")
+    if identity_data is not None:
+        ident = U7Identity.from_bytes(identity_data)
+        lines.append(f"Identity: {ident.game}")
+        add_row("identity", "parsed", ident.game)
+
+    for name in ("exult.ver", "newgame.ver"):
+        data = data_for(name)
+        if data is not None:
+            first = data.decode("ascii", errors="replace").splitlines()[0]
+            add_row(name, "parsed text", first)
+
+    npc_names: dict[int, str] | None = None
+    npc_data = data_for("npc.dat")
+    if npc_data is not None:
+        npcs = U7NPCData.from_bytes(
+            npc_data,
+            container_shapes=container_shapes,
+        )
+        npc_names = npcs.name_map()
+        lines.append(npcs.dump_summary())
+        female_count = sum(1 for npc in npcs.npcs if npc.is_female)
+        male_count = sum(1 for npc in npcs.npcs if npc.is_female is False)
+        lines.append(
+            "NPC sex: decoded from Exult runtime type_flags bit 9 "
+            f"({female_count} female, {male_count} male)."
+        )
+        add_row(
+            "npc.dat",
+            "parsed",
+            f"{len(npcs.npcs)} NPCs; {female_count} female, {male_count} male",
+        )
+
+    mon_data = data_for("monsnpcs.dat")
+    if mon_data is not None:
+        monsters = U7NPCData.from_monsnpcs_bytes(
+            mon_data,
+            container_shapes=container_shapes,
+        )
+        lines.append(
+            f"Monster NPCs: {len(monsters.npcs)} parsed "
+            f"({monsters.num_npcs1} declared)"
+        )
+        add_row("monsnpcs.dat", "parsed", f"{len(monsters.npcs)} monsters")
+
+    sched_data = data_for("schedule.dat")
+    if sched_data is not None:
+        sched = U7Schedules.from_bytes(sched_data)
+        lines.append(sched.dump_summary(npc_names))
+        total = sum(len(entries) for entries in sched.entries.values())
+        add_row("schedule.dat", "parsed", f"{total} entries ({sched.format})")
+
+    flag_data = data_for("flaginit")
+    if flag_data is not None:
+        gflags = U7GlobalFlags.from_bytes(flag_data)
+        lines.append(gflags.dump_summary())
+        add_row("flaginit", "parsed", f"{gflags.nonzero_count} nonzero")
+
+    saveinfo_data = data_for("saveinfo.dat")
+    if saveinfo_data is not None:
+        info = U7SaveInfo.from_bytes(saveinfo_data)
+        lines.append(
+            f"Save info: {info.real_year:04d}-{info.real_month:02d}-"
+            f"{info.real_day:02d} {info.real_hour:02d}:"
+            f"{info.real_minute:02d}:{info.real_second:02d}, "
+            f"party size {info.party_size}"
+        )
+        add_row("saveinfo.dat", "parsed", f"party size {info.party_size}")
+
+    gwin_data = data_for("gamewin.dat")
+    if gwin_data is not None:
+        gwin = U7GameState.from_bytes(gwin_data)
+        lines.append(
+            f"Game window: camera=({gwin.scroll_tx},{gwin.scroll_ty}), "
+            f"day {gwin.clock_day}, {gwin.clock_hour:02d}:"
+            f"{gwin.clock_minute:02d}"
+        )
+        add_row("gamewin.dat", "parsed", "camera/time state")
+
+    usedat_data = data_for("usecode.dat")
+    if usedat_data is not None:
+        usedat = U7UsecodeData.from_bytes(usedat_data)
+        nonzero = sum(1 for timer in usedat.timers if timer.value != 0)
+        lines.append(
+            f"Usecode runtime: party={usedat.party_members}, "
+            f"timers={len(usedat.timers)} ({nonzero} nonzero)"
+        )
+        add_row("usecode.dat", "parsed summary", "party/timers/saved pos")
+
+    usevars_data = data_for("usecode.var")
+    if usevars_data is not None:
+        usevars = U7UsecodeVars.from_bytes(usevars_data)
+        add_row(
+            "usecode.var",
+            "parsed summary",
+            f"{usevars.global_static_count} global statics",
+        )
+
+    keyring_data = data_for("keyring.dat")
+    if keyring_data is not None:
+        keyring = U7Keyring.from_bytes(keyring_data)
+        add_row("keyring.dat", "parsed", f"{len(keyring.keys)} keys")
+
+    frames_data = data_for("frames.flg")
+    if frames_data is not None:
+        frames = U7FrameFlags.from_bytes(frames_data)
+        add_row(
+            "frames.flg",
+            "parsed",
+            f"{len(frames.values)} entries, {frames.non_default_count} set",
+        )
+
+    if archive is None:
+        screenshot_path = root / "scrnshot.shp"
+        if screenshot_path.is_file():
+            shape = U7Shape.from_file(str(screenshot_path))
+            if shape.frames:
+                frame = shape.frames[0]
+                add_row(
+                    "scrnshot.shp",
+                    "parsed",
+                    f"{len(shape.frames)} frame(s), {frame.width}x{frame.height}",
+                )
+            else:
+                add_row("scrnshot.shp", "parsed", "0 frames")
+
+    ireg_names = [
+        name for name in entry_names()
+        if name.startswith("u7ireg") and len(Path(name).name) == 8
+    ]
+    if ireg_names:
+        total_bytes = sum(source_size(name) for name in ireg_names)
+        if archive is None:
+            simple_objects = 0
+            for name in ireg_names:
+                path = root / name
+                schunk = int(path.name[-2:], 16)
+                simple_objects += len(U7MapRenderer.parse_ireg(str(path), schunk))
+            note = f"{len(ireg_names)} files; {simple_objects} simple objects"
+            lines.append(
+                f"IREG: {len(ireg_names)} files, {simple_objects} simple "
+                "objects parsed by current partial parser"
+            )
+        else:
+            note = f"{len(ireg_names)} files; archive bytes counted"
+            lines.append(
+                f"IREG: {len(ireg_names)} files present; object parsing is "
+                "available for loose files"
+            )
+        rows.append(("u7iregNN", total_bytes, "partially parsed", note))
+
+    known = {name for name, _, _, _ in rows}
+    known.add("u7iregNN")
+    for name in entry_names():
+        plain_name = Path(name).name
+        if plain_name in known or name in known:
+            continue
+        if plain_name.startswith("u7ireg") and len(plain_name) == 8:
+            continue
+        if Path(plain_name).suffix.lower() in {".csv", ".md"}:
+            rows.append((name, source_size(name), "generated artifact", ""))
+        else:
+            rows.append((name, source_size(name), "unrecognized", ""))
+
+    fmt = getattr(args, "format", "summary") or "summary"
+    if fmt == "csv":
+        content_lines = ["file,size,status,note"]
+        content_lines.extend(
+            ",".join(_csv_cell(cell) for cell in row) for row in rows
+        )
+        content = "\n".join(content_lines)
+    elif fmt == "detail":
+        lines.append("")
+        lines.append("--- File Coverage ---")
+        for name, size, status, note in rows:
+            suffix = f" - {note}" if note else ""
+            lines.append(f"{name:<24} {size:>8}  {status}{suffix}")
+        content = "\n".join(lines)
+    else:
+        content = "\n".join(lines)
+
+    if args.output:
+        with open(args.output, "w", encoding="utf-8") as f:
+            f.write(content)
+            f.write("\n")
+        print(f"\n{fmt.title()} dump written to: {args.output}")
+    else:
         print(content)
     return 0
 
@@ -1535,7 +1964,7 @@ def typeflag_dump_cmd(
 @u7_app.command("npc-dump")
 def npc_dump_cmd(
     file: Annotated[str, typer.Argument(
-        help="Path to npc.dat or a GAMEDAT directory containing npc.dat")],
+        help="Path to npc.dat, a GAMEDAT directory, or STATIC/INITGAME.DAT")],
     static: Annotated[
         Optional[str],
         typer.Option("--static",
@@ -1556,7 +1985,7 @@ def npc_dump_cmd(
                      help="Output format: summary (default), detail, csv"),
     ] = None,
 ) -> None:
-    """Dump NPC data from loose Exult GAMEDAT npc.dat."""
+    """Dump NPC data from loose Exult GAMEDAT npc.dat or INITGAME.DAT."""
     raise SystemExit(cmd_npc_dump(SimpleNamespace(
         file=file, game=game, static=static, output=output, format=format,
     )))
@@ -1595,6 +2024,41 @@ def schedule_dump_cmd(
     raise SystemExit(cmd_schedule_dump(SimpleNamespace(
         file=file, npc_file=npc_file, game=game, static=static,
         output=output, format=format,
+    )))
+
+
+@u7_app.command("gamedat-info")
+def gamedat_info_cmd(
+    directory: Annotated[Optional[str], typer.Argument(
+        help="Path to a loose Exult GAMEDAT directory or archive (default: titan.toml/AppData)")] = None,
+    static: Annotated[
+        Optional[str],
+        typer.Option("--static",
+                     help="Path to STATIC directory for npc.dat inventory parsing"),
+    ] = None,
+    game: Annotated[
+        Literal["bg", "si"],
+        typer.Option("--game", help="Use config section for BG or SI defaults"),
+    ] = "bg",
+    mod: Annotated[
+        Optional[str],
+        typer.Option("--mod", help="Resolve AppData Exult runtime GAMEDAT for this mod"),
+    ] = None,
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output",
+                     help="Write dump to this file"),
+    ] = None,
+    format: Annotated[
+        Optional[str],
+        typer.Option("-f", "--format",
+                     help="Output format: summary (default), detail, csv"),
+    ] = None,
+) -> None:
+    """Inspect loose Exult GAMEDAT files or archives."""
+    raise SystemExit(cmd_gamedat_info(SimpleNamespace(
+        directory=directory, game=game, mod=mod, static=static, output=output,
+        format=format,
     )))
 
 

@@ -1398,6 +1398,87 @@ titan u7 gflag-dump gamedat/flaginit -f detail -o gflags.txt
 
 ---
 
+#### `u7 gamedat-info`
+
+Inspect a loose Exult `GAMEDAT/` directory or Exult archive in one pass and
+produce a consolidated report of the files TITAN currently understands.
+
+This is the best starting command when you have extracted or copied a live
+`GAMEDAT/` folder, or when a mod stores its initial data in
+`patch/initgame.dat`, and want to see what can be read before running focused
+exports.
+
+```
+titan u7 gamedat-info [GAMEDAT_DIR|ARCHIVE] [--game bg|si] [--mod NAME] [--static DIR] [-o FILE] [-f FORMAT]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `GAMEDAT_DIR|ARCHIVE` | Directory containing loose Exult runtime files, or an Exult ZIP/FLEX archive containing GAMEDAT entries. Optional when config or AppData discovery can resolve a source |
+| `--game bg|si` | Select config section for default GAMEDAT/STATIC lookup (`bg` default) |
+| `--mod NAME` | Resolve a configured or AppData mod source such as `serpentisle/mods/NAME/gamedat`, falling back to `[u7si.mods."NAME".paths].archive` |
+| `--static DIR` | Override STATIC directory for TFA container detection |
+| `-o FILE`, `--output FILE` | Write report to this file |
+| `-f FORMAT`, `--format FORMAT` | Output format: `summary` (default), `detail`, `csv` |
+
+Currently reports:
+- `identity`, `exult.ver`, `newgame.ver`
+- `npc.dat` summary, including NPC sex decoded from Exult runtime
+  `type_flags` bit 9
+- `monsnpcs.dat` monster actor summary
+- `schedule.dat` schedule counts
+- `flaginit` global flag counts
+- `saveinfo.dat` save timestamp and party size
+- `gamewin.dat` camera/time state
+- `usecode.dat` party/timer/saved-position summary
+- `usecode.var` static variable summary
+- `keyring.dat` key count
+- `frames.flg` frame-flag counts
+- `scrnshot.shp` screenshot shape dimensions
+- `u7ireg00`–`u7ireg8f` partial simple-object counts
+
+`titan setup` records mod save folders as `[u7*.mods."NAME".paths].saves`
+when it can find `.sav` files. Because some mods save directly in the mod
+profile root while others use a `saves/` child folder, setup scans the mod
+profile recursively and chooses the folder containing the most `.sav` files.
+Those `.sav` files are full Exult save archives for commands such as
+`u7 save-info`, `u7 save-npcs`, `u7 save-schedules`, and `u7 save-extract`;
+pass those commands a specific `.sav` file from the recorded folder.
+
+`u7iregNN` files are mutable map-region object files. Static terrain and
+fixed map layout come from install-side files such as `U7MAP`, `U7CHUNKS`,
+`U7IFIX*`, and `SHAPES.VGA`; `u7iregNN` adds the current dynamic state for
+objects that can be moved, created, removed, placed in containers, or otherwise
+changed during play. `u7 gamedat-info` currently counts/parses simple loose
+IREG entries as a partial model and reports archive IREG presence.
+
+> `u7 gamedat-info` is a consolidated reader/report command, not yet a full
+> byte-perfect extraction of every GAMEDAT format. IREG parsing is currently
+> partial: simple object entries are counted, while extended records,
+> containers, eggs, attributes, strings, and scheduled usecode still need a
+> fuller data model.
+
+**Examples**
+```bash
+# Quick loose GAMEDAT summary
+titan u7 gamedat-info --game si
+titan u7 gamedat-info gamedat/ --static STATIC/
+
+# Mod runtime/archive summaries
+titan u7 gamedat-info --game bg --mod Keyring
+titan u7 gamedat-info --game si --mod sifixes
+titan u7 gamedat-info --game si --mod <mod-name>
+titan u7 gamedat-info mods/<mod-name>/patch/initgame.dat --static STATIC/
+
+# Detailed file coverage report
+titan u7 gamedat-info --game si -f detail -o gamedat_info.txt
+
+# CSV inventory for analysis
+titan u7 gamedat-info gamedat/ --static STATIC/ -f csv -o gamedat_info.csv
+```
+
+---
+
 #### `u7 save-info`
 
 Show consolidated save metadata: game identity, real-world save timestamp,
@@ -1438,9 +1519,10 @@ inventory skipping, it uses `--static`, `titan.toml`, or a sibling `STATIC/`
 directory to load `TFA.DAT`.
 
 > **Format note:** This command is aimed at Exult-style loose `GAMEDAT/` plus
-> `STATIC/` layouts. For loose original `npc.dat` exports, the `female` column
-> is reported as `UNKNOWN` because the available type-flag field is not
-> reliable in this Exult-compatible file flow.
+> `STATIC/` layouts. Exult runtime `npc.dat` stores NPC sex in `type_flags`
+> bit 9, matching `get_npc_prop(SEX_FLAG)`. Original new-game data embedded in
+> `INITGAME.DAT` uses Exult's first-load normalization path and is decoded by
+> passing `INITGAME.DAT` to this command.
 
 **Examples**
 ```bash
@@ -1816,6 +1898,7 @@ variant  = "blackgate"
 static   = "STATIC/"
 shapes   = "STATIC/SHAPES.VGA"
 palette  = "STATIC/PALETTES.FLX"
+gamedat  = "gamedat/"
 
 [u7si.game]
 base     = "C:/GOG Games/Ultima VII/SERPENT"
@@ -1825,6 +1908,7 @@ variant  = "serpentisle"
 static   = "STATIC/"
 shapes   = "STATIC/SHAPES.VGA"
 palette  = "STATIC/PALETTES.FLX"
+gamedat  = "gamedat/"
 ```
 
 ### Search order
@@ -1887,6 +1971,7 @@ A value on the command line always wins.
 | `u7 save-list` | List entries in an Exult U7 savegame |
 | `u7 save-extract` | Extract entries from an Exult U7 savegame |
 | `u7 gflag-dump` | Dump global flags from a U7 save or `flaginit` file |
+| `u7 gamedat-info` | Inspect loose Exult `GAMEDAT/` files in one consolidated report |
 | `u7 save-info` | Show save metadata: identity, timestamp, party, game state |
 | `u7 npc-dump` | Dump NPC data from loose Exult `npc.dat` / `GAMEDAT` |
 | `u7 save-npcs` | Dump NPC data from an Exult U7 savegame |

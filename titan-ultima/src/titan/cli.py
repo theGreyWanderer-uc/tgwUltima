@@ -480,8 +480,20 @@ def cmd_config(args: SimpleNamespace) -> int:
         _print_kv_section("[u8.paths]", u8.get("paths", {}), check_exists=True)
         _print_kv_section("[u7bg.game]", u7bg.get("game", {}))
         _print_kv_section("[u7bg.paths]", u7bg.get("paths", {}), check_exists=True)
+        for mod_name, mod in u7bg.get("mods", {}).items():
+            _print_kv_section(
+                f'[u7bg.mods."{mod_name}".paths]',
+                mod.get("paths", {}),
+                check_exists=True,
+            )
         _print_kv_section("[u7si.game]", u7si.get("game", {}))
         _print_kv_section("[u7si.paths]", u7si.get("paths", {}), check_exists=True)
+        for mod_name, mod in u7si.get("mods", {}).items():
+            _print_kv_section(
+                f'[u7si.mods."{mod_name}".paths]',
+                mod.get("paths", {}),
+                check_exists=True,
+            )
     else:
         game = config.get("game", {})
         paths = config.get("paths", {})
@@ -692,6 +704,84 @@ def cmd_setup(args: SimpleNamespace) -> int:
     )
     u7bg_static_detected = (Path(u7bg_base) / "STATIC") if u7bg_base else None
     u7si_static_detected = (Path(u7si_base) / "STATIC") if u7si_base else None
+    exult_profile = (
+        Path(os.getenv("LOCALAPPDATA", "")) / "Exult"
+        if os.getenv("LOCALAPPDATA") else None
+    )
+    if exult_profile is not None and not exult_profile.is_dir():
+        exult_profile = None
+
+    def _has_runtime_npc(path: Path) -> bool:
+        return (path / "npc.dat").is_file()
+
+    def _preferred_u7_gamedat(base_value: str, slug: str) -> str:
+        candidates: list[Path] = []
+        if exult_profile is not None:
+            candidates.append(exult_profile / slug / "gamedat")
+        if base_value:
+            candidates.append(Path(base_value) / "gamedat")
+            candidates.append(Path(base_value) / "GAMEDAT")
+        for candidate in candidates:
+            if _has_runtime_npc(candidate):
+                return str(candidate).replace("\\", "/")
+        return "gamedat/"
+
+    def _discover_u7_mod_sources(base_value: str, slug: str) -> list[dict[str, str]]:
+        if not base_value:
+            return []
+        install_mods = Path(base_value) / "mods"
+        if not install_mods.is_dir():
+            return []
+
+        def _best_saves_dir(runtime_root: Optional[Path]) -> Optional[Path]:
+            if runtime_root is None or not runtime_root.is_dir():
+                return None
+            counts: dict[Path, int] = {}
+            for save_file in runtime_root.rglob("*.sav"):
+                if save_file.is_file():
+                    counts[save_file.parent] = counts.get(save_file.parent, 0) + 1
+            if not counts:
+                return None
+            return sorted(
+                counts.items(),
+                key=lambda item: (-item[1], len(str(item[0])), str(item[0]).lower()),
+            )[0][0]
+
+        sources: list[dict[str, str]] = []
+        for mod_dir in sorted(p for p in install_mods.iterdir() if p.is_dir()):
+            item: dict[str, str] = {"name": mod_dir.name}
+            runtime_root = (
+                exult_profile / slug / "mods" / mod_dir.name
+                if exult_profile is not None else None
+            )
+            if runtime_root is not None and runtime_root.is_dir():
+                item["root"] = str(runtime_root).replace("\\", "/")
+            runtime_gamedat = (
+                runtime_root / "gamedat" if runtime_root is not None else None
+            )
+            install_gamedat = mod_dir / "gamedat"
+            if runtime_gamedat is not None and _has_runtime_npc(runtime_gamedat):
+                item["gamedat"] = str(runtime_gamedat).replace("\\", "/")
+            elif _has_runtime_npc(install_gamedat):
+                item["gamedat"] = str(install_gamedat).replace("\\", "/")
+            saves_dir = _best_saves_dir(runtime_root)
+            if saves_dir is not None:
+                item["saves"] = str(saves_dir).replace("\\", "/")
+            for archive in (
+                mod_dir / "patch" / "initgame.dat",
+                mod_dir / "data" / "initgame.dat",
+            ):
+                if archive.is_file():
+                    item["archive"] = str(archive).replace("\\", "/")
+                    break
+            if len(item) > 1:
+                sources.append(item)
+        return sources
+
+    u7bg_gamedat = _preferred_u7_gamedat(u7bg_base, "blackgate") if u7bg_base else ""
+    u7si_gamedat = _preferred_u7_gamedat(u7si_base, "serpentisle") if u7si_base else ""
+    u7bg_mod_sources = _discover_u7_mod_sources(u7bg_base, "blackgate")
+    u7si_mod_sources = _discover_u7_mod_sources(u7si_base, "serpentisle")
 
     print("\nDetected folders to write to titan.toml:")
     print(f"  U8 base:      {base}")
@@ -700,8 +790,26 @@ def cmd_setup(args: SimpleNamespace) -> int:
     print(f"  U8 USECODE:   {u8_usecode_detected}")
     print(f"  U7 BG base:   {u7bg_base or '(empty)'}")
     print(f"  U7 BG STATIC: {u7bg_static_detected or '(empty)'}")
+    print(f"  U7 BG GAMEDAT:{u7bg_gamedat or '(empty)'}")
     print(f"  U7 SI base:   {u7si_base or '(empty)'}")
     print(f"  U7 SI STATIC: {u7si_static_detected or '(empty)'}")
+    print(f"  U7 SI GAMEDAT:{u7si_gamedat or '(empty)'}")
+    for item in u7bg_mod_sources:
+        print(
+            f"  U7 BG mod:    {item['name']} "
+            f"root={item.get('root', '(none)')} "
+            f"gamedat={item.get('gamedat', '(none)')} "
+            f"saves={item.get('saves', '(none)')} "
+            f"archive={item.get('archive', '(none)')}"
+        )
+    for item in u7si_mod_sources:
+        print(
+            f"  U7 SI mod:    {item['name']} "
+            f"root={item.get('root', '(none)')} "
+            f"gamedat={item.get('gamedat', '(none)')} "
+            f"saves={item.get('saves', '(none)')} "
+            f"archive={item.get('archive', '(none)')}"
+        )
 
     confirm = input("Are these paths correct? [Y/n] ").strip().lower()
 
@@ -716,6 +824,10 @@ def cmd_setup(args: SimpleNamespace) -> int:
         lang = ""
         u7bg_base = ""
         u7si_base = ""
+        u7bg_gamedat = ""
+        u7si_gamedat = ""
+        u7bg_mod_sources = []
+        u7si_mod_sources = []
 
         manual_u8_static = input("U8 STATIC path [optional]: ").strip().replace("\\", "/")
         manual_u8_usecode = input("U8 EUSECODE.FLX path [optional]: ").strip().replace("\\", "/")
@@ -763,6 +875,7 @@ def cmd_setup(args: SimpleNamespace) -> int:
         base_guess = ""
         if static_p.name.upper() == "STATIC" and static_p.parent != static_p:
             base_guess = str(static_p.parent).replace("\\", "/")
+        gamedat_guess = str(static_p.parent / "gamedat").replace("\\", "/")
         section_name = "u7bg" if variant == "blackgate" else "u7si"
         return [
             "",
@@ -774,6 +887,7 @@ def cmd_setup(args: SimpleNamespace) -> int:
             f'static   = "{static_norm}"',
             f'shapes   = "{static_norm}/SHAPES.VGA"',
             f'palette  = "{static_norm}/PALETTES.FLX"',
+            f'gamedat  = "{gamedat_guess}"',
         ]
 
     lines = [
@@ -820,7 +934,21 @@ def cmd_setup(args: SimpleNamespace) -> int:
             'static   = "STATIC/"',
             'shapes   = "STATIC/SHAPES.VGA"',
             'palette  = "STATIC/PALETTES.FLX"',
+            f'gamedat  = "{u7bg_gamedat}"',
         ]
+        for item in u7bg_mod_sources:
+            lines += [
+                "",
+                f'[u7bg.mods."{item["name"]}".paths]',
+            ]
+            if "gamedat" in item:
+                lines.append(f'gamedat  = "{item["gamedat"]}"')
+            if "saves" in item:
+                lines.append(f'saves    = "{item["saves"]}"')
+            if "root" in item:
+                lines.append(f'root     = "{item["root"]}"')
+            if "archive" in item:
+                lines.append(f'archive  = "{item["archive"]}"')
 
     if manual_u7si_static:
         lines += _u7_section_from_manual(manual_u7si_static, "serpentisle")
@@ -835,7 +963,21 @@ def cmd_setup(args: SimpleNamespace) -> int:
             'static   = "STATIC/"',
             'shapes   = "STATIC/SHAPES.VGA"',
             'palette  = "STATIC/PALETTES.FLX"',
+            f'gamedat  = "{u7si_gamedat}"',
         ]
+        for item in u7si_mod_sources:
+            lines += [
+                "",
+                f'[u7si.mods."{item["name"]}".paths]',
+            ]
+            if "gamedat" in item:
+                lines.append(f'gamedat  = "{item["gamedat"]}"')
+            if "saves" in item:
+                lines.append(f'saves    = "{item["saves"]}"')
+            if "root" in item:
+                lines.append(f'root     = "{item["root"]}"')
+            if "archive" in item:
+                lines.append(f'archive  = "{item["archive"]}"')
 
     toml_path = Path.cwd() / "titan.toml"
     toml_path.write_text("\n".join(lines) + "\n", encoding="utf-8")

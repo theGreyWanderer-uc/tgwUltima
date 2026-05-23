@@ -10,6 +10,35 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ---
 
+## [0.6.5]
+
+### Added
+
+- **Expanded Titan setup path discovery** — setup and U7 helper commands now
+  account for Exult profile paths in `%LOCALAPPDATA%/Exult`, including
+  initialized base-game and mod `gamedat` folders, mod-specific save roots,
+  and IREG/runtime data locations alongside installed game files.
+- **Dialogue web branch visibility** — the U8 dialogue web engine now
+  simulates `urandom(...)` conversation branches, reports the selected roll,
+  selected-branch chance, and first visible outcome at conversation end.
+- **Dialogue web flag-gated ending hints** — conversations that end through a
+  simple global-flag branch now report the selected flag value and suggest
+  the alternate value to try, such as `devonInRule = false` for GUARD10.
+
+### Fixed
+
+- **U7 NPC sex source clarification** — confirmed Exult writes normalized NPC
+  sex into runtime `GAMEDAT/npc.dat` type flags after initialization, while
+  original `INITGAME.DAT` uses Exult's new-game inversion path. Titan now
+  treats initialized Exult runtime files as authoritative instead of forcing
+  loose NPC sex to `UNKNOWN`.
+- **Dialogue web random/string branch handling** — fixed U8 dialogue paths
+  that combine random branches with ask-driven conversation flow, including
+  raw `strcmp` expressions that compare against both literals and local
+  variables.
+
+---
+
 ## [0.6.4]
 
 ### Added
@@ -21,6 +50,10 @@ This project uses [Semantic Versioning](https://semver.org/):
   `u7 typeflag-dump --format detail` output plus source-checked parser notes
   for `TFA.DAT`, `SHPDIMS.DAT`, `WGTVOL.DAT`, `OCCLUDE.DAT`, shape classes,
   and BG/SI animation nibbles.
+- **U7 Exult runtime source discovery** — `titan setup` now records live
+  Exult profile `GAMEDAT` paths when initialized, detects mod
+  `patch/initgame.dat` archives, and `u7 gamedat-info --mod NAME` can inspect
+  configured/AppData mod sources.
 
 ### Fixed
 
@@ -35,11 +68,17 @@ This project uses [Semantic Versioning](https://semver.org/):
 - Corrected the U8 dialogue web engine loop safety guard so long valid
   conversations that pause at an `Ask` no longer force-end after ten topic
   choices, while no-pause runaway loops are still capped.
+- Corrected loose Exult `GAMEDAT/npc.dat` sex export to decode runtime
+  `type_flags` bit 9 directly, while `INITGAME.DAT` still uses Exult's
+  original new-game inversion path.
+- Added raw ZIP archive support for Exult mod `initgame.dat` containers.
 
-### Known Issues
+### Correction
 
-- U7 NPC sex is exported as `UNKNOWN` for loose original `npc.dat` files,
-  because the available type-flag field is not reliable in these source files.
+- The U7 Exult runtime source discovery note above was incomplete: Exult
+  stores initialized base-game and mod runtime files under its profile data
+  folders, not only under the installed game or mod directories. The expanded
+  setup/path handling is tracked in `0.6.5`.
 
 ---
 
