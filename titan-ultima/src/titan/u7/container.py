@@ -38,7 +38,7 @@ from titan.u7.map import (
     C_TILES_PER_CHUNK,
 )
 from titan.u7.typeflag import U7TypeFlags
-from titan.u7.names import U7ShapeNames
+from titan.u7.names import U7ShapeNames, U7FrameNames
 from titan.u7.world import _superchunks_for_rect
 
 
@@ -67,6 +67,7 @@ class ContainerQueryParams:
 
     # Names
     text_flx_path: Optional[str] = None
+    exult_flx_path: Optional[str] = None  # path to exult_bg.flx or exult_si.flx
 
     # Output
     output_format: str = "tree"    # "tree", "csv"
@@ -301,9 +302,24 @@ def browse_containers(params: ContainerQueryParams) -> list[ContainerResult]:
 # Formatters
 # ---------------------------------------------------------------------------
 
+def _item_label(
+    obj: U7MapObject,
+    names: Optional[U7ShapeNames],
+    frame_names: Optional[U7FrameNames],
+) -> str:
+    """Return the best display label for an item, using frame name when available."""
+    if frame_names:
+        fname = frame_names.get(obj.shape, obj.frame)
+        if fname:
+            return f"{obj.shape}:{obj.frame} ({fname})"
+    shape_name = names.get(obj.shape) if names else ""
+    return f"{obj.shape} ({shape_name})" if shape_name else str(obj.shape)
+
+
 def format_tree(
     results: list[ContainerResult],
     names: Optional[U7ShapeNames],
+    frame_names: Optional[U7FrameNames] = None,
 ) -> str:
     lines: list[str] = []
     lines.append(f"Container browse: {len(results)} container(s) found.")
@@ -327,7 +343,7 @@ def format_tree(
         )
         if res.obj.egg_meta and not res.is_nested:
             lines.append(f"    egg: {res.obj.egg_meta.summary()}")
-        _append_children(lines, res.obj.children, names, indent="    ", last_flags=[])
+        _append_children(lines, res.obj.children, names, frame_names, indent="    ", last_flags=[])
         lines.append("")
 
     return "\n".join(lines)
@@ -337,14 +353,14 @@ def _append_children(
     lines: list[str],
     children: list[U7MapObject],
     names: Optional[U7ShapeNames],
+    frame_names: Optional[U7FrameNames],
     indent: str,
     last_flags: list[bool],
 ) -> None:
     for i, child in enumerate(children):
         is_last = (i == len(children) - 1)
         branch = "└─ " if is_last else "├─ "
-        name = names.get(child.shape) if names else ""
-        label = f"{child.shape} ({name})" if name else str(child.shape)
+        label = _item_label(child, names, frame_names)
 
         qty_str = ""
         if child.quality > 1:
@@ -358,12 +374,13 @@ def _append_children(
 
         if child.children:
             child_indent = indent + ("    " if is_last else "│   ")
-            _append_children(lines, child.children, names, child_indent, last_flags + [is_last])
+            _append_children(lines, child.children, names, frame_names, child_indent, last_flags + [is_last])
 
 
 def format_csv(
     results: list[ContainerResult],
     names: Optional[U7ShapeNames],
+    frame_names: Optional[U7FrameNames] = None,
 ) -> str:
     buf = io.StringIO()
     writer = csv.writer(buf)
@@ -375,7 +392,6 @@ def format_csv(
     ])
 
     for res in results:
-        # For nested containers, substitute world coords from the root object.
         display_obj = res.obj
         if res.is_nested:
             from copy import copy as _copy
@@ -384,7 +400,7 @@ def format_csv(
             display_obj.ty = res.world_ty
             display_obj.tz = res.world_tz
         _write_children_csv(
-            writer, res.obj.children, names,
+            writer, res.obj.children, names, frame_names,
             res.superchunk, display_obj, names.get(res.obj.shape) if names else "",
             depth=1, path_parts=[res.label()],
         )
@@ -396,6 +412,7 @@ def _write_children_csv(
     writer: "csv.writer",
     children: list[U7MapObject],
     names: Optional[U7ShapeNames],
+    frame_names: Optional[U7FrameNames],
     sc: int,
     container: U7MapObject,
     container_name: str,
@@ -403,8 +420,12 @@ def _write_children_csv(
     path_parts: list[str],
 ) -> None:
     for child in children:
-        child_name = names.get(child.shape) if names else ""
-        child_label = f"{child.shape} ({child_name})" if child_name else str(child.shape)
+        child_label = _item_label(child, names, frame_names)
+        # item_name column: prefer frame name, fall back to shape name
+        if frame_names:
+            child_name = frame_names.get(child.shape, child.frame) or (names.get(child.shape) if names else "")
+        else:
+            child_name = names.get(child.shape) if names else ""
         path = " > ".join(path_parts + [child_label])
 
         writer.writerow([
@@ -426,16 +447,21 @@ def _write_children_csv(
 
         if child.children:
             _write_children_csv(
-                writer, child.children, names,
+                writer, child.children, names, frame_names,
                 sc, child, child_name,
                 depth + 1, path_parts + [child_label],
             )
 
 
-def format_results(results: list[ContainerResult], params: ContainerQueryParams, names: Optional[U7ShapeNames]) -> str:
+def format_results(
+    results: list[ContainerResult],
+    params: ContainerQueryParams,
+    names: Optional[U7ShapeNames],
+    frame_names: Optional[U7FrameNames] = None,
+) -> str:
     if params.output_format == "csv":
-        return format_csv(results, names)
-    return format_tree(results, names)
+        return format_csv(results, names, frame_names)
+    return format_tree(results, names, frame_names)
 
 
 # ---------------------------------------------------------------------------
@@ -446,6 +472,7 @@ def run_wizard(
     static_dir: Optional[str] = None,
     gamedat_dir: Optional[str] = None,
     text_flx: Optional[str] = None,
+    exult_flx_path: Optional[str] = None,
 ) -> int:
     """Interactive questionary container-browse wizard. Returns exit code."""
     try:
@@ -480,6 +507,19 @@ def run_wizard(
             pass
     if _names is None and static_dir:
         _names = U7ShapeNames.from_static_dir(static_dir)
+
+    _frame_names: Optional[U7FrameNames] = None
+    if static_dir and exult_flx_path and Path(exult_flx_path).exists():
+        _text_flx = text_flx or next(
+            (str(Path(static_dir) / n) for n in ("TEXT.FLX", "text.flx")
+             if (Path(static_dir) / n).exists()),
+            None,
+        )
+        if _text_flx:
+            try:
+                _frame_names = U7FrameNames.from_flx(exult_flx_path, _text_flx)
+            except Exception:
+                pass
 
     # ── 2. Container filter ───────────────────────────────────────────────
     print()
@@ -633,7 +673,7 @@ def run_wizard(
     )
 
     results = browse_containers(params)
-    output = format_results(results, params, _names)
+    output = format_results(results, params, _names, _frame_names)
 
     if output_path:
         Path(output_path).write_text(output, encoding="utf-8")

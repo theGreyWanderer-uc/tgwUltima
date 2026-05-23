@@ -1882,6 +1882,7 @@ titan u7 container-browse [STATIC] [OPTIONS]
 | `--game bg\|si` | Use config section for BG or SI (default: `bg`) |
 | `--gamedat PATH` | Path to gamedat/ directory — required |
 | `--text PATH` | Explicit TEXT.FLX path for shape name lookup |
+| `--exult-flx PATH` | Path to `exult_bg.flx` or `exult_si.flx` for per-frame item names |
 | `--container-shape N` | Container shape filter, hex or decimal (repeatable) |
 | `--container-name STR` | Container name substring filter (case-insensitive) |
 | `--contains-shape N` | Only show containers holding item with this shape (repeatable) |
@@ -1897,6 +1898,7 @@ titan u7 container-browse [STATIC] [OPTIONS]
 - Tree format shows the full nesting hierarchy with `├─`/`└─`/`│` branches, item counts, and quality multipliers.
 - CSV format emits one row per item at any nesting depth with a `path` column like `819 (barrel) > 801 (backpack) > item`.
 - Shape names come from TEXT.FLX (auto-discovered from STATIC if not given via `--text`).
+- `--exult-flx` enables per-frame item names for multi-frame shapes (e.g. shape 675 "desk item" breaks down into `675:1 (quill)`, `675:2 (inkwell)`, `675:6 (document)`, etc.). The path can also be set permanently via `titan setup`, which writes it to `[exult.paths] bg_flx` in titan.toml. Without `--exult-flx` or a configured path, items display by shape name only.
 
 **Wizard steps (interactive):**
 1. STATIC directory path (if not supplied)
@@ -1931,17 +1933,20 @@ titan u7 container-browse STATIC/ --gamedat gamedat/ --sc 0x27 -f csv -o sc27_co
 
 # Configured BG paths — wizard mode.
 titan u7 container-browse --game bg
+
+# Per-frame item names (requires exult_bg.flx from an Exult installation).
+titan u7 container-browse STATIC/ --gamedat gamedat/ --container-name desk --exult-flx "C:/Program Files/Exult/data/exult_bg.flx"
 ```
 
-**Output format (tree):**
+**Output format (tree), shape names only:**
 
 ```
 Container browse: 3 container(s) found.
 
   522 (locked chest)              0x020A  @ (649,856)  lift=1  sc=0x26  [4 item(s), depth=1]
     ├─ 573 (plate armour)
-    ├─ 340 (/potion//s)
-    ├─ 340 (/potion//s)
+    ├─ 340 (potion)
+    ├─ 340 (potion)
     └─ 549 (lightning whip)
 
   522 (locked chest)              0x020A  @ (2081,581)  lift=0  sc=0x20  [3 item(s), depth=1]
@@ -1950,9 +1955,20 @@ Container browse: 3 container(s) found.
     └─ 549 (lightning whip)
 
   802 (bag)                       0x0322  @ (1204,2805)  lift=0  sc=0x7C  [7 item(s), depth=1]
-    ├─ 644 (/gold coin//s)  ×228
-    ├─ 627 (/lockpick//s)  ×134
+    ├─ 644 (gold coin)  ×228
+    ├─ 627 (lockpick)  ×134
     └─ 549 (lightning whip)  ×8
+```
+
+**Output format (tree), with `--exult-flx` (per-frame names):**
+
+```
+Container browse: 1 container(s) found.
+
+  283 (desk)                      0x011B  @ (1027,1118)  lift=0  sc=0x34  [3 item(s), depth=1]
+    ├─ 675:6 (document)
+    ├─ 675:13 (document)
+    └─ 675:16 (mirror)
 ```
 
 When `--contains-*` is active, each result is the container that **directly** holds

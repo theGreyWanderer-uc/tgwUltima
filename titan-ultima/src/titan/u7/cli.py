@@ -2451,6 +2451,10 @@ def container_browse_cmd(
         Optional[str],
         typer.Option("--text", help="Path to TEXT.FLX for shape name lookup"),
     ] = None,
+    exult_flx: Annotated[
+        Optional[str],
+        typer.Option("--exult-flx", help="Path to exult_bg.flx (or exult_si.flx) for per-frame item names"),
+    ] = None,
     # ── Container identity filters ───────────────────────────────────────────
     container_shape: Annotated[
         Optional[list[str]],
@@ -2507,7 +2511,8 @@ def container_browse_cmd(
         format_results,
         run_wizard as _container_wizard,
     )
-    from titan.u7.names import U7ShapeNames
+    from titan.u7.names import U7ShapeNames, U7FrameNames
+    from titan._config import exult_cfg
 
     static_dir = static
     if not static_dir:
@@ -2525,11 +2530,14 @@ def container_browse_cmd(
         tile_rect, sc, format, output,
     ])
 
+    _exult_flx = exult_flx or exult_cfg(f"{game}_flx") or None
+
     if not _non_interactive:
         raise SystemExit(_container_wizard(
             static_dir=static_dir,
             gamedat_dir=gamedat_dir,
             text_flx=text_flx,
+            exult_flx_path=_exult_flx,
         ))
 
     # ── Parse filters ────────────────────────────────────────────────────────
@@ -2586,6 +2594,13 @@ def container_browse_cmd(
     if names is None and static_dir:
         names = U7ShapeNames.from_static_dir(static_dir)
 
+    frame_names: Optional[U7FrameNames] = None
+    if _exult_flx and text_flx and Path(_exult_flx).exists():
+        try:
+            frame_names = U7FrameNames.from_flx(_exult_flx, text_flx, game=game)
+        except Exception:
+            pass
+
     params = ContainerQueryParams(
         static_dir=static_dir or "",
         gamedat_dir=gamedat_dir,
@@ -2596,12 +2611,13 @@ def container_browse_cmd(
         superchunks=superchunks,
         tile_rect=parsed_rect,
         text_flx_path=text_flx,
+        exult_flx_path=_exult_flx,
         output_format=format or "tree",
         output_path=output,
     )
 
     results = browse_containers(params)
-    out = format_results(results, params, names)
+    out = format_results(results, params, names, frame_names)
 
     if output:
         from pathlib import Path as _Path
