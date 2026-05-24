@@ -29,11 +29,24 @@ This project uses [Semantic Versioning](https://semver.org/):
   arbitrary nesting (Ship's Hold → Backpack → Bag → items). Filter by
   container identity, required contents, shape number, name substring, area
   (tile rectangle or superchunks). Tree and CSV output formats. Shape names
-  from TEXT.FLX (auto-discovered from STATIC).
+  from TEXT.FLX (auto-discovered from STATIC). Per-frame item names via
+  `--exult-flx` (resolves e.g. shape 675 "desk item" into `quill`, `inkwell`,
+  `document` per frame). Mod-specific names via `--mod-data` (reads
+  `textmsg.txt` `%%section shapes` and `%%section miscnames` overlaid on base
+  TEXT.FLX, plus the mod's `shape_info.txt` framename mappings overlaid on
+  the Exult FLX base). Multi-map mod support via `--map-num` (queries
+  `mapNN/u7ireg*` in the mod gamedat).
 - **Expanded Titan setup path discovery** — setup and U7 helper commands now
   account for Exult profile paths in `%LOCALAPPDATA%/Exult`, including
   initialized base-game and mod `gamedat` folders, mod-specific save roots,
-  and IREG/runtime data locations alongside installed game files.
+  and IREG/runtime data locations alongside installed game files. Setup also
+  detects `exult_bg.flx` / `exult_si.flx` in common Exult install locations
+  and writes `[exult.paths]` to `titan.toml`.
+- **Multi-map mod support for `world-query` and `map-render`** — both commands
+  accept `--map-num N` to address alternate maps stored in `mapNN/`
+  subdirectories inside STATIC (IFIX and U7MAP) and gamedat (IREG). Pass the
+  mod patch dir as STATIC; the renderer and query engine resolve the correct
+  subdir automatically. Map 0 (default) behaviour is unchanged.
 - **Dialogue web branch visibility** — the U8 dialogue web engine now
   simulates `urandom(...)` conversation branches, reports the selected roll,
   selected-branch chance, and first visible outcome at conversation end.
