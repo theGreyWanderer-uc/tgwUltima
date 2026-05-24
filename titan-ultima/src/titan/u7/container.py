@@ -69,6 +69,9 @@ class ContainerQueryParams:
     text_flx_path: Optional[str] = None
     exult_flx_path: Optional[str] = None  # path to exult_bg.flx or exult_si.flx
 
+    # Map selection (0 = default/root, 1+ = mapNN/ subdirectory)
+    map_num: int = 0
+
     # Output
     output_format: str = "tree"    # "tree", "csv"
     output_path: Optional[str] = None
@@ -237,11 +240,20 @@ def browse_containers(params: ContainerQueryParams) -> list[ContainerResult]:
 
     results: list[ContainerResult] = []
 
+    # Resolve IREG subdirectory: map 0 uses root (or map00/), maps 1+ use mapNN/
+    if params.map_num > 0:
+        ireg_subdir: Optional[Path] = gamedat / f"map{params.map_num:02x}"
+    else:
+        ireg_subdir = None  # resolved per-superchunk below
+
     for sc in sc_list:
         ireg_name = f"u7ireg{sc:02X}"
-        ireg_path = gamedat / ireg_name
-        if not ireg_path.exists():
-            ireg_path = gamedat / "map00" / ireg_name
+        if ireg_subdir is not None:
+            ireg_path = ireg_subdir / ireg_name
+        else:
+            ireg_path = gamedat / ireg_name
+            if not ireg_path.exists():
+                ireg_path = gamedat / "map00" / ireg_name
         if not ireg_path.exists():
             continue
 
@@ -473,6 +485,8 @@ def run_wizard(
     gamedat_dir: Optional[str] = None,
     text_flx: Optional[str] = None,
     exult_flx_path: Optional[str] = None,
+    mod_data_dir: Optional[str] = None,
+    map_num: int = 0,
 ) -> int:
     """Interactive questionary container-browse wizard. Returns exit code."""
     try:
@@ -520,6 +534,18 @@ def run_wizard(
                 _frame_names = U7FrameNames.from_flx(exult_flx_path, _text_flx)
             except Exception:
                 pass
+
+    if mod_data_dir and Path(mod_data_dir).is_dir():
+        _text_flx_for_mod = text_flx or (
+            next(
+                (str(Path(static_dir) / n) for n in ("TEXT.FLX", "text.flx")
+                 if (Path(static_dir) / n).exists()),
+                None,
+            ) if static_dir else None
+        )
+        _names = U7ShapeNames.from_mod_dir(mod_data_dir, base=_names) or _names
+        if _text_flx_for_mod:
+            _frame_names = U7FrameNames.from_mod_dir(mod_data_dir, _text_flx_for_mod, base=_frame_names) or _frame_names
 
     # ── 2. Container filter ───────────────────────────────────────────────
     print()
@@ -668,6 +694,7 @@ def run_wizard(
         superchunks=superchunks,
         tile_rect=tile_rect,
         text_flx_path=text_flx,
+        map_num=map_num,
         output_format=fmt,
         output_path=output_path,
     )

@@ -1123,6 +1123,7 @@ titan u7 map-render [static] [--game bg|si]
 | `--highlight-lift N` | Projection lift for highlight rectangles (default: 0). Useful in `classic`/`steep` views when you want overlays shifted with lift |
 | `--highlight-fill-alpha N` | Highlight fill alpha (0–255, default: 128 = 50%). Set `0` for outline-only |
 | `--highlight-labels / --no-highlight-labels` | Draw labels on highlighted rectangles (default: on). Uses custom `LABEL` when provided, else `tx0,ty0,tx1,ty1` |
+| `--map-num N` | Map number to render: `0` = default world (root `STATIC/`, default), `1`+ = `mapNN/` subdirectory inside `STATIC` for IFIX and U7MAP. Used with multi-map mods; pass the mod patch dir as `STATIC` |
 
 > **U7 and roof tiles:** U7's `TFA.DAT` does not have a dedicated roof flag
 > (unlike U8's `TYPEFLAG.DAT`).  Use `--exclude no_building` to remove all
@@ -1185,6 +1186,13 @@ titan u7 map-render STATIC/ --full \
 titan u7 map-render STATIC/ --full \
    --zone-profile bg_zones --all-zones \
    -o u7_bg_guard_regions.png
+
+# Render a mod's alternate map — pass the patch dir as STATIC, select map 1
+titan u7 map-render "mods/MyMod/patch" --map-num 1 --sc 0x08 -o mod_map1_sc08.png
+
+# Mod map with IREG dynamic objects (gamedat must contain map01/ subdir)
+titan u7 map-render "mods/MyMod/patch" --map-num 1 --sc 0x08 \
+  --gamedat "mods/MyMod/gamedat" -o mod_map1_sc08_ireg.png
 ```
 
 ---
@@ -1814,6 +1822,7 @@ titan u7 world-query [STATIC] [OPTIONS]
 | `--tile-rect tx0,ty0,tx1,ty1` | Restrict search to a tile rectangle (0–3071 per axis) |
 | `--sc N` | Superchunk number filter, hex or decimal, repeatable (e.g. `0x55`) |
 | `--ireg / --no-ireg` | Force-include or force-exclude IREG objects |
+| `--map-num N` | Map number: `0` = default world (root `STATIC/` and root `gamedat/`, default), `1`+ = `mapNN/` subdirectory inside `STATIC` for IFIX and inside `gamedat` for IREG |
 | `-f, --format TEXT` | Output format: `summary` (default), `full_text`, `csv` |
 | `-o, --output FILE` | Write output to a file instead of stdout |
 
@@ -1824,6 +1833,7 @@ titan u7 world-query [STATIC] [OPTIONS]
 - `--name` and `--shape` can be combined; both filters must match.
 - When `TEXT.FLX` is available, shape names appear in all output as `522 (locked chest)`.
 - If `titan setup` has been run, `TEXT.FLX` is recorded in `titan.toml` and resolved automatically.
+- `--map-num` applies to both IFIX and IREG lookups simultaneously. For mod maps, pass the mod patch dir as `STATIC` — the patch dir contains the `mapNN/` subdirectory with IFIX files for that map. The `gamedat` path should point to the mod's live gamedat, which also has `mapNN/` subdirs for each additional map.
 
 **Interactive wizard steps** (no filter flags supplied):
 
@@ -1858,6 +1868,14 @@ titan u7 world-query --game bg
 
 # Explicit paths — wizard mode.
 titan u7 world-query STATIC/ --gamedat gamedat/
+
+# Mod map query — IFIX from patch/map01/, IREG from gamedat/map01/.
+titan u7 world-query "mods/MyMod/patch" --gamedat "mods/MyMod/gamedat" \
+  --map-num 1 --class container --ireg
+
+# Mod map query, all objects, CSV output.
+titan u7 world-query "mods/MyMod/patch" --gamedat "mods/MyMod/gamedat" \
+  --map-num 1 --ireg -f csv -o mod_map1_objects.csv
 ```
 
 **Output formats:**
@@ -1883,6 +1901,8 @@ titan u7 container-browse [STATIC] [OPTIONS]
 | `--gamedat PATH` | Path to gamedat/ directory — required |
 | `--text PATH` | Explicit TEXT.FLX path for shape name lookup |
 | `--exult-flx PATH` | Path to `exult_bg.flx` or `exult_si.flx` for per-frame item names |
+| `--mod-data PATH` | Path to a mod's `patch/` or `data/` directory; overlays mod-specific shape names and per-frame names on top of the base game data |
+| `--map-num N` | Map number to query: `0` = default world map (root gamedat), `1`+ = `mapNN/` subdirectory inside gamedat (default: `0`) |
 | `--container-shape N` | Container shape filter, hex or decimal (repeatable) |
 | `--container-name STR` | Container name substring filter (case-insensitive) |
 | `--contains-shape N` | Only show containers holding item with this shape (repeatable) |
@@ -1899,6 +1919,8 @@ titan u7 container-browse [STATIC] [OPTIONS]
 - CSV format emits one row per item at any nesting depth with a `path` column like `819 (barrel) > 801 (backpack) > item`.
 - Shape names come from TEXT.FLX (auto-discovered from STATIC if not given via `--text`).
 - `--exult-flx` enables per-frame item names for multi-frame shapes (e.g. shape 675 "desk item" breaks down into `675:1 (quill)`, `675:2 (inkwell)`, `675:6 (document)`, etc.). The path can also be set permanently via `titan setup`, which writes it to `[exult.paths] bg_flx` in titan.toml. Without `--exult-flx` or a configured path, items display by shape name only.
+- `--mod-data` reads `textmsg.txt` and `shape_info.txt` from the given directory. `textmsg.txt %%section shapes` overlays shape names on top of TEXT.FLX; `%%section miscnames` extends the per-frame name string table. The mod's `shape_info.txt %%section framenames` overlays frame-to-name mappings on top of the base Exult FLX data. Both files are optional — if only one is present, titan uses what it can. `--exult-flx` and `--mod-data` are independent and complement each other: `--exult-flx` provides the base framename mappings, `--mod-data` overlays the mod's additions.
+- `--map-num` selects which set of IREG files to query. Mods with multiple maps store each map's IREG in a `mapNN/` subdirectory inside gamedat (e.g. `gamedat/map01/u7ireg*`). Map 0 uses the root gamedat directory. Only the IREG for the selected map is scanned; `--contains-*` filters operate within that map's data.
 
 **Wizard steps (interactive):**
 1. STATIC directory path (if not supplied)
@@ -1934,8 +1956,20 @@ titan u7 container-browse STATIC/ --gamedat gamedat/ --sc 0x27 -f csv -o sc27_co
 # Configured BG paths — wizard mode.
 titan u7 container-browse --game bg
 
-# Per-frame item names (requires exult_bg.flx from an Exult installation).
-titan u7 container-browse STATIC/ --gamedat gamedat/ --container-name desk --exult-flx "C:/Program Files/Exult/data/exult_bg.flx"
+# Per-frame item names from an Exult installation (base game, no mod).
+titan u7 container-browse STATIC/ --gamedat gamedat/ --container-name desk \
+  --exult-flx "C:/Program Files/Exult/data/exult_bg.flx"
+
+# Mod query — map 0 (default world) with mod-specific names overlaid.
+# --exult-flx provides base frame mappings; --mod-data overlays the mod's additions.
+titan u7 container-browse STATIC/ --gamedat mods/MyMod/gamedat \
+  --exult-flx "C:/Program Files/Exult/data/exult_si.flx" \
+  --mod-data "mods/MyMod/patch" --game si
+
+# Mod query — alternate map (map 1) inside the same mod gamedat.
+titan u7 container-browse STATIC/ --gamedat mods/MyMod/gamedat \
+  --exult-flx "C:/Program Files/Exult/data/exult_si.flx" \
+  --mod-data "mods/MyMod/patch" --game si --map-num 1
 ```
 
 **Output format (tree), shape names only:**

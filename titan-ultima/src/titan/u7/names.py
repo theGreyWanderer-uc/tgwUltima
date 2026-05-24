@@ -8,12 +8,27 @@ for shape N (e.g. record 522 → "locked chest").  Records 0x500+ are misc_names
 shape_info.txt (Exult supplemental data) maps (shape, frame) → misc_name index
 via ``%%section framenames`` entries of the form ``:shape/frame/qual/type/msgid``.
 
+Mod support: mods may supply ``textmsg.txt`` and ``shape_info.txt`` in their
+``patch/`` or ``data/`` directory.  ``textmsg.txt`` has three sections:
+
+- ``%%section shapes``     — shape number (hex) → name, overlays TEXT.FLX
+- ``%%section miscnames``  — misc_name index (hex) → name, overlays TEXT.FLX 0x500+
+- ``%%section msgs``       — NPC/dialogue text (not used here)
+
+The mod's ``shape_info.txt %%section framenames`` overlays the base framenames
+from ``exult_bg.flx`` / ``exult_si.flx``.  Load a merged set with
+``U7ShapeNames.from_mod_dir()`` and ``U7FrameNames.from_mod_dir()``.
+
 Example::
 
     from titan.u7.names import U7ShapeNames, U7FrameNames
 
     names  = U7ShapeNames.from_file("STATIC/TEXT.FLX")
-    frames = U7FrameNames.from_files("exult/data/bg/shape_info.txt", "STATIC/TEXT.FLX")
+    frames = U7FrameNames.from_flx("exult_si.flx", "STATIC/TEXT.FLX", game="si")
+
+    # Overlay mod data on top of base data
+    names  = U7ShapeNames.from_mod_dir("patch/", base=names) or names
+    frames = U7FrameNames.from_mod_dir("patch/", "STATIC/TEXT.FLX", base=frames)
 
     print(names.get(675))                # "desk item"
     print(frames.get(675, 1))            # "quill"
@@ -85,6 +100,56 @@ class U7ShapeNames:
             if path.exists():
                 return cls.from_file(str(path))
         return None
+
+    @classmethod
+    def from_textmsg(cls, textmsg_path: str, base: Optional["U7ShapeNames"] = None) -> "U7ShapeNames":
+        """Load shape names from ``textmsg.txt %%section shapes``, overlaying on *base*.
+
+        Entries in the mod's textmsg.txt overlay TEXT.FLX entries for the same
+        shape number; shapes absent from textmsg.txt retain their base names.
+        If *base* is None, only mod-defined names are available.
+        """
+        in_section = False
+        overrides: dict[int, str] = {}
+        with open(textmsg_path, encoding="latin-1") as fh:
+            for line in fh:
+                line = line.strip()
+                if line == "%%section shapes":
+                    in_section = True
+                    continue
+                if line.startswith("%%"):
+                    if in_section:
+                        break
+                    continue
+                if not in_section or line.startswith("#") or ":" not in line:
+                    continue
+                idx_str, _, name = line.partition(":")
+                try:
+                    idx = int(idx_str, 16)
+                except ValueError:
+                    continue
+                overrides[idx] = _clean_article_name(name.strip())
+        names = list(base._names) if base is not None else []
+        for idx, name in overrides.items():
+            if idx >= len(names):
+                names.extend([""] * (idx - len(names) + 1))
+            names[idx] = name
+        return cls(names)
+
+    @classmethod
+    def from_mod_dir(
+        cls,
+        mod_data_dir: str,
+        base: Optional["U7ShapeNames"] = None,
+    ) -> Optional["U7ShapeNames"]:
+        """Load/overlay shape names from a mod's ``textmsg.txt %%section shapes``.
+
+        Returns *base* unchanged if no ``textmsg.txt`` is found in *mod_data_dir*.
+        """
+        textmsg = Path(mod_data_dir) / "textmsg.txt"
+        if not textmsg.exists():
+            return base
+        return cls.from_textmsg(str(textmsg), base=base)
 
     # ------------------------------------------------------------------
     # Lookup
@@ -188,6 +253,84 @@ class U7FrameNames:
             elif typ == -1:
                 lookup[(shape, frame)] = ""  # explicitly unnamed
         return lookup
+
+    @classmethod
+    def _load_misc_names_from_textmsg(
+        cls, textmsg_path: str, base: Optional[list[str]] = None
+    ) -> list[str]:
+        """Parse ``%%section miscnames`` from textmsg.txt, overlaying on *base*.
+
+        The mod's misc_name entries (indexed from 0x0) overlay the base
+        TEXT.FLX misc_names at matching indices, and extend the table for
+        indices beyond the base game's range.
+        """
+        result: list[str] = list(base) if base else []
+        in_section = False
+        with open(textmsg_path, encoding="latin-1") as fh:
+            for line in fh:
+                line = line.strip()
+                if line == "%%section miscnames":
+                    in_section = True
+                    continue
+                if line.startswith("%%"):
+                    if in_section:
+                        break
+                    continue
+                if not in_section or line.startswith("#") or ":" not in line:
+                    continue
+                idx_str, _, name = line.partition(":")
+                try:
+                    idx = int(idx_str, 16)
+                except ValueError:
+                    continue
+                name = cls._clean_misc_name(name.strip())
+                if idx >= len(result):
+                    result.extend([""] * (idx - len(result) + 1))
+                result[idx] = name
+        return result
+
+    def merged_with(self, other: "U7FrameNames") -> "U7FrameNames":
+        """Return a new U7FrameNames with *other* entries overlaying self."""
+        merged = dict(self._lookup)
+        merged.update(other._lookup)
+        return U7FrameNames(merged)
+
+    @classmethod
+    def from_mod_dir(
+        cls,
+        mod_data_dir: str,
+        text_flx_path: str,
+        base: Optional["U7FrameNames"] = None,
+    ) -> Optional["U7FrameNames"]:
+        """Load mod frame names from a mod's ``patch/`` or ``data/`` directory.
+
+        Looks for ``textmsg.txt`` (misc_names overlay) and ``shape_info.txt``
+        (framename mappings).  Merges with *base* if provided — mod entries
+        win on any (shape, frame) conflict.
+
+        Returns *base* unchanged if neither file is found; returns *base*
+        unchanged if ``shape_info.txt`` is absent (misc_names alone provide no
+        frame-to-name mappings).
+        """
+        mod_dir = Path(mod_data_dir)
+        textmsg = mod_dir / "textmsg.txt"
+        shape_info = mod_dir / "shape_info.txt"
+
+        if not shape_info.exists():
+            return base
+
+        misc_names = cls._load_misc_names(text_flx_path)
+        if textmsg.exists():
+            misc_names = cls._load_misc_names_from_textmsg(str(textmsg), base=misc_names)
+
+        with open(shape_info, encoding="latin-1") as fh:
+            lines = fh.readlines()
+        mod_lookup = cls._parse_framenames(lines, misc_names)
+        mod_frame_names = cls(mod_lookup)
+
+        if base is not None:
+            return base.merged_with(mod_frame_names)
+        return mod_frame_names
 
     @classmethod
     def from_files(cls, shape_info_path: str, text_flx_path: str) -> "U7FrameNames":

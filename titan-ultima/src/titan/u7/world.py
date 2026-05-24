@@ -107,6 +107,9 @@ class WorldQueryParams:
     include_ifix: bool = True
     include_ireg: bool = True
 
+    # Map number: 0 = default world map, 1+ = mapNN/ subdirectory
+    map_num: int = 0
+
     # Output format: "summary", "full_text", "csv"
     output_format: str = "summary"
 
@@ -188,10 +191,15 @@ def run_query(params: WorldQueryParams) -> WorldResult:
 
         if params.include_ifix:
             ifix_name = f"U7IFIX{sc:02X}"
-            ifix_path = static / ifix_name
-            if not ifix_path.exists():
-                ifix_name_lower = f"u7ifix{sc:02X}"
-                ifix_path = static / ifix_name_lower
+            if params.map_num > 0:
+                ifix_dir = static / f"map{params.map_num:02x}"
+                ifix_path = ifix_dir / ifix_name
+                if not ifix_path.exists():
+                    ifix_path = ifix_dir / ifix_name.lower()
+            else:
+                ifix_path = static / ifix_name
+                if not ifix_path.exists():
+                    ifix_path = static / ifix_name.lower()
             if ifix_path.exists():
                 for obj in U7MapRenderer.parse_ifix(str(ifix_path), sc):
                     obj.source = "ifix"
@@ -199,10 +207,12 @@ def run_query(params: WorldQueryParams) -> WorldResult:
 
         if params.include_ireg and gamedat:
             ireg_name = f"u7ireg{sc:02X}"
-            ireg_path = gamedat / ireg_name
-            if not ireg_path.exists():
-                # Try map00 subdirectory (Exult GAMEDAT layout)
-                ireg_path = gamedat / "map00" / ireg_name
+            if params.map_num > 0:
+                ireg_path = gamedat / f"map{params.map_num:02x}" / ireg_name
+            else:
+                ireg_path = gamedat / ireg_name
+                if not ireg_path.exists():
+                    ireg_path = gamedat / "map00" / ireg_name
             if ireg_path.exists():
                 for obj in U7MapRenderer.parse_ireg(str(ireg_path), sc):
                     obj.source = "ireg"

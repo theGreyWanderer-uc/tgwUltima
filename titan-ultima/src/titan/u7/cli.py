@@ -782,7 +782,8 @@ def cmd_map_render(args: SimpleNamespace) -> int:
         return 1
 
     pal = U7Palette.from_file(palette_path)
-    renderer = U7MapRenderer(static_dir)
+    map_num = int(getattr(args, "map_num", 0) or 0)
+    renderer = U7MapRenderer(static_dir, map_num=map_num)
 
     view = args.view or "classic"
     if view not in U7MapRenderer.PROJECTIONS:
@@ -804,6 +805,10 @@ def cmd_map_render(args: SimpleNamespace) -> int:
               f"{len(exclude)} shapes excluded")
 
     gamedat = getattr(args, "gamedat", None)
+    if gamedat and map_num > 0:
+        map_ireg_dir = os.path.join(gamedat, f"map{map_num:02x}")
+        if os.path.isdir(map_ireg_dir):
+            gamedat = map_ireg_dir
     overlay_tuples = getattr(args, "highlight_rects", None) or []
     overlays = [
         U7TileRectOverlay(
@@ -1842,6 +1847,16 @@ def map_render_cmd(
             ),
         ),
     ] = False,
+    map_num: Annotated[
+        int,
+        typer.Option(
+            "--map-num",
+            help=(
+                "Map number: 0 = default world map (root STATIC), "
+                "1+ = mapNN/ subdirectory inside STATIC and gamedat (default: 0)"
+            ),
+        ),
+    ] = 0,
 ) -> None:
     """Render a U7 map region (superchunk, chunk range, or full world) to PNG."""
     if full:
@@ -1902,6 +1917,7 @@ def map_render_cmd(
         palette=palette, output=output, view=view,
         gamedat=gamedat, grid=grid, grid_size=grid_size,
         exclude_flags=exclude, max_lift=max_lift,
+        map_num=map_num,
         highlight_rects=parsed_highlights,
         highlight_width=highlight_width,
         highlight_lift=highlight_lift,
@@ -2313,6 +2329,10 @@ def world_query_cmd(
         bool,
         typer.Option("--ireg/--no-ireg", help="Include IREG dynamic objects (default: auto)"),
     ] = False,
+    map_num: Annotated[
+        int,
+        typer.Option("--map-num", help="Map number: 0 = default world map, 1+ = mapNN/ subdirectory inside STATIC and gamedat (default: 0)"),
+    ] = 0,
     format: Annotated[
         Optional[str],
         typer.Option("-f", "--format", help="Output format: summary (default), full_text, csv"),
@@ -2416,6 +2436,7 @@ def world_query_cmd(
         tile_rect=parsed_rect,
         include_ifix=True,
         include_ireg=use_ireg,
+        map_num=map_num,
         output_format=format or "summary",
         output_path=output,
     )
@@ -2455,6 +2476,14 @@ def container_browse_cmd(
         Optional[str],
         typer.Option("--exult-flx", help="Path to exult_bg.flx (or exult_si.flx) for per-frame item names"),
     ] = None,
+    mod_data: Annotated[
+        Optional[str],
+        typer.Option("--mod-data", help="Path to mod patch/data directory (textmsg.txt + shape_info.txt for mod-specific names)"),
+    ] = None,
+    map_num: Annotated[
+        int,
+        typer.Option("--map-num", help="Map number to query: 0 = default world map, 1+ = mod map subdirectory (mapNN/)"),
+    ] = 0,
     # ── Container identity filters ───────────────────────────────────────────
     container_shape: Annotated[
         Optional[list[str]],
@@ -2538,6 +2567,8 @@ def container_browse_cmd(
             gamedat_dir=gamedat_dir,
             text_flx=text_flx,
             exult_flx_path=_exult_flx,
+            mod_data_dir=mod_data,
+            map_num=map_num,
         ))
 
     # ── Parse filters ────────────────────────────────────────────────────────
@@ -2601,6 +2632,12 @@ def container_browse_cmd(
         except Exception:
             pass
 
+    # Overlay mod-specific names on top of base data
+    if mod_data and Path(mod_data).is_dir():
+        names = U7ShapeNames.from_mod_dir(mod_data, base=names) or names
+        if text_flx:
+            frame_names = U7FrameNames.from_mod_dir(mod_data, text_flx, base=frame_names) or frame_names
+
     params = ContainerQueryParams(
         static_dir=static_dir or "",
         gamedat_dir=gamedat_dir,
@@ -2612,6 +2649,7 @@ def container_browse_cmd(
         tile_rect=parsed_rect,
         text_flx_path=text_flx,
         exult_flx_path=_exult_flx,
+        map_num=map_num,
         output_format=format or "tree",
         output_path=output,
     )

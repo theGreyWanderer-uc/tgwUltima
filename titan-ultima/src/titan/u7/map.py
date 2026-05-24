@@ -298,8 +298,13 @@ class U7MapRenderer:
     }
     DEFAULT_VIEW = "classic"
 
-    def __init__(self, static_dir: str) -> None:
+    def __init__(self, static_dir: str, map_num: int = 0) -> None:
         self.static_dir = static_dir
+        self.map_num = map_num
+        # For map_num > 0, U7MAP and IFIX live in a mapNN/ subdir.
+        self._map_data_dir: str = (
+            os.path.join(static_dir, f"map{map_num:02x}") if map_num > 0 else static_dir
+        )
         self._terrain_map: list[list[int]] | None = None
         self._terrains: list[list[tuple[int, int]]] | None = None  # terrain shapes
         self._tfa: U7TypeFlags | None = None
@@ -348,7 +353,11 @@ class U7MapRenderer:
 
         Returns ``grid[cx][cy]`` = terrain index into U7CHUNKS.
         """
-        path = os.path.join(self.static_dir, "U7MAP")
+        path = os.path.join(self._map_data_dir, "U7MAP")
+        if not os.path.isfile(path):
+            path = os.path.join(self._map_data_dir, "u7map")
+        if not os.path.isfile(path) and self.map_num > 0:
+            path = os.path.join(self.static_dir, "U7MAP")
         with open(path, "rb") as f:
             data = f.read()
 
@@ -884,7 +893,7 @@ class U7MapRenderer:
         objects: list[U7MapObject] = []
         if include_fixed:
             ifix_name = f"U7IFIX{schunk:02X}"
-            ifix_path = os.path.join(self.static_dir, ifix_name)
+            ifix_path = os.path.join(self._map_data_dir, ifix_name)
             ifix_objs = self.parse_ifix(ifix_path, schunk)
             for obj in ifix_objs:
                 if obj.shape not in exclude:
@@ -1635,7 +1644,7 @@ class U7MapRenderer:
 
         for sc in sorted(needed_schunks):
             ifix_name = f"U7IFIX{sc:02X}"
-            ifix_path = os.path.join(self.static_dir, ifix_name)
+            ifix_path = os.path.join(self._map_data_dir, ifix_name)
             ifix_objs = self.parse_ifix(ifix_path, sc)
             for obj in ifix_objs:
                 obj_cx = obj.tx // C_TILES_PER_CHUNK

@@ -32,8 +32,9 @@ Requirements:
 ## Quick Start
 
 Run setup once. It detects common Ultima 8 and Ultima 7 install locations,
-detects Exult runtime folders where possible, writes `titan.toml`, and can
-extract the U8 shape/glob data used by map rendering.
+detects Exult runtime folders and the Exult install directory (for
+`exult_bg.flx` / `exult_si.flx`), writes `titan.toml`, and can extract the
+U8 shape/glob data used by map rendering.
 
 ```bash
 titan setup
@@ -79,6 +80,8 @@ place for command options, longer examples, and format notes.
 | Saves and runtime data | List/extract U8 save archives | Read Exult `.sav`; inspect loose `gamedat/`; dump NPCs, schedules, flags | `titan u7 save-info exult00bg.sav` | [U8 save commands](cli_reference.md#u8-save-archive-commands), [U7 save commands](cli_reference.md#u7-save-commands) |
 | Fonts | U8 font archives can be extracted as Flex data | U7 `font-create` wizard for Exult-compatible font shapes | `titan u7 font-create` | [U7 font-create](cli_reference.md#u7-font-create) |
 | World query | Not applicable | Interactive wizard to filter IFIX/IREG object placements by shape class, number, TFA flags, and area | `titan u7 world-query --game bg` | [U7 world-query](cli_reference.md#u7-world-query) |
+| Container data | Not applicable | Browse IREG container contents with full nesting; filter by container name, item name, or tile area; optional per-frame item names via Exult FLX | `titan u7 container-browse --game bg --container-name chest` | [U7 container-browse](cli_reference.md#u7-container-browse) |
+| Egg data | Not applicable | Query IREG egg trigger objects — type, usecode function, probability, location | `titan u7 egg-query --game bg --type usecode` | [U7 egg-query](cli_reference.md#u7-egg-query) |
 | Text and misc data | Gump layout, XOR credits, quotes, transform palettes | Global flags and selected runtime metadata | `titan u8 credits-decrypt ECREDITS.DAT` | [U8 data commands](cli_reference.md#u8-data-inspection-commands) |
 
 ---
@@ -141,6 +144,42 @@ titan u7 world-query --game si --gamedat /path/to/serpentisle/gamedat
 The wizard prompts for shape-class checkboxes, optional shape numbers, TFA flag
 checkboxes, area (all or specific superchunks), and output format (summary /
 full text / CSV). Output can be printed or saved to a file.
+
+### U7 Container Browse
+
+```bash
+# Interactive wizard — configured BG paths.
+titan u7 container-browse --game bg
+
+# Show all chests with their full contents tree.
+titan u7 container-browse STATIC/ --gamedat gamedat/ --container-name chest
+
+# Find containers holding a sword.
+titan u7 container-browse STATIC/ --gamedat gamedat/ --contains-name sword
+
+# Export to CSV with per-frame item names (requires Exult installation).
+titan u7 container-browse STATIC/ --gamedat gamedat/ -f csv -o containers.csv \
+  --exult-flx "C:/Program Files/Exult/data/exult_bg.flx"
+
+# Configured paths with per-frame names from titan.toml [exult.paths].
+titan u7 container-browse --game bg --container-name desk
+```
+
+### U7 Egg Query
+
+```bash
+# Interactive wizard — configured BG paths.
+titan u7 egg-query --game bg
+
+# All usecode eggs.
+titan u7 egg-query STATIC/ --gamedat gamedat/ --type usecode
+
+# Find every placement of a specific usecode function.
+titan u7 egg-query STATIC/ --gamedat gamedat/ --fn 0x06BC
+
+# Export usecode eggs to CSV.
+titan u7 egg-query STATIC/ --gamedat gamedat/ --type usecode -f csv -o usecode_eggs.csv
+```
 
 ### U8 Map Rendering
 
@@ -205,6 +244,10 @@ root    = "C:/Users/<you>/AppData/Local/Exult/serpentisle/mods/<mod-name>"
 saves   = "C:/Users/<you>/AppData/Local/Exult/serpentisle/mods/<mod-name>/saves"
 gamedat = "C:/Users/<you>/AppData/Local/Exult/serpentisle/mods/<mod-name>/gamedat"
 archive = "C:/Path/To/Ultima7/SERPENT/mods/<mod-name>/patch/initgame.dat"
+
+[exult.paths]
+bg_flx  = "C:/Program Files/Exult/data/exult_bg.flx"
+si_flx  = "C:/Program Files/Exult/data/exult_si.flx"
 ```
 
 Notes:
