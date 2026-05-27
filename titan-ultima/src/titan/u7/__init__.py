@@ -19,7 +19,9 @@ from titan.u7.music import convert_xmidi_file, extract_music
 from titan.u7.palette import U7Palette
 from titan.u7.save import (
     U7GlobalFlags, U7Save, U7Identity, U7SaveInfo, U7PartyMember,
-    U7GameState, U7Schedules, U7ScheduleEntry, U7NPCData, U7NPC,
+    U7GameState, U7UsecodeData, U7UsecodeTimer, U7UsecodeVars,
+    U7Keyring, U7FrameFlags, U7Schedules, U7ScheduleEntry,
+    U7NPCData, U7NPC,
 )
 from titan.u7.shape import U7Shape
 from titan.u7.sound import VocDecoder
@@ -32,6 +34,8 @@ __all__ = [
     "U7TypeFlags", "U7MapRenderer", "U7MapSampler",
     "U7Save", "U7GlobalFlags",
     "U7Identity", "U7SaveInfo", "U7PartyMember",
-    "U7GameState", "U7Schedules", "U7ScheduleEntry",
+    "U7GameState", "U7UsecodeData", "U7UsecodeTimer",
+    "U7UsecodeVars", "U7Keyring", "U7FrameFlags",
+    "U7Schedules", "U7ScheduleEntry",
     "U7NPCData", "U7NPC",
 ]

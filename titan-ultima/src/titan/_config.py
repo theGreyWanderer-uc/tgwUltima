@@ -138,6 +138,17 @@ def cfg(key: str, section: str = "paths") -> Optional[str]:
     return _config.get(section, {}).get(key)
 
 
+def exult_cfg(key: str) -> Optional[str]:
+    """Get a value from the ``[exult.paths]`` config section.
+
+    Parameters
+    ----------
+    key : str
+        The key to look up, e.g. ``"bg_flx"`` or ``"si_flx"``.
+    """
+    return _config.get("exult", {}).get("paths", {}).get(key)
+
+
 def get_config() -> dict:
     """Return the full loaded config dict (read-only reference)."""
     return _config

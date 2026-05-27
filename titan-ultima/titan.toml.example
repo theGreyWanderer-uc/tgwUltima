@@ -80,15 +80,37 @@ nonfixed  = "U8SAVE.000"
 # nonfixed = "U8SAVE.000"
 #
 # [u7bg.game]
-# base     = "C:/Program Files (x86)/GOG Galaxy/Games/Ultima 7"
+# base     = "C:/Path/To/Ultima7/ULTIMA7"
 # variant  = "blackgate"
 #
 # [u7bg.paths]
+# # Install-side original/static data. Relative paths expand from [u7bg.game].base.
 # static   = "STATIC/"
+# shapes   = "STATIC/SHAPES.VGA"
+# palette  = "STATIC/PALETTES.FLX"
+# # Live Exult runtime data. Prefer the AppData copy when it has npc.dat;
+# # fall back to install-side gamedat/ only when no AppData runtime exists.
+# gamedat  = "C:/Users/<you>/AppData/Local/Exult/blackgate/gamedat"
 #
 # [u7si.game]
-# base     = "C:/Program Files (x86)/GOG Galaxy/Games/Ultima 7 Serpent Isle"
+# base     = "C:/Path/To/Ultima7/SERPENT"
 # variant  = "serpentisle"
 #
 # [u7si.paths]
+# # Install-side original/static data. Relative paths expand from [u7si.game].base.
 # static   = "STATIC/"
+# shapes   = "STATIC/SHAPES.VGA"
+# palette  = "STATIC/PALETTES.FLX"
+# # Base-game live runtime data. This may be empty until SI has been initialized.
+# gamedat  = "C:/Users/<you>/AppData/Local/Exult/serpentisle/gamedat"
+#
+# [u7si.mods."<mod-name>".paths]
+# # Mod profile root, if Exult has initialized that mod.
+# root     = "C:/Users/<you>/AppData/Local/Exult/serpentisle/mods/<mod-name>"
+# # Folder containing the most .sav files found under the mod profile root.
+# saves    = "C:/Users/<you>/AppData/Local/Exult/serpentisle/mods/<mod-name>/saves"
+# # Mod live runtime data, if Exult has initialized that mod.
+# gamedat  = "C:/Users/<you>/AppData/Local/Exult/serpentisle/mods/<mod-name>/gamedat"
+# # Mod packaged initial runtime data. Exult mods often store this as a
+# # ZIP-style initgame.dat containing npc.dat, schedule.dat, u7iregNN, etc.
+# archive  = "C:/Path/To/Ultima7/SERPENT/mods/<mod-name>/patch/initgame.dat"

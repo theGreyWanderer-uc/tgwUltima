@@ -23,6 +23,25 @@ export interface CallFrame {
   env: Record<string, string | number>;
 }
 
+export interface RandomChoice {
+  nodeId: string;
+  raw: string;
+  roll: number;
+  maxExclusive: number;
+  result: boolean;
+  chancePercent: number;
+  branchLabel?: string;
+  outcomePreview?: string;
+  branchEndsConversation?: boolean;
+}
+
+export interface FlagBranchEndHint {
+  nodeId: string;
+  flag: string;
+  selectedValue: boolean;
+  suggestedValue: boolean;
+}
+
 export interface EngineState {
   flags: Record<string, number>;
   history: DialogueMessage[];
@@ -37,6 +56,10 @@ export interface EngineState {
   unresolvedConditionCount: number;
   unresolvedConditionNodes: Record<string, true>;
   callVisitCounts: Record<string, number>;
+  randomChoices: RandomChoice[];
+  randomNotesReported: boolean;
+  flagBranchEndHints: FlagBranchEndHint[];
+  flagBranchEndNotesReported: boolean;
   // Flags seeded via DEFAULT_FLAGS — re-applied when BeginConversation fires so any
   // flag the shipped engine would have suppressed via the BC process-kill is always
   // overridden even if a sub-function was entered before BC (e.g. Mythran).
@@ -60,6 +83,8 @@ export function cloneEngineState(state: EngineState): EngineState {
     })),
     unresolvedConditionNodes: { ...state.unresolvedConditionNodes },
     callVisitCounts: { ...state.callVisitCounts },
+    randomChoices: state.randomChoices.map(choice => ({ ...choice })),
+    flagBranchEndHints: state.flagBranchEndHints.map(hint => ({ ...hint })),
   };
 }
 
@@ -79,6 +104,10 @@ function newState(flags: Record<string, number>, conditionPolicy: 'permissive' |
     unresolvedConditionCount: 0,
     unresolvedConditionNodes: {},
     callVisitCounts: {},
+    randomChoices: [],
+    randomNotesReported: false,
+    flagBranchEndHints: [],
+    flagBranchEndNotesReported: false,
   };
 }
 
@@ -109,6 +138,309 @@ function parseRawNumber(token: string): number | null {
 
 type TriState = 'true' | 'false' | 'unknown';
 
+function randomInt(maxExclusive: number): number {
+  if (maxExclusive <= 0) return 0;
+  return Math.floor(Math.random() * maxExclusive);
+}
+
+function countRandomMatches(maxExclusive: number, predicate: (roll: number) => boolean): number {
+  let count = 0;
+  for (let roll = 0; roll < maxExclusive; roll++) {
+    if (predicate(roll)) count++;
+  }
+  return count;
+}
+
+function evaluateRandomCondition(
+  raw: string | undefined,
+  nodeId: string | undefined,
+  randomChoices?: RandomChoice[],
+): boolean | null {
+  const text = raw?.trim();
+  if (!text || !/\burandom\(/i.test(text)) return null;
+
+  const comparison = text.match(/^(not\s+)?urandom\((0x[0-9a-fA-F]+h?|\d+)\)\s*(<=|>=|<|>|==|!=)\s*(0x[0-9a-fA-F]+h?|\d+)$/i);
+  if (comparison) {
+    const isNot = !!comparison[1];
+    const maxExclusive = parseRawNumber(comparison[2]) ?? 0;
+    const op = comparison[3];
+    const threshold = parseRawNumber(comparison[4]) ?? 0;
+    const roll = randomInt(maxExclusive);
+    let result: boolean;
+    if      (op === '<')  result = roll <  threshold;
+    else if (op === '>')  result = roll >  threshold;
+    else if (op === '<=') result = roll <= threshold;
+    else if (op === '>=') result = roll >= threshold;
+    else if (op === '==') result = roll === threshold;
+    else                  result = roll !== threshold;
+    if (isNot) result = !result;
+
+    const matches = countRandomMatches(maxExclusive, candidate => {
+      if      (op === '<')  return candidate <  threshold;
+      else if (op === '>')  return candidate >  threshold;
+      else if (op === '<=') return candidate <= threshold;
+      else if (op === '>=') return candidate >= threshold;
+      else if (op === '==') return candidate === threshold;
+      else                  return candidate !== threshold;
+    });
+    const trueMatches = isNot ? Math.max(0, maxExclusive - matches) : matches;
+    const branchMatches = result ? trueMatches : Math.max(0, maxExclusive - trueMatches);
+    const chancePercent = maxExclusive > 0 ? (branchMatches / maxExclusive) * 100 : 0;
+
+    randomChoices?.push({
+      nodeId: nodeId ?? 'unknown',
+      raw: text,
+      roll,
+      maxExclusive,
+      result,
+      chancePercent,
+    });
+    dbg.log('evalCondition', '  → urandom cmp:', text, 'roll=', roll, 'max=', maxExclusive, 'RESULT:', result);
+    return result;
+  }
+
+  const bare = text.match(/^(not\s+)?urandom\((0x[0-9a-fA-F]+h?|\d+)\)$/i);
+  if (bare) {
+    const isNot = !!bare[1];
+    const maxExclusive = parseRawNumber(bare[2]) ?? 0;
+    const roll = randomInt(maxExclusive);
+    const rawResult = roll !== 0;
+    const result = isNot ? !rawResult : rawResult;
+    const trueMatches = isNot ? 1 : Math.max(0, maxExclusive - 1);
+    const branchMatches = result ? trueMatches : Math.max(0, maxExclusive - trueMatches);
+    const chancePercent = maxExclusive > 0 ? (branchMatches / maxExclusive) * 100 : 0;
+    randomChoices?.push({
+      nodeId: nodeId ?? 'unknown',
+      raw: text,
+      roll,
+      maxExclusive,
+      result,
+      chancePercent,
+    });
+    dbg.log('evalCondition', '  → urandom bare:', text, 'roll=', roll, 'max=', maxExclusive, 'RESULT:', result);
+    return result;
+  }
+
+  return null;
+}
+
+function reportRandomChoicesAtEnd(state: EngineState): void {
+  if (state.randomNotesReported || state.randomChoices.length === 0) return;
+  for (const choice of state.randomChoices) {
+    const percent = Number.isInteger(choice.chancePercent)
+      ? String(choice.chancePercent)
+      : choice.chancePercent.toFixed(1);
+    const branch = choice.result ? 'true' : 'false';
+    const selectedBranch = choice.branchLabel ?? branch;
+    const branchDetail = choice.outcomePreview
+      ? `; first visible outcome: "${choice.outcomePreview}"`
+      : '';
+    const ending = choice.branchEndsConversation
+      ? '; this selected branch ends the conversation'
+      : '';
+    state.history.push({
+      speaker: 'system',
+      text: `🎲 Random roll at ${choice.nodeId} chose the ${selectedBranch} branch (${percent}% chance; roll ${choice.roll}/${choice.maxExclusive - 1})${branchDetail}${ending}. Try New Conversation for another roll.`,
+    });
+  }
+  state.randomNotesReported = true;
+}
+
+function reportFlagBranchEndHintsAtEnd(state: EngineState): void {
+  if (state.flagBranchEndNotesReported || state.flagBranchEndHints.length === 0) return;
+  const seen = new Set<string>();
+  for (const hint of state.flagBranchEndHints) {
+    const key = `${hint.nodeId}:${hint.flag}:${hint.selectedValue}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    state.history.push({
+      speaker: 'system',
+      text: `⚑ Conversation ended through the ${hint.flag} = ${hint.selectedValue ? 'true' : 'false'} branch. Set ${hint.flag} to ${hint.suggestedValue ? 'true' : 'false'} to see the alternate path.`,
+    });
+  }
+  state.flagBranchEndNotesReported = true;
+}
+
+function firstVisibleBranchOutcome(
+  nodes: DialogueNode[] | undefined,
+  npcName: string,
+  env?: Record<string, string | number>,
+): string | undefined {
+  for (const node of nodes ?? []) {
+    if (node.type === 'Bark' || node.type === 'DialogueLine') {
+      const text = resolveText(node.text ?? '', npcName, env).trim();
+      if (text) return text;
+    }
+    if (node.type === 'Ask') return 'a player choice';
+    if (node.type === 'MenuSet' || node.type === 'MenuAdd' || node.type === 'MenuUnion') {
+      const options = (node.options ?? []).map(option => resolveText(option, npcName, env).trim()).filter(Boolean);
+      if (options.length > 0) return `choices: ${options.join(' / ')}`;
+    }
+    if (node.type === 'EndConversation') return '[Conversation ended]';
+
+    const nested =
+      firstVisibleBranchOutcome(node.then, npcName, env) ??
+      firstVisibleBranchOutcome(node.else, npcName, env) ??
+      firstVisibleBranchOutcome(node.body, npcName, env);
+    if (nested) return nested;
+
+    for (const elif of node.else_ifs ?? []) {
+      const elifOutcome = firstVisibleBranchOutcome(elif.body, npcName, env);
+      if (elifOutcome) return elifOutcome;
+    }
+  }
+  return undefined;
+}
+
+function branchEndsBeforePlayerChoice(nodes: DialogueNode[] | undefined): boolean {
+  for (const node of nodes ?? []) {
+    if (node.type === 'EndConversation') return true;
+    if (node.type === 'Ask') return false;
+
+    if (node.type === 'ConversationLoop') {
+      return branchEndsBeforePlayerChoice(node.body);
+    }
+
+    if (node.type === 'IfStatement') {
+      const branches = [
+        node.then,
+        ...(node.else_ifs ?? []).map(elif => elif.body),
+        node.else,
+      ].filter((branch): branch is DialogueNode[] => !!branch && branch.length > 0);
+      if (branches.length > 0 && branches.every(branch => branchEndsBeforePlayerChoice(branch))) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function annotateLatestRandomChoice(
+  state: EngineState,
+  nodeId: string,
+  branchLabel: string,
+  branchNodes: DialogueNode[] | undefined,
+  npcName: string,
+  env?: Record<string, string | number>,
+): void {
+  const choice = state.randomChoices.at(-1);
+  if (!choice || choice.nodeId !== nodeId || choice.branchLabel) return;
+  choice.branchLabel = branchLabel;
+  choice.outcomePreview = firstVisibleBranchOutcome(branchNodes, npcName, env);
+  choice.branchEndsConversation = branchEndsBeforePlayerChoice(branchNodes);
+}
+
+function rememberFlagBranchEndHint(
+  state: EngineState,
+  nodeId: string,
+  cond: NodeCondition | undefined,
+  selectedConditionResult: boolean,
+  branchNodes: DialogueNode[] | undefined,
+): void {
+  if (!cond?.flags || cond.flags.length !== 1 || !branchEndsBeforePlayerChoice(branchNodes)) return;
+  const flagCondition = cond.flags[0];
+  if (flagCondition.op || (flagCondition.values && flagCondition.values.length > 0)) return;
+
+  const selectedValue = flagCondition.negated ? !selectedConditionResult : selectedConditionResult;
+  const suggestedValue = !selectedValue;
+  state.flagBranchEndHints.push({
+    nodeId,
+    flag: flagCondition.flag,
+    selectedValue,
+    suggestedValue,
+  });
+}
+
+function splitRawLogicalTerms(raw: string): { terms: string[]; operators: string[] } | null {
+  const terms: string[] = [];
+  const operators: string[] = [];
+  let current = '';
+  let inQuote = false;
+
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i];
+    if (ch === '"') {
+      inQuote = !inQuote;
+      current += ch;
+      continue;
+    }
+
+    if (!inQuote) {
+      const rest = raw.slice(i);
+      const op = rest.match(/^\s+(or|and)\s+/i);
+      if (op) {
+        terms.push(current.trim());
+        operators.push(op[1].toLowerCase());
+        current = '';
+        i += op[0].length - 1;
+        continue;
+      }
+    }
+
+    current += ch;
+  }
+
+  if (current.trim()) terms.push(current.trim());
+  if (terms.length === 0 || operators.length !== terms.length - 1) return null;
+  return { terms, operators };
+}
+
+function resolveStringOperand(raw: string, env?: Record<string, string | number>, lastChoice = ''): string {
+  const operand = raw.trim();
+  if (operand === '(word)suspend' || operand === 'suspend') return lastChoice;
+  if (env?.[operand] !== undefined) return String(env[operand]);
+  if (operand.startsWith('"') && operand.endsWith('"')) return operand.slice(1, -1);
+  return operand;
+}
+
+function evaluateRawStringCompareClause(
+  clause: string,
+  lastChoice: string,
+  env?: Record<string, string | number>,
+): boolean | null {
+  let rawStr = clause.trimStart();
+  let notCount = 0;
+  while (/^not\s+/i.test(rawStr)) {
+    rawStr = rawStr.replace(/^not\s+/i, '');
+    notCount++;
+  }
+
+  const parts = rawStr.split(' strcmp ');
+  if (parts.length !== 2) return null;
+
+  const leftVal = resolveStringOperand(parts[0], env, lastChoice);
+  const rightVal = resolveStringOperand(parts[1], env, lastChoice);
+  const eq = leftVal.trim() === rightVal.trim();
+
+  // U8 strcmp branches execute bare comparisons when equal; each leading not flips that.
+  return (notCount % 2 === 0) ? eq : !eq;
+}
+
+function evaluateRawStringCompareCondition(
+  raw: string | undefined,
+  lastChoice: string,
+  env?: Record<string, string | number>,
+): boolean | null {
+  if (!raw || !raw.includes(' strcmp ')) return null;
+
+  const parsed = splitRawLogicalTerms(raw.trim());
+  if (!parsed) {
+    return evaluateRawStringCompareClause(raw, lastChoice, env);
+  }
+
+  if (!parsed.terms.every(term => term.includes(' strcmp '))) return null;
+
+  const values = parsed.terms.map(term => evaluateRawStringCompareClause(term, lastChoice, env));
+  if (values.some(value => value === null)) return null;
+
+  let result = values[0] as boolean;
+  for (let i = 0; i < parsed.operators.length; i++) {
+    const next = values[i + 1] as boolean;
+    result = parsed.operators[i] === 'or' ? result || next : result && next;
+  }
+  return result;
+}
+
 function evalCondition(
   cond: NodeCondition | undefined,
   flags: Record<string, number>,
@@ -117,7 +449,9 @@ function evalCondition(
   policy: 'permissive' | 'strict',
   history?: DialogueMessage[],
   env?: Record<string, string | number>,
-  menuVars?: Record<string, string[]>
+  menuVars?: Record<string, string[]>,
+  randomChoices?: RandomChoice[],
+  nodeId?: string,
 ): boolean {
   if (!cond) {
     dbg.log('evalCondition', 'no condition → true');
@@ -130,6 +464,15 @@ function evalCondition(
   dbg.log('evalCondition', '    cond.flags:', JSON.stringify(cond.flags ?? []));
   dbg.log('evalCondition', '    cond.isDead:', cond.isDead, '| isDeadNegated:', cond.isDeadNegated);
   dbg.log('evalCondition', '    cond.strcmp:', JSON.stringify(cond.strcmp ?? []));
+
+  const randomResult = evaluateRandomCondition(cond.raw, nodeId, randomChoices);
+  if (randomResult !== null) return randomResult;
+
+  const rawStringCompareResult = evaluateRawStringCompareCondition(cond.raw, lastChoice, env);
+  if (rawStringCompareResult !== null) {
+    dbg.log('evalCondition', '  → strcmp (raw full):', cond.raw, 'RESULT:', rawStringCompareResult);
+    return rawStringCompareResult;
+  }
 
   // Handle FREE::getListLength(localN) OP VALUE comparisons using actual menu data.
   if (cond.raw && /FREE::getListLength/i.test(cond.raw)) {
@@ -201,39 +544,6 @@ function evalCondition(
       dbg.log('evalCondition', '  → strcmp (structured): lastChoice=', JSON.stringify(lastChoice),
         'match=', match, 'notCount=', notCount, 'RESULT:', strcmpResult);
       return strcmpResult;
-    }
-  }
-
-  if (cond.raw && cond.raw.includes(' strcmp ')) {
-    // Strip leading "not " / "not not " prefix before splitting — "not X strcmp Y"
-    // means X == Y (strcmp returns 0 on match, not inverts → truthy).
-    let rawStr = cond.raw.trimStart();
-    let notCountRaw = 0;
-    while (/^not\s+/i.test(rawStr)) {
-      rawStr = rawStr.replace(/^not\s+/i, '');
-      notCountRaw++;
-    }
-    const parts = rawStr.split(' strcmp ');
-    if (parts.length === 2) {
-      let left = parts[0].trim();
-      let right = parts[1].trim();
-
-      let leftVal = env?.[left] !== undefined ? String(env[left]) : left;
-      let rightVal = env?.[right] !== undefined ? String(env[right]) : right;
-
-      if (leftVal.startsWith('"') && leftVal.endsWith('"')) leftVal = leftVal.slice(1, -1);
-      if (rightVal.startsWith('"') && rightVal.endsWith('"')) rightVal = rightVal.slice(1, -1);
-
-      if (leftVal === '(word)suspend' || leftVal === 'suspend') leftVal = lastChoice;
-      if (rightVal === '(word)suspend' || rightVal === 'suspend') rightVal = lastChoice;
-
-      const eq = leftVal.trim() === rightVal.trim();
-      // Pattern 1: bare strcmp (strcmp→jne, notCount=0) → body fires when EQUAL.
-      // Pattern 2: not strcmp (strcmp→NOT→jne, notCount=1) → body fires when NOT EQUAL.
-      const result = (notCountRaw % 2 === 0) ? eq : !eq;
-      dbg.log('evalCondition', '  → strcmp (raw): notCount=', notCountRaw, 'left=', JSON.stringify(leftVal),
-        'right=', JSON.stringify(rightVal), 'eq=', eq, 'RESULT:', result);
-      return result;
     }
   }
 
@@ -408,6 +718,8 @@ export function selectOption(state: EngineState, choice: string, _npc: NPCFile |
 
   if (choice === 'bye' || choice === 'leave') {
     s.history.push({ speaker: 'system', text: '[Conversation ended]' });
+    reportFlagBranchEndHintsAtEnd(s);
+    reportRandomChoicesAtEnd(s);
     s.ended = true;
     s.paused = false;
     return s;
@@ -527,6 +839,8 @@ state: EngineState, npcIndex: Record<string, NPCFile>): EngineState {
     const frame = currentFrame(s);
     if (!frame) {
       if (!s.ended) s.history.push({ speaker: 'system', text: '[Conversation ended]', nodeId: '__end' });
+      reportFlagBranchEndHintsAtEnd(s);
+      reportRandomChoicesAtEnd(s);
       s.ended = true;
       return s;
     }
@@ -591,7 +905,7 @@ state: EngineState, npcIndex: Record<string, NPCFile>): EngineState {
       // deadMode is therefore always 'alive' in the conversation engine.
       // Look descriptions with dead/alive branching are handled separately in evaluateLook().
       dbg.log('step:node', `[${node.id}] top-level guard: type=${node.type} cond=${JSON.stringify(node.condition?.raw)}`);
-      passCond = evalCondition(node.condition, s.flags, s.lastChoice, 'alive', s.conditionPolicy, s.history, frame.env, s.menuVars);
+      passCond = evalCondition(node.condition, s.flags, s.lastChoice, 'alive', s.conditionPolicy, s.history, frame.env, s.menuVars, s.randomChoices, node.id);
     }
     if (!passCond) {
       dbg.log('step:node', `[${node.id}] SKIP (condition false) type=${node.type} cond=${JSON.stringify(node.condition?.raw)}`);
@@ -801,7 +1115,7 @@ state: EngineState, npcIndex: Record<string, NPCFile>): EngineState {
         break;
       }
       case 'IfStatement': {
-        const passIf = evalCondition(node.condition, s.flags, s.lastChoice, 'alive', s.conditionPolicy, s.history, frame.env, s.menuVars);
+        const passIf = evalCondition(node.condition, s.flags, s.lastChoice, 'alive', s.conditionPolicy, s.history, frame.env, s.menuVars, s.randomChoices, node.id);
         // RF-15: if(0xFFFFFFFFh) is fold's decompilation of the U8 loopscr/loopnext opcode
         // (inventory-scan loop). Any bare hex literal condition (0x1Bh, 0x20h, 0x1Fh, etc.)
         // serves the same role — iterating over an NPC's container items.  Since the web
@@ -838,13 +1152,17 @@ state: EngineState, npcIndex: Record<string, NPCFile>): EngineState {
           dbg.warn('step:if', `[${node.id}] Unresolved condition (local/param) — policy=${s.conditionPolicy} result=${passIf} total=${s.unresolvedConditionCount}`);
         }
         if (effectivePassIf && node.then && node.then.length > 0) {
+           annotateLatestRandomChoice(s, node.id, 'true', node.then, frame.npcName, frame.env);
+           rememberFlagBranchEndHint(s, node.id, node.condition, true, node.then);
            frame.blocks.push({ nodes: node.then, pc: 0 });
         } else {
           let matchedElif = false;
           if (node.else_ifs) {
             for (const elif of node.else_ifs) {
-                 if (evalCondition(elif.condition, s.flags, s.lastChoice, 'alive', s.conditionPolicy, s.history, frame.env, s.menuVars)) {
+                 if (evalCondition(elif.condition, s.flags, s.lastChoice, 'alive', s.conditionPolicy, s.history, frame.env, s.menuVars, s.randomChoices, node.id)) {
                  if (elif.body && elif.body.length > 0) {
+                    annotateLatestRandomChoice(s, node.id, 'else-if', elif.body, frame.npcName, frame.env);
+                    rememberFlagBranchEndHint(s, node.id, elif.condition, true, elif.body);
                     frame.blocks.push({ nodes: elif.body, pc: 0 });
                  }
                  matchedElif = true;
@@ -853,6 +1171,8 @@ state: EngineState, npcIndex: Record<string, NPCFile>): EngineState {
             }
           }
           if (!matchedElif && node.else && node.else.length > 0) {
+            annotateLatestRandomChoice(s, node.id, 'false', node.else, frame.npcName, frame.env);
+            rememberFlagBranchEndHint(s, node.id, node.condition, false, node.else);
             frame.blocks.push({ nodes: node.else, pc: 0 });
           }
         }
@@ -863,7 +1183,7 @@ state: EngineState, npcIndex: Record<string, NPCFile>): EngineState {
         // In the original engine a guarded loop is a JNE before the ASK; if it fails
         // the code jumps entirely past the conversation block.
         if (node.condition) {
-          const passLoop = evalCondition(node.condition, s.flags, s.lastChoice, 'alive', s.conditionPolicy, s.history, frame.env, s.menuVars);
+          const passLoop = evalCondition(node.condition, s.flags, s.lastChoice, 'alive', s.conditionPolicy, s.history, frame.env, s.menuVars, s.randomChoices, node.id);
           dbg.log('step:loop', `[${node.id}] ConversationLoop guard: cond=${JSON.stringify(node.condition?.raw)} pass=${passLoop}`);
           if (!passLoop) break;
         }
@@ -971,6 +1291,8 @@ state: EngineState, npcIndex: Record<string, NPCFile>): EngineState {
       }
       case 'EndConversation': {
         s.history.push({ speaker: 'system', text: '[Conversation ended]' });
+        reportFlagBranchEndHintsAtEnd(s);
+        reportRandomChoicesAtEnd(s);
         s.ended = true;
         return s;
       }
