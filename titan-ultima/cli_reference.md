@@ -1123,6 +1123,7 @@ titan u7 map-render [static] [--game bg|si]
 | `--highlight-lift N` | Projection lift for highlight rectangles (default: 0). Useful in `classic`/`steep` views when you want overlays shifted with lift |
 | `--highlight-fill-alpha N` | Highlight fill alpha (0–255, default: 128 = 50%). Set `0` for outline-only |
 | `--highlight-labels / --no-highlight-labels` | Draw labels on highlighted rectangles (default: on). Uses custom `LABEL` when provided, else `tx0,ty0,tx1,ty1` |
+| `--map-num N` | Map number to render: `0` = default world (root `STATIC/`, default), `1`+ = `mapNN/` subdirectory inside `STATIC` for IFIX and U7MAP. Used with multi-map mods; pass the mod patch dir as `STATIC` |
 
 > **U7 and roof tiles:** U7's `TFA.DAT` does not have a dedicated roof flag
 > (unlike U8's `TYPEFLAG.DAT`).  Use `--exclude no_building` to remove all
@@ -1185,6 +1186,13 @@ titan u7 map-render STATIC/ --full \
 titan u7 map-render STATIC/ --full \
    --zone-profile bg_zones --all-zones \
    -o u7_bg_guard_regions.png
+
+# Render a mod's alternate map — pass the patch dir as STATIC, select map 1
+titan u7 map-render "mods/MyMod/patch" --map-num 1 --sc 0x08 -o mod_map1_sc08.png
+
+# Mod map with IREG dynamic objects (gamedat must contain map01/ subdir)
+titan u7 map-render "mods/MyMod/patch" --map-num 1 --sc 0x08 \
+  --gamedat "mods/MyMod/gamedat" -o mod_map1_sc08_ireg.png
 ```
 
 ---
@@ -1398,6 +1406,87 @@ titan u7 gflag-dump gamedat/flaginit -f detail -o gflags.txt
 
 ---
 
+#### `u7 gamedat-info`
+
+Inspect a loose Exult `GAMEDAT/` directory or Exult archive in one pass and
+produce a consolidated report of the files TITAN currently understands.
+
+This is the best starting command when you have extracted or copied a live
+`GAMEDAT/` folder, or when a mod stores its initial data in
+`patch/initgame.dat`, and want to see what can be read before running focused
+exports.
+
+```
+titan u7 gamedat-info [GAMEDAT_DIR|ARCHIVE] [--game bg|si] [--mod NAME] [--static DIR] [-o FILE] [-f FORMAT]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `GAMEDAT_DIR|ARCHIVE` | Directory containing loose Exult runtime files, or an Exult ZIP/FLEX archive containing GAMEDAT entries. Optional when config or AppData discovery can resolve a source |
+| `--game bg|si` | Select config section for default GAMEDAT/STATIC lookup (`bg` default) |
+| `--mod NAME` | Resolve a configured or AppData mod source such as `serpentisle/mods/NAME/gamedat`, falling back to `[u7si.mods."NAME".paths].archive` |
+| `--static DIR` | Override STATIC directory for TFA container detection |
+| `-o FILE`, `--output FILE` | Write report to this file |
+| `-f FORMAT`, `--format FORMAT` | Output format: `summary` (default), `detail`, `csv` |
+
+Currently reports:
+- `identity`, `exult.ver`, `newgame.ver`
+- `npc.dat` summary, including NPC sex decoded from Exult runtime
+  `type_flags` bit 9
+- `monsnpcs.dat` monster actor summary
+- `schedule.dat` schedule counts
+- `flaginit` global flag counts
+- `saveinfo.dat` save timestamp and party size
+- `gamewin.dat` camera/time state
+- `usecode.dat` party/timer/saved-position summary
+- `usecode.var` static variable summary
+- `keyring.dat` key count
+- `frames.flg` frame-flag counts
+- `scrnshot.shp` screenshot shape dimensions
+- `u7ireg00`–`u7ireg8f` partial simple-object counts
+
+`titan setup` records mod save folders as `[u7*.mods."NAME".paths].saves`
+when it can find `.sav` files. Because some mods save directly in the mod
+profile root while others use a `saves/` child folder, setup scans the mod
+profile recursively and chooses the folder containing the most `.sav` files.
+Those `.sav` files are full Exult save archives for commands such as
+`u7 save-info`, `u7 save-npcs`, `u7 save-schedules`, and `u7 save-extract`;
+pass those commands a specific `.sav` file from the recorded folder.
+
+`u7iregNN` files are mutable map-region object files. Static terrain and
+fixed map layout come from install-side files such as `U7MAP`, `U7CHUNKS`,
+`U7IFIX*`, and `SHAPES.VGA`; `u7iregNN` adds the current dynamic state for
+objects that can be moved, created, removed, placed in containers, or otherwise
+changed during play. `u7 gamedat-info` currently counts/parses simple loose
+IREG entries as a partial model and reports archive IREG presence.
+
+> `u7 gamedat-info` is a consolidated reader/report command, not yet a full
+> byte-perfect extraction of every GAMEDAT format. IREG parsing is currently
+> partial: simple object entries are counted, while extended records,
+> containers, eggs, attributes, strings, and scheduled usecode still need a
+> fuller data model.
+
+**Examples**
+```bash
+# Quick loose GAMEDAT summary
+titan u7 gamedat-info --game si
+titan u7 gamedat-info gamedat/ --static STATIC/
+
+# Mod runtime/archive summaries
+titan u7 gamedat-info --game bg --mod Keyring
+titan u7 gamedat-info --game si --mod sifixes
+titan u7 gamedat-info --game si --mod <mod-name>
+titan u7 gamedat-info mods/<mod-name>/patch/initgame.dat --static STATIC/
+
+# Detailed file coverage report
+titan u7 gamedat-info --game si -f detail -o gamedat_info.txt
+
+# CSV inventory for analysis
+titan u7 gamedat-info gamedat/ --static STATIC/ -f csv -o gamedat_info.csv
+```
+
+---
+
 #### `u7 save-info`
 
 Show consolidated save metadata: game identity, real-world save timestamp,
@@ -1438,9 +1527,10 @@ inventory skipping, it uses `--static`, `titan.toml`, or a sibling `STATIC/`
 directory to load `TFA.DAT`.
 
 > **Format note:** This command is aimed at Exult-style loose `GAMEDAT/` plus
-> `STATIC/` layouts. For loose original `npc.dat` exports, the `female` column
-> is reported as `UNKNOWN` because the available type-flag field is not
-> reliable in this Exult-compatible file flow.
+> `STATIC/` layouts. Exult runtime `npc.dat` stores NPC sex in `type_flags`
+> bit 9, matching `get_npc_prop(SEX_FLAG)`. Original new-game data embedded in
+> `INITGAME.DAT` uses Exult's first-load normalization path and is decoded by
+> passing `INITGAME.DAT` to this command.
 
 **Examples**
 ```bash
@@ -1708,6 +1798,277 @@ a vertical colour gradient fill. You can specify colours in two ways:
 
 ---
 
+#### `u7 world-query`
+
+Search IFIX (static) and optionally IREG (runtime) world object placements
+by shape class, name, shape number, TFA flags, and area. Runs as an
+interactive wizard when no filter flags are supplied; runs non-interactively
+when any filter flag is present. Requires `questionary>=2.0` for wizard mode.
+
+```
+titan u7 world-query [STATIC] [OPTIONS]
+```
+
+| Argument / Option | Description |
+|-------------------|-------------|
+| `STATIC` | Path to STATIC directory. Defaults to configured path from `titan.toml`. |
+| `--game bg\|si` | Use config section for Black Gate or Serpent Isle (default: `bg`) |
+| `--gamedat DIR` | Path to GAMEDAT directory for IREG dynamic objects |
+| `--text FILE` | Path to `TEXT.FLX` for shape name lookup (auto-discovered from STATIC if omitted) |
+| `--class NAME` | Shape class filter, repeatable (e.g. `container`, `human`, `monster`) |
+| `--shape N` | Shape number filter, hex or decimal, repeatable (e.g. `522`, `0x20A`) |
+| `--name TEXT` | Shape name substring filter, case-insensitive (e.g. `"locked chest"`) |
+| `--flag NAME` | TFA flag filter, repeatable (e.g. `solid`, `animated`, `door`) |
+| `--tile-rect tx0,ty0,tx1,ty1` | Restrict search to a tile rectangle (0–3071 per axis) |
+| `--sc N` | Superchunk number filter, hex or decimal, repeatable (e.g. `0x55`) |
+| `--ireg / --no-ireg` | Force-include or force-exclude IREG objects |
+| `--map-num N` | Map number: `0` = default world (root `STATIC/` and root `gamedat/`, default), `1`+ = `mapNN/` subdirectory inside `STATIC` for IFIX and inside `gamedat` for IREG |
+| `-f, --format TEXT` | Output format: `summary` (default), `full_text`, `csv` |
+| `-o, --output FILE` | Write output to a file instead of stdout |
+
+**Notes:**
+- Containers, NPCs, eggs, and monsters live in IREG only. The wizard auto-defaults
+  `--ireg` to Yes when those classes are selected.
+- `--tile-rect` coordinates are normalised (top-left is always the smaller value).
+- `--name` and `--shape` can be combined; both filters must match.
+- When `TEXT.FLX` is available, shape names appear in all output as `522 (locked chest)`.
+- If `titan setup` has been run, `TEXT.FLX` is recorded in `titan.toml` and resolved automatically.
+- `--map-num` applies to both IFIX and IREG lookups simultaneously. For mod maps, pass the mod patch dir as `STATIC` — the patch dir contains the `mapNN/` subdirectory with IFIX files for that map. The `gamedat` path should point to the mod's live gamedat, which also has `mapNN/` subdirs for each additional map.
+
+**Interactive wizard steps** (no filter flags supplied):
+
+1. Shape class checkbox — leave blank for no filter.
+2. Include IREG? — auto-defaults to Yes for IREG-only classes.
+3. Name search — substring; matching shape numbers shown as hints.
+4. Shape number — comma-separated, hex or decimal; leave blank for all.
+5. TFA flag checkbox — leave blank for no filter.
+6. Area — entire world, superchunk list, or tile rectangle (top-left XY + bottom-right XY).
+7. Output format — `summary`, `full_text`, or `csv`.
+8. Save to file? — optional output path.
+
+**Non-interactive examples:**
+```bash
+# All containers in a tile rectangle (the large central area of the BG world).
+titan u7 world-query STATIC/ --gamedat gamedat/ --class container --tile-rect 512,512,2048,2048
+
+# All placements of shape 522 (locked chest) across the entire world, CSV output.
+titan u7 world-query STATIC/ --gamedat gamedat/ --shape 522 --ireg -f csv -o locked_chests.csv
+
+# All shapes whose name contains "chest" (any variant), full text.
+titan u7 world-query STATIC/ --gamedat gamedat/ --name chest --ireg -f full_text
+
+# All doors in superchunk 0x55 (Britain area).
+titan u7 world-query STATIC/ --flag door --sc 0x55
+
+# Containers and humans in two adjacent superchunks, saved to a file.
+titan u7 world-query STATIC/ --gamedat gamedat/ --class container --class human --sc 0x55 --sc 0x56 -o area_objects.txt
+
+# Configured BG paths — wizard mode.
+titan u7 world-query --game bg
+
+# Explicit paths — wizard mode.
+titan u7 world-query STATIC/ --gamedat gamedat/
+
+# Mod map query — IFIX from patch/map01/, IREG from gamedat/map01/.
+titan u7 world-query "mods/MyMod/patch" --gamedat "mods/MyMod/gamedat" \
+  --map-num 1 --class container --ireg
+
+# Mod map query, all objects, CSV output.
+titan u7 world-query "mods/MyMod/patch" --gamedat "mods/MyMod/gamedat" \
+  --map-num 1 --ireg -f csv -o mod_map1_objects.csv
+```
+
+**Output formats:**
+
+- `summary` — total match count + unique shape count + per-shape count table with names.
+- `full_text` — one line per placement: source, shape name, hex, tile coords, lift, class, flags.
+- `csv` — columns: `source, shape, shape_hex, shape_name, frame, quality, tx, ty, tz, shape_class, shape_class_name, flags`.
+
+---
+
+#### `u7 container-browse`
+
+Browse and inspect container contents from IREG with full nesting support (e.g. Ship's Hold → Backpack → Bag → items). With no filter flags, launches an interactive wizard; supply any filter flag to run non-interactively.
+
+```
+titan u7 container-browse [STATIC] [OPTIONS]
+```
+
+| Option | Description |
+|---|---|
+| `STATIC` | Path to STATIC directory (positional, optional if configured) |
+| `--game bg\|si` | Use config section for BG or SI (default: `bg`) |
+| `--gamedat PATH` | Path to gamedat/ directory — required |
+| `--text PATH` | Explicit TEXT.FLX path for shape name lookup |
+| `--exult-flx PATH` | Path to `exult_bg.flx` or `exult_si.flx` for per-frame item names |
+| `--mod-data PATH` | Path to a mod's `patch/` or `data/` directory; overlays mod-specific shape names and per-frame names on top of the base game data |
+| `--map-num N` | Map number to query: `0` = default world map (root gamedat), `1`+ = `mapNN/` subdirectory inside gamedat (default: `0`) |
+| `--container-shape N` | Container shape filter, hex or decimal (repeatable) |
+| `--container-name STR` | Container name substring filter (case-insensitive) |
+| `--contains-shape N` | Only show containers holding item with this shape (repeatable) |
+| `--contains-name STR` | Only show containers holding item matching name substring |
+| `--tile-rect tx0,ty0,tx1,ty1` | Restrict to tile rectangle |
+| `--sc N` | Restrict to superchunk, hex or decimal (repeatable) |
+| `-f / --format` | Output format: `tree` (default) or `csv` |
+| `-o / --output FILE` | Write output to file instead of stdout |
+
+**Notes:**
+- Containers must be in IREG (runtime gamedat), not IFIX.
+- Empty containers (no items recorded at runtime) are included by default; use `--contains-*` to require specific contents.
+- Tree format shows the full nesting hierarchy with `├─`/`└─`/`│` branches, item counts, and quality multipliers.
+- CSV format emits one row per item at any nesting depth with a `path` column like `819 (barrel) > 801 (backpack) > item`.
+- Shape names come from TEXT.FLX (auto-discovered from STATIC if not given via `--text`).
+- `--exult-flx` enables per-frame item names for multi-frame shapes (e.g. shape 675 "desk item" breaks down into `675:1 (quill)`, `675:2 (inkwell)`, `675:6 (document)`, etc.). The path can also be set permanently via `titan setup`, which writes it to `[exult.paths] bg_flx` in titan.toml. Without `--exult-flx` or a configured path, items display by shape name only.
+- `--mod-data` reads `textmsg.txt` and `shape_info.txt` from the given directory. `textmsg.txt %%section shapes` overlays shape names on top of TEXT.FLX; `%%section miscnames` extends the per-frame name string table. The mod's `shape_info.txt %%section framenames` overlays frame-to-name mappings on top of the base Exult FLX data. Both files are optional — if only one is present, titan uses what it can. `--exult-flx` and `--mod-data` are independent and complement each other: `--exult-flx` provides the base framename mappings, `--mod-data` overlays the mod's additions.
+- `--map-num` selects which set of IREG files to query. Mods with multiple maps store each map's IREG in a `mapNN/` subdirectory inside gamedat (e.g. `gamedat/map01/u7ireg*`). Map 0 uses the root gamedat directory. Only the IREG for the selected map is scanned; `--contains-*` filters operate within that map's data.
+
+**Wizard steps (interactive):**
+1. STATIC directory path (if not supplied)
+2. Gamedat directory path (if not supplied)
+3. Container name substring filter (leave blank for all containers)
+4. Container shape number filter (comma-separated, leave blank for all)
+5. Contains-item name filter (leave blank to skip)
+6. Contains-item shape filter (comma-separated, leave blank to skip)
+7. Area: entire world, specific superchunks, or tile rectangle
+8. Output format (tree / csv) + optional file save
+
+**Non-interactive examples:**
+
+```bash
+# All containers in the entire world (wizard mode).
+titan u7 container-browse STATIC/ --gamedat gamedat/
+
+# All containers in a tile rectangle.
+titan u7 container-browse STATIC/ --gamedat gamedat/ --tile-rect 512,512,2048,2048
+
+# Show only locked chests (shape 522).
+titan u7 container-browse STATIC/ --gamedat gamedat/ --container-shape 522
+
+# Show containers whose name includes "chest".
+titan u7 container-browse STATIC/ --gamedat gamedat/ --container-name chest
+
+# Show containers that hold at least one sword (by name).
+titan u7 container-browse STATIC/ --gamedat gamedat/ --contains-name sword
+
+# Export to CSV, only in superchunk 0x27.
+titan u7 container-browse STATIC/ --gamedat gamedat/ --sc 0x27 -f csv -o sc27_containers.csv
+
+# Configured BG paths — wizard mode.
+titan u7 container-browse --game bg
+
+# Per-frame item names from an Exult installation (base game, no mod).
+titan u7 container-browse STATIC/ --gamedat gamedat/ --container-name desk \
+  --exult-flx "C:/Program Files/Exult/data/exult_bg.flx"
+
+# Mod query — map 0 (default world) with mod-specific names overlaid.
+# --exult-flx provides base frame mappings; --mod-data overlays the mod's additions.
+titan u7 container-browse STATIC/ --gamedat mods/MyMod/gamedat \
+  --exult-flx "C:/Program Files/Exult/data/exult_si.flx" \
+  --mod-data "mods/MyMod/patch" --game si
+
+# Mod query — alternate map (map 1) inside the same mod gamedat.
+titan u7 container-browse STATIC/ --gamedat mods/MyMod/gamedat \
+  --exult-flx "C:/Program Files/Exult/data/exult_si.flx" \
+  --mod-data "mods/MyMod/patch" --game si --map-num 1
+```
+
+**Output format (tree), shape names only:**
+
+```
+Container browse: 3 container(s) found.
+
+  522 (locked chest)              0x020A  @ (649,856)  lift=1  sc=0x26  [4 item(s), depth=1]
+    ├─ 573 (plate armour)
+    ├─ 340 (potion)
+    ├─ 340 (potion)
+    └─ 549 (lightning whip)
+
+  522 (locked chest)              0x020A  @ (2081,581)  lift=0  sc=0x20  [3 item(s), depth=1]
+    ├─ 815 (stone chips)
+    ├─ 815 (stone chips)
+    └─ 549 (lightning whip)
+
+  802 (bag)                       0x0322  @ (1204,2805)  lift=0  sc=0x7C  [7 item(s), depth=1]
+    ├─ 644 (gold coin)  ×228
+    ├─ 627 (lockpick)  ×134
+    └─ 549 (lightning whip)  ×8
+```
+
+**Output format (tree), with `--exult-flx` (per-frame names):**
+
+```
+Container browse: 1 container(s) found.
+
+  283 (desk)                      0x011B  @ (1027,1118)  lift=0  sc=0x34  [3 item(s), depth=1]
+    ├─ 675:6 (document)
+    ├─ 675:13 (document)
+    └─ 675:16 (mirror)
+```
+
+When `--contains-*` is active, each result is the container that **directly** holds
+the matching item. Without `--contains-*`, results are all root-level IREG containers
+shown with their full contents tree.
+
+**CSV columns:** `sc, container_shape, container_hex, container_name, tx, ty, tz, depth, item_shape, item_hex, item_name, item_frame, item_quality, path`
+
+---
+
+---
+
+#### `u7 egg-query`
+
+Query egg trigger objects from IREG. Surfaces each egg's type, usecode function number, trigger probability, distance, criteria, and flags. With no filter flags, launches an interactive wizard; supply any filter flag to run non-interactively.
+
+```
+titan u7 egg-query [STATIC] [OPTIONS]
+```
+
+| Option | Description |
+|---|---|
+| `STATIC` | Path to STATIC directory (positional, optional if configured) |
+| `--game bg\|si` | Use config section for BG or SI (default: `bg`) |
+| `--gamedat PATH` | Path to gamedat/ directory — required |
+| `--type NAME` | Egg type filter (repeatable): `monster`, `usecode`, `teleport`, `jukebox`, `soundsfx`, `voice`, `missile`, `weather`, `path`, `button`, `intermap` |
+| `--fn N` | Usecode function number filter, hex or decimal (only matches type=usecode) |
+| `--tile-rect tx0,ty0,tx1,ty1` | Restrict to tile rectangle |
+| `--sc N` | Restrict to superchunk, hex or decimal (repeatable) |
+| `-f / --format` | Output format: `table` (default) or `csv` |
+| `-o / --output FILE` | Write output to file instead of stdout |
+
+**Wizard steps (interactive):**
+1. STATIC directory path (if not supplied)
+2. Gamedat directory path (if not supplied)
+3. Egg type checkbox (leave blank for all types)
+4. Usecode function number filter (shown only when usecode type is selected or no type filter)
+5. Area: entire world, specific superchunks, or tile rectangle
+6. Output format + optional file save
+
+**Non-interactive examples:**
+
+```bash
+# All eggs in the world.
+titan u7 egg-query STATIC/ --gamedat gamedat/
+
+# All usecode eggs.
+titan u7 egg-query STATIC/ --gamedat gamedat/ --type usecode
+
+# Find every placement of a specific function.
+titan u7 egg-query STATIC/ --gamedat gamedat/ --fn 0x06BC
+
+# Monster eggs in a tile region.
+titan u7 egg-query STATIC/ --gamedat gamedat/ --type monster --tile-rect 512,512,2048,2048
+
+# Export all usecode eggs to CSV.
+titan u7 egg-query STATIC/ --gamedat gamedat/ --type usecode -f csv -o usecode_eggs.csv
+
+# Configured BG paths — wizard mode.
+titan u7 egg-query --game bg
+```
+
+**CSV columns:** `sc, tx, ty, tz, egg_type, egg_type_name, fn, probability, distance, criteria, criteria_name, once, nocturnal, auto_reset, hatched, data1, data2`
+
+---
+
 ### Configuration commands (shared)
 
 ---
@@ -1816,6 +2177,7 @@ variant  = "blackgate"
 static   = "STATIC/"
 shapes   = "STATIC/SHAPES.VGA"
 palette  = "STATIC/PALETTES.FLX"
+gamedat  = "gamedat/"
 
 [u7si.game]
 base     = "C:/GOG Games/Ultima VII/SERPENT"
@@ -1825,6 +2187,7 @@ variant  = "serpentisle"
 static   = "STATIC/"
 shapes   = "STATIC/SHAPES.VGA"
 palette  = "STATIC/PALETTES.FLX"
+gamedat  = "gamedat/"
 ```
 
 ### Search order
@@ -1887,12 +2250,16 @@ A value on the command line always wins.
 | `u7 save-list` | List entries in an Exult U7 savegame |
 | `u7 save-extract` | Extract entries from an Exult U7 savegame |
 | `u7 gflag-dump` | Dump global flags from a U7 save or `flaginit` file |
+| `u7 gamedat-info` | Inspect loose Exult `GAMEDAT/` files in one consolidated report |
 | `u7 save-info` | Show save metadata: identity, timestamp, party, game state |
 | `u7 npc-dump` | Dump NPC data from loose Exult `npc.dat` / `GAMEDAT` |
 | `u7 save-npcs` | Dump NPC data from an Exult U7 savegame |
 | `u7 schedule-dump` | Dump schedules from loose Exult `schedule.dat` / `GAMEDAT` |
 | `u7 save-schedules` | Dump NPC schedules from an Exult U7 savegame |
 | `u7 font-create` | Interactive wizard for creating U7 font shapes from TTF |
+| `u7 world-query` | Interactive wizard to filter IFIX/IREG world object placements |
+| `u7 container-browse` | Browse container contents from IREG with full nesting support |
+| `u7 egg-query` | Query egg trigger objects from IREG — type, usecode function, location |
 | `dialogue prepare` | Generate dialogue runtime artifacts |
 | `dialogue validate` | Validate dialogue runtime artifacts (`--content-lint` is unfinished) |
 | `dialogue launch` | Launch local dialogue web viewer (`--host/--port` optional advanced overrides) |

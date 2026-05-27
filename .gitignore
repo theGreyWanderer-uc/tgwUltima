@@ -1,6 +1,10 @@
 # VS Code / GitHub
 .github/skills
 
+# Claude Code
+.claude/
+CLAUDE.md
+
 # Python virtual environment
 .venv/
 venv/

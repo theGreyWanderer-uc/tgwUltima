@@ -9,6 +9,8 @@ from __future__ import annotations
 
 __all__ = ["u7_app"]
 
+import csv
+import io
 import os
 import sys
 from pathlib import Path
@@ -55,6 +57,142 @@ def _resolve_u7_paths(game: str) -> tuple[Optional[str], Optional[str]]:
         palette = str(Path(static) / "PALETTES.FLX")
 
     return static, palette
+
+
+def _resolve_u7_text_flx(game: str, static_dir: Optional[str] = None) -> Optional[str]:
+    """Resolve TEXT.FLX path from config, with fallback to STATIC dir."""
+    cfg = get_config() or {}
+    section_key = "u7bg" if game.lower() == "bg" else "u7si"
+    section = cfg.get(section_key, {}) if isinstance(cfg, dict) else {}
+    game_cfg = section.get("game", {}) if isinstance(section, dict) else {}
+    paths_cfg = section.get("paths", {}) if isinstance(section, dict) else {}
+
+    base = game_cfg.get("base") if isinstance(game_cfg, dict) else None
+    base_path = Path(str(base)).expanduser() if base else None
+
+    configured = paths_cfg.get("text") if isinstance(paths_cfg, dict) else None
+    if configured:
+        p = Path(str(configured)).expanduser()
+        if p.is_absolute() or base_path is None:
+            candidate = p
+        else:
+            candidate = base_path / p
+        if candidate.exists():
+            return str(candidate)
+
+    # Fall back to STATIC directory discovery
+    search_dirs: list[Path] = []
+    if static_dir:
+        search_dirs.append(Path(static_dir))
+    if base_path:
+        search_dirs.append(base_path / "STATIC")
+    for d in search_dirs:
+        for name in ("TEXT.FLX", "text.flx"):
+            p = d / name
+            if p.exists():
+                return str(p)
+    return None
+
+
+def _resolve_u7_gamedat(game: str) -> Optional[str]:
+    """Resolve loose GAMEDAT path from multi-game config for BG/SI."""
+    cfg = get_config() or {}
+    section_key = "u7bg" if game.lower() == "bg" else "u7si"
+    section = cfg.get(section_key, {}) if isinstance(cfg, dict) else {}
+    game_cfg = section.get("game", {}) if isinstance(section, dict) else {}
+    paths_cfg = section.get("paths", {}) if isinstance(section, dict) else {}
+
+    base = game_cfg.get("base") if isinstance(game_cfg, dict) else None
+    base_path = Path(str(base)).expanduser() if base else None
+
+    configured = paths_cfg.get("gamedat") if isinstance(paths_cfg, dict) else None
+    if configured:
+        path = Path(str(configured)).expanduser()
+        if path.is_absolute() or base_path is None:
+            return str(path)
+        return str(base_path / path)
+
+    if base_path is not None:
+        for name in ("gamedat", "GAMEDAT"):
+            candidate = base_path / name
+            if candidate.is_dir():
+                return str(candidate)
+    return None
+
+
+def _exult_profile_root() -> Optional[Path]:
+    """Return the standard per-user Exult profile root, if it exists."""
+    local_appdata = os.getenv("LOCALAPPDATA")
+    if not local_appdata:
+        return None
+    root = Path(local_appdata) / "Exult"
+    return root if root.is_dir() else None
+
+
+def _exult_game_slug(game: str) -> str:
+    return "blackgate" if game.lower() == "bg" else "serpentisle"
+
+
+def _resolve_u7_mod_gamedat(game: str, mod: Optional[str]) -> Optional[str]:
+    """Resolve per-user Exult runtime GAMEDAT for a base game or mod."""
+    cfg = get_config() or {}
+    section_key = "u7bg" if game.lower() == "bg" else "u7si"
+    section = cfg.get(section_key, {}) if isinstance(cfg, dict) else {}
+    game_cfg = section.get("game", {}) if isinstance(section, dict) else {}
+    mods_cfg = section.get("mods", {}) if isinstance(section, dict) else {}
+    if mod and isinstance(mods_cfg, dict):
+        mod_cfg = mods_cfg.get(mod, {})
+        if isinstance(mod_cfg, dict):
+            paths_cfg = mod_cfg.get("paths", {})
+            if isinstance(paths_cfg, dict):
+                configured = paths_cfg.get("gamedat")
+                if configured:
+                    path = Path(str(configured)).expanduser()
+                    if (path / "npc.dat").is_file():
+                        return str(path)
+
+    root = _exult_profile_root()
+    if root is None:
+        return None
+    base = root / _exult_game_slug(game)
+    candidate = base / "gamedat" if not mod else base / "mods" / mod / "gamedat"
+    if (candidate / "npc.dat").is_file():
+        return str(candidate)
+
+    base_path = game_cfg.get("base") if isinstance(game_cfg, dict) else None
+    if mod and base_path:
+        install_candidate = Path(str(base_path)).expanduser() / "mods" / mod / "gamedat"
+        if (install_candidate / "npc.dat").is_file():
+            return str(install_candidate)
+    return None
+
+
+def _resolve_u7_mod_archive(game: str, mod: Optional[str]) -> Optional[str]:
+    """Resolve configured Exult mod archive data, such as patch/initgame.dat."""
+    if not mod:
+        return None
+    cfg = get_config() or {}
+    section_key = "u7bg" if game.lower() == "bg" else "u7si"
+    section = cfg.get(section_key, {}) if isinstance(cfg, dict) else {}
+    game_cfg = section.get("game", {}) if isinstance(section, dict) else {}
+    mods_cfg = section.get("mods", {}) if isinstance(section, dict) else {}
+    mod_cfg = mods_cfg.get(mod, {}) if isinstance(mods_cfg, dict) else {}
+    paths_cfg = mod_cfg.get("paths", {}) if isinstance(mod_cfg, dict) else {}
+    archive = paths_cfg.get("archive") if isinstance(paths_cfg, dict) else None
+    if archive:
+        path = Path(str(archive)).expanduser()
+        if path.is_file():
+            return str(path)
+    base_path = game_cfg.get("base") if isinstance(game_cfg, dict) else None
+    if base_path:
+        mod_root = Path(str(base_path)).expanduser() / "mods" / mod
+        for candidate in (
+            mod_root / "patch" / "initgame.dat",
+            mod_root / "data" / "initgame.dat",
+        ):
+            if candidate.is_file():
+                return str(candidate)
+    return None
 
 
 def _resolve_loose_data_file(path: str, filename: str) -> str:
@@ -644,7 +782,8 @@ def cmd_map_render(args: SimpleNamespace) -> int:
         return 1
 
     pal = U7Palette.from_file(palette_path)
-    renderer = U7MapRenderer(static_dir)
+    map_num = int(getattr(args, "map_num", 0) or 0)
+    renderer = U7MapRenderer(static_dir, map_num=map_num)
 
     view = args.view or "classic"
     if view not in U7MapRenderer.PROJECTIONS:
@@ -666,6 +805,10 @@ def cmd_map_render(args: SimpleNamespace) -> int:
               f"{len(exclude)} shapes excluded")
 
     gamedat = getattr(args, "gamedat", None)
+    if gamedat and map_num > 0:
+        map_ireg_dir = os.path.join(gamedat, f"map{map_num:02x}")
+        if os.path.isdir(map_ireg_dir):
+            gamedat = map_ireg_dir
     overlay_tuples = getattr(args, "highlight_rects", None) or []
     overlays = [
         U7TileRectOverlay(
@@ -855,25 +998,78 @@ def cmd_typeflag_dump(args: SimpleNamespace) -> int:
 # ============================================================================
 
 def cmd_npc_dump(args: SimpleNamespace) -> int:
-    """Dump NPC data from a loose npc.dat file or GAMEDAT directory."""
-    from titan.u7.save import U7NPCData
+    """Dump NPC data from loose npc.dat, GAMEDAT, or INITGAME.DAT."""
+    from titan.u7.flex import U7FlexArchive
+    from titan.u7.save import U7NPCData, U7Save
 
-    filepath = _resolve_loose_data_file(args.file, "npc.dat")
-    if not os.path.isfile(filepath):
-        print(f"ERROR: npc.dat not found: {filepath}", file=sys.stderr)
+    input_path = Path(args.file)
+    looks_like_initgame = (
+        input_path.is_file()
+        and input_path.name.lower() == "initgame.dat"
+    )
+    initgame_source = looks_like_initgame and U7FlexArchive.is_u7_flex(
+        str(input_path)
+    )
+    archive_source = False
+    archive: Optional[U7Save] = None
+    if looks_like_initgame and not initgame_source:
+        try:
+            archive = U7Save.from_file(str(input_path))
+            archive_source = archive.has_entry("npc.dat")
+        except ValueError:
+            archive_source = False
+        if not archive_source:
+            print(
+                "ERROR: INITGAME.DAT is neither a U7 Flex archive nor an "
+                f"Exult ZIP archive with npc.dat: {input_path}",
+                file=sys.stderr,
+            )
+            return 1
+    filepath = str(input_path) if initgame_source else _resolve_loose_data_file(
+        args.file,
+        "npc.dat",
+    )
+    if not archive_source and not os.path.isfile(filepath):
+        print(
+            f"ERROR: npc.dat or INITGAME.DAT not found: {filepath}",
+            file=sys.stderr,
+        )
         return 1
 
-    print(f"Source: {filepath} (loose npc.dat)")
+    if initgame_source:
+        source_note = "INITGAME.DAT Flex:npc.dat"
+    elif archive_source:
+        source_note = "Exult archive:npc.dat"
+        filepath = str(input_path)
+    else:
+        source_note = "loose npc.dat"
+    print(f"Source: {filepath} ({source_note})")
     container_shapes = _load_container_shapes(
         args,
-        fallback_static=_infer_static_dir_for_data_file(filepath),
+        fallback_static=(
+            str(Path(filepath).resolve().parent)
+            if initgame_source
+            else _infer_static_dir_for_data_file(filepath)
+        ),
     )
-    print("Sex:    UNKNOWN (loose original npc.dat type flag is not reliable)")
-    npcs = U7NPCData.from_file(
-        filepath,
-        container_shapes=container_shapes,
-        sex_unknown=True,
-    )
+    if initgame_source:
+        print("Sex:    decoded from original new-game data (raw bit 9 inverted)")
+        npcs = U7NPCData.from_initgame_file(
+            filepath,
+            container_shapes=container_shapes,
+        )
+    elif archive_source and archive is not None:
+        print("Sex:    decoded from Exult runtime type_flags bit 9")
+        npcs = U7NPCData.from_save(
+            archive,
+            container_shapes=container_shapes,
+        )
+    else:
+        print("Sex:    decoded from Exult runtime type_flags bit 9")
+        npcs = U7NPCData.from_file(
+            filepath,
+            container_shapes=container_shapes,
+        )
 
     fmt = getattr(args, "format", "summary") or "summary"
 
@@ -885,7 +1081,7 @@ def cmd_npc_dump(args: SimpleNamespace) -> int:
         content = npcs.dump_summary()
 
     if args.output:
-        with open(args.output, "w") as f:
+        with open(args.output, "w", encoding="utf-8") as f:
             f.write(content)
             f.write("\n")
         print(f"\n{fmt.title()} dump written to: {args.output}")
@@ -897,7 +1093,7 @@ def cmd_npc_dump(args: SimpleNamespace) -> int:
 
 def cmd_schedule_dump(args: SimpleNamespace) -> int:
     """Dump NPC schedules from a loose schedule.dat file or directory."""
-    from titan.u7.save import U7NPCData, U7Schedules
+    from titan.u7.save import U7NPCData, U7Save, U7Schedules
 
     filepath = _resolve_loose_data_file(args.file, "schedule.dat")
     if not os.path.isfile(filepath):
@@ -908,24 +1104,34 @@ def cmd_schedule_dump(args: SimpleNamespace) -> int:
     sched = U7Schedules.from_file(filepath)
 
     npc_names: dict[int, str] | None = None
-    npc_file = getattr(args, "npc_file", None)
-    if npc_file:
-        npc_file = _resolve_loose_data_file(npc_file, "npc.dat")
+    npc_file_arg = getattr(args, "npc_file", None)
+    npc_file: Optional[str] = None
+    npc_save: Optional[U7Save] = None
+    if npc_file_arg:
+        npc_path = Path(npc_file_arg)
+        if npc_path.is_file() and npc_path.suffix.lower() == ".dat" and npc_path.name.lower() != "npc.dat":
+            try:
+                npc_save = U7Save.from_file(str(npc_path))
+                if not npc_save.has_entry("npc.dat"):
+                    npc_save = None
+            except ValueError:
+                npc_save = None
+        if npc_save is None:
+            npc_file = _resolve_loose_data_file(npc_file_arg, "npc.dat")
     else:
         sibling = Path(filepath).with_name("npc.dat")
         npc_file = str(sibling) if sibling.is_file() else None
 
-    if npc_file:
+    if npc_save is not None or npc_file:
         try:
-            container_shapes = _load_container_shapes(
-                args,
-                fallback_static=_infer_static_dir_for_data_file(npc_file),
-            )
-            npc_names = U7NPCData.from_file(
-                npc_file,
-                container_shapes=container_shapes,
-            ).name_map()
-            print(f"Names:  {len(npc_names)} NPC names loaded from {npc_file}")
+            container_shapes = _load_container_shapes(args, fallback_static=None)
+            if npc_save is not None:
+                npc_data = U7NPCData.from_save(npc_save, container_shapes=container_shapes)
+                print(f"Names:  {len(npc_data.npcs)} NPC names loaded from {npc_file_arg}")
+            else:
+                npc_data = U7NPCData.from_file(npc_file, container_shapes=container_shapes)
+                print(f"Names:  {len(npc_data.npcs)} NPC names loaded from {npc_file}")
+            npc_names = npc_data.name_map()
         except (OSError, ValueError) as exc:
             print(f"Names:  unavailable ({exc})")
     else:
@@ -947,6 +1153,275 @@ def cmd_schedule_dump(args: SimpleNamespace) -> int:
         print(f"\n{fmt.title()} dump written to: {args.output}")
     else:
         print()
+        print(content)
+    return 0
+
+
+
+
+def cmd_gamedat_info(args: SimpleNamespace) -> int:
+    """Inspect a loose Exult GAMEDAT directory or Exult archive."""
+    from titan.u7.map import U7MapRenderer
+    from titan.u7.save import (
+        U7FrameFlags, U7GameState, U7GlobalFlags, U7Identity, U7Keyring,
+        U7NPCData, U7Save, U7SaveInfo, U7Schedules, U7UsecodeData,
+        U7UsecodeVars,
+    )
+    from titan.u7.shape import U7Shape
+
+    source = getattr(args, "directory", None)
+    mod = getattr(args, "mod", None)
+    if not source:
+        source = _resolve_u7_mod_gamedat(getattr(args, "game", "bg"), mod)
+    if not source:
+        source = _resolve_u7_mod_archive(getattr(args, "game", "bg"), mod)
+    if not source:
+        source = _resolve_u7_gamedat(getattr(args, "game", "bg"))
+    if not source:
+        print(
+            "ERROR: GAMEDAT source not supplied and no configured/default "
+            f"[u7{getattr(args, 'game', 'bg')}] source was found.",
+            file=sys.stderr,
+        )
+        return 1
+
+    root = Path(source)
+    archive: Optional[U7Save] = None
+    if root.is_file():
+        try:
+            archive = U7Save.from_file(str(root))
+        except ValueError as exc:
+            print(f"ERROR: GAMEDAT source is not a directory or Exult archive: {exc}", file=sys.stderr)
+            return 1
+    elif not root.is_dir():
+        print(f"ERROR: GAMEDAT source not found: {root}", file=sys.stderr)
+        return 1
+
+    def data_for(name: str) -> Optional[bytes]:
+        if archive is not None:
+            return archive.get_data(name)
+        path = root / name
+        return path.read_bytes() if path.is_file() else None
+
+    def source_size(name: str) -> int:
+        if archive is not None:
+            data = archive.get_data(name)
+            return len(data) if data is not None else 0
+        path = root / name
+        return path.stat().st_size if path.exists() else 0
+
+    def entry_names() -> list[str]:
+        if archive is not None:
+            return sorted(name for name, _ in archive.list_entries())
+        return sorted(path.name for path in root.iterdir() if path.is_file())
+
+    container_shapes = _load_container_shapes(
+        args,
+        fallback_static=(
+            None if archive is not None
+            else _infer_static_dir_for_data_file(str(root / "npc.dat"))
+        ),
+    )
+
+    rows: list[tuple[str, int, str, str]] = []
+
+    def add_row(name: str, status: str, note: str = "") -> None:
+        rows.append((name, source_size(name), status, note))
+
+    source_kind = f"{archive.container_format.upper()} archive" if archive else "directory"
+    lines: list[str] = [
+        "=== Loose GAMEDAT Info ===",
+        f"Source: {root} ({source_kind})",
+        "",
+    ]
+
+    identity_data = data_for("identity")
+    if identity_data is not None:
+        ident = U7Identity.from_bytes(identity_data)
+        lines.append(f"Identity: {ident.game}")
+        add_row("identity", "parsed", ident.game)
+
+    for name in ("exult.ver", "newgame.ver"):
+        data = data_for(name)
+        if data is not None:
+            first = data.decode("ascii", errors="replace").splitlines()[0]
+            add_row(name, "parsed text", first)
+
+    npc_names: dict[int, str] | None = None
+    npc_data = data_for("npc.dat")
+    if npc_data is not None:
+        npcs = U7NPCData.from_bytes(
+            npc_data,
+            container_shapes=container_shapes,
+        )
+        npc_names = npcs.name_map()
+        lines.append(npcs.dump_summary())
+        female_count = sum(1 for npc in npcs.npcs if npc.is_female)
+        male_count = sum(1 for npc in npcs.npcs if npc.is_female is False)
+        lines.append(
+            "NPC sex: decoded from Exult runtime type_flags bit 9 "
+            f"({female_count} female, {male_count} male)."
+        )
+        add_row(
+            "npc.dat",
+            "parsed",
+            f"{len(npcs.npcs)} NPCs; {female_count} female, {male_count} male",
+        )
+
+    mon_data = data_for("monsnpcs.dat")
+    if mon_data is not None:
+        monsters = U7NPCData.from_monsnpcs_bytes(
+            mon_data,
+            container_shapes=container_shapes,
+        )
+        lines.append(
+            f"Monster NPCs: {len(monsters.npcs)} parsed "
+            f"({monsters.num_npcs1} declared)"
+        )
+        add_row("monsnpcs.dat", "parsed", f"{len(monsters.npcs)} monsters")
+
+    sched_data = data_for("schedule.dat")
+    if sched_data is not None:
+        sched = U7Schedules.from_bytes(sched_data)
+        lines.append(sched.dump_summary(npc_names))
+        total = sum(len(entries) for entries in sched.entries.values())
+        add_row("schedule.dat", "parsed", f"{total} entries ({sched.format})")
+
+    flag_data = data_for("flaginit")
+    if flag_data is not None:
+        gflags = U7GlobalFlags.from_bytes(flag_data)
+        lines.append(gflags.dump_summary())
+        add_row("flaginit", "parsed", f"{gflags.nonzero_count} nonzero")
+
+    saveinfo_data = data_for("saveinfo.dat")
+    if saveinfo_data is not None:
+        info = U7SaveInfo.from_bytes(saveinfo_data)
+        lines.append(
+            f"Save info: {info.real_year:04d}-{info.real_month:02d}-"
+            f"{info.real_day:02d} {info.real_hour:02d}:"
+            f"{info.real_minute:02d}:{info.real_second:02d}, "
+            f"party size {info.party_size}"
+        )
+        add_row("saveinfo.dat", "parsed", f"party size {info.party_size}")
+
+    gwin_data = data_for("gamewin.dat")
+    if gwin_data is not None:
+        gwin = U7GameState.from_bytes(gwin_data)
+        lines.append(
+            f"Game window: camera=({gwin.scroll_tx},{gwin.scroll_ty}), "
+            f"day {gwin.clock_day}, {gwin.clock_hour:02d}:"
+            f"{gwin.clock_minute:02d}"
+        )
+        add_row("gamewin.dat", "parsed", "camera/time state")
+
+    usedat_data = data_for("usecode.dat")
+    if usedat_data is not None:
+        usedat = U7UsecodeData.from_bytes(usedat_data)
+        nonzero = sum(1 for timer in usedat.timers if timer.value != 0)
+        lines.append(
+            f"Usecode runtime: party={usedat.party_members}, "
+            f"timers={len(usedat.timers)} ({nonzero} nonzero)"
+        )
+        add_row("usecode.dat", "parsed summary", "party/timers/saved pos")
+
+    usevars_data = data_for("usecode.var")
+    if usevars_data is not None:
+        usevars = U7UsecodeVars.from_bytes(usevars_data)
+        add_row(
+            "usecode.var",
+            "parsed summary",
+            f"{usevars.global_static_count} global statics",
+        )
+
+    keyring_data = data_for("keyring.dat")
+    if keyring_data is not None:
+        keyring = U7Keyring.from_bytes(keyring_data)
+        add_row("keyring.dat", "parsed", f"{len(keyring.keys)} keys")
+
+    frames_data = data_for("frames.flg")
+    if frames_data is not None:
+        frames = U7FrameFlags.from_bytes(frames_data)
+        add_row(
+            "frames.flg",
+            "parsed",
+            f"{len(frames.values)} entries, {frames.non_default_count} set",
+        )
+
+    if archive is None:
+        screenshot_path = root / "scrnshot.shp"
+        if screenshot_path.is_file():
+            shape = U7Shape.from_file(str(screenshot_path))
+            if shape.frames:
+                frame = shape.frames[0]
+                add_row(
+                    "scrnshot.shp",
+                    "parsed",
+                    f"{len(shape.frames)} frame(s), {frame.width}x{frame.height}",
+                )
+            else:
+                add_row("scrnshot.shp", "parsed", "0 frames")
+
+    ireg_names = [
+        name for name in entry_names()
+        if name.startswith("u7ireg") and len(Path(name).name) == 8
+    ]
+    if ireg_names:
+        total_bytes = sum(source_size(name) for name in ireg_names)
+        if archive is None:
+            simple_objects = 0
+            for name in ireg_names:
+                path = root / name
+                schunk = int(path.name[-2:], 16)
+                simple_objects += len(U7MapRenderer.parse_ireg(str(path), schunk))
+            note = f"{len(ireg_names)} files; {simple_objects} simple objects"
+            lines.append(
+                f"IREG: {len(ireg_names)} files, {simple_objects} simple "
+                "objects parsed by current partial parser"
+            )
+        else:
+            note = f"{len(ireg_names)} files; archive bytes counted"
+            lines.append(
+                f"IREG: {len(ireg_names)} files present; object parsing is "
+                "available for loose files"
+            )
+        rows.append(("u7iregNN", total_bytes, "partially parsed", note))
+
+    known = {name for name, _, _, _ in rows}
+    known.add("u7iregNN")
+    for name in entry_names():
+        plain_name = Path(name).name
+        if plain_name in known or name in known:
+            continue
+        if plain_name.startswith("u7ireg") and len(plain_name) == 8:
+            continue
+        if Path(plain_name).suffix.lower() in {".csv", ".md"}:
+            rows.append((name, source_size(name), "generated artifact", ""))
+        else:
+            rows.append((name, source_size(name), "unrecognized", ""))
+
+    fmt = getattr(args, "format", "summary") or "summary"
+    if fmt == "csv":
+        buf = io.StringIO()
+        writer = csv.writer(buf, lineterminator='\n')
+        writer.writerow(["file", "size", "status", "note"])
+        writer.writerows(rows)
+        content = buf.getvalue()
+    elif fmt == "detail":
+        lines.append("")
+        lines.append("--- File Coverage ---")
+        for name, size, status, note in rows:
+            suffix = f" - {note}" if note else ""
+            lines.append(f"{name:<24} {size:>8}  {status}{suffix}")
+        content = "\n".join(lines)
+    else:
+        content = "\n".join(lines)
+
+    if args.output:
+        with open(args.output, "w", encoding="utf-8") as f:
+            f.write(content)
+            f.write("\n")
+        print(f"\n{fmt.title()} dump written to: {args.output}")
+    else:
         print(content)
     return 0
 
@@ -1382,6 +1857,16 @@ def map_render_cmd(
             ),
         ),
     ] = False,
+    map_num: Annotated[
+        int,
+        typer.Option(
+            "--map-num",
+            help=(
+                "Map number: 0 = default world map (root STATIC), "
+                "1+ = mapNN/ subdirectory inside STATIC and gamedat (default: 0)"
+            ),
+        ),
+    ] = 0,
 ) -> None:
     """Render a U7 map region (superchunk, chunk range, or full world) to PNG."""
     if full:
@@ -1442,6 +1927,7 @@ def map_render_cmd(
         palette=palette, output=output, view=view,
         gamedat=gamedat, grid=grid, grid_size=grid_size,
         exclude_flags=exclude, max_lift=max_lift,
+        map_num=map_num,
         highlight_rects=parsed_highlights,
         highlight_width=highlight_width,
         highlight_lift=highlight_lift,
@@ -1535,7 +2021,7 @@ def typeflag_dump_cmd(
 @u7_app.command("npc-dump")
 def npc_dump_cmd(
     file: Annotated[str, typer.Argument(
-        help="Path to npc.dat or a GAMEDAT directory containing npc.dat")],
+        help="Path to npc.dat, a GAMEDAT directory, or STATIC/INITGAME.DAT")],
     static: Annotated[
         Optional[str],
         typer.Option("--static",
@@ -1556,7 +2042,7 @@ def npc_dump_cmd(
                      help="Output format: summary (default), detail, csv"),
     ] = None,
 ) -> None:
-    """Dump NPC data from loose Exult GAMEDAT npc.dat."""
+    """Dump NPC data from loose Exult GAMEDAT npc.dat or INITGAME.DAT."""
     raise SystemExit(cmd_npc_dump(SimpleNamespace(
         file=file, game=game, static=static, output=output, format=format,
     )))
@@ -1595,6 +2081,41 @@ def schedule_dump_cmd(
     raise SystemExit(cmd_schedule_dump(SimpleNamespace(
         file=file, npc_file=npc_file, game=game, static=static,
         output=output, format=format,
+    )))
+
+
+@u7_app.command("gamedat-info")
+def gamedat_info_cmd(
+    directory: Annotated[Optional[str], typer.Argument(
+        help="Path to a loose Exult GAMEDAT directory or archive (default: titan.toml/AppData)")] = None,
+    static: Annotated[
+        Optional[str],
+        typer.Option("--static",
+                     help="Path to STATIC directory for npc.dat inventory parsing"),
+    ] = None,
+    game: Annotated[
+        Literal["bg", "si"],
+        typer.Option("--game", help="Use config section for BG or SI defaults"),
+    ] = "bg",
+    mod: Annotated[
+        Optional[str],
+        typer.Option("--mod", help="Resolve AppData Exult runtime GAMEDAT for this mod"),
+    ] = None,
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output",
+                     help="Write dump to this file"),
+    ] = None,
+    format: Annotated[
+        Optional[str],
+        typer.Option("-f", "--format",
+                     help="Output format: summary (default), detail, csv"),
+    ] = None,
+) -> None:
+    """Inspect loose Exult GAMEDAT files or archives."""
+    raise SystemExit(cmd_gamedat_info(SimpleNamespace(
+        directory=directory, game=game, mod=mod, static=static, output=output,
+        format=format,
     )))
 
 
@@ -1763,3 +2284,537 @@ def font_create_cmd(
     raise SystemExit(cmd_font_create(SimpleNamespace(
         config=config, output=output,
     )))
+
+
+# ============================================================================
+# TYPER COMMAND WRAPPERS — WORLD QUERY
+# ============================================================================
+
+@u7_app.command("world-query")
+def world_query_cmd(
+    static: Annotated[
+        Optional[str],
+        typer.Argument(
+            help="Path to STATIC directory (default: from titan.toml u7bg/u7si)",
+        ),
+    ] = None,
+    game: Annotated[
+        Literal["bg", "si"],
+        typer.Option("--game", help="Use config section for BG or SI"),
+    ] = "bg",
+    gamedat: Annotated[
+        Optional[str],
+        typer.Option("--gamedat", help="Path to gamedat/ directory for IREG dynamic objects"),
+    ] = None,
+    text: Annotated[
+        Optional[str],
+        typer.Option("--text", help="Path to TEXT.FLX for shape name lookup"),
+    ] = None,
+    # ── Non-interactive filters ──────────────────────────────────────────────
+    shape_class: Annotated[
+        Optional[list[str]],
+        typer.Option("--class", help="Shape class filter (repeatable): container, human, monster, …"),
+    ] = None,
+    shape_num: Annotated[
+        Optional[list[str]],
+        typer.Option("--shape", help="Shape number filter, hex or decimal (repeatable): 522, 0x20A"),
+    ] = None,
+    name: Annotated[
+        Optional[str],
+        typer.Option("--name", help="Shape name substring filter (case-insensitive)"),
+    ] = None,
+    flag: Annotated[
+        Optional[list[str]],
+        typer.Option("--flag", help="TFA flag filter (repeatable): solid, animated, door, …"),
+    ] = None,
+    tile_rect: Annotated[
+        Optional[str],
+        typer.Option("--tile-rect", help="Tile rectangle filter: tx0,ty0,tx1,ty1"),
+    ] = None,
+    sc: Annotated[
+        Optional[list[str]],
+        typer.Option("--sc", help="Superchunk number filter, hex or decimal (repeatable): 0x55"),
+    ] = None,
+    ireg: Annotated[
+        bool,
+        typer.Option("--ireg/--no-ireg", help="Include IREG dynamic objects (default: auto)"),
+    ] = False,
+    map_num: Annotated[
+        int,
+        typer.Option("--map-num", help="Map number: 0 = default world map, 1+ = mapNN/ subdirectory inside STATIC and gamedat (default: 0)"),
+    ] = 0,
+    format: Annotated[
+        Optional[str],
+        typer.Option("-f", "--format", help="Output format: summary (default), full_text, csv"),
+    ] = None,
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Write output to this file"),
+    ] = None,
+) -> None:
+    """Query world object placements from IFIX and IREG.
+
+    With no filter flags, launches an interactive wizard (requires questionary).
+    Supply any filter flag to run non-interactively.
+
+    \\b
+    Non-interactive examples:
+      titan u7 world-query STATIC/ --gamedat gamedat/ --class container --tile-rect 512,512,2048,2048
+      titan u7 world-query STATIC/ --name "locked chest" --ireg --gamedat gamedat/ -f csv -o out.csv
+      titan u7 world-query STATIC/ --shape 522 --ireg --gamedat gamedat/ -f full_text
+    """
+    from titan.u7.world import run_wizard as _world_wizard, WorldQueryParams, run_query, format_result
+    from titan.u7.typeflag import U7TypeFlags
+
+    static_dir = static
+    if not static_dir:
+        resolved, _ = _resolve_u7_paths(game)
+        static_dir = resolved
+
+    gamedat_dir = gamedat
+    if not gamedat_dir:
+        gamedat_dir = _resolve_u7_gamedat(game)
+
+    text_flx = text or _resolve_u7_text_flx(game, static_dir)
+
+    # Non-interactive mode when any filter flag is supplied
+    _non_interactive = any([shape_class, shape_num, name, flag, tile_rect, sc, format, output, ireg])
+
+    if not _non_interactive:
+        raise SystemExit(_world_wizard(
+            static_dir=static_dir,
+            gamedat_dir=gamedat_dir,
+            text_flx=text_flx,
+        ))
+
+    # ── Parse CLI filters ────────────────────────────────────────────────────
+    shape_class_ids: list[int] = []
+    if shape_class:
+        _class_map = {v: k for k, v in U7TypeFlags.SHAPE_CLASS_NAMES.items()}
+        for cls_name in shape_class:
+            cid = _class_map.get(cls_name.lower())
+            if cid is not None:
+                shape_class_ids.append(cid)
+            else:
+                typer.echo(f"Unknown shape class: {cls_name!r}. Valid: {', '.join(_class_map)}", err=True)
+                raise SystemExit(1)
+
+    shape_nums: list[int] = []
+    if shape_num:
+        for token in shape_num:
+            try:
+                shape_nums.append(int(token, 0))
+            except ValueError:
+                typer.echo(f"Invalid shape number: {token!r}", err=True)
+                raise SystemExit(1)
+
+    superchunks: list[int] = []
+    if sc:
+        for token in sc:
+            try:
+                superchunks.append(int(token, 0))
+            except ValueError:
+                typer.echo(f"Invalid superchunk number: {token!r}", err=True)
+                raise SystemExit(1)
+
+    parsed_rect: Optional[tuple[int, int, int, int]] = None
+    if tile_rect:
+        parts = tile_rect.split(",")
+        if len(parts) != 4:
+            typer.echo("--tile-rect must be tx0,ty0,tx1,ty1", err=True)
+            raise SystemExit(1)
+        try:
+            tx0, ty0, tx1, ty1 = (int(p.strip(), 0) for p in parts)
+            parsed_rect = (min(tx0, tx1), min(ty0, ty1), max(tx0, tx1), max(ty0, ty1))
+        except ValueError:
+            typer.echo("--tile-rect values must be integers", err=True)
+            raise SystemExit(1)
+
+    use_ireg = ireg or bool(gamedat_dir and any([
+        cls in (6, 7, 12, 13) for cls in shape_class_ids
+    ]))
+
+    params = WorldQueryParams(
+        static_dir=static_dir or "",
+        gamedat_dir=gamedat_dir if use_ireg else None,
+        shape_classes=shape_class_ids,
+        shape_nums=shape_nums,
+        name_filter=name or "",
+        text_flx_path=text_flx,
+        tfa_flags=list(flag) if flag else [],
+        superchunks=superchunks,
+        tile_rect=parsed_rect,
+        include_ifix=True,
+        include_ireg=use_ireg,
+        map_num=map_num,
+        output_format=format or "summary",
+        output_path=output,
+    )
+
+    result = run_query(params)
+    out = format_result(result)
+
+    if output:
+        from pathlib import Path as _Path
+        _Path(output).write_text(out, encoding="utf-8")
+        typer.echo(f"Wrote {result.count} result(s) to {output}")
+    else:
+        typer.echo(out)
+
+
+@u7_app.command("container-browse")
+def container_browse_cmd(
+    static: Annotated[
+        Optional[str],
+        typer.Argument(
+            help="Path to STATIC directory (default: from titan.toml u7bg/u7si)",
+        ),
+    ] = None,
+    game: Annotated[
+        Literal["bg", "si"],
+        typer.Option("--game", help="Use config section for BG or SI"),
+    ] = "bg",
+    gamedat: Annotated[
+        Optional[str],
+        typer.Option("--gamedat", help="Path to gamedat/ directory (required for IREG)"),
+    ] = None,
+    text: Annotated[
+        Optional[str],
+        typer.Option("--text", help="Path to TEXT.FLX for shape name lookup"),
+    ] = None,
+    exult_flx: Annotated[
+        Optional[str],
+        typer.Option("--exult-flx", help="Path to exult_bg.flx (or exult_si.flx) for per-frame item names"),
+    ] = None,
+    mod_data: Annotated[
+        Optional[str],
+        typer.Option("--mod-data", help="Path to mod patch/data directory (textmsg.txt + shape_info.txt for mod-specific names)"),
+    ] = None,
+    map_num: Annotated[
+        int,
+        typer.Option("--map-num", help="Map number to query: 0 = default world map, 1+ = mod map subdirectory (mapNN/)"),
+    ] = 0,
+    # ── Container identity filters ───────────────────────────────────────────
+    container_shape: Annotated[
+        Optional[list[str]],
+        typer.Option("--container-shape", help="Container shape number(s), hex or decimal (repeatable)"),
+    ] = None,
+    container_name: Annotated[
+        Optional[str],
+        typer.Option("--container-name", help="Container name substring filter (case-insensitive)"),
+    ] = None,
+    # ── Contents filters ─────────────────────────────────────────────────────
+    contains_shape: Annotated[
+        Optional[list[str]],
+        typer.Option("--contains-shape", help="Only show containers holding item with this shape (repeatable)"),
+    ] = None,
+    contains_name: Annotated[
+        Optional[str],
+        typer.Option("--contains-name", help="Only show containers holding item matching name substring"),
+    ] = None,
+    # ── Area filters ─────────────────────────────────────────────────────────
+    tile_rect: Annotated[
+        Optional[str],
+        typer.Option("--tile-rect", help="Tile rectangle filter: tx0,ty0,tx1,ty1"),
+    ] = None,
+    sc: Annotated[
+        Optional[list[str]],
+        typer.Option("--sc", help="Superchunk number filter, hex or decimal (repeatable)"),
+    ] = None,
+    # ── Output ───────────────────────────────────────────────────────────────
+    format: Annotated[
+        Optional[str],
+        typer.Option("-f", "--format", help="Output format: tree (default), csv"),
+    ] = None,
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Write output to this file"),
+    ] = None,
+) -> None:
+    """Browse container contents from IREG, with full nesting support.
+
+    With no filter flags, launches an interactive wizard (requires questionary).
+    Supply any filter flag to run non-interactively.
+
+    \\b
+    Non-interactive examples:
+      titan u7 container-browse STATIC/ --gamedat gamedat/
+      titan u7 container-browse STATIC/ --gamedat gamedat/ --container-name chest
+      titan u7 container-browse STATIC/ --gamedat gamedat/ --container-shape 522
+      titan u7 container-browse STATIC/ --gamedat gamedat/ --contains-name sword -f csv -o containers.csv
+      titan u7 container-browse STATIC/ --gamedat gamedat/ --tile-rect 512,512,2048,2048 -f tree
+    """
+    from titan.u7.container import (
+        browse_containers,
+        ContainerQueryParams,
+        format_results,
+        run_wizard as _container_wizard,
+    )
+    from titan.u7.names import U7ShapeNames, U7FrameNames
+    from titan._config import exult_cfg
+
+    static_dir = static
+    if not static_dir:
+        resolved, _ = _resolve_u7_paths(game)
+        static_dir = resolved
+
+    gamedat_dir = gamedat
+    if not gamedat_dir:
+        gamedat_dir = _resolve_u7_gamedat(game)
+
+    text_flx = text or _resolve_u7_text_flx(game, static_dir)
+
+    _non_interactive = any([
+        container_shape, container_name, contains_shape, contains_name,
+        tile_rect, sc, format, output,
+    ])
+
+    _exult_flx = exult_flx or exult_cfg(f"{game}_flx") or None
+
+    if not _non_interactive:
+        raise SystemExit(_container_wizard(
+            static_dir=static_dir,
+            gamedat_dir=gamedat_dir,
+            text_flx=text_flx,
+            exult_flx_path=_exult_flx,
+            mod_data_dir=mod_data,
+            map_num=map_num,
+        ))
+
+    # ── Parse filters ────────────────────────────────────────────────────────
+    container_shape_nums: list[int] = []
+    if container_shape:
+        for token in container_shape:
+            try:
+                container_shape_nums.append(int(token, 0))
+            except ValueError:
+                typer.echo(f"Invalid shape number: {token!r}", err=True)
+                raise SystemExit(1)
+
+    contains_shape_nums: list[int] = []
+    if contains_shape:
+        for token in contains_shape:
+            try:
+                contains_shape_nums.append(int(token, 0))
+            except ValueError:
+                typer.echo(f"Invalid shape number: {token!r}", err=True)
+                raise SystemExit(1)
+
+    superchunks: list[int] = []
+    if sc:
+        for token in sc:
+            try:
+                superchunks.append(int(token, 0))
+            except ValueError:
+                typer.echo(f"Invalid superchunk number: {token!r}", err=True)
+                raise SystemExit(1)
+
+    parsed_rect: Optional[tuple[int, int, int, int]] = None
+    if tile_rect:
+        parts = tile_rect.split(",")
+        if len(parts) != 4:
+            typer.echo("--tile-rect must be tx0,ty0,tx1,ty1", err=True)
+            raise SystemExit(1)
+        try:
+            tx0, ty0, tx1, ty1 = (int(p.strip(), 0) for p in parts)
+            parsed_rect = (min(tx0, tx1), min(ty0, ty1), max(tx0, tx1), max(ty0, ty1))
+        except ValueError:
+            typer.echo("--tile-rect values must be integers", err=True)
+            raise SystemExit(1)
+
+    if not gamedat_dir:
+        typer.echo("Error: --gamedat is required for container-browse (containers live in IREG)", err=True)
+        raise SystemExit(1)
+
+    names: Optional[U7ShapeNames] = None
+    if text_flx:
+        try:
+            names = U7ShapeNames.from_file(text_flx)
+        except (FileNotFoundError, OSError):
+            pass
+    if names is None and static_dir:
+        names = U7ShapeNames.from_static_dir(static_dir)
+
+    frame_names: Optional[U7FrameNames] = None
+    if _exult_flx and text_flx and Path(_exult_flx).exists():
+        try:
+            frame_names = U7FrameNames.from_flx(_exult_flx, text_flx, game=game)
+        except Exception:
+            pass
+
+    # Overlay mod-specific names on top of base data
+    if mod_data and Path(mod_data).is_dir():
+        names = U7ShapeNames.from_mod_dir(mod_data, base=names) or names
+        if text_flx:
+            frame_names = U7FrameNames.from_mod_dir(mod_data, text_flx, base=frame_names) or frame_names
+
+    params = ContainerQueryParams(
+        static_dir=static_dir or "",
+        gamedat_dir=gamedat_dir,
+        container_shape_nums=container_shape_nums,
+        container_name_filter=container_name or "",
+        contains_shape_nums=contains_shape_nums,
+        contains_name_filter=contains_name or "",
+        superchunks=superchunks,
+        tile_rect=parsed_rect,
+        text_flx_path=text_flx,
+        exult_flx_path=_exult_flx,
+        map_num=map_num,
+        output_format=format or "tree",
+        output_path=output,
+    )
+
+    results = browse_containers(params)
+    out = format_results(results, params, names, frame_names)
+
+    if output:
+        from pathlib import Path as _Path
+        _Path(output).write_text(out, encoding="utf-8")
+        typer.echo(f"Wrote {len(results)} container(s) to {output}")
+    else:
+        typer.echo(out)
+
+
+@u7_app.command("egg-query")
+def egg_query_cmd(
+    static: Annotated[
+        Optional[str],
+        typer.Argument(
+            help="Path to STATIC directory (default: from titan.toml u7bg/u7si)",
+        ),
+    ] = None,
+    game: Annotated[
+        Literal["bg", "si"],
+        typer.Option("--game", help="Use config section for BG or SI"),
+    ] = "bg",
+    gamedat: Annotated[
+        Optional[str],
+        typer.Option("--gamedat", help="Path to gamedat/ directory (required)"),
+    ] = None,
+    egg_type: Annotated[
+        Optional[list[str]],
+        typer.Option("--type", help="Egg type filter (repeatable): usecode, monster, teleport, …"),
+    ] = None,
+    fn: Annotated[
+        Optional[str],
+        typer.Option("--fn", help="Usecode function number filter, hex or decimal: 0x06BC"),
+    ] = None,
+    tile_rect: Annotated[
+        Optional[str],
+        typer.Option("--tile-rect", help="Tile rectangle filter: tx0,ty0,tx1,ty1"),
+    ] = None,
+    sc: Annotated[
+        Optional[list[str]],
+        typer.Option("--sc", help="Superchunk number filter, hex or decimal (repeatable)"),
+    ] = None,
+    format: Annotated[
+        Optional[str],
+        typer.Option("-f", "--format", help="Output format: table (default), csv"),
+    ] = None,
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Write output to this file"),
+    ] = None,
+) -> None:
+    """Query egg trigger objects from IREG, showing type, function, and location.
+
+    With no filter flags, launches an interactive wizard (requires questionary).
+    Supply any filter flag to run non-interactively.
+
+    \\b
+    Non-interactive examples:
+      titan u7 egg-query STATIC/ --gamedat gamedat/
+      titan u7 egg-query STATIC/ --gamedat gamedat/ --type usecode
+      titan u7 egg-query STATIC/ --gamedat gamedat/ --fn 0x06BC
+      titan u7 egg-query STATIC/ --gamedat gamedat/ --type monster --tile-rect 512,512,2048,2048
+      titan u7 egg-query STATIC/ --gamedat gamedat/ --type usecode -f csv -o eggs.csv
+    """
+    from titan.u7.eggs import (
+        query_eggs,
+        EggQueryParams,
+        format_results,
+        run_wizard as _egg_wizard,
+    )
+
+    static_dir = static
+    if not static_dir:
+        resolved, _ = _resolve_u7_paths(game)
+        static_dir = resolved
+
+    gamedat_dir = gamedat
+    if not gamedat_dir:
+        gamedat_dir = _resolve_u7_gamedat(game)
+
+    _non_interactive = any([egg_type, fn, tile_rect, sc, format, output])
+
+    if not _non_interactive:
+        raise SystemExit(_egg_wizard(
+            static_dir=static_dir,
+            gamedat_dir=gamedat_dir,
+        ))
+
+    # ── Validate --type values ───────────────────────────────────────────────
+    from titan.u7.map import EGG_TYPE_NAMES as _ETN
+    _valid_types = set(_ETN.values())
+    for t in (egg_type or []):
+        if t not in _valid_types:
+            typer.echo(f"Unknown egg type: {t!r}. Valid: {', '.join(sorted(_valid_types))}", err=True)
+            raise SystemExit(1)
+
+    # ── Parse --fn ───────────────────────────────────────────────────────────
+    fn_filter: Optional[int] = None
+    if fn:
+        try:
+            fn_filter = int(fn, 0)
+        except ValueError:
+            typer.echo(f"Invalid function number: {fn!r}", err=True)
+            raise SystemExit(1)
+
+    # ── Parse --sc ───────────────────────────────────────────────────────────
+    superchunks: list[int] = []
+    if sc:
+        for token in sc:
+            try:
+                superchunks.append(int(token, 0))
+            except ValueError:
+                typer.echo(f"Invalid superchunk number: {token!r}", err=True)
+                raise SystemExit(1)
+
+    # ── Parse --tile-rect ────────────────────────────────────────────────────
+    parsed_rect: Optional[tuple[int, int, int, int]] = None
+    if tile_rect:
+        parts = tile_rect.split(",")
+        if len(parts) != 4:
+            typer.echo("--tile-rect must be tx0,ty0,tx1,ty1", err=True)
+            raise SystemExit(1)
+        try:
+            tx0, ty0, tx1, ty1 = (int(p.strip(), 0) for p in parts)
+            parsed_rect = (min(tx0, tx1), min(ty0, ty1), max(tx0, tx1), max(ty0, ty1))
+        except ValueError:
+            typer.echo("--tile-rect values must be integers", err=True)
+            raise SystemExit(1)
+
+    if not gamedat_dir:
+        typer.echo("Error: --gamedat is required for egg-query (eggs live in IREG)", err=True)
+        raise SystemExit(1)
+
+    params = EggQueryParams(
+        static_dir=static_dir or "",
+        gamedat_dir=gamedat_dir,
+        egg_types=list(egg_type) if egg_type else [],
+        fn_filter=fn_filter,
+        superchunks=superchunks,
+        tile_rect=parsed_rect,
+        output_format=format or "table",
+        output_path=output,
+    )
+
+    results = query_eggs(params)
+    out = format_results(results, params)
+
+    if output:
+        from pathlib import Path as _Path
+        _Path(output).write_text(out, encoding="utf-8")
+        typer.echo(f"Wrote {len(results)} egg(s) to {output}")
+    else:
+        typer.echo(out)
