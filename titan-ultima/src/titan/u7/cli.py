@@ -1093,7 +1093,7 @@ def cmd_npc_dump(args: SimpleNamespace) -> int:
 
 def cmd_schedule_dump(args: SimpleNamespace) -> int:
     """Dump NPC schedules from a loose schedule.dat file or directory."""
-    from titan.u7.save import U7NPCData, U7Schedules
+    from titan.u7.save import U7NPCData, U7Save, U7Schedules
 
     filepath = _resolve_loose_data_file(args.file, "schedule.dat")
     if not os.path.isfile(filepath):
@@ -1104,24 +1104,34 @@ def cmd_schedule_dump(args: SimpleNamespace) -> int:
     sched = U7Schedules.from_file(filepath)
 
     npc_names: dict[int, str] | None = None
-    npc_file = getattr(args, "npc_file", None)
-    if npc_file:
-        npc_file = _resolve_loose_data_file(npc_file, "npc.dat")
+    npc_file_arg = getattr(args, "npc_file", None)
+    npc_file: Optional[str] = None
+    npc_save: Optional[U7Save] = None
+    if npc_file_arg:
+        npc_path = Path(npc_file_arg)
+        if npc_path.is_file() and npc_path.suffix.lower() == ".dat" and npc_path.name.lower() != "npc.dat":
+            try:
+                npc_save = U7Save.from_file(str(npc_path))
+                if not npc_save.has_entry("npc.dat"):
+                    npc_save = None
+            except ValueError:
+                npc_save = None
+        if npc_save is None:
+            npc_file = _resolve_loose_data_file(npc_file_arg, "npc.dat")
     else:
         sibling = Path(filepath).with_name("npc.dat")
         npc_file = str(sibling) if sibling.is_file() else None
 
-    if npc_file:
+    if npc_save is not None or npc_file:
         try:
-            container_shapes = _load_container_shapes(
-                args,
-                fallback_static=_infer_static_dir_for_data_file(npc_file),
-            )
-            npc_names = U7NPCData.from_file(
-                npc_file,
-                container_shapes=container_shapes,
-            ).name_map()
-            print(f"Names:  {len(npc_names)} NPC names loaded from {npc_file}")
+            container_shapes = _load_container_shapes(args, fallback_static=None)
+            if npc_save is not None:
+                npc_data = U7NPCData.from_save(npc_save, container_shapes=container_shapes)
+                print(f"Names:  {len(npc_data.npcs)} NPC names loaded from {npc_file_arg}")
+            else:
+                npc_data = U7NPCData.from_file(npc_file, container_shapes=container_shapes)
+                print(f"Names:  {len(npc_data.npcs)} NPC names loaded from {npc_file}")
+            npc_names = npc_data.name_map()
         except (OSError, ValueError) as exc:
             print(f"Names:  unavailable ({exc})")
     else:
@@ -1392,7 +1402,7 @@ def cmd_gamedat_info(args: SimpleNamespace) -> int:
     fmt = getattr(args, "format", "summary") or "summary"
     if fmt == "csv":
         buf = io.StringIO()
-        writer = csv.writer(buf)
+        writer = csv.writer(buf, lineterminator='\n')
         writer.writerow(["file", "size", "status", "note"])
         writer.writerows(rows)
         content = buf.getvalue()

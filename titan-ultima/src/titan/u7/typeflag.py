@@ -606,7 +606,7 @@ class U7TypeFlags:
     def dump_csv(self) -> str:
         """Return CSV output of all shape entries."""
         buf = io.StringIO()
-        writer = csv.writer(buf)
+        writer = csv.writer(buf, lineterminator='\n')
 
         writer.writerow([
             "shape", "hex", "tfa0", "tfa1", "tfa2",

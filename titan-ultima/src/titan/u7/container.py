@@ -395,7 +395,7 @@ def format_csv(
     frame_names: Optional[U7FrameNames] = None,
 ) -> str:
     buf = io.StringIO()
-    writer = csv.writer(buf)
+    writer = csv.writer(buf, lineterminator='\n')
     writer.writerow([
         "sc", "container_shape", "container_hex", "container_name",
         "tx", "ty", "tz",

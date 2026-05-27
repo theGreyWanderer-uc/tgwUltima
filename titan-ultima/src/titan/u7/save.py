@@ -367,7 +367,7 @@ class U7GlobalFlags:
         CSV with every set flag (index_dec, index_hex, value_dec, value_hex).
         """
         buf = io.StringIO()
-        writer = csv.writer(buf)
+        writer = csv.writer(buf, lineterminator='\n')
         writer.writerow(["index", "index_hex", "value", "value_hex"])
         for i, v in enumerate(self.raw):
             if v != 0:
@@ -1051,8 +1051,8 @@ class U7Schedules:
 
     def dump_csv(self, npc_names: dict[int, str] | None = None) -> str:
         buf = io.StringIO()
-        writer = csv.writer(buf)
-        writer.writerow(["npc", "name", "time", "type", "type_name", "tx", "ty", "tz", "days"])
+        writer = csv.writer(buf, lineterminator='\n')
+        writer.writerow(["npc", "name", "time_slot", "sched_type", "sched_name", "tx", "ty", "tz", "days"])
         for npc_idx in sorted(self.entries):
             for e in self.entries[npc_idx]:
                 name = npc_names.get(npc_idx, "") if npc_names else ""
@@ -1605,11 +1605,11 @@ class U7NPCData:
 
     def dump_csv(self) -> str:
         buf = io.StringIO()
-        writer = csv.writer(buf)
+        writer = csv.writer(buf, lineterminator='\n')
         writer.writerow([
-            "npc_num", "name", "shape", "frame", "tile_x", "tile_y", "lift", "map",
-            "health", "str", "dex", "int", "cmb", "magic", "mana", "exp", "training", "food",
-            "schedule", "schedule_name", "attack_mode", "alignment",
+            "npc_num", "name", "shape", "frame", "tile_x", "tile_y", "lift", "map_num",
+            "health", "strength", "dex", "intelligence", "combat", "magic", "mana", "exp", "training", "food",
+            "current_sched_type", "current_sched_name", "attack_mode", "alignment",
             "face", "type_flags", "type_flags_hex", "in_party", "female", "has_inventory",
             "dead", "unused",
         ])

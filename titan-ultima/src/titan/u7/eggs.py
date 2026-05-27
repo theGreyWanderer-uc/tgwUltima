@@ -188,7 +188,7 @@ def format_table(results: list[EggResult]) -> str:
 
 def format_csv(results: list[EggResult]) -> str:
     buf = io.StringIO()
-    writer = csv.writer(buf)
+    writer = csv.writer(buf, lineterminator='\n')
     writer.writerow([
         "sc", "tx", "ty", "tz",
         "egg_type", "egg_type_name",

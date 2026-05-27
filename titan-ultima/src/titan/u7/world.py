@@ -351,7 +351,7 @@ def _format_full_text(result: WorldResult) -> str:
 
 def _format_csv(result: WorldResult) -> str:
     buf = io.StringIO()
-    writer = csv.writer(buf)
+    writer = csv.writer(buf, lineterminator='\n')
     writer.writerow([
         "source", "shape", "shape_hex", "shape_name", "frame", "quality",
         "tx", "ty", "tz", "shape_class", "shape_class_name", "flags",
