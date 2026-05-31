@@ -35,6 +35,8 @@ exult/
 # Local game/runtime data
 u7data/
 u8data/
+u9data/
+uuw2data/
 
 # Local helper scripts
 .github/scripts/
