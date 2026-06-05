@@ -33,9 +33,11 @@ exult/
 .github/reference/
 
 # Local game/runtime data
+u6data/
 u7data/
 u8data/
 u9data/
+uuw1data/
 uuw2data/
 
 # Local helper scripts

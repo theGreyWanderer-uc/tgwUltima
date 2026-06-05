@@ -14,57 +14,31 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Added
 
-- **`titan u7 world-query` command** — interactive questionary-based wizard
-  to filter IFIX and IREG world object placements by shape class, TFA flags,
-  shape number, and area (whole world or specific superchunks). Outputs a
-  summary table, full per-placement text, or CSV. Requires
-  `questionary>=2.0` (added as a project dependency).
-- **`titan u7 egg-query` command** — interactive wizard and non-interactive CLI
-  to query egg trigger objects from IREG. Decodes and displays egg type,
-  usecode function number, probability, distance, trigger criteria, and flags
-  (once, nocturnal, auto_reset, hatched). Filter by type, function number,
-  area (tile rectangle or superchunks). Table and CSV output formats.
-- **`titan u7 container-browse` command** — interactive wizard and
-  non-interactive CLI to browse container contents from IREG, including
-  arbitrary nesting (Ship's Hold → Backpack → Bag → items). Filter by
-  container identity, required contents, shape number, name substring, area
-  (tile rectangle or superchunks). Tree and CSV output formats. Shape names
-  from TEXT.FLX (auto-discovered from STATIC). Per-frame item names via
-  `--exult-flx` (resolves e.g. shape 675 "desk item" into `quill`, `inkwell`,
-  `document` per frame). Mod-specific names via `--mod-data` (reads
-  `textmsg.txt` `%%section shapes` and `%%section miscnames` overlaid on base
-  TEXT.FLX, plus the mod's `shape_info.txt` framename mappings overlaid on
-  the Exult FLX base). Multi-map mod support via `--map-num` (queries
-  `mapNN/u7ireg*` in the mod gamedat).
-- **Expanded Titan setup path discovery** — setup and U7 helper commands now
-  account for Exult profile paths in `%LOCALAPPDATA%/Exult`, including
-  initialized base-game and mod `gamedat` folders, mod-specific save roots,
-  and IREG/runtime data locations alongside installed game files. Setup also
-  detects `exult_bg.flx` / `exult_si.flx` in common Exult install locations
-  and writes `[exult.paths]` to `titan.toml`.
-- **Multi-map mod support for `world-query` and `map-render`** — both commands
-  accept `--map-num N` to address alternate maps stored in `mapNN/`
-  subdirectories inside STATIC (IFIX and U7MAP) and gamedat (IREG). Pass the
-  mod patch dir as STATIC; the renderer and query engine resolve the correct
-  subdir automatically. Map 0 (default) behaviour is unchanged.
-- **Dialogue web branch visibility** — the U8 dialogue web engine now
-  simulates `urandom(...)` conversation branches, reports the selected roll,
-  selected-branch chance, and first visible outcome at conversation end.
-- **Dialogue web flag-gated ending hints** — conversations that end through a
-  simple global-flag branch now report the selected flag value and suggest
-  the alternate value to try, such as `devonInRule = false` for GUARD10.
+- Added three new U7 data-inspection commands:
+  - `titan u7 world-query` for IFIX and IREG placement filtering by shape,
+    class, flags, and area.
+  - `titan u7 egg-query` for decoded egg trigger inspection with table or CSV
+    output.
+  - `titan u7 container-browse` for nested container traversal with tree or
+    CSV output.
+- Expanded U7 naming resolution with layered sources:
+  - Base shape names from `TEXT.FLX`.
+  - Per-frame names from Exult FLX data.
+  - Optional mod overrides from `textmsg.txt` and `shape_info.txt`.
+- Added stronger Exult-aware setup and config discovery:
+  - Detects runtime `gamedat` paths in `%LOCALAPPDATA%` profile folders.
+  - Discovers mod roots, saves, and archive/initgame sources.
+  - Writes Exult paths into config when available.
+- Added multi-map mod support for `world-query` and `map-render` via
+  `--map-num`.
+- Improved dialogue web branch reporting:
+  - Random branch roll/chance reporting.
+  - Flag-branch ending hints to suggest alternate outcomes.
 
 ### Fixed
 
-- **U7 NPC sex source clarification** — confirmed Exult writes normalized NPC
-  sex into runtime `GAMEDAT/npc.dat` type flags after initialization, while
-  original `INITGAME.DAT` uses Exult's new-game inversion path. Titan now
-  treats initialized Exult runtime files as authoritative instead of forcing
-  loose NPC sex to `UNKNOWN`.
-- **Dialogue web random/string branch handling** — fixed U8 dialogue paths
-  that combine random branches with ask-driven conversation flow, including
-  raw `strcmp` expressions that compare against both literals and local
-  variables.
+- Corrected dialogue web condition handling for mixed random and
+  `strcmp`-driven branch flow.
 
 ---
 
@@ -87,10 +61,11 @@ This project uses [Semantic Versioning](https://semver.org/):
 ### Fixed
 
 - Replaced CSV serialisation in `typeflag.py`, `save.py`,
-  and `cli.py` with Python's standard `csv.writer` module.
-- Corrected U7 NPC inventory skipping for IREG special entries, allowing
-  `npc.dat` parsing to continue past Avatar inventory and export all declared
-  NPC records.
+  and `cli.py` with Python's standard `csv.writer` module for robust export
+  output.
+- Corrected U7 NPC and inventory parsing edge cases in runtime data paths,
+  including IREG special-entry skipping so `npc.dat` parsing continues past
+  Avatar inventory and exports all declared NPC records.
 - Removed duplicate raw type-flag columns from U7 NPC CSV exports.
 - Corrected U7 TFA parsing so BG/SI animation bytes at offset `3 * 1024` are
   decoded as packed animation nibbles instead of extra shape records.
@@ -102,7 +77,8 @@ This project uses [Semantic Versioning](https://semver.org/):
 - Corrected loose Exult `GAMEDAT/npc.dat` sex export to decode runtime
   `type_flags` bit 9 directly, while `INITGAME.DAT` still uses Exult's
   original new-game inversion path.
-- Added raw ZIP archive support for Exult mod `initgame.dat` containers.
+- Added raw ZIP archive support for Exult mod `initgame.dat` containers and
+  initgame parsing in Exult mod data paths.
 
 ### Correction
 
