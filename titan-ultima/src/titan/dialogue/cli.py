@@ -19,6 +19,7 @@ from titan._config import get_config
 from titan.dialogue.pipeline.build_data import build_data
 from titan.dialogue.pipeline.extract_ast import main as extract_ast_main
 from titan.dialogue.pipeline.extract_books import main as extract_books_main
+from titan.dialogue.pipeline.extract_library import main as extract_library_main
 from titan.dialogue.pipeline.lint_json import run_lint
 from titan.dialogue.pipeline.run_fold import FoldRunError, get_effective_fold_path, run_fold
 
@@ -153,13 +154,13 @@ def _run_prepare(
         for pattern in ("U8P_*.txt",):
             for file in dirs.fold.glob(pattern):
                 file.unlink()
-        for pattern in ("U8P_*.json", "all_dialogue.json", "manifest.json", "books.json"):
+        for pattern in ("U8P_*.json", "all_dialogue.json", "manifest.json", "books.json", "library.json"):
             for file in dirs.json.glob(pattern):
                 file.unlink()
-        for pattern in ("U8P_*.json", "all_dialogue.json", "manifest.json", "books.json"):
+        for pattern in ("U8P_*.json", "all_dialogue.json", "manifest.json", "books.json", "library.json"):
             for file in dirs.web_data.glob(pattern):
                 file.unlink()
-        for pattern in ("U8P_*.json", "all_dialogue.json", "manifest.json", "flag_metadata.json", "books.json"):
+        for pattern in ("U8P_*.json", "all_dialogue.json", "manifest.json", "flag_metadata.json", "books.json", "library.json"):
             for file in websrc_data.glob(pattern):
                 file.unlink()
 
@@ -224,6 +225,19 @@ def _run_prepare(
         return books_rc
 
     _ok("Book extraction complete")
+
+    typer.echo("Starting library extraction...")
+    library_rc = extract_library_main([
+        "--json-dir",
+        str(dirs.json),
+        "--out",
+        str(dirs.json / "library.json"),
+    ])
+    if library_rc != 0:
+        _bad(f"Library extraction failed with exit code {library_rc}")
+        return library_rc
+
+    _ok("Library extraction complete")
 
     typer.echo("Copying JSON files and writing manifests...")
 
@@ -350,6 +364,71 @@ def _validate_pipeline_outputs(runtime_root: Path, expected_classes: int, run_co
         else:
             _ok(f"{label} books data: {len(books)} books, {readable} with text")
 
+    def _validate_library_json(path: Path, label: str) -> None:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            _bad(f"{label} library data is not valid JSON: {path} ({exc})")
+            return
+
+        if not isinstance(payload, dict):
+            _bad(f"{label} library data is not a JSON object: {path}")
+            return
+
+        sections = payload.get("sections")
+        if not isinstance(sections, list) or not sections:
+            _bad(f"{label} library sections missing or empty: {path}")
+            return
+
+        expected_sections = {"books", "scrolls", "graves", "plaques", "spells"}
+        seen_sections = {
+            section.get("id")
+            for section in sections
+            if isinstance(section, dict) and isinstance(section.get("id"), str)
+        }
+        missing = expected_sections - seen_sections
+        if missing:
+            _bad(f"{label} library sections missing {sorted(missing)} in {path}")
+
+        total_items = 0
+        malformed = 0
+        for section in sections:
+            if not isinstance(section, dict):
+                malformed += 1
+                continue
+            items = section.get("items")
+            if not isinstance(items, list) or not items:
+                _bad(f"{label} library section {section.get('id')!r} has no items in {path}")
+                continue
+            if section.get("totalItems") != len(items):
+                _bad(
+                    f"{label} library section {section.get('id')!r} totalItems mismatch: "
+                    f"declared {section.get('totalItems')}, actual {len(items)} in {path}"
+                )
+            total_items += len(items)
+            for item in items:
+                if not isinstance(item, dict):
+                    malformed += 1
+                    continue
+                if not isinstance(item.get("id"), str) or not item.get("id"):
+                    malformed += 1
+                if not isinstance(item.get("title"), str) or not item.get("title"):
+                    malformed += 1
+                if not isinstance(item.get("kind"), str) or not item.get("kind"):
+                    malformed += 1
+                if not isinstance(item.get("category"), str) or not item.get("category"):
+                    malformed += 1
+
+        if payload.get("totalItems") != total_items:
+            _bad(
+                f"{label} library totalItems mismatch: declared {payload.get('totalItems')}, "
+                f"actual {total_items} in {path}"
+            )
+        if malformed:
+            _bad(f"{label} library data contains {malformed} malformed item(s) in {path}")
+        else:
+            _ok(f"{label} library data: {len(sections)} sections, {total_items} items")
+
     typer.secho("Dialogue pipeline validation", fg=typer.colors.BRIGHT_BLUE, bold=True)
     typer.echo(f"Runtime root: {runtime_root}")
 
@@ -446,6 +525,12 @@ def _validate_pipeline_outputs(runtime_root: Path, expected_classes: int, run_co
     else:
         _validate_books_json(runtime_books, "Runtime")
 
+    runtime_library = dirs.web_data / "library.json"
+    if not runtime_library.is_file():
+        _bad(f"Runtime library data missing: {runtime_library}")
+    else:
+        _validate_library_json(runtime_library, "Runtime")
+
     websrc_manifest = websrc_data / "manifest.json"
     if not websrc_manifest.is_file():
         _bad(f"Websrc manifest missing (for npx vite): {websrc_manifest}")
@@ -463,6 +548,12 @@ def _validate_pipeline_outputs(runtime_root: Path, expected_classes: int, run_co
         _bad(f"Websrc books data missing (for npx vite): {websrc_books}")
     else:
         _validate_books_json(websrc_books, "Websrc")
+
+    websrc_library = websrc_data / "library.json"
+    if not websrc_library.is_file():
+        _bad(f"Websrc library data missing (for npx vite): {websrc_library}")
+    else:
+        _validate_library_json(websrc_library, "Websrc")
 
     if not websrc_meta.is_dir():
         _bad(f"Websrc meta directory missing (required for dialogue launch): {websrc_meta}")
