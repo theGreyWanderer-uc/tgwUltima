@@ -190,9 +190,9 @@ def build_item_properties(class_name, shape_to_weapon, shape_to_armour, class_to
     return props if props else None
 
 RE_FUNC_HEADER = re.compile(r'^(process\s+)?(\w+)::(\w+)\(([^)]*)\)\s*$')
-RE_OFFSET = re.compile(r'Function Start Offset:\s*(0x[\dA-Fa-f]+)')
-RE_LOCALS = re.compile(r'Locals Datasize:\s*(0x[\dA-Fa-f]+)')
-RE_PROCTYPE = re.compile(r'Process Type:\s*(0x[\dA-Fa-f]+)')
+RE_OFFSET = re.compile(r'^\s*(?:/\*\s*)?Function Start Offset:\s*(0x[\dA-Fa-f]+)')
+RE_LOCALS = re.compile(r'^\s*(?:/\*\s*)?Locals Datasize:\s*(0x[\dA-Fa-f]+)')
+RE_PROCTYPE = re.compile(r'^\s*(?:/\*\s*)?Process Type:\s*(0x[\dA-Fa-f]+)')
 RE_BARK = re.compile(r'process Item::bark\((.+?)(?:,\s*pid)?,\s*(?:this|0x[\dA-Fa-f]+h?|addressof\(\w+\))\)')
 RE_BARK3 = re.compile(r'process Item::bark\(\s*pid\s*,\s*(?:this|0x[\dA-Fa-f]+h?|addressof\(\w+\)|\w+)\s*,\s*str_to_ptr\("((?:[^"\\]|\\.)*)"\)\)')
 RE_BARK2 = re.compile(r'process Item::bark\(\s*(?:0x[\dA-Fa-f]+h?|addressof\(\w+\))\s*,\s*str_to_ptr\("((?:[^"\\]|\\.)*)"\)\)')
@@ -224,8 +224,9 @@ RE_CREATE_ITEMS = re.compile(r'FREE::createItemsAtLocation\(([^)]*)\)')
 RE_FIND_NEARBY = re.compile(r'FREE::findNearbyItems\(([^)]*)\)')
 RE_GET_NAME = re.compile(r'getName\(\)')
 RE_NUM_TO_STR = re.compile(r'numToStr\(([^)]*)\)')
-RE_SUSPEND_ASSIGN = re.compile(r'^(local\d+)\s*=\s*\(word\)suspend\b')
+RE_SUSPEND_ASSIGN = re.compile(r'^((?:local|param)\d+)\s*=\s*(?:\((?:word|dword)\)\s*)?(?:suspend\b|process_result\(\))')
 RE_RANDOM_ASSIGN = re.compile(r'^(local\d+)\s*=\s*FREE::randomInRange0\(')
+RE_INLINE_SPAWN = re.compile(r'^inline_spawn_[0-9A-Fa-f]+\(\)$')
 
 CONFIDENCE_RANK = {"low": 0, "medium": 1, "high": 2}
 
@@ -277,9 +278,9 @@ def infer_variable_hints(func):
 
     for line in func.lines:
         stripped = line.strip()
-        m = RE_ASK.search(stripped)
-        if m and re.fullmatch(r'local\d+', m.group(1)):
-            add_hint("locals", m.group(1), "menu_options", "high", "used as Item::ask options list")
+        ask_menu = extract_ask_menu(stripped)
+        if ask_menu and re.fullmatch(r'local\d+', ask_menu):
+            add_hint("locals", ask_menu, "menu_options", "high", "used as Item::ask options list")
         m = RE_MENU_ASSIGN.search(stripped)
         if m and re.fullmatch(r'local\d+', m.group(1)):
             add_hint("locals", m.group(1), "menu_options", "high", "assigned from array literal")
@@ -293,7 +294,9 @@ def infer_variable_hints(func):
         if m and re.fullmatch(r'local\d+', m.group(1)):
             add_hint("locals", m.group(1), "menu_options", "high", "updated via menu remove")
         m = RE_SUSPEND_ASSIGN.match(stripped)
-        if m: add_hint("locals", m.group(1), "menu_choice", "high", "assigned from suspend")
+        if m:
+            scope = "params" if m.group(1).startswith("param") else "locals"
+            add_hint(scope, m.group(1), "menu_choice", "high", "assigned from suspend")
         strcmp_matches = RE_STRCMP.findall(stripped)
         for var, _txt in strcmp_matches:
             if re.fullmatch(r'local\d+', var): add_hint("locals", var, "menu_choice", "high", "used in strcmp")
@@ -403,7 +406,145 @@ def classify_function(func, is_npc_class=False):
         func.classification = "behavior"
     else: func.classification = "utility"
 
+def _split_args(arg_text):
+    args = []
+    start = 0
+    depth_paren = 0
+    depth_bracket = 0
+    in_string = False
+    escape = False
+    for i, ch in enumerate(arg_text):
+        if in_string:
+            if escape:
+                escape = False
+            elif ch == '\\':
+                escape = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch == '(':
+            depth_paren += 1
+        elif ch == ')':
+            depth_paren = max(0, depth_paren - 1)
+        elif ch == '[':
+            depth_bracket += 1
+        elif ch == ']':
+            depth_bracket = max(0, depth_bracket - 1)
+        elif ch == ',' and depth_paren == 0 and depth_bracket == 0:
+            args.append(arg_text[start:i].strip())
+            start = i + 1
+    tail = arg_text[start:].strip()
+    if tail:
+        args.append(tail)
+    return args
+
+def _extract_call_args(line, call_name):
+    start = line.find(call_name + '(')
+    if start < 0:
+        return None
+    open_idx = start + len(call_name)
+    depth = 0
+    in_string = False
+    escape = False
+    for i in range(open_idx, len(line)):
+        ch = line[i]
+        if in_string:
+            if escape:
+                escape = False
+            elif ch == '\\':
+                escape = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch == '(':
+            depth += 1
+        elif ch == ')':
+            depth -= 1
+            if depth == 0:
+                return _split_args(line[open_idx + 1:i])
+    return None
+
+def _unwrap_call(expr, call_name):
+    expr = expr.strip()
+    if not expr.startswith(call_name + '(') or not expr.endswith(')'):
+        return None
+    args = _extract_call_args(expr, call_name)
+    if args is None or len(args) != 1:
+        return None
+    return args[0]
+
+def _strip_string_pointer_wrappers(expr):
+    expr = expr.strip()
+    while True:
+        unwrapped = _unwrap_call(expr, 'str_to_ptr')
+        if unwrapped is None:
+            unwrapped = _unwrap_call(expr, 'strptr')
+        if unwrapped is None:
+            return expr
+        expr = unwrapped.strip()
+
+def _num_to_str_text(segment):
+    inner = _unwrap_call(segment.strip(), 'numToStr')
+    if inner is None:
+        m = RE_NUM_TO_STR.search(segment)
+        inner = m.group(1) if m else None
+    return '{' + inner + '}' if inner else '{numToStr}'
+
+def _eval_static_string_expr(expr):
+    expr = _strip_string_pointer_wrappers(expr)
+    parts = []
+    for segment in re.split(r'\s*\+\s*', expr):
+        segment = _strip_string_pointer_wrappers(segment)
+        if not segment:
+            continue
+        if segment.startswith('"') and segment.endswith('"'):
+            parts.append(segment[1:-1])
+        elif 'getName()' in segment:
+            parts.append('{getName}')
+        elif 'numToStr(' in segment:
+            parts.append(_num_to_str_text(segment))
+        else:
+            parts.append('{' + segment + '}')
+    return ''.join(parts)
+
+def _is_textish_bark_arg(arg):
+    arg = arg.strip()
+    if not arg or arg in ('pid', 'this') or arg.startswith('addressof('):
+        return False
+    if re.fullmatch(r'0x[\dA-Fa-f]+h?', arg):
+        return False
+    return (
+        arg.startswith('"')
+        or arg.startswith('str_to_ptr(')
+        or arg.startswith('strptr(')
+        or 'getName()' in arg
+        or 'numToStr(' in arg
+        or re.fullmatch(r'local\d+|param\d+', arg) is not None
+    )
+
+def _choose_bark_text_arg(args):
+    for arg in args:
+        if _is_textish_bark_arg(arg):
+            return arg
+    return args[0] if args else None
+
+def extract_ask_menu(line):
+    args = _extract_call_args(line, 'process Item::ask')
+    if not args:
+        return None
+    return _strip_string_pointer_wrappers(args[0])
+
 def extract_bark_text(line):
+    args = _extract_call_args(line, 'process Item::bark')
+    if args:
+        text_arg = _choose_bark_text_arg(args)
+        if text_arg is not None:
+            return _eval_static_string_expr(text_arg)
+
     m3 = RE_BARK3.search(line)
     if m3: return m3.group(1)
     m4 = RE_BARK4.search(line)
@@ -461,9 +602,7 @@ class Parser:
         self.string_vars = {}
 
     def _eval_string_expr(self, expr):
-        expr = expr.strip()
-        if expr.startswith('str_to_ptr('):
-            expr = expr[11:-1]
+        expr = _strip_string_pointer_wrappers(expr)
         
         m_assign = re.match(r'^(?:temp\s*=\s*)?(local\d+)\s*=\s*(.*)', expr)
         if m_assign:
@@ -475,15 +614,14 @@ class Parser:
             
         parts = []
         for segment in re.split(r'\s*\+\s*', expr):
-            segment = segment.strip()
+            segment = _strip_string_pointer_wrappers(segment)
             if not segment: continue
             if segment.startswith('"') and segment.endswith('"'):
                 parts.append(segment[1:-1])
             elif 'getName()' in segment:
                 parts.append('{getName}')
             elif 'numToStr(' in segment:
-                m2 = RE_NUM_TO_STR.search(segment)
-                parts.append('{' + m2.group(1) + '}' if m2 else '{numToStr}')
+                parts.append(_num_to_str_text(segment))
             elif segment in self.string_vars:
                 parts.append(self.string_vars[segment])
             elif segment.startswith('local'):
@@ -532,6 +670,12 @@ class Parser:
             self.advance()
             return None
 
+        if RE_INLINE_SPAWN.match(line):
+            self.advance()
+            if self.peek() == '{':
+                return self.parse_block()
+            return None
+
         m_ee = RE_ELSE_ENTRY.match(line)
         if m_ee:
             self.advance()
@@ -556,6 +700,16 @@ class Parser:
                 if 'Item::bark' not in pre and 'Item::ask' not in pre:
                     self._eval_string_expr(pre)
 
+        bark_args = _extract_call_args(line, 'process Item::bark')
+        if bark_args:
+            text_arg = _choose_bark_text_arg(bark_args)
+            if text_arg is not None:
+                return {'id': self.next_id(), 'type': 'Bark', 'text': self._eval_string_expr(text_arg)}
+
+        bark_text = extract_bark_text(line)
+        if bark_text is not None:
+            return {'id': self.next_id(), 'type': 'Bark', 'text': bark_text}
+
         m3 = RE_BARK3.search(line)
         if m3: return {'id': self.next_id(), 'type': 'Bark', 'text': m3.group(1)}
         m = RE_BARK4.search(line)
@@ -573,8 +727,15 @@ class Parser:
                 self._eval_string_expr(line)
                 return {'id': self.next_id(), 'type': 'StringAssign', 'var': m_assign.group(1), 'value': m_assign.group(2), 'raw': line}
 
-        m = RE_ASK.search(line)
-        if m: return {'id': self.next_id(), 'type': 'Ask', 'menu': m.group(1)}
+        ask_menu = extract_ask_menu(line)
+        if ask_menu:
+            if ask_menu.startswith('['):
+                menu_name = f"inlineAsk_{self.node_counter + 1:03d}"
+                return [
+                    {'id': self.next_id(), 'type': 'MenuSet', 'target': menu_name, 'options': extract_menu_items(ask_menu)},
+                    {'id': self.next_id(), 'type': 'Ask', 'menu': menu_name},
+                ]
+            return {'id': self.next_id(), 'type': 'Ask', 'menu': ask_menu}
         if ' remove ' in line:
             m = RE_MENU_REMOVE.search(line)
             if m: return {'id': self.next_id(), 'type': 'MenuRemove', 'target': m.group(1), 'options': extract_menu_items(line)}
@@ -593,7 +754,7 @@ class Parser:
         m = RE_SPAWN_METHOD.search(line)
         if m and m.group(1) not in ('beginConversation', 'endConversation'): return {'id': self.next_id(), 'type': 'Call', 'target': f"METHOD::{m.group(1)}"}
         if '/* jmp' in line: return {'id': self.next_id(), 'type': 'Jump'}
-        m = re.match(r'^(local\d+)\s*=\s*\(word\)suspend\b', line)
+        m = RE_SUSPEND_ASSIGN.match(line)
         if m: return {'id': self.next_id(), 'type': 'SuspendAssign', 'var': m.group(1)}
         return {'id': self.next_id(), 'type': 'Unknown', 'raw': line}
 
@@ -813,6 +974,10 @@ def extract_nodes(func, global_flags):
 
 def parse_condition(cond_text, global_flags):
     cond = {"raw": cond_text}
+    stripped_cond = cond_text.strip()
+    if re.fullmatch(r'(?:not\s+)?(?:\((?:word|dword)\)\s*)?process_result\(\)', stripped_cond):
+        cond["processResult"] = True
+        cond["processResultNegated"] = stripped_cond.startswith('not ')
     comparisons = RE_FLAG_COMPARE.findall(cond_text)
     compared_flags = set()
     flag_refs = []
