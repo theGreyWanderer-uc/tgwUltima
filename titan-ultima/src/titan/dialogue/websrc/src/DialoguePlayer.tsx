@@ -130,20 +130,14 @@ export function DialoguePlayer() {
         )}
         <div className="dialogue-body">
           <div className="action-buttons">
+            {hasLibrary && (
+              <button className="btn" onClick={() => setBookOpen(true)}>
+                📖 {selectedNpc.npc === 'BASEBOOK' ? 'Read Books' : 'Open Library'}
+              </button>
+            )}
             {hasTalk && (
               <button className="btn btn-primary" onClick={() => startTalking(selectedNpc)}>
                 Talk to {selectedNpc.npc}
-              </button>
-            )}
-            {canExportDialogueWalk && (
-              <button
-                className="btn"
-                onClick={exportDialogueWalk}
-                type="button"
-                title="Export dialogue walk markdown"
-                aria-label={`Export ${selectedNpc.npc} dialogue walk markdown`}
-              >
-                Export
               </button>
             )}
             {hasLook && (
@@ -156,14 +150,20 @@ export function DialoguePlayer() {
                 {selectedNpc.npc}&apos;s Shop
               </button>
             )}
-            {hasLibrary && (
-              <button className="btn" onClick={() => setBookOpen(true)}>
-                📖 {selectedNpc.npc === 'BASEBOOK' ? 'Read Books' : 'Open Library'}
-              </button>
-            )}
             {hasUtil && (
               <button className="btn" onClick={() => setUtilOpen(true)}>
                 Describe {selectedNpc.npc}
+              </button>
+            )}
+            {canExportDialogueWalk && (
+              <button
+                className="btn"
+                onClick={exportDialogueWalk}
+                type="button"
+                title="Export dialogue walk markdown"
+                aria-label={`Export ${selectedNpc.npc} dialogue walk markdown`}
+              >
+                Export
               </button>
             )}
           </div>
