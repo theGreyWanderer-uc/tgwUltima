@@ -3,28 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_PALEGG.json",
   "file": "U8P_PALEGG",
   "behavior_summary": [
-    "PALEGG::hatch is the U8P_PALEGG::hatch-event handler for a PALEGG object. When the U8P_PALEGG::hatch event fires it first checks the global rule flag 'devonInRule'; if that flag is false the handler returns immediately and does nothing.",
-    "If 'devonInRule' is true the handler sets an info/state on the target object (pushes info id 0x0210 and the event parameter), excludes that object from normal processing, computes a future time via TimeInMinutes(pid, 7), and calls Npc::schedule(time, handler_address) to schedule a future NPC/event action.",
-    "After scheduling it performs an implies/pop style operation using the last return value, stores the result into a temporary local, and then suspends the process (yields until resumed by the engine)."
+    "U8P_PALEGG::hatch is a short background process whose job is to schedule a later action (the actual U8P_PALEGG::hatch/event) and then suspend itself. It first checks the global rule flag devonInRule; if that flag is false it calls Npc::schedule with a delay computed by TimeInMinutes() and a pointer taken from the process stack ([SP+04h]). The returned scheduler id/handle is stored/exchanged into a local (temp/pid) and the process issues suspend so it yields and does not continue running. The function therefore orchestrates timing for a U8P_PALEGG::hatch event rather than performing the U8P_PALEGG::hatch immediately."
   ],
   "notable_control_flow": [
-    "Entry is gated by the global flag 'devonInRule' — false = early return, true = schedule path.",
-    "Deterministic sequence in the true-path: set info (0x0210) on parameter, process-exclude the target, call TimeInMinutes, then call Npc::schedule with the computed time and a handler address, then perform an 'implies' result handling and suspend.",
-    "The function runs as a process-style handler (it uses suspend/yield semantics rather than a one-shot immediate action)."
+    "U8P_PALEGG::hatch reads global flag devonInRule and only proceeds to schedule when that flag is false.",
+    "When allowed, U8P_PALEGG::hatch calls TimeInMinutes() to produce a delay, passes that delay and addressof([SP+04h]) into Npc::schedule, stores the returned process id/handle, then calls suspend to yield.",
+    "There is no branching beyond the devonInRule guard; behavior is linear/single-path afterwards."
   ],
   "open_questions": [
-    "What semantic meaning does the literal '7' passed to TimeInMinutes have (minutes delay, time slot index, or predefined schedule ID)?",
-    "What exactly is the handler/address taken from the stack ([SP+04h]) that is passed to Npc::schedule (a callback, script address, or NPC id)?",
-    "What precise effect does the 'implies' operation have here — is it purely an internal flow control artifact or does it modify engine state?",
-    "What object/context is referenced by the BP+06h parameter when used with 'set info' (the egg itself, a related NPC, or another entity)?"
+    "What is the runtime meaning of the stack slot addressof([SP+04h]) passed to Npc::schedule (a callback, the target NPC/item, or data struct)?",
+    "Which code or game event instantiates/starts this process (what triggers U8P_PALEGG::hatch to be created)?",
+    "What exact behavior the scheduled process id corresponds to (what the scheduled 'U8P_PALEGG::hatch' action does) and how pid/temp are used later (is pid stored globally or used for cancellation)?"
   ],
   "main_function": {
     "name": "U8P_PALEGG::hatch",
     "execution_form": "process",
-    "purpose": "Handle the U8P_PALEGG::hatch event for a PALEGG object: conditionally schedule a future NPC/event action and then suspend, gated by a global rule.",
+    "purpose": "Orchestrate a delayed U8P_PALEGG::hatch/event by scheduling a future NPC/process action and then suspending. It acts as a timer/launcher rather than performing the U8P_PALEGG::hatch itself.",
     "entry_conditions": [
-      "Event 7 (U8P_PALEGG::hatch) invoked for the PALEGG instance",
-      "Global flag 'devonInRule' must be true for the scheduling path to run"
+      "Instanced as a process (processType 0x0210) by external code or entity creation (inferred).",
+      "Runs and checks global guard devonInRule; scheduling occurs only when devonInRule is false."
     ],
     "confidence": "high"
   },
@@ -32,32 +29,8 @@
     {
       "name": "U8P_PALEGG::hatch",
       "kind": "main",
-      "role": "U8P_PALEGG::hatch event handler for PALEGG that conditionally schedules an NPC/event and suspends",
+      "role": "Background timer/process that schedules a delayed U8P_PALEGG::hatch/event and then suspends.",
       "confidence": "high"
-    },
-    {
-      "name": "U8P_PALEGG::TimeInMinutes",
-      "kind": "extern",
-      "role": "compute/return a time value used for scheduling (called with pid and literal 7)",
-      "confidence": "high"
-    },
-    {
-      "name": "Npc::schedule",
-      "kind": "extern",
-      "role": "schedule an NPC or event to occur at the given time with the provided handler/address",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_PALEGG::set info",
-      "kind": "extern",
-      "role": "engine operation to set an info/state key (0x0210) on an object (inferred engine call)",
-      "confidence": "medium"
-    },
-    {
-      "name": "U8P_PALEGG::process exclude",
-      "kind": "extern",
-      "role": "engine operation to exclude the target object from normal processing/AI (inferred)",
-      "confidence": "medium"
     }
   ],
   "call_analysis": {
@@ -65,26 +38,20 @@
     "external_calls": [
       {
         "caller": "U8P_PALEGG::hatch",
-        "callee": "U8P_PALEGG::set info",
-        "purpose": "Set info id 0x0210 on the object/context supplied by BP+06h before scheduling (inferred preparatory state change)",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_PALEGG::hatch",
-        "callee": "U8P_PALEGG::process exclude",
-        "purpose": "Exclude the referenced object from further processing (inferred protective/preventative action)",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_PALEGG::hatch",
-        "callee": "U8P_PALEGG::TimeInMinutes",
-        "purpose": "Compute a scheduling time value (called with the current pid and literal 7); its return value is used as the time parameter to Npc::schedule",
+        "callee": "TimeInMinutes",
+        "purpose": "Provide a delay/time value (in minutes) used as the scheduling delay argument for Npc::schedule.",
         "confidence": "high"
       },
       {
         "caller": "U8P_PALEGG::hatch",
         "callee": "Npc::schedule",
-        "purpose": "Schedule an NPC/event to run at the computed time using a handler/address from the stack ([SP+04h])",
+        "purpose": "Request that a future NPC/process action be run after the computed delay; called with (TimeInMinutes(), addressof([SP+04h])) and returns a process id/handle that is stored/exchanged into a local.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PALEGG::hatch",
+        "callee": "suspend",
+        "purpose": "Yield/suspend the current process after scheduling so it stops active execution.",
         "confidence": "high"
       }
     ]
@@ -93,7 +60,7 @@
     "reads": [
       {
         "name": "devonInRule",
-        "likely_effect": "Acts as a gate controlling whether Devon-related rules/actions are active; when false the U8P_PALEGG::hatch handler returns immediately",
+        "likely_effect": "Acts as a guard: when true it prevents scheduling the delayed U8P_PALEGG::hatch; when false scheduling proceeds.",
         "confidence": "high"
       }
     ],
@@ -101,14 +68,14 @@
   },
   "ui_tags": [
     "trigger",
-    "guard",
-    "schedule",
-    "suspend"
+    "cleanup",
+    "animation",
+    "guard"
   ],
   "quick_facts": {
-    "main_function": "PALEGG::hatch",
-    "behavior_summary_one_liner": "PALEGG::hatch is the U8P_PALEGG::hatch-event handler for a PALEGG object. When the U8P_PALEGG::hatch event fires it first checks the global rule flag 'devonInRule'; if that flag is false the handler returns immediately and does nothing.",
-    "external_call_count": 4,
+    "main_function": "U8P_PALEGG::hatch",
+    "behavior_summary_one_liner": "U8P_PALEGG::hatch is a short background process whose job is to schedule a later action (the actual U8P_PALEGG::hatch/event) and then suspend itself. It first checks the global rule flag devonInRule; if that flag is false it calls Npc::schedule with a delay computed by TimeInMinutes() and a pointer taken from the process stack ([SP+04h]). The returned scheduler id/handle is stored/exchanged into a local (temp/pid) and the process issues suspend so it yields and does not continue running. The function therefore orchestrates timing for a U8P_PALEGG::hatch event rather than performing the U8P_PALEGG::hatch immediately.",
+    "external_call_count": 3,
     "flag_read_count": 1,
     "flag_write_count": 0
   },

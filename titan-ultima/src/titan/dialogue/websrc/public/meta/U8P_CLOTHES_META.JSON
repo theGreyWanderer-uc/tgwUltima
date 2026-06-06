@@ -3,28 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_CLOTHES.json",
   "file": "U8P_CLOTHES",
   "behavior_summary": [
-    "Handles the player's 'U8P_CLOTHES::look' (examine) action on a clothing item. When invoked it sets item-level state (engine 'set info' and 'process exclude'), constructs the literal prefix string \"clothes \", and asks the item to 'bark' (display) a description using that prefix.",
-    "The handler frees the temporary string and propagates the return value produced by the bark call as its own return value.",
-    "Overall effect at gameplay level: when the player inspects clothing, the game marks the item in engine state, and the item presents the text 'clothes <item-specific text>' to the player."
+    "When the player examines the CLOTHES item, the U8P_CLOTHES::look handler displays a single short description line: \"clothes \".",
+    "Immediately after showing the description the process suspends/exits, ending the U8P_CLOTHES::look interaction.",
+    "The handler performs no branching, menu presentation, external calls, or flag manipulation."
   ],
   "notable_control_flow": [
-    "Entry: Event 0 (U8P_CLOTHES::look) triggers the handler for the clothing item.",
-    "Engine state ops: issue 'set info' on the item and apply 'process exclude' (both inferred engine-level operations that modify item processing state).",
-    "Construct ephemeral string \"clothes \", call Item::bark(item, \"clothes \"), then free the constructed string.",
-    "Return: the result returned by Item::bark is propagated as the handler's return value."
+    "Unconditional bark of the string \"clothes \".",
+    "Immediate suspend/termination of the U8P_CLOTHES::look process after the bark (ensures a single-shot description display)."
   ],
   "open_questions": [
-    "Which exact info key/value is written by the 'set info' opcode in this script (disassembly shows set info but not the semantic label)?",
-    "Why is 'process exclude' applied on U8P_CLOTHES::look for clothing items (inferred to modify processing/AI but exact gameplay reason is unclear)?",
-    "Does Item::bark's return value convey a success/failure boolean or some engine-specific control code (script propagates it but semantics are inferred)?",
-    "Which process or player PID ultimately receives the bark (the script passes 'this' as the source/target in the disassembly; whether the viewer PID is forwarded is not explicit)."
+    "Item metadata lists armour.armourClass = 1 (light armour) — is this object equippable or referenced elsewhere in gameplay? The U8P_CLOTHES::look handler does not use this property.",
+    "The scripted text contains a trailing space \"clothes \" — is the space intentional (concatenation with other text elsewhere) or an artifact?",
+    "Are there other handlers for this item (use/enterFastArea) in other scripts that implement functional behavior beyond description?"
   ],
   "main_function": {
     "name": "U8P_CLOTHES::look",
     "execution_form": "process",
-    "purpose": "Examine/U8P_CLOTHES::look handler for clothing items: mark item state (set info/process-exclude), prefix the item's description with \"clothes \", invoke Item::bark to present the description, and return the bark call's result.",
+    "purpose": "Provide the short description shown when the player examines the CLOTHES item and then end the U8P_CLOTHES::look interaction.",
     "entry_conditions": [
-      "Event 0 (U8P_CLOTHES::look) — invoked when the player or relevant actor examines the clothing item"
+      "Player issues a U8P_CLOTHES::look/examine action on the CLOTHES item",
+      "Engine invokes the object's U8P_CLOTHES::look-type process (processType 0x0208)"
     ],
     "confidence": "high"
   },
@@ -32,41 +30,25 @@
     {
       "name": "U8P_CLOTHES::look",
       "kind": "main",
-      "role": "Examine/U8P_CLOTHES::look event handler for clothing items; prepares item state and delegates text output to Item::bark.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine that displays/emits text for an item; here called with prefix \"clothes \" to present the clothing description.",
+      "role": "examine/describe object (short description)",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_CLOTHES::look",
-        "callee": "Item::bark",
-        "purpose": "Ask the item to display/emit its description, passing the item (this) and the dynamically constructed prefix string \"clothes \". The return value is captured and propagated.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
     "writes": []
   },
   "ui_tags": [
-    "trigger",
-    "cleanup",
-    "description",
-    "examine"
+    "trigger"
   ],
   "quick_facts": {
-    "main_function": "CLOTHES::look",
-    "behavior_summary_one_liner": "Handles the player's 'U8P_CLOTHES::look' (examine) action on a clothing item. When invoked it sets item-level state (engine 'set info' and 'process exclude'), constructs the literal prefix string \"clothes \", and asks the item to 'bark' (display) a description using that prefix.",
-    "external_call_count": 1,
+    "main_function": "U8P_CLOTHES::look",
+    "behavior_summary_one_liner": "When the player examines the CLOTHES item, the U8P_CLOTHES::look handler displays a single short description line: \"clothes \".",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

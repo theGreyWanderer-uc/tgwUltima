@@ -3,157 +3,179 @@
   "source_of_truth": "dialogue/json/U8P_DAEMSCEN.json",
   "file": "U8P_DAEMSCEN",
   "behavior_summary": [
-    "Provides scene/event logic for a daemon/Pyros encounter and a small per-item dispatcher. The module contains a main event handler that, when invoked with a subject object and a list, ignores NPC subjects and otherwise iterates the list to dispatch an oriented action for each element using the subject's facing.",
-    "Includes a short helper that makes an object emit agonized vocal lines with small waits between lines (hurt/dying vocalization).",
-    "Includes a large orchestrator that sequences a multi-step encounter: playing music, branching dialog by a global flag (acolyteKilled), creating/destroying map items and NPCs, issuing orientation/path commands, casting multiple fire-spell effects, making NPCs speak, and coordinating timing with spawn/suspend/delays."
+    "This script implements a small ritual/daemon scene and a suite of dialogue handlers for an Acolyte test flow. It runs staged visual/audio effects (music, fire-spell spawns, temporary items/NPC teleports) to represent a summoning/ritual, and it manages the player's progression through a sponsor/test mechanic culminating in promotion to Acolyte.",
+    "U8P_DAEMSCEN::func0080 is a compact utility that, when 'this' refers to an NPC, queues a short NPC action (orientation/movement/animation) by spawning METHOD::func15E7 with the NPC's facing — intended to make NPCs animate/orient in scripted sequences or area triggers.",
+    "U8P_DAEMSCEN::func014B performs the ritual: plays music, chooses gendered phrasing based on the acolyteKilled flag, creates and positions a temporary item/object, calls object methods and fire-spell routines, spawns short-lived helper processes (FREE::func1C19) to pace the sequence, and destroys the temporary object when done. It also assembles quest-like instruction text naming a kill target (Morduin or Sabriane depending on flags).",
+    "U8P_DAEMSCEN::func19C9 builds and mutates a menu presented to the player (Ask), captures selections via suspend, branches on strcmp results, and routes selections to other modules (BANE2/VARDION2) or to U8P_DAEMSCEN::func4172 to progress the test. It also modifies the sponsorTest state and composes progress status text from spellsCast.",
+    "U8P_DAEMSCEN::func4172 is the promotion/finalization handler: sets sponsorTest, validates distance to a target param, waits for area re-entry if aborted, and when spellsCast == 3 it places the avatar in stasis, performs sequencing (spawned FREE::func1C19 and METHOD::func091C), begins a conversation, delivers the promotion line and sets keyOfTheAcolyte to grant progression."
   ],
   "notable_control_flow": [
-    "U8P_DAEMSCEN::0080 immediately sets object info then checks Item::isNpc(object); if true it returns early (guard against running on NPCs).",
-    "If the subject is not an NPC, U8P_DAEMSCEN::0080 iterates the provided item_list (foreach). For each element it reads the subject's facing via Npc::getDir and then spawns METHOD::15E7 for that list element with the facing as an argument; each spawn is awaited (implies/suspend semantics) so the routine dispatches actions sequentially.",
-    "U8P_DAEMSCEN::014B branches behavior and dialogue based on the global flag acolyteKilled and sequences many timed spawns/destroys/creates and spell casts; it uses short waits (FREE::1C19) and speech spawns (METHOD::087D) to pace the scene.",
-    "U8P_DAEMSCEN::00D1 performs short vocalization steps by spawning speech METHOD::087D and short delay FREE::1C19 between lines."
+    "Menu-driven branching in U8P_DAEMSCEN::func19C9: constructs local7 (menu options), presents Item::ask, assigns suspend results to local4/local5/local0, and uses strcmp-based IfStatement nodes to route selections (forfeit, guidance, finalization).",
+    "Promotion gating in U8P_DAEMSCEN::func4172: spellsCast is checked for equality to 3 to allow the promotion sequence; if the player/target (param1) is too far or sponsorTest is cleared the flow aborts and waits on Item::enterFastArea(this) to re-arm.",
+    "Ritual sequencing in U8P_DAEMSCEN::func014B and U8P_DAEMSCEN::func0B96 uses many spawn + suspend pairs (FREE::func1C19 helper spawns and FIRESPEL spawns) to stagger effects and to teleport/animate NPCs safely via status flag toggles.",
+    "Several short monologues (U8P_DAEMSCEN::func00D1, U8P_DAEMSCEN::func4355) are simple suspend-bark sequences used as audio/behavior cues within larger flows."
   ],
   "open_questions": [
-    "Exact in-game effect of METHOD::15E7 (animation, attack, movement, or effect) when spawned with a direction byte — inferred but not explicit.",
-    "Precise semantics and meaning of the object info keys set by the scripts (e.g., the 0x210-like info referenced in related scripts) and any side-effects on AI/process exclusion.",
-    "Which external functions call U8P_DAEMSCEN::0080 in the engine (event id or trigger type — area entry, script event, or item activation) is not explicit.",
-    "Full parameter ordering for some spawned methods (some calls use pid + text + byte, others push item pointers first) — ordering was inferred from usage patterns."
+    "Exact numeric semantics and available action codes for METHOD::func15E7 (what action ids like local3 represent and how many distinct actions exist) — inferred as orientation/movement but not confirmed.",
+    "Precise meanings and lifetime semantics of FREE::func1C19 numeric arguments (observed values like 0x1E): appear to be delay/cleanup worker durations but the mapping to timing is unclear.",
+    "Whether U8P_DAEMSCEN::func0080 is invoked directly from an Item::enterFastArea event handler in this script (evidence suggests it is often used in area/fast-area triggers but the call site is not present in the excerpt).",
+    "The complete set of menu text strings assembled into local7 in U8P_DAEMSCEN::func19C9 and their exact strcmp match values (we see control structure but not every literal option in the decompiled snippets).",
+    "Whether any persistent world-state beyond the named flags (sponsorTest, spellsCast, keyOfTheAcolyte, acolyteKilled) is affected by the ritual (e.g., NPC ownership, spawned quest items) — descriptive evidence implies a quest instruction but no explicit global write to a quest flag besides keyOfTheAcolyte."
   ],
   "main_function": {
-    "name": "U8P_DAEMSCEN::0080",
+    "name": "U8P_DAEMSCEN::func0080",
     "execution_form": "process",
-    "purpose": "Event handler that, when given a process id, a subject object and a list of targets, ignores NPC subjects and otherwise dispatches a per-list-element, direction-oriented action by reading the subject's facing and spawning METHOD::15E7 for each element (with suspend/await between spawns).",
+    "purpose": "Small utility helper that, when 'this' is an NPC, spawns/queues a short NPC action using the NPC's facing (Npc::getDir) by calling addressof(this)->METHOD::func15E7. Used to make NPCs orient/move/animate as part of scripted sequences or trigger responses.",
     "entry_conditions": [
-      "Called with pid (process id), object_ptr (subject) and item_list (list of targets).",
-      "Intended to run only when the passed object is not an NPC (it checks Item::isNpc and returns early on true)."
+      "Called with 'this' pointing at an item/actor (context required).",
+      "Item::isNpc(this) must be true; otherwise the function returns without spawning actions.",
+      "Inferred typical invocation contexts: area/fast-area entry triggers or other script points where an NPC should perform a short queued action."
     ],
     "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_DAEMSCEN::0080",
+      "name": "U8P_DAEMSCEN::func0080",
       "kind": "main",
-      "role": "Per-list dispatcher: gate by non-NPC subject and spawn oriented actions (METHOD::15E7) for each list element.",
+      "role": "NPC action/animation helper (spawn METHOD::func15E7 when 'this' is an NPC)",
       "confidence": "high"
     },
     {
-      "name": "U8P_DAEMSCEN::00D1",
+      "name": "U8P_DAEMSCEN::func00D1",
       "kind": "helper",
-      "role": "Short vocalization routine: set info on an object and spawn speech lines with short waits (agonized/cry vocalization).",
+      "role": "Short scream/bark emitter used for pain/impact audio cues and paced with spawn/suspend",
       "confidence": "high"
     },
     {
-      "name": "U8P_DAEMSCEN::014B",
+      "name": "U8P_DAEMSCEN::func014B",
       "kind": "helper",
-      "role": "Large encounter/scene orchestrator for a Pyros/daemon event: plays music, chooses dialogue by acolyteKilled, spawns/destroys items and NPCs, issues pathfinding and orientation, casts multiple fire-spell effects, and sequences timed speech/actions.",
+      "role": "Ritual/daemon scene: plays music, spawns items/NPCs and fire effects, composes quest text naming a kill target",
       "confidence": "high"
     },
     {
-      "name": "Item::isNpc",
-      "kind": "extern",
-      "role": "Engine query to decide whether an item pointer refers to an NPC (used as an early exit guard).",
+      "name": "U8P_DAEMSCEN::func0B96",
+      "kind": "helper",
+      "role": "Dialogue/monologue branch about a daemonic presence and the acolyte Bane; includes menu-choice usage and scene choreography",
       "confidence": "high"
     },
     {
-      "name": "Npc::getDir",
-      "kind": "extern",
-      "role": "Engine helper returning the facing/direction of an NPC/object (used to orient spawned effects/actions).",
+      "name": "U8P_DAEMSCEN::func19C9",
+      "kind": "helper",
+      "role": "Primary test/examination dialogue routine: builds menus, presents Ask, handles choices and routes to other modules or promotion handler",
       "confidence": "high"
     },
     {
-      "name": "METHOD::15E7",
-      "kind": "extern",
-      "role": "Spawned action applied to list elements with a direction argument; likely an oriented effect/animation/attack (inferred).",
-      "confidence": "medium"
+      "name": "U8P_DAEMSCEN::func4172",
+      "kind": "helper",
+      "role": "Promotion/finalization dialogue: validates distance, gates by spellsCast==3, sequences the promotion and sets keyOfTheAcolyte",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DAEMSCEN::func4355",
+      "kind": "helper",
+      "role": "Short dismissive monologue used when the NPC is busy; redirects player to Master Malchir",
+      "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
-        "caller": "U8P_DAEMSCEN::014B",
-        "callee": "U8P_DAEMSCEN::00D1",
-        "purpose": "Likely used to produce agonized vocal lines for created NPCs/objects during the scene (inferred from similar speech/delay patterns in 00D1).",
-        "confidence": "medium"
+        "caller": "U8P_DAEMSCEN::func19C9",
+        "callee": "U8P_DAEMSCEN::func4172",
+        "purpose": "Route a menu selection into the promotion/finalization handler when the player chooses the option to advance or completes the test flow.",
+        "confidence": "high"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_DAEMSCEN::0080",
-        "callee": "Item::isNpc",
-        "purpose": "Guard: check whether the event subject is an NPC and early-return if true.",
+        "caller": "U8P_DAEMSCEN::func0080",
+        "callee": "METHOD::func15E7",
+        "purpose": "Spawn/queue a short NPC action on the NPC (uses Npc::getDir to pass facing/direction); used to orient/move/animate NPCs.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_DAEMSCEN::0080",
-        "callee": "Npc::getDir",
-        "purpose": "Read the subject's facing/direction to parameterize per-target spawned actions.",
+        "caller": "U8P_DAEMSCEN::func014B",
+        "callee": "FIRESPEL::func059A",
+        "purpose": "Cast/trigger a fire-spell effect as part of the ritual sequence (visual/attack effect).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_DAEMSCEN::0080",
-        "callee": "METHOD::15E7",
-        "purpose": "Spawn the per-list-element action/behavior using the previously obtained direction; spawns are awaited/suspended to sequence them.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_DAEMSCEN::00D1",
-        "callee": "METHOD::087D",
-        "purpose": "Spawn speech/dialogue lines (make an agent 'bark' a scream/line).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_DAEMSCEN::00D1",
-        "callee": "FREE::1C19",
-        "purpose": "Short timed wait/delay between speech lines to pace vocalization.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_DAEMSCEN::014B",
-        "callee": "METHOD::087D",
-        "purpose": "Make created NPCs or the encounter emit dialogue/barks at staged times.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_DAEMSCEN::014B",
-        "callee": "Item::create / Npc::create",
-        "purpose": "Pop new items or NPCs into the scene at computed coordinates as part of encounter setup.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_DAEMSCEN::014B",
-        "callee": "Item::getX / Item::getY / Item::getZ",
-        "purpose": "Read coordinates of scene anchors or the player/objects for distance checks and spawn placement.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_DAEMSCEN::014B",
-        "callee": "Item::pop / Item::destroy / Item::touch",
-        "purpose": "Place temporary map tiles/anchors then remove or trigger them as part of the scene sequencing.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_DAEMSCEN::014B",
-        "callee": "Item::getDirToItem",
-        "purpose": "Compute directional targeting between items/NPCs before spawning oriented effects.",
+        "caller": "U8P_DAEMSCEN::func014B",
+        "callee": "FIRESPEL::func0AF5",
+        "purpose": "Variant or step of the fire-spell sequence used during the ritual.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_DAEMSCEN::014B",
-        "callee": "FIRESPEL::<various>",
-        "purpose": "Spawn/execute multiple fire-spell effects at locations or on targets during the encounter.",
+        "caller": "U8P_DAEMSCEN::func014B",
+        "callee": "FIRESPEL::func1F65",
+        "purpose": "Spawn a fire-spell projectile/effect at world coordinates computed from a temporary item (visual/damaging effect).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_DAEMSCEN::014B",
-        "callee": "METHOD::0113",
-        "purpose": "Initialize newly created NPCs (appearance/state) with a small byte argument after creation.",
-        "confidence": "medium"
+        "caller": "U8P_DAEMSCEN::func014B",
+        "callee": "Item::create / Item::pop / Item::destroy / Item::getX/getY/getZ/getDirToItem",
+        "purpose": "Create a temporary object to act as a ritual focal point, position it near a target, read its coordinates for effect placement, and destroy it afterwards.",
+        "confidence": "high"
       },
       {
-        "caller": "U8P_DAEMSCEN::014B",
-        "callee": "PENT::10C3",
-        "purpose": "Trigger a special encounter effect (teleport/pentagram) on list items with pid; used as part of scene mechanics.",
-        "confidence": "medium"
+        "caller": "U8P_DAEMSCEN::func0B96",
+        "callee": "Npc::teleport",
+        "purpose": "Teleport an NPC into position for the scene; used with toggleStatusFlag to avoid collision/AI issues during move.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMSCEN::func0B96",
+        "callee": "METHOD::func091C",
+        "purpose": "Trigger an effect/animation on an object/NPC as part of the scene choreography.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMSCEN::func19C9",
+        "callee": "BANE2::func0A03",
+        "purpose": "Delegate Bane-related dialogue/behavior to the BANE2 module when the corresponding menu option is selected.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMSCEN::func19C9",
+        "callee": "BANE2::func0D58",
+        "purpose": "Delegate additional Bane-module behavior for alternate menu choices.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMSCEN::func19C9",
+        "callee": "VARDION2::func1DAD / VARDION2::func2347",
+        "purpose": "Invoke Vardion-specific dialogue/behavior branches depending on the acolyteKilled flag and player choices.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMSCEN::func4172",
+        "callee": "FREE::getDistanceBetween",
+        "purpose": "Measure distance from param1 to decide whether to abort the sponsorTest/promotion flow when the player or target is too far.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMSCEN::func4172",
+        "callee": "setAvatarInStasis",
+        "purpose": "Place the avatar into stasis during the promotion sequence to control player state while the promotion dialog/effects run.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMSCEN::func00D1",
+        "callee": "FREE::func1C19",
+        "purpose": "Spawn short-lived helper processes to pace scream/bark timing or perform delayed cleanup.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMSCEN::func014B",
+        "callee": "playMusic",
+        "purpose": "Start ritual music to accompany the summoning sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DAEMSCEN::func19C9",
+        "callee": "Item::ask / MenuSet / MenuAdd / MenuRemove",
+        "purpose": "Construct and present a player menu, capture the selection via suspend, and use strcmp checks to branch on chosen option.",
+        "confidence": "high"
       }
     ]
   },
@@ -161,11 +183,52 @@
     "reads": [
       {
         "name": "acolyteKilled",
-        "likely_effect": "Selects dialogue variants and named targets used by U8P_DAEMSCEN::014B (changes who speaks/which lines and some scene branching).",
+        "likely_effect": "Selects gendered dialog text and which NPC name (Morduin vs Sabriane or alternate name) is referenced in ritual and accusation scenes.",
         "confidence": "high"
+      },
+      {
+        "name": "spellsCast",
+        "likely_effect": "Used as a progress counter (0..3) for the sponsor/test; determines which progress text is shown and gates promotion when == 3.",
+        "confidence": "high"
+      },
+      {
+        "name": "sponsorTest",
+        "likely_effect": "Controls whether the sponsor/test forfeit flow is active and whether certain menu branches appear; read to decide forfeit handling and progression gating.",
+        "confidence": "high"
+      },
+      {
+        "name": "betrayedDisciple",
+        "likely_effect": "Read early to choose which base menu options to present (affects tone/options of the test dialogue).",
+        "confidence": "medium"
+      },
+      {
+        "name": "vardionAvaName",
+        "likely_effect": "When set, causes a getName() capture to include an avatar's actual name in dialogue lines (used in U8P_DAEMSCEN::func0B96).",
+        "confidence": "medium"
+      },
+      {
+        "name": "baneAvaName",
+        "likely_effect": "When set, causes a getName() capture to include an avatar's actual name in dialogue lines (used in U8P_DAEMSCEN::func0B96).",
+        "confidence": "medium"
       }
     ],
-    "writes": []
+    "writes": [
+      {
+        "name": "sponsorTest",
+        "likely_effect": "Set to 1 at the start of promotion flow (U8P_DAEMSCEN::func4172) and cleared (0) when the test is aborted or after promotion completes; used to mark an active sponsor/promotion sequence.",
+        "confidence": "high"
+      },
+      {
+        "name": "spellsCast",
+        "likely_effect": "Cleared to 0 in abort branches (resets progress) and read to check for promotion readiness; acts as a progress tracker rather than a purely read-only flag.",
+        "confidence": "high"
+      },
+      {
+        "name": "keyOfTheAcolyte",
+        "likely_effect": "Set to 1 when promotion completes to grant the player Acolyte progression/privilege (represents the earned key/status).",
+        "confidence": "high"
+      }
+    ]
   },
   "ui_tags": [
     "trigger",
@@ -174,11 +237,11 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_DAEMSCEN::0080",
-    "behavior_summary_one_liner": "Provides scene/event logic for a daemon/Pyros encounter and a small per-item dispatcher. The module contains a main event handler that, when invoked with a subject object and a list, ignores NPC subjects and otherwise iterates the list to dispatch an oriented action for each element using the subject's facing.",
-    "external_call_count": 13,
-    "flag_read_count": 1,
-    "flag_write_count": 0
+    "main_function": "U8P_DAEMSCEN::func0080",
+    "behavior_summary_one_liner": "This script implements a small ritual/daemon scene and a suite of dialogue handlers for an Acolyte test flow. It runs staged visual/audio effects (music, fire-spell spawns, temporary items/NPC teleports) to represent a summoning/ritual, and it manages the player's progression through a sponsor/test mechanic culminating in promotion to Acolyte.",
+    "external_call_count": 15,
+    "flag_read_count": 6,
+    "flag_write_count": 3
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

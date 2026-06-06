@@ -3,28 +3,31 @@
   "source_of_truth": "dialogue/json/U8P_SINKING.json",
   "file": "U8P_SINKING",
   "behavior_summary": [
-    "Implements a multi-stage \"sinking\" stepping-stone tile: when an actor enters its fast/trigger area it begins a timed sink animation that changes tile frames/types, plays SFX, spawns visual/effect helpers, and moves items between z-layers (lifting some up and letting others fall).",
-    "Provides area-entry/exit and release handlers: enterFastArea spawns the main sink controller; leaveFastArea forces a stable type and runs cleanup effects; release can grant a small dexterity reward when the tile surface weight is zero.",
-    "Three subordinate helper processes (01D6, 0341, 04D3) coordinate the visual/phased animation and physically move items via Item::push/Item::pop, getEtherealTop, and Item::fall. FREE::* effect spawns and playSFX calls accompany the animation."
+    "This item behaves as a stepping-stone tile: when examined (U8P_SINKING::look) it shows a short description ('stepping stone').",
+    "When the player/avatar enters the item's fast-area trigger (U8P_SINKING::enterFastArea) it begins a staged sinking/animation sequence (U8P_SINKING::func0114) that: computes delays from the item's quality, plays sound effects, records the current frame, and runs three helper stages (U8P_SINKING::func01D6, U8P_SINKING::func04D3, U8P_SINKING::func0341).",
+    "Stage helpers manipulate the item's in-world type and frame (Item::setType, Item::setFrame), temporarily push nearby/stacked items (Item::push), and pop them back at altered Z to simulate vertical motion; they use spawn/suspend (FREE::func1C19) to pace the animation and inner loops bounded by a small iteration limit.",
+    "Leaving the fast-area (U8P_SINKING::leaveFastArea) cancels/cleans up the animation state by resetting the item's type to a fallback (0x020F) and clearing a stored/free reference (FREE::resetRef), preventing the sequence from continuing off-screen.",
+    "A U8P_SINKING::release utility (U8P_SINKING::release) checks Item::getSurfaceWeight and, if zero, calls AccumulateDexterity(0x0F) — a small player stat award."
   ],
   "notable_control_flow": [
-    "Area entry (U8P_SINKING::enterFastArea) spawns the central controller U8P_SINKING::0114 rather than making immediate atomic changes — behaviour is implemented as inter-process sequencing.",
-    "U8P_SINKING::0114: read item quality and frame, spawn scaled FREE::1C19 effects and subordinate helpers (U8P_SINKING::01D6, U8P_SINKING::04D3, U8P_SINKING::0341), toggle frames/types, play SFX, and use repeated spawn/imply/suspend (yields) to time multi-step animation.",
-    "Helpers perform push/pop iterations over the tile stack and use getEtherealTop to compute intermediary z positions — items are selectively popped, moved or sent to fall state across several timed yields.",
-    "leaveFastArea performs a forced type change (cleanup) and spawns FREE::2A56 for visual cleanup; release conditionally calls AccumulateDexterity when surface weight == 0."
+    "U8P_SINKING::enterFastArea immediately calls U8P_SINKING::func0114 to start the timed/staged animation.",
+    "U8P_SINKING::func0114 computes an initial spawn delay from Item::getQuality(this) * 3 via FREE::func1C19, then alternates calls to stage helpers with explicit spawn/suspend pauses (fixed delays like 0x01F4, 0x00C8 and the quality-based delay).",
+    "Stage helpers (U8P_SINKING::func01D6 and U8P_SINKING::func0341) run bounded internal loops (local3 from 1 to 0x0F) where each iteration pushes this item and nearby items, adjusts frames, pops items at Z+1 or Z-1 and suspends to animate progression.",
+    "U8P_SINKING::func04D3 collects eligible nearby items (skips specific types), switches this item to a restore type/frame (0x015B/0x10), then iteratively pops and causes collected items to fall to finalize stack restoration.",
+    "U8P_SINKING::leaveFastArea forcibly resets type and clears FREE reference, acting as a cleanup/abort for the staged animation."
   ],
   "open_questions": [
-    "Exact semantics and numeric meanings of the type/frame constants used (examples observed: 0x79, 0x015B, 0x020F) and whether they map to specific in-game tiles/animations.",
-    "Precise PID semantics for some calls (e.g., whether the second parameter to spawn is always the actor who triggered the sink or sometimes a different process id).",
-    "Whether release is triggered only when an actor steps off the tile or also when other objects are removed — the trigger condition is inferred but not explicit.",
-    "Edge-case behavior for stacked containers: how nested container contents are selected/filtered during push/pop scans (the selection predicate is inferred from disassembly patterns)."
+    "Exact semantic meaning of numeric type IDs (0x79, 0x020F, 0x015B) in game content — inferred as visual/state variants but not concretely identified.",
+    "Precise behavior and callback semantics of FREE::func1C19 (spawn parameter effects and what process it resumes) — used as a delayed spawn but exact return/pid semantics are inferred.",
+    "Who receives AccumulateDexterity (player vs. actor) when U8P_SINKING::release awards dexterity and under what gameplay conditions that path is triggered in normal play.",
+    "Behavior if the avatar leaves the fast-area mid-sequence: whether spawned timers persist or are cancelled by FREE::resetRef beyond the immediate setType call."
   ],
   "main_function": {
     "name": "U8P_SINKING::look",
     "execution_form": "process",
-    "purpose": "Handle a player/actor 'U8P_SINKING::look' (examine) action on the sinking tile/item: set per-instance info/exclude and invoke Item::bark to display the descriptive string \"stepping stone \". Does not alter world state beyond per-instance flags.",
+    "purpose": "Provide the item's short description when the player examines it and then yield/end the U8P_SINKING::look process.",
     "entry_conditions": [
-      "Event 0: invoked when an actor inspects/looks at the item (U8P_SINKING::look/examine event)"
+      "Triggered when the player uses the 'U8P_SINKING::look' / examine action on this item."
     ],
     "confidence": "high"
   },
@@ -32,174 +35,138 @@
     {
       "name": "U8P_SINKING::look",
       "kind": "main",
-      "role": "Examine/tooltip handler that invokes Item::bark with \"stepping stone \" and sets per-instance info/process exclusion",
+      "role": "examine/U8P_SINKING::look handler that displays a short bark ('stepping stone')",
       "confidence": "high"
     },
     {
       "name": "U8P_SINKING::enterFastArea",
       "kind": "helper",
-      "role": "Area-entry trigger: sets instance info/process-exclude and spawns U8P_SINKING::0114 to start the sink sequence",
+      "role": "trigger entry point that starts the sinking/animation by calling U8P_SINKING::func0114",
       "confidence": "high"
     },
     {
       "name": "U8P_SINKING::leaveFastArea",
       "kind": "helper",
-      "role": "Area-exit trigger: sets instance info/process-exclude, forces item type to a stable type (reset) and spawns cleanup effect FREE::2A56",
+      "role": "cleanup/abort handler: resets item type to fallback and clears the stored/free reference (FREE::resetRef)",
       "confidence": "high"
     },
     {
       "name": "U8P_SINKING::release",
       "kind": "helper",
-      "role": "Release handler: sets instance info/process-exclude then checks Item::getSurfaceWeight; if zero, calls AccumulateDexterity(0x0F)",
+      "role": "utility to 'U8P_SINKING::release' the item; conditionally awards dexterity when surface weight == 0",
       "confidence": "medium"
     },
     {
-      "name": "U8P_SINKING::0114",
+      "name": "U8P_SINKING::func0114",
       "kind": "helper",
-      "role": "Primary sinking controller: sequences animation frames/types, plays SFX, spawns subordinate handlers (01D6, 04D3, 0341), and spawns FREE::1C19 effects scaled by Item::getQuality. Uses suspend/yield timing.",
-      "confidence": "high"
+      "role": "central orchestrator of the staged sinking animation (timing, SFX, record frame, call stage helpers)",
+      "confidence": "medium"
     },
     {
-      "name": "U8P_SINKING::01D6",
+      "name": "U8P_SINKING::func01D6",
       "kind": "helper",
-      "role": "Upward-lift phase: set visual type/frame, push/pop tile stack at z+offset to lift items, scan container contents and spawn a small FREE::1C19 effect (code 8)",
-      "confidence": "high"
+      "role": "early-stage animator: set type 0x79, set frame by boolean param, push/pop this and nearby items, small vertical shifts and a spawn/suspend step",
+      "confidence": "medium"
     },
     {
-      "name": "U8P_SINKING::0341",
+      "name": "U8P_SINKING::func0341",
       "kind": "helper",
-      "role": "Complementary phase: set type/frame, iterate stack to move items via ethereal top adjustments and spawn FREE::1C19 (code 5); coordinates downward/transfer movement",
-      "confidence": "high"
+      "role": "later-stage animator: similar push/pop loop with different frames/offsets, final setType to 0x020F and large negative Z pop to sink",
+      "confidence": "medium"
     },
     {
-      "name": "U8P_SINKING::04D3",
+      "name": "U8P_SINKING::func04D3",
       "kind": "helper",
-      "role": "Content-release routine: change tile type/frame and for qualifying stack entries use getEtherealTop + Item::pop + Item::fall to cause items to drop/fall",
-      "confidence": "high"
+      "role": "collect-and-restore helper: gathers nearby items (skipping specific types), changes this item to 0x015B/0x10 and then pops/makes collected items fall",
+      "confidence": "medium"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
         "caller": "U8P_SINKING::enterFastArea",
-        "callee": "U8P_SINKING::0114",
-        "purpose": "Spawn the primary sink controller to run the timed sinking sequence for this item/pid",
+        "callee": "U8P_SINKING::func0114",
+        "purpose": "Start the sinking/animation sequence on fast-area entry",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SINKING::0114",
-        "callee": "U8P_SINKING::01D6",
-        "purpose": "Spawn the upward-lift helper phase as part of the multi-step animation",
+        "caller": "U8P_SINKING::func0114",
+        "callee": "U8P_SINKING::func01D6",
+        "purpose": "Perform the first/early animation stage (frame/type change and push/pop)",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SINKING::0114",
-        "callee": "U8P_SINKING::04D3",
-        "purpose": "Spawn the content-release helper that triggers Item::fall for affected items",
+        "caller": "U8P_SINKING::func0114",
+        "callee": "U8P_SINKING::func04D3",
+        "purpose": "Perform middle stage to collect/restore nearby items",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SINKING::0114",
-        "callee": "U8P_SINKING::0341",
-        "purpose": "Spawn a complementary phase helper to move items via ethereal top adjustments and continue animation sequencing",
+        "caller": "U8P_SINKING::func0114",
+        "callee": "U8P_SINKING::func0341",
+        "purpose": "Perform final/later animation stage including deep sink/pop",
         "confidence": "high"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_SINKING::look",
-        "callee": "Item::bark",
-        "purpose": "Display the descriptive string \"stepping stone \" to the inspecting actor/process",
+        "caller": "U8P_SINKING::func0114",
+        "callee": "FREE::func1C19",
+        "purpose": "Spawn/schedule timed delays used to pace the animation (called with quality-derived and fixed values)",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SINKING::enterFastArea",
-        "callee": "U8P_SINKING::set info / process exclude",
-        "purpose": "Record per-instance info and exclude the spawned/affected process from global lists (engine idiom to manage instance state)",
+        "caller": "U8P_SINKING::func0114",
+        "callee": "playSFX",
+        "purpose": "Play sound effects at stage boundaries",
         "confidence": "high"
       },
       {
         "caller": "U8P_SINKING::leaveFastArea",
+        "callee": "FREE::resetRef",
+        "purpose": "Clear the stored/free reference for this item as part of cleanup",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SINKING::func01D6",
         "callee": "Item::setType",
-        "purpose": "Force the item's visual/behavior type to a fixed type (reset on exit)",
+        "purpose": "Change the item's in-world type to 0x79 for the animation stage",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SINKING::leaveFastArea",
-        "callee": "FREE::2A56",
-        "purpose": "Spawn cleanup/free effect when leaving the trigger area",
+        "caller": "U8P_SINKING::func0341",
+        "callee": "Item::setType",
+        "purpose": "Set types (0x79 then later 0x020F) to reflect animation and final sunk state",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SINKING::func01D6",
+        "callee": "Item::push / Item::pop",
+        "purpose": "Temporarily remove and re-add items at adjusted coordinates to simulate vertical motion",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SINKING::func04D3",
+        "callee": "Item::getType",
+        "purpose": "Inspect nearby items and skip types 0x015B, 0x01DC, 0x0269 when collecting",
         "confidence": "high"
       },
       {
         "caller": "U8P_SINKING::release",
         "callee": "Item::getSurfaceWeight",
-        "purpose": "Query surface weight to decide whether to award AccumulateDexterity",
+        "purpose": "Determine if the surface weight is zero before awarding dexterity",
         "confidence": "high"
       },
       {
         "caller": "U8P_SINKING::release",
-        "callee": "U8P_SINKING::AccumulateDexterity",
-        "purpose": "Grant a small dexterity increase (0x0F) when surface weight == 0",
+        "callee": "AccumulateDexterity",
+        "purpose": "Award/increase dexterity when surface weight == 0",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_SINKING::0114",
-        "callee": "Item::getQuality",
-        "purpose": "Scale the number/strength of spawned FREE::1C19 effects based on item quality",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SINKING::0114",
-        "callee": "U8P_SINKING::playSFX",
-        "purpose": "Play sound effects at the tile to accompany sink animation phases",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SINKING::0114",
-        "callee": "Item::getFrame",
-        "purpose": "Read current frame to choose animation branch and pass a frame flag to spawned helpers",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SINKING::01D6",
-        "callee": "Item::setFrame",
-        "purpose": "Set visual frame for the lift-phase animation",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SINKING::01D6",
-        "callee": "Item::push",
-        "purpose": "Prepare iteration over the tile stack before popping/moving entries",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SINKING::01D6",
-        "callee": "Item::pop",
-        "purpose": "Remove/return stack entries at computed positions (often z+offset) as part of lift movement",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SINKING::0341",
-        "callee": "U8P_SINKING::getEtherealTop",
-        "purpose": "Obtain ethereal layer top z to compute intermediate placement for moving items",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SINKING::04D3",
-        "callee": "Item::fall",
-        "purpose": "Cause qualifying items to enter a falling state so they drop as part of the sink effect",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SINKING::01D6",
-        "callee": "FREE::1C19",
-        "purpose": "Spawn a small visual/effect process (code 8) during the lift-phase",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SINKING::0341",
-        "callee": "FREE::1C19",
-        "purpose": "Spawn a small visual/effect process (code 5) during the complementary phase",
+        "caller": "U8P_SINKING::func01D6",
+        "callee": "getEtherealTop",
+        "purpose": "Retrieve pushed/ethereal items so they can be popped back in order",
         "confidence": "high"
       }
     ]
@@ -216,8 +183,8 @@
   ],
   "quick_facts": {
     "main_function": "U8P_SINKING::look",
-    "behavior_summary_one_liner": "Implements a multi-stage \"sinking\" stepping-stone tile: when an actor enters its fast/trigger area it begins a timed sink animation that changes tile frames/types, plays SFX, spawns visual/effect helpers, and moves items between z-layers (lifting some up and letting others fall).",
-    "external_call_count": 16,
+    "behavior_summary_one_liner": "This item behaves as a stepping-stone tile: when examined (U8P_SINKING::look) it shows a short description ('stepping stone').",
+    "external_call_count": 10,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

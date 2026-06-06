@@ -3,26 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_LAMP2.json",
   "file": "U8P_LAMP2",
   "behavior_summary": [
-    "This script implements the in-game behavior for a wall lamp object. When the object is examined (U8P_LAMP2::look), it prepares the item and emits a short descriptive text 'wall lamp '.",
-    "When the object is used/activated, it reads the lamp's world coordinates (X, Y, Z), adjusts the Y coordinate downward by 0x20 (32 units), and calls an engine/free routine (FREE::2411) with the adjusted coordinates, a mode/flag of 1, a code 0x25E, and the lamp object data — inferred to spawn or trigger a lamp-related spatial effect (light, flame, or visual animation) at that location."
+    "This script provides two simple processes for a wall lamp item: a U8P_LAMP2::look (examine) handler that shows a short description, and a U8P_LAMP2::use handler that replaces/transforms the item instance in the world.",
+    "U8P_LAMP2::look emits the single bark \"wall lamp \" when the player examines the object and then ends the U8P_LAMP2::look process.",
+    "U8P_LAMP2::use invokes the engine routine FREE::changeItemType with the lamp's coordinates (Y adjusted by -0x20) and a target type id 0x025E, causing the item to be replaced/changed in-place (inferred visual/instance transformation)."
   ],
   "notable_control_flow": [
-    "Event-driven: handlers run as short processes in response to actor interactions (Event 0 = U8P_LAMP2::look/examine, Event 1 = use/activate).",
-    "U8P_LAMP2::look sets local item info/exclusion flags and calls Item::bark(item_ptr, \"wall lamp \") to present the description, then suspends/returns.",
-    "U8P_LAMP2::use queries Item::getZ/getY/getX in that order, subtracts 0x20 from the Y return value, and then calls FREE::2411(x, y-0x20, z, 1, 0x25E, item_ptr)."
+    "U8P_LAMP2::look: linear flow — display a single bark then suspend/terminate; no branching or flag checks.",
+    "U8P_LAMP2::use: linear flow — single external call to FREE::changeItemType; no branching, menus, or flag manipulation."
   ],
   "open_questions": [
-    "What exact effect FREE::2411 implements for code 0x25E (visual light, flame, persistent object, or transient effect)? This is inferred but not explicit.",
-    "Why is the Y coordinate adjusted by exactly 0x20 (32) units before spawning the effect — to align with sprite origin, place the effect lower on the wall, or for engine coordinate conventions?",
-    "What is the meaning of the small temporary/local 'temp' used after the implies/pop in the U8P_LAMP2::look handler (control/flow-only artifact vs. signaling return)?",
-    "Are there any global flags or broader state changes associated with toggling the lamp (e.g., toggling light on/off) elsewhere in the system that interact with this script?"
+    "What concrete in-game variant does item type 0x025E represent (exact visual/state difference)? — inferred but not known from script.",
+    "What is the semantic purpose of the numeric parameter 0x01 passed to FREE::changeItemType (option/flag)?",
+    "Why is the Y coordinate adjusted by -0x20 for the replacement placement — layering/offset behavior inferred but not confirmed."
   ],
   "main_function": {
     "name": "U8P_LAMP2::look",
     "execution_form": "process",
-    "purpose": "Handle 'U8P_LAMP2::look' (examine) interactions for the wall lamp: set up item info/exclusion, and present a short descriptive string 'wall lamp ' via Item::bark to the inspecting actor/process.",
+    "purpose": "Handle player 'U8P_LAMP2::look' (examine) action for the wall lamp; display a short identifying description to the player.",
     "entry_conditions": [
-      "Event 0: triggered when a player or actor examines/looks at the lamp (examine/observe interaction)."
+      "Invoked by the engine when the player examines/looks at this item (process type 0x0208 / U8P_LAMP2::look handler)."
     ],
     "confidence": "high"
   },
@@ -30,78 +29,30 @@
     {
       "name": "U8P_LAMP2::look",
       "kind": "main",
-      "role": "Examine/U8P_LAMP2::look event handler for the wall lamp; produces the descriptive text and completes the U8P_LAMP2::look interaction.",
+      "role": "Present a short description when the player examines the lamp.",
       "confidence": "high"
     },
     {
       "name": "U8P_LAMP2::use",
       "kind": "helper",
-      "role": "Use/activate event handler for the wall lamp; collects coordinates, adjusts Y, and invokes an engine routine to spawn or trigger a spatial effect tied to the lamp.",
+      "role": "Handle the 'U8P_LAMP2::use' action by transforming/replacing the item instance via an engine call.",
       "confidence": "high"
     },
     {
-      "name": "Item::bark",
+      "name": "FREE::changeItemType",
       "kind": "extern",
-      "role": "Engine/item API used to emit or present a short text message associated with an item/process (used for the U8P_LAMP2::look description).",
+      "role": "Engine routine to change/replace an item instance at given coordinates and with given type/options (called by U8P_LAMP2::use).",
       "confidence": "high"
-    },
-    {
-      "name": "Item::getX",
-      "kind": "extern",
-      "role": "Return the lamp's X coordinate for spatial operations.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getY",
-      "kind": "extern",
-      "role": "Return the lamp's Y coordinate for spatial operations (subsequently adjusted by -0x20).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getZ",
-      "kind": "extern",
-      "role": "Return the lamp's Z coordinate (height/level) for spatial operations.",
-      "confidence": "high"
-    },
-    {
-      "name": "FREE::2411",
-      "kind": "extern",
-      "role": "Engine/free routine invoked with coordinates, mode/flag, a type/code (0x25E), and item data; likely creates or triggers the lamp's visual/spatial effect.",
-      "confidence": "medium"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_LAMP2::look",
-        "callee": "Item::bark",
-        "purpose": "Present the short descriptive string 'wall lamp ' to the inspector/process. Used to display the examine text.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_LAMP2::use",
-        "callee": "Item::getZ",
-        "purpose": "Obtain the lamp's Z coordinate (height) to pass as the Z argument to the engine free-routine.",
+        "callee": "FREE::changeItemType",
+        "purpose": "Replace/transform the current item instance in the world by creating/applying item type 0x025E at the lamp's coordinates (Item::getZ(this), Item::getY(this) - 0x20, Item::getX(this)) with option 0x01; 'this' is passed as the item reference.",
         "confidence": "high"
-      },
-      {
-        "caller": "U8P_LAMP2::use",
-        "callee": "Item::getY",
-        "purpose": "Obtain the lamp's Y coordinate; result is then decremented by 0x20 before being passed to FREE::2411 (position adjustment for effect placement).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LAMP2::use",
-        "callee": "Item::getX",
-        "purpose": "Obtain the lamp's X coordinate to pass as the X argument to the engine free-routine.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LAMP2::use",
-        "callee": "FREE::2411",
-        "purpose": "Invoke an engine routine with (x, y-0x20, z, mode=1, code=0x25E, item_ptr) to create or trigger a spatial effect (inferred: lamp-related light/animation) at the adjusted location.",
-        "confidence": "medium"
       }
     ]
   },
@@ -111,14 +62,12 @@
   },
   "ui_tags": [
     "trigger",
-    "animation",
-    "spawn",
-    "description"
+    "animation"
   ],
   "quick_facts": {
     "main_function": "U8P_LAMP2::look",
-    "behavior_summary_one_liner": "This script implements the in-game behavior for a wall lamp object. When the object is examined (U8P_LAMP2::look), it prepares the item and emits a short descriptive text 'wall lamp '.",
-    "external_call_count": 5,
+    "behavior_summary_one_liner": "This script provides two simple processes for a wall lamp item: a U8P_LAMP2::look (examine) handler that shows a short description, and a U8P_LAMP2::use handler that replaces/transforms the item instance in the world.",
+    "external_call_count": 1,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

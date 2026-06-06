@@ -3,37 +3,36 @@
   "source_of_truth": "dialogue/json/U8P_CYRRUS.json",
   "file": "U8P_CYRRUS",
   "behavior_summary": [
-    "Handles player inspection ('U8P_CYRRUS::look') of the NPC Cyrrus and emits a short context-sensitive description or bark depending on whether Cyrrus is dead and on two global flags (cyrrusName, cyrrusJob).",
-    "Chooses and stores a runtime schedule (cyrrusSchedule) via a schedule routine that queries world/time state (FREE::28F9) and then spawns schedule-specific behavior routines.",
-    "Responds to the Avatar entering/leaving Cyrrus' fast-trigger area: when entering it either teleports a dead Cyrrus to random coordinates or resets references and spawns a behavior routine determined by cyrrusSchedule; leaving clears cyrrusJustHealed and resets refs.",
-    "Implements a cast ritual that waits for a target, performs dialog/animation/sfx, clears immortality and sets Cyrrus dead, then teleports the NPC (inferred scripted self-ritual that ends in death/relocation).",
-    "Reacts to theft by scanning items, possibly pathfinding to an item location, barking at the player, and spawning follow-up reaction behaviors (schedule-dependent).",
-    "Uses resetRef often to clear script references before starting new behaviors; spawns many engine methods (METHOD::* and FREE::*) to schedule animations, timers and auxiliary effects."
+    "This script implements the NPC Cyrrus: short 'U8P_CYRRUS::look' descriptions, a time-of-day driven activity U8P_CYRRUS::schedule, proximity/idle monologues, a full conversation menu, reactions to theft, and a ritual/U8P_CYRRUS::cast routine that can end with the NPC dying and being teleported.",
+    "The 'U8P_CYRRUS::look' process returns concise descriptions that vary if Cyrrus is dead and depending on persistent flags (cyrrusName, cyrrusJob).",
+    "A U8P_CYRRUS::schedule() process queries the time-of-day (FREE::getTimeOfDayPeriod) and writes a numeric cyrrusSchedule which drives which U8P_CYRRUS::schedule-specific handlers run when the player approaches (U8P_CYRRUS::enterFastArea dispatches to U8P_CYRRUS::schedule handlers U8P_CYRRUS::func05B3, U8P_CYRRUS::func0D97, U8P_CYRRUS::func1357).",
+    "U8P_CYRRUS::enterFastArea/U8P_CYRRUS::leaveFastArea manage fast-area state: teleport dead actors, reset engine refs, dispatch U8P_CYRRUS::schedule behaviors on entry, and clear the 'just healed' marker (cyrrusJustHealed) on exit.",
+    "U8P_CYRRUS::use implements the conversation flow: it builds a dynamic menu (local2), presents Ask, captures the player's choice (local1) and branches dialogue/actions accordingly. Menu options depend heavily on many persistent quest/dialog flags.",
+    "U8P_CYRRUS::cast waits for a target, then performs a multi-step ritual (barks, timed waits/animations, frame changes) that clears immortality, marks the NPC dead and teleports it — effectively an in-world sacrificial/scene sequence.",
+    "U8P_CYRRUS::AvatarStoleSomething reacts when the player steals: it checks cyrrusSchedule, resets refs, may start an activity (Npc::cSetActivity), issues a complaint bark and schedules follow-ups."
   ],
   "notable_control_flow": [
-    "CYRRUS::look (main entry) first checks Npc::isDead; if true emits 'the late Cyrrus ' bark; otherwise reads global booleans cyrrusName and cyrrusJob to pick one of several alive descriptions ('Holy Cyrrus, the healer', 'Cyrrus', 'monk', 'man').",
-    "CYRRUS::schedule performs multiple FREE::28F9 queries and uses their results to set a local choice ([BP-09h]) which is then written to global cyrrusSchedule and drives spawning of schedule-specific methods.",
-    "U8P_CYRRUS::enterFastArea: if Npc::isDead -> choose random x/y via urandom and call Npc::teleport; else -> call resetRef for several refs and spawn a schedule-specific behavior (U8P_CYRRUS::05B3, U8P_CYRRUS::0D97 or U8P_CYRRUS::1357 depending on cyrrusSchedule).",
-    "U8P_CYRRUS::leaveFastArea clears cyrrusJustHealed (writes 0) and calls resetRef for the same set of refs as enterFastArea.",
-    "U8P_CYRRUS::cast loops polling Npc::getTarget and yields via FREE::1C19 until a target exists; upon a match it resets refs, barks 'Aid me, Stratos!', spawns effect/timer routines (FREE::29D8, METHOD::15E7) and proceeds through an animation/effects sequence that ends with Npc::clrImmortal and Npc::setDead followed by Npc::teleport.",
-    "U8P_CYRRUS::AvatarStoleSomething scans player/item lists in a loop, sets NPC activity/pathfind to an item location and may bark at the player before spawning enterFastArea behavior; some branches short-circuit based on cyrrusSchedule.",
-    "Loop/frame progression inside U8P_CYRRUS::schedule; treated as control-flow, not explicit internal call."
+    "Main examine path: U8P_CYRRUS::look -> check Npc::isDead(this) -> if dead bark 'the late Cyrrus' else pick description using cyrrusName and cyrrusJob flags.",
+    "Schedule selection: U8P_CYRRUS::schedule queries FREE::getTimeOfDayPeriod, sets local U8P_CYRRUS::schedule/value bitmasks, calls METHOD::func143A, suspends and on process_result() writes cyrrusSchedule and calls METHOD::func133F.",
+    "Fast-area entry: U8P_CYRRUS::enterFastArea -> if dead, Npc::teleport(random coords) -> resetRef(...) -> dispatch to U8P_CYRRUS::func05B3 / ::func0D97 / ::func1357 depending on cyrrusSchedule.",
+    "Conversation loop: U8P_CYRRUS::use builds menu (MenuSet/MenuUnion/MenuRemove/MenuAdd), presents Ask(local2), SuspendAssign(local1), strcmp on local1 to branch, repeat until player picks 'bye'.",
+    "Ritual/U8P_CYRRUS::cast: U8P_CYRRUS::cast(sp) loops waiting for a target (spawn FREE::func1C19), then if target present runs sequence: resetRef, bark, spawn FREE::func29D8, METHOD::func15E7, toggle status flag, Item::setFrame, Npc::clrImmortal, Npc::setDead, Npc::teleport(urandom...)."
   ],
   "open_questions": [
-    "Exact text-to-flag mapping: which specific U8P_CYRRUS::look strings correspond to the true/false combinations of cyrrusName and cyrrusJob (the general options are known but precise mapping is inferred).",
-    "Precise semantics and return values of FREE::28F9 used during scheduling (time-of-day/calendar queries vs other world-state checks) — schedule selection logic is inferred from comparisons but not fully known.",
-    "Detailed behavior of spawned METHOD::* routines (METHOD::143A, METHOD::133F, METHOD::15E7, etc.) — their exact animation/movement/timer roles are inferred from usage but not explicit.",
-    "Why the cast sequence marks Cyrrus dead and teleports him — narrative intent is inferred (ritual/sacrifice/heal) but not explicit in the code excerpt.",
-    "Exact role and lifetime semantics of cyrrusJustHealed (beyond leaveFastArea clearing it) and interactions with other scripts not present in this file.",
-    "Concrete meanings of several local temporaries (full set of BP-offsets) beyond the main ones used for schedule selection and loop counters."
+    "Which exact persistent flags are written by the conversation (U8P_CYRRUS::use) — several SetFlag nodes exist but specific flag names were not recovered from the excerpt.",
+    "Precise semantics and numeric meanings of the U8P_CYRRUS::schedule-specific bitmask/value constants (local0/local1/local2 in U8P_CYRRUS::schedule()) and how they map to NPC pathing/activities inside METHOD::func143A.",
+    "The intent and in-game triggering context of U8P_CYRRUS::cast: is it a player-invoked healing, a scripted sacrificial scene, or tied to quest progression? (inferred as ritual-like but exact quest link is unknown).",
+    "What U8P_CYRRUS::func0239 does (called from U8P_CYRRUS::AvatarStoleSomething) — its behavior was referenced but its body was not available in the excerpt.",
+    "Whether any other systems (quest state machines) set cyrrusJustHealed or depend on its cleared state in U8P_CYRRUS::leaveFastArea; the exact consumer of that flag is not visible."
   ],
   "main_function": {
     "name": "U8P_CYRRUS::look",
     "execution_form": "process",
-    "purpose": "Respond to a player's 'U8P_CYRRUS::look' (examine) event for the NPC Cyrrus by emitting a short context-aware bark/description depending on whether Cyrrus is dead and on global flags that control name/job presentation.",
+    "purpose": "Provide a short, context-sensitive description when the player examines Cyrrus; selects wording based on death state and persistent name/job flags.",
     "entry_conditions": [
-      "Invoked when the player (or an actor) performs an examine/U8P_CYRRUS::look event on the Cyrrus NPC (Event 0).",
-      "Runs in the NPC's process context and expects a pid parameter (viewer) and the NPC object pointer (implicit)."
+      "Triggered by the engine when the player 'looks' at / examines the NPC (process type 0x0208).",
+      "Detects actor death via Npc::isDead(this) to show a corpse-specific description.",
+      "Reads persistent flags cyrrusName and cyrrusJob to display name/title variants."
     ],
     "confidence": "high"
   },
@@ -41,186 +40,234 @@
     {
       "name": "U8P_CYRRUS::look",
       "kind": "main",
-      "role": "Handle 'U8P_CYRRUS::look' event and select/display an appropriate short description/bark for Cyrrus (alive vs dead and name/job variants).",
+      "role": "examine/description handler that returns short barks based on death and name/job flags",
       "confidence": "high"
     },
     {
       "name": "U8P_CYRRUS::schedule",
       "kind": "helper",
-      "role": "Determine and write a schedule value to global cyrrusSchedule by querying world/time state (FREE::28F9) and spawn follow-up behavior methods.",
+      "role": "choose and commit the NPC's time-of-day U8P_CYRRUS::schedule (writes cyrrusSchedule) and trigger activity updates",
       "confidence": "high"
     },
     {
       "name": "U8P_CYRRUS::enterFastArea",
       "kind": "helper",
-      "role": "Fast-area entry trigger: teleport a dead Cyrrus randomly; otherwise reset refs and spawn schedule-specific behavior routines based on cyrrusSchedule.",
+      "role": "fast-area entry behavior: teleport dead NPCs, reset refs, dispatch U8P_CYRRUS::schedule-specific behavior",
       "confidence": "high"
     },
     {
       "name": "U8P_CYRRUS::leaveFastArea",
       "kind": "helper",
-      "role": "Fast-area exit trigger: clear cyrrusJustHealed and reset script references to clean up running behaviors.",
+      "role": "fast-area exit cleanup: clear cyrrusJustHealed and reset fast-area references",
       "confidence": "high"
     },
     {
       "name": "U8P_CYRRUS::cast",
       "kind": "helper",
-      "role": "Handle a casting event: wait for/inspect a target, perform dialog, spawn visual/sound/timer effects and run an animation sequence that clears immortality and sets Cyrrus dead, then teleports him.",
-      "confidence": "medium"
+      "role": "perform a multi-step U8P_CYRRUS::cast/ritual sequence that can clear immortality, kill and teleport the NPC (accepts a uword selector parameter)",
+      "confidence": "high"
     },
     {
       "name": "U8P_CYRRUS::AvatarStoleSomething",
       "kind": "helper",
-      "role": "React to theft: optionally ignore based on schedule, otherwise clear refs, search items, pathfind to an item, bark at the player, and trigger follow-up behavior (enterFastArea).",
-      "confidence": "medium"
+      "role": "reaction to theft: reset refs, possibly start an activity, complain and run a follow-up helper",
+      "confidence": "high"
     },
     {
-      "name": "U8P_CYRRUS::05B3",
+      "name": "U8P_CYRRUS::func05B3",
       "kind": "helper",
-      "role": "Schedule-specific behavior routine (spawned when cyrrusSchedule==1): handles animation/frame checks, item scanning, pathfinding and meditative/dialog behavior loops.",
-      "confidence": "medium"
-    },
-    {
-      "name": "Npc::isDead",
-      "kind": "extern",
-      "role": "Engine query to determine if the NPC is dead; used to alter dialog/behavior flows.",
+      "role": "U8P_CYRRUS::schedule-specific behavior (cyrrusSchedule==1): monologues, pathfind attempts, barks and timed waits",
       "confidence": "high"
     },
     {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Emit a short on-screen dialog/description (NPC or item 'bark') toward a pid; used for all short lines in U8P_CYRRUS::look() and cast().",
+      "name": "U8P_CYRRUS::func082B",
+      "kind": "helper",
+      "role": "idle/interaction monologue utility: proximity/random barks for presence and privacy",
       "confidence": "high"
     },
     {
-      "name": "U8P_CYRRUS::resetRef",
-      "kind": "extern",
-      "role": "Clear stored script/object references for the NPC context to cancel or reset running sub-behaviors.",
+      "name": "U8P_CYRRUS::func0D97",
+      "kind": "helper",
+      "role": "U8P_CYRRUS::schedule-specific behavior (cyrrusSchedule==2): pathfind, barks, and timed follow-ups",
       "confidence": "high"
     },
     {
-      "name": "urandom",
-      "kind": "extern",
-      "role": "Produce a random word less than a given bound; used to pick random teleport coordinates for a dead NPC.",
+      "name": "U8P_CYRRUS::func0F47",
+      "kind": "helper",
+      "role": "dialog/interaction utility supplying polite/solicitous lines (ambient barks)",
       "confidence": "high"
     },
     {
-      "name": "Npc::teleport",
-      "kind": "extern",
-      "role": "Teleport the NPC to supplied coordinates/floor/facing; used to relocate Cyrrus (notably when dead).",
+      "name": "U8P_CYRRUS::func1357",
+      "kind": "helper",
+      "role": "U8P_CYRRUS::schedule-specific behavior (cyrrusSchedule==3): similar orchestration of pathfind/barks/waits",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CYRRUS::func15A8",
+      "kind": "helper",
+      "role": "idle monologue utility: friendly/distant barks about the island (used when nobody is talking)",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CYRRUS::use",
+      "kind": "main",
+      "role": "conversation/dialogue handler that builds a dynamic menu, presents Ask, captures choice and branches dialog/actions",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_CYRRUS::func5366",
+      "kind": "helper",
+      "role": "short utility: bark about an open door and spawn DOOR_NS::useDoor on a referenced door",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
-        "caller": "U8P_CYRRUS::look",
-        "callee": "Npc::isDead",
-        "purpose": "Check if Cyrrus is dead to decide whether to use the 'late' description or alive variants.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_CYRRUS::look",
-        "callee": "Item::bark",
-        "purpose": "Emit the chosen short description to the player/process that looked at Cyrrus.",
+        "caller": "U8P_CYRRUS::enterFastArea",
+        "callee": "U8P_CYRRUS::func05B3",
+        "purpose": "Dispatch U8P_CYRRUS::schedule-specific behavior when cyrrusSchedule == 1",
         "confidence": "high"
       },
       {
         "caller": "U8P_CYRRUS::enterFastArea",
-        "callee": "U8P_CYRRUS::05B3",
-        "purpose": "Spawn schedule-specific behavior when cyrrusSchedule == 1 (one of the branches spawned on area entry).",
+        "callee": "U8P_CYRRUS::func0D97",
+        "purpose": "Dispatch U8P_CYRRUS::schedule-specific behavior when cyrrusSchedule == 2",
         "confidence": "high"
       },
       {
         "caller": "U8P_CYRRUS::enterFastArea",
-        "callee": "U8P_CYRRUS::0D97",
-        "purpose": "Spawn schedule-specific behavior when cyrrusSchedule == 2 (another branch on area entry).",
+        "callee": "U8P_CYRRUS::func1357",
+        "purpose": "Dispatch U8P_CYRRUS::schedule-specific behavior when cyrrusSchedule == 3",
         "confidence": "high"
       },
       {
-        "caller": "U8P_CYRRUS::enterFastArea",
-        "callee": "U8P_CYRRUS::1357",
-        "purpose": "Spawn schedule-specific behavior when cyrrusSchedule == 3 (a third branch on area entry).",
+        "caller": "U8P_CYRRUS::func05B3",
+        "callee": "U8P_CYRRUS::func082B",
+        "purpose": "Invoke idle monologue helper when nobodyTalking is false (provide ambient dialogue)",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CYRRUS::func05B3",
+        "callee": "U8P_CYRRUS::func5366",
+        "purpose": "Invoke door-check/short monologue for certain frame/index values",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CYRRUS::func0D97",
+        "callee": "U8P_CYRRUS::func0F47",
+        "purpose": "Use generic interaction barks for certain branches",
         "confidence": "high"
       },
       {
         "caller": "U8P_CYRRUS::AvatarStoleSomething",
-        "callee": "U8P_CYRRUS::enterFastArea",
-        "purpose": "After reacting to theft (bark/pathfind), spawn enterFastArea behavior to pursue or otherwise continue reaction.",
+        "callee": "U8P_CYRRUS::func0239",
+        "purpose": "Continue or finalize the theft-reaction sequence (exact effect unknown)",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_CYRRUS::use",
+        "callee": "U8P_CYRRUS::schedule",
+        "purpose": "Referenced helper elsewhere; U8P_CYRRUS::schedule influences dialog availability (inferred coupling)",
         "confidence": "medium"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_CYRRUS::look",
-        "callee": "Npc::isDead",
-        "purpose": "Query dead/alive state to select dialog; prevents alive-only descriptions for dead NPCs.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_CYRRUS::look",
-        "callee": "Item::bark",
-        "purpose": "Display the short description string to the player who looked at Cyrrus.",
+        "caller": "U8P_CYRRUS::schedule",
+        "callee": "FREE::getTimeOfDayPeriod",
+        "purpose": "Query current time-of-day to choose cyrrusSchedule branch",
         "confidence": "high"
       },
       {
         "caller": "U8P_CYRRUS::schedule",
-        "callee": "FREE::28F9",
-        "purpose": "Query world/time/state conditions used to select a schedule index (cyrrusSchedule).",
+        "callee": "METHOD::func143A",
+        "purpose": "Apply or commit movement/activity changes after preparing U8P_CYRRUS::schedule values",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_CYRRUS::schedule",
+        "callee": "METHOD::func133F",
+        "purpose": "Finalize/persist the selected U8P_CYRRUS::schedule after process_result() confirmation",
         "confidence": "medium"
       },
       {
         "caller": "U8P_CYRRUS::enterFastArea",
-        "callee": "urandom",
-        "purpose": "Pick random map coordinates when teleporting a dead Cyrrus.",
+        "callee": "Npc::teleport",
+        "purpose": "Teleport dead NPC to random coordinates on player approach",
         "confidence": "high"
       },
       {
         "caller": "U8P_CYRRUS::enterFastArea",
-        "callee": "Npc::teleport",
-        "purpose": "Relocate Cyrrus to randomly chosen coordinates (used when Cyrrus is dead upon area entry).",
+        "callee": "resetRef",
+        "purpose": "Clear internal reference slots as part of fast-area entry reset",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CYRRUS::leaveFastArea",
+        "callee": "resetRef",
+        "purpose": "Clear internal references and cleanup when leaving the fast area",
         "confidence": "high"
       },
       {
         "caller": "U8P_CYRRUS::cast",
         "callee": "Npc::getTarget",
-        "purpose": "Poll for the NPC's current target; used in a retry loop to wait until a valid target exists before executing the cast sequence.",
+        "purpose": "Check for presence of a combat/interaction target before running the ritual",
         "confidence": "high"
       },
       {
         "caller": "U8P_CYRRUS::cast",
-        "callee": "FREE::1C19",
-        "purpose": "Yield/sleep during target-polling retries to avoid tight loops while waiting for a target.",
+        "callee": "FREE::func1C19",
+        "purpose": "Spawned as a wait/timer helper in the retry loop when no target is present",
         "confidence": "high"
       },
       {
         "caller": "U8P_CYRRUS::cast",
-        "callee": "FREE::29D8",
-        "purpose": "Spawn a timed visual/sound effect as part of the cast sequence.",
+        "callee": "FREE::func29D8",
+        "purpose": "Spawned to obtain timing/random value used between ritual steps",
         "confidence": "medium"
       },
       {
         "caller": "U8P_CYRRUS::cast",
-        "callee": "Npc::clrImmortal",
-        "purpose": "Remove immortality flag from Cyrrus as part of the ritual/cast sequence (precedes setting dead).",
-        "confidence": "medium"
+        "callee": "METHOD::func15E7",
+        "purpose": "Play animations/sounds or enforce wait points around barks and actions",
+        "confidence": "high"
       },
       {
         "caller": "U8P_CYRRUS::cast",
-        "callee": "Npc::setDead",
-        "purpose": "Mark Cyrrus as dead during the cast/ritual sequence; likely ends the NPC's active life state.",
+        "callee": "Npc::clrImmortal / Npc::setDead",
+        "purpose": "Clear immortality and mark NPC dead as part of the ritual",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CYRRUS::cast",
+        "callee": "Item::setFrame / Item::getFrame",
+        "purpose": "Change NPC/display frame during the ritual sequence",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_CYRRUS::AvatarStoleSomething",
+        "caller": "U8P_CYRRUS::func5366",
+        "callee": "DOOR_NS::useDoor",
+        "purpose": "Attempt to operate an adjacent door object (spawned asynchronously)",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CYRRUS::use",
+        "callee": "AIRSPEL::func0BEB",
+        "purpose": "Called from dialogue flow; likely a spell/ability related helper invoked as part of a menu branch",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_CYRRUS::use",
+        "callee": "METHOD::func15E7",
+        "purpose": "Animation/sound/wait helper used around conversation lines",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CYRRUS::func05B3",
         "callee": "Npc::pathfind",
-        "purpose": "Request pathfinding toward an item or location detected by the theft-handling scan loop.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_CYRRUS::AvatarStoleSomething",
-        "callee": "Item::bark",
-        "purpose": "Speak a reproach/alert to the player after detecting theft-related conditions.",
+        "purpose": "Asynchronously request movement to a target and check process_result() to decide next actions",
         "confidence": "high"
       }
     ]
@@ -228,36 +275,56 @@
   "global_flags": {
     "reads": [
       {
+        "name": "cyrrusSchedule",
+        "likely_effect": "Used by U8P_CYRRUS::enterFastArea, U8P_CYRRUS::AvatarStoleSomething and other behaviors to choose U8P_CYRRUS::schedule-specific handlers/behavior",
+        "confidence": "high"
+      },
+      {
         "name": "cyrrusName",
-        "likely_effect": "Influences the text used in CYRRUS::look to choose which name/label to display for Cyrrus (affects whether to use 'Holy Cyrrus' vs 'Cyrrus' etc.).",
+        "likely_effect": "Read by U8P_CYRRUS::look() and U8P_CYRRUS::use() to determine whether to display or reference the NPC's personal name",
         "confidence": "high"
       },
       {
         "name": "cyrrusJob",
-        "likely_effect": "Combined with cyrrusName when alive to choose a job-related descriptor (e.g., 'the healer' or 'monk' vs 'man').",
+        "likely_effect": "Read by U8P_CYRRUS::look() and U8P_CYRRUS::use() to determine job/title/treatment (e.g., 'healer' menu options)",
         "confidence": "high"
       },
       {
-        "name": "cyrrusSchedule",
-        "likely_effect": "Selects which schedule-specific behavior routine is spawned on fast-area entry and by theft reaction logic (read by enterFastArea and others).",
+        "name": "cyrrusMet",
+        "likely_effect": "Read by idle monologue helpers (U8P_CYRRUS::func082B/U8P_CYRRUS::func15A8) to select first-meeting vs repeat phrasing",
         "confidence": "high"
       },
       {
         "name": "somebodyTalking",
-        "likely_effect": "Checked before spawning speech/behavior to avoid interrupting other dialog (used as a guard to suppress barks/spawns).",
+        "likely_effect": "Used to decide whether to U8P_CYRRUS::use ambient monologues or alternate branches in U8P_CYRRUS::schedule handlers",
+        "confidence": "medium"
+      },
+      {
+        "name": "torwinJumped / torwinMet / spokeAboutTorwinS / spokeAboutTorwinX",
+        "likely_effect": "Used by conversation and monologue helpers to gate Torwin-related lines and menu options",
+        "confidence": "medium"
+      },
+      {
+        "name": "attemptedWisdomTest / passedWisdomTest / attemptedCenteredTest / passedCenteredTest / passedThirdTest / hasBreath / hasRing / hasOwnFoci / stratosMet",
+        "likely_effect": "Quest/dialog gating flags consulted by U8P_CYRRUS::use to add/remove menu options",
         "confidence": "medium"
       }
     ],
     "writes": [
       {
         "name": "cyrrusSchedule",
-        "likely_effect": "Stored by U8P_CYRRUS::schedule to persist the chosen schedule index for later behavior selection on area entry and other events.",
+        "likely_effect": "Set by U8P_CYRRUS::schedule to control which U8P_CYRRUS::schedule-specific behavior runs; written after confirmation via process_result()",
         "confidence": "high"
       },
       {
         "name": "cyrrusJustHealed",
-        "likely_effect": "Cleared (set to 0) by U8P_CYRRUS::leaveFastArea to indicate the NPC is no longer in a recently-healed state; likely prevents immediate re-triggering of heal behavior.",
+        "likely_effect": "Cleared (set to 0) by U8P_CYRRUS::leaveFastArea as part of fast-area cleanup; used to mark recent healing state",
         "confidence": "high"
+      },
+      {
+        "name": "various dialog/quest flags (unnamed in excerpt)",
+        "likely_effect": "U8P_CYRRUS::use contains SetFlag nodes that update persistent conversation/quest flags (exact names not recovered)",
+        "confidence": "low"
       }
     ]
   },
@@ -268,11 +335,11 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "CYRRUS::look",
-    "behavior_summary_one_liner": "Handles player inspection ('U8P_CYRRUS::look') of the NPC Cyrrus and emits a short context-sensitive description or bark depending on whether Cyrrus is dead and on two global flags (cyrrusName, cyrrusJob).",
-    "external_call_count": 12,
-    "flag_read_count": 4,
-    "flag_write_count": 2
+    "main_function": "U8P_CYRRUS::look",
+    "behavior_summary_one_liner": "This script implements the NPC Cyrrus: short 'U8P_CYRRUS::look' descriptions, a time-of-day driven activity U8P_CYRRUS::schedule, proximity/idle monologues, a full conversation menu, reactions to theft, and a ritual/U8P_CYRRUS::cast routine that can end with the NPC dying and being teleported.",
+    "external_call_count": 16,
+    "flag_read_count": 7,
+    "flag_write_count": 3
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

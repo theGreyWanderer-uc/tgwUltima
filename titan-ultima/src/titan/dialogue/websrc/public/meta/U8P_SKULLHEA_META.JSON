@@ -3,28 +3,28 @@
   "source_of_truth": "dialogue/json/U8P_SKULLHEA.json",
   "file": "U8P_SKULLHEA",
   "behavior_summary": [
-    "U8P_SKULLHEA provides two gameplay behaviors: an examine ('U8P_SKULLHEA::look') handler that displays the Skull's description, and a use handler that can trigger a localized earthquake/teleport sequence when applied to a specific target type.",
-    "Examining the Skull: the U8P_SKULLHEA::look handler presents the static description string 'The Skull of Quakes ' to the viewing process.",
-    "Using the Skull: the use handler first guards on the Skull's quantity and the presence and type of a target. If the target type equals 0x0325, it rearranges item/NPC positions, starts a camera quake, plays earthquake sound effects, runs an NPC animation, fades the player's view to black, teleports the player (and later restores the target to saved coordinates), sets a global 'postEarthQuake' flag, fades back in, and stops the quake."
+    "U8P_SKULLHEA::look is a simple examine handler that displays the short description 'The Skull of Quakes' when the player looks at the item.",
+    "U8P_SKULLHEA::use implements a one-time activation sequence for the Skull of Quakes: it guards against reuse, prompts the player to pick a target, verifies the target type, places the skull onto that target, marks the skull used, triggers a camera quake and SFX, runs an NPC animation and a fade-to-black cutscene while temporarily teleporting an actor for staging, sets the global postEarthQuake flag, returns the actor to the saved location, fades back, and stops the quake effect."
   ],
   "notable_control_flow": [
-    "U8P_SKULLHEA::use enforces guards early: it returns immediately if the Skull's quantity is zero or if there is no valid target.",
-    "Type check: use proceeds only when the target's type equals 0x0325; otherwise no quake sequence runs.",
-    "Sequence ordering: after placement/move operations (Item::push/Item::pop and Item::setQ), an ordered cinematic sequence is executed: Camera::startQuake -> playSFX (twice) -> Npc::doAnim -> process::FadeToBlack -> Npc::teleport (player) -> set global postEarthQuake -> Npc::teleport (restore saved target) -> process::FadeFromBlack -> Camera::stopQuake.",
-    "The handler uses suspend/imply style calls around key operations (SFX/animation/teleport) to wait for those actions to complete before continuing."
+    "Guard: U8P_SKULLHEA::use first checks Item::getQ(this) and aborts if nonzero to prevent reactivation.",
+    "Input/suspend: U8P_SKULLHEA::use obtains a process target via pid <=> process target() and suspends to capture the player's selection into local1.",
+    "Validation branch: if selection is nonzero and Item::getType(local1) == 0x0325 then the activation sequence proceeds; otherwise the U8P_SKULLHEA::use ends without performing the event.",
+    "Placement and state change: Item::push(this) followed by Item::pop(...) places the skull relative to the target, then Item::setQ(0x01, this) marks it used.",
+    "Event sequence: the script saves returned coordinates, starts Camera::startQuake, plays SFX, spawns/waits for Npc::doAnim and FadeToBlack/FadeFromBlack processes, teleports an actor (Npc::teleport) to/from a staging location, sets the postEarthQuake global flag, and finally stops the quake with Camera::stopQuake."
   ],
   "open_questions": [
-    "Exact semantics and argument ordering of Item::push and Item::pop are inferred from call patterns but not fully certain (e.g., whether pop places the pushed item into coordinates or moves the target).",
-    "The meaning of type id 0x0325 (what in-game object/class this constant corresponds to) is not identified here and is inferred only as 'the correct target' for the Skull.",
-    "Which specific NPC/process is animated by Npc::doAnim in the sequence (likely the player or a nearby NPC) is not explicitly named in the disassembly excerpt.",
-    "Whether the teleport destination is the player's current map (Npc::getMap used to fetch it) and the precise mapping between saved X/Y/Z locals and teleport arguments is inferred rather than explicitly documented."
+    "What concrete game object/type does the numeric target type 0x0325 represent (which in-game object is a valid target)?",
+    "Which NPC or actor is being animated and teleported during the cutscene (metadata infers 'an NPC' but the exact actor id/role is not explicit)?",
+    "What exact SFX id(s) and parameters are played during the quake sequence?",
+    "Are there any other scripts that read postEarthQuake to gate later content (the presence and effect of this flag elsewhere is inferred but not shown)?"
   ],
   "main_function": {
     "name": "U8P_SKULLHEA::look",
     "execution_form": "process",
-    "purpose": "Handle the examine/U8P_SKULLHEA::look event for the Skull of Quakes by presenting a short descriptive string to the inspecting process.",
+    "purpose": "Display the item's short description when the player examines the Skull of Quakes.",
     "entry_conditions": [
-      "Event 0: called when a process/player examines or 'looks at' the Skull item."
+      "Player performs the U8P_SKULLHEA::look/examine action on the Skull of Quakes (object-type U8P_SKULLHEA::look handler invoked)."
     ],
     "confidence": "high"
   },
@@ -32,49 +32,13 @@
     {
       "name": "U8P_SKULLHEA::look",
       "kind": "main",
-      "role": "Examine handler that displays the Skull's description via Item::bark.",
+      "role": "examine/description handler",
       "confidence": "high"
     },
     {
       "name": "U8P_SKULLHEA::use",
       "kind": "helper",
-      "role": "Use handler that, when applied to a specific target type (0x0325) and if the Skull has quantity, triggers an earthquake/teleport cinematic and sets a global flag.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "External API to display short text or messages for an item/process (used by U8P_SKULLHEA::look and by various items elsewhere).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getQ",
-      "kind": "extern",
-      "role": "Get item quantity (guarding use behavior).",
-      "confidence": "high"
-    },
-    {
-      "name": "process::target",
-      "kind": "extern",
-      "role": "Return the current target of the using process (used by use handler).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getType",
-      "kind": "extern",
-      "role": "Return an object's type id (used to test for 0x0325).",
-      "confidence": "high"
-    },
-    {
-      "name": "Camera::startQuake",
-      "kind": "extern",
-      "role": "Start camera quake effect for earthquake sequence.",
-      "confidence": "high"
-    },
-    {
-      "name": "Camera::stopQuake",
-      "kind": "extern",
-      "role": "Stop camera quake effect.",
+      "role": "one-time activation / cutscene coordinator for the skull item",
       "confidence": "high"
     }
   ],
@@ -82,111 +46,105 @@
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_SKULLHEA::look",
-        "callee": "Item::bark",
-        "purpose": "Show the Skull's descriptive text to the inspecting process.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_SKULLHEA::use",
         "callee": "Item::getQ",
-        "purpose": "Check the Skull's quantity and abort use if zero.",
+        "purpose": "Check whether this skull instance is already marked/used (nonzero aborts activation).",
         "confidence": "high"
       },
       {
         "caller": "U8P_SKULLHEA::use",
-        "callee": "process::target",
-        "purpose": "Obtain the current target of the using process; required for subsequent type and coordinate checks.",
+        "callee": "pid <=> process target()",
+        "purpose": "Obtain the player's selected target/process when using the item; result suspended into local1.",
         "confidence": "high"
       },
       {
         "caller": "U8P_SKULLHEA::use",
         "callee": "Item::getType",
-        "purpose": "Verify the target's type equals 0x0325 before initiating the quake sequence.",
+        "purpose": "Verify the selected target's type equals 0x0325 before permitting placement/activation.",
         "confidence": "high"
       },
       {
         "caller": "U8P_SKULLHEA::use",
         "callee": "Item::push",
-        "purpose": "Temporarily push/place the skull into an item/context stack before movement/pop operation (inferred part of relocation).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_SKULLHEA::use",
-        "callee": "Item::getX",
-        "purpose": "Read target X coordinate to save for later teleport/restore.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SKULLHEA::use",
-        "callee": "Item::getY",
-        "purpose": "Read target Y coordinate to save for later teleport/restore.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SKULLHEA::use",
-        "callee": "Item::getZ",
-        "purpose": "Read target Z coordinate (adjusted by code) to save for later teleport/restore.",
+        "purpose": "Temporarily attach/stack the skull for relative placement computations.",
         "confidence": "high"
       },
       {
         "caller": "U8P_SKULLHEA::use",
         "callee": "Item::pop",
-        "purpose": "Place/move the skull (or target) to computed X/Y/Z coordinates as part of the sequence (exact arg ordering inferred).",
-        "confidence": "medium"
+        "purpose": "Place the skull into world coordinates computed from the target (uses offsets like z+0x10, y-0x08, x).",
+        "confidence": "high"
       },
       {
         "caller": "U8P_SKULLHEA::use",
         "callee": "Item::setQ",
-        "purpose": "Set the Skull's quantity to 1 after the pop/move operation.",
+        "purpose": "Mark the item Q flag (0x01) to record that the skull was activated and prevent reuse.",
         "confidence": "high"
+      },
+      {
+        "caller": "U8P_SKULLHEA::use",
+        "callee": "Item::getX",
+        "purpose": "Read saved X coordinate from the push/pop context to restore an actor's position later.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_SKULLHEA::use",
+        "callee": "Item::getY",
+        "purpose": "Read saved Y coordinate from the push/pop context to restore an actor's position later.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_SKULLHEA::use",
+        "callee": "Item::getZ",
+        "purpose": "Read saved map/Z coordinate from the push/pop context to restore an actor's location later.",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_SKULLHEA::use",
         "callee": "Camera::startQuake",
-        "purpose": "Begin camera quake visual effect for the earthquake event.",
+        "purpose": "Begin a camera earthquake visual effect for the activation sequence.",
         "confidence": "high"
       },
       {
         "caller": "U8P_SKULLHEA::use",
-        "callee": "U8P_SKULLHEA::playSFX",
-        "purpose": "Play earthquake-related sound effects (called multiple times for layered SFX).",
+        "callee": "playSFX",
+        "purpose": "Play quake/event sound effects during the sequence.",
         "confidence": "high"
       },
       {
         "caller": "U8P_SKULLHEA::use",
         "callee": "Npc::doAnim",
-        "purpose": "Trigger an NPC animation during the quake (likely to convey impact or reaction).",
+        "purpose": "Trigger an NPC animation as part of the cutscene; spawned and waited on.",
         "confidence": "medium"
       },
       {
         "caller": "U8P_SKULLHEA::use",
-        "callee": "process::FadeToBlack",
-        "purpose": "Fade the player's/process's screen to black before teleporting.",
+        "callee": "process FadeToBlack",
+        "purpose": "Run a fade-to-black transition to stage the cutscene, the script waits for it to finish.",
         "confidence": "high"
-      },
-      {
-        "caller": "U8P_SKULLHEA::use",
-        "callee": "Npc::getMap",
-        "purpose": "Obtain a map id (likely the player's current map or destination) used for teleportation.",
-        "confidence": "medium"
       },
       {
         "caller": "U8P_SKULLHEA::use",
         "callee": "Npc::teleport",
-        "purpose": "Teleport the player/process (and later the saved target) to specified map/X/Y/Z coordinates as part of the scene change and restore.",
-        "confidence": "high"
+        "purpose": "Temporarily teleport an NPC/player to a staging location for the cutscene and later teleport them back.",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_SKULLHEA::use",
-        "callee": "process::FadeFromBlack",
-        "purpose": "Fade the player's/process's screen back from black after teleportation/completion.",
+        "callee": "Npc::getMap",
+        "purpose": "Obtain the map id from the push/pop context to compute teleport source/destination.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_SKULLHEA::use",
+        "callee": "process FadeFromBlack",
+        "purpose": "Fade back in after the cutscene completes.",
         "confidence": "high"
       },
       {
         "caller": "U8P_SKULLHEA::use",
         "callee": "Camera::stopQuake",
-        "purpose": "End the camera quake visual effect after the sequence completes.",
+        "purpose": "Stop the camera earthquake effect when the event sequence completes.",
         "confidence": "high"
       }
     ]
@@ -195,8 +153,8 @@
     "reads": [],
     "writes": [
       {
-        "name": "global [0012 01] (postEarthQuake)",
-        "likely_effect": "Marked true/set to 1 when the earthquake/teleport sequence runs, indicating that a post-earthquake game state should be active.",
+        "name": "postEarthQuake",
+        "likely_effect": "Set to 1 when the skull-triggered earthquake sequence completes; used to record that the event occurred for other game logic.",
         "confidence": "high"
       }
     ]
@@ -209,8 +167,8 @@
   ],
   "quick_facts": {
     "main_function": "U8P_SKULLHEA::look",
-    "behavior_summary_one_liner": "U8P_SKULLHEA provides two gameplay behaviors: an examine ('U8P_SKULLHEA::look') handler that displays the Skull's description, and a use handler that can trigger a localized earthquake/teleport sequence when applied to a specific target type.",
-    "external_call_count": 18,
+    "behavior_summary_one_liner": "U8P_SKULLHEA::look is a simple examine handler that displays the short description 'The Skull of Quakes' when the player looks at the item.",
+    "external_call_count": 17,
     "flag_read_count": 0,
     "flag_write_count": 1
   },

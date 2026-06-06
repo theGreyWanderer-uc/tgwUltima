@@ -3,26 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_WOOL.json",
   "file": "U8P_WOOL",
   "behavior_summary": [
-    "Handles the 'U8P_WOOL::look' (examine) event for the Wool item: when a player (or relevant actor) examines the wool, the script builds and emits a one-line description \"kith silk \".",
-    "Before emitting the text it adjusts per-call message/context flags (info, process-exclude, pid) so the bark is delivered with the intended routing/visibility semantics.",
-    "The description string is allocated/constructed, passed to the item-level bark routine (Item::bark) together with the item context, then freed. The handler then yields/suspends as a typical event process."
+    "Provides a U8P_WOOL::look/examine handler for the WOOL actor that plays a short bark string \"kith silk \" when the player inspects the actor.",
+    "The function is purely presentational: it does not branch, modify global flags, call external systems, or present menus.",
+    "After emitting the bark the process suspends/terminates (likely ending the U8P_WOOL::look interaction)."
   ],
   "notable_control_flow": [
-    "Entry is event-driven: triggered by the 'U8P_WOOL::look' event for the Wool item (no looping or long-running behavior).",
-    "Synchronous sequence: set up message/context flags -> construct string -> call Item::bark -> free string -> process return value (small implies/pop handling) -> suspend/return.",
-    "No iteration, no global state mutation observed; the routine confines effects to emitting a localized description and manipulating ephemeral call-context flags."
+    "Linear sequence: enter U8P_WOOL::look process -> emit a single Bark -> suspend/terminate the process.",
+    "No conditional branches, menu logic, or external calls observed."
   ],
   "open_questions": [
-    "Exact semantics of the 'info' and 'process-exclude' context flags: what recipients are excluded or what metadata 0x210 (if present) denotes in engine terms?",
-    "Whether the string is allocated via a general allocator that must be freed with a particular engine API (the disassembly implies freeing but exact free function name is not present).",
-    "Whether Item::bark does any additional side-effects beyond presenting the string (e.g., logging, AI notifications) — inferred as a display/emit function but full effects are external."
+    "Is the trailing space in the bark text \"kith silk \" intentional (concatenation/formatting) or an artifact of extraction?",
+    "Does the suspend node terminate the U8P_WOOL::look process immediately, or yield to the engine for a short duration (suspend semantics vary by context)?",
+    "Is WOOL an object or a simple NPC? The script is minimal so broader usage/context is unknown."
   ],
   "main_function": {
     "name": "U8P_WOOL::look",
     "execution_form": "process",
-    "purpose": "Respond to a 'U8P_WOOL::look' (examine) event for a Wool item by producing a short descriptive bark ('kith silk '), using the item context as the source and adjusting message/context flags to control delivery.",
+    "purpose": "Handle the player's U8P_WOOL::look/examine action by displaying a short descriptive bark.",
     "entry_conditions": [
-      "Event 0 — the object's 'U8P_WOOL::look' trigger (fired when the Avatar or relevant actor examines the wool)"
+      "Triggered when the player examines/looks at the WOOL actor (U8P_WOOL::look/inspect action / process type 0x0208)."
     ],
     "confidence": "high"
   },
@@ -30,38 +29,13 @@
     {
       "name": "U8P_WOOL::look",
       "kind": "main",
-      "role": "Event handler that constructs and emits the wool item's short description when examined.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item API used to display/emit a short, single-line message from an item/process to a target (used here to present 'kith silk ').",
+      "role": "U8P_WOOL::look handler / provide short description",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_WOOL::look",
-        "callee": "Item::bark",
-        "purpose": "Deliver/display the constructed short description string ('kith silk ') from the Wool item to the viewing process/actor.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_WOOL::look",
-        "callee": "U8P_WOOL::engine_context_set (inferred)",
-        "purpose": "Set per-call message/context flags (info, process-exclude, pid) that control routing/visibility of the bark. This entry represents engine-level ops observed prior to calling Item::bark.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_WOOL::look",
-        "callee": "U8P_WOOL::memory_free (inferred)",
-        "purpose": "Free the temporary/constructed string after passing it to Item::bark (disassembly implies freeing but exact API name is not present).",
-        "confidence": "medium"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -69,12 +43,12 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup"
+    "presentational"
   ],
   "quick_facts": {
-    "main_function": "WOOL::look",
-    "behavior_summary_one_liner": "Handles the 'U8P_WOOL::look' (examine) event for the Wool item: when a player (or relevant actor) examines the wool, the script builds and emits a one-line description \"kith silk \".",
-    "external_call_count": 3,
+    "main_function": "U8P_WOOL::look",
+    "behavior_summary_one_liner": "Provides a U8P_WOOL::look/examine handler for the WOOL actor that plays a short bark string \"kith silk \" when the player inspects the actor.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

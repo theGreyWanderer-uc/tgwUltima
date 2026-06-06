@@ -3,31 +3,31 @@
   "source_of_truth": "dialogue/json/U8P_DOOR_NS.json",
   "file": "U8P_DOOR_NS",
   "behavior_summary": [
-    "Implements the in-game door object behavior: responding to player examine (U8P_DOOR_NS::look), use, and hit events; producing descriptive text for examined doors; and driving open/close animations and multi-tile updates.",
-    "DOOR_NS::look is the entry point for 'U8P_DOOR_NS::look' (examine) interactions: it establishes process context/exclusion and spawns a helper that composes and emits a short descriptive bark such as 'Locked Door', 'door', or 'tower door'.",
-    "Use and gotHit handlers set context/exclusion and spawn further handlers which attempt to open/operate the door or process damage/forced-entry attempts; the heavy lifting of permission checks, coordinated multi-tile updates, and animation is in helpers U8P_DOOR_NS::DOOR_NS::016C, ::0340 and ::05E4.",
-    "Door state and branching are primarily driven by item quality bits (tested against masks such as 0x0100 and 0x0200) and by item type codes (distinct door subtypes like normal vs tower).",
-    "Animation updates are coordinated by computing per-piece frame targets/timers, calling FREE::2411 as a claim/availability check, spawning FREE::1C19 for timed/asynchronous sub-processes, and repeatedly calling Item::setFrame / Item::setQuality while suspending to animate."
+    "This script implements the in-world behavior for door items: describing them when inspected, handling player 'U8P_DOOR_NS::use' attempts, and responding to hits by mapping certain strikes into a U8P_DOOR_NS::use/open attempt.",
+    "U8P_DOOR_NS::look delegates to a lock/type-aware check (U8P_DOOR_NS::checkDoorLocked) that emits a short description: 'Locked Door' when the item's quality has the lock bit, otherwise 'door' or 'tower door' depending on item type.",
+    "U8P_DOOR_NS::use (process) simply forwards to U8P_DOOR_NS::useDoor, which enforces locked/blocked checks, emits user-facing barks ('Locked Door' or 'blocked') when appropriate, and invokes swing/type-change helpers (U8P_DOOR_NS::calculateDoorSwing and U8P_DOOR_NS::func0340) to animate/open the door via FREE::changeItemType.",
+    "Hit handling funnels through U8P_DOOR_NS::gotHit -> U8P_DOOR_NS::func0C82 which filters hits (e.g., attacker anim set check) and may call U8P_DOOR_NS::useDoor so certain attack types can open or break doors.",
+    "Utilities like U8P_DOOR_NS::func05E4, U8P_DOOR_NS::func0886 and quality/type reads (Item::getQuality, Item::getType, Item::getFrame) are used to detect paired doors, orientation/flip bits, lock state, and to compute the correct frame/type and coordinates for the engine call FREE::changeItemType."
   ],
   "notable_control_flow": [
-    "Entry handlers (U8P_DOOR_NS::look/use/gotHit) set process info and a process exclude and then spawn a short-lived helper process to perform the visible behavior—spawn + suspend pattern used for bark/animation.",
-    "Decision points test Item::getQuality bits and Item::getType to choose message text and animation branches (locked vs unlocked, normal vs tower).",
-    "Animation helpers loop: compute target frames and timing, call FREE::2411 to claim/verify per-tile transitions, spawn FREE::1C19 to schedule per-step timing, call Item::setFrame and Item::setQuality, then suspend and repeat until transition finishes.",
-    "Scanning helper (U8P_DOOR_NS::DOOR_NS::05E4) iterates neighboring pieces (by coordinates and type) to collect/coordinate multi-tile door parts before invoking core animation/permission routines."
+    "U8P_DOOR_NS::look -> calls U8P_DOOR_NS::checkDoorLocked and always suspends after emitting one short bark; lock bit (quality & 0x0400) takes precedence and yields 'Locked Door'.",
+    "U8P_DOOR_NS::useDoor first checks for alternate/paired door context via U8P_DOOR_NS::func05E4, then uses U8P_DOOR_NS::func0886 to test a 'locked-like' condition; when param1 == 0x01 (player-initiated), locked or blocked results produce barks and suspend.",
+    "Swing computation path: U8P_DOOR_NS::calculateDoorSwing and U8P_DOOR_NS::func0340 compute new frame/type and call FREE::changeItemType; their boolean result controls whether U8P_DOOR_NS::useDoor reports 'blocked' and whether avatar stasis/animation adjustments occur.",
+    "Hit-to-U8P_DOOR_NS::use mapping in U8P_DOOR_NS::func0C82: proceeds only when param1 == 0x01, U8P_DOOR_NS::func0886(this) == 0, Npc::getLastAnimSet(copyOfParam1) == 0x3A, and the door lacks the 0x0100 quality bit; then it calls U8P_DOOR_NS::useDoor."
   ],
   "open_questions": [
-    "Exact semantics of the quality bit masks (e.g., 0x0100, 0x0200): they appear to indicate 'locked' and an auto/multi-tile mode but the concrete meaning is inferred.",
-    "Precise behavior and contract of FREE::2411: it behaves like a reservation/claim or permission test for applying a frame/state change to a tile or resource but the exact conditions and side-effects are unknown.",
-    "Role of FREE::1C19 beyond timing: appears to be a spawned helper for delayed animation/effects, but how it interacts with other game systems (sound/effects) is not confirmed.",
-    "Meaning of several numeric type constants (0x44, 0x45, 0x154, 0x156, 0x155) and how they map to in-game door subtypes and orientation."
+    "Exact semantics of param1 passed to U8P_DOOR_NS::useDoor — it is treated as a selector/actor flag (0x01 triggers player-facing barks) but its full set of values and callers isn't fully enumerated.",
+    "Precise meanings of quality flags beyond observed bits (0x0400 -> lock, 0x0100 / 0x0200 used for pairing/orientation) and how they map to in-game editor flags.",
+    "Edge cases and return values from FREE::changeItemType (how non-success is reported back to the script) are inferred but not fully confirmed.",
+    "Whether U8P_DOOR_NS::func0340 and U8P_DOOR_NS::calculateDoorSwing always call FREE::changeItemType or if they sometimes modify internal state without a map update (some conditional branches were low-confidence)."
   ],
   "main_function": {
     "name": "U8P_DOOR_NS::look",
     "execution_form": "process",
-    "purpose": "Handle the player 'U8P_DOOR_NS::look' (examine) event for a door: prepare process info and exclusion and spawn a helper that determines and emits the appropriate descriptive text (locked/normal/tower).",
+    "purpose": "Handle the player's 'U8P_DOOR_NS::look' / inspect action for a door item by emitting a short description that reflects lock state and door subtype.",
     "entry_conditions": [
-      "Triggered when a player or relevant actor examines the door (Usecode Event 0 / 'U8P_DOOR_NS::look').",
-      "Called with an implicit pid/player process and an item pointer for the door instance."
+      "Triggered by the engine when the player inspects or 'looks at' the door item.",
+      "Runs in the item's process context (implicit 'this' refers to the door item)."
     ],
     "confidence": "high"
   },
@@ -35,151 +35,223 @@
     {
       "name": "U8P_DOOR_NS::look",
       "kind": "main",
-      "role": "Entry handler for 'U8P_DOOR_NS::look' (examine) interactions; spawns descriptive bark helper and returns its result.",
+      "role": "Top-level 'U8P_DOOR_NS::look' process that delegates to lock/type-aware description logic.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DOOR_NS::checkDoorLocked",
+      "kind": "helper",
+      "role": "Determines lock bit and door subtype to emit one-line barks ('Locked Door', 'door', 'tower door').",
       "confidence": "high"
     },
     {
       "name": "U8P_DOOR_NS::use",
+      "kind": "main",
+      "role": "Process entry for 'U8P_DOOR_NS::use' action; delegates to U8P_DOOR_NS::useDoor.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DOOR_NS::useDoor",
       "kind": "helper",
-      "role": "Handle 'use' event: set context and spawn a further handler (door operation attempt, likely open/close/unlock) with a flag argument.",
+      "role": "Primary handler for activation/U8P_DOOR_NS::use: enforces locked/blocked checks, orchestrates swing computation and calls frame/type-change routines; emits 'blocked'/'Locked Door' barks when needed.",
       "confidence": "high"
     },
     {
       "name": "U8P_DOOR_NS::gotHit",
-      "kind": "helper",
-      "role": "Handle 'got hit' event: set context and spawn damage/forced-entry handler with attacker/damage params and the door item.",
+      "kind": "main",
+      "role": "Process invoked when the door is hit; forwards impact parameters to U8P_DOOR_NS::func0C82 for filtering/handling.",
       "confidence": "high"
     },
     {
-      "name": "U8P_DOOR_NS::00D0",
+      "name": "U8P_DOOR_NS::func0C82",
       "kind": "helper",
-      "role": "Compose and emit the short descriptive bark when a door is examined: checks locked bit and type to pick 'Locked Door ', 'door ', or 'tower door ' and calls Item::bark.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_DOOR_NS::016C",
-      "kind": "helper",
-      "role": "Capability/permission and parameter computation helper: inspects frame/type/quality and computes offsets/timers/flags, calls FREE::2411 and returns a boolean-like status indicating whether an action can proceed.",
+      "role": "Filters incoming hit events (by param, attacker anim set, and door quality) and maps qualifying hits into U8P_DOOR_NS::useDoor.",
       "confidence": "medium"
     },
     {
-      "name": "U8P_DOOR_NS::0340",
+      "name": "U8P_DOOR_NS::calculateDoorSwing",
       "kind": "helper",
-      "role": "Core animation/state transition routine: coordinates multi-step open/close animation, calls FREE::2411, spawns FREE::1C19 for timing, and updates Item::setFrame/Item::setQuality in a loop with suspends.",
+      "role": "Compute the new frame/type/encoding and coordinates required when the door swings; prepares args and calls FREE::changeItemType.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_DOOR_NS::func0340",
+      "kind": "helper",
+      "role": "Coordinate-aware variant of swing/type-change logic that reads X/Y/Z and applies FREE::changeItemType for the actual map update.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_DOOR_NS::func05E4",
+      "kind": "helper",
+      "role": "Searches for/returns a paired/neighbor door item based on type/quality and coordinate adjacency; used by U8P_DOOR_NS::useDoor to attempt alternate swings.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_DOOR_NS::func0886",
+      "kind": "helper",
+      "role": "Small predicate that inspects Item::getQuality(this) and returns a boolean-like indicator (used as a locked/blocked test).",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::getQuality",
+      "kind": "extern",
+      "role": "Engine API: read item quality/flags (used for lock/orientation tests).",
       "confidence": "high"
     },
     {
-      "name": "U8P_DOOR_NS::05E4",
-      "kind": "helper",
-      "role": "Scan/iteration helper that finds related pieces of a potentially multi-tile door (by type/coords/quality) and dispatches to permission/animation routines for coordinated updates.",
+      "name": "Item::getType",
+      "kind": "extern",
+      "role": "Engine API: read item type id (used to choose door subtype handling).",
       "confidence": "high"
+    },
+    {
+      "name": "Item::getFrame",
+      "kind": "extern",
+      "role": "Engine API: read current item frame index for computing new frame offsets.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getX",
+      "kind": "extern",
+      "role": "Engine API: read item X coordinate for coordinate-aware change calls.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getY",
+      "kind": "extern",
+      "role": "Engine API: read item Y coordinate for coordinate-aware change calls.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getZ",
+      "kind": "extern",
+      "role": "Engine API: read item Z/floor coordinate for coordinate-aware change calls.",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::changeItemType",
+      "kind": "extern",
+      "role": "Engine-level call to update an item on the map (apply new frame/type and position changes).",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::getLastAnimSet",
+      "kind": "extern",
+      "role": "Engine API: used to inspect an attacker's last animation set as a filter for hit-handling.",
+      "confidence": "medium"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
         "caller": "U8P_DOOR_NS::look",
-        "callee": "U8P_DOOR_NS::00D0",
-        "purpose": "Spawn a helper to build and emit the U8P_DOOR_NS::look/examine text (bark) for the door.",
+        "callee": "U8P_DOOR_NS::checkDoorLocked",
+        "purpose": "Delegate U8P_DOOR_NS::look/inspect description generation (lock/type-aware one-line bark).",
         "confidence": "high"
       },
       {
         "caller": "U8P_DOOR_NS::use",
-        "callee": "U8P_DOOR_NS::08B4",
-        "purpose": "Spawn a deeper handler to attempt open/close or to process the use action; passed a flag argument (inferred to request an operation).",
-        "confidence": "medium"
+        "callee": "U8P_DOOR_NS::useDoor",
+        "purpose": "Forward the 'U8P_DOOR_NS::use' process to the main U8P_DOOR_NS::use handler.",
+        "confidence": "high"
       },
       {
         "caller": "U8P_DOOR_NS::gotHit",
-        "callee": "U8P_DOOR_NS::0C82",
-        "purpose": "Spawn a handler to process hit/damage effects or forced entry attempts with the door item and hit parameters.",
+        "callee": "U8P_DOOR_NS::func0C82",
+        "purpose": "Dispatch hit parameters to a hit-filtering/handling helper.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DOOR_NS::func0C82",
+        "callee": "U8P_DOOR_NS::useDoor",
+        "purpose": "Convert a qualifying hit into a U8P_DOOR_NS::use/open attempt on the door.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_DOOR_NS::05E4",
-        "callee": "U8P_DOOR_NS::016C",
-        "purpose": "Invoke permission/parameter checks for individual pieces discovered by the scanner before attempting animation updates.",
+        "caller": "U8P_DOOR_NS::useDoor",
+        "callee": "U8P_DOOR_NS::func05E4",
+        "purpose": "Query for a paired/neighbor door to attempt alternate swing/change if primary attempt fails.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_DOOR_NS::0340",
-        "callee": "U8P_DOOR_NS::016C",
-        "purpose": "Call the helper that computes per-piece parameters and performs the FREE::2411 check to verify a piece may be updated during animation.",
+        "caller": "U8P_DOOR_NS::useDoor",
+        "callee": "U8P_DOOR_NS::func0886",
+        "purpose": "Test 'locked/blocked' condition on item(s) to decide whether to emit 'Locked Door' bark and abort when param1==0x01.",
         "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DOOR_NS::useDoor",
+        "callee": "U8P_DOOR_NS::calculateDoorSwing",
+        "purpose": "Compute and attempt the swing/open change; its boolean result drives blocked/animation logic.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DOOR_NS::useDoor",
+        "callee": "U8P_DOOR_NS::func0340",
+        "purpose": "Coordinate-aware application of the computed swing/change (calls FREE::changeItemType).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DOOR_NS::calculateDoorSwing",
+        "callee": "U8P_DOOR_NS::func0340",
+        "purpose": "Related swing/apply logic (U8P_DOOR_NS::func0340 is a coordinate-aware variant called in similar flows).",
+        "confidence": "low"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_DOOR_NS::00D0",
+        "caller": "U8P_DOOR_NS::checkDoorLocked",
         "callee": "Item::getQuality",
-        "purpose": "Read the door's quality/flags to determine locked/auto/mode bits used while selecting the descriptive text.",
+        "purpose": "Read the lock bit (observed 0x0400) to decide whether to bark 'Locked Door'.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_DOOR_NS::00D0",
+        "caller": "U8P_DOOR_NS::checkDoorLocked",
         "callee": "Item::getType",
-        "purpose": "Identify door subtype (normal vs tower vs special) to select the appropriate descriptor string.",
+        "purpose": "Distinguish door subtypes (e.g., 0x44/0x45) to choose between 'door' and 'tower door' descriptions.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_DOOR_NS::00D0",
-        "callee": "Item::bark",
-        "purpose": "Emit the chosen descriptive string to the examining player/process.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_DOOR_NS::016C",
-        "callee": "FREE::2411",
-        "purpose": "Perform a tile/resource claim or availability test with computed parameters to decide whether a piece can be updated.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_DOOR_NS::0340",
-        "callee": "FREE::2411",
-        "purpose": "Repeatedly check/claim each tile/piece before performing frame/quality updates as part of animation.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_DOOR_NS::0340",
-        "callee": "FREE::1C19",
-        "purpose": "Spawn a timed/asynchronous helper (likely to schedule delays or visual/sound effects) during animation steps.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_DOOR_NS::0340",
-        "callee": "Item::setFrame",
-        "purpose": "Update the visual frame of a door piece during open/close animation.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_DOOR_NS::0340",
-        "callee": "Item::setQuality",
-        "purpose": "Toggle quality bits to reflect new door state (open/closed/locked) as part of the transition.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_DOOR_NS::0340",
+        "caller": "U8P_DOOR_NS::calculateDoorSwing",
         "callee": "Item::getFrame",
-        "purpose": "Read the current frame to compute stepwise changes and target frames for animation.",
+        "purpose": "Read current frame(s) to compute frame-offset components for the new swung frame index.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_DOOR_NS::05E4",
+        "caller": "U8P_DOOR_NS::calculateDoorSwing",
+        "callee": "Item::getType",
+        "purpose": "Branch on door type to choose offsets and target type ids for change operations.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DOOR_NS::func0340",
         "callee": "Item::getX",
-        "purpose": "Read coordinates when scanning for neighboring pieces of a multi-tile door.",
+        "purpose": "Obtain X coordinate for coordinate-aware change calls.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_DOOR_NS::05E4",
+        "caller": "U8P_DOOR_NS::func0340",
         "callee": "Item::getY",
-        "purpose": "Read coordinates when scanning for neighboring pieces of a multi-tile door.",
+        "purpose": "Obtain Y coordinate for coordinate-aware change calls.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_DOOR_NS::05E4",
+        "caller": "U8P_DOOR_NS::func0340",
         "callee": "Item::getZ",
-        "purpose": "Read height/level when scanning for neighboring pieces to ensure matching plane.",
+        "purpose": "Obtain Z (floor) for change calls passed to FREE::changeItemType.",
         "confidence": "high"
+      },
+      {
+        "caller": "U8P_DOOR_NS::calculateDoorSwing",
+        "callee": "FREE::changeItemType",
+        "purpose": "Apply the computed frame/type change to the map item to effect opening/closing animation or replacement.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DOOR_NS::func0C82",
+        "callee": "Npc::getLastAnimSet",
+        "purpose": "Inspect the attacker's last animation set to filter which hits (anim set 0x3A observed) may trigger door U8P_DOOR_NS::use behavior.",
+        "confidence": "medium"
       }
     ]
   },
@@ -194,9 +266,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_DOOR_NS::DOOR_NS::look",
-    "behavior_summary_one_liner": "Implements the in-game door object behavior: responding to player examine (U8P_DOOR_NS::look), use, and hit events; producing descriptive text for examined doors; and driving open/close animations and multi-tile updates.",
-    "external_call_count": 12,
+    "main_function": "U8P_DOOR_NS::look",
+    "behavior_summary_one_liner": "This script implements the in-world behavior for door items: describing them when inspected, handling player 'U8P_DOOR_NS::use' attempts, and responding to hits by mapping certain strikes into a U8P_DOOR_NS::use/open attempt.",
+    "external_call_count": 9,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

@@ -3,79 +3,78 @@
   "source_of_truth": "dialogue/json/U8P_TELEPAD.json",
   "file": "U8P_TELEPAD",
   "behavior_summary": [
-    "Implements a telepad's trigger/activation behavior: when an actor activates the pad the script advances a short animation over several trigger resumptions and, once the animation reaches a terminal frame, performs a teleport/effect using coordinates and stored pad data.",
-    "The routine runs in an event-driven form (fast-area trigger): it sets area info and suspends, resumes when the trigger is activated, reads the pad's frame and coordinates, and either increments the frame and spawns a transient effect or calls a FREE routine to execute the teleport action.",
-    "Advancing the animation involves incrementing the pad's frame via Item::setFrame and spawning an auxiliary handler (FREE::1C19) with a small event code; the teleport branch calls FREE::2411 with X/Y/Z, an effect id (0x034F), the item pointer, and a 2-byte value read from the item (likely a destination id)."
+    "U8P_TELEPAD::func0080 is a per-item process that advances a telepad item's animation frame each tick and, when the frame reaches 3, replaces the item at the same X,Y,Z with item type 0x034F (likely the activated/teleporting state).",
+    "On frames before the terminal frame the routine increments the item's frame, spawns an auxiliary process/effect (spawn -> FREE::func1C19) and then suspends; this causes the animation to progress across scheduler ticks.",
+    "When Item::getFrame(this) == 3 the routine calls FREE::changeItemType(Item::getZ(this), Item::getY(this), Item::getX(this), 0x00, 0x034F, this) and exits without further animation steps."
   ],
   "notable_control_flow": [
-    "Entry via a fast-area trigger — the script sets trigger info and suspends, yielding until the pad's area is activated (enterFastArea semantics).",
-    "On each resume it reads Item::getFrame(item). If frame < 3 the script increments the frame, calls Item::setFrame(item, frame+1), spawns FREE::1C19 (likely an effect), then re-suspends to wait for further trigger resumes (loop).",
-    "When Item::getFrame(item) == 3 the script executes the teleport/effect path by reading Item::getX/Y/Z(item) and calling FREE::2411 with coordinates, a fixed effect id (0x034F), the item pointer and an indirect 2-byte value from the item, then terminates/returns."
+    "Process loop: check current frame -> branch: if frame == 3 then perform changeItemType and exit; else increment frame, spawn effect, suspend (yield) to resume later.",
+    "Uses suspend to yield between animation steps, so the routine spans multiple scheduler ticks rather than completing immediately.",
+    "Spawning an auxiliary process occurs only on non-terminal frames; the spawn return is stored in a temp local variable."
   ],
   "open_questions": [
-    "What exact gameplay semantics does the 2-byte indirect value read from the item represent (destination id, map id, linked telepad id, or other metadata)? — inferred but not certain.",
-    "What is the canonical meaning of the constants passed to FREE::2411 (0x034F) and FREE::1C19 (0x0A)? Are they effect ids, spell ids, event codes, or spawn-type identifiers?",
-    "Which actor/player PID is passed to FREE::1C19 when advancing the frame (inference: the triggering actor's pid) and how is it sourced in the broader engine context?",
-    "Does the telepad behavior require staying inside the fast-area for multiple resumption events (enter/leave semantics) or is each activation a discrete trigger? The code implies repeated resumes while the pad animates but the exact trigger lifecycle is implementation-dependent.",
-    "Does FREE::2411 perform a full-map teleport, summon, or some other 'free' engine action? The name and args strongly suggest teleporting but the exact side-effects are inferred."
+    "Exact gameplay semantics of item type 0x034F (appears to be the telepad's activated/teleporting variant) — inferred, confidence: medium.",
+    "What the spawned FREE::func1C19 process does (visual/sound/auxiliary effect is likely) and whether its return value stored in temp is later used — inferred, confidence: low.",
+    "Role and lifecycle of the pid token seen in the raw code (appears to be a process identifier but its use is not present in the excerpt) — confidence: low."
   ],
   "main_function": {
-    "name": "U8P_TELEPAD::0080",
+    "name": "U8P_TELEPAD::func0080",
     "execution_form": "process",
-    "purpose": "Handle a telepad item's activation: advance its local animation across trigger resumptions and, when the animation reaches the final frame, perform the teleport/effect using the pad's coordinates and stored destination metadata.",
+    "purpose": "Animate and transition a telepad item: advance frames each tick, spawn auxiliary effects during animation, and when final frame is reached convert the item to a new type (0x034F).",
     "entry_conditions": [
-      "Invoked when the telepad's fast-area trigger is set/activated (enterFastArea-style trigger); the routine sets area info and suspends until activation.",
-      "Runs repeatedly on resume from the suspended state to progress animation or execute the teleport when the final frame is reached."
+      "Runs as a recurring/process tick attached to the telepad item (process type 0x00F0).",
+      "Implicitly begins when the telepad item is present and this process is scheduled on it (operates on implicit 'this').",
+      "Resumes across scheduler ticks due to suspend nodes between iterations."
     ],
     "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_TELEPAD::0080",
+      "name": "U8P_TELEPAD::func0080",
       "kind": "main",
-      "role": "Telepad fast-area activation handler that advances animation frames and triggers the teleport/effect when the final frame is reached.",
+      "role": "Per-item animation/activation process for the telepad item",
       "confidence": "high"
     },
     {
       "name": "Item::getFrame",
       "kind": "extern",
-      "role": "Read the telepad item's current animation/frame index (used to decide whether to advance animation or teleport).",
+      "role": "Query item animation/frame index",
       "confidence": "high"
     },
     {
       "name": "Item::setFrame",
       "kind": "extern",
-      "role": "Write a new frame value to the telepad item (used to advance the animation by +1).",
+      "role": "Set item animation/frame index",
       "confidence": "high"
     },
     {
       "name": "Item::getX",
       "kind": "extern",
-      "role": "Read telepad X coordinate for use when invoking the teleport/effect routine.",
+      "role": "Obtain item's X coordinate",
       "confidence": "high"
     },
     {
       "name": "Item::getY",
       "kind": "extern",
-      "role": "Read telepad Y coordinate for use when invoking the teleport/effect routine.",
+      "role": "Obtain item's Y coordinate",
       "confidence": "high"
     },
     {
       "name": "Item::getZ",
       "kind": "extern",
-      "role": "Read telepad Z coordinate for use when invoking the teleport/effect routine.",
+      "role": "Obtain item's Z/level coordinate",
       "confidence": "high"
     },
     {
-      "name": "FREE::2411",
+      "name": "FREE::changeItemType",
       "kind": "extern",
-      "role": "Engine routine invoked to perform the teleport/effect using coordinates, an effect id (0x034F), the item pointer, and an indirect 2-byte item value (likely destination metadata).",
-      "confidence": "medium"
+      "role": "Replace/transform the item at X,Y,Z to a new item type (used for final transition to 0x034F)",
+      "confidence": "high"
     },
     {
-      "name": "FREE::1C19",
+      "name": "FREE::func1C19",
       "kind": "extern",
-      "role": "Spawn auxiliary effect/handler on animation advance (likely visual/sound/timer) with arguments including pid, event/code 0x0A and 0.",
+      "role": "Spawned auxiliary process/effect (spawn called in non-final frames)",
       "confidence": "medium"
     }
   ],
@@ -83,46 +82,46 @@
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_TELEPAD::0080",
+        "caller": "U8P_TELEPAD::func0080",
         "callee": "Item::getFrame",
-        "purpose": "Obtain the telepad's current animation/frame to decide whether to advance the animation or perform the teleport.",
+        "purpose": "Read current animation frame to decide whether to advance or finalize the telepad.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_TELEPAD::0080",
+        "caller": "U8P_TELEPAD::func0080",
         "callee": "Item::setFrame",
-        "purpose": "Set the telepad's animation frame to frame+1 when advancing the animation on activation.",
+        "purpose": "Advance the telepad's animation frame by one on non-terminal ticks.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_TELEPAD::0080",
-        "callee": "FREE::1C19",
-        "purpose": "Spawn a short-lived auxiliary process/effect (likely sound/visual/timer) when the pad frame is advanced.",
+        "caller": "U8P_TELEPAD::func0080",
+        "callee": "spawn -> FREE::func1C19",
+        "purpose": "Create an auxiliary process/effect while the telepad animates; return stored in a temp local.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_TELEPAD::0080",
+        "caller": "U8P_TELEPAD::func0080",
         "callee": "Item::getX",
-        "purpose": "Read pad X coordinate to pass to the teleport/effect routine.",
+        "purpose": "Provide X coordinate argument to FREE::changeItemType when finalizing.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_TELEPAD::0080",
+        "caller": "U8P_TELEPAD::func0080",
         "callee": "Item::getY",
-        "purpose": "Read pad Y coordinate to pass to the teleport/effect routine.",
+        "purpose": "Provide Y coordinate argument to FREE::changeItemType when finalizing.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_TELEPAD::0080",
+        "caller": "U8P_TELEPAD::func0080",
         "callee": "Item::getZ",
-        "purpose": "Read pad Z coordinate to pass to the teleport/effect routine.",
+        "purpose": "Provide Z/level coordinate argument to FREE::changeItemType when finalizing.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_TELEPAD::0080",
-        "callee": "FREE::2411",
-        "purpose": "Execute the teleport/effect action when the pad reaches its final animation frame; passes coordinates, a zero byte, effect id 0x034F, the item pointer, and a 2-byte value read from the item (likely destination id).",
-        "confidence": "medium"
+        "caller": "U8P_TELEPAD::func0080",
+        "callee": "FREE::changeItemType",
+        "purpose": "Replace the telepad item with type 0x034F when its frame reaches the terminal value (3).",
+        "confidence": "high"
       }
     ]
   },
@@ -137,8 +136,8 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_TELEPAD::TELEPAD::0080",
-    "behavior_summary_one_liner": "Implements a telepad's trigger/activation behavior: when an actor activates the pad the script advances a short animation over several trigger resumptions and, once the animation reaches a terminal frame, performs a teleport/effect using coordinates and stored pad data.",
+    "main_function": "U8P_TELEPAD::func0080",
+    "behavior_summary_one_liner": "U8P_TELEPAD::func0080 is a per-item process that advances a telepad item's animation frame each tick and, when the frame reaches 3, replaces the item at the same X,Y,Z with item type 0x034F (likely the activated/teleporting state).",
     "external_call_count": 7,
     "flag_read_count": 0,
     "flag_write_count": 0

@@ -3,28 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_BRANCHES.json",
   "file": "U8P_BRANCHES",
   "behavior_summary": [
-    "Responds to the 'U8P_BRANCHES::look' (examine) event for a branch/tree object by producing a short label \"tree \".",
-    "Prepares item/process context (sets info and applies a process-exclude state) so the item is in the correct state for emitting text.",
-    "Constructs or references the literal string \"tree \" and calls Item::bark with the item/process as 'this' to emit that text to the viewer/process.",
-    "Frees the temporary string buffer (or otherwise cleans up), inspects the return value from Item::bark via an 'implies' check, then suspends and returns."
+    "U8P_BRANCHES::look is a U8P_BRANCHES::look-type process that runs when the player examines the BRANCHES object.",
+    "When invoked it displays a single short description/bark: \"tree \" (note the trailing space in the source).",
+    "After displaying the bark the process yields/suspends, ending the short-description handling. There are no menus, branches, variable reads/writes, or external calls involved."
   ],
   "notable_control_flow": [
-    "Entry is event-driven: invoked on the 'U8P_BRANCHES::look' event for the object (player/actor inspects the branch).",
-    "Linear sequence: prepare context (set-info/process-exclude) -> build/reference string -> external call (Item::bark) -> examine bark retval (implies/pop) -> suspend/return.",
-    "The bark call's return value is explicitly examined (push retval / implies / pop) which may influence subsequent behavior (the actual branching action is not present in the snippet, only the check)."
+    "Linear: display one Bark node then suspend/yield; no conditional branches or menu flow.",
+    "No internal or external calls are made; the routine's effect is purely UI text emission and process suspension."
   ],
   "open_questions": [
-    "What exact info key and semantics are set by the 'set info' opcode(s) (what state does the item receive)?",
-    "What precise effect does the 'process exclude' operation have in game terms for this object (temporary pause, prevent re-entrance, etc.)?",
-    "What does the 'implies' check on Item::bark's return value represent and how would a true vs false outcome change runtime behavior (the snippet inspects the result but does not show alternate branches)?",
-    "Is the bark target the viewer/player PID or the item/process itself (BP+06h is used as 'this' but the visible recipient of the text is inferred)?"
+    "Is the trailing space in the bark text \"tree \" intentional (formatting for concatenation) or an artifact?",
+    "Does the 'suspend' imply a short timed display managed by the engine or simply the end of the U8P_BRANCHES::look process?",
+    "Is this U8P_BRANCHES::look handler ever invoked by area triggers (enterFastArea/leaveFastArea) in other contexts, or only by direct 'U8P_BRANCHES::look' player action?"
   ],
   "main_function": {
     "name": "U8P_BRANCHES::look",
     "execution_form": "process",
-    "purpose": "Handle the item's 'U8P_BRANCHES::look' event by announcing the object as a 'tree'—prepare the item context, call Item::bark to emit the short label, examine the bark return value, then suspend/return.",
+    "purpose": "Provide the short description for BRANCHES when the player examines it, then yield/end the U8P_BRANCHES::look process.",
     "entry_conditions": [
-      "Event 0: triggered when a player or relevant actor looks at or inspects the branch object."
+      "Player uses the 'U8P_BRANCHES::look' (examine) action on the BRANCHES object.",
+      "Invoked by the engine's U8P_BRANCHES::look-type process dispatch (processType 0x0208) when the object is inspected or focused."
     ],
     "confidence": "high"
   },
@@ -32,41 +30,25 @@
     {
       "name": "U8P_BRANCHES::look",
       "kind": "main",
-      "role": "Main handler for the branch/tree 'U8P_BRANCHES::look' event: set up item context and invoke Item::bark with the string 'tree '.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine used to emit or display a short string message from an item/process (used here to show 'tree ').",
+      "role": "Handle object examination by showing a short descriptive bark and suspending the U8P_BRANCHES::look process.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_BRANCHES::look",
-        "callee": "Item::bark",
-        "purpose": "Ask the item/process to emit/display the short text label 'tree ' (message shown to the viewing process/player).",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
     "writes": []
   },
   "ui_tags": [
-    "trigger",
-    "cleanup",
-    "animation",
-    "guard"
+    "trigger"
   ],
   "quick_facts": {
-    "main_function": "BRANCHES::look",
-    "behavior_summary_one_liner": "Responds to the 'U8P_BRANCHES::look' (examine) event for a branch/tree object by producing a short label \"tree \".",
-    "external_call_count": 1,
+    "main_function": "U8P_BRANCHES::look",
+    "behavior_summary_one_liner": "U8P_BRANCHES::look is a U8P_BRANCHES::look-type process that runs when the player examines the BRANCHES object.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

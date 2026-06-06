@@ -3,34 +3,37 @@
   "source_of_truth": "dialogue/json/U8P_DARION.json",
   "file": "U8P_DARION",
   "behavior_summary": [
-    "This script implements Darion's scheduling and fast-area behaviors: choosing a high-level U8P_DARION::schedule, storing it, and dispatching a runtime behavior when the player enters Darion's proximity (fast-area).",
-    "DARION::schedule (main) queries an external status table (FREE::28F9) to pick one of several U8P_DARION::schedule variants, spawns methods to install/run that U8P_DARION::schedule, and writes the chosen U8P_DARION::schedule id into the global darionSchedule slot.",
-    "U8P_DARION::enterFastArea resets stored reference slots for the NPC, checks death and global guard flags, and then either spawns a map-specific behavior or dispatches the runtime method that matches darionSchedule (for example U8P_DARION::02A8 for U8P_DARION::schedule==1 or U8P_DARION::0897 for other variants).",
-    "U8P_DARION::leaveFastArea cleans up by freeing the same reference slots when the player leaves the area.",
-    "U8P_DARION::02A8 is the active runtime loop for one U8P_DARION::schedule: it scans candidate items/targets, inspects item frames/status, pathfinds to targets, and triggers subordinate actions such as orientation, barks, and timers; it respects somebodyTalking to avoid interruptions.",
-    "U8P_DARION::0411 is the short interaction/bark routine: it chooses dialog lines (sometimes based on darionMet), orients Darion toward the target/player, plays a short animation or orientation method, and issues Item::bark to speak."
+    "This script implements the NPC Darion's runtime behavior, area-entry dispatcher, conversation/shop interactions, training/combat mini-sequence, and a set of short monologue/bark utilities used during patrol/engagement.",
+    "U8P_DARION::schedule (process) computes Darion's current routine based on the time-of-day and writes a persistent routine index (darionSchedule) which other behaviors consult to choose actions.",
+    "U8P_DARION::enterFastArea (process) is the fast-interaction entry point: it resets per-NPC references, guards against running when the NPC or related state disallows it (dead, secondexecution, toranDead), and dispatches to movement/monologue routines, a special map/event sequence, or starts an activity depending on map and darionSchedule.",
+    "U8P_DARION::func02A8 and U8P_DARION::func0897 are patrol/engagement utilities: they inspect nearby item frames, attempt Npc::pathfind to targets, and on success either run short action demos (U8P_DARION::func0E9D) or emit contextual barks/monologues (U8P_DARION::func0411/U8P_DARION::func09F5) or call a generic animation helper (METHOD::func15E7). They spawn timed helper processes for follow-up behavior.",
+    "U8P_DARION::func0411, U8P_DARION::func09F5 and U8P_DARION::func0E9D are localized monologue/action routines that pick lines by distance and random rolls, honor personalization (darionMet), and call orientation/animation helpers (METHOD::func091C/METHOD::func15E7) while scheduling timed follow-ups via FREE::func1C19.",
+    "U8P_DARION::use is the player-facing conversation handler: it builds dynamic Ask menus (MenuSet/MenuAdd/MenuUnion), captures player choice, dispatches to shop (U8P_DARION::func10DB) or training/encounter (U8P_DARION::func17F2), and respects conversation guards (somebodyTalking, avatarTooCheap).",
+    "U8P_DARION::func10DB implements the shop flow: presents purchasable armor options, confirms payment via FREE::findNearbyItems, attempts to equip or hand over the purchased item (FREE::equipItem), and prints appropriate dialogue for success/failure.",
+    "U8P_DARION::func17F2 coordinates a short training/combat mini-game: it sets DarionTraining, spawns animations/timers, tracks U8P_DARION::hit counters (AvatarTookHit, DarionTookHit), enforces a cycle threshold based on Npc::getStr, and performs comprehensive cleanup (clear combat flags, reset refs, restore avatar stasis) when the session ends or the player runs away."
   ],
   "notable_control_flow": [
-    "DARION::schedule early-exits if Npc::isDead returns true or global guards (secondexecution or toranDead) are set.",
-    "Schedule selection is data-driven: FREE::28F9 is queried with multiple indices and its returns determine which parameter block and U8P_DARION::schedule id are selected; the chosen id is then spawned via METHOD::143A and saved to darionSchedule before spawning METHOD::133F.",
-    "enterFastArea first clears reference slots (resetRef) to ensure a fresh state, then branches by map id (Npc::getMap) to choose special behavior (map==3 special-case) or read the global darionSchedule to decide which runtime method to spawn.",
-    "The runtime loop (U8P_DARION::02A8) iterates item lists, uses Item::getFrame / Item::getStatus to filter targets, calls Npc::pathfind to approach a chosen target (suspending until completion), and conditionally spawns U8P_DARION::0411 to handle barks when nobody is talking; fallback behavior spawns orientation/animation methods and timers via FREE::1C19.",
-    "leaveFastArea deterministically frees the references set/reset during enterFastArea (no complex branching)."
+    "U8P_DARION::schedule: guards early-exit when Npc::isDead(this) is true, secondexecution == 1, or toranDead == 0; otherwise branches on FREE::getTimeOfDayPeriod() to set candidate flags then calls METHOD::func143A and on positive process_result() sets darionSchedule and calls METHOD::func133F.",
+    "U8P_DARION::enterFastArea: always resets reference slots (0x0205, 0x0204, 0x00F0, 0x0200) up-front, checks map==3 and devonInRule to pick a special event (U8P_DARION::func6227) or to spawn an activity (Npc::cSetActivity) and wait; otherwise dispatches by darionSchedule (1 -> U8P_DARION::func02A8, 3/4 -> U8P_DARION::func0897).",
+    "Movement helpers (U8P_DARION::func02A8/U8P_DARION::func0897): loop over candidate frame/index values (from Item::getFrame) and attempt Npc::pathfind; after suspend, process_result() directs either action (U8P_DARION::func0E9D) for certain indices or speech (U8P_DARION::func0411/U8P_DARION::func09F5) or fallback animation (METHOD::func15E7); each branch schedules a FREE::func1C19 spawn with different delays.",
+    "U8P_DARION::use conversation: constructs menu array (local2), runs ConversationLoop (Ask + SuspendAssign), uses strcmp on captured choice to call U8P_DARION::func10DB (shop) or U8P_DARION::func17F2 (training), and clears avatarTooCheap when present to abort."
   ],
   "open_questions": [
-    "Exact numeric meanings of the U8P_DARION::schedule ids written into darionSchedule (what each id corresponds to in game-facing behavior beyond the inferred mapping).",
-    "Precise semantics and contents of the reference slots (0205, 0204, 00F0, 0200): what objects or processes they reference at runtime.",
-    "Full set of dialog strings and the exact conditions that choose each line (beyond the high-level use of darionMet and randomness).",
-    "Behavior of the special map==3 branch (what DARION::6227/DARION::0897 do in detail) and why devonInRule affects it.",
-    "Exact return/result convention for spawned METHOD::143A / METHOD::133F (what return values indicate success vs failure and how U8P_DARION::schedule() interprets them)."
+    "Exact semantics of METHOD::func143A and METHOD::func133F called by U8P_DARION::schedule — they appear to compute/apply the U8P_DARION::schedule selection but their precise side effects are not recorded here.",
+    "Meaning and lifetime of flags secondexecution and toranDead: they are guards but the higher-level conditions that set/clear them and their intended gameplay triggers are not fully shown.",
+    "Precise mapping from Item::getFrame values to world markers/target behaviors (which frame indices correspond to which patrol points or animations) is inferred but not concretely enumerated.",
+    "Exact item identifiers/prices used by U8P_DARION::func10DB (shop): FREE::findNearbyItems and FREE::equipItem are called with local3/local4/local5 but the concrete payment item type and reward item ids are not explicit in this extraction."
   ],
   "main_function": {
     "name": "U8P_DARION::schedule",
     "execution_form": "process",
-    "purpose": "Choose and install Darion's high-level U8P_DARION::schedule/behavior variant by querying status data (FREE::28F9), spawn the installer method(s), and persist the chosen U8P_DARION::schedule id to the global darionSchedule so fast-area entry logic and runtime loops know which behavior to run.",
+    "purpose": "Maintain and compute Darion's current routine index based on time-of-day and guard flags, then store that index into darionSchedule and trigger follow-up scheduling logic.",
     "entry_conditions": [
-      "Invoked on Event 8 (scheduling event) to compute or re-compute Darion's U8P_DARION::schedule.",
-      "Runs only when Npc::isDead is false and global guards secondexecution and toranDead are not set (those cause an early exit)."
+      "Runs as a recurring NPC behavior/scheduler process.",
+      "Exits early if Npc::isDead(this) == true.",
+      "Exits early if global secondexecution == 1.",
+      "Exits early if global toranDead == 0.",
+      "Otherwise triggered periodically to re-evaluate FREE::getTimeOfDayPeriod() and update darionSchedule."
     ],
     "confidence": "high"
   },
@@ -38,43 +41,91 @@
     {
       "name": "U8P_DARION::schedule",
       "kind": "main",
-      "role": "Compute and install Darion's U8P_DARION::schedule; spawn installer methods and write darionSchedule.",
+      "role": "Compute and persist Darion's routine index (darionSchedule) from time-of-day and guard flags; orchestrates high-level state.",
       "confidence": "high"
     },
     {
       "name": "U8P_DARION::enterFastArea",
       "kind": "helper",
-      "role": "Handle player entering Darion's fast-area: reset refs, guard-check, branch by map or darionSchedule, and spawn the matching runtime behavior.",
+      "role": "Area-entry dispatcher: reset refs, guard, dispatch to behavior (movement, special event, or activity) based on map and darionSchedule.",
       "confidence": "high"
     },
     {
       "name": "U8P_DARION::leaveFastArea",
       "kind": "helper",
-      "role": "Handle player leaving the fast-area: free/clear reference slots created/used while active.",
+      "role": "Cleanup on fast-area exit — reset per-NPC reference slots to clear interaction state.",
       "confidence": "high"
     },
     {
-      "name": "U8P_DARION::02A8",
+      "name": "U8P_DARION::func02A8",
       "kind": "helper",
-      "role": "Runtime behavior loop for a U8P_DARION::schedule variant: select targets, pathfind, spawn interaction barks/animations, and set timers.",
-      "confidence": "high"
+      "role": "Patrol/engage utility: inspect item frames, attempt Npc::pathfind, on success run action (U8P_DARION::func0E9D) or speech (U8P_DARION::func0411) or animation helper (METHOD::func15E7), and spawn timers.",
+      "confidence": "medium"
     },
     {
-      "name": "U8P_DARION::0411",
+      "name": "U8P_DARION::func0897",
       "kind": "helper",
-      "role": "Short interaction/bark handler: pick a line (using randomness and darionMet), orient Darion, and call Item::bark.",
+      "role": "Alternate patrol/interaction utility similar to U8P_DARION::func02A8, but uses a different frame range and pathfind target; calls U8P_DARION::func09F5 for speech branch.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_DARION::func0411",
+      "kind": "helper",
+      "role": "Short contextual monologue/bark routine; distance- and random-aware, respects darionMet, calls orientation/animation helpers and schedules timed follow-ups.",
       "confidence": "high"
     },
     {
-      "name": "Npc::isDead",
-      "kind": "extern",
-      "role": "Engine check used to avoid scheduling or behavior for a dead NPC.",
+      "name": "U8P_DARION::func09F5",
+      "kind": "helper",
+      "role": "Greeting/ambient monologue routine used by U8P_DARION::func0897; distance- and random-aware, respects darionMet and spawns timers.",
       "confidence": "high"
     },
     {
-      "name": "FREE::28F9",
-      "kind": "extern",
-      "role": "External status/U8P_DARION::schedule lookup queried to decide which U8P_DARION::schedule variant to pick.",
+      "name": "U8P_DARION::func0E9D",
+      "kind": "helper",
+      "role": "Short action/demo animation sequence invoked when certain frame indices are reached (emits 'En guard!' / 'Watch this!' variants and schedules follow-ups).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DARION::func10DB",
+      "kind": "helper",
+      "role": "Shop submenu: build Ask menus, capture choices, confirm payment via FREE::findNearbyItems, and give/equip purchased items via FREE::equipItem.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DARION::func17F2",
+      "kind": "helper",
+      "role": "Training/combat sequence manager: sets DarionTraining, runs spawn/suspend cycles, tracks U8P_DARION::hit counters (AvatarTookHit, DarionTookHit), enforces thresholds, and performs cleanup and state restoration.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DARION::hit",
+      "kind": "helper",
+      "role": "Stub/process for handling incoming U8P_DARION::hit events (signature present but body unknown in excerpt).",
+      "confidence": "low"
+    },
+    {
+      "name": "U8P_DARION::gotHit",
+      "kind": "helper",
+      "role": "Stub/process for aftermath when NPC takes damage (signature present but body unknown in excerpt).",
+      "confidence": "low"
+    },
+    {
+      "name": "U8P_DARION::look",
+      "kind": "helper",
+      "role": "Look/examine handler: returns descriptive barks (name/title/dead variants) when the player inspects Darion.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DARION::use",
+      "kind": "helper",
+      "role": "Main player conversation handler: builds/updates menus, captures choice, dispatches to shop (U8P_DARION::func10DB), training (U8P_DARION::func17F2) or special replies, and respects conversation guards.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_DARION::func6227",
+      "kind": "helper",
+      "role": "Short special-case monologue/event used when map==3 and devonInRule==1; emits grunts/barks and spawns timers.",
       "confidence": "high"
     }
   ],
@@ -82,112 +133,154 @@
     "internal_calls": [
       {
         "caller": "U8P_DARION::schedule",
-        "callee": "U8P_DARION::enterFastArea",
-        "purpose": "Not a direct call in U8P_DARION::schedule itself but related: the U8P_DARION::schedule value written by U8P_DARION::schedule() is later read by enterFastArea to dispatch runtime behavior. (Data-flow relation.)",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_DARION::enterFastArea",
-        "callee": "U8P_DARION::02A8",
-        "purpose": "Spawn the active runtime loop when darionSchedule==1 (dispatch runtime behavior upon fast-area entry).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_DARION::enterFastArea",
-        "callee": "U8P_DARION::0897",
-        "purpose": "Spawn alternate runtime behavior when darionSchedule indicates other variants (inferred mapping: U8P_DARION::schedule==3 or 4 -> 0897).",
+        "callee": "METHOD::func143A",
+        "purpose": "Initiate or query platform scheduling after local U8P_DARION::schedule parameters are set; U8P_DARION::schedule waits on this and uses process_result() to decide whether to write darionSchedule.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_DARION::02A8",
-        "callee": "U8P_DARION::0411",
-        "purpose": "Spawn a short interaction/bark routine when nobody is talking or a target interaction is triggered.",
+        "caller": "U8P_DARION::schedule",
+        "callee": "METHOD::func133F",
+        "purpose": "Finalize or apply the chosen U8P_DARION::schedule when METHOD::func143A returned success; follow-up behavior trigger.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DARION::enterFastArea",
+        "callee": "U8P_DARION::func6227",
+        "purpose": "Invoke special event monologue when on map 3 and devonInRule == 1.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DARION::enterFastArea",
+        "callee": "Npc::cSetActivity",
+        "purpose": "Start a map-specific activity/process (map==3 non-special-case) and wait on it; used to hand control to an activity routine.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DARION::enterFastArea",
+        "callee": "U8P_DARION::func02A8",
+        "purpose": "Dispatch to patrol/engagement behavior when darionSchedule == 1.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DARION::enterFastArea",
+        "callee": "U8P_DARION::func0897",
+        "purpose": "Dispatch to alternate patrol behavior when darionSchedule == 3 or 4.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DARION::func02A8",
+        "callee": "U8P_DARION::func0E9D",
+        "purpose": "Perform a short action/demo when pathfind landed on certain frame indices (0/2/4/6 series).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DARION::func02A8",
+        "callee": "U8P_DARION::func0411",
+        "purpose": "Emit contextual barks when pathfind succeeded for non-action frames and nobodyTalking is false.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DARION::func0897",
+        "callee": "U8P_DARION::func09F5",
+        "purpose": "Emit contextual barks for the U8P_DARION::func0897 success/speech branch when nobodyTalking is false.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DARION::use",
+        "callee": "U8P_DARION::func10DB",
+        "purpose": "Open the shop submenu when the player selects the purchase option.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DARION::use",
+        "callee": "U8P_DARION::func17F2",
+        "purpose": "Start the training/sparring encounter flow when the player requests training.",
         "confidence": "high"
       }
     ],
     "external_calls": [
       {
         "caller": "U8P_DARION::schedule",
-        "callee": "Npc::isDead",
-        "purpose": "Guard: check if Darion is dead and early-exit scheduling if so.",
+        "callee": "FREE::getTimeOfDayPeriod",
+        "purpose": "Retrieve current time-of-day period to choose candidate U8P_DARION::schedule parameters.",
         "confidence": "high"
-      },
-      {
-        "caller": "U8P_DARION::schedule",
-        "callee": "FREE::28F9",
-        "purpose": "Query configuration/status table with small indices to determine which U8P_DARION::schedule variant/parameter block to choose.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_DARION::schedule",
-        "callee": "METHOD::143A (spawn)",
-        "purpose": "Spawn/install the chosen U8P_DARION::schedule behavior variant (installer/start routine).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_DARION::schedule",
-        "callee": "METHOD::133F (spawn)",
-        "purpose": "Spawn a complementary/secondary method after installing the U8P_DARION::schedule (continuation or secondary behavior).",
-        "confidence": "medium"
       },
       {
         "caller": "U8P_DARION::enterFastArea",
-        "callee": "U8P_DARION::resetRef",
-        "purpose": "Initialize/clear stored reference slots for the NPC to ensure fresh state on area entry.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_DARION::leaveFastArea",
-        "callee": "FREE::2A56",
-        "purpose": "Free or clear the reference slots when leaving the fast-area.",
+        "callee": "Npc::isDead",
+        "purpose": "Guard: skip behavior if the NPC is dead.",
         "confidence": "high"
       },
       {
         "caller": "U8P_DARION::enterFastArea",
         "callee": "Npc::getMap",
-        "purpose": "Decide behavior by current map (special-case handling when map==3).",
+        "purpose": "Branch behavior by current map (special handling when on map 3).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_DARION::enterFastArea",
-        "callee": "process Npc::cSetActivity",
-        "purpose": "Set a map-specific activity/state for Darion (used in the map==3 branch).",
+        "caller": "U8P_DARION::func02A8",
+        "callee": "Item::getFrame",
+        "purpose": "Read nearby item frame/index to choose a target/behavior index for pathfinding.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DARION::func02A8",
+        "callee": "Npc::pathfind",
+        "purpose": "Request movement to a target; script suspends and checks process_result() to select next action.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DARION::func02A8",
+        "callee": "FREE::func1C19",
+        "purpose": "Spawn timed helper processes used as delays or follow-up schedulers after actions/lines.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DARION::func0411",
+        "callee": "FREE::getDistanceBetween",
+        "purpose": "Measure proximity to player to select short vs ambient barks.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DARION::func0411",
+        "callee": "METHOD::func091C",
+        "purpose": "Orient/prepare NPC before delivering a bark/monologue.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_DARION::02A8",
-        "callee": "Item::getFrame",
-        "purpose": "Inspect candidate items' frames to filter/choose targets for interaction.",
+        "caller": "U8P_DARION::func0411",
+        "callee": "METHOD::func15E7",
+        "purpose": "Trigger animation/post-speech helper after some barks.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DARION::func10DB",
+        "callee": "FREE::findNearbyItems",
+        "purpose": "Verify player payment items before completing a purchase.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_DARION::02A8",
-        "callee": "Npc::pathfind",
-        "purpose": "Move Darion to a chosen target; the routine suspends until the pathfind completes and result is inspected.",
+        "caller": "U8P_DARION::func10DB",
+        "callee": "FREE::equipItem",
+        "purpose": "Transfer/equip the purchased item to the player or hold it for them on failure.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_DARION::02A8",
-        "callee": "FREE::1C19",
-        "purpose": "Spawn a timer/delay after actions (used to pace behavior after barks or movement).",
+        "caller": "U8P_DARION::func17F2",
+        "callee": "setAvatarInStasis",
+        "purpose": "Freeze/unfreeze the player avatar during the training encounter.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_DARION::0411",
-        "callee": "Item::getStatus",
-        "purpose": "Check item flags/status used to select dialog variants or special conditions for barks.",
-        "confidence": "high"
+        "caller": "U8P_DARION::func17F2",
+        "callee": "Npc::clrImmortal",
+        "purpose": "Clear Darion's temporary immortal flag as part of training cleanup.",
+        "confidence": "medium"
       },
       {
-        "caller": "U8P_DARION::0411",
-        "callee": "urandom",
-        "purpose": "Pick a random variant of a speech line or action to vary dialog.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_DARION::0411",
-        "callee": "Item::bark",
-        "purpose": "Emit the chosen dialog string to the player/viewer.",
+        "caller": "U8P_DARION::func6227",
+        "callee": "FREE::func1C19",
+        "purpose": "Spawn timed delays before emitting grunts/barks in the special map event.",
         "confidence": "high"
       }
     ]
@@ -195,41 +288,81 @@
   "global_flags": {
     "reads": [
       {
-        "name": "secondexecution",
-        "likely_effect": "Acts as a guard preventing re-scheduling or re-dispatch when set; U8P_DARION::schedule() and enterFastArea early-exit if true.",
-        "confidence": "high"
-      },
-      {
-        "name": "toranDead",
-        "likely_effect": "Global condition that blocks Darion's scheduling/behavior when set (early-exit guard).",
-        "confidence": "high"
-      },
-      {
-        "name": "devonInRule",
-        "likely_effect": "Used in enterFastArea with map==3 to select a special behavior variant for Darion (map-specific rule).",
-        "confidence": "medium"
-      },
-      {
-        "name": "darionSchedule",
-        "likely_effect": "Selector persisted by U8P_DARION::schedule() and read by enterFastArea to decide which runtime method to spawn on area entry.",
-        "confidence": "high"
-      },
-      {
         "name": "darionMet",
-        "likely_effect": "Dialog state read by U8P_DARION::0411 to prefer 'you're back' style greeting lines versus initial dialog.",
+        "likely_effect": "Personalize barks and dialog choices (alternate lines when the player has met Darion).",
         "confidence": "high"
       },
       {
         "name": "somebodyTalking",
-        "likely_effect": "Concurrency guard read by U8P_DARION::02A8 to avoid speaking over other dialog; influences whether U8P_DARION::0411 is spawned.",
+        "likely_effect": "Suppresses speech branches; when true functions avoid calling monologue helpers and U8P_DARION::use animation helpers instead to avoid overlapping dialogue.",
         "confidence": "high"
+      },
+      {
+        "name": "devonInRule",
+        "likely_effect": "Triggers a special event/monologue (U8P_DARION::func6227) when Darion is on map 3 and this flag is set.",
+        "confidence": "high"
+      },
+      {
+        "name": "secondexecution",
+        "likely_effect": "Used as a guard in U8P_DARION::schedule/U8P_DARION::enterFastArea to skip or alter execution—likely prevents duplicate re-entry or repeated scheduling.",
+        "confidence": "medium"
+      },
+      {
+        "name": "toranDead",
+        "likely_effect": "If zero prevents U8P_DARION::schedule/entry behavior (guard against running when a related character is dead).",
+        "confidence": "medium"
+      },
+      {
+        "name": "avatarTooCheap",
+        "likely_effect": "Conversation guard: if set it causes U8P_DARION::use to abort and is then cleared; used to block shop interactions due to insufficient funds/behavior.",
+        "confidence": "medium"
+      },
+      {
+        "name": "hasHeart",
+        "likely_effect": "When true forces emergency dialog/menu path in U8P_DARION::use (alters initial greeting and menu availability).",
+        "confidence": "medium"
+      },
+      {
+        "name": "spokeAboutJenna",
+        "likely_effect": "Toggles a dialog branch about Darion's daughter; affects menu text and options in U8P_DARION::use.",
+        "confidence": "medium"
+      },
+      {
+        "name": "hydrosFree",
+        "likely_effect": "Influences greeting variants when darionMet is set (politeness/greeting style).",
+        "confidence": "low"
+      },
+      {
+        "name": "hasAvaName",
+        "likely_effect": "Enables personalized greeting using the avatar's name.",
+        "confidence": "low"
       }
     ],
     "writes": [
       {
         "name": "darionSchedule",
-        "likely_effect": "Written by DARION::schedule to persist the chosen U8P_DARION::schedule id so runtime and enterFastArea use the same behavior variant.",
+        "likely_effect": "Persistent NPC U8P_DARION::schedule index set by U8P_DARION::schedule; determines which patrol/behavior helper U8P_DARION::enterFastArea calls.",
         "confidence": "high"
+      },
+      {
+        "name": "DarionTraining",
+        "likely_effect": "Marks that the training/combat sequence is active while U8P_DARION::func17F2 runs; cleared on cleanup.",
+        "confidence": "high"
+      },
+      {
+        "name": "AvatarTookHit",
+        "likely_effect": "Read/cleared inside U8P_DARION::func17F2 to detect when the avatar was U8P_DARION::hit during training and increment counters.",
+        "confidence": "high"
+      },
+      {
+        "name": "DarionTookHit",
+        "likely_effect": "Read/cleared inside U8P_DARION::func17F2 to detect when Darion was U8P_DARION::hit during training and increment counters.",
+        "confidence": "high"
+      },
+      {
+        "name": "avatarTooCheap",
+        "likely_effect": "Cleared by U8P_DARION::use when detected to abort a conversation/shop flow (prevents repeated cheap behavior).",
+        "confidence": "medium"
       }
     ]
   },
@@ -240,11 +373,11 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "DARION::schedule",
-    "behavior_summary_one_liner": "This script implements Darion's scheduling and fast-area behaviors: choosing a high-level U8P_DARION::schedule, storing it, and dispatching a runtime behavior when the player enters Darion's proximity (fast-area).",
+    "main_function": "U8P_DARION::schedule",
+    "behavior_summary_one_liner": "This script implements the NPC Darion's runtime behavior, area-entry dispatcher, conversation/shop interactions, training/combat mini-sequence, and a set of short monologue/bark utilities used during patrol/engagement.",
     "external_call_count": 14,
-    "flag_read_count": 6,
-    "flag_write_count": 1
+    "flag_read_count": 10,
+    "flag_write_count": 5
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

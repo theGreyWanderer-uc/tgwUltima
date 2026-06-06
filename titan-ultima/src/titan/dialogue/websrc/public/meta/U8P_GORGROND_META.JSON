@@ -3,31 +3,33 @@
   "source_of_truth": "dialogue/json/U8P_GORGROND.json",
   "file": "U8P_GORGROND",
   "behavior_summary": [
-    "Represents the NPC Gorgrond's interactive AI: handles being targeted by spells, reacting to theft, player 'look' descriptions, scheduled idle behavior, fast-area entry/exit triggers, and direct 'use' (talk/interact) flows.",
-    "When Gorgrond is U8P_GORGROND::cast upon (Event 11) the script marks the NPC as hostile (sets gorgrondMad) and spawns the spell-combat resolver to handle effects.",
-    "Theft by the avatar increments a warning counter (gorgrondWarned) and escalates from verbal warnings to immobilizing the avatar (stasis) and setting Gorgrond's combat target on repeated offenses; directional reactions are spawned toward stolen items.",
-    "Look and use interactions produce context-sensitive dialog/Ui behavior: first-meeting flags (gorgrondMet), name/job flags (gorgrondName, gorgrondJob, gorgrondAvaName), and story flags (acolyteKilled) influence available dialog and spawned conversation or response processes.",
-    "Schedule and fast-area handlers spawn movement/behavior processes (MOVE/METHOD spawns) unless suppressed by a global scene flag (inDaemonScene). Fast-area enter can immediately set the avatar as target if avatarMasterSorcerer is set."
+    "This script implements the NPC Gorgrond's interaction, examination, AI scheduling, theft response, fast-area triggers, and reaction to spells.",
+    "U8P_GORGROND::cast (process) marks Gorgrond as enraged (gorgrondMad = 3) and delegates to the combat spell loop (SPELCMBT::combatSpellLoop) so the NPC reacts to being targeted by spells.",
+    "U8P_GORGROND::use (process) is the player-interaction entry: it opens/closes the NPC gump, begins a conversation and dispatches into several dialogue branches depending on global flags (acolyteKilled, gorgrondMad) and companion/alive checks.",
+    "U8P_GORGROND::func05A8 and U8P_GORGROND::func24D8 are the primary conversation/menu routines: they build and mutate option lists, capture player choices, set gorgrondMet on first meeting, and route to short monologues (U8P_GORGROND::func14F2, U8P_GORGROND::func17D7) or longer branches.",
+    "U8P_GORGROND::AvatarStoleSomething (process) applies a stepped theft response: increments gorgrondWarned, gives escalating spoken warnings and ultimately immobilizes and attacks the avatar (setAvatarInStasis, Npc::setTarget) when thresholds are exceeded or in an immediate-attack case.",
+    "U8P_GORGROND::look provides examine text variants (name/title/dead) controlled by gorgrondName and gorgrondJob. U8P_GORGROND::schedule, U8P_GORGROND::enterFastArea, and U8P_GORGROND::leaveFastArea provide periodic AI, movement initiation and cleanup behavior."
   ],
   "notable_control_flow": [
-    "Event-driven: each entry point corresponds to an in-game event (U8P_GORGROND::cast, look, use, schedule, enter/leave fast-area, AvatarStoleSomething) and mostly spawns other processes rather than performing long inline computation.",
-    "Escalation flow in AvatarStoleSomething: checks and increments gorgrondWarned, branches across warning->strong warning->stasis/attack outcomes, and spawns movement/attack behaviors when thresholds are reached.",
-    "Spawn-based delegation: many actions are implemented by spawning external METHODS (e.g., SPELCMBT::084D, MOVE::0080, METHOD::091C, METHOD::143A) and then suspending, with the spawned process' return used to choose follow-up actions in schedule and dialog flows.",
-    "Conditional suppression: global inDaemonScene prevents movement/spawn behavior from schedule and enterFastArea; Npc::isDead checks prevent most actions when Gorgrond is dead.",
-    "Dialog branching uses Item::ask result strings and sets persistent story/dialog flags (gorgrondMet, gorgrondName, gorgrondAvaName, gorgrondMad) to influence future interactions."
+    "U8P_GORGROND::cast immediately writes gorgrondMad = 3 then calls SPELCMBT::combatSpellLoop and suspends (combat/spell lifecycle handled externally).",
+    "U8P_GORGROND::use begins a conversation (BeginConversation), then chooses a dialogue helper: U8P_GORGROND::func05A8 (first meeting), U8P_GORGROND::func1A5E (angry branch), U8P_GORGROND::func1E03 (companion-alive random monologue), U8P_GORGROND::func24D8 (main conversation loop) or fallback U8P_GORGROND::func22C2.",
+    "Conversation helpers frequently U8P_GORGROND::use MenuSet/Ask/SuspendAssign and strcmp on captured answers to dispatch sub-branches; menus are repeatedly unioned/removed and reordered (FREE::moveToEndOfList) until the player chooses a farewell option.",
+    "U8P_GORGROND::AvatarStoleSomething reads and increments gorgrondWarned to step through verbal warnings and ultimately set the NPC's target and freeze the avatar; a local match (local1 == param1) can trigger immediate attack bypassing warnings.",
+    "U8P_GORGROND::schedule sets local timer/state values, calls external U8P_GORGROND::schedule helper METHOD::func143A, suspends, and on process_result() true calls METHOD::func133F — i.e., a sleep/wake follow-up pattern."
   ],
   "open_questions": [
-    "Exact numeric thresholds and textual strings used for each gorgrondWarned level are inferred but not explicitly enumerated (what exact counts map to which escalation step?).",
-    "Precise meanings of some spawned METHODs (e.g., METHOD::091C, METHOD::133F, METHOD::143A, METHOD::1090) are inferred (movement, follow-up behaviors, UI handling) but their internal behavior is external to this script.",
-    "Whether the U8P_GORGROND::cast parameter is the spell id, caster pid, or an encoded spell-context word is not definitively known (it is passed to SPELCMBT::084D and treated as a uword).",
-    "Some internal helper names (e.g., GORGROND::045E referenced by spawn in theft flow) appear in the disassembly but are not fully documented here; their responsibilities are inferred."
+    "What exact meaning/value space does the U8P_GORGROND::cast(uword) parameter hold (spell id, caster id, or effect type)? Inference: likely spell id/source (confidence: medium).",
+    "What external behavior does METHOD::func091C perform when called from U8P_GORGROND::AvatarStoleSomething (inventory recovery, bookkeeping, or quest state)? (low confidence).",
+    "Some numeric/global flags (e.g., ticked, gorgrondGroveled) are used locally — are they persisted globally across saves or meant to be transient counters? (medium confidence).",
+    "Precise side effects of METHOD::func133F, METHOD::func143A and METHOD::func15E7: they appear to manage scheduling/state changes but their full effects are external to this script (low confidence)."
   ],
   "main_function": {
     "name": "U8P_GORGROND::cast",
     "execution_form": "process",
-    "purpose": "Handle being targeted by a spell: mark Gorgrond hostile and hand off detailed spell-combat handling to the spell-combat subsystem.",
+    "purpose": "Handle a spell-casting event targeted at Gorgrond: mark the NPC enraged and hand off to the combat spell lifecycle handler so the NPC responds appropriately to the spell/effect.",
     "entry_conditions": [
-      "Event 11 (U8P_GORGROND::cast) — invoked when a spell is U8P_GORGROND::cast on/targeting Gorgrond; receives a uword parameter (likely spell or caster context)."
+      "Invoked by the engine when a spell or combat magic effect is U8P_GORGROND::cast on or targeted at this NPC (process type 0x021D).",
+      "Takes a single uword parameter (likely identifies the spell or source)."
     ],
     "confidence": "high"
   },
@@ -35,174 +37,210 @@
     {
       "name": "U8P_GORGROND::cast",
       "kind": "main",
-      "role": "Mark Gorgrond hostile and spawn spell-combat resolution (entry for Event 11).",
+      "role": "Spell-event handler that sets gorgrondMad and enters the combat spell handling loop (SPELCMBT::combatSpellLoop).",
       "confidence": "high"
     },
     {
       "name": "U8P_GORGROND::AvatarStoleSomething",
       "kind": "helper",
-      "role": "React to avatar stealing an item: free region info, compute direction to stolen item, bark warnings, increment gorgrondWarned, possibly set stasis/target and spawn retaliatory behaviors.",
+      "role": "Theft response process: increments gorgrondWarned, issues staged warnings and can force attack/immobilize the avatar.",
       "confidence": "high"
     },
     {
       "name": "U8P_GORGROND::look",
       "kind": "helper",
-      "role": "Produce context-aware 'look' descriptions based on flags (gorgrondName, gorgrondJob) and death state.",
+      "role": "Examine/U8P_GORGROND::look handler that returns short barks depending on name/job flags and death state.",
       "confidence": "high"
     },
     {
       "name": "U8P_GORGROND::schedule",
       "kind": "helper",
-      "role": "Periodic behavior scheduler: if alive and not inDaemonScene, spawn movement/behavior methods to drive idle/patrol actions.",
+      "role": "Periodic AI scheduler: prepares local U8P_GORGROND::schedule state, calls external U8P_GORGROND::schedule methods, and follows up after suspend/process_result().",
       "confidence": "high"
     },
     {
       "name": "U8P_GORGROND::enterFastArea",
       "kind": "helper",
-      "role": "Fast-area entry trigger: set region info, optionally set avatar as target (if avatarMasterSorcerer) or spawn movement reaction (if not suppressed).",
+      "role": "Fast-area trigger: initiates movement or sets target on avatar when conditions are met (not dead, avatarMasterSorcerer, not inDaemonScene).",
       "confidence": "high"
     },
     {
       "name": "U8P_GORGROND::leaveFastArea",
       "kind": "helper",
-      "role": "Fast-area exit cleanup: free/cleanup region info set during enterFastArea.",
+      "role": "Fast-area exit cleanup; resets an internal reference via FREE::resetRef.",
       "confidence": "high"
     },
     {
       "name": "U8P_GORGROND::use",
       "kind": "helper",
-      "role": "Handle player 'use' interaction (talk/UI): route to dialog flows, open/close gumps, spawn dialog/behavior processes and set dialog/story flags.",
+      "role": "Player-U8P_GORGROND::use entry: open/close gump, start conversation, and dispatch to dialogue branches based on flags and world state.",
       "confidence": "high"
     },
     {
-      "name": "U8P_GORGROND::05A8",
+      "name": "U8P_GORGROND::func05A8",
       "kind": "helper",
-      "role": "Dialog/first-meeting routine: present initial dialog choices, set gorgrondMet/gorgrondName/gorgrondAvaName and adjust gorgrondMad based on responses.",
+      "role": "Initial greeting / first-contact conversation: builds menus, sets gorgrondMet, captures player choices and branches accordingly.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_GORGROND::func24D8",
+      "kind": "helper",
+      "role": "Primary conversation loop that builds dynamic menus, handles naming/farewell, and dispatches to smaller monologues.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_GORGROND::func1A5E",
+      "kind": "helper",
+      "role": "Angry/hostile conversation branch used when gorgrondMad is set; allows de-escalation or escalation to attack.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_GORGROND::func1E03",
+      "kind": "helper",
+      "role": "Randomized monologue chooser; includes grief/escalation behavior when acolyteKilled indicates a specific state.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_GORGROND::func14F2",
+      "kind": "helper",
+      "role": "Short farewell monologue with randomized variants and address token selection.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_GORGROND::func17D7",
+      "kind": "helper",
+      "role": "Short rude/insult monologue that increments gorgrondMad.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_GORGROND::func22C2",
+      "kind": "helper",
+      "role": "Contrite/polite monologue branch that sets gorgrondGroveled and calls external METHOD::func15E7 for side effects.",
       "confidence": "medium"
+    },
+    {
+      "name": "U8P_GORGROND::func2497",
+      "kind": "helper",
+      "role": "Utility to reorder option lists (move a specific string to end) used when building menus.",
+      "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
-        "caller": "U8P_GORGROND::AvatarStoleSomething",
-        "callee": "U8P_GORGROND::045E",
-        "purpose": "Spawn follow-up Gorgrond behavior after theft escalation (inferred continuation of retaliatory behavior).",
+        "caller": "U8P_GORGROND::cast",
+        "callee": "SPELCMBT::combatSpellLoop",
+        "purpose": "Hand off to the combat-spell lifecycle and behavior while Gorgrond is under a spell/effect.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GORGROND::use",
+        "callee": "U8P_GORGROND::func05A8",
+        "purpose": "Route to initial greeting dialog when acolyteKilled == 0 or first-contact conditions apply.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GORGROND::use",
+        "callee": "U8P_GORGROND::func1A5E",
+        "purpose": "Route to angry/hostile dialog if gorgrondMad is set.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GORGROND::use",
+        "callee": "U8P_GORGROND::func1E03",
+        "purpose": "Route to randomized monologue when a particular companion/context is present (SP-00h alive).",
         "confidence": "medium"
       },
       {
         "caller": "U8P_GORGROND::use",
-        "callee": "U8P_GORGROND::05A8",
-        "purpose": "Spawn or route into initial dialog/meeting subroutine when the player uses/talks to Gorgrond.",
-        "confidence": "medium"
+        "callee": "U8P_GORGROND::func24D8",
+        "purpose": "Route to the main conversation loop as a primary conversation branch.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GORGROND::func05A8",
+        "callee": "U8P_GORGROND::func17D7",
+        "purpose": "Fallback rude response or short monologue when menus/options don't match explicit branches.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GORGROND::func24D8",
+        "callee": "U8P_GORGROND::func2497",
+        "purpose": "Adjust/reorder conversation menu before presenting it (e.g., move Farewell to end).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GORGROND::AvatarStoleSomething",
+        "callee": "U8P_GORGROND::func045E",
+        "purpose": "Finalization/follow-up after theft response sequence (exact effect unclear).",
+        "confidence": "low"
       }
     ],
     "external_calls": [
       {
         "caller": "U8P_GORGROND::cast",
-        "callee": "SPELCMBT::084D",
-        "purpose": "Spawn the spell-combat/resolution process passing caller pid, incoming spell/caster param, and Gorgrond for effect resolution.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GORGROND::AvatarStoleSomething",
-        "callee": "FREE::2A56",
-        "purpose": "Free previously pushed region/info structure as cleanup at the start of theft handling.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GORGROND::AvatarStoleSomething",
-        "callee": "Item::getDirToItem",
-        "purpose": "Compute direction from Gorgrond to the stolen item to parameterize a directional reaction/movement spawn.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GORGROND::AvatarStoleSomething",
-        "callee": "METHOD::091C",
-        "purpose": "Spawn a directional movement/animation/attack using the computed direction (reaction to theft).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GORGROND::AvatarStoleSomething",
-        "callee": "U8P_GORGROND::setAvatarInStasis",
-        "purpose": "Immobilize the avatar as a punitive response when theft escalation reaches a certain level.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GORGROND::AvatarStoleSomething",
-        "callee": "Item::bark",
-        "purpose": "Make Gorgrond speak warning or threatening lines at the avatar during theft escalation.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GORGROND::AvatarStoleSomething",
-        "callee": "Npc::setTarget",
-        "purpose": "Set the avatar as Gorgrond's combat/attention target when escalation requires attack/reactive focus.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GORGROND::look",
-        "callee": "Npc::isDead",
-        "purpose": "Check if Gorgrond is dead to vary the look/description strings accordingly.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GORGROND::schedule",
-        "callee": "METHOD::143A",
-        "purpose": "Spawn a scheduled behavior process and inspect its result to decide further scheduled actions.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GORGROND::schedule",
-        "callee": "METHOD::133F",
-        "purpose": "Spawn as a follow-up scheduled behavior depending on METHOD::143A's returned process result.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_GORGROND::enterFastArea",
-        "callee": "Npc::setTarget",
-        "purpose": "Immediately set the avatar as target when avatarMasterSorcerer is set (fast-area reaction).",
+        "callee": "SPELCMBT::combatSpellLoop",
+        "purpose": "External combat-spell loop handler that runs while the NPC is under a spell effect.",
         "confidence": "high"
       },
       {
         "caller": "U8P_GORGROND::enterFastArea",
-        "callee": "MOVE::0080",
-        "purpose": "Spawn a fast movement/react behavior when avatar enters the area and movement isn't suppressed by inDaemonScene.",
+        "callee": "MOVE::func0080",
+        "purpose": "Initiate movement or pathing in response to a fast-area trigger when appropriate.",
         "confidence": "high"
       },
       {
         "caller": "U8P_GORGROND::leaveFastArea",
-        "callee": "FREE::2A56",
-        "purpose": "Free/cleanup region info set on enterFastArea (cleanup on leaving the trigger region).",
+        "callee": "FREE::resetRef",
+        "purpose": "Clear internal reference associated with the fast-area (cleanup on exit).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_GORGROND::use",
-        "callee": "Item::closeGump",
-        "purpose": "Close an existing interaction UI when use indicates closing the gump (dead/closed states).",
+        "caller": "U8P_GORGROND::AvatarStoleSomething",
+        "callee": "METHOD::func091C",
+        "purpose": "Handle theft bookkeeping or inventory consequences early in the theft handler (inferred).",
+        "confidence": "low"
+      },
+      {
+        "caller": "U8P_GORGROND::AvatarStoleSomething",
+        "callee": "setAvatarInStasis",
+        "purpose": "Freeze/immobilize avatar when theft escalation reaches attack threshold or immediate-attack condition is met.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GORGROND::AvatarStoleSomething",
+        "callee": "Npc::setTarget",
+        "purpose": "Set Gorgrond's combat target to the avatar to begin attacking after escalation.",
         "confidence": "high"
       },
       {
         "caller": "U8P_GORGROND::use",
         "callee": "Item::openGump",
-        "purpose": "Open a dialog/interaction UI with a specific gump id when starting conversation/interaction.",
+        "purpose": "Open NPC gump/UI when player interacts.",
         "confidence": "high"
       },
       {
         "caller": "U8P_GORGROND::use",
-        "callee": "Item::ask",
-        "purpose": "Present dialog choices to the player and branch on the returned string for conversation flow.",
+        "callee": "Item::closeGump",
+        "purpose": "Close NPC gump/UI when appropriate.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_GORGROND::use",
-        "callee": "METHOD::1090",
-        "purpose": "Spawn a UI/behavior method as part of the use/dialog flow (exact role inferred: dialog continuation/UI update).",
+        "caller": "U8P_GORGROND::func1E03",
+        "callee": "Npc::setTarget",
+        "purpose": "Make Gorgrond hostile after repeated grief interactions (when ticked exceeds thresholds).",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_GORGROND::AvatarStoleSomething",
-        "callee": "Item::bark",
-        "purpose": "Issue short speech lines (warnings/threats) during theft handling.",
+        "caller": "U8P_GORGROND::func24D8",
+        "callee": "FREE::moveToEndOfList",
+        "purpose": "Reorder menu so Farewell appears last before presenting the Ask to the player.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GORGROND::func1E03",
+        "callee": "FREE::randomInRange0",
+        "purpose": "Choose a random monologue variant when acolyteKilled isn't triggering the grief sequence.",
         "confidence": "high"
       }
     ]
@@ -210,84 +248,85 @@
   "global_flags": {
     "reads": [
       {
-        "name": "gorgrondWarned",
-        "likely_effect": "Read to determine current warning count for theft; controls escalation logic in AvatarStoleSomething.",
+        "name": "acolyteKilled",
+        "likely_effect": "Chooses grief/accusation vs. normal conversation branches in U8P_GORGROND::use() and U8P_GORGROND::func1E03.",
         "confidence": "high"
       },
       {
         "name": "gorgrondMad",
-        "likely_effect": "Checked to influence dialog/behavior and to determine whether Gorgrond is already hostile (affects spawn choices in use/other handlers).",
+        "likely_effect": "Selects angry/hostile dialogue branches and variants; used to escalate or gate aggressive menu options.",
         "confidence": "high"
       },
       {
         "name": "gorgrondName",
-        "likely_effect": "Controls whether Gorgrond's full name/title or a shorter label is used in look/dialog outputs.",
+        "likely_effect": "Controls whether examine/U8P_GORGROND::look output includes Gorgrond's full name and influences dialogue addressing.",
         "confidence": "high"
       },
       {
         "name": "gorgrondJob",
-        "likely_effect": "Controls whether job/title ('Sorcerer'/'mage') appears in look descriptions.",
-        "confidence": "high"
-      },
-      {
-        "name": "avatarMasterSorcerer",
-        "likely_effect": "If set, causes immediate targeting of the avatar when they enter Gorgrond's fast area.",
+        "likely_effect": "Controls whether job/title is included in U8P_GORGROND::look/examination text and may add job-related menu options.",
         "confidence": "high"
       },
       {
         "name": "inDaemonScene",
-        "likely_effect": "Suppresses schedule and fast-area movement/spawn behavior when in special scenes (prevents autonomous actions).",
-        "confidence": "high"
-      },
-      {
-        "name": "acolyteKilled",
-        "likely_effect": "Alters dialog/interaction branching in use flows (different responses or behaviors if an acolyte is dead).",
+        "likely_effect": "Alters U8P_GORGROND::schedule and U8P_GORGROND::enterFastArea behavior (skip movement/alternative scheduling in special scene).",
         "confidence": "medium"
       },
       {
-        "name": "gorgrondMet",
-        "likely_effect": "Indicates whether the avatar has met Gorgrond before; changes greeting/dialog paths.",
+        "name": "avatarMasterSorcerer",
+        "likely_effect": "If true in U8P_GORGROND::enterFastArea, causes Gorgrond to immediately set his target to the avatar (authority relationship).",
+        "confidence": "medium"
+      },
+      {
+        "name": "gorgrondDung",
+        "likely_effect": "Changes form of address to the insult 'Dungbreath' in dialogues that choose addressing token.",
+        "confidence": "high"
+      },
+      {
+        "name": "gorgrondAvaName",
+        "likely_effect": "When set, causes the NPC to U8P_GORGROND::use the avatar's real name (getName()) in dialogues and menus.",
         "confidence": "high"
       }
     ],
     "writes": [
       {
         "name": "gorgrondMad",
-        "likely_effect": "Set (written to value 3 in U8P_GORGROND::cast) to mark Gorgrond as hostile/angry, causing aggressive behavior and altered dialog.",
+        "likely_effect": "Set to 3 by U8P_GORGROND::cast() (force enraged/hostile). Also incremented by insult/angry routines to escalate hostility or reset in de-escalation path.",
         "confidence": "high"
       },
       {
         "name": "gorgrondWarned",
-        "likely_effect": "Incremented during theft handling to track warnings and drive escalation to stasis/attack.",
+        "likely_effect": "Incremented by U8P_GORGROND::AvatarStoleSomething to track theft warnings and determine when to escalate to attack.",
         "confidence": "high"
       },
       {
         "name": "gorgrondMet",
-        "likely_effect": "Set on first meeting to change future greetings and dialog options.",
+        "likely_effect": "Set on first contact in U8P_GORGROND::func05A8 so future greetings U8P_GORGROND::use the met-state and altered menu options.",
         "confidence": "high"
       },
       {
-        "name": "gorgrondAvaName",
-        "likely_effect": "Set when Gorgrond learns/accepts the avatar's name (affects personalized dialog/look behavior).",
+        "name": "ticked",
+        "likely_effect": "Read/written in U8P_GORGROND::func1E03 to count grief interactions and determine when to escalate to attack (Npc::setTarget).",
         "confidence": "medium"
       },
       {
-        "name": "gorgrondName",
-        "likely_effect": "Set during conversation to force display of Gorgrond's name/title in future look/dialog outputs.",
+        "name": "gorgrondGroveled",
+        "likely_effect": "Set by U8P_GORGROND::func22C2 to mark that Gorgrond has given a contrite/apology response; prevents repetition of the longer apology variant.",
         "confidence": "medium"
       }
     ]
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "animation",
-    "guard"
+    "menu",
+    "conversation",
+    "combat",
+    "cleanup"
   ],
   "quick_facts": {
     "main_function": "U8P_GORGROND::cast",
-    "behavior_summary_one_liner": "Represents the NPC Gorgrond's interactive AI: handles being targeted by spells, reacting to theft, player 'look' descriptions, scheduled idle behavior, fast-area entry/exit triggers, and direct 'use' (talk/interact) flows.",
-    "external_call_count": 18,
+    "behavior_summary_one_liner": "This script implements the NPC Gorgrond's interaction, examination, AI scheduling, theft response, fast-area triggers, and reaction to spells.",
+    "external_call_count": 11,
     "flag_read_count": 8,
     "flag_write_count": 5
   },

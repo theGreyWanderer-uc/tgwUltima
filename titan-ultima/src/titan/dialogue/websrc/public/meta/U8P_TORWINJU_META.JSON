@@ -3,29 +3,27 @@
   "source_of_truth": "dialogue/json/U8P_TORWINJU.json",
   "file": "U8P_TORWINJU",
   "behavior_summary": [
-    "Handles an item's 'U8P_TORWINJU::hatch' event: if the item has not already been hatched (quality == 0) the script scans a scripted collection/sequence and, when a matching entry is found, activates the item and marks it as hatched.",
-    "On a successful match the handler calls Item::use(item) to trigger the item's effect, sets the item's quality to 1 via Item::setQuality(item, 1) to record it as hatched, requests an NPC animation (Npc::doAnim) targeted at a pid from the script context, waits briefly (suspend/delay) to allow the animation/effects, and calls Item::use(item) again (likely to finalize consumption or spawn results).",
-    "The scan is implemented as a constructed loopscr/loop/loopnext sequence using a local loop index; the loop's tokens and matching criteria are inferred from low-level opcodes and appear to compare scripted entries against constants/operators."
+    "U8P_TORWINJU::hatch is a short-running process that implements an item 'U8P_TORWINJU::hatch' sequence. It checks the current item's quality and, only if quality == 0, performs a sequence of calls to Item::use, Item::setQuality(0x01), starts an NPC animation via Npc::doAnim, waits (suspend) for the animation/process to complete, then calls Item::use again and suspends — marking the item as 'hatched' (quality set to 1) and coordinating visual/effect timing with an NPC animation.",
+    "The routine operates on the implicit item instance 'this' and uses stack slots (SP-00h, SP+08h) as transient pointers/contexts passed to the external calls. Temporary locals capture process return values and process ids to coordinate waits."
   ],
   "notable_control_flow": [
-    "Guard/early-exit: Immediately reads Item::getQuality(item_instance) and returns without action if quality != 0 (prevents re-hatching).",
-    "Iterative scan: A loopscr-style loop iterates over scripted tokens/entries controlled by local loop_index; each iteration compares token/operator patterns until a match condition is found.",
-    "On-match sequence: Item::use -> Item::setQuality(item, 1) -> Npc::doAnim(pid, ...) -> suspend/delay -> Item::use -> suspend. After the sequence the loop continues or ends based on loop control.",
-    "No observable writes to global flags in this handler (behavior is localized to the passed item and an NPC animation)."
+    "U8P_TORWINJU::hatch begins as a process (process type 0x0210) and first queries Item::getQuality(this).",
+    "If Item::getQuality(this) != 0 the function exits without performing the U8P_TORWINJU::hatch sequence (guard condition).",
+    "When quality == 0 and 'this' is present, the function: Item::use(item pointer) -> Item::setQuality(1,this) -> start Npc::doAnim(...) (capture pid/temp) -> suspend/wait -> Item::use(...) -> suspend; suspends indicate deliberate waits for animations/effects to finish before proceeding or terminating."
   ],
   "open_questions": [
-    "What exactly is being iterated by the loopscr/loop sequence (inventory contents, item-subentries, or embedded script tokens)? This is inferred but not explicit.",
-    "What precise matching criteria/tokens are being evaluated (operators like '=' '@' and an int '%' are present in the disassembly but their high-level semantics are unclear)?",
-    "What is the exact source and semantic role of the pid passed to Npc::doAnim (which actor is animated and why)? It is pushed from script context but its origin is not explicitly named.",
-    "Why is Item::use called twice (first to 'activate' and second likely to finalize or consume)? The decompiled sequence shows two calls but the game-level reason is inferred."
+    "What object or NPC reference is stored in SP+08h (passed to Npc::doAnim)? It appears to be the animation target/context but is not explicitly named in the decompilation.",
+    "Why is Item::use invoked both before and after Item::setQuality? The first call may trigger pre-U8P_TORWINJU::hatch effects and the second post-U8P_TORWINJU::hatch effects; this is inferred but not certain.",
+    "How is the captured pid compared or used after Npc::doAnim beyond the observed suspend nodes (the decompiled comparison/pid usage is low-level and its exact branching behavior is unclear).",
+    "Are there any global flags or game-state side effects outside the item instance (none were found, but broader game rules may be affected elsewhere)."
   ],
   "main_function": {
     "name": "U8P_TORWINJU::hatch",
     "execution_form": "process",
-    "purpose": "Respond to an item's U8P_TORWINJU::hatch event by scanning an internal/scripted list for a condition; if found, trigger the item's use, mark the item as hatched (quality=1), request an NPC animation, wait, and finalize the use.",
+    "purpose": "Detects an unhatched item (quality == 0), runs the U8P_TORWINJU::hatch sequence to change item state to hatched (set quality to 1), and sequences item-use effects with an NPC animation, using suspends to wait for completion.",
     "entry_conditions": [
-      "Event 7 (U8P_TORWINJU::hatch) — invoked when the item's U8P_TORWINJU::hatch event is triggered",
-      "Only proceeds when Item::getQuality(item_instance) == 0 (guard against already-hatched items)"
+      "Process is started (process type 0x0210) — U8P_TORWINJU::hatch runs as a process.",
+      "Item::getQuality(this) == 0 — the U8P_TORWINJU::hatch sequence only runs when the item's quality equals zero."
     ],
     "confidence": "high"
   },
@@ -33,31 +31,31 @@
     {
       "name": "U8P_TORWINJU::hatch",
       "kind": "main",
-      "role": "Primary event handler for the item's U8P_TORWINJU::hatch event; controls loop scanning, guard, activation, marking, and animation sequencing.",
+      "role": "Implements the U8P_TORWINJU::hatch lifecycle/sequence for the item instance (guarded by quality==0).",
       "confidence": "high"
     },
     {
       "name": "Item::getQuality",
       "kind": "extern",
-      "role": "Read the item's quality/state to decide whether to proceed with hatching.",
+      "role": "Query item quality/state used to decide whether to run the U8P_TORWINJU::hatch sequence.",
       "confidence": "high"
     },
     {
       "name": "Item::use",
       "kind": "extern",
-      "role": "Activate or use the item; called twice as part of the U8P_TORWINJU::hatch sequence (activation and likely finalization/consumption).",
-      "confidence": "high"
+      "role": "Trigger item use effects; called before and after setQuality to produce visual/gameplay effects.",
+      "confidence": "medium"
     },
     {
       "name": "Item::setQuality",
       "kind": "extern",
-      "role": "Set the item's quality/state (used here to mark the item as hatched by setting quality to 1).",
+      "role": "Update the item quality/state; called with 0x01 to mark the item as hatched.",
       "confidence": "high"
     },
     {
       "name": "Npc::doAnim",
       "kind": "extern",
-      "role": "Trigger an NPC animation for a target pid to show hatching feedback/visuals.",
+      "role": "Start an NPC animation/timed effect to accompany the U8P_TORWINJU::hatch sequence; the process waits for its completion.",
       "confidence": "high"
     }
   ],
@@ -67,25 +65,25 @@
       {
         "caller": "U8P_TORWINJU::hatch",
         "callee": "Item::getQuality",
-        "purpose": "Read current item quality to guard against re-hatching; early exit if non-zero.",
+        "purpose": "Check the current item's quality to decide whether to run the U8P_TORWINJU::hatch sequence (guard).",
         "confidence": "high"
       },
       {
         "caller": "U8P_TORWINJU::hatch",
         "callee": "Item::use",
-        "purpose": "Activate the item's U8P_TORWINJU::hatch effect; appears as first action when a matching loop entry is found, and is called again later (likely to finalize or consume the item/spawn results).",
-        "confidence": "high"
+        "purpose": "Invoke the item's use/effect handlers; called once before setQuality and once after, likely to produce pre- and post-U8P_TORWINJU::hatch effects or triggers.",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_TORWINJU::hatch",
         "callee": "Item::setQuality",
-        "purpose": "Mark the item as hatched by setting its quality to 1, preventing future U8P_TORWINJU::hatch activation.",
+        "purpose": "Set the item's quality to 0x01 to mark it as hatched/used.",
         "confidence": "high"
       },
       {
         "caller": "U8P_TORWINJU::hatch",
         "callee": "Npc::doAnim",
-        "purpose": "Request a visual animation on a target pid to represent the hatching event; followed by a suspend to allow the animation to play.",
+        "purpose": "Start an animation/timed process (arguments suggest duration/id flags) and coordinate a wait so the U8P_TORWINJU::hatch sequence aligns with animation completion.",
         "confidence": "high"
       }
     ]
@@ -101,8 +99,8 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "TORWINJU::hatch",
-    "behavior_summary_one_liner": "Handles an item's 'U8P_TORWINJU::hatch' event: if the item has not already been hatched (quality == 0) the script scans a scripted collection/sequence and, when a matching entry is found, activates the item and marks it as hatched.",
+    "main_function": "U8P_TORWINJU::hatch",
+    "behavior_summary_one_liner": "U8P_TORWINJU::hatch is a short-running process that implements an item 'U8P_TORWINJU::hatch' sequence. It checks the current item's quality and, only if quality == 0, performs a sequence of calls to Item::use, Item::setQuality(0x01), starts an NPC animation via Npc::doAnim, waits (suspend) for the animation/process to complete, then calls Item::use again and suspends — marking the item as 'hatched' (quality set to 1) and coordinating visual/effect timing with an NPC animation.",
     "external_call_count": 4,
     "flag_read_count": 0,
     "flag_write_count": 0

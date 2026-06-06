@@ -3,27 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_BIGWEBEW.json",
   "file": "U8P_BIGWEBEW",
   "behavior_summary": [
-    "U8P_BIGWEBEW::gotHit is an on-hit handler that marks the targeted object with a specific info/state identifier (immediate 0x20C) and applies a process-exclude, then immediately destroys the Item instance passed to the routine.",
-    "The routine receives a damage parameter which is present but not referenced by the implementation; the actual cleanup (flag + destroy) is the only observable effect.",
-    "The mark (set-info) and process-exclude appear to disable or flag the object to prevent further processing before removal, ensuring a clean deletion."
+    "This script defines a single process handler U8P_BIGWEBEW::gotHit that runs when the object is hit.",
+    "When invoked the handler immediately destroys the current item instance by calling Item::destroy(this).",
+    "There is no visible branching, flag manipulation, dialogue, or UI interaction in this excerpt — its entire gameplay effect is to remove the item on hit."
   ],
   "notable_control_flow": [
-    "Deterministic, linear sequence: set-info(0x20C, target) -> process-exclude(target) -> Item::destroy(target).",
-    "No branching or loops observed; the handler performs a single cleanup path when invoked.",
-    "The damage parameter is ignored by the script, so there is no conditional logic based on damage in this function."
+    "U8P_BIGWEBEW::gotHit contains a single unconditional external call to Item::destroy(this).",
+    "No conditionals, menus, or flag checks are present; control flow is linear and terminates after the destroy call."
   ],
   "open_questions": [
-    "What is the precise semantic meaning of info id 0x20C (what game-visible state or flag does it represent)?",
-    "Does set-info(0x20C) target the same object instance referenced by the Item::destroy call in all cases, or could it refer to a related object derived from the item? (disassembly suggests same pointer but exact engine semantics are inferred)",
-    "Are there any engine-level side effects of process-exclude beyond preventing further processing (e.g., visual changes, AI stop) that are not visible in the script?",
-    "Is the unused 'damage' parameter intended for future use or consumed by higher-level engine bookkeeping elsewhere?"
+    "Are the declared parameters (uword, word) used elsewhere by the engine or in other build variants? They are present but not referenced in the visible code.",
+    "Is the destruction intended to be immediate (instant removal) or does the engine perform any implicit cleanup/animations when Item::destroy is called?",
+    "Could other processes or global flags interact with this item in contexts not present in this excerpt (e.g., preventing destruction under certain higher-level game states)?"
   ],
   "main_function": {
     "name": "U8P_BIGWEBEW::gotHit",
     "execution_form": "process",
-    "purpose": "Respond to an on-hit event by flagging/disabling the targeted object (via a set-info with id 0x20C and a process-exclude) and then destroying the item instance passed in.",
+    "purpose": "Handle the 'got hit' event for the item by removing the item instance from the world.",
     "entry_conditions": [
-      "Event 6 (U8P_BIGWEBEW::gotHit) — invoked when this object/item receives a hit in the game (on-hit trigger)."
+      "Invoked by the engine when this object receives a hit/damage (process type 0x020C)."
     ],
     "confidence": "high"
   },
@@ -31,7 +29,7 @@
     {
       "name": "U8P_BIGWEBEW::gotHit",
       "kind": "main",
-      "role": "on-hit event handler that flags an object and destroys the associated Item instance",
+      "role": "destroy-on-hit handler (cleanup)",
       "confidence": "high"
     }
   ],
@@ -41,14 +39,8 @@
       {
         "caller": "U8P_BIGWEBEW::gotHit",
         "callee": "Item::destroy",
-        "purpose": "Remove/destroy the item/actor instance referenced by the routine's item pointer (passed as 'this') so it is removed from the world.",
+        "purpose": "Remove/destroy the current item instance (this) from the game world.",
         "confidence": "high"
-      },
-      {
-        "caller": "U8P_BIGWEBEW::gotHit",
-        "callee": "U8P_BIGWEBEW::engine:set info (id 0x20C) + process-exclude",
-        "purpose": "Engine operations that set a state/info identifier (0x20C) on the object and exclude it from normal processing prior to destruction; used to mark/disable the instance before cleanup.",
-        "confidence": "medium"
       }
     ]
   },
@@ -59,13 +51,13 @@
   "ui_tags": [
     "trigger",
     "cleanup",
-    "state-change",
-    "destroy"
+    "animation",
+    "guard"
   ],
   "quick_facts": {
-    "main_function": "BIGWEBEW::gotHit",
-    "behavior_summary_one_liner": "U8P_BIGWEBEW::gotHit is an on-hit handler that marks the targeted object with a specific info/state identifier (immediate 0x20C) and applies a process-exclude, then immediately destroys the Item instance passed to the routine.",
-    "external_call_count": 2,
+    "main_function": "U8P_BIGWEBEW::gotHit",
+    "behavior_summary_one_liner": "This script defines a single process handler U8P_BIGWEBEW::gotHit that runs when the object is hit.",
+    "external_call_count": 1,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

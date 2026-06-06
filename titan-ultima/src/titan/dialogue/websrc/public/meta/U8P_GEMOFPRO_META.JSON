@@ -3,27 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_GEMOFPRO.json",
   "file": "U8P_GEMOFPRO",
   "behavior_summary": [
-    "Handles the 'U8P_GEMOFPRO::look' (examine) event for the gem object: it marks the item with a local info flag and process-exclude, constructs the description string \"blue field passage gem \", and asks the item to 'bark' that string so the player (or triggering process) sees the description.",
-    "All changes are object-local (item info / process-exclude). No global game flags are read or written by this script.",
-    "After calling Item::bark the script frees the temporary string/cleanup data and then suspends/returns; the bark return value is captured and briefly used before the function yields."
+    "This script implements a single 'U8P_GEMOFPRO::look' process that displays a short descriptive text for the object: the player-facing bark 'blue field passage gem '.",
+    "There are no conditionals, menus, external calls, or flag reads/writes; the process shows the description and then suspends/terminates.",
+    "The routine is purely presentational: it exists to provide the examine/U8P_GEMOFPRO::look text for the game object and does not modify game state."
   ],
   "notable_control_flow": [
-    "Entry on the 'U8P_GEMOFPRO::look' trigger: set item info (push 0x0208 / set info on the item) and set process-exclude for the item.",
-    "Construct literal description string \"blue field passage gem \".",
-    "Call external Item::bark with the item/context and the description string.",
-    "Free or release the constructed string, push the bark return value (retval), perform an implies/pop sequence with retval, then suspend/return."
+    "Single Bark node emitting the description string followed by a suspend/terminate node (standard end-of-process behavior).",
+    "No branching, loops, or calls to other internal/external functions are present."
   ],
   "open_questions": [
-    "Exact semantic meaning of the info id 0x0208 that is written to the item (inferred as an item-info flag but exact gameplay meaning is unknown).",
-    "Precise interpretation of the 'implies' operation applied to the bark return value (likely a control/flow idiom used by the engine; exact effect is unclear).",
-    "Whether [BP+06h] should be treated as a process id (pid of the viewer) or the item 'this' pointer in all contexts; evidence strongly favors 'this/item pointer' but some routines in the codebase pass pids similarly."
+    "Whether U8P_GEMOFPRO::look is also invoked by an area-trigger (enterFastArea) in some map contexts — common for U8P_GEMOFPRO::look-type processes but not explicit in the script (inference: likely but unconfirmed).",
+    "Whether the trailing space in the bark text ('blue field passage gem ') is intentional (stylistic) or an artifact of disassembly.",
+    "If the object has alternate inspect states (e.g., different descriptions when flags change) — none are present here, but higher-level game code could override behavior."
   ],
   "main_function": {
     "name": "U8P_GEMOFPRO::look",
     "execution_form": "process",
-    "purpose": "Respond to the object's 'U8P_GEMOFPRO::look' event by marking the object with an info/process-exclude state and emitting a short descriptive text to the viewer: \"blue field passage gem \".",
+    "purpose": "Provide the short examine/U8P_GEMOFPRO::look description for the object by emitting a single player-facing bark string.",
     "entry_conditions": [
-      "Event 0 / 'U8P_GEMOFPRO::look' — invoked when a player or actor examines (looks at) the gem object or enters its 'U8P_GEMOFPRO::look' trigger area."
+      "Invoked when the player performs a 'U8P_GEMOFPRO::look' or examine action on the object (canonical for processType 0x0208).",
+      "May also be invoked when an actor enters the object's fast-area trigger region in engines that reuse U8P_GEMOFPRO::look handlers for area-entry (inferred)."
     ],
     "confidence": "high"
   },
@@ -31,26 +30,13 @@
     {
       "name": "U8P_GEMOFPRO::look",
       "kind": "main",
-      "role": "Event handler for the gem object's 'U8P_GEMOFPRO::look' (examine) action; prepares object state and emits description text.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item API used to display or emit a text message from an item/process (used here to show the gem description).",
+      "role": "object examine/description handler that emits the one-line bark text",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_GEMOFPRO::look",
-        "callee": "Item::bark",
-        "purpose": "Deliver/display the literal description string \"blue field passage gem \" to the viewer/process (make the item 'say' or show the text).",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -58,13 +44,12 @@
   },
   "ui_tags": [
     "trigger",
-    "description",
-    "cleanup"
+    "description"
   ],
   "quick_facts": {
     "main_function": "U8P_GEMOFPRO::look",
-    "behavior_summary_one_liner": "Handles the 'U8P_GEMOFPRO::look' (examine) event for the gem object: it marks the item with a local info flag and process-exclude, constructs the description string \"blue field passage gem \", and asks the item to 'bark' that string so the player (or triggering process) sees the description.",
-    "external_call_count": 1,
+    "behavior_summary_one_liner": "This script implements a single 'U8P_GEMOFPRO::look' process that displays a short descriptive text for the object: the player-facing bark 'blue field passage gem '.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

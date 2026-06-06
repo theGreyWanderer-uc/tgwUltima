@@ -3,26 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_ABACUS.json",
   "file": "U8P_ABACUS",
   "behavior_summary": [
-    "Provides two gameplay interactions for an abacus item: a 'U8P_ABACUS::look' (examine) handler that announces the item to the viewer, and a 'use' handler that counts a specific inventory item (inferred as 'obsidian coin') and reports the total to the user.",
-    "ABACUS::look sets item display/info flags for the U8P_ABACUS::look event and sends a short static description string ('abacus ') to the viewing process via Item::bark.",
-    "ABACUS::use queries a subset of the actor's equipment/inventory (inferred slot range ~1..6) via Npc::getEquip, iterates the returned list, sums quantities of items matching a specific shape constant (inferred 0x008F), formats the total into a human message with pluralization, and sends it to the actor via Item::bark."
+    "U8P_ABACUS::look: When the player examines the abacus, the script displays the short description text \"abacus\" and then suspends. This is a simple U8P_ABACUS::look/description handler.",
+    "U8P_ABACUS::use: When the player uses the abacus, the script computes a total number of \"obsidian coins\" the relevant actor has by checking an equipment slot and/or item handles, accumulates their quantities, formats the total using a numeric-to-string conversion, performs simple pluralization of \"coin/coins\", displays a message such as \"You have X obsidian coin(s)\", then clears the constructed string and suspends."
   ],
   "notable_control_flow": [
-    "Event-driven: U8P_ABACUS::ABACUS::look is executed in response to a 'U8P_ABACUS::look' event/area entry; U8P_ABACUS::ABACUS::use runs on the item's use action.",
-    "U8P_ABACUS::ABACUS::use performs an enumeration loop over a returned equipment list/pointer (returned by Npc::getEquip), accumulating a running total using repeated Item::getQuantity calls.",
-    "Message construction path: numeric total -> numToStr conversion -> concatenation with static text -> conditional plural 's' when total != 1 -> dispatch via Item::bark."
+    "U8P_ABACUS::look emits a single Bark with the short text and then suspends (one-shot descriptive flow).",
+    "U8P_ABACUS::use initializes a numeric accumulator (local1 = 0), conditionally calls Npc::getEquip(slot=0x06, actor) and checks the result against a sentinel (0xFFFFFFFF) to determine presence of an item, calls Item::getQuantity on found item references to add to local1, converts local1 to text with numToStr, appends \" obsidian coin\" and adds an \"s\" when local1 != 1, barks the constructed message, then clears the string and suspends.",
+    "Control relies on simple conditional guards (item-present checks) rather than global flags; no persistent flags are read or written."
   ],
   "open_questions": [
-    "The exact mapping of the shape constant 0x008F to 'obsidian coin' is inferred from local string construction; is this mapping defined elsewhere in data/shape tables?",
-    "Exact slot indices and semantics passed to Npc::getEquip are inferred as 1..6 from pushed bytes; are the start/end slot parameters documented elsewhere?",
-    "Which internal VM operations correspond to the 'set item info' and 'process exclude' writes performed by ABACUS::look (they are recorded as flag writes but the concrete flag names are not present here)?"
+    "Which actor/context is being inspected by U8P_ABACUS::use (player, the object owner, or another NPC)? The actor pointer is referenced on the stack in the raw code but not named in the JSON.",
+    "Are multiple equipment slots or other inventory sources consulted beyond the single slot 0x06 observed in the code sample? The disassembly shows slot 0x06 but additional inventory checks may be present in other builds.",
+    "Exact mapping of local2/local3 to engine types (item handle vs. item pointer) is inferred from call patterns; the precise types and error-handling behavior (beyond the 0xFFFFFFFF sentinel) remain uncertain."
   ],
   "main_function": {
     "name": "U8P_ABACUS::look",
     "execution_form": "process",
-    "purpose": "Respond to an examine/U8P_ABACUS::look event for the abacus: set item display/exclusion flags and present the item's short description to the requesting process/player.",
+    "purpose": "Provide the object's short description when the player examines the abacus.",
     "entry_conditions": [
-      "Event 0 triggered when an actor looks at or examines the abacus (enterFastArea / U8P_ABACUS::look event)."
+      "Triggered by the player's 'U8P_ABACUS::look' or inspect action on the abacus (process type 0x0208)."
     ],
     "confidence": "high"
   },
@@ -30,99 +29,73 @@
     {
       "name": "U8P_ABACUS::look",
       "kind": "main",
-      "role": "Handle the 'U8P_ABACUS::look'/examine interaction for the abacus, set item info flags, and emit a short description to the viewer via Item::bark.",
+      "role": "Display short description ('abacus') on examine",
       "confidence": "high"
     },
     {
       "name": "U8P_ABACUS::use",
       "kind": "helper",
-      "role": "Handle the 'use' interaction: scan actor equipment/inventory for items of a target shape, total their quantities, build a 'You have N <item>(s)' message, and present it to the actor.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Deliver a short text message from an item/process to a target process/player.",
-      "confidence": "high"
+      "role": "Compute and display the actor's obsidian coin total; builds and barks a message with pluralization",
+      "confidence": "medium"
     },
     {
       "name": "Npc::getEquip",
       "kind": "extern",
-      "role": "Return a pointer/list representing a subset of an actor's equipment/inventory for iteration.",
+      "role": "Query an NPC/eactor's equipment slot to obtain an item handle/id (returns 0xFFFFFFFF when empty)",
       "confidence": "high"
     },
     {
       "name": "Item::getQuantity",
       "kind": "extern",
-      "role": "Return the stack/quantity value for a particular item instance.",
+      "role": "Return quantity/count for an item reference so it can be added to the accumulator",
       "confidence": "high"
     },
     {
-      "name": "U8P_ABACUS::numToStr",
+      "name": "numToStr",
       "kind": "extern",
-      "role": "Convert a numeric value (uword) to its decimal string representation for message construction.",
+      "role": "Convert numeric accumulator to a string for message construction",
       "confidence": "high"
     }
   ],
   "call_analysis": {
-    "internal_calls": [
-      {
-        "caller": "U8P_ABACUS::look",
-        "callee": "Item::bark",
-        "purpose": "Emit the static item description string ('abacus ') to the viewing process.",
-        "confidence": "high"
-      }
-    ],
+    "internal_calls": [],
     "external_calls": [
       {
         "caller": "U8P_ABACUS::use",
         "callee": "Npc::getEquip",
-        "purpose": "Request a pointer/list of equipped/held items across a slot range to iterate and inspect.",
+        "purpose": "Check a specific equipment slot (0x06) on the actor/context and obtain an item handle; return value compared to 0xFFFFFFFF to detect absence.",
         "confidence": "high"
       },
       {
         "caller": "U8P_ABACUS::use",
         "callee": "Item::getQuantity",
-        "purpose": "Obtain the numeric count/stack size for each candidate item to add to the running total.",
+        "purpose": "Obtain the quantity of a discovered item to add into the running obsidian-coin total (local1).",
         "confidence": "high"
       },
       {
         "caller": "U8P_ABACUS::use",
-        "callee": "U8P_ABACUS::numToStr",
-        "purpose": "Convert the final numeric total into text for concatenation into the 'You have N ...' message.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_ABACUS::use",
-        "callee": "Item::bark",
-        "purpose": "Deliver the constructed inventory-count message to the actor who used the abacus.",
+        "callee": "numToStr",
+        "purpose": "Convert the numeric total (local1) to a string for inclusion in the user-facing message.",
         "confidence": "high"
       }
     ]
   },
   "global_flags": {
     "reads": [],
-    "writes": [
-      {
-        "name": "item info / process exclude (ambient look state)",
-        "likely_effect": "Mark the item with display/behavior flags for the U8P_ABACUS::look event and prevent certain processes from running concurrently for this item/event.",
-        "confidence": "medium"
-      }
-    ]
+    "writes": []
   },
   "ui_tags": [
     "trigger",
-    "inventory_scan",
-    "ui_message",
-    "pluralization",
-    "guard"
+    "display",
+    "query",
+    "suspend"
   ],
   "quick_facts": {
-    "main_function": "U8P_ABACUS::ABACUS::look",
-    "behavior_summary_one_liner": "Provides two gameplay interactions for an abacus item: a 'U8P_ABACUS::look' (examine) handler that announces the item to the viewer, and a 'use' handler that counts a specific inventory item (inferred as 'obsidian coin') and reports the total to the user.",
-    "external_call_count": 4,
+    "main_function": "U8P_ABACUS::look",
+    "behavior_summary_one_liner": "U8P_ABACUS::look: When the player examines the abacus, the script displays the short description text \"abacus\" and then suspends. This is a simple U8P_ABACUS::look/description handler.",
+    "external_call_count": 3,
     "flag_read_count": 0,
-    "flag_write_count": 1
+    "flag_write_count": 0
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

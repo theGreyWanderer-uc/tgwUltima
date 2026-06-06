@@ -3,33 +3,34 @@
   "source_of_truth": "dialogue/json/U8P_SHAANA.json",
   "file": "U8P_SHAANA",
   "behavior_summary": [
-    "This script implements the in-game behavior for the NPC Shaana. It provides a 'U8P_SHAANA::look' (examine) handler that chooses a short bark based on whether Shaana is dead and on two global flags (shaanaName, shaanaJob).",
-    "It manages Shaana's movement schedule via schedule(), selecting and storing a schedule id/range in a global (shaanaSchedule) based on world state (toranDead, secondexecution, and the NPC's live/dead state) and spawning engine methods to apply it.",
-    "enterFastArea and leaveFastArea provide fast-entry/exit triggers around Shaana that quickly spawn short routines (movement/idle/area-specific behaviors) or perform fast-area cleanup.",
-    "Two longer routines (U8P_SHAANA::029E and U8P_SHAANA::03B0) drive patrol/pathfinding and repeated orientation/taunt sequences by iterating waypoint lists, spawning engine pathfinding/animation methods, and occasionally emitting short barks.",
-    "A use handler (U8P_SHAANA::use) (inferred) controls direct interaction/dialogue branching using many global flags (shaanaMet, hydrosFree, pyrosFree, hasHeart, devonInRule) and random rolls to pick first-meeting vs normal conversation or refusal responses."
+    "This script implements the runtime behavior and dialogue for the NPC Shaana (an executioner). It provides: a U8P_SHAANA::look/description handler, a time-of-day U8P_SHAANA::schedule chooser, fast-area entry/exit triggers that drive short ambient groans or roaming/pathfinding behavior, a roaming/taunt routine with animations and barks, and a multi-part conversation system triggered by player 'U8P_SHAANA::use' (talk).",
+    "Look: returns a corpse descriptor when the NPC is dead; otherwise prefers a known name (shaanaName), then a job/title (shaanaJob), and finally a generic descriptor.",
+    "Fast-area entry (U8P_SHAANA::enterFastArea) either runs a short groan monologue on specific map/plot conditions or resets engine refs and launches roaming/pathfinding logic (U8P_SHAANA::func029E), possibly forcing an activity change; U8P_SHAANA::leaveFastArea cleans up refs.",
+    "Schedule: U8P_SHAANA::schedule() chooses a U8P_SHAANA::schedule based on FREE::getTimeOfDayPeriod and, when a helper returns a valid result, writes shaanaSchedule and calls a commit helper.",
+    "Roaming/motion (U8P_SHAANA::func029E) loops pathfinding attempts, calling U8P_SHAANA::func03B0 (taunt/monologue) on some successful attempts and spawning retry timers on failures; U8P_SHAANA::func03B0 runs animation/taunt sequences with random barks.",
+    "Dialogue: U8P_SHAANA::use() gates conversation by plot flags (toranDead) and map/scene flags, issues short non-interactive lines on some map conditions, or delegates to two richer dialog routines (U8P_SHAANA::func0973 for initial contact and U8P_SHAANA::func2A16 for repeat interactions) that manage menus, choices, and state flags like shaanaMet, shaanaName, and shaanaBored."
   ],
   "notable_control_flow": [
-    "U8P_SHAANA::look: immediately checks Npc::isDead; if dead barks corpse text and returns; otherwise checks global shaanaName then shaanaJob to pick name/job/generic genders and barks the chosen string.",
-    "U8P_SHAANA::schedule: reads toranDead and secondexecution (and Npc::isDead), queries FREE::28F9, selects schedule parameters, writes shaanaSchedule, then spawns engine METHODS (e.g., METHOD::143A, METHOD::133F) to apply the schedule and waits/suspends for spawned results.",
-    "U8P_SHAANA::enterFastArea: fast-path entry handler reads Npc::isDead and Npc::getMap and global devonInRule to decide whether to spawn U8P_SHAANA::029E, spawn a map-specific routine, or set the NPC activity via Npc::cSetActivity(0); it uses FREE::2A56 for fast-area bookkeeping.",
-    "U8P_SHAANA::029E and U8P_SHAANA::03B0: loop over small indexed lists (waypoints/entries). 029E invokes pathfinding and either spawns 03B0 or runs orientation/animation METHODs; 03B0 obtains directions with Item::getDirToItem and repeatedly spawns turn/move METHODs and occasional bark lines.",
-    "U8P_SHAANA::use (inferred): complex branching based on multiple globals (shaanaMet, hydrosFree, pyrosFree, hasHeart, devonInRule) and urandom; may refuse to talk, emit randomized flavor lines, or spawn first-meeting vs normal conversation routines.",
-    "Loop/frame progression inside U8P_SHAANA::schedule; treated as control-flow, not explicit internal call."
+    "U8P_SHAANA::look (process): if Npc::isDead(this) => corpse text; else if global shaanaName set => show name; else if shaanaJob set => show job/title; else show generic 'woman'.",
+    "U8P_SHAANA::enterFastArea (process): if isDead OR (map==0x03 and devonInRule==0) => no action; else if map==0x03 and devonInRule==1 => call U8P_SHAANA::func08CD; else reset refs (FREE::resetRef), spawn Npc::cSetActivity(0x00,this) and call U8P_SHAANA::func029E.",
+    "U8P_SHAANA::leaveFastArea (process): call FREE::resetRef(0x0205,this) (cleanup).",
+    "U8P_SHAANA::schedule (process): guarded by toranDead / isDead / secondexecution combination; selects parameters based on FREE::getTimeOfDayPeriod, calls METHOD::func143A, checks process_result(), and on success sets shaanaSchedule = chosen value and calls METHOD::func133F.",
+    "U8P_SHAANA::func029E (utility): loop (local2 from 0 to <=7) spawn Npc::pathfind and suspend; on success call U8P_SHAANA::func03B0 when local2==1 or 3 else METHOD::func15E7; on failure spawn FREE::func1C19 with different delays and then METHOD::func15E7; increment attempt counter and repeat.",
+    "U8P_SHAANA::use (process): if not toranDead => return early; special-case short conversation/groan on map 0x03 when devonInRule==0; otherwise compute a small counter from hydrosFree/hasHeart/pyrosFree and either bark alarm lines or dispatch to U8P_SHAANA::func0973 (first meeting) or U8P_SHAANA::func2A16 (repeat meeting)."
   ],
   "open_questions": [
-    "Exact semantics and return values of FREE::1C19, FREE::28F9, and FREE::2A56 — they appear to be scheduling/fast-area/query helpers but their precise contracts are unknown.",
-    "Precise schedule identifiers, their timing semantics, and how shaanaSchedule is interpreted elsewhere in the game.",
-    "Complete contents and branching in U8P_SHAANA::use: the excerpt infers many dialog branches but the exact text and some branches are not present in the extracted snippet.",
-    "Whether any spawn METHOD numbers (e.g., METHOD::143A, METHOD::133F, METHOD::15E7, METHOD::091C) have side effects beyond movement/animation (they likely do but exact effects are engine-level).",
-    "Edge cases when the NPC is dead combined with world flags (e.g., how schedule() behaves if Shaana is dead) — behavior is inferred but not exhaustively confirmed."
+    "Exact semantics and return values of METHOD::func143A and METHOD::func133F (they appear to compute and apply a U8P_SHAANA::schedule choice, but details of inputs/returned index are inferred).",
+    "Precise intended meanings of U8P_SHAANA::schedule numeric constants passed into METHOD::func143A and how shaanaSchedule values map to in-world behaviors/waypoints.",
+    "Whether any other scripts or map systems rely on shaanaSchedule beyond this script (external dependents unknown).",
+    "The full content and text of some low-confidence 'Unknown' nodes (suspend/temporary blocks) that could slightly alter timing or conditional ordering in U8P_SHAANA::func029E and U8P_SHAANA::func03B0."
   ],
   "main_function": {
     "name": "U8P_SHAANA::look",
     "execution_form": "process",
-    "purpose": "Handle the player 'U8P_SHAANA::look' (examine) event for Shaana: choose and emit a short bark based on Shaana's alive/dead state and two global flags that control whether the NPC's name or job is used, otherwise fall back to a generic gender term.",
+    "purpose": "Return the short description shown when the player 'looks at' Shaana: corpse text if dead; otherwise prefer a stored name (shaanaName), then job/title (shaanaJob), finally a generic description.",
     "entry_conditions": [
-      "Event 0 (U8P_SHAANA::look): triggered when a player/process examines or 'looks at' Shaana."
+      "Invoked by the engine on a player 'U8P_SHAANA::look' or inspect action for this NPC.",
+      "Branches depend on Npc::isDead(this) and the presence of global flags shaanaName and shaanaJob."
     ],
     "confidence": "high"
   },
@@ -37,55 +38,61 @@
     {
       "name": "U8P_SHAANA::look",
       "kind": "main",
-      "role": "Public U8P_SHAANA::look/examine handler that selects short bark text (name/job/generic/corpse) and emits it to the viewer.",
+      "role": "short description / U8P_SHAANA::look handler",
       "confidence": "high"
     },
     {
       "name": "U8P_SHAANA::schedule",
       "kind": "helper",
-      "role": "Select and apply Shaana's movement/activity schedule based on world flags and NPC state; writes global shaanaSchedule and spawns engine schedule methods.",
-      "confidence": "high"
+      "role": "time-of-day U8P_SHAANA::schedule selection and commit (writes shaanaSchedule)",
+      "confidence": "medium"
     },
     {
       "name": "U8P_SHAANA::enterFastArea",
       "kind": "helper",
-      "role": "Fast-entry trigger to quickly spawn movement/behavior routines or set activity when the avatar enters Shaana's area.",
+      "role": "fast-area entry trigger: decides groan vs roaming and forces activity changes",
       "confidence": "high"
     },
     {
       "name": "U8P_SHAANA::leaveFastArea",
       "kind": "helper",
-      "role": "Fast-exit cleanup for area triggers; calls FREE::2A56 for bookkeeping.",
+      "role": "fast-area exit cleanup (reset references)",
       "confidence": "high"
     },
     {
-      "name": "U8P_SHAANA::029E",
+      "name": "U8P_SHAANA::func029E",
       "kind": "helper",
-      "role": "Looped patrol/pathfinding routine that iterates waypoint entries and spawns pathfinding and orientation actions.",
-      "confidence": "medium"
+      "role": "roaming/pathfinding and retry/timer logic; invokes taunt routine on certain successes",
+      "confidence": "high"
     },
     {
-      "name": "U8P_SHAANA::03B0",
+      "name": "U8P_SHAANA::func03B0",
       "kind": "helper",
-      "role": "Looped orientation/movement/taunt routine used by the patrol behavior; repeatedly orients and occasionally barks/taunts.",
-      "confidence": "medium"
+      "role": "monologue/taunt animation sequence with barks and timed steps",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_SHAANA::func08CD",
+      "kind": "helper",
+      "role": "short non-interactive groan/ambient monologue",
+      "confidence": "high"
     },
     {
       "name": "U8P_SHAANA::use",
       "kind": "helper",
-      "role": "Direct-interaction (use/talk) handler that branches dialog and meeting routines based on multiple world flags and random selection; inferred from surrounding context.",
-      "confidence": "medium"
-    },
-    {
-      "name": "Npc::isDead",
-      "kind": "extern",
-      "role": "Engine/extern check used throughout to determine whether the NPC is dead.",
+      "role": "player 'U8P_SHAANA::use' (talk) entry point: gating and dispatch to dialogue routines or short groan branch",
       "confidence": "high"
     },
     {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/extern call to emit short text/bark from the NPC/item to a target player/process.",
+      "name": "U8P_SHAANA::func0973",
+      "kind": "helper",
+      "role": "initial dialogue routine: builds menus, loops on Ask, sets shaanaMet/shaanaName/shaanaBored and responds to options",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_SHAANA::func2A16",
+      "kind": "helper",
+      "role": "follow-up / repeat dialogue routine similar to U8P_SHAANA::func0973: manages repeated conversation interactions and menu updates",
       "confidence": "high"
     }
   ],
@@ -93,95 +100,131 @@
     "internal_calls": [
       {
         "caller": "U8P_SHAANA::enterFastArea",
-        "callee": "U8P_SHAANA::029E",
-        "purpose": "Spawn the patrol/path routine when certain map/devonInRule conditions are met.",
+        "callee": "U8P_SHAANA::func08CD",
+        "purpose": "Play a short groan/monologue when on map 0x03 and devonInRule==1 (map-specific ambient reaction).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SHAANA::029E",
-        "callee": "U8P_SHAANA::03B0",
-        "purpose": "Occasionally spawn the shorter orientation/taunt loop as part of patrol behavior.",
-        "confidence": "medium"
+        "caller": "U8P_SHAANA::enterFastArea",
+        "callee": "U8P_SHAANA::func029E",
+        "purpose": "Launch roaming/pathfinding behavior after resetting refs and possibly forcing an activity change.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SHAANA::func029E",
+        "callee": "U8P_SHAANA::func03B0",
+        "purpose": "Trigger taunt/monologue sequences on certain successful pathfind attempts (local2 == 1 or 3).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SHAANA::use",
+        "callee": "U8P_SHAANA::func0973",
+        "purpose": "Dispatch to initial conversation/menu when player first speaks to Shaana (shaanaMet not set).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SHAANA::use",
+        "callee": "U8P_SHAANA::func2A16",
+        "purpose": "Dispatch to follow-up/repeat conversation when shaanaMet is already set.",
+        "confidence": "high"
       }
     ],
     "external_calls": [
       {
         "caller": "U8P_SHAANA::look",
         "callee": "Npc::isDead",
-        "purpose": "Decide whether to use corpse text vs alive barks.",
+        "purpose": "Check if the NPC is dead to select corpse vs living description.",
         "confidence": "high"
-      },
-      {
-        "caller": "U8P_SHAANA::look",
-        "callee": "Item::bark",
-        "purpose": "Emit the chosen short bark/phrase to the viewing player/process.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SHAANA::schedule",
-        "callee": "FREE::28F9",
-        "purpose": "Query helper used during schedule selection (likely returns a state/schedule hint).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_SHAANA::schedule",
-        "callee": "spawn METHOD::143A",
-        "purpose": "Apply or initiate the selected schedule via engine method spawn.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_SHAANA::schedule",
-        "callee": "spawn METHOD::133F",
-        "purpose": "Secondary engine method spawn used after schedule selection (likely to start or finalize schedule).",
-        "confidence": "medium"
       },
       {
         "caller": "U8P_SHAANA::enterFastArea",
         "callee": "Npc::getMap",
-        "purpose": "Check the current map to select area-specific fast-entry behavior.",
+        "purpose": "Check current map id to choose map-specific behavior (map==0x03).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SHAANA::enterFastArea",
+        "callee": "FREE::resetRef",
+        "purpose": "Clear engine references for this NPC before spawning activity/process or running behavior helpers (cleanup).",
         "confidence": "high"
       },
       {
         "caller": "U8P_SHAANA::enterFastArea",
         "callee": "Npc::cSetActivity",
-        "purpose": "Set Shaana's activity/state (e.g., idle) when no routine is spawned.",
+        "purpose": "Spawn a process to force the NPC's activity/state when entering the fast area (pid stored and waited on).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SHAANA::enterFastArea",
-        "callee": "FREE::2A56",
-        "purpose": "Fast-area bookkeeping/cleanup on entry/exit.",
+        "caller": "U8P_SHAANA::schedule",
+        "callee": "FREE::getTimeOfDayPeriod",
+        "purpose": "Determine time-of-day branch for U8P_SHAANA::schedule selection.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SHAANA::schedule",
+        "callee": "METHOD::func143A",
+        "purpose": "Query/compute available U8P_SHAANA::schedule choices (suspends and later checked via process_result()).",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_SHAANA::029E",
+        "caller": "U8P_SHAANA::schedule",
+        "callee": "METHOD::func133F",
+        "purpose": "Apply/commit the chosen U8P_SHAANA::schedule after shaanaSchedule is set.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_SHAANA::func029E",
         "callee": "Npc::pathfind",
-        "purpose": "Initiate pathfinding to waypoints as part of patrol routine.",
+        "purpose": "Attempt movement/pathfinding to a destination; success/failure controls further behavior.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SHAANA::03B0",
-        "callee": "Item::getDirToItem",
-        "purpose": "Compute direction to a waypoint/item before spawning turn/movement actions.",
+        "caller": "U8P_SHAANA::func029E",
+        "callee": "FREE::func1C19",
+        "purpose": "Spawn delayed helper/timer on pathfind failure (used for retry/backoff).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SHAANA::029E",
-        "callee": "FREE::1C19",
-        "purpose": "Helper used inside patrol loop (likely for timing/cleanup decisions).",
-        "confidence": "low"
+        "caller": "U8P_SHAANA::func03B0",
+        "callee": "METHOD::func15E7",
+        "purpose": "Drive animations/waits or advance NPC behavior steps during the taunt/monologue sequence.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_SHAANA::func03B0",
+        "callee": "METHOD::func091C",
+        "purpose": "Trigger animation/combat-like actions in the taunt sequence (inferred).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_SHAANA::func08CD",
+        "callee": "FREE::func1C19",
+        "purpose": "Spawn a timer/delayed helper to U8P_SHAANA::schedule groan timing before emitting the final bark.",
+        "confidence": "high"
       },
       {
         "caller": "U8P_SHAANA::use",
-        "callee": "urandom",
-        "purpose": "Choose randomized dialogue/behavior variants when interacting with Shaana.",
+        "callee": "METHOD::func15E7",
+        "purpose": "Used around conversation barks/waits in short conversation branch (timing/animation helper).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_SHAANA::func0973",
+        "callee": "Npc::getMap",
+        "purpose": "Add a map-specific dialogue option when NPC is on map 0x08.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SHAANA::29E",
-        "callee": "spawn METHOD::15E7",
-        "purpose": "Spawn an orientation/animation engine method during patrol sequences.",
-        "confidence": "medium"
+        "caller": "U8P_SHAANA::func2A16",
+        "callee": "METHOD::func091C",
+        "purpose": "Called during dialog flow (likely animation helper); precise U8P_SHAANA::use in dialog is not fully explicit.",
+        "confidence": "low"
+      },
+      {
+        "caller": "U8P_SHAANA::various",
+        "callee": "urandom",
+        "purpose": "Randomly vary barks and timing choices in monologue/taunt/groan behaviors.",
+        "confidence": "high"
       }
     ]
   },
@@ -189,54 +232,64 @@
     "reads": [
       {
         "name": "toranDead",
-        "likely_effect": "Alters schedule selection in U8P_SHAANA::schedule (influences which schedule variant to pick).",
-        "confidence": "high"
-      },
-      {
-        "name": "secondexecution",
-        "likely_effect": "Used with toranDead and other state to choose alternate schedule parameters.",
+        "likely_effect": "Gate whether Shaana will engage in conversation/U8P_SHAANA::use handling (when false, U8P_SHAANA::use() returns early).",
         "confidence": "high"
       },
       {
         "name": "devonInRule",
-        "likely_effect": "Controls map-specific fast-area behavior in U8P_SHAANA::enterFastArea and influences dialogue branches in use().",
+        "likely_effect": "Used with a map check (map==0x03) to select a special groan/monologue path in U8P_SHAANA::enterFastArea.",
         "confidence": "high"
       },
       {
         "name": "shaanaName",
-        "likely_effect": "If set, U8P_SHAANA::look barks Shaana's name instead of job/generic term.",
+        "likely_effect": "If set, used by U8P_SHAANA::look() to display the NPC's name and by dialogues to conditionally show 'Who are you?' option or alternate greeting.",
         "confidence": "high"
       },
       {
         "name": "shaanaJob",
-        "likely_effect": "If shaanaName is not set, controls whether U8P_SHAANA::look barks 'executioner' instead of a generic term.",
+        "likely_effect": "Used by U8P_SHAANA::look() as a fallback descriptor (job/title 'executioner') when shaanaName is not set.",
         "confidence": "high"
       },
       {
-        "name": "shaanaMet",
-        "likely_effect": "Determines whether U8P_SHAANA::use will spawn a first-meeting dialog routine or normal conversation.",
-        "confidence": "medium"
-      },
-      {
         "name": "hydrosFree",
-        "likely_effect": "Contributes to dialog/urgent-refusal logic in U8P_SHAANA::use (counts toward a threshold).",
-        "confidence": "medium"
-      },
-      {
-        "name": "pyrosFree",
-        "likely_effect": "Contributes to dialog/urgent-refusal logic in U8P_SHAANA::use (counts toward a threshold).",
+        "likely_effect": "Contributes to an interaction counter in U8P_SHAANA::use() that can change the dialogue outcome (inferred: increments local4).",
         "confidence": "medium"
       },
       {
         "name": "hasHeart",
-        "likely_effect": "Affects dialog choices and warnings in U8P_SHAANA::use.",
+        "likely_effect": "Contributes to the same counter in U8P_SHAANA::use() and triggers a specific warning line when set.",
         "confidence": "medium"
+      },
+      {
+        "name": "pyrosFree",
+        "likely_effect": "Contributes to the same counter in U8P_SHAANA::use() (inferred role).",
+        "confidence": "medium"
+      },
+      {
+        "name": "secondexecution",
+        "likely_effect": "Used in U8P_SHAANA::schedule() guard logic to determine whether scheduling should run (inferred guard variable).",
+        "confidence": "low"
       }
     ],
     "writes": [
       {
         "name": "shaanaSchedule",
-        "likely_effect": "Stores the chosen schedule id/parameters selected by U8P_SHAANA::schedule for use by spawned engine schedule methods and later logic.",
+        "likely_effect": "Stores the selected U8P_SHAANA::schedule index/state for Shaana; written by U8P_SHAANA::schedule() when the U8P_SHAANA::schedule selection helper returns a result.",
+        "confidence": "high"
+      },
+      {
+        "name": "shaanaMet",
+        "likely_effect": "Set when the player begins conversation; marks that the player has met Shaana and routes future U8P_SHAANA::use() calls to the follow-up dialog routine.",
+        "confidence": "high"
+      },
+      {
+        "name": "shaanaName",
+        "likely_effect": "Set when the player asks 'Who are you?' to record that Shaana's name is now known (affects U8P_SHAANA::look text and future dialogue).",
+        "confidence": "high"
+      },
+      {
+        "name": "shaanaBored",
+        "likely_effect": "Set when the player repeatedly ignores or gives empty input, causing Shaana to end the conversation or become curt in future interactions.",
         "confidence": "high"
       }
     ]
@@ -249,10 +302,10 @@
   ],
   "quick_facts": {
     "main_function": "U8P_SHAANA::look",
-    "behavior_summary_one_liner": "This script implements the in-game behavior for the NPC Shaana. It provides a 'U8P_SHAANA::look' (examine) handler that chooses a short bark based on whether Shaana is dead and on two global flags (shaanaName, shaanaJob).",
-    "external_call_count": 13,
-    "flag_read_count": 9,
-    "flag_write_count": 1
+    "behavior_summary_one_liner": "This script implements the runtime behavior and dialogue for the NPC Shaana (an executioner). It provides: a U8P_SHAANA::look/description handler, a time-of-day U8P_SHAANA::schedule chooser, fast-area entry/exit triggers that drive short ambient groans or roaming/pathfinding behavior, a roaming/taunt routine with animations and barks, and a multi-part conversation system triggered by player 'U8P_SHAANA::use' (talk).",
+    "external_call_count": 16,
+    "flag_read_count": 8,
+    "flag_write_count": 4
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

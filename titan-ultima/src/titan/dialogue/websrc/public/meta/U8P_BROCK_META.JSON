@@ -3,30 +3,30 @@
   "source_of_truth": "dialogue/json/U8P_BROCK.json",
   "file": "U8P_BROCK",
   "behavior_summary": [
-    "Provides an examination ('U8P_BROCK::look') handler for the BROCK object that reports a short identifying string based on the item's current frame/state (maps frames 0..4 to specific artifact piece names).",
-    "Contains a complex helper activation routine that appears to implement multi-stage artifact interactions or a dramatic scripted event: scanning references, applying damage to nearby targets, spawning visual/sound effects, creating/destroying temporary items, changing the BROCK item's frame/type, and performing camera/fade/teleport operations.",
-    "The U8P_BROCK::look handler is read-only and presentation-focused (text bark). The helper performs gameplay-affecting changes and large-scale scene effects (damage, teleport, stasis, camera quake).",
-    "Most external engine routines (Item::*, spawn, playSFX, process LightningBolt, Camera::startQuake, FadeToBlack/FadeFromBlack, Npc::teleport, etc.) are used by the helper to stage visual and mechanical outcomes."
+    "This script implements an interactive obelisk-like object/NPC that (A) reports which elemental/obelisk piece is present when examined (U8P_BROCK::look), and (B) accepts items via a U8P_BROCK::use flow that can consume/transform items, spawn effects (lightning, transforms, fades), drop or create reward items, change the object's frame/type, and ultimately play victory/defeat barks or teleport/fade the NPC.",
+    "U8P_BROCK::look: a short examine handler that reads this item's frame (Item::getFrame(this)) and emits one of several short barks describing the piece (examples: 'obelisk tip', 'the Heart of Earth', 'the Tear of the Seas', 'the Breath of Air', 'the Tongue of Flame').",
+    "U8P_BROCK::use (process): entry for using items on the object; it gathers/inspects equipped items (Npc::getEquip), reorders/moves items (Item::push, Item::popToEnd), counts matching frames and either spawns an intermediate effect or directly calls the core handler U8P_BROCK::func0197 when preconditions are met.",
+    "U8P_BROCK::func0197: the core interaction routine that suspends to receive the selected item reference, branches heavily on Item::getType and Item::getFrame(this), and executes conditional outcomes such as spawning processes (LightningBolt, pyrosTransformReverse, fades), creating/popping/dropping items, playing sound effects, applying Item::receiveHit, changing item frame/type, destroying temporaries, and emitting victory/defeat barks."
   ],
   "notable_control_flow": [
-    "BROCK::look branches on Item::getFrame(item_ptr) (frame 0..4) to select the bark string, then suspends — straightforward event-to-text mapping.",
-    "U8P_BROCK::BROCK::0197 (helper) branches heavily on the item's type/frame and on the triggering process state, iterates item reference slots (Item::push / loopscr / Item::getQ), and uses loop counters to apply repeated effects (Item::receiveHit with urandom-based damage) to enumerated targets.",
-    "The helper interleaves asynchronous visual processes (spawn PYROS/LITHOS/FREE), synchronous operations (Item::create/Item::destroy, Item::setFrame), and global scene transitions (FadeToBlack/FadeFromBlack, Camera quakes, setAvatarInStasis) to construct a multi-step scripted sequence.",
-    "Reference resets (Kernel::resetRef) and pop/popToEnd calls are used to manage and clean up referenced helper items created during sequences."
+    "U8P_BROCK::look: single-shot process that reads Item::getFrame(this) into local1 and selects one of several Bark nodes; then suspends/returns.",
+    "U8P_BROCK::use: initializes locals (local1=0, local3=0), reads player's equipment via Npc::getEquip, iterates/inspects candidate items (using Item::push and Item::popToEnd), increments a counter local3 when frames match, and triggers U8P_BROCK::func0197 when four matching items are assembled or immediately on the else path.",
+    "U8P_BROCK::func0197: suspends to capture a selected item (SuspendAssign -> local1), then performs a large decision tree keyed on Item::getType(addressof(local1)) and Item::getFrame(this). Many branches spawn external processes (spawn), playSFX, create/pop items, setType/setFrame, call Kernel::resetRef, call Item::receiveHit, and emit barks. Several branches include suspend points while awaiting spawned effects.",
+    "Multiple suspend points are present: the U8P_BROCK::use path suspends when spawning an intermediate effect, and U8P_BROCK::func0197 suspends while awaiting spawned processes or immediate result processing (dialogue barks, item moves)."
   ],
   "open_questions": [
-    "What exact game-state conditions or item type constants trigger each distinct branch inside U8P_BROCK::BROCK::0197 (the disassembly shows many branches but not the high-level design intent for artifact progression vs. defeat sequence)?",
-    "Which external spawn processes (FREE::1C19, PYROS::1914, LITHOS::0CCD, etc.) correspond to specific visual effects, and how do their parameters alter the appearance/behavior of the sequence?",
-    "Does BROCK::0197 get invoked by a player 'use' action, another event type, or an external script? The entry event for the helper routine isn't explicit in the disassembly summary.",
-    "Are there global quest flags or persistent state changes outside the script's local item frame/type changes that should be set during the activation sequence (no global flags were observed being written in the provided extract)?"
+    "Exact numeric item type IDs and the concrete in-game item names associated with the Item::getType branches (the script checks specific type values that are not labeled here).",
+    "Precise player-facing meaning of every branch inside U8P_BROCK::func0197 (which branches produce rewards vs. transformation vs. NPC defeat) — the actions are clear, but mapping to in-game items/quests is inferred.",
+    "Whether any persistent global flags outside this script are set elsewhere as a consequence of these interactions (no globals are read/written here, but other scripts may observe state changes produced by spawned processes or item type/frame changes).",
+    "Exact conditions under which the script teleports/releases the NPC vs. simply changing this item's frame/type — branch intent is inferred from teleport/spawn calls but not fully annotated in the decompilation output."
   ],
   "main_function": {
     "name": "U8P_BROCK::look",
     "execution_form": "process",
-    "purpose": "Handle 'U8P_BROCK::look' (examine) events for the BROCK object and emit a short identifying line describing which artifact piece the item currently represents, based on its frame value.",
+    "purpose": "Provide a concise description when the player examines this object/NPC by reporting which obelisk/element piece (frame) is present.",
     "entry_conditions": [
-      "Triggered by the object's 'U8P_BROCK::look' / examine event (Event 0 or equivalent engine 'U8P_BROCK::look' trigger).",
-      "Requires the viewer/trigger process id (pid) and the item instance reference (item_ptr)."
+      "Triggered by the player 'U8P_BROCK::look' / examine action on the item/NPC.",
+      "Branches solely on uword Item::getFrame(this) to select one short descriptive bark."
     ],
     "confidence": "high"
   },
@@ -34,95 +34,102 @@
     {
       "name": "U8P_BROCK::look",
       "kind": "main",
-      "role": "Examine handler that reads the item's frame (Item::getFrame) and uses Item::bark to display a descriptive string (frames 0..4 map to specific artifact piece names).",
+      "role": "examine/description handler; reads this object's frame and emits a short descriptive bark.",
       "confidence": "high"
     },
     {
-      "name": "U8P_BROCK::0197",
+      "name": "U8P_BROCK::func0197",
       "kind": "helper",
-      "role": "Complex activation/interaction routine: inspects equipment/target, branches on item type/frame, enumerates and manipulates referenced items, applies hits/damage, spawns visual processes, creates/destroys items, sets frames/types, and orchestrates camera/fade/teleport effects for a scripted event.",
+      "role": "core 'U8P_BROCK::use' interaction handler; performs item-type/frame checks and executes world effects, item creation/drops, setType/setFrame, and barks/teleport sequences.",
       "confidence": "medium"
     },
     {
-      "name": "Item::getFrame",
-      "kind": "extern",
-      "role": "Engine call returning an item's current frame/state used for branching and presentation.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Emit a short text line (dialogue/description) on behalf of an item/process to a player/process.",
-      "confidence": "high"
+      "name": "U8P_BROCK::use",
+      "kind": "helper",
+      "role": "U8P_BROCK::use-entry process that prepares and assembles candidate items (inventory manip), checks preconditions, and calls U8P_BROCK::func0197.",
+      "confidence": "medium"
     }
   ],
   "call_analysis": {
-    "internal_calls": [],
+    "internal_calls": [
+      {
+        "caller": "U8P_BROCK::use",
+        "callee": "U8P_BROCK::func0197",
+        "purpose": "Invoke the core interaction handler when item-count/frame preconditions are met or on the default path.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BROCK::func0197",
+        "callee": "U8P_BROCK::look",
+        "purpose": "No evidence of direct call; functions are complementary. (Listed to clarify internal function relationships.)",
+        "confidence": "low"
+      }
+    ],
     "external_calls": [
       {
         "caller": "U8P_BROCK::look",
         "callee": "Item::getFrame",
-        "purpose": "Read the BROCK item's frame/state to decide which description to display.",
+        "purpose": "Read this item's frame to determine which descriptive bark to emit.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_BROCK::look",
-        "callee": "Item::bark",
-        "purpose": "Display a short identifying string to the viewer (pid) describing the artifact piece.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_BROCK::0197",
+        "caller": "U8P_BROCK::use",
         "callee": "Npc::getEquip",
-        "purpose": "Inspect an NPC equip slot to guard or conditionally alter behavior based on the actor's equipment/state.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_BROCK::0197",
-        "callee": "Item::getType",
-        "purpose": "Query the item's type id to route to different scripted outcomes.",
+        "purpose": "Obtain the player's equipped item/container used to build the candidate item set.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_BROCK::0197",
-        "callee": "Item::push / Item::pop / Item::popToEnd / Kernel::resetRef / Item::getQ",
-        "purpose": "Enumerate and manage the item's referenced slots/contained items in order to find targets and to create/clean up helper objects.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_BROCK::0197",
-        "callee": "Item::create / Item::destroy / Item::setFrame / Item::setType",
-        "purpose": "Create temporary helper items at the BROCK's coordinates, update their state or the BROCK's frame/type, and destroy temporary objects during cleanup.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_BROCK::0197",
-        "callee": "spawn (FREE::1C19, PYROS::1914, LITHOS::0CCD, etc.)",
-        "purpose": "Start asynchronous visual/effect processes to accompany scripted events (explosions, flames, rock effects).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_BROCK::0197",
-        "callee": "Item::receiveHit / process LightningBolt / urandom",
-        "purpose": "Apply damage/hits to targeted referenced entities with randomized damage values and trigger lightning/damage effects.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_BROCK::0197",
-        "callee": "U8P_BROCK::playSFX",
-        "purpose": "Play sound effects at key moments of the scripted sequence for dramatic feedback.",
+        "caller": "U8P_BROCK::use",
+        "callee": "Item::push / Item::popToEnd",
+        "purpose": "Reorder/move items between stacks/containers to assemble the items passed to U8P_BROCK::func0197.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_BROCK::0197",
-        "callee": "Item::getX / Item::getY / Item::getZ",
-        "purpose": "Query the BROCK item's coordinates to position created helper items and effects appropriately.",
+        "caller": "U8P_BROCK::func0197",
+        "callee": "Item::getType / Item::getFrame",
+        "purpose": "Branch logic by the type of the selected item and by the object's frame to determine the interaction outcome.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_BROCK::0197",
-        "callee": "process FadeToBlack / FadeFromBlack / Camera::startQuake / Camera::stopQuake / setAvatarInStasis / Npc::teleport",
-        "purpose": "Perform scene-level transitions (fade, camera quake, stasis) and teleportation to deliver a cinematic scripted outcome.",
+        "caller": "U8P_BROCK::func0197",
+        "callee": "spawn (LightningBolt, pyrosTransformReverse, FadeToBlack/FadeFromBlack, FREE::func1C19, etc.)",
+        "purpose": "Start visual/logic effect processes as part of transformation, attack, or reward sequences.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BROCK::func0197",
+        "callee": "Item::create / Item::pop / Item::popToEnd / Item::destroy / Item::push",
+        "purpose": "Create temporary reward or effect items, place them in the world, move items in inventories, and clean up temporaries.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BROCK::func0197",
+        "callee": "playSFX",
+        "purpose": "Play sound effects associated with dramatic outcomes (lightning, reward drop, etc.).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BROCK::func0197",
+        "callee": "Item::receiveHit",
+        "purpose": "Apply damage/effects to the NPC/item to simulate an attack or forced transformation in some branches.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BROCK::func0197",
+        "callee": "Kernel::resetRef",
+        "purpose": "Cleanup/reset kernel-level references when reassigning or destroying temporaries during transformations.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BROCK::func0197",
+        "callee": "Npc::teleport",
+        "purpose": "Teleport the NPC/object after defeat/transform sequences in some branches.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BROCK::func0197",
+        "callee": "urandom",
+        "purpose": "Generate randomness used to vary hit/effect values.",
         "confidence": "medium"
       }
     ]
@@ -138,8 +145,8 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_BROCK::BROCK::look",
-    "behavior_summary_one_liner": "Provides an examination ('U8P_BROCK::look') handler for the BROCK object that reports a short identifying string based on the item's current frame/state (maps frames 0..4 to specific artifact piece names).",
+    "main_function": "U8P_BROCK::look",
+    "behavior_summary_one_liner": "This script implements an interactive obelisk-like object/NPC that (A) reports which elemental/obelisk piece is present when examined (U8P_BROCK::look), and (B) accepts items via a U8P_BROCK::use flow that can consume/transform items, spawn effects (lightning, transforms, fades), drop or create reward items, change the object's frame/type, and ultimately play victory/defeat barks or teleport/fade the NPC.",
     "external_call_count": 11,
     "flag_read_count": 0,
     "flag_write_count": 0

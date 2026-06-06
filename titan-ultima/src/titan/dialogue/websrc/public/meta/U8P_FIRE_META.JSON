@@ -3,105 +3,104 @@
   "source_of_truth": "dialogue/json/U8P_FIRE.json",
   "file": "U8P_FIRE",
   "behavior_summary": [
-    "This script implements the per-tick/process logic for a persistent fire/flame item: it advances the item's animation frame, and on particular frames/ticks attempts to spawn temporary subsidiary effects (lava pools and pyro sparks) at offsets from the item's position.",
-    "Before creating effects it computes explicit X,Y,Z candidate positions from the host item's coordinates and validates placement with Item::legal_create; only on success does it spawn LAVA or PYROS objects.",
-    "It uses the FREE subsystem (spawned helper FREE::1C19 and calls to FREE::2A56) around spawn points to schedule or perform cleanup of the temporary effects.",
-    "The routine loops/suspends to repeat this behavior over time while the fire item persists; frame/state bytes and small local flags gate when and which effects are produced."
+    "U8P_FIRE::func0080 runs as a timed process bound to a FIRE item instance and advances the item's animation/frame over time (read via Item::getFrame and written via Item::setFrame).",
+    "At specific animation frames (notably frame == 0x02 and other hex thresholds like 0x0F, 0x1D, 0x23, 0x2C) it computes nearby coordinates from Item::getX/getY/getZ and attempts to create effect items using Item::legal_create. On successful create it spawns behaviors on the new item (LAVA::func00AF or PYROS::func20A1(0x01)).",
+    "The routine uses a spawned helper (FREE::func1C19) and synchronizes/waits on it (spawn/compare to local2 and suspend) to pace or coordinate operations, and it calls FREE::resetRef(0x0202, this) and PYROS::func3E82 when activation/resetting is required.",
+    "Internal boolean-like locals (local5, local4) act as guards so spawns and reset/notification happen only once per activation window; the process loops with suspend delays until lifecycle completion/reset."
   ],
   "notable_control_flow": [
-    "Read current frame (Item::getFrame) into a local byte (BP-02) and branch behavior based on comparisons against constants (examples: 0x1D, 0x23, 0x0F, 0x2C).",
-    "On specific frame values, compute two distinct sets of candidate offsets (two X/Y/Z triplets) from Item::getX/Y/Z and run Item::legal_create for each candidate.",
-    "If Item::legal_create returns success, spawn either LAVA (shape 0x6F) or PYROS (shape 0x6D) at the returned slot/address; otherwise skip that spawn path.",
-    "Call/Spawn FREE helpers: spawn FREE::1C19 (passed pid and a small flag) frequently before suspend/around spawn points; in some branches call FREE::2A56 prior to spawning PYROS::3E82.",
-    "Advance or set the item's frame via Item::setFrame and loop/suspend so the script runs again on subsequent ticks."
+    "Main loop is time-driven: read frame -> conditional branches for frame thresholds -> perform spawn/create attempts or toggles -> Item::setFrame -> suspend (delay) -> repeat.",
+    "Frame-specific branches: a creation/activation block at frame == 0x02, additional behavior changes at frames 0x0F, 0x1D, 0x23, and 0x2C forming phased lifecycle transitions.",
+    "Spawning and synchronization: the process may spawn FREE::func1C19 and compare its handle with local2 to wait for or detect completion before continuing.",
+    "Guard logic: local5 and local4 are toggled and checked to prevent repeated resets/spawns and to gate calls to FREE::resetRef and PYROS::func3E82."
   ],
   "open_questions": [
-    "Precise semantic meaning of FREE::1C19 and FREE::2A56 (appear to schedule or perform cleanup/freeing for temporary effects, but exact behavior is inferred).",
-    "Exact identity and gameplay behavior of shapes 0x6D and 0x6F (mapped to PYROS/LAVA here by pattern; their in-game lifetimes/effects are not fully specified).",
-    "Meaning of small local byte flags (BP-0Ah/BP-0Bh etc.): whether they represent cooldowns, one-shot guards, or state counters is inferred but not certain.",
-    "Why some branches call FREE::2A56 (a call) before spawning PYROS::3E82 while others do not — the side effects expected from FREE::2A56 are not explicitly documented."
+    "What exact gameplay semantics correspond to each frame threshold (0x02, 0x0F, 0x1D, 0x23, 0x2C)? — these appear to be animation/lifecycle phases but mapping to visible game events is inferred.",
+    "What is the precise effect and contract of FREE::func1C19 (spawned helper) and how long/what conditions does it enforce before the process continues?",
+    "What does the registry key 0x0202 (used with FREE::resetRef) represent in game data and how does resetRef affect other systems?",
+    "Is local4 used both as a created-item reference and later as a boolean-like flag (inference from mixed use); this dual role needs verification from original source or runtime traces."
   ],
   "main_function": {
-    "name": "U8P_FIRE::0080",
+    "name": "U8P_FIRE::func0080",
     "execution_form": "process",
-    "purpose": "Drive the persistent fire item: advance animation frames, periodically attempt to spawn nearby temporary lava and pyro effects after validating placement, and arrange cleanup via FREE helper routines.",
+    "purpose": "Drive the FIRE item instance's animation and side-effects over time: advance frames, attempt to spawn nearby flame/lava effects at specific frames, coordinate timing with an external helper, and perform cleanup/notification when activation occurs.",
     "entry_conditions": [
-      "Runs as the active/process script for a fire item (invoked repeatedly, suspending and looping each tick).",
-      "Triggered by the item's lifecycle/engine tick rather than a one-off external call."
+      "Spawned/started as a process attached to a FIRE item instance (invoked externally, e.g., from PYROS::func247C per available metadata).",
+      "Runs continuously for the lifetime of the FIRE item, paced by suspend/delay operations."
     ],
     "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_FIRE::0080",
+      "name": "U8P_FIRE::func0080",
       "kind": "main",
-      "role": "Per-tick controller for a fire/flame item that drives animation and spawns temporary effects.",
+      "role": "Manage FIRE item lifecycle, animation progression, spawn nearby effects, and perform cleanup/notification.",
       "confidence": "high"
     },
     {
       "name": "Item::getFrame",
       "kind": "extern",
-      "role": "Read current animation/frame byte from the item to decide behavior and timing.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getX",
-      "kind": "extern",
-      "role": "Return item X coordinate used to compute spawn X offsets.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getY",
-      "kind": "extern",
-      "role": "Return item Y coordinate used to compute spawn Y offsets.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getZ",
-      "kind": "extern",
-      "role": "Return item Z coordinate used to compute spawn Z/height offsets.",
+      "role": "Read the item's current animation/frame index (used to drive conditional behavior).",
       "confidence": "high"
     },
     {
       "name": "Item::setFrame",
       "kind": "extern",
-      "role": "Advance or set the item's animation frame to step its visual/state progression.",
+      "role": "Write a new frame value to progress the item's animation/lifecycle.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getX",
+      "kind": "extern",
+      "role": "Provide item's X coordinate for computing spawn offsets.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getY",
+      "kind": "extern",
+      "role": "Provide item's Y coordinate for computing spawn offsets.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getZ",
+      "kind": "extern",
+      "role": "Provide item's Z/level for spawn placement computations.",
       "confidence": "high"
     },
     {
       "name": "Item::legal_create",
       "kind": "extern",
-      "role": "Validate whether a shape can be created at a candidate X,Y,Z; returns an output slot/address used by spawn calls.",
+      "role": "Check/attempt creation of a new item/entity at a candidate position; returns created-item reference via out parameter when allowed.",
       "confidence": "high"
     },
     {
-      "name": "FREE::1C19",
+      "name": "LAVA::func00AF",
       "kind": "extern",
-      "role": "Spawned helper used around spawn/suspend points; inferred to schedule timed cleanup/freeing for transient effects.",
+      "role": "Behavior spawned on newly created lava-effect items (initialization of LAVA behavior).",
       "confidence": "medium"
     },
     {
-      "name": "FREE::2A56",
+      "name": "PYROS::func20A1",
       "kind": "extern",
-      "role": "Called (not spawned) in some branches before creating PYROS::3E82; inferred to register or perform immediate cleanup/registration for spawned objects.",
+      "role": "Behavior spawned on created pyro items (called with flag 0x01); initializes alternate fire effect.",
       "confidence": "medium"
     },
     {
-      "name": "LAVA::00AF",
+      "name": "FREE::func1C19",
       "kind": "extern",
-      "role": "Spawn handler that creates a temporary lava effect at a validated spawn slot/address.",
-      "confidence": "high"
+      "role": "Spawned helper/process used for synchronization/timing with the main loop (exact purpose inferred).",
+      "confidence": "low"
     },
     {
-      "name": "PYROS::20A1",
+      "name": "FREE::resetRef",
       "kind": "extern",
-      "role": "Spawn handler that creates a pyro/spark effect at a validated spawn slot/address.",
-      "confidence": "high"
+      "role": "Deregister/reset a registry/reference (called with 0x0202 and this) as part of activation/cleanup.",
+      "confidence": "medium"
     },
     {
-      "name": "PYROS::3E82",
+      "name": "PYROS::func3E82",
       "kind": "extern",
-      "role": "Spawn handler that creates a different variant of pyro/ember effect, typically after FREE::2A56 is called.",
+      "role": "Notify or trigger a PYROS-system update after reset/activation (inferred side-effect).",
       "confidence": "medium"
     }
   ],
@@ -109,81 +108,75 @@
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_FIRE::0080",
+        "caller": "U8P_FIRE::func0080",
         "callee": "Item::getFrame",
-        "purpose": "Obtain the current animation/state frame to drive branching and timing.",
+        "purpose": "Read current animation/frame index to decide behavior and when to advance frames.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_FIRE::0080",
+        "caller": "U8P_FIRE::func0080",
         "callee": "Item::getX",
-        "purpose": "Retrieve base X coordinate used to compute spawn X offsets for candidate positions.",
+        "purpose": "Obtain item's X coordinate to compute spawn X offsets for creation attempts.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_FIRE::0080",
+        "caller": "U8P_FIRE::func0080",
         "callee": "Item::getY",
-        "purpose": "Retrieve base Y coordinate used to compute spawn Y offsets for candidate positions.",
+        "purpose": "Obtain item's Y coordinate to compute spawn Y offsets for creation attempts.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_FIRE::0080",
+        "caller": "U8P_FIRE::func0080",
         "callee": "Item::getZ",
-        "purpose": "Retrieve base Z coordinate used to compute spawn Z offsets/height for placement checks.",
+        "purpose": "Obtain item's Z coordinate/level to compute spawn Z for creation attempts.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_FIRE::0080",
+        "caller": "U8P_FIRE::func0080",
         "callee": "Item::legal_create",
-        "purpose": "Validate placement of a shape at computed offsets; produces an output slot/address used by the subsequent spawn if allowed.",
+        "purpose": "Attempt to create nearby effect items/entities at computed offsets; returns created reference via out parameter.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_FIRE::0080",
-        "callee": "LAVA::00AF (spawn)",
-        "purpose": "Spawn a temporary lava object at a location validated by Item::legal_create.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FIRE::0080",
-        "callee": "PYROS::20A1 (spawn)",
-        "purpose": "Spawn a pyro/spark visual at a validated location.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FIRE::0080",
-        "callee": "PYROS::3E82 (spawn)",
-        "purpose": "Spawn an alternate pyro-related visual, typically after calling FREE::2A56.",
+        "caller": "U8P_FIRE::func0080",
+        "callee": "spawn addressof(localRef)->LAVA::func00AF",
+        "purpose": "Initialize LAVA behavior on a successfully created lava item (spawned coroutine).",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_FIRE::0080",
-        "callee": "FREE::1C19 (spawn)",
-        "purpose": "Spawned repeatedly around suspend/spawn points; likely schedules or marks timed cleanup/free operations for temporary effects.",
+        "caller": "U8P_FIRE::func0080",
+        "callee": "spawn addressof(localRef)->PYROS::func20A1",
+        "purpose": "Initialize PYROS/pyro behavior on a created item (alternate creation path), called with flag 0x01.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_FIRE::0080",
-        "callee": "FREE::2A56 (call)",
-        "purpose": "Called in some branches before spawning certain pyros; inferred to perform immediate registration/cleanup actions for the upcoming spawn.",
+        "caller": "U8P_FIRE::func0080",
+        "callee": "spawn FREE::func1C19",
+        "purpose": "Spawn a helper process used for timing/synchronization; return/handle is compared with local2 and used to suspend/wait.",
+        "confidence": "low"
+      },
+      {
+        "caller": "U8P_FIRE::func0080",
+        "callee": "FREE::resetRef",
+        "purpose": "Reset/deregister a reference (0x0202, this) as part of activation/cleanup before notifying PYROS.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_FIRE::0080",
+        "caller": "U8P_FIRE::func0080",
+        "callee": "PYROS::func3E82",
+        "purpose": "Notify the PYROS system of activation/reset after FREE::resetRef is called.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FIRE::func0080",
         "callee": "Item::setFrame",
-        "purpose": "Update the item's frame to the next animation/state value so behavior evolves across ticks.",
+        "purpose": "Write back the incremented/updated frame to progress the item's animation.",
         "confidence": "high"
       }
     ]
   },
   "global_flags": {
-    "reads": [
-      {
-        "name": "pid",
-        "likely_effect": "Read and passed as the owner/process id to FREE::1C19 spawns (used to scope spawned helper/cleanup operations).",
-        "confidence": "medium"
-      }
-    ],
+    "reads": [],
     "writes": []
   },
   "ui_tags": [
@@ -193,10 +186,10 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_FIRE::FIRE::0080",
-    "behavior_summary_one_liner": "This script implements the per-tick/process logic for a persistent fire/flame item: it advances the item's animation frame, and on particular frames/ticks attempts to spawn temporary subsidiary effects (lava pools and pyro sparks) at offsets from the item's position.",
+    "main_function": "U8P_FIRE::func0080",
+    "behavior_summary_one_liner": "U8P_FIRE::func0080 runs as a timed process bound to a FIRE item instance and advances the item's animation/frame over time (read via Item::getFrame and written via Item::setFrame).",
     "external_call_count": 11,
-    "flag_read_count": 1,
+    "flag_read_count": 0,
     "flag_write_count": 0
   },
   "hypotheses": {

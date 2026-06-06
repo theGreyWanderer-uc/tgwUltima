@@ -3,29 +3,23 @@
   "source_of_truth": "dialogue/json/U8P_WTHRONE.json",
   "file": "U8P_WTHRONE",
   "behavior_summary": [
-    "Responds to a 'U8P_WTHRONE::look' (examine) event on the wooden throne: prepares the throne process for inspection, makes the throne emit a short descriptive text 'wooden throne ', and then returns/suspends.",
-    "Performs engine-level preparation on the target process (a set-info and a process-exclude style operation inferred from the opcode sequence) before producing the description.",
-    "Allocates or references a temporary string literal ('wooden throne '), calls Item::bark with that string and the throne process pointer, frees the temporary, and preserves the bark return value as the function's result."
+    "This script implements the object's 'U8P_WTHRONE::look' (examine) handler. When the player examines the wooden throne, the script emits a single short descriptive bark 'wooden throne' and then yields/ends the U8P_WTHRONE::look process.",
+    "No branching, menus, flags, or helper functions are present; the behavior is minimal and strictly presentational."
   ],
   "notable_control_flow": [
-    "Entry on a U8P_WTHRONE::look/inspect trigger: the routine runs when an actor inspects the throne.",
-    "Engine state updates: a set-info opcode and a process-exclude opcode are executed against the target process (inferred to prevent concurrent handling or to mark display state).",
-    "Call to external routine Item::bark with (description_string, target_process); the return value is captured into a local 'retval'.",
-    "Temporary memory lifecycle: the description string is created/converted to a pointer, passed to Item::bark, then freed immediately after the call.",
-    "Post-call housekeeping: the captured return value is pushed/returned, an implies/pop-like boolean sequence runs (transient), then the function suspends/returns."
+    "Single linear flow: show a bark text then call suspend (engine yield/terminate).",
+    "No conditional branches or menu/choice logic are present."
   ],
   "open_questions": [
-    "Exact meaning and numeric id of the 'set info' key used on the process: what in-game flag or UI state is being changed by this set-info opcode?",
-    "Precise semantics of the process-exclude operation in this context: does it temporarily prevent other handlers, permanently deactivate the process, or just adjust update scheduling?",
-    "The source/semantics of the implies/pop boolean sequence after the bark return: is it influencing further logic, interrupt handling, or merely an artifact of the engine call convention?",
-    "Confirmation of the parameter at [BP+06h]: inferred to be the throne's process/object pointer (viewer vs. item process distinction not recorded in disassembly)."
+    "Does the engine 'suspend' call terminate the process or merely yield it for later resumption? (inferred as end-of-handler; confidence: low)",
+    "Are there any external systems that further react to this object's U8P_WTHRONE::look process beyond the visible bark (no evidence in this script; confidence: low)"
   ],
   "main_function": {
     "name": "U8P_WTHRONE::look",
     "execution_form": "process",
-    "purpose": "Handle the player's 'U8P_WTHRONE::look' action on the wooden throne by marking/preparing the throne process and emitting a short descriptive message ('wooden throne ').",
+    "purpose": "Provide the short descriptive text when the player examines the throne object.",
     "entry_conditions": [
-      "Event 0 (U8P_WTHRONE::look/inspect) triggered when the player or relevant actor inspects or looks at the throne."
+      "Player performs a 'U8P_WTHRONE::look' (examine) action targeted at the wooden throne (object-level U8P_WTHRONE::look interaction)."
     ],
     "confidence": "high"
   },
@@ -33,13 +27,7 @@
     {
       "name": "U8P_WTHRONE::look",
       "kind": "main",
-      "role": "Main event handler for the throne's 'U8P_WTHRONE::look' (inspect) event; sets process info/exclusion and invokes Item::bark to display a short description.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/library routine used to make an item/process emit a short text message (a 'bark') to a viewer or to the game UI.",
+      "role": "Object U8P_WTHRONE::look/examine handler that emits a single description line and then yields/ends.",
       "confidence": "high"
     }
   ],
@@ -48,9 +36,9 @@
     "external_calls": [
       {
         "caller": "U8P_WTHRONE::look",
-        "callee": "Item::bark",
-        "purpose": "Deliver the short description string ('wooden throne ') to the throne process so the item can display or emit the text to the player; return value captured as the handler's result.",
-        "confidence": "high"
+        "callee": "suspend",
+        "purpose": "Engine/runtime operation to yield or end the U8P_WTHRONE::look process after displaying the bark (inferred).",
+        "confidence": "medium"
       }
     ]
   },
@@ -60,12 +48,13 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "guard"
+    "description",
+    "suspend",
+    "object-look"
   ],
   "quick_facts": {
-    "main_function": "WTHRONE::look",
-    "behavior_summary_one_liner": "Responds to a 'U8P_WTHRONE::look' (examine) event on the wooden throne: prepares the throne process for inspection, makes the throne emit a short descriptive text 'wooden throne ', and then returns/suspends.",
+    "main_function": "U8P_WTHRONE::look",
+    "behavior_summary_one_liner": "This script implements the object's 'U8P_WTHRONE::look' (examine) handler. When the player examines the wooden throne, the script emits a single short descriptive bark 'wooden throne' and then yields/ends the U8P_WTHRONE::look process.",
     "external_call_count": 1,
     "flag_read_count": 0,
     "flag_write_count": 0

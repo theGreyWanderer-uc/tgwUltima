@@ -3,32 +3,30 @@
   "source_of_truth": "dialogue/json/U8P_CEMHAT.json",
   "file": "U8P_CEMHAT",
   "behavior_summary": [
-    "U8P_CEMHAT::hatch is an area/trigger handler that scans the area's item list and performs story-driven scene setup and cleanup when the event fires.",
-    "It contains multiple gated flows keyed to global story flags: a 'told dagger' flow (create/destroy dagger-related items and mark toldDaggerDone), a ceremony flow (teleport NPCs, set ceremonySoon, spawn a follow-up routine), a Lithos meeting setup (create and place many items, set lithosMetDone), and tomb/Loth interment handling (destroy/create tomb items).",
-    "Selection of targets is done by iterating items, testing item shape/frame and position (Item::getZ/getX/getY), treating NPCs specially (Item::isNpc => Npc::teleport) and otherwise using Item::push/Item::create/Item::pop and engine helpers (FREE::*) to assemble and place scene objects.",
-    "The function modifies persistent story state (sets toldDaggerDone, ceremonySoon, lithosMetDone) to prevent repeating sequences and to schedule follow-up behavior."
+    "U8P_CEMHAT::hatch is a world/process-level spawner that creates and places items (and occasionally NPCs) according to current quest/encounter flags.",
+    "It selects one of several mutually-exclusive branches based on global flags (e.g., toldDagger, haveDagger, lithosMet, lothInterred) and performs creation, placement, optional teleportation, and completion flag writes so the branch does not repeat.",
+    "Some branches call a bulk helper (FREE::createItemsAtLocation) to generate many items, filter them by coordinates/height and isNpc checks, push accepted items into a list, teleport NPCs into acceptable positions, and set branch-done flags.",
+    "The haveDagger branch resets references, sets ceremonySoon, teleports/positions an NPC for a ceremony, invokes spawn/METHOD::func15E7 on that object and yields the process (suspend) to allow the spawned behavior to proceed."
   ],
   "notable_control_flow": [
-    "Iterate over the area's item list and for each item: read Z/X/Y, test shape/frame/coords, then branch to destroy/create/teleport logic.",
-    "If toldDagger flag is set and toldDaggerDone is not set: remove existing dagger-related items, create/place new dagger items, and set toldDaggerDone.",
-    "If haveDagger is set: call resetRef for small refs, set ceremonySoon, teleport NPC(s) to ceremony coords (using FREE::1A85 to obtain/encode coordinates), and spawn U8P_CEMHAT::METHOD::15E7 to continue the ceremony asynchronously.",
-    "If lithosMet is set and lithosMetDone is not set: run a bulk item-creation flow using repeated Item::create + FREE::24A7 + Item::pop calls to populate many placed objects, then set lithosMetDone.",
-    "If lothInterred is relevant: scan for tomb/Loth items, destroy or replace them as appropriate (inferred tomb cleanup/creation)."
+    "Branch selection is driven by global flags: check toldDagger && !toldDaggerDone, haveDagger (then set ceremonySoon), lithosMet && !lithosMetDone, and lothInterred.",
+    "Each one-time branch sets a corresponding Done flag (e.g., toldDaggerDone, lithosMetDone) to guard against re-running.",
+    "Creation loop pattern: Item::create -> test/validate (z/x/y/isNpc) -> either Item::pop (place) or Item::destroy (cleanup) or Npc::teleport + push into a list returned by FREE::createItemsAtLocation.",
+    "Asynchronous coordination: spawn + METHOD::func15E7 is called and the process yields via suspend, implying multi-step or timed behaviors after teleport/spawn."
   ],
   "open_questions": [
-    "Exact semantics and data layout of FREE::24A7 and FREE::1A85: they appear to assemble multi-field placement/configuration records but their precise fields and side effects are not fully determined.",
-    "Concrete item type IDs, shapes, and frames used in matching/creation steps (the disassembly shows constants but the mapping to in-game item types is inferred rather than canonical).",
-    "Precise coordinate mapping and whether Item::pop(uword,uword,ubyte) uses map-tile ids, local XY, or encoded location values returned from FREE::1A85.",
-    "Whether METHOD::15E7 is defined in the same script module or another module (it appears to be a follow-up/spawn routine tied to the ceremony but its code is not included here).",
-    "Edge conditions around multiple NPCs in the area: whether all matching NPCs are teleported or only the first/closest (looping implies multiple can be handled but exact selection rules need verification)."
+    "Exact item type and subtype ids (numeric constants seen in calls) are present in the raw but their semantic meanings (which in-game item each id maps to) remain unknown from this script alone.",
+    "Whether local7/local6/local5 are persistent global flags or purely temporary encoded location descriptors used only in this process (metadata suggests they behave as temporaries but they were listed under written globals).",
+    "Precise timing/frequency and trigger for this process execution (process type 0x0210 indicates a world/area process but whether it is periodic, on area load, or triggered by another script is not explicit).",
+    "The exact semantics of METHOD::func15E7 invoked after spawn (what it does to the spawned object and how the suspend interacts with it) are not fully recoverable here."
   ],
   "main_function": {
     "name": "U8P_CEMHAT::hatch",
     "execution_form": "process",
-    "purpose": "Area/trigger handler that prepares, schedules, or cleans up scene objects and NPC positions to progress multiple story beats (dagger reveal, ceremony, Lithos meeting, Loth interment) when the event fires.",
+    "purpose": "Spawn and place quest- or event-related items/NPCs in the world based on quest flags; prepare and signal a ceremony branch when appropriate; mark branches complete to avoid repetition.",
     "entry_conditions": [
-      "Triggered by an area/fast-area event (area entry/trigger).",
-      "Behavior gated by global story flags such as toldDagger, haveDagger, lithosMet, and lothInterred."
+      "Invoked as a process (process type 0x0210) for the associated world/area or item instance rather than as a direct player dialogue handler.",
+      "Runtime branch entry depends on global state flags such as toldDagger, haveDagger, lithosMet, and lothInterred (and their corresponding Done flags)."
     ],
     "confidence": "high"
   },
@@ -36,121 +34,102 @@
     {
       "name": "U8P_CEMHAT::hatch",
       "kind": "main",
-      "role": "Primary area event handler that scans area items and executes story flows (dagger, ceremony, lithos, tomb).",
+      "role": "World/area utility process that spawns and positions items/NPCs and advances related quest flags.",
       "confidence": "high"
-    },
-    {
-      "name": "U8P_CEMHAT::METHOD::15E7",
-      "kind": "helper",
-      "role": "Spawned continuation/finalizer for the ceremony sequence (invoked asynchronously after NPC teleportation).",
-      "confidence": "medium"
-    },
-    {
-      "name": "Item::*",
-      "kind": "extern",
-      "role": "Engine item API (destroy/create/push/pop/getX/getY/getZ/isNpc) used to detect, remove, create and place items and to test coordinates and NPC status.",
-      "confidence": "high"
-    },
-    {
-      "name": "Npc::teleport",
-      "kind": "extern",
-      "role": "Engine API used to move NPCs to ceremony/meeting coordinates.",
-      "confidence": "high"
-    },
-    {
-      "name": "FREE::24A7",
-      "kind": "extern",
-      "role": "Engine helper that assembles/configures multi-field structures for complex item placement; invoked during bulk placement (lithos/tomb flows).",
-      "confidence": "medium"
-    },
-    {
-      "name": "FREE::1A85",
-      "kind": "extern",
-      "role": "Engine helper that computes/returns an encoded coordinate or placement value used for teleport/pop placement.",
-      "confidence": "medium"
-    },
-    {
-      "name": "U8P_CEMHAT::resetRef",
-      "kind": "extern",
-      "role": "Reset/initialize small reference slots prior to scheduling the ceremony.",
-      "confidence": "medium"
     }
   ],
   "call_analysis": {
-    "internal_calls": [
-      {
-        "caller": "U8P_CEMHAT::hatch",
-        "callee": "U8P_CEMHAT::METHOD::15E7",
-        "purpose": "Spawn an asynchronous continuation to proceed with or finalize the ceremony after NPCs have been teleported and ceremonySoon set.",
-        "confidence": "medium"
-      }
-    ],
+    "internal_calls": [],
     "external_calls": [
       {
         "caller": "U8P_CEMHAT::hatch",
-        "callee": "Item::destroy",
-        "purpose": "Remove existing items that conflict with or precede creation of new story objects (cleanup).",
+        "callee": "Item::create",
+        "purpose": "Allocate/create an item or NPC instance and return a handle for subsequent placement/inspection.",
         "confidence": "high"
       },
       {
         "caller": "U8P_CEMHAT::hatch",
-        "callee": "Item::create",
-        "purpose": "Allocate new item instances used to populate the scene (dagger, lithos, tomb pieces).",
+        "callee": "Item::pop",
+        "purpose": "Place/spawn a created item at specific map coordinates or into a placement list/container.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CEMHAT::hatch",
+        "callee": "Item::destroy",
+        "purpose": "Discard unwanted or invalid created items as cleanup when validation checks fail.",
         "confidence": "high"
       },
       {
         "caller": "U8P_CEMHAT::hatch",
         "callee": "Item::push",
-        "purpose": "Push an item state onto an internal stack for later Item::pop placement or transformation.",
+        "purpose": "Add accepted created item handles into a list/collection returned by FREE::createItemsAtLocation.",
         "confidence": "high"
       },
       {
         "caller": "U8P_CEMHAT::hatch",
-        "callee": "Item::pop(uword,uword,ubyte)",
-        "purpose": "Finalize placement of a created item at specific coordinates/flags (commonly used after Item::create or FREE::* assembly).",
+        "callee": "Item::getX",
+        "purpose": "Read an item's X coordinate to test whether it lies inside a target region.",
         "confidence": "high"
       },
       {
         "caller": "U8P_CEMHAT::hatch",
-        "callee": "Item::pop(uword)",
-        "purpose": "Consume or restore pushed item state; used in some placement/transform sequences.",
-        "confidence": "medium"
+        "callee": "Item::getY",
+        "purpose": "Read an item's Y coordinate for region tests and placement validation.",
+        "confidence": "high"
       },
       {
         "caller": "U8P_CEMHAT::hatch",
-        "callee": "Item::getZ / Item::getX / Item::getY",
-        "purpose": "Query item elevation and coordinates to filter which items to act on during the area scan.",
+        "callee": "Item::getZ",
+        "purpose": "Read an item's Z (height) and filter out items above/below thresholds (e.g., z>8 checks).",
         "confidence": "high"
       },
       {
         "caller": "U8P_CEMHAT::hatch",
         "callee": "Item::isNpc",
-        "purpose": "Detect NPC items so that teleportation (Npc::teleport) is used instead of static item placement/destruction.",
+        "purpose": "Determine whether a created item is an NPC so it can be teleported instead of treated as a static item.",
         "confidence": "high"
       },
       {
         "caller": "U8P_CEMHAT::hatch",
         "callee": "Npc::teleport",
-        "purpose": "Move found NPCs to ceremony or meeting coordinates determined by FREE::1A85/constructed values.",
+        "purpose": "Teleport NPC instances to target map/layer/coordinates for ceremony or randomized placements.",
         "confidence": "high"
       },
       {
         "caller": "U8P_CEMHAT::hatch",
-        "callee": "U8P_CEMHAT::resetRef",
-        "purpose": "Clear or initialize small reference slots before scheduling ceremony-related state.",
+        "callee": "FREE::createItemsAtLocation",
+        "purpose": "Bulk-create items in an area and return a collection/list handle for filtering and final placement.",
         "confidence": "medium"
       },
       {
         "caller": "U8P_CEMHAT::hatch",
-        "callee": "FREE::24A7",
-        "purpose": "Assemble a complex multi-field placement/configuration record used repeatedly in the lithos/tomb item creation flow.",
+        "callee": "FREE::randomInRange0",
+        "purpose": "Produce random integers used to randomize NPC teleport destinations or placement offsets.",
         "confidence": "medium"
       },
       {
         "caller": "U8P_CEMHAT::hatch",
-        "callee": "FREE::1A85",
-        "purpose": "Compute/encode a coordinate or placement id used for teleport/pop placement of NPCs or items.",
+        "callee": "resetRef",
+        "purpose": "Clear world/object reference slots before initiating a ceremony or teleport sequence.",
         "confidence": "medium"
+      },
+      {
+        "caller": "U8P_CEMHAT::hatch",
+        "callee": "spawn",
+        "purpose": "Spawn or instantiate an object and/or call METHOD::func15E7 to initiate scripted behavior on it.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_CEMHAT::hatch",
+        "callee": "METHOD::func15E7",
+        "purpose": "Invoke a method on the spawned object to drive multi-step behavior; the process then suspends to wait for it.",
+        "confidence": "low"
+      },
+      {
+        "caller": "U8P_CEMHAT::hatch",
+        "callee": "suspend",
+        "purpose": "Yield the process (wait) after starting an asynchronous spawn/method sequence or to end the current execution slice.",
+        "confidence": "high"
       }
     ]
   },
@@ -158,50 +137,65 @@
     "reads": [
       {
         "name": "toldDagger",
-        "likely_effect": "Gate whether the 'told dagger' creation/cleanup flow should run; read to decide entry into dagger flow.",
+        "likely_effect": "Controls whether the 'told about dagger' spawn branch should run.",
         "confidence": "high"
       },
       {
         "name": "toldDaggerDone",
-        "likely_effect": "Checked to avoid repeating the dagger flow if already completed.",
+        "likely_effect": "Prevents re-running the toldDagger branch when set.",
         "confidence": "high"
       },
       {
         "name": "haveDagger",
-        "likely_effect": "If set, triggers ceremony scheduling and NPC teleportation flow.",
+        "likely_effect": "Triggers the ceremony branch which teleports an NPC and starts the spawn/method sequence.",
         "confidence": "high"
       },
       {
         "name": "lithosMet",
-        "likely_effect": "Gate whether the Lithos meeting item-creation setup should run.",
+        "likely_effect": "Enables a bulk-spawn branch that creates many Lithos-related items for placement.",
         "confidence": "high"
       },
       {
         "name": "lithosMetDone",
-        "likely_effect": "Checked to avoid repeating the Lithos meeting setup.",
+        "likely_effect": "Guards against repeating the lithosMet branch once it has been executed.",
         "confidence": "high"
       },
       {
         "name": "lothInterred",
-        "likely_effect": "Indicates Loth interment state; read to drive tomb-related cleanup/creation flows.",
+        "likely_effect": "Allows the Loth-interred item sequence to run (creates a sequence of items).",
         "confidence": "medium"
       }
     ],
     "writes": [
       {
         "name": "toldDaggerDone",
-        "likely_effect": "Set to mark dagger flow as completed so it does not rerun.",
+        "likely_effect": "Mark the toldDagger branch complete so it does not run again.",
         "confidence": "high"
       },
       {
         "name": "ceremonySoon",
-        "likely_effect": "Set to signal that a ceremony has been scheduled/should occur soon (used to coordinate later behavior).",
+        "likely_effect": "Signal that a ceremony sequence will occur soon (set by haveDagger branch).",
         "confidence": "high"
       },
       {
         "name": "lithosMetDone",
-        "likely_effect": "Set to mark the Lithos meeting setup as complete and prevent repetition.",
+        "likely_effect": "Mark that the lithos-related spawning/placement has been performed.",
         "confidence": "high"
+      },
+      {
+        "name": "local7",
+        "likely_effect": "Appears to hold an encoded X coordinate or location descriptor used as an argument to FREE::createItemsAtLocation; likely a temporary in-process value rather than a persistent global.",
+        "confidence": "low"
+      },
+      {
+        "name": "local6",
+        "likely_effect": "Appears to hold an encoded Y coordinate or location descriptor used for bulk-creation arguments; likely temporary.",
+        "confidence": "low"
+      },
+      {
+        "name": "local5",
+        "likely_effect": "Small integer temporary used as a helper/coordinate value in filtering logic; likely non-persistent.",
+        "confidence": "low"
       }
     ]
   },
@@ -213,10 +207,10 @@
   ],
   "quick_facts": {
     "main_function": "U8P_CEMHAT::hatch",
-    "behavior_summary_one_liner": "U8P_CEMHAT::hatch is an area/trigger handler that scans the area's item list and performs story-driven scene setup and cleanup when the event fires.",
-    "external_call_count": 11,
+    "behavior_summary_one_liner": "U8P_CEMHAT::hatch is a world/process-level spawner that creates and places items (and occasionally NPCs) according to current quest/encounter flags.",
+    "external_call_count": 15,
     "flag_read_count": 6,
-    "flag_write_count": 3
+    "flag_write_count": 6
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

@@ -3,24 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_TORAN.json",
   "file": "U8P_TORAN",
   "behavior_summary": [
-    "Implements the Toran NPC's response to being 'looked' at: when the U8P_TORAN::look event runs the script prepares a short literal string \"Toran  \", asks the Toran process to 'bark' that string (emit a short speech message), frees the string, inspects the bark return value, then suspends/returns.",
-    "All behavior is local to the Toran process instance passed into the event handler; no global flags are read or written.",
-    "String allocation and immediate deallocation is performed around the bark call, indicating the message is created just for this single emission."
+    "Handles the game's 'U8P_TORAN::look' / examine event for the NPC labeled Toran.",
+    "When invoked, it displays a single on-screen bark/label: \"Toran\" and then yields/suspends the process.",
+    "No dialogue menus, branching, global flag reads/writes, or external calls are present; this is a purely informational U8P_TORAN::look handler."
   ],
   "notable_control_flow": [
-    "Entry on a U8P_TORAN::look/examine event -> allocate literal string \"Toran  \" -> call Item::bark on the Toran process with that string -> free the string -> check/consume the bark return value -> suspend/return the process handler."
+    "Linear: entry -> display bark ('Toran') -> suspend/return.",
+    "Execution form is a long-running process (processType 0x0208) triggered by the engine's examine/U8P_TORAN::look action.",
+    "Contains low-level Unknown nodes in the disassembly (raw tokens like '{' and 'suspend'), but structured behavior is a single bark followed by suspend."
   ],
   "open_questions": [
-    "Exact event number/name mapping: inference (Event 0 / 'U8P_TORAN::look') is supported by naming and calling convention but not explicitly encoded in this snippet.",
-    "Whether the [BP+06h] parameter is always the Toran process or sometimes a viewer PID (inferred as the target 'this' for Item::bark).",
-    "Whether the implies/pop sequence examining the bark return value has side effects beyond a simple return-value discard (appears to be control flow housekeeping)."
+    "No gameplay state changes or side effects are visible; confirm that no other engine hooks (e.g., U8P_TORAN::look callbacks) are invoked implicitly by the suspend.",
+    "Unknown nodes in the raw output appear to be decompiler remnants; verify there are no hidden conditionals or additional barks in other localized builds (confidence: low)."
   ],
   "main_function": {
     "name": "U8P_TORAN::look",
     "execution_form": "process",
-    "purpose": "Handle the NPC's examine/U8P_TORAN::look event by making the Toran process emit a short identifying speech ('Toran  ').",
+    "purpose": "Provide the short label/bark shown when the player examines the NPC 'Toran'.",
     "entry_conditions": [
-      "Invoked on the object's U8P_TORAN::look/examine event (inferred as Event 0 — called when a player or actor looks at Toran)."
+      "Triggered by the engine's 'U8P_TORAN::look' / examine event for this NPC (processType 0x0208).",
+      "Invoked when the player targets or inspects the NPC to view its short description."
     ],
     "confidence": "high"
   },
@@ -28,26 +30,13 @@
     {
       "name": "U8P_TORAN::look",
       "kind": "main",
-      "role": "Event handler for the Toran NPC's U8P_TORAN::look/examine event; composes and triggers a short bark/speech.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine routine used to make a process/item emit a short text message; called with (process, char*).",
+      "role": "Look/examine handler that emits the single bark 'Toran' and then suspends.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_TORAN::look",
-        "callee": "Item::bark",
-        "purpose": "Make the Toran process emit the literal message \"Toran  \". The process pointer from [BP+06h] is passed as the target 'this' for the bark call.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -55,14 +44,14 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "animation",
-    "guard"
+    "label",
+    "suspend",
+    "examine"
   ],
   "quick_facts": {
-    "main_function": "TORAN::look",
-    "behavior_summary_one_liner": "Implements the Toran NPC's response to being 'looked' at: when the U8P_TORAN::look event runs the script prepares a short literal string \"Toran  \", asks the Toran process to 'bark' that string (emit a short speech message), frees the string, inspects the bark return value, then suspends/returns.",
-    "external_call_count": 1,
+    "main_function": "U8P_TORAN::look",
+    "behavior_summary_one_liner": "Handles the game's 'U8P_TORAN::look' / examine event for the NPC labeled Toran.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

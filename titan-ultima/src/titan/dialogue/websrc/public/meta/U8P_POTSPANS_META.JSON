@@ -3,26 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_POTSPANS.json",
   "file": "U8P_POTSPANS",
   "behavior_summary": [
-    "POTSPANS::look responds to the 'U8P_POTSPANS::look' (examine) event for a pot-like item by having the item emit a short description string ('pot ').",
-    "Before emitting text it runs a small context/setup sequence (usecode 'set info' and 'process exclude' semantics inferred) then constructs a temporary string, calls Item::bark to present that string to the viewer/process, frees the temporary, consumes the bark return value via an implies/pop sequence, then suspends/returns.",
-    "No global flags are read or written by this snippet; behavior appears to be purely descriptive (UI/bark) and local to the item and calling process."
+    "Provides the 'U8P_POTSPANS::look' (examine) response for the POTSPANS actor: when the player examines this actor the script emits a single short bark containing the text \"pot \".",
+    "The process appears to yield/suspend immediately after emitting the bark, ending the U8P_POTSPANS::look handling.",
+    "No global flags are read or written, no parameters or local variables are used, and there are no external function calls in the visible code."
   ],
   "notable_control_flow": [
-    "Entry on a U8P_POTSPANS::look/examine trigger -> set info / process exclude ops run to prepare context -> push PID and temporary string 'pot ' -> call Item::bark(item, 'pot ') -> free temporary string -> handle return value with an implies/pop -> suspend and return.",
-    "The implies/pop sequence processes the return value of Item::bark (exact effect inferred; likely used to influence immediate control or messaging continuation)."
+    "U8P_POTSPANS::look is a process-oriented handler triggered by the game's examine/U8P_POTSPANS::look action.",
+    "Control flow is linear and trivial: emit one Bark ('pot ') then suspend/terminate; there are no branches, loops, or calls.",
+    "Presence of low-confidence 'Unknown' nodes in the decompilation suggests a suspend/yield step surrounding the bark but no additional behavior."
   ],
   "open_questions": [
-    "What exact engine state is changed by the observed 'set info' and 'process exclude' opcodes (what info id 0x210 or similar represents here is not explicit)?",
-    "What is the provenance and exact semantics of the pushed PID/context used when calling Item::bark (which process receives the bark call)?",
-    "What precise effect does the implies/pop sequence have on control flow after Item::bark (a guard, conditional suppression, or purely pop/cleanup)?",
-    "Could there be other events in this script not present in the disassembly snippet (only Event 0 / U8P_POTSPANS::look is visible)?"
+    "Is the trailing space in the bark text ('pot ') intentional or an artifact/truncation from decompilation?",
+    "Does a higher-level engine mechanism perform any follow-up (e.g., logging or voice playback) after the suspend that isn't visible in this snippet?",
+    "Are there any adjacent/hidden handlers (not present in this file) that rely on POTSPANS being examined (no flags are set here, but other scripts could check external state)?"
   ],
   "main_function": {
     "name": "U8P_POTSPANS::look",
     "execution_form": "process",
-    "purpose": "When the item is examined by a player/actor, present a short textual description by invoking the item's bark/display routine with the literal 'pot '.",
+    "purpose": "Handle the player examine/U8P_POTSPANS::look action for the POTSPANS actor by displaying a short descriptive bark.",
     "entry_conditions": [
-      "Triggered by the 'U8P_POTSPANS::look' / examine event (Event 0) for the POTSPANS item."
+      "Triggered when the player performs the 'U8P_POTSPANS::look' (examine) action on the POTSPANS actor."
     ],
     "confidence": "high"
   },
@@ -30,26 +30,13 @@
     {
       "name": "U8P_POTSPANS::look",
       "kind": "main",
-      "role": "Handle Event 0 (U8P_POTSPANS::look) for the POTSPANS item: prepare context and call Item::bark with the description string.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine used to display/emit short text messages for an item/process; called by POTSPANS::look to show 'pot '.",
+      "role": "Examine/U8P_POTSPANS::look handler that presents a single short bark to the player.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_POTSPANS::look",
-        "callee": "Item::bark",
-        "purpose": "Display/emote the short description string 'pot ' to the viewer/process; invoked with item instance and pointer to constructed string (PID/context pushed beforehand).",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -57,13 +44,13 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "guard"
+    "dialogue",
+    "suspend"
   ],
   "quick_facts": {
-    "main_function": "POTSPANS::look",
-    "behavior_summary_one_liner": "POTSPANS::look responds to the 'U8P_POTSPANS::look' (examine) event for a pot-like item by having the item emit a short description string ('pot ').",
-    "external_call_count": 1,
+    "main_function": "U8P_POTSPANS::look",
+    "behavior_summary_one_liner": "Provides the 'U8P_POTSPANS::look' (examine) response for the POTSPANS actor: when the player examines this actor the script emits a single short bark containing the text \"pot \".",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

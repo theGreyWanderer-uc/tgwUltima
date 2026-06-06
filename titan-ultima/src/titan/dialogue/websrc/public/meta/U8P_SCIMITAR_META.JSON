@@ -3,24 +3,30 @@
   "source_of_truth": "dialogue/json/U8P_SCIMITAR.json",
   "file": "U8P_SCIMITAR",
   "behavior_summary": [
-    "Implements the item's response to being examined (the 'U8P_SCIMITAR::look' event). When a player/actor looks at the scimitar the script sets item/process state bits, constructs the literal string \"scimitar \", and asks the item/process system to 'bark' that string toward the viewer. After the bark call it frees the temporary string, evaluates the bark return value in an implied test, then suspends/returns."
+    "Provides the object's response when the player 'looks at' or inspects the scimitar item.",
+    "When inspected, the process emits a single short bark/label text: \"scimitar \".",
+    "After showing the bark the U8P_SCIMITAR::look process suspends/ends immediately; there is no branching, menu, or player choice.",
+    "No global flags are read or written and there are no visible external calls from the U8P_SCIMITAR::look handler.",
+    "Object metadata includes item properties (weapon damage, damage type, treasure chance) but these are separate from the U8P_SCIMITAR::look behavior."
   ],
   "notable_control_flow": [
-    "Triggered on the U8P_SCIMITAR::look (Event 0) entry.",
-    "Executes a 'set info' operation on the item (push 0x0208 inferred) and a 'process exclude' operation to adjust processing state.",
-    "Allocates/pushes the literal string \"scimitar \", calls Item::bark, then frees the string and handles the bark return value with an 'implies' style test before suspending."
+    "Entry: engine triggers U8P_SCIMITAR::look for a U8P_SCIMITAR::look/inspect event (process form).",
+    "Action: output a single bark/string \"scimitar \".",
+    "Termination: suspend/stop the U8P_SCIMITAR::look process immediately after the bark.",
+    "No conditional branches, menus, or additional actions occur in the function."
   ],
   "open_questions": [
-    "Exact semantic meaning of the 'info id' used by the set-info operation (0x0208 observed in the disassembly — what gameplay state does this represent?).",
-    "Precise semantics and runtime effect of the 'implies' test applied to the bark return value (does it gate further actions or is it purely a control/cleanup artifact?).",
-    "Exact identity and type of the [BP+06h] parameter (inferred to be the viewer/process id but not named in the canonical data)."
+    "Is the trailing space in the bark text intentional or an artifact of disassembly?",
+    "Are the item's weapon properties (baseDamage, damageModifier, damageType, treasureChance) used by other scripts or systems at runtime?",
+    "Does any other process or script rely on this U8P_SCIMITAR::look process for chaining UI/interaction behavior (e.g., inspection counters, analytics)?"
   ],
   "main_function": {
     "name": "U8P_SCIMITAR::look",
     "execution_form": "process",
-    "purpose": "Handle the 'U8P_SCIMITAR::look' (examine) event for the scimitar: mark item/process state and emit a short descriptive bark ('scimitar ') to the observing process/player, then suspend/return.",
+    "purpose": "Handle the U8P_SCIMITAR::look/inspect event for the scimitar item: show a short label/bark and then suspend the process.",
     "entry_conditions": [
-      "Event 0 (U8P_SCIMITAR::look) — invoked when an actor/player inspects or 'looks' at the scimitar item"
+      "Invoked by the engine when the player inspects/looks at the scimitar object.",
+      "Registered as a U8P_SCIMITAR::look-type process (process type 0x0208) for the item instance."
     ],
     "confidence": "high"
   },
@@ -28,52 +34,30 @@
     {
       "name": "U8P_SCIMITAR::look",
       "kind": "main",
-      "role": "Look/examine event handler for the scimitar item",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine-provided routine to emit/display a short text message (the item's spoken/visible label) toward a process/player",
+      "role": "Provide the short description/bark when the scimitar is inspected.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_SCIMITAR::look",
-        "callee": "Item::bark",
-        "purpose": "Make the item/process emit the literal string \"scimitar \" to the target process/player (the viewer).",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
-    "writes": [
-      {
-        "name": "item info flags (info id inferred 0x0208)",
-        "likely_effect": "Set a per-item info/state bit that changes how the item is treated/processed (exact gameplay meaning of 0x0208 is inferred).",
-        "confidence": "medium"
-      },
-      {
-        "name": "process exclude (process-level state)",
-        "likely_effect": "Adjust the item's/process' exclusion state so it is excluded from some processing or marked as processed.",
-        "confidence": "medium"
-      }
-    ]
+    "writes": []
   },
   "ui_tags": [
     "trigger",
-    "cleanup"
+    "description",
+    "suspend",
+    "label"
   ],
   "quick_facts": {
-    "main_function": "SCIMITAR::look",
-    "behavior_summary_one_liner": "Implements the item's response to being examined (the 'U8P_SCIMITAR::look' event). When a player/actor looks at the scimitar the script sets item/process state bits, constructs the literal string \"scimitar \", and asks the item/process system to 'bark' that string toward the viewer. After the bark call it frees the temporary string, evaluates the bark return value in an implied test, then suspends/returns.",
-    "external_call_count": 1,
+    "main_function": "U8P_SCIMITAR::look",
+    "behavior_summary_one_liner": "Provides the object's response when the player 'looks at' or inspects the scimitar item.",
+    "external_call_count": 0,
     "flag_read_count": 0,
-    "flag_write_count": 2
+    "flag_write_count": 0
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

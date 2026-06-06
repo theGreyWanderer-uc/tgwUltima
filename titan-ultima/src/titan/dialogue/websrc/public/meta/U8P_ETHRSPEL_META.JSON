@@ -3,150 +3,229 @@
   "source_of_truth": "dialogue/json/U8P_ETHRSPEL.json",
   "file": "U8P_ETHRSPEL",
   "behavior_summary": [
-    "ETHRSPEL::0080 is an area/ethereal short-range spell process invoked with an entity/item reference at [BP+06h] (the caster or origin).",
-    "When run it displays a chant/visual tied to the caster (via METHOD::087D), invokes the LightningBolt spell process, and waits on those visual/spell spawns.",
-    "After the visual/spell resolves it iterates nearby NPCs/items and, for any NPC currently targeting the caster, clears their in-combat flag (Npc::clrInCombat) and resets their activity (Npc::cSetActivity(0)) — effectively stopping or pacifying foes that were attacking the caster.",
-    "U8P_ETHRSPEL::0114 produces scattered physical debris by randomizing offsets around an origin and creating/hurling items (Item::legal_create, Item::hurl).",
-    "U8P_ETHRSPEL::01CE is a chant-wrapper that displays a different chant, runs LightningBolt, and then spawns U8P_ETHRSPEL::0114 to produce debris.",
-    "U8P_ETHRSPEL::0225 is a more complex summon/command routine: it displays a chant, computes spawn coordinates, optionally prompts for a target, creates and initializes a summoned NPC with randomized stats (Npc::create and setStr/setInt/setDex/setHp), sets orientation/animations and assigns a target; it may temporarily set avatar stasis during parts of this routine."
+    "This script collection implements a set of ethereal/spell utilities for creating visual spell effects, spawning debris/temporary items, summoning minions, teleporting entities, and performing post-spell cleanup.",
+    "U8P_ETHRSPEL::func0080 is the primary lightning-style routine: it plays a short incantation, launches the LightningBolt process/effect, and then performs cleanup by clearing in-combat state and resetting activity for an NPC that had the caster as its target (if such an NPC reference is present).",
+    "U8P_ETHRSPEL::castEtherealTravel is a high-level wrapper that announces an incantation, launches LightningBolt, and spawns the debris routine (U8P_ETHRSPEL::func0114) as a secondary effect.",
+    "U8P_ETHRSPEL::func0114 repeatedly attempts to create/hurl temporary items at randomized offsets around a base object (used to create scattered visual debris) with pacing via short spawned timer processes.",
+    "U8P_ETHRSPEL::func0225 is a complex summon/attack routine: it optionally prompts the player for a target, resolves coordinates, chooses a creature type randomly, validates placement, creates temporary visual items and animations, creates an NPC with randomized stats, and issues behavior commands (METHOD::func15E7) to make the summoned creature act against the target.",
+    "U8P_ETHRSPEL::func0C2D is a targeting/visual helper: it obtains or accepts a target handle, reads its coordinates, spawns and animates temporary items at those coordinates, applies a receiveHit wrapper to the target, and cleans up.",
+    "Other helpers implement short audiovisual impact sequences (U8P_ETHRSPEL::func087D, U8P_ETHRSPEL::func0939), teleport/fade sequences (U8P_ETHRSPEL::func0821), and multi-stage orchestrations that combine stasis, SFX, delays and cleanup (U8P_ETHRSPEL::func09DD)."
   ],
   "notable_control_flow": [
-    "Start: accept entity/item parameter at [BP+06h] representing the caster/origin.",
-    "Spawn a METHOD::087D instance to display chant text associated with the caster and spawn the LightningBolt process; await these spawned processes before continuing.",
-    "Iterate over a list/area of nearby objects (loop variable stored in [BP-02h]). For each object: check Npc::isInCombat and Npc::getTarget; if the target equals the caster then call Npc::clrInCombat and Npc::cSetActivity(0).",
-    "Helpers: U8P_ETHRSPEL::0114 computes random offsets around the origin and uses Item::legal_create and Item::hurl to produce thrown debris; U8P_ETHRSPEL::01CE triggers a chant + LightningBolt and then spawns the debris helper; U8P_ETHRSPEL::0225 follows a sequence of placement checks, SFX, item frame setup and NPC creation/configuration, optionally prompting the player to pick a victim.",
-    "Many branches depend on external call results (LightningBolt return, canExistAt/legal_create outcomes, target() return) and on randomized values from urandom."
+    "Spawn + suspend pattern: many functions spawn short timer processes (FREE::func1C19), suspend to wait for those timers and to pace animations and stage transitions.",
+    "Target acquisition uses process target() with suspend-assign; chosen target handles are stored in locals (e.g., local1) and then used to read coordinates via Item::getX/Y/Z.",
+    "Randomized choice and retry loops govern debris spawning (U8P_ETHRSPEL::func0114) and summoned NPC stat/type selection (U8P_ETHRSPEL::func0225). Loops are used to animate temporary items by iterating frame indices and suspending between frames.",
+    "Context-guarded behavior: many functions branch on caller context ('this' or whether called by player) to decide whether to set avatar stasis, prompt the player, teleport the avatar, or apply different effects.",
+    "Post-effect cleanup: several routines check Npc::isInCombat and Npc::getTarget and, when appropriate, call Npc::clrInCombat and spawn Npc::cSetActivity(0) to reset affected NPCs after an effect."
   ],
   "open_questions": [
-    "Is ETHRSPEL::0080 used as both a castable spell and as an enterFastArea trigger (the disassembly suggests both usages but exact in-game event bindings are not explicit)?",
-    "What exact item types/frames are created and hurled by U8P_ETHRSPEL::0114 (the code randomizes types/frames but the specific shape ids are not documented here)?",
-    "What are the precise conditions or range used to enumerate 'nearby' NPCs/items in the main loop (how the list is sourced is inferred but not explicitly represented)?",
-    "In U8P_ETHRSPEL::0225, what are the specific NPC types and SFX ids used for the summoned creature, and what fallback behavior does FIRESPEL::1F4F represent when target() returns certain values?",
-    "Does clearing an NPC's in-combat flag fully prevent future hostility or only reset current engagement state (i.e., do NPCs re-engage immediately after)?"
+    "Exact calling trigger for each helper: whether these are invoked directly by spells, by enterFastArea/leaveFastArea triggers, or by other higher-level spell systems is inferred but not explicit.",
+    "Precise semantics of some numeric/local values (e.g., certain item type ids and exact mapping from random index to creature type in U8P_ETHRSPEL::func0225) are not fully reconstructed.",
+    "Whether U8P_ETHRSPEL::func0080 is always run as a process or sometimes called as a synchronous utility (metadata lists process_type 0x0220 but the function is flagged as a utility) — execution form is inferred from spawn/suspend usage.",
+    "Exact intended gameplay balance/effects (damage values, spawn counts, stat ranges) beyond the presence of randomization are undetermined from this extraction.",
+    "Precise contract and parameters for METHOD::func15E7 and METHOD::func091C (used to command spawned NPCs) are inferred from usage but not fully documented here."
   ],
   "main_function": {
-    "name": "U8P_ETHRSPEL::0080",
+    "name": "U8P_ETHRSPEL::func0080",
     "execution_form": "process",
-    "purpose": "Perform a short-range ethereal/area spell effect for the provided caster/origin: show chant/visuals, run LightningBolt, then neutralize nearby NPCs that are targeting the caster by clearing their combat state and resetting activity.",
+    "purpose": "Produce a short lightning/spell effect (play incantation, launch LightningBolt) and perform post-effect cleanup: if a referenced small-entity handle exists and is an NPC targeting the caster, clear its in-combat state and reset its activity.",
     "entry_conditions": [
-      "Invoked as a spell process (likely when the spell is cast) or when an actor enters a fast-area trigger region tied to the spell.",
-      "Requires an entity/item reference passed at [BP+06h] identifying the caster/origin."
+      "Invoked when the spell/effect is triggered (called_from present in metadata).",
+      "Likely bound to a spell-cast event or similar ethereal/spell activation (could be triggered by a player or NPC caster)."
     ],
     "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_ETHRSPEL::0080",
+      "name": "U8P_ETHRSPEL::func0080",
       "kind": "main",
-      "role": "Main ethereal-area spell process that displays chant/visuals, invokes LightningBolt, and clears combat state on nearby NPCs targeting the caster.",
+      "role": "primary lightning-bolt style effect + post-spell NPC combat cleanup",
       "confidence": "high"
     },
     {
-      "name": "U8P_ETHRSPEL::0114",
+      "name": "U8P_ETHRSPEL::func0114",
       "kind": "helper",
-      "role": "Create and hurl several items at randomized offsets around an origin to produce scattered debris/projectile effects.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_ETHRSPEL::01CE",
-      "kind": "helper",
-      "role": "Variant spell wrapper: display a different chant, run LightningBolt, then spawn U8P_ETHRSPEL::0114 to scatter debris.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_ETHRSPEL::0225",
-      "kind": "helper",
-      "role": "Summon/command routine: place a summoned object/NPC, initialize randomized stats, optionally prompt for a target, and assign the summoned creature a target and activity/animations.",
+      "role": "debris/secondary effect spawner — repeatedly legal_create + Item::hurl with pacing",
       "confidence": "medium"
     },
     {
-      "name": "METHOD::087D",
-      "kind": "extern",
-      "role": "Engine-spawned method to display chant text/speech or a visual tied to a process/pid.",
+      "name": "U8P_ETHRSPEL::castEtherealTravel",
+      "kind": "helper",
+      "role": "wrapper/orchestrator: incantation + spawn LightningBolt + spawn U8P_ETHRSPEL::func0114",
       "confidence": "high"
     },
     {
-      "name": "U8P_ETHRSPEL::LightningBolt (process)",
-      "kind": "extern",
-      "role": "External spell/effect process invoked by the chant wrappers; core visual/damage/effect of the spell sequence.",
+      "name": "U8P_ETHRSPEL::func0225",
+      "kind": "helper",
+      "role": "summon/attack routine: optional player targeting, spawn visuals, create NPC minions and command them to attack",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ETHRSPEL::func078C",
+      "kind": "helper",
+      "role": "incantation wrapper that delegates to U8P_ETHRSPEL::func0C2D under certain conditions",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_ETHRSPEL::func0821",
+      "kind": "helper",
+      "role": "teleportation wrapper: fade to black, Npc::teleport, fade from black",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ETHRSPEL::func087D",
+      "kind": "helper",
+      "role": "short SFX + LightningBolt + transient item animation impact routine",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ETHRSPEL::func0939",
+      "kind": "helper",
+      "role": "spawn fire visual anchored to an item and then teleport or apply damage depending on context",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_ETHRSPEL::func09DD",
+      "kind": "helper",
+      "role": "multi-stage spell orchestration: stasis, UI control, timed SFX/visuals, NPC cleanup and issuing behavior commands",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_ETHRSPEL::func0C2D",
+      "kind": "helper",
+      "role": "targeting/selection helper: obtain target, read coords, animate temporary items, apply receiveHit, cleanup",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
-        "caller": "U8P_ETHRSPEL::01CE",
-        "callee": "U8P_ETHRSPEL::0114",
-        "purpose": "After displaying its chant and invoking LightningBolt, spawn the debris/hurl helper to produce scattered physical effects.",
+        "caller": "U8P_ETHRSPEL::castEtherealTravel",
+        "callee": "U8P_ETHRSPEL::func0114",
+        "purpose": "Launch secondary debris spawner after LightningBolt; provides visual follow-up.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_ETHRSPEL::0080",
-        "callee": "U8P_ETHRSPEL::0114",
-        "purpose": "Not directly called by U8P_ETHRSPEL::0080 in canonical trace, but 01CE (a variant) delegates to 0114; relationship exists between variant wrappers and the debris helper.",
+        "caller": "U8P_ETHRSPEL::func078C",
+        "callee": "U8P_ETHRSPEL::func0C2D",
+        "purpose": "Delegate to the targeting/visual helper when preconditions (caller context and NPC-target checks) hold.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_ETHRSPEL::0225",
-        "callee": "U8P_ETHRSPEL::0114",
-        "purpose": "0225 may coordinate with item/frame setup helpers to establish summoned item visuals; linking is inferred from similar creation/pop patterns.",
-        "confidence": "low"
+        "caller": "U8P_ETHRSPEL::func09DD",
+        "callee": "U8P_ETHRSPEL::func087D",
+        "purpose": "Spawn a short impact helper as part of the multi-stage visual sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ETHRSPEL::func09DD",
+        "callee": "U8P_ETHRSPEL::func0939",
+        "purpose": "Spawn fire visual helper anchored to the affected NPC/item as a later stage in the sequence.",
+        "confidence": "high"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_ETHRSPEL::0080",
-        "callee": "METHOD::087D (spawned)",
-        "purpose": "Display chant text or a speech bubble tied to the caster/process (e.g., 'In Quas Wis!').",
+        "caller": "U8P_ETHRSPEL::func0080",
+        "callee": "process LightningBolt",
+        "purpose": "Produce the primary bolt visual/effect for the lightning spell.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_ETHRSPEL::0080",
-        "callee": "U8P_ETHRSPEL::LightningBolt (process)",
-        "purpose": "Execute the LightningBolt spell/effect as part of the ethereal/area spell sequence; return value is used to gate later actions.",
+        "caller": "U8P_ETHRSPEL::castEtherealTravel",
+        "callee": "process LightningBolt",
+        "purpose": "Same: launch the bolt effect as the primary visual stage.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_ETHRSPEL::0080",
-        "callee": "Npc::isInCombat / Npc::getTarget / Npc::clrInCombat / Npc::cSetActivity",
-        "purpose": "Detect NPCs in combat that are targeting the caster, clear their combat state and reset their activity to stop hostilities toward the caster.",
+        "caller": "U8P_ETHRSPEL::func0114",
+        "callee": "Item::legal_create",
+        "purpose": "Validate whether an item can be created at candidate coordinates before spawning debris.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_ETHRSPEL::0114",
-        "callee": "U8P_ETHRSPEL::urandom(word)",
-        "purpose": "Generate random offsets and selection indices used to decide where to create and hurl debris items.",
+        "caller": "U8P_ETHRSPEL::func0114",
+        "callee": "Item::hurl",
+        "purpose": "Create and animate/hurl debris items when legal_create succeeds.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_ETHRSPEL::0114",
-        "callee": "Item::legal_create / Item::hurl / Item::create / Item::pop",
-        "purpose": "Check placement legality, create item instances and throw them with randomized offsets to produce scattered debris visuals/impacts.",
+        "caller": "U8P_ETHRSPEL::func0225",
+        "callee": "Item::getX / Item::getY / Item::getZ",
+        "purpose": "Resolve target/world coordinates for spawn placement.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_ETHRSPEL::0225",
+        "caller": "U8P_ETHRSPEL::func0225",
         "callee": "Npc::create / Npc::setStr / Npc::setInt / Npc::setDex / Npc::setHp",
-        "purpose": "Instantiate a summoned NPC and initialize its attributes with randomized values as part of the summon routine.",
+        "purpose": "Create a summoned NPC and initialize randomized stats.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_ETHRSPEL::0225",
-        "callee": "U8P_ETHRSPEL::process target() / getAvatarInStasis / setAvatarInStasis",
-        "purpose": "Optionally prompt the player to select a target for the summoned creature and temporarily change player stasis during that interaction.",
+        "caller": "U8P_ETHRSPEL::func0225",
+        "callee": "METHOD::func15E7",
+        "purpose": "Command the summoned NPC to move/attack/behave toward the target.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ETHRSPEL::func0C2D",
+        "callee": "METHOD::receiveHitWrapper",
+        "purpose": "Apply a hit/effect to the resolved target after animating temporary items.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ETHRSPEL::func087D",
+        "callee": "playSFX",
+        "purpose": "Play sound accompaniment for the impact/visual sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ETHRSPEL::func0821",
+        "callee": "Npc::teleport",
+        "purpose": "Move the relevant NPC/avatar to fixed coordinates as part of a teleport spell with fade visuals.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ETHRSPEL::func0939",
+        "callee": "FIRESPEL::func1F65",
+        "purpose": "Spawn a fire visual/effect at computed world coordinates anchored to an item.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ETHRSPEL::func09DD",
+        "callee": "FREE::func1C19",
+        "purpose": "Spawn short timers/delays used for sequencing animation and waits between stages.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ETHRSPEL::func0225",
+        "callee": "Item::create / Item::pop / Item::destroy / Item::setFrame",
+        "purpose": "Create and animate temporary visual items that precede NPC creation and placement.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ETHRSPEL::func0080",
+        "callee": "Npc::isInCombat / Npc::getTarget / Npc::clrInCombat / Npc::cSetActivity",
+        "purpose": "Detect and clear an NPC's combat state if it was targeting the caster, then reset its activity (post-spell housekeeping).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ETHRSPEL::func0225",
+        "callee": "Item::canExistAt",
+        "purpose": "Validate or adjust spawn elevation/placement before creating NPCs or items.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_ETHRSPEL::0225",
-        "callee": "METHOD::091C / METHOD::15E7 / Item::getDirToCoords / Item::getDirToItem / Npc::getDir",
-        "purpose": "Compute facing/direction and spawn orientation/animation methods for summoned items/NPCs so they are oriented and animated toward targets.",
+        "caller": "U8P_ETHRSPEL::func0225",
+        "callee": "FIRESPEL::playFireSpellSFX",
+        "purpose": "Play fire-spell sound effect in certain player-targeted branches.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_ETHRSPEL::0114",
-        "callee": "U8P_ETHRSPEL::playSFX",
-        "purpose": "Play short sound effects when items are created/popped or hurled to enhance the visual debris effect.",
-        "confidence": "medium"
+        "caller": "U8P_ETHRSPEL::func0225",
+        "callee": "process target()",
+        "purpose": "Request a target from the player/engine when invoked by player context (suspend-assign into local1).",
+        "confidence": "high"
       }
     ]
   },
@@ -161,9 +240,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_ETHRSPEL::0080",
-    "behavior_summary_one_liner": "ETHRSPEL::0080 is an area/ethereal short-range spell process invoked with an entity/item reference at [BP+06h] (the caster or origin).",
-    "external_call_count": 9,
+    "main_function": "U8P_ETHRSPEL::func0080",
+    "behavior_summary_one_liner": "This script collection implements a set of ethereal/spell utilities for creating visual spell effects, spawning debris/temporary items, summoning minions, teleporting entities, and performing post-spell cleanup.",
+    "external_call_count": 17,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

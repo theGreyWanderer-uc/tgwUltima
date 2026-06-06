@@ -3,144 +3,113 @@
   "source_of_truth": "dialogue/json/U8P_FENALIA.json",
   "file": "U8P_FENALIA",
   "behavior_summary": [
-    "Provides an item-backed background behavior and the item's interaction handlers. The main spawned process (U8P_FENALIA::0080) runs a repeating randomized countdown that occasionally makes the item emit short \"hungry\" bark lines and triggers a palette/fx flash sequence.",
-    "The background loop suppresses speech when a global somebodyTalking flag is set, chooses a new palette index distinct from the previous one, calls FadeToPalette for a visual color change, and spawns a short-lived visual/cleanup process (FREE::1C19) with a duration derived from randomness.",
-    "Two event handlers support player interaction: U8P_FENALIA::look returns a short identifying text based on the item's frame; U8P_FENALIA::use either consumes the item (frame 0 path: emits a disgust bark, spawns the background and visual fx, then push/destroy) or attempts to act on a targeted object (frame 1 path: queries target(), checks target type and frame, then push/destroy the target and spawn the background/fx)."
+    "U8P_FENALIA::func0080 is an ambient/background loop that controls the item's idle visuals and occasional short hunger barks: it runs a randomized countdown, periodically clears or selects a palette via FadeToPalette, spawns small FREE particle/effect bursts, and emits short barks when conditions permit.",
+    "U8P_FENALIA::look is a simple examine handler that emits one-line descriptive barks depending on Item::getFrame(this) (frame 0 -> \"plant bud\", frame 1 -> \"pipe\").",
+    "U8P_FENALIA::use handles player interaction and branches on the item's frame: frame 0 plays a disgust bark, spawns the idle/background process (U8P_FENALIA::func0080), spawns a FREE effect, and destroys/pushes the item; frame 1 prompts the player to target another object and, if the target matches a specific type/frame, transfers/destroys that target and spawns the idle process."
   ],
   "notable_control_flow": [
-    "U8P_FENALIA::0080 initializes a countdown BP-04 = urandom(0x14) + 0x0F, enters a suspend/sleep loop, decrements BP-04 each cycle and only executes bark/fx when BP-04 <= 0, after which it reinitializes the timer.",
-    "Before barking, the loop checks the global somebodyTalking flag and skips speech when that flag indicates another process is speaking (guard to avoid overlapping text).",
-    "Palette changes are chosen by urandom(7); a candidate index (BP-02) is compared to the previous index (BP-01) and adjusted to ensure the palette differs, then FadeToPalette is invoked for the current pid.",
-    "U8P_FENALIA::use has two distinct branches based on Item::getFrame(): a self-consume branch (frame 0) and a targeted-action branch (frame 1). The targeted branch performs target() → validate type == 0x0178 and frame checks before acting."
+    "U8P_FENALIA::func0080 uses a urandom-based countdown (local2) to pace palette clears and visual/action bursts, looping with suspend/yield points between actions.",
+    "Bark emission is gated by a probabilistic urandom check together with a somebodyTalking read to avoid overlapping dialogue.",
+    "U8P_FENALIA::use may spawn U8P_FENALIA::func0080 (start of the ambient loop) as a separate process (spawn) rather than running it inline, enabling background visual behavior after U8P_FENALIA::use.",
+    "U8P_FENALIA::use frame-1 path suspends to call process target() and branches on the returned target (local1), validating Item::getType and Item::getFrame before push/destroy and spawning the idle process."
   ],
   "open_questions": [
-    "Exact semantics of the type constant 0x0178 checked in U8P_FENALIA::use: what concrete object/class does it represent in-game?",
-    "Precise behavior and visual design of the spawned FREE::1C19 process (what particles/cleanup it performs and how it composes with FadeToPalette).",
-    "The exact gameplay semantics of Item::push() in this context (inventory handoff, reward, or staging before destroy) — this script calls push() prior to destroy() but the engine-side effect is inferred.",
-    "Whether any other global flags interact with U8P_FENALIA::0080 (only somebodyTalking was observed; other cross-script interactions may exist)."
+    "Exact meaning of the numeric parameter passed to FREE::func1C19 (appears randomized; likely controls intensity/count of effects) — inferred but not certain.",
+    "Canonical execution form of U8P_FENALIA::func0080: metadata marks it as a utility (non-process) but evidence shows it is spawned as a background looping process (confidence: medium); need engine annotations to resolve.",
+    "Whether somebodyTalking is a globally managed dialogue guard (inferred) and if other global flags influence bark suppression beyond that check."
   ],
   "main_function": {
-    "name": "U8P_FENALIA::0080",
+    "name": "U8P_FENALIA::func0080",
     "execution_form": "process",
-    "purpose": "Spawned background loop for a FENALIA item that intermittently emits hunger-related speech, flashes/chages the item's palette, and spawns a short visual effect on a randomized timer while respecting a global speaking guard.",
+    "purpose": "Run a repeating ambient/idle behavior for the FENALIA item: manage palette fades, spawn small particle effects, and occasionally emit short hunger-themed barks on a randomized schedule.",
     "entry_conditions": [
-      "Spawned as a background process (explicitly by U8P_FENALIA::use when the item is consumed/activated).",
-      "Runs continuously as a suspended process that wakes according to its internal timer (BP-04) until it returns/ends or the process is explicitly removed."
+      "Spawned explicitly (spawn ->U8P_FENALIA::func0080()) typically from U8P_FENALIA::use after the item is consumed/operated on.",
+      "Runs as a spawned background loop with suspend/yield points between visual changes and barks."
     ],
     "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_FENALIA::0080",
+      "name": "U8P_FENALIA::func0080",
       "kind": "main",
-      "role": "Background behavioral process that manages randomized speech and palette/visual effects for the item.",
+      "role": "idle/ambient background loop controlling palette transitions, occasional speech, and spawning small effects",
       "confidence": "high"
     },
     {
-      "name": "U8P_FENALIA::look (Event 0)",
+      "name": "U8P_FENALIA::look",
       "kind": "helper",
-      "role": "Handle 'look' event: inspect/examine; produces a short identifying bark string based on item frame.",
+      "role": "examine/inspect handler that emits a short description based on item frame",
       "confidence": "high"
     },
     {
-      "name": "U8P_FENALIA::use (Event 1)",
+      "name": "U8P_FENALIA::use",
       "kind": "helper",
-      "role": "Handle 'use' event: either consume the item (frame 0) spawning the background/fx and destroying the item, or act on a selected target (frame 1) after type/frame validation, then spawn background/fx and destroy target if valid.",
+      "role": "player-U8P_FENALIA::use handler that either consumes the item (frame 0) or targets another item to transfer/destroy (frame 1); both paths can spawn the ambient loop",
       "confidence": "high"
-    },
-    {
-      "name": "urandom",
-      "kind": "extern",
-      "role": "Engine-provided random number generator used to initialize and vary timers, pick bark variants, palette indices, and effect durations.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_FENALIA::FadeToPalette",
-      "kind": "extern",
-      "role": "Engine visual routine to change/flash an object's palette; called with pid and palette/index.",
-      "confidence": "high"
-    },
-    {
-      "name": "FREE::1C19",
-      "kind": "extern",
-      "role": "Spawned visual/cleanup effect used alongside palette change; duration argument computed from randomness.",
-      "confidence": "medium"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
-        "caller": "U8P_FENALIA::use (Event 1)",
-        "callee": "U8P_FENALIA::0080",
-        "purpose": "Start the background process when the item is used/consumed so the item can continue to emit speech and palette effects after consumption.",
+        "caller": "U8P_FENALIA::use",
+        "callee": "U8P_FENALIA::func0080",
+        "purpose": "Start the ambient/background idle loop after consuming or operating on the item (spawn)",
+        "confidence": "high"
+      },
+      {
+        "caller": "engine/look-dispatch",
+        "callee": "U8P_FENALIA::look",
+        "purpose": "Invoke the short descriptive bark when the player examines the item (process-type 0x0208)",
         "confidence": "high"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_FENALIA::0080",
-        "callee": "urandom",
-        "purpose": "Produce random numbers for initializing BP-04 timer, choosing which bark to speak, selecting a new palette index, and computing FREE::1C19 duration.",
+        "caller": "U8P_FENALIA::func0080",
+        "callee": "FadeToPalette",
+        "purpose": "Synchronously change/clear the item's palette/tint to create visual transitions",
         "confidence": "high"
       },
       {
-        "caller": "U8P_FENALIA::0080",
-        "callee": "Item::bark",
-        "purpose": "Emit short hunger-related text lines (barks) from the item; guarded by somebodyTalking and randomized choices.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FENALIA::0080",
-        "callee": "U8P_FENALIA::FadeToPalette",
-        "purpose": "Apply a temporary palette change/flash to the item with the randomly chosen palette index.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FENALIA::0080",
-        "callee": "spawn => FREE::1C19",
-        "purpose": "Spawn a short visual/cleanup effect with duration computed from urandom, paired with the palette flash.",
+        "caller": "U8P_FENALIA::func0080",
+        "callee": "FREE::func1C19",
+        "purpose": "Spawn small particle/effect bursts with a randomized parameter to vary appearance/intensity",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_FENALIA::look (Event 0)",
-        "callee": "Item::getFrame",
-        "purpose": "Read the item's current frame/state to decide which short identifying string to bark ('plant bud' vs 'pipe').",
+        "caller": "U8P_FENALIA::use",
+        "callee": "process target",
+        "purpose": "Prompt player to select a target object and return the selection (suspend until selection)",
         "confidence": "high"
       },
       {
-        "caller": "U8P_FENALIA::look (Event 0)",
-        "callee": "Item::bark",
-        "purpose": "Present the identifying text to the inspecting actor/process.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FENALIA::use (Event 1)",
-        "callee": "Item::getFrame",
-        "purpose": "Select use-branch behavior based on the item's frame (consume vs targeted action).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FENALIA::use (Event 1)",
-        "callee": "U8P_FENALIA::target",
-        "purpose": "Obtain the currently selected use-target when acting on other objects (frame 1 path).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FENALIA::use (Event 1)",
-        "callee": "Item::getType",
-        "purpose": "Validate that the selected target matches an expected type (compares to 0x0178) before modifying/destroying it.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FENALIA::use (Event 1)",
+        "caller": "U8P_FENALIA::use",
         "callee": "Item::push",
-        "purpose": "Perform an item handoff or inventory operation prior to destroy(); exact semantics are engine-defined and inferred as push/hand-off.",
-        "confidence": "medium"
+        "purpose": "Push the item (this or target) onto the actor/inventory/processing stack prior to destruction/move",
+        "confidence": "high"
       },
       {
-        "caller": "U8P_FENALIA::use (Event 1)",
+        "caller": "U8P_FENALIA::use",
         "callee": "Item::destroy",
-        "purpose": "Consume/destroy the item (or the validated target) as part of the use action.",
+        "purpose": "Remove/destroy the consumed or transferred item from the world",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FENALIA::use",
+        "callee": "Item::getFrame",
+        "purpose": "Read item/frame state to choose U8P_FENALIA::use/inspect behavior and validate target frame == 0",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FENALIA::use",
+        "callee": "Item::getType",
+        "purpose": "Validate the selected target's numeric type (must equal 0x0178) before allowing transfer/destroy",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FENALIA::func0080",
+        "callee": "urandom",
+        "purpose": "Drive randomized timing, choice of palette index, and probabilistic bark emission",
         "confidence": "high"
       }
     ]
@@ -149,7 +118,7 @@
     "reads": [
       {
         "name": "somebodyTalking",
-        "likely_effect": "Acts as a global speaking guard: read by U8P_FENALIA::0080 to suppress item barks while another process is speaking.",
+        "likely_effect": "Guard that suppresses playing barks when another dialogue is active (prevents overlapping speech)",
         "confidence": "high"
       }
     ],
@@ -162,9 +131,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_FENALIA::0080",
-    "behavior_summary_one_liner": "Provides an item-backed background behavior and the item's interaction handlers. The main spawned process (U8P_FENALIA::0080) runs a repeating randomized countdown that occasionally makes the item emit short \"hungry\" bark lines and triggers a palette/fx flash sequence.",
-    "external_call_count": 11,
+    "main_function": "U8P_FENALIA::func0080",
+    "behavior_summary_one_liner": "U8P_FENALIA::func0080 is an ambient/background loop that controls the item's idle visuals and occasional short hunger barks: it runs a randomized countdown, periodically clears or selects a palette via FadeToPalette, spawns small FREE particle/effect bursts, and emits short barks when conditions permit.",
+    "external_call_count": 8,
     "flag_read_count": 1,
     "flag_write_count": 0
   },

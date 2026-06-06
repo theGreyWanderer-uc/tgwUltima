@@ -3,27 +3,28 @@
   "source_of_truth": "dialogue/json/U8P_SPIDER.json",
   "file": "U8P_SPIDER",
   "behavior_summary": [
-    "U8P_SPIDER::SPIDER::look: When an actor 'looks' at the spider (Event 0), the spider process emits the literal text \"spider \" (via Item::bark), sets up implied/process state, and then suspends/returns. This is a simple descriptive/feedback handler for examination.",
-    "U8P_SPIDER::SPIDER::gotHit: When the spider receives a hit (Event 6), the handler first checks an internal spider field against a threshold (0x0100) and returns early if the check fails. It then queries Npc::isDead and returns if the spider is dead. If alive and the checks pass, it iterates a collection of items associated with the spider/context, uses Item::getWeightIncludingContents to find 'small' items (weight <= 3) that match an additional filter, computes a randomized damage value (using urandom seeded/scaled by an incoming parameter), and calls Item::receiveHit on those items to apply collateral/randomized damage. This models fragile/small items being damaged when the spider is struck."
+    "U8P_SPIDER::look is the object's examine/U8P_SPIDER::look handler: when the player inspects the spider it emits a short bark text ('spider ') and then the process suspends.",
+    "U8P_SPIDER::gotHit handles incoming hits for the spider. It accepts two parameters (uword, word), performs an early numeric threshold check and a liveliness check (Npc::isDead), and—if conditions pass—may forward partial damage to a referenced item via Item::receiveHit.",
+    "Item damage is conditional: the script appears to forward damage only when the referenced item meets a weight threshold (>3) or matches a special id (local1 == 1). When forwarded, the damage amount is roughly half the incoming damage plus a small urandom(8) modifier and a fixed damage category (0x04)."
   ],
   "notable_control_flow": [
-    "Event-driven entry: SPIDER::look is invoked by the engine when the player/actor examines the spider; SPIDER::gotHit is invoked on hit events.",
-    "Guard checks in gotHit: an internal field threshold check and an Npc::isDead() check cause early returns, preventing further processing in those conditions.",
-    "Iterative collateral logic: gotHit loops over an item collection, filters by weight and a secondary flag/id, computes randomized damage from the incoming hit parameter, and calls Item::receiveHit per eligible item.",
-    "SPIDER::look performs a single external call (Item::bark) then uses an 'implies' bookkeeping op and suspends — no mutations to global flags observed."
+    "U8P_SPIDER::look is a simple, linear process: bark 'spider ' then suspend; minimal branching.",
+    "U8P_SPIDER::gotHit contains conditional guards: an initial numeric test, a check that the NPC is not dead (Npc::isDead), and then a conditional branch that tests the referenced item (weight > 3 or id == 1) before calling Item::receiveHit.",
+    "Damage forwarding uses computed arguments (param2/2 and urandom(8)) and passes the spider context (this) to Item::receiveHit; the function contains low-confidence remnants suggesting additional minor branches or no-op jumps, but core guards above determine behavior."
   ],
   "open_questions": [
-    "What exact field is compared against 0x0100 in SPIDER::gotHit and what gameplay state does that field represent (e.g., armor, shielded flag, stunned state)?",
-    "What is the precise source of the item collection iterated in gotHit (spider inventory, equipment slots on the attacker, nearby ground items, or a context-provided list)?",
-    "What are the semantic meanings of the two gotHit parameters (BP+0Ah and BP+0Ch) at the API level — attacker id, weapon id, damage amount, hit type, or other metadata?",
-    "What does the secondary item filter (id/flag != 1) represent (e.g., unbreakable flag, container vs. content, specific shape exclusion)?"
+    "What is the precise meaning of the initial numeric threshold test referenced in U8P_SPIDER::gotHit (raw: 'this > 0x0100h') and when does it short-circuit hit processing?",
+    "Is param1 always an item handle/reference, or can it encode other kinds of IDs? The code treats it like an item for Item::* calls but this is inferred.",
+    "What is the semantics of the special-case check local1 == 1 (is '1' a sentinel item id with special behavior)?",
+    "Are there additional engine-level callers for U8P_SPIDER::gotHit beyond standard damage dispatch (this helper is a process-type utility and may be invoked by the engine or other scripts)?"
   ],
   "main_function": {
     "name": "U8P_SPIDER::look",
     "execution_form": "process",
-    "purpose": "Provide the examination/description behavior for the spider: emit the short descriptive string \"spider \" to the inspecting process and set implied/process state before suspending.",
+    "purpose": "Provide the short inspection/description text for the spider entity when the player uses 'U8P_SPIDER::look' or a U8P_SPIDER::look-type trigger; play the bark 'spider ' and then suspend.",
     "entry_conditions": [
-      "Event 0 (U8P_SPIDER::look) dispatched by the engine when a player/actor inspects or looks at the spider process."
+      "Invoked by the engine when the player examines or 'looks at' the spider (process type 0x0208).",
+      "May also be triggered by fast-area/area-entry style U8P_SPIDER::look hooks consistent with object U8P_SPIDER::look handlers."
     ],
     "confidence": "high"
   },
@@ -31,43 +32,37 @@
     {
       "name": "U8P_SPIDER::look",
       "kind": "main",
-      "role": "Examine/U8P_SPIDER::look event handler that causes the spider to 'bark' its description.",
+      "role": "examine/description handler (plays bark and suspends)",
       "confidence": "high"
     },
     {
       "name": "U8P_SPIDER::gotHit",
       "kind": "helper",
-      "role": "Hit/damage event handler that applies checks and propagates randomized collateral damage to small items.",
+      "role": "hit/damage handler for the spider (interprets params, guards, may forward damage to an associated item)",
       "confidence": "medium"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Emit/display a text string from an item/NPC to a target process/player.",
-      "confidence": "high"
     },
     {
       "name": "Npc::isDead",
       "kind": "extern",
-      "role": "Query whether the NPC (spider) is dead to short-circuit hit handling.",
+      "role": "external API: check NPC liveliness to guard hit handling",
       "confidence": "high"
     },
     {
       "name": "Item::getWeightIncludingContents",
       "kind": "extern",
-      "role": "Return an item's weight (including contained items) used to identify small/fragile items.",
-      "confidence": "high"
-    },
-    {
-      "name": "urandom",
-      "kind": "extern",
-      "role": "Provide a random value used to scale randomized damage applied to items.",
+      "role": "external API: query item weight (used to decide if item should take damage)",
       "confidence": "high"
     },
     {
       "name": "Item::receiveHit",
       "kind": "extern",
-      "role": "Apply damage/hit effects to an item instance (damage magnitude/type/etc.).",
+      "role": "external API: apply damage to an item (used to forward partial damage)",
+      "confidence": "high"
+    },
+    {
+      "name": "urandom",
+      "kind": "extern",
+      "role": "external utility: generate a small random number used in damage calculation",
       "confidence": "high"
     }
   ],
@@ -75,33 +70,27 @@
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_SPIDER::look",
-        "callee": "Item::bark",
-        "purpose": "Make the spider emit the literal string \"spider \" to the inspecting process/player.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_SPIDER::gotHit",
         "callee": "Npc::isDead",
-        "purpose": "Check whether the spider is dead and skip damage propagation if so.",
+        "purpose": "Guard: check whether the spider NPC is dead and skip further hit handling if so.",
         "confidence": "high"
       },
       {
         "caller": "U8P_SPIDER::gotHit",
         "callee": "Item::getWeightIncludingContents",
-        "purpose": "Measure each candidate item's weight (including contents) to filter 'small' items eligible for collateral damage.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SPIDER::gotHit",
-        "callee": "urandom",
-        "purpose": "Generate randomness scaled by an incoming hit parameter to vary damage applied to items.",
-        "confidence": "high"
+        "purpose": "Decision data: obtain the referenced item's weight to decide if the item should receive forwarded damage (threshold appears to be >3).",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_SPIDER::gotHit",
         "callee": "Item::receiveHit",
-        "purpose": "Apply calculated/randomized damage to individual items selected by the filter.",
+        "purpose": "Action: forward partial damage to the referenced item using category 0x04, amount param2/2, a urandom(8) modifier, and spider context (this).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_SPIDER::gotHit",
+        "callee": "urandom",
+        "purpose": "Generate small random modifier passed into Item::receiveHit.",
         "confidence": "high"
       }
     ]
@@ -117,9 +106,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_SPIDER::SPIDER::look",
-    "behavior_summary_one_liner": "U8P_SPIDER::SPIDER::look: When an actor 'looks' at the spider (Event 0), the spider process emits the literal text \"spider \" (via Item::bark), sets up implied/process state, and then suspends/returns. This is a simple descriptive/feedback handler for examination.",
-    "external_call_count": 5,
+    "main_function": "U8P_SPIDER::look",
+    "behavior_summary_one_liner": "U8P_SPIDER::look is the object's examine/U8P_SPIDER::look handler: when the player inspects the spider it emits a short bark text ('spider ') and then the process suspends.",
+    "external_call_count": 4,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

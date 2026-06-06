@@ -3,28 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_CAULDRON.json",
   "file": "U8P_CAULDRON",
   "behavior_summary": [
-    "Provides the 'U8P_CAULDRON::look' (examine) handler for the cauldron item: when invoked it prepares a fixed textual prefix \"cauldron \", configures per-item processing flags, and then delegates the rest of the descriptive output to Item::bark.",
-    "The function passes the cauldron/object context and the constructed prefix to Item::bark, propagates Item::bark's return value as its own return, frees the temporary prefix string, and then performs a small implies/pop bookkeeping sequence before suspending/returning.",
-    "The 'set info' and 'process exclude' operations are applied before calling Item::bark and therefore likely influence how the bark/description is generated or how the item is temporarily treated by the engine during description."
+    "Provides the object's response when the player inspects or 'looks at' the cauldron: it displays a single short text/bark 'cauldron' and then issues a suspend.",
+    "There is no branching, menu, or external call behavior; the handler is a minimal U8P_CAULDRON::look/inspection routine.",
+    "The routine is intended as an object label/short description rather than a dialogue interaction."
   ],
   "notable_control_flow": [
-    "Create temporary string containing literal prefix \"cauldron \".",
-    "Apply per-object flags/state (inferred 'set info' and 'process exclude').",
-    "Push the object/context pointer and the prefix string and call external Item::bark.",
-    "Free the temporary prefix string after Item::bark returns.",
-    "Save Item::bark's return value as the function retval, perform an implies/pop bookkeeping sequence, then suspend/return."
+    "U8P_CAULDRON::look executes, emits one Bark node with text 'cauldron', then issues a suspend to end or pause the U8P_CAULDRON::look process.",
+    "No conditional logic or menu/choice presentation is present; control flow is linear and immediate."
   ],
   "open_questions": [
-    "Exact semantics and scope of the 'set info' (info id 0x210 observed elsewhere) and 'process exclude' operations — how they change bark output or processing for this object is inferred but not explicit.",
-    "Precise type/name of the BP+06h parameter (it appears to be the cauldron's item/process PID/context) and whether additional context (player PID) is implicitly supplied by the caller.",
-    "Meaning and consumers of Item::bark's return value in this context: whether it encodes success/failure or is purely informational for the engine's caller."
+    "Is U8P_CAULDRON::look invoked by the explicit player Look/Examine action, by entering a fast-area trigger, or both? (metadata suggests either; exact trigger mapping is not present).",
+    "What exact engine behavior does the suspend perform here (terminate process, yield to engine, or wait for player dismiss) in this project context?",
+    "The raw data contained Unknown nodes around the bark — do those represent bookkeeping or additional descriptive text that was elided?"
   ],
   "main_function": {
     "name": "U8P_CAULDRON::look",
     "execution_form": "process",
-    "purpose": "Handle the 'U8P_CAULDRON::look' event for the cauldron: produce a visible description by prefixing \"cauldron \" and delegating detailed text generation to Item::bark, while setting temporary processing flags and cleaning up temporaries.",
+    "purpose": "Serve as the U8P_CAULDRON::look/inspection handler for the cauldron object: present the object's short description label to the player and then suspend the process.",
     "entry_conditions": [
-      "Event 0 (U8P_CAULDRON::look) — invoked when an actor (typically the Avatar) looks at or examines the cauldron item"
+      "Inferred: called when the player uses the Look/Examine action on the cauldron.",
+      "Inferred: may also be invoked when an actor enters the object's U8P_CAULDRON::look-type fast-area trigger (processType 0x0208 indicates a U8P_CAULDRON::look/inspection process)."
     ],
     "confidence": "high"
   },
@@ -32,20 +30,13 @@
     {
       "name": "U8P_CAULDRON::look",
       "kind": "main",
-      "role": "Look/examine event handler for the cauldron item; prepares prefix and delegates description.",
+      "role": "U8P_CAULDRON::look/inspection handler that emits a short object label and suspends",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_CAULDRON::look",
-        "callee": "Item::bark",
-        "purpose": "Provide the cauldron's descriptive output by passing the object context and the prefix string \"cauldron \". The cauldron handler delegates full text production to Item::bark and returns its result.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -53,13 +44,12 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "guard"
+    "cleanup"
   ],
   "quick_facts": {
-    "main_function": "U8P_CAULDRON::CAULDRON::look",
-    "behavior_summary_one_liner": "Provides the 'U8P_CAULDRON::look' (examine) handler for the cauldron item: when invoked it prepares a fixed textual prefix \"cauldron \", configures per-item processing flags, and then delegates the rest of the descriptive output to Item::bark.",
-    "external_call_count": 1,
+    "main_function": "U8P_CAULDRON::look",
+    "behavior_summary_one_liner": "Provides the object's response when the player inspects or 'looks at' the cauldron: it displays a single short text/bark 'cauldron' and then issues a suspend.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

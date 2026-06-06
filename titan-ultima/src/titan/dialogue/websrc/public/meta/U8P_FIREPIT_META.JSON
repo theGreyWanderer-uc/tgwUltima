@@ -3,31 +3,31 @@
   "source_of_truth": "dialogue/json/U8P_FIREPIT.json",
   "file": "U8P_FIREPIT",
   "behavior_summary": [
-    "The script implements the in-game behavior for a fire pit object: it starts/stops an ambient fire sound when actors enter/leave a fast trigger region, responds to being hit (possibly igniting, playing SFX, spawning a burn effect/process, and in some NPC cases destroying the item), and provides a simple 'look' description.",
-    "U8P_FIREPIT::enterFastArea (U8P_FIREPIT::enterFastArea) marks per-item/process info state and starts an ambient looping fire SFX for the item when an actor steps into its fast-area trigger.",
-    "leaveFastArea (U8P_FIREPIT::leaveFastArea) clears the per-item/process info and stops the ambient SFX when the actor leaves the fast-area trigger.",
-    "gotHit (U8P_FIREPIT::gotHit) handles incoming hits: ignores zero-damage, checks status bits and randomness to gate ignition, may play hit/burning sounds, toggles a 'burning' status bit, creates/positions a visual/effect helper, spawns a burn/effect process after a randomized delay, and treats NPC-backed items with an alternate path that can destroy the item based on a type-flag test.",
-    "look (U8P_FIREPIT::look) composes and delivers the string 'fire pit ' to the inspecting process via Item::bark."
+    "U8P_FIREPIT implements a simple ambient-audio and reactive object: when an actor enters the firepit's fast-area the object starts a looping fire ambient SFX; when the actor leaves that area the ambient SFX is stopped.",
+    "The object's U8P_FIREPIT::look handler returns a short description shown to the player ('fire pit').",
+    "The U8P_FIREPIT::gotHit process implements conditional reactive behavior when the firepit is hit: it ignores null hits, checks a transient busy/status bit to avoid reentrancy, uses randomness to gate reactions, may play an impact SFX, set a transient busy flag, spawn a short-lived effect, and either retaliate (apply damage to an attacking NPC using receiveHitWrapper with randomized damage and computed direction) or destroy a non-NPC attacker that lacks a specific type flag."
   ],
   "notable_control_flow": [
-    "U8P_FIREPIT::enterFastArea: set per-item info/process-exclusion entries for the entering actor, then call playAmbientSFX to begin an ambient loop tied to the item.",
-    "leaveFastArea: clear the info/process-exclusion entries and call stopSFX to stop the ambient loop.",
-    "gotHit: early exit on zero damage; check a status bit to avoid re-ignition; perform a urandom() check to probabilistically allow ignition/hit reaction; if allowed, optionally play immediate hit SFX, set a burning status (Item::orStatus), prepare/position an effect (FREE::1A96, Item::getX/Y, Item::getDirFromCoords, METHOD::0080), spawn a burn process (FREE::1C19) with a small random delay, then clear temporary status (Item::andStatus) after suspension; NPC items follow a different branch which tests a type flag and may call Item::destroy.",
-    "look: set item info/exclude, call Item::bark with the literal 'fire pit ' addressed to the inspecting PID, and use an implies/suspend pattern for process flow control."
+    "Area triggers: U8P_FIREPIT::enterFastArea (process) is invoked on fast-area entry and simply calls playAmbientSFX; U8P_FIREPIT::leaveFastArea stops that same SFX.",
+    "Early-return guard in U8P_FIREPIT::gotHit: if param1 == 0 do nothing.",
+    "Reentrancy/guard bit: U8P_FIREPIT::gotHit checks the object's status (status & 0x1000) and only proceeds if not already busy; it sets the flag with Item::orStatus(0x1000) and clears it later with Item::andStatus(~0x1000).",
+    "Random gating: U8P_FIREPIT::gotHit uses urandom(2) (or equivalent) to limit how often the firepit reacts (chance-based branch).",
+    "Divergent attacker handling: if attacker is an NPC then retaliation is applied via METHOD::receiveHitWrapper (randomized damage and computed direction); if attacker is not an NPC and lacks a type-flag (Item::getTypeFlag 0x2F) it may be destroyed via Item::destroy."
   ],
   "open_questions": [
-    "Exact semantics and meaning of the status bit(s) tested/modified on the item (which precise bit(s) represent 'burning' vs other transient states) — inferred from orStatus/andStatus usage but not explicit.",
-    "Precise behavior and contents of the spawned process FREE::1C19 (what visual/functional effect it runs and its lifetime) — inferred to be a burn/particle effect but not explicit.",
-    "Meaning of the specific type-flag tested in NPC branch (which flag index and what it semantically denotes) and the conditions that cause Item::destroy to be called — inferred from getTypeFlag use.",
-    "Roles of FREE::1A96 and METHOD::0080: they appear to create and orient effect objects, but their exact operations and returned data structures are not fully known."
+    "Exact meanings of numeric constants used as parameters (0x32, 0x0086 for SFX IDs; 0x1000 status bit; 0x2F type-flag mask; type 0x60 special-case) — inferred but not canonical.",
+    "Precise identity and visual/audio effect spawned by spawn->FREE::func1C19 and its parameters (what visual/spawn object is created and how the delay is used).",
+    "Whether U8P_FIREPIT::gotHit's second parameter (word param2) has any gameplay effect (appears unused in the excerpt).",
+    "Exact SFX semantics for playSFX/playAmbientSFX codes (which sound assets correspond to 0x64/0x7C/0x0086/0x32).",
+    "Whether there are additional interactions with other global flags or systems outside this excerpt that further modify the firepit's behavior."
   ],
   "main_function": {
     "name": "U8P_FIREPIT::enterFastArea",
     "execution_form": "process",
-    "purpose": "Handle an actor entering the firepit's fast trigger region by marking per-item/process state and starting an ambient fire sound attached to the item.",
+    "purpose": "Start the firepit's looping ambient sound when an actor enters the object's fast-area trigger.",
     "entry_conditions": [
-      "Triggered when an actor (usually the Avatar) enters the firepit's 'fast area' trigger (U8P_FIREPIT::enterFastArea event).",
-      "Implicit parameter: item instance (BP+06h) and the triggering actor/process id (pid) are provided by the engine when the event fires."
+      "Triggered by the engine on fast-area entry (process type 0x021B).",
+      "No parameters; operates on the current item instance (this)."
     ],
     "confidence": "high"
   },
@@ -35,265 +35,126 @@
     {
       "name": "U8P_FIREPIT::enterFastArea",
       "kind": "main",
-      "role": "Event handler for fast-area entry: set per-item info/process-exclusion and start ambient fire SFX.",
+      "role": "starts ambient fire SFX on fast-area entry (trigger)",
       "confidence": "high"
     },
     {
       "name": "U8P_FIREPIT::leaveFastArea",
       "kind": "helper",
-      "role": "Event handler for fast-area exit: clear per-item info/process-exclusion and stop ambient SFX.",
+      "role": "stops ambient fire SFX on fast-area exit (cleanup)",
       "confidence": "high"
     },
     {
       "name": "U8P_FIREPIT::gotHit",
       "kind": "helper",
-      "role": "Event handler for being struck: manage hit/ignition logic, SFX, status bits, and spawn burn effects; includes NPC-specific behavior.",
-      "confidence": "high"
+      "role": "handles the object being hit: guarded, chance-gated reaction that may play SFX, spawn an effect, mark transient busy state, retaliate or destroy attacker",
+      "confidence": "medium"
     },
     {
       "name": "U8P_FIREPIT::look",
       "kind": "helper",
-      "role": "Event handler for 'look' action: produce the item's display text ('fire pit ').",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_FIREPIT::playAmbientSFX",
-      "kind": "extern",
-      "role": "Engine/audio extern: start or attach a looping ambient sound effect to an object.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_FIREPIT::stopSFX",
-      "kind": "extern",
-      "role": "Engine/audio extern: stop a previously started sound effect on an object.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Item/display extern: make the item produce short descriptive text to a target process/player.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getStatus",
-      "kind": "extern",
-      "role": "Item state query: read status bits/flags used to avoid redundant ignition or detect current item state.",
-      "confidence": "high"
-    },
-    {
-      "name": "urandom",
-      "kind": "extern",
-      "role": "Utility: provide a uniform random integer for probabilistic behavior gating.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::isNpc",
-      "kind": "extern",
-      "role": "Item type query: determine if the item represents an NPC to select NPC-specific hit behavior.",
-      "confidence": "high"
-    },
-    {
-      "name": "FREE::1A96",
-      "kind": "extern",
-      "role": "Project helper: likely allocate/initialize a temporary effect/object used when the firepit is hit (inferred).",
-      "confidence": "medium"
-    },
-    {
-      "name": "FREE::1C19",
-      "kind": "extern",
-      "role": "Project helper/spawn: spawn a burn/effect process with a delay (inferred to drive ongoing burn visuals/behavior).",
-      "confidence": "medium"
-    },
-    {
-      "name": "Item::orStatus",
-      "kind": "extern",
-      "role": "Item state mutation: set status bits (used to mark the item as burning).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::andStatus",
-      "kind": "extern",
-      "role": "Item state mutation: clear status bits (used to remove temporary burning mark).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getType",
-      "kind": "extern",
-      "role": "Item info query: return item type used to select SFX variants or other conditional behavior.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getTypeFlag",
-      "kind": "extern",
-      "role": "Item metadata query: test a specific type/flag bit used in NPC branch decisions.",
-      "confidence": "medium"
-    },
-    {
-      "name": "Item::destroy",
-      "kind": "extern",
-      "role": "Item lifecycle: remove/destroy the item from the game world (used in NPC destruction branch).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getX",
-      "kind": "extern",
-      "role": "Item position query: obtain X coordinate for effect placement.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getY",
-      "kind": "extern",
-      "role": "Item position query: obtain Y coordinate for effect placement.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getDirFromCoords",
-      "kind": "extern",
-      "role": "Utility: compute direction/heading from coordinates to orient spawned effects or facing.",
-      "confidence": "medium"
-    },
-    {
-      "name": "METHOD::0080",
-      "kind": "extern",
-      "role": "Project method: apply orientation/motion/initialization to a created helper/effect (inferred).",
-      "confidence": "medium"
-    },
-    {
-      "name": "U8P_FIREPIT::playSFX",
-      "kind": "extern",
-      "role": "Audio: play a one-shot sound effect on the item (used for hit/ignition sounds).",
+      "role": "U8P_FIREPIT::look/inspect handler that returns the short description 'fire pit' to the player",
       "confidence": "high"
     }
   ],
   "call_analysis": {
-    "internal_calls": [
-      {
-        "caller": "U8P_FIREPIT::enterFastArea",
-        "callee": "U8P_FIREPIT::none",
-        "purpose": "Top-level event handler that does not invoke other internal script functions; it sets info and calls external audio APIs.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FIREPIT::leaveFastArea",
-        "callee": "U8P_FIREPIT::none",
-        "purpose": "Event handler that performs cleanup and stops SFX; does not call other internal script routines.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FIREPIT::gotHit",
-        "callee": "U8P_FIREPIT::none",
-        "purpose": "Self-contained hit handler that uses external services and spawn but does not call other U8P_FIREPIT script functions directly.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FIREPIT::look",
-        "callee": "U8P_FIREPIT::none",
-        "purpose": "Simple display handler that calls Item::bark externally; no internal script-to-script calls observed.",
-        "confidence": "high"
-      }
-    ],
+    "internal_calls": [],
     "external_calls": [
       {
         "caller": "U8P_FIREPIT::enterFastArea",
-        "callee": "U8P_FIREPIT::playAmbientSFX",
-        "purpose": "Start a looping ambient fire sound attached to the item when an actor enters the fast area.",
+        "callee": "playAmbientSFX",
+        "purpose": "Attach/start a looping ambient fire sound on this object (params: this, 0x32, 0x0086).",
         "confidence": "high"
       },
       {
         "caller": "U8P_FIREPIT::leaveFastArea",
-        "callee": "U8P_FIREPIT::stopSFX",
-        "purpose": "Stop the ambient fire sound started on entry when the actor leaves the fast area.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FIREPIT::look",
-        "callee": "Item::bark",
-        "purpose": "Display the descriptive string 'fire pit ' to the inspecting process/player.",
+        "callee": "stopSFX",
+        "purpose": "Stop the previously started ambient sound attached to this object (params: this, 0x0086).",
         "confidence": "high"
       },
       {
         "caller": "U8P_FIREPIT::gotHit",
         "callee": "Item::getStatus",
-        "purpose": "Read item status bits to determine if ignition/hit reaction should proceed.",
+        "purpose": "Query object's status flags to check for transient/busy bit (to avoid reentrancy).",
         "confidence": "high"
       },
       {
         "caller": "U8P_FIREPIT::gotHit",
         "callee": "urandom",
-        "purpose": "Perform a randomized check to probabilistically gate ignition or special hit behavior.",
+        "purpose": "Produce randomness used as a chance gate for whether the firepit reacts to a hit and to randomize spawn/delay parameters.",
         "confidence": "high"
       },
       {
         "caller": "U8P_FIREPIT::gotHit",
-        "callee": "U8P_FIREPIT::playSFX",
-        "purpose": "Play immediate hit or ignition sound effects depending on branch and item type.",
+        "callee": "playSFX",
+        "purpose": "Play a one-shot impact/hit sound when the firepit reacts to being hit.",
         "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIREPIT::gotHit",
+        "callee": "Item::getType",
+        "purpose": "Check the attacker/item type to special-case behavior (type 0x60 appears to suppress further reaction).",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_FIREPIT::gotHit",
         "callee": "Item::isNpc",
-        "purpose": "Decide whether the hit target is an NPC-backed item and branch into NPC-specific handling.",
+        "purpose": "Determine whether the attacker is an NPC to choose between applying retaliatory damage or destroying the attacker item.",
         "confidence": "high"
       },
       {
         "caller": "U8P_FIREPIT::gotHit",
-        "callee": "FREE::1A96",
-        "purpose": "Create/initialize a helper/effect object prior to orienting/positioning a spawned effect (inferred).",
+        "callee": "METHOD::receiveHitWrapper",
+        "purpose": "Apply retaliatory damage to an NPC attacker (damage randomized via FREE::randomInRange; direction computed with Item::getDirFromCoords).",
         "confidence": "medium"
-      },
-      {
-        "caller": "U8P_FIREPIT::gotHit",
-        "callee": "Item::getY",
-        "purpose": "Fetch Y coordinate for effect placement and direction computation.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FIREPIT::gotHit",
-        "callee": "Item::getX",
-        "purpose": "Fetch X coordinate for effect placement and direction computation.",
-        "confidence": "high"
       },
       {
         "caller": "U8P_FIREPIT::gotHit",
         "callee": "Item::getDirFromCoords",
-        "purpose": "Compute direction from coordinates to orient spawned effect/helper.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_FIREPIT::gotHit",
-        "callee": "METHOD::0080",
-        "purpose": "Apply the computed direction and auxiliary data to the created helper/effect (inferred initialization/orientation).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_FIREPIT::gotHit",
-        "callee": "Item::orStatus",
-        "purpose": "Set the 'burning' (or similar) status bit on the item before spawning the burn process.",
+        "purpose": "Compute direction from the firepit to the attacker coordinates for aiming retaliatory hit.",
         "confidence": "high"
       },
       {
         "caller": "U8P_FIREPIT::gotHit",
-        "callee": "FREE::1C19",
-        "purpose": "Spawn a burn/effect process after a randomized delay to produce ongoing burn visuals/behavior (inferred).",
+        "callee": "Item::orStatus",
+        "purpose": "Set the object's transient busy/status flag (0x1000) before spawning effects and suspending.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIREPIT::gotHit",
+        "callee": "spawn->FREE::func1C19",
+        "purpose": "Spawn a temporary effect/child entity associated with the reaction; a delay/parameter is computed using 0x32 + urandom(0x40).",
         "confidence": "medium"
       },
       {
         "caller": "U8P_FIREPIT::gotHit",
         "callee": "Item::andStatus",
-        "purpose": "Clear the temporary status bit set earlier after suspension/processing completes.",
+        "purpose": "Clear the transient busy/status bit (~0x1000) after the reaction is complete.",
         "confidence": "high"
       },
       {
         "caller": "U8P_FIREPIT::gotHit",
+        "callee": "FREE::randomInRange",
+        "purpose": "Choose randomized damage amount for retaliation (passed to receiveHitWrapper).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FIREPIT::gotHit",
         "callee": "Item::getTypeFlag",
-        "purpose": "In the NPC branch, test a specific type flag to decide whether to destroy the NPC item.",
+        "purpose": "Check specific type flags (0x2F) on a non-NPC attacker to decide whether to destroy it.",
         "confidence": "medium"
       },
       {
         "caller": "U8P_FIREPIT::gotHit",
         "callee": "Item::destroy",
-        "purpose": "Remove the NPC-backed item from the world when the type-flag test indicates it should be destroyed.",
+        "purpose": "Destroy/remove a non-NPC attacker that lacks the required type flag.",
         "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FIREPIT::look",
+        "callee": "Bark (dialogue node)",
+        "purpose": "Emit the short description 'fire pit' to the player when looked at.",
+        "confidence": "high"
       }
     ]
   },
@@ -309,8 +170,8 @@
   ],
   "quick_facts": {
     "main_function": "U8P_FIREPIT::enterFastArea",
-    "behavior_summary_one_liner": "The script implements the in-game behavior for a fire pit object: it starts/stops an ambient fire sound when actors enter/leave a fast trigger region, responds to being hit (possibly igniting, playing SFX, spawning a burn effect/process, and in some NPC cases destroying the item), and provides a simple 'look' description.",
-    "external_call_count": 17,
+    "behavior_summary_one_liner": "U8P_FIREPIT implements a simple ambient-audio and reactive object: when an actor enters the firepit's fast-area the object starts a looping fire ambient SFX; when the actor leaves that area the ambient SFX is stopped.",
+    "external_call_count": 16,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

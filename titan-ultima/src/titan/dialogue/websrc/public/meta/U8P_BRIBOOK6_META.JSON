@@ -3,40 +3,33 @@
   "source_of_truth": "dialogue/json/U8P_BRIBOOK6.json",
   "file": "U8P_BRIBOOK6",
   "behavior_summary": [
-    "Presents a lengthy in-game book text to the player by invoking the engine Book::read routine with the book's string and a context/actor id, waits for the read operation to complete, and records that the magical book has been read by setting a persistent flag.",
-    "Frees the temporary string buffer after passing it to Book::read and performs a suspend/wait sequence once Book::read returns (the return value is inspected with an 'implies' sequence before suspending).",
-    "Acts as the object’s 'open/read book' handler: display narrative content, block/wait for player interaction/completion, then update game state (readMagBook = 1)."
+    "U8P_BRIBOOK6::func0080 launches the game's Book::read UI with a long lore string (a prose entry denying non-Titanic magic and recounting three investigated incidents), suspends until the read UI/process completes, and then records that the book was read by setting the global flag readMagBook.",
+    "This script therefore implements the player-facing 'read this book' interaction: present text, wait for the player to finish, and set persistent state so the read event can be tracked or gated."
   ],
   "notable_control_flow": [
-    "Prepare arguments: push constant 0x0001 and the context/actor id (value from BP+06h), set object info, then push the book string pointer and the context id again before calling Book::read.",
-    "After Book::read returns the routine frees the allocated string buffer, inspects the return value (pushed -> implies -> popped into a temp), executes a suspend (wait) and then writes the global flag readMagBook = 1.",
-    "No other internal helpers are invoked; behavior is linear: prepare -> call Book::read -> cleanup -> suspend -> set flag -> return."
+    "U8P_BRIBOOK6::func0080 calls Book::read with a pointer to the book string and stores the returned process id in a local (temp).",
+    "The function issues a suspend (wait) so execution pauses until the Book::read process ends (player closes the book).",
+    "After the Book::read process completes, the function sets the global flag readMagBook = 0x01 to record the read event."
   ],
   "open_questions": [
-    "Exact meaning and semantics of the stack value at BP+06h (appears to be a process/player/context id passed into Book::read) — inferred but not explicit.",
-    "Precise semantics of the script-level 'implies' instruction and the Book::read return value (how the return influences the suspend/wait are inferred).",
-    "Whether setting readMagBook = 1 has branching consequences elsewhere in game logic (quest progression, dialog unlocks) — outside this snippet."
+    "Exact trigger: the script is inferred to run when the player interacts with the in-world book object (BRIBOOK6) but the calling/attachment point is not present in this excerpt (confidence: medium).",
+    "Downstream usage: which game systems or dialogues check readMagBook to alter behavior (quest gating, repeated prompts) is not present and remains unknown (confidence: low).",
+    "Localization: the prose is embedded directly as a long string here; whether other language/localization variants exist or are handled separately is not shown (confidence: low)."
   ],
   "main_function": {
-    "name": "U8P_BRIBOOK6::0080",
+    "name": "U8P_BRIBOOK6::func0080",
     "execution_form": "process",
-    "purpose": "When the book object is activated, display a long narrative text to the actor/player via Book::read, wait for the read interaction to finish, then mark the book as read in persistent state.",
+    "purpose": "Start the Book::read UI to display a long lore entry, wait for the player to finish reading, then set readMagBook to record the event.",
     "entry_conditions": [
-      "Invoked when the player/actor interacts with or opens this specific book object (inferred from passing a pid/context and calling Book::read)."
+      "Inferred: invoked when the player interacts with or chooses to read the in-world book object associated with BRIBOOK6 (likely via a use/interact handler)."
     ],
     "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_BRIBOOK6::0080",
+      "name": "U8P_BRIBOOK6::func0080",
       "kind": "main",
-      "role": "Present book text, wait for completion, set read flag",
-      "confidence": "high"
-    },
-    {
-      "name": "Book::read",
-      "kind": "extern",
-      "role": "Engine routine to display book text / manage reading UI",
+      "role": "Launches Book::read with the embedded lore text, waits for completion, and sets the readMagBook flag to record the interaction.",
       "confidence": "high"
     }
   ],
@@ -44,9 +37,15 @@
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_BRIBOOK6::0080",
+        "caller": "U8P_BRIBOOK6::func0080",
         "callee": "Book::read",
-        "purpose": "Display the provided book text to the player and manage the reading UI; return value used to coordinate a suspend/wait sequence",
+        "purpose": "Start a separate UI/process that displays the long book text to the player. Passed a pointer/reference to the embedded string; returns a process id that is stored in a local (temp).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BRIBOOK6::func0080",
+        "callee": "suspend",
+        "purpose": "Pause the current execution until the Book::read process completes (wait for the player to close/finish reading).",
         "confidence": "high"
       }
     ]
@@ -56,21 +55,20 @@
     "writes": [
       {
         "name": "readMagBook",
-        "likely_effect": "Records persistently that this magical book has been read (set to 1 at routine end).",
+        "likely_effect": "Set to true (0x01) to record that this magic-related book has been read; likely used to avoid replaying the read interaction or to gate subsequent content/dialogue.",
         "confidence": "high"
       }
     ]
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "guard",
-    "animation"
+    "presentation",
+    "guard"
   ],
   "quick_facts": {
-    "main_function": "BRIBOOK6::0080",
-    "behavior_summary_one_liner": "Presents a lengthy in-game book text to the player by invoking the engine Book::read routine with the book's string and a context/actor id, waits for the read operation to complete, and records that the magical book has been read by setting a persistent flag.",
-    "external_call_count": 1,
+    "main_function": "U8P_BRIBOOK6::func0080",
+    "behavior_summary_one_liner": "U8P_BRIBOOK6::func0080 launches the game's Book::read UI with a long lore string (a prose entry denying non-Titanic magic and recounting three investigated incidents), suspends until the read UI/process completes, and then records that the book was read by setting the global flag readMagBook.",
+    "external_call_count": 2,
     "flag_read_count": 0,
     "flag_write_count": 1
   },

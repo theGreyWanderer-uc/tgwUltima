@@ -3,181 +3,185 @@
   "source_of_truth": "dialogue/json/U8P_LOGBOOK2.json",
   "file": "U8P_LOGBOOK2",
   "behavior_summary": [
-    "Runs a scripted multi-stage cutscene (an arrest/evidence scene) that freezes the player, plays scene music, spawns multiple NPCs and evidence items, positions/teleports them, sequences timed helper processes and delays, plays lines of dialog (barks), checks NPC survival to branch dialog/flow, manages a fade transition, and records that the scene has been executed so it will not run again."
+    "U8P_LOGBOOK2::func0080 stages a short cinematic/scripted scene that freezes the avatar, plays scene music, resets multiple map/world reference slots, creates or places an item, and populates the scene with several NPCs (guards and a prisoner).",
+    "The function ensures the scene proceeds even if a referenced actor is dead by creating a replacement NPC, marking it persistent, placing it into the world, and starting per-actor behavior tasks via spawn. It uses suspend and spawned timers to pace the beats and calls helpers in LOGBOOK3 and LOGBOOK4 to advance sub-steps.",
+    "U8P_LOGBOOK2::func0ADB is a helper that creates one or more items at a location (via FREE::createItemsAtLocation), inspects the created item handles (Item::getZ/getX/getY/isNpc/getType), teleports NPC-items to random positions when appropriate, and re-places non-NPC items using Item::push/Item::pop."
   ],
   "notable_control_flow": [
-    "U8P_LOGBOOK2::0080 sets avatar into stasis immediately to prevent player input during the scene.",
-    "It starts scene music (playMusic) and spawns an internal choreography helper (U8P_LOGBOOK2::0ADB) to drive timed actions.",
-    "Creates multiple Item and Npc instances (Item::create, Npc::create), then places them with Item::pop and Npc::teleport while setting status bits (Item::orStatus) to control persistence/behavior.",
-    "After placing NPCs the routine repeatedly spawns helper/METHOD and FREE processes (METHOD::15E7, METHOD::091C, FREE::* family) as timers/animation schedulers, using imply/wait idioms to sequence.",
-    "Throughout the sequence it issues many Item::bark calls to deliver dialogue, and uses Npc::isDead checks to branch dialog and subsequent actions depending on which NPCs survive.",
-    "It calls FadeFromBlack at the appropriate time to reveal the scene, and at the end writes the global flag secondexecution to prevent replaying the scene in the future."
+    "Branch on referenced actor aliveness: U8P_LOGBOOK2::func0080 checks Npc::isDead(addressof([SP-00h])); if dead, it creates a replacement NPC (Npc::create) and marks it with Item::orStatus before placement; otherwise it teleports the existing NPC (Npc::teleport).",
+    "Many repeated FREE::resetRef calls to reinitialize map/world reference slots before populating the scene.",
+    "Interleaved spawn (concurrent behaviors) and suspend calls to orchestrate timing: spawn METHOD::func15E7 / METHOD::func091C on NPC handles, interspersed with suspend and camera/fade operations to create cinematic pacing.",
+    "U8P_LOGBOOK2::func0080 calls U8P_LOGBOOK2::func0ADB early to prepare item(s) used by the scene, then delegates later sub-steps to LOGBOOK3::func0080, LOGBOOK4::func10DD, and LOGBOOK4::func1196."
   ],
   "open_questions": [
-    "Exact trigger/entry condition semantics: whether the event is invoked by using a logbook item, entering a trigger area, or another interaction (inferred to be a logbook/trigger).",
-    "Precise meanings and parameter mappings for helper spawn functions (METHOD::15E7, METHOD::091C, FREE::2A56 and other FREE::*): these appear to be timers/animation schedulers but their exact effects are unclear.",
-    "Exact mapping of Item::pop and Npc::teleport parameters (which bytes correspond to tile, stack, orientation, or named markers).",
-    "Which specific NPC types and item shapes are created (only inferred from ID usage; exact type names are not present in the disassembly summary).",
-    "Detailed branching conditions around Npc::isDead checks (which narrative branches occur for each possible combination of NPC deaths)."
+    "Exact semantic meanings of numeric arguments passed to spawn/METHOD::func15E7 and METHOD::func091C (which behavior/animation IDs do they map to?).",
+    "Precise semantics and map coordinates of the numeric constants used in Item::pop / Npc::teleport calls (what scene layout do the tile indices correspond to?).",
+    "Whether U8P_LOGBOOK2::func0080 is invoked directly by a story event, a fast-area trigger, or called from another higher-level script in all use cases (calling context is inferred, not explicit)."
   ],
   "main_function": {
-    "name": "U8P_LOGBOOK2::0080",
+    "name": "U8P_LOGBOOK2::func0080",
     "execution_form": "process",
-    "purpose": "Orchestrate a scripted arrest/evidence cutscene: freeze the avatar, play music, spawn and place NPCs and items, schedule timed helper processes and animations, run dialogue, conditionally branch on NPC deaths, fade into the scene, and mark the scene as executed to prevent replay.",
+    "purpose": "Orchestrate a scripted arrest/prison/courtroom scene: pause player control, set audio, reset map refs, create/place an evidence item, ensure and position scene NPCs (creating replacements if necessary), start per-actor behaviors, and drive camera/fade/timing for the cinematic.",
     "entry_conditions": [
-      "Invoked by the game when the associated logbook/trigger is activated (appears when the player interacts with or activates the logbook/trigger).",
-      "Function runs as a scene/process rather than a pure callback; it spawns sub-processes and sequences timed waits."
+      "Triggered by a story/script event that starts this staged scene (inference from orchestration behavior; function has no parameters).",
+      "Function inspects a referenced actor handle ([SP-00h]) and branches on Npc::isDead to decide whether to teleport the real actor or create a replacement — so presence/aliveness of that actor is a runtime condition."
     ],
     "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_LOGBOOK2::0080",
+      "name": "U8P_LOGBOOK2::func0080",
       "kind": "main",
-      "role": "Main scene process that coordinates the entire cutscene/arrest/evidence sequence.",
+      "role": "Scene orchestration / cinematic staging",
       "confidence": "high"
     },
     {
-      "name": "U8P_LOGBOOK2::0ADB",
+      "name": "U8P_LOGBOOK2::func0ADB",
       "kind": "helper",
-      "role": "Spawned choreography/timing helper used by the main routine to pace animations and actions early in the scene (exact behavior in its own function).",
+      "role": "Create/place items at a location and return/inspect position (teleport NPC-items or push/pop non-NPCs as needed)",
       "confidence": "medium"
     },
     {
-      "name": "LOGBOOK4::10DD",
+      "name": "LOGBOOK3::func0080",
       "kind": "extern",
-      "role": "External/logbook helper script spawned to handle a sub-scene or related behavior.",
-      "confidence": "medium"
+      "role": "Cross-script helper invoked during the scene (coordinating other narrative/scene elements)",
+      "confidence": "low"
     },
     {
-      "name": "LOGBOOK4::1196",
+      "name": "LOGBOOK4::func10DD",
       "kind": "extern",
-      "role": "Another external helper script spawned for coordinated sub-behaviors related to this logbook sequence.",
-      "confidence": "medium"
+      "role": "Project-specific helper used to advance staged sub-steps late in the scene",
+      "confidence": "low"
     },
     {
-      "name": "METHOD::15E7",
+      "name": "LOGBOOK4::func1196",
       "kind": "extern",
-      "role": "Repeatedly spawned method/process that likely drives NPC post-teleport animation or movement scheduling.",
-      "confidence": "medium"
+      "role": "Project-specific helper repeatedly invoked to progress scene beats",
+      "confidence": "low"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
-        "caller": "U8P_LOGBOOK2::0080",
-        "callee": "U8P_LOGBOOK2::0ADB",
-        "purpose": "Spawn a local choreography/timing helper to schedule the early sequence of the cutscene.",
-        "confidence": "medium"
+        "caller": "U8P_LOGBOOK2::func0080",
+        "callee": "U8P_LOGBOOK2::func0ADB",
+        "purpose": "Prepare/create item(s) used in the scene and return position/handle information before placing/populating the map.",
+        "confidence": "high"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_LOGBOOK2::0080",
-        "callee": "U8P_LOGBOOK2::setAvatarInStasis",
-        "purpose": "Freeze the player/avatar to prevent input and movement during the cinematic.",
+        "caller": "U8P_LOGBOOK2::func0080",
+        "callee": "setAvatarInStasis",
+        "purpose": "Freeze avatar controls/animation at scene start.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_LOGBOOK2::0080",
+        "caller": "U8P_LOGBOOK2::func0080",
         "callee": "playMusic",
-        "purpose": "Start background music appropriate to the scene.",
+        "purpose": "Start background/scene music for cinematic atmosphere.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_LOGBOOK2::0080",
+        "caller": "U8P_LOGBOOK2::func0080",
+        "callee": "FREE::resetRef",
+        "purpose": "Reset many world/map reference slots to prepare/clear the map state for the scene.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK2::func0080",
         "callee": "Item::create",
-        "purpose": "Create item or evidence objects used in the scene and retain handles for later placement and status changes.",
+        "purpose": "Allocate an item instance used in the scene (evidence/prop); handle stored to a local for placement.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_LOGBOOK2::0080",
+        "caller": "U8P_LOGBOOK2::func0080",
         "callee": "Item::pop",
-        "purpose": "Instantiate/place created item graphics/instances at specific coordinates or tiles.",
+        "purpose": "Place created item(s) into the world at specific tile indices.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_LOGBOOK2::0080",
-        "callee": "Npc::create",
-        "purpose": "Create NPC participants for the arrest/evidence scene and store handles for teleporting and checks.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LOGBOOK2::0080",
-        "callee": "Item::orStatus",
-        "purpose": "Set status bits on created items/NPCs (e.g., persistence, invisibility, special behavior flags).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LOGBOOK2::0080",
-        "callee": "Npc::teleport",
-        "purpose": "Position NPCs at desired map coordinates or named markers with orientation/flags for the scene composition.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LOGBOOK2::0080",
-        "callee": "METHOD::15E7",
-        "purpose": "Spawned repeatedly after teleports to drive NPC animation/movement scheduling.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_LOGBOOK2::0080",
+        "caller": "U8P_LOGBOOK2::func0080",
         "callee": "Npc::isDead",
-        "purpose": "Query NPC survival state to branch dialogue and scene progression based on which participants survive.",
+        "purpose": "Test whether a referenced actor is dead to decide replacement vs teleport path.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_LOGBOOK2::0080",
-        "callee": "U8P_LOGBOOK2::FadeFromBlack",
-        "purpose": "Reveal the scene to the player by removing the fade overlay during cinematic sequencing.",
+        "caller": "U8P_LOGBOOK2::func0080",
+        "callee": "Npc::teleport",
+        "purpose": "Teleport existing NPC handles to scene coordinates for placement.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_LOGBOOK2::0080",
-        "callee": "Item::bark",
-        "purpose": "Deliver lines of dialogue for NPCs/items; primary mechanism to convey scene narrative.",
+        "caller": "U8P_LOGBOOK2::func0080",
+        "callee": "Npc::create",
+        "purpose": "Create a replacement NPC when the original referenced actor is dead.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_LOGBOOK2::0080",
-        "callee": "FREE::2A56",
-        "purpose": "Used as a scheduling/delay or resource spawn function to control timing of later actions in the sequence.",
+        "caller": "U8P_LOGBOOK2::func0080",
+        "callee": "Item::orStatus",
+        "purpose": "Mark created NPC/items with a persistent/important status flag so they persist in the scene.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_LOGBOOK2::0080",
-        "callee": "FREE::1C19",
-        "purpose": "Spawned utility/timed process likely for visual or timing effects.",
+        "caller": "U8P_LOGBOOK2::func0080",
+        "callee": "spawn -> METHOD::func15E7",
+        "purpose": "Start concurrent per-actor behaviors/animations/timed actions on NPC handles to drive scene animation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK2::func0080",
+        "callee": "spawn -> METHOD::func091C",
+        "purpose": "Start additional concurrent NPC/object actions (gesture/animation/state changes) used for scene staging.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_LOGBOOK2::0080",
-        "callee": "FREE::1C6D",
-        "purpose": "Spawned utility/timed process likely for visual or timing effects.",
+        "caller": "U8P_LOGBOOK2::func0080",
+        "callee": "FREE::cameraFollowAvatar",
+        "purpose": "Adjust camera to frame the avatar or follow them during the cinematic.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_LOGBOOK2::0080",
-        "callee": "FREE::29D8",
-        "purpose": "Spawned utility/timed process likely for visual or timing effects.",
+        "caller": "U8P_LOGBOOK2::func0ADB",
+        "callee": "FREE::createItemsAtLocation",
+        "purpose": "Create item(s) at a target map location and return handles/result for further processing.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK2::func0ADB",
+        "callee": "Item::getZ",
+        "purpose": "Read item Z/layer to filter which created items should be processed further.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK2::func0ADB",
+        "callee": "Item::getX",
+        "purpose": "Read item X coordinate for bounding-box checks before acting on an item.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK2::func0ADB",
+        "callee": "Item::getY",
+        "purpose": "Read item Y coordinate for bounding-box checks before acting on an item.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK2::func0ADB",
+        "callee": "Item::isNpc",
+        "purpose": "Decide whether the created item represents an NPC (and should be teleported) or is a non-NPC prop (push/pop handling).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK2::func0ADB",
+        "callee": "Npc::teleport",
+        "purpose": "Relocate NPC-items to random positions using FREE::randomInRange0 for X/Y selection.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_LOGBOOK2::0080",
-        "callee": "LOGBOOK4::10DD",
-        "purpose": "Spawn an external script to run a related sub-scene or helper routine.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_LOGBOOK2::0080",
-        "callee": "LOGBOOK4::1196",
-        "purpose": "Spawn a second external script to coordinate additional sub-scene behavior.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_LOGBOOK2::0080",
-        "callee": "METHOD::091C",
-        "purpose": "Generic helper method spawn used to drive animations/timed actions for NPCs with small timing/animation parameters.",
+        "caller": "U8P_LOGBOOK2::func0ADB",
+        "callee": "Item::push / Item::pop",
+        "purpose": "Re-place non-NPC items into the map when they pass filters (likely register and then place into a map slot).",
         "confidence": "medium"
       }
     ]
@@ -187,8 +191,8 @@
     "writes": [
       {
         "name": "secondexecution",
-        "likely_effect": "Mark that the scene has already run so it will not be executed again.",
-        "confidence": "high"
+        "likely_effect": "Set to indicate this scene/function has run at least once before (acts as a run-state marker).",
+        "confidence": "medium"
       }
     ]
   },
@@ -196,12 +200,14 @@
     "trigger",
     "cleanup",
     "animation",
-    "guard"
+    "guard",
+    "cinematic",
+    "spawn"
   ],
   "quick_facts": {
-    "main_function": "U8P_LOGBOOK2::0080",
-    "behavior_summary_one_liner": "Runs a scripted multi-stage cutscene (an arrest/evidence scene) that freezes the player, plays scene music, spawns multiple NPCs and evidence items, positions/teleports them, sequences timed helper processes and delays, plays lines of dialog (barks), checks NPC survival to branch dialog/flow, manages a fade transition, and records that the scene has been executed so it will not run again.",
-    "external_call_count": 18,
+    "main_function": "U8P_LOGBOOK2::func0080",
+    "behavior_summary_one_liner": "U8P_LOGBOOK2::func0080 stages a short cinematic/scripted scene that freezes the avatar, plays scene music, resets multiple map/world reference slots, creates or places an item, and populates the scene with several NPCs (guards and a prisoner).",
+    "external_call_count": 19,
     "flag_read_count": 0,
     "flag_write_count": 1
   },

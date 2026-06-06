@@ -3,28 +3,24 @@
   "source_of_truth": "dialogue/json/U8P_SCIMOKG.json",
   "file": "U8P_SCIMOKG",
   "behavior_summary": [
-    "Handles the 'U8P_SCIMOKG::look' (examine) event for the Scimitar of Khumash-Gor: when an actor inspects the item it announces its name to that actor and adjusts the item's processing/info state.",
-    "On invocation it pushes a constant (0x0208) and performs a 'set info' followed by a 'process exclude'—inferred to mark or modify the item's info/state and exclude it from certain processing.",
-    "The handler constructs and passes the literal string \"Scimitar of Khumash-Gor \" to Item::bark using the triggering process id so the name/description is displayed to the correct viewer.",
-    "After messaging it frees the string, performs a small return-value manipulation (implies/pop) and yields a truthy/success return before suspending/returning."
+    "This script implements the item's U8P_SCIMOKG::look/inspect handler. When the engine invokes the U8P_SCIMOKG::look process for this object it displays a single player-facing bark: \"Scimitar of Khumash-Gor\" and then suspends/returns.",
+    "There is no branching, menu interaction, or external calls in the U8P_SCIMOKG::look routine; it is a minimal descriptive handler.",
+    "Item metadata present in the file (baseDamage, damageModifier, damage types, etc.) is separate from this U8P_SCIMOKG::look handler and is not referenced by the process."
   ],
   "notable_control_flow": [
-    "Entry (U8P_SCIMOKG::look event) -> push info constant (0x0208) -> set info opcode -> process exclude opcode",
-    "Create literal string \"Scimitar of Khumash-Gor \" -> convert/obtain pointer -> call Item::bark(pid, string)",
-    "Free created string -> clean up temporaries -> manipulate/return a truthy retval (implies/pop) -> suspend/return"
+    "U8P_SCIMOKG::look executes linearly: emit a Bark ('Scimitar of Khumash-Gor') then suspend/terminate the process.",
+    "No conditionals, loops, or calls are present in the U8P_SCIMOKG::look process — control flow is immediate display then suspend."
   ],
   "open_questions": [
-    "Exact semantics and intended target of the 'set info' operation with constant 0x0208 (what gameplay state or flag does 0x0208 represent?).",
-    "Precise effect of the 'process exclude' opcode in this context (which processing is excluded and for how long?).",
-    "Meaning and role of the small 'implies/pop' sequence with the temporary value — whether it encodes an event-result convention, suppression of further processing, or a simple boolean return."
+    "Is the U8P_SCIMOKG::look handler invoked via a standard inspect/\"U8P_SCIMOKG::look\" action (processType 0x0208) or also via fast-area entry triggers in specific contexts? (inferred: standard inspect; confidence: high)",
+    "Are the item's combat-related metadata fields (damage, modifiers, isSpecial) consumed by other scripts/systems elsewhere? (inferred: yes, but not by this file; confidence: medium)"
   ],
   "main_function": {
     "name": "U8P_SCIMOKG::look",
     "execution_form": "process",
-    "purpose": "Respond to an examine/U8P_SCIMOKG::look event by announcing the item's name to the inspecting process and setting local item info/state to control further processing; returns a truthy success value.",
+    "purpose": "Provide the short description/name when the player examines or 'looks' at this item by displaying the text 'Scimitar of Khumash-Gor' and then suspending.",
     "entry_conditions": [
-      "Event 0 (U8P_SCIMOKG::look) — triggered when an actor examines or looks at the Scimitar (high confidence).",
-      "May also be invoked by area-entry style triggers depending on engine mapping of fast-area events to U8P_SCIMOKG::look handlers (inferred, medium confidence)."
+      "Invoked by the engine's U8P_SCIMOKG::look/inspect interaction for the item (processType 0x0208)."
     ],
     "confidence": "high"
   },
@@ -32,40 +28,25 @@
     {
       "name": "U8P_SCIMOKG::look",
       "kind": "main",
-      "role": "Handle 'U8P_SCIMOKG::look' event for the Scimitar of Khumash-Gor: set item info/exclusion, announce item name to the viewer, return success.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item-provided routine to display or emit a short text/message from an item/process to a target process/player (used to show the item name).",
+      "role": "item U8P_SCIMOKG::look/inspect handler (displays short description)",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_SCIMOKG::look",
-        "callee": "Item::bark",
-        "purpose": "Deliver the literal name string \"Scimitar of Khumash-Gor \" to the inspecting process (pid) so the player sees the item's name/description.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
     "writes": []
   },
   "ui_tags": [
-    "trigger",
-    "display",
-    "state"
+    "trigger"
   ],
   "quick_facts": {
-    "main_function": "SCIMOKG::look",
-    "behavior_summary_one_liner": "Handles the 'U8P_SCIMOKG::look' (examine) event for the Scimitar of Khumash-Gor: when an actor inspects the item it announces its name to that actor and adjusts the item's processing/info state.",
-    "external_call_count": 1,
+    "main_function": "U8P_SCIMOKG::look",
+    "behavior_summary_one_liner": "This script implements the item's U8P_SCIMOKG::look/inspect handler. When the engine invokes the U8P_SCIMOKG::look process for this object it displays a single player-facing bark: \"Scimitar of Khumash-Gor\" and then suspends/returns.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

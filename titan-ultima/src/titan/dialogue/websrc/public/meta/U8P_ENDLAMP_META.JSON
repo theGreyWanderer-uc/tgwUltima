@@ -3,27 +3,23 @@
   "source_of_truth": "dialogue/json/U8P_ENDLAMP.json",
   "file": "U8P_ENDLAMP",
   "behavior_summary": [
-    "Handles the item's 'U8P_ENDLAMP::look' (examine) event: when a player/actor inspects the lamp, the script prepares context, constructs the literal string \"lamp \", and asks the item to 'bark' that string so the description/message is shown to the viewer.",
-    "Around the bark call the script performs engine-level context operations (inferred from opcodes as 'set info' and 'process exclude') to set an info key or exclude the object from other processing while the bark runs.",
-    "After calling Item::bark, the temporary string is freed, the bark return value is captured and consumed via an 'implies'/pop sequence, and the process is suspended (the handler yields) before finishing."
+    "U8P_ENDLAMP::look is a simple examine/description handler for a lamp object. When the player 'looks at' or examines the lamp, the script emits a single short bark text 'lamp' and then ends/suspends the process.",
+    "No global flags are read or written, no menu/choice logic is present, and there are no external engine calls invoked by this script. The behavior is purely descriptive."
   ],
   "notable_control_flow": [
-    "Entry triggered as an event-driven process (Event 0: U8P_ENDLAMP::look) and runs in process form (suspends rather than returning immediately).",
-    "Performs a brief prepare/guard sequence ('set info' + 'process exclude'), then pushes parameters and calls external Item::bark with the literal \"lamp \".",
-    "Frees the temporary string after the call, captures Item::bark's return value, executes an 'implies' operation whose result is popped into a temp, and then suspends the process."
+    "Direct linear flow: process entry -> emit bark 'lamp' -> suspend/terminate. No branching or loops.",
+    "Function runs as a process-type handler (U8P_ENDLAMP::look/examine); 'suspend' tokens in the raw indicate process lifecycle termination rather than additional logic."
   ],
   "open_questions": [
-    "What exactly does the 'implies' opcode represent in engine terms and how is the bark return value intended to affect subsequent logic?",
-    "What concrete info key is being set by 'set info' (a pushed constant is observed) and which object reference is the target of that info operation?",
-    "Does 'process exclude' temporarily prevent other scripts from running on the lamp, and if so for how long (until suspend returns or immediately)?",
-    "How is the captured bark return value used by game logic after the implied/pop sequence — is it a status, dialog-selection, or purely internal control flag?"
+    "Are there any engine-level side effects (logging, analytics) tied to emitting a bark that are not visible in this script? (low confidence)",
+    "Does the object also receive other process handlers (use, touch) in other files that change behavior when looked at in different contexts? (low confidence)"
   ],
   "main_function": {
     "name": "U8P_ENDLAMP::look",
     "execution_form": "process",
-    "purpose": "Respond to the player/actor looking at the lamp by making the lamp emit/display a short descriptive string (\"lamp \") while setting temporary processing context and then suspending the handler.",
+    "purpose": "Provide the short description when the player examines or 'looks at' the lamp object by emitting a single bark 'lamp'.",
     "entry_conditions": [
-      "Event 0 (U8P_ENDLAMP::look/examine) invoked by the player or relevant actor interacting with the lamp's examine area/trigger."
+      "Player examines or uses the 'U8P_ENDLAMP::look' action on the lamp object (engine invokes the U8P_ENDLAMP::look process)."
     ],
     "confidence": "high"
   },
@@ -31,26 +27,13 @@
     {
       "name": "U8P_ENDLAMP::look",
       "kind": "main",
-      "role": "Event handler for the lamp's 'U8P_ENDLAMP::look' action — builds and forwards a description string to the item bark routine, manages temporary context/guards, then suspends.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item method called to display or emit a short text message from the item (here invoked with \"lamp \").",
+      "role": "examine/description handler that emits a single bark 'lamp'",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_ENDLAMP::look",
-        "callee": "Item::bark",
-        "purpose": "Cause the lamp item to present/display the text \"lamp \" to the target/viewer; acts as the visible description/feedback for the U8P_ENDLAMP::look action.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -64,8 +47,8 @@
   ],
   "quick_facts": {
     "main_function": "U8P_ENDLAMP::look",
-    "behavior_summary_one_liner": "Handles the item's 'U8P_ENDLAMP::look' (examine) event: when a player/actor inspects the lamp, the script prepares context, constructs the literal string \"lamp \", and asks the item to 'bark' that string so the description/message is shown to the viewer.",
-    "external_call_count": 1,
+    "behavior_summary_one_liner": "U8P_ENDLAMP::look is a simple examine/description handler for a lamp object. When the player 'looks at' or examines the lamp, the script emits a single short bark text 'lamp' and then ends/suspends the process.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

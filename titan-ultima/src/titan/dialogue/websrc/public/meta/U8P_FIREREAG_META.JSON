@@ -3,29 +3,28 @@
   "source_of_truth": "dialogue/json/U8P_FIREREAG.json",
   "file": "U8P_FIREREAG",
   "behavior_summary": [
-    "U8P_FIREREAG::look runs when a player or actor 'looks at' (examines) a fire reagent item. It reads a single byte property/subtype from the item and, depending on that byte's value (0..5), causes the item/process to emit a short identifying material name to the viewer.",
-    "Values 0..5 map to six material names that are barked to the player: 'volcanic ash', 'pumice', 'obsidian', 'iron', 'brimstone', 'daemon bone' (order inferred from disassembly).",
-    "The routine uses a small test helper (PENT::0F4B) to compare the stored subtype byte against the literal values and then invokes the item's bark routine to display the chosen string."
+    "U8P_FIREREAG::look is the object's 'U8P_FIREREAG::look' (examine) process handler. When the player inspects the object it identifies which pentagram reagent/piece the object represents and emits a short one-word bark naming that reagent.",
+    "The routine obtains a temporary reference to this object (local1 = this) and tests membership against pentagram slot indices 0..5 by calling PENT::isPentagramPieceForSlot with the slot index and the object reference.",
+    "For each slot index there is an associated one-word reagent bark: slot0 → 'volcanic ash', slot1 → 'pumice', slot2 → 'obsidian', slot3 → 'iron', slot4 → 'brimstone', slot5 → 'daemon bone'.",
+    "When a match is found the function emits the corresponding bark and then performs a suspend (likely ending the U8P_FIREREAG::look process). If no slot matches, the function falls through without emitting these barks (no global flags are read/written)."
   ],
   "notable_control_flow": [
-    "On entry (LOOK event), the code reads one byte from the item into local [BP-02h].",
-    "It sequentially tests that byte against constants 0 through 5 using PENT::0F4B; each successful test triggers a conditional path that calls process Item::bark with the corresponding material string.",
-    "Bark calls are wrapped with engine-level 'implies/suspend' style sequencing (inferred engine semantics) to queue/sequence the display; return/call cleanup uses a small temp slot.",
-    "After attempting all comparisons and possible bark calls, the function returns."
+    "U8P_FIREREAG::look sets local1 = this and then performs sequential checks against PENT::isPentagramPieceForSlot for slot indices 0 through 5.",
+    "On the first successful PENT::isPentagramPieceForSlot result the function issues the corresponding reagent Bark and then calls suspend, which likely halts further checks and ends the U8P_FIREREAG::look process.",
+    "There are no menu interactions, no global flag reads/writes, and no other external side effects visible in this script."
   ],
   "open_questions": [
-    "PENT::0F4B appears to be a byte equality/test helper; is it a simple equality comparison or does it perform a masked/tested comparison with other side effects?",
-    "Are the six material strings fixed per subtype across all contexts of this reagent, or can other game data override the mapping?",
-    "Exact semantics of the implied/suspend handshake around Item::bark: does it only control sequencing or can it affect whether subsequent game ticks/processes run?",
-    "Precise identity of the caller PID passed into Item::bark and whether the bark is visible to multiple processes (inferred as the examining player)."
+    "If the object could belong to multiple slots, does the code rely on the sequential checks to select the first matching reagent (inferred) or are multiple matches impossible by design?",
+    "Are the bark strings literal display texts or keys resolved by the engine localization system?",
+    "What broader game logic governs PENT::isPentagramPieceForSlot (how slots are assigned and when pieces can change)?"
   ],
   "main_function": {
     "name": "U8P_FIREREAG::look",
     "execution_form": "process",
-    "purpose": "Handle the LOOK (examine) event for a fire reagent item: read the item's subtype byte and, for values 0..5, cause the item to 'bark' a short material name to the viewer.",
+    "purpose": "When the player examines the item, identify which pentagram reagent/piece it represents and show a single-word reagent label as a bark.",
     "entry_conditions": [
-      "Triggered by the LOOK event (Event 0) when an actor/player examines the reagent item.",
-      "Runs when the engine requests an item's description (player inspects the item)."
+      "Triggered by the engine's 'U8P_FIREREAG::look' (examine) action for the object (process type 0x0208).",
+      "Function begins by storing a temporary reference to the current instance (local1 = this)."
     ],
     "confidence": "high"
   },
@@ -33,19 +32,13 @@
     {
       "name": "U8P_FIREREAG::look",
       "kind": "main",
-      "role": "LOOK/event handler for fire reagent items; maps a stored subtype byte to a human-readable material string and emits it.",
+      "role": "examine/U8P_FIREREAG::look handler that identifies pentagram reagent and emits reagent bark",
       "confidence": "high"
     },
     {
-      "name": "PENT::0F4B",
+      "name": "PENT::isPentagramPieceForSlot",
       "kind": "extern",
-      "role": "Helper used to test/compare the stored byte against literal values; returns a boolean-like result used to gate bark calls (appears to be an equality/test function).",
-      "confidence": "medium"
-    },
-    {
-      "name": "process Item::bark",
-      "kind": "extern",
-      "role": "Cause the item/process to emit/display a short text message to the specified process/player (used to show the reagent's material name).",
+      "role": "query that tests whether the given object is the pentagram piece assigned to a specific slot index",
       "confidence": "high"
     }
   ],
@@ -54,14 +47,8 @@
     "external_calls": [
       {
         "caller": "U8P_FIREREAG::look",
-        "callee": "PENT::0F4B",
-        "purpose": "Compare the byte read from the item ([BP-02h]) against constants 0..5; returns a boolean-like value to decide whether to bark the corresponding string.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_FIREREAG::look",
-        "callee": "process Item::bark",
-        "purpose": "Emit a short descriptive string (material name) to the examining player/process when a subtype match is found.",
+        "callee": "PENT::isPentagramPieceForSlot",
+        "purpose": "Determine whether the inspected object (local1 / this) is the pentagram piece for a specific slot index (0..5); results select which reagent bark to emit.",
         "confidence": "high"
       }
     ]
@@ -72,14 +59,13 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "animation",
-    "guard"
+    "identification",
+    "ui_bark"
   ],
   "quick_facts": {
     "main_function": "U8P_FIREREAG::look",
-    "behavior_summary_one_liner": "U8P_FIREREAG::look runs when a player or actor 'looks at' (examines) a fire reagent item. It reads a single byte property/subtype from the item and, depending on that byte's value (0..5), causes the item/process to emit a short identifying material name to the viewer.",
-    "external_call_count": 2,
+    "behavior_summary_one_liner": "U8P_FIREREAG::look is the object's 'U8P_FIREREAG::look' (examine) process handler. When the player inspects the object it identifies which pentagram reagent/piece the object represents and emits a short one-word bark naming that reagent.",
+    "external_call_count": 1,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

@@ -3,27 +3,27 @@
   "source_of_truth": "dialogue/json/U8P_GRIMOIRE.json",
   "file": "U8P_GRIMOIRE",
   "behavior_summary": [
-    "Provides the 'U8P_GRIMOIRE::look' (examine) handler for a grimoire/book item. When an actor inspects the item the handler reads a small numeric code (item quality) and maps that value to a human-readable title or short description.",
-    "For each recognized code the routine asks the game process to 'speak' or display the chosen literal string by invoking Item::bark with the inspecting process (pid) and the item as context.",
-    "The routine is informational: it dispatches purely on the item's quality code to select text and does not appear to change persistent global flags or other game state in the extracted excerpt."
+    "Provides examine (U8P_GRIMOIRE::look) and U8P_GRIMOIRE::use behavior for a grimoire-type item. The U8P_GRIMOIRE::look() process maps the item's numeric quality code (Item::getQuality(this)) to a human-readable book title and displays it when the player inspects the item.",
+    "The U8P_GRIMOIRE::use() helper prepares the item for reading: it appears to award an intelligence increment (AccumulateIntelligence(0x03)), stores a reference to the item in a local (local1 = this), and spawns a book-specific reader routine (several spawn addressof(local1)->BOOKX::func0080 variants) to present the book's contents, then suspends until that reader executes/returns."
   ],
   "notable_control_flow": [
-    "Entry occurs on the item 'U8P_GRIMOIRE::look' event; control flow is a multi-way dispatch keyed on the return from Item::getQuality.",
-    "For each matched case the function prepares a literal string and issues a call to Item::bark (pushing pid, string, item).",
-    "There are repeated calls to Item::getQuality and repeated bark calls; no branching that modifies globals is observed in the excerpt."
+    "U8P_GRIMOIRE::look implements a switch-like conditional on Item::getQuality(this) and issues a matching display (Bark) for each quality code (i.e., maps quality IDs to book titles).",
+    "U8P_GRIMOIRE::use does a linear sequence: assign local1=this, call AccumulateIntelligence(0x03) (inferred), then branch on Item::getQuality(this) to spawn the appropriate reader process and suspend execution; spawn result is captured in a temp local.",
+    "No global flags are read or written by either routine in the available excerpt."
   ],
   "open_questions": [
-    "Is the full mapping from quality codes to titles complete in the disassembly excerpt or are more cases handled elsewhere?",
-    "Which exact process id (pid) value is provided to the function (viewer vs. the item itself) in the engine's calling convention — inferred but not explicitly declared in the excerpt.",
-    "Are there any side effects of Item::bark beyond displaying text (e.g., logging, triggering dialogue state) that are not visible in this snippet?"
+    "Exact mapping from quality IDs to reader routines and the full list of BOOKx reader targets (metadata shows many spawn variants but mapping completeness is uncertain).",
+    "Whether AccumulateIntelligence(0x03) always triggers on U8P_GRIMOIRE::use() or only for certain quality IDs—call pattern suggests it is unconditional but this is inferred from low-confidence snippets.",
+    "Precise behavior and UI flow of the spawned BOOK1/STEBOOK/EARTHMAG routines (do they show pages, advance skills, or just display flavor text?).",
+    "Whether any global flags outside this excerpt are set by the reader routines (reading side effects are outside this file)."
   ],
   "main_function": {
     "name": "U8P_GRIMOIRE::look",
     "execution_form": "process",
-    "purpose": "Handle the examine/U8P_GRIMOIRE::look event for a book/grimoire item: read the item's numeric quality/code and present a corresponding book title or short descriptive string to the inspecting actor via Item::bark.",
+    "purpose": "When the player inspects the grimoire item, read its quality code and display the corresponding book/spellbook title (short description).",
     "entry_conditions": [
-      "Invoked when an actor examines (looks at) the grimoire item (Event 0 / U8P_GRIMOIRE::look).",
-      "Triggered when the engine dispatches a 'U8P_GRIMOIRE::look' event to the item's process; the item pointer is provided (inferred at BP+06h)."
+      "Triggered by the game's examine/U8P_GRIMOIRE::look action on the item (process type 0x0208).",
+      "Runs whenever the player 'looks at' the item (no special global flags required)."
     ],
     "confidence": "high"
   },
@@ -31,20 +31,32 @@
     {
       "name": "U8P_GRIMOIRE::look",
       "kind": "main",
-      "role": "Event handler for the grimoire's 'U8P_GRIMOIRE::look' (examine) event; maps item quality codes to human-readable strings and displays them.",
+      "role": "Display the short description (title) for the grimoire based on its quality code.",
       "confidence": "high"
+    },
+    {
+      "name": "U8P_GRIMOIRE::use",
+      "kind": "helper",
+      "role": "Handle using/reading the grimoire: award intelligence (inferred), set up local reference to the item, spawn the book reader process appropriate to the quality code, then suspend.",
+      "confidence": "medium"
     },
     {
       "name": "Item::getQuality",
       "kind": "extern",
-      "role": "External accessor used to obtain the item quality/code used as the dispatch key.",
+      "role": "Provide the quality/ID integer for this Item instance; drives title selection and reader dispatch.",
       "confidence": "high"
     },
     {
-      "name": "Item::bark",
+      "name": "AccumulateIntelligence",
       "kind": "extern",
-      "role": "External routine used to deliver/display the prepared string to the target process/player (speaker PID) with the item as context.",
-      "confidence": "high"
+      "role": "Increment or award intelligence/knowledge when the book is used (inferred call with constant 0x03).",
+      "confidence": "medium"
+    },
+    {
+      "name": "spawn addressof(local1)->BOOK1::func0080 (and variants)",
+      "kind": "extern",
+      "role": "Spawn/invoke book-specific reader/display processes for the item instance passed as local1.",
+      "confidence": "medium"
     }
   ],
   "call_analysis": {
@@ -53,14 +65,38 @@
       {
         "caller": "U8P_GRIMOIRE::look",
         "callee": "Item::getQuality",
-        "purpose": "Return a small numeric code/quality value from the item that selects which book title/description to show.",
+        "purpose": "Obtain the numeric quality code for the item to select which title/bark to display.",
         "confidence": "high"
       },
       {
         "caller": "U8P_GRIMOIRE::look",
-        "callee": "Item::bark",
-        "purpose": "Make the chosen string visible/audible to the inspecting actor by issuing a bark from the relevant process (pid) with the item as context.",
+        "callee": "Bark / dialogue display",
+        "purpose": "Show the chosen human-readable title or short description to the player when examined.",
         "confidence": "high"
+      },
+      {
+        "caller": "U8P_GRIMOIRE::use",
+        "callee": "AccumulateIntelligence",
+        "purpose": "Award/increment intelligence or knowledge on item U8P_GRIMOIRE::use (observed call with constant 0x03; inferred learning reward).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GRIMOIRE::use",
+        "callee": "Item::getQuality",
+        "purpose": "Check the item's quality code to decide which book reader process to spawn.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GRIMOIRE::use",
+        "callee": "spawn addressof(local1)->BOOK1::func0080 (and other BOOKx variants like EARTHMAG::func0080, STEVBOOK::func0080)",
+        "purpose": "Launch the specific reader/handler for the chosen book instance, passing the item reference (local1).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GRIMOIRE::use",
+        "callee": "suspend",
+        "purpose": "Pause the using process while the spawned reader executes or until control returns.",
+        "confidence": "medium"
       }
     ]
   },
@@ -70,12 +106,14 @@
   },
   "ui_tags": [
     "trigger",
+    "spawn",
+    "suspend",
     "informational"
   ],
   "quick_facts": {
-    "main_function": "GRIMOIRE::look",
-    "behavior_summary_one_liner": "Provides the 'U8P_GRIMOIRE::look' (examine) handler for a grimoire/book item. When an actor inspects the item the handler reads a small numeric code (item quality) and maps that value to a human-readable title or short description.",
-    "external_call_count": 2,
+    "main_function": "U8P_GRIMOIRE::look",
+    "behavior_summary_one_liner": "Provides examine (U8P_GRIMOIRE::look) and U8P_GRIMOIRE::use behavior for a grimoire-type item. The U8P_GRIMOIRE::look() process maps the item's numeric quality code (Item::getQuality(this)) to a human-readable book title and displays it when the player inspects the item.",
+    "external_call_count": 6,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

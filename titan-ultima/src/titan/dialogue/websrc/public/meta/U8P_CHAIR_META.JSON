@@ -3,26 +3,28 @@
   "source_of_truth": "dialogue/json/U8P_CHAIR.json",
   "file": "U8P_CHAIR",
   "behavior_summary": [
-    "Provides the in-game behavior for a chair object: when examined the chair announces itself as a \"wooden chair\"; when struck under certain conditions the chair's type is changed (likely to a damaged/broken variant).",
-    "CHAIR::look prepares the item state, constructs a short literal description string, calls Item::bark to present that description to the examining actor/process, frees the temporary string, and returns Item::bark's result.",
-    "CHAIR::gotHit inspects a passed-in parameter (the second argument) and, if the condition is satisfied, calls Item::setType with constant 0x022A for the same item process id to change the item's type."
+    "U8P_CHAIR::look is the object's 'U8P_CHAIR::look/examine' handler: when the player examines the chair it presents the short description 'wooden chair' and then suspends/returns control to the engine.",
+    "U8P_CHAIR::gotHit handles the object being struck. If its first parameter (param1) is false/zero (inferred condition: 'not param1'), the routine calls Item::setType(0x022A, this) to change the in-game item type/identity of this object — likely flipping the chair into a different state (e.g., broken or alternate object).",
+    "No global flags are read or written by these routines, and there is no player menu/dialogue branching present."
   ],
   "notable_control_flow": [
-    "U8P_CHAIR::CHAIR::look is triggered by the standard 'U8P_CHAIR::look' event and synchronously calls Item::bark with a literal string; it captures and returns the bark result (the return value is processed through an 'implies' pattern before suspend/return).",
-    "U8P_CHAIR::CHAIR::gotHit runs for 'got hit' events: it checks the second argument and conditionally calls Item::setType(0x022A, pid) to mutate the object's type. This is a guarded transformation rather than an unconditional destroy.",
-    "No global flags are read or written by the provided handlers; behavior is object-local and mediated by engine-supplied params."
+    "U8P_CHAIR::look: simple linear flow — open block, emit a single bark ('wooden chair'), then suspend/end the U8P_CHAIR::look process.",
+    "U8P_CHAIR::gotHit: conditional flow — test first parameter (param1); when the test is false/zero, call external Item::setType to change this item's type to 0x022A; otherwise do nothing.",
+    "Both functions are implemented as engine processes (execution form: process); U8P_CHAIR::gotHit is a helper process invoked by engine damage/hit events."
   ],
   "open_questions": [
-    "What exact semantics does the magic constant 0x022A represent (inferred to be a damaged/broken-chair shape/type but not definitively identified)?",
-    "What specific condition on CHAIR::gotHit's second parameter triggers the type-change (the disassembly shows a test but not the semantic meaning of the value)?",
-    "Are there additional events or state transitions for the chair handled elsewhere in the script or other scripts (only U8P_CHAIR::look and gotHit were present in the excerpt)?"
+    "What concrete gameplay state does item type 0x022A represent (broken chair, alternate object, removed/converted state)? — inferred but not certain.",
+    "What exact semantics does the first parameter (param1) to U8P_CHAIR::gotHit carry (boolean 'fatal hit', source mask, actor id)? — usage suggests a boolean-like guard but confidence is low.",
+    "When and by which engine code paths is U8P_CHAIR::gotHit invoked (player attack, environment damage, thrown object)? — not present in snippet.",
+    "Is the second parameter to U8P_CHAIR::gotHit used elsewhere or intentionally unused in this object's logic?"
   ],
   "main_function": {
     "name": "U8P_CHAIR::look",
     "execution_form": "process",
-    "purpose": "Handle the player/actor 'U8P_CHAIR::look' (examine) action on a chair: set up item info/exclusion, present a short description string ('wooden chair  ') via Item::bark, free temp resources, and return bark's result.",
+    "purpose": "Provide the short description displayed when the player examines the chair (bark: 'wooden chair').",
     "entry_conditions": [
-      "Event 0 — invoked when an actor (typically the Avatar) examines or 'looks' at the chair (area/inspect trigger)."
+      "Triggered by the engine when the player (or relevant actor) performs a 'U8P_CHAIR::look'/'examine' action on this object.",
+      "Also may be triggered by any engine fast-area U8P_CHAIR::look/examine entry semantics for objects of this type."
     ],
     "confidence": "high"
   },
@@ -30,25 +32,19 @@
     {
       "name": "U8P_CHAIR::look",
       "kind": "main",
-      "role": "Examine/describe the chair to the player (calls Item::bark with a static description).",
+      "role": "object U8P_CHAIR::look/examine handler that emits a short description to the player",
       "confidence": "high"
     },
     {
       "name": "U8P_CHAIR::gotHit",
       "kind": "helper",
-      "role": "Respond to the chair being hit: conditionally change the chair's item/type to a different id (0x022A) when a test on the incoming parameter passes.",
+      "role": "hit/damage handler that conditionally changes the item's type/state",
       "confidence": "medium"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine that displays/emits a short text or message on behalf of an item/process.",
-      "confidence": "high"
     },
     {
       "name": "Item::setType",
       "kind": "extern",
-      "role": "Engine/item routine to set/change an item's type/shape id (used here to transform the chair to id 0x022A).",
+      "role": "engine call to change an item's type/identity (used by U8P_CHAIR::gotHit to flip this object to 0x022A)",
       "confidence": "high"
     }
   ],
@@ -56,15 +52,9 @@
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_CHAIR::look",
-        "callee": "Item::bark",
-        "purpose": "Present the chair's short description string to the examining actor/process (text 'wooden chair  ').",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_CHAIR::gotHit",
         "callee": "Item::setType",
-        "purpose": "Change the chair's type/shape to constant 0x022A when the hit-condition is satisfied (inferred to mark a damaged/broken variant).",
+        "purpose": "Change this item's type/identity to 0x022A, effecting a state transition for the chair (inferred: broken/converted state).",
         "confidence": "medium"
       }
     ]
@@ -76,12 +66,13 @@
   "ui_tags": [
     "trigger",
     "cleanup",
+    "animation",
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_CHAIR::CHAIR::look",
-    "behavior_summary_one_liner": "Provides the in-game behavior for a chair object: when examined the chair announces itself as a \"wooden chair\"; when struck under certain conditions the chair's type is changed (likely to a damaged/broken variant).",
-    "external_call_count": 2,
+    "main_function": "U8P_CHAIR::look",
+    "behavior_summary_one_liner": "U8P_CHAIR::look is the object's 'U8P_CHAIR::look/examine' handler: when the player examines the chair it presents the short description 'wooden chair' and then suspends/returns control to the engine.",
+    "external_call_count": 1,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

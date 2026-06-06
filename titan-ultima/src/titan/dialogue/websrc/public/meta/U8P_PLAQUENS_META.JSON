@@ -3,31 +3,27 @@
   "source_of_truth": "dialogue/json/U8P_PLAQUENS.json",
   "file": "U8P_PLAQUENS",
   "behavior_summary": [
-    "Provides inspect ('U8P_PLAQUENS::look') and use behavior for a plaque object: a short one-line label is emitted on U8P_PLAQUENS::look, and a detailed read flow is launched on use.",
-    "PLAQUENS::look emits a short label by calling Item::bark with the literal \"plaque \" directed at the viewer/process that triggered the U8P_PLAQUENS::look.",
-    "PLAQUENS::use does not print text directly; it spawns a dedicated read routine (PLAQUENS::00C2) to handle selection and display of the plaque's full inscription.",
-    "U8P_PLAQUENS::00C2 queries the plaque's numeric variant via Item::getQuality(), switches on that variant to pick one of many hard-coded inscription strings, and calls Plaque::read with a display flag (0x10) to present the chosen inscription.",
-    "A small number of plaque variants consult global flags (acolyteKilled, goToInnerSanctum) to choose alternate inscriptions, making the displayed text conditional on game state.",
-    "After invoking Plaque::read the read routine yields/suspends so the player can read the text (synchronous reading experience)."
+    "U8P_PLAQUENS::look handles the player examining the plaque: it emits a short descriptive bark ('plaque ') and then yields/suspends until the U8P_PLAQUENS::look interaction completes.",
+    "U8P_PLAQUENS::use is the item 'U8P_PLAQUENS::use' entry point and immediately delegates behavior to U8P_PLAQUENS::func00C2.",
+    "U8P_PLAQUENS::func00C2 queries the plaque instance's quality code (Item::getQuality(this)), uses that numeric value as a selector across many cases, and for each case starts a Plaque::read process with a specific hardcoded inscription string and a display flag (0x10). After spawning the read, the script captures the pid and suspends—effectively waiting for the displayed inscription to finish."
   ],
   "notable_control_flow": [
-    "Look handler (U8P_PLAQUENS::look) performs a simple call to Item::bark and then returns/suspends.",
-    "Use handler (U8P_PLAQUENS::use) spawns an independent read process U8P_PLAQUENS::00C2 rather than printing inline, isolating the read logic in its own process.",
-    "U8P_PLAQUENS::00C2 performs a switch/case on the local 'quality' value (Item::getQuality result) to select inscription text; a few cases further branch on global flags (acolyteKilled, goToInnerSanctum).",
-    "Calling Plaque::read is followed by a suspend/wait, implying the spawned process halts until the player finishes reading."
+    "A simple examine path (U8P_PLAQUENS::look) that only shows a short bark and suspends.",
+    "A dispatcher path (U8P_PLAQUENS::func00C2) that performs a multi-way branch on the item's quality value to select one of many hardcoded inscription strings.",
+    "Spawn + suspend pattern: U8P_PLAQUENS::func00C2 starts Plaque::read with the selected string, captures the returned pid, then suspends to wait for the read/display to finish before returning."
   ],
   "open_questions": [
-    "Exact mapping of numeric quality values to all concrete inscription strings (the disassembly shows selection but the full set and exact strings would confirm content).",
-    "Precise meaning/semantics of the Plaque::read flag value 0x10 (display mode, UI flags, or read-only marker) — inferred but not explicit.",
-    "Whether additional global flags (beyond acolyteKilled and goToInnerSanctum) influence other, less-common plaque variants — only two flags were observed being read.",
-    "Exact event numbers that map to higher-level player actions in the engine (e.g., which event ID corresponds to 'use' vs other interactions) — inferred from context but not enumerated here."
+    "What exact range and meaning of quality codes (Item::getQuality) map to each inscription string? The file shows many cases but the numeric mapping detail is not reconstructed here.",
+    "Do any inscription cases set or depend on broader game state (global flags) beyond the local spawn/suspend behavior? The script shows no global flag reads/writes, but external gameplay systems might be involved.",
+    "Is the display flag (0x10) used uniformly for all Plaque::read calls significant (e.g., text formatting or voice) and does it interact with other UI systems?"
   ],
   "main_function": {
     "name": "U8P_PLAQUENS::look",
     "execution_form": "process",
-    "purpose": "Handle the player's 'U8P_PLAQUENS::look' (inspect) interaction with a plaque by preparing object/process context and emitting a one-line label for the plaque (calls Item::bark with \"plaque \").",
+    "purpose": "Provide the short examine/description text for the plaque and end the U8P_PLAQUENS::look interaction.",
     "entry_conditions": [
-      "Triggered when an actor/player inspects or 'looks' at the plaque (the script's 'U8P_PLAQUENS::look' event)."
+      "Invoked by the engine when the player 'looks at' or examines the plaque (U8P_PLAQUENS::look/inspect event).",
+      "No parameters or global flags required."
     ],
     "confidence": "high"
   },
@@ -35,97 +31,61 @@
     {
       "name": "U8P_PLAQUENS::look",
       "kind": "main",
-      "role": "Responds to the 'U8P_PLAQUENS::look' event: sets object/process info and calls Item::bark to emit the short label 'plaque '.",
+      "role": "player-facing examine/description handler (emits a short bark and suspends).",
       "confidence": "high"
     },
     {
       "name": "U8P_PLAQUENS::use",
       "kind": "helper",
-      "role": "Responds to the 'use' event: sets up context and spawns U8P_PLAQUENS::00C2 to perform the detailed read/display flow.",
+      "role": "U8P_PLAQUENS::use-entry process that delegates U8P_PLAQUENS::use behavior to the dispatcher U8P_PLAQUENS::func00C2.",
       "confidence": "high"
     },
     {
-      "name": "U8P_PLAQUENS::00C2",
+      "name": "U8P_PLAQUENS::func00C2",
       "kind": "helper",
-      "role": "Spawned read routine: obtains plaque variant via Item::getQuality, selects the inscription text (with a switch and occasional checks of global flags), calls Plaque::read to show the text, then suspends to allow reading.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine used to emit a short message/label for an item/process (used by U8P_PLAQUENS::look to show 'plaque ').",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getQuality",
-      "kind": "extern",
-      "role": "Engine/item routine returning a numeric quality/variant id for an item; drives inscription selection in the read routine.",
-      "confidence": "high"
-    },
-    {
-      "name": "Plaque::read",
-      "kind": "extern",
-      "role": "Engine/UI routine that presents the plaque's full inscription text to the player; called with a display flag (0x10) and the chosen text.",
-      "confidence": "high"
+      "role": "quality-to-inscription dispatcher: reads Item::getQuality(this), maps value to a literal inscription string and spawns Plaque::read with that string, then suspends.",
+      "confidence": "medium"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
         "caller": "U8P_PLAQUENS::use",
-        "callee": "U8P_PLAQUENS::00C2",
-        "purpose": "Spawn an independent read/display process to handle the plaque inscription instead of performing it inline.",
+        "callee": "U8P_PLAQUENS::func00C2",
+        "purpose": "Delegate the 'U8P_PLAQUENS::use' action to the dispatcher that selects and shows the appropriate inscription.",
         "confidence": "high"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_PLAQUENS::look",
-        "callee": "Item::bark",
-        "purpose": "Emit a short one-line label/utterance ('plaque ') to the viewer/process that inspected the plaque.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_PLAQUENS::00C2",
+        "caller": "U8P_PLAQUENS::func00C2",
         "callee": "Item::getQuality",
-        "purpose": "Retrieve the plaque's variant id/quality used to select which inscription to display.",
+        "purpose": "Query the plaque item's numeric 'quality' or variant code used as the selector for which inscription to show.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_PLAQUENS::00C2",
+        "caller": "U8P_PLAQUENS::func00C2",
         "callee": "Plaque::read",
-        "purpose": "Present the chosen inscription text to the player (called with flags 0x10 and then the routine suspends to allow reading).",
+        "purpose": "Start/display the selected inscription text (passed a string pointer, display flag 0x10, and the plaque instance); the spawn returns a pid captured locally and the script suspends waiting for it.",
         "confidence": "high"
       }
     ]
   },
   "global_flags": {
-    "reads": [
-      {
-        "name": "acolyteKilled",
-        "likely_effect": "Gates alternate inscription text for certain plaque variants (used to pick between two possible strings).",
-        "confidence": "medium"
-      },
-      {
-        "name": "goToInnerSanctum",
-        "likely_effect": "Combined with acolyteKilled in some cases to determine character/location-specific plaque text; affects inscription selection.",
-        "confidence": "medium"
-      }
-    ],
+    "reads": [],
     "writes": []
   },
   "ui_tags": [
     "trigger",
-    "spawn",
+    "text_display",
     "suspend",
-    "dialog",
-    "guard"
+    "dispatcher"
   ],
   "quick_facts": {
-    "main_function": "PLAQUENS::look",
-    "behavior_summary_one_liner": "Provides inspect ('U8P_PLAQUENS::look') and use behavior for a plaque object: a short one-line label is emitted on U8P_PLAQUENS::look, and a detailed read flow is launched on use.",
-    "external_call_count": 3,
-    "flag_read_count": 2,
+    "main_function": "U8P_PLAQUENS::look",
+    "behavior_summary_one_liner": "U8P_PLAQUENS::look handles the player examining the plaque: it emits a short descriptive bark ('plaque ') and then yields/suspends until the U8P_PLAQUENS::look interaction completes.",
+    "external_call_count": 2,
+    "flag_read_count": 0,
     "flag_write_count": 0
   },
   "hypotheses": {

@@ -3,161 +3,487 @@
   "source_of_truth": "dialogue/json/U8P_SGBOOK.json",
   "file": "U8P_SGBOOK",
   "behavior_summary": [
-    "This script module implements a collection of book-reading handlers. Each function prepares a specific piece of in-game text (lore, letters, or spell descriptions) and invokes the engine UI routine that displays book content to a player.",
-    "When a handler runs it sets book-related info on the target object, arranges the player context (pid), allocates/creates a runtime string pointer for the literal text, calls Book::read(book_object_ptr, string_ptr) to present the text to the player, frees the temporary string, and then propagates/handles the return value.",
-    "Handlers are data-driven: each function differs only in the literal string payload (title/body) it pushes before calling Book::read. No global game flags are read or written by these handlers in the observed excerpt."
+    "This script provides a set of simple utility handlers that present prewritten book/letter/spell text to the player. Each named function spawns Book::read with a fixed string literal (converted via str_to_ptr) and the calling object ('this'), captures the spawn result into a temporary, and then suspends until the reader process ends.",
+    "There is no branching, menu logic, or flag manipulation — each function's sole gameplay effect is to open a book/reader UI with specific content and wait for the player to finish reading."
   ],
   "notable_control_flow": [
-    "Linear per-handler flow: set book info -> push implicit player id -> push literal text -> convert literal to pointer -> call Book::read -> free temporary string -> handle/propagate retval.",
-    "No branching or global-state based logic in these handlers; they act as thin wrappers around a single display call.",
-    "Multiple separate helper functions (U8P_SGBOOK::08A3, ::0AC9, ::0CE0, etc.) follow the same flow with different text payloads."
+    "All functions follow the same linear flow: call str_to_ptr on an embedded literal -> spawn Book::read (using the spawn operator <=>) and store the result in a local (temp/pid) -> suspend the current script until the spawned Book::read process finishes.",
+    "No conditional branches, loops, or inter-function control transfers are present in this file; functions are one-shot viewers."
   ],
   "open_questions": [
-    "Which exact event(s) trigger each function (e.g., on-use, on-read, or on-enter area)? Inference: they run when the player interacts/reads the corresponding book object, but the precise event id is not explicit in the excerpt.",
-    "Is the 'set info' opcode used for visual/UI state, object metadata, or to mark the object as currently open? The engine-level effect of the set-info step is inferred but not confirmed.",
-    "Are there any player-specific permission checks (e.g., skill or quest gating) performed outside these handlers before they are invoked?",
-    "Exact lifetime/ownership semantics of 'str to ptr' and 'free string' (allocator used and whether Book::read expects ownership transfer) are inferred but not proven from the snippet."
+    "Which in-game object(s) or item IDs are bound to each function (e.g., which book instance calls U8P_SGBOOK::func0080 vs. U8P_SGBOOK::func08A3)? (confidence: medium — inferred but not present in this file)",
+    "Is process_type 0x0001 used by the engine to register these as immediate event handlers (look/use/read) for book objects, and if so what exact engine event triggers each function? (confidence: medium)",
+    "Are there any localization or runtime substitutions applied to the embedded literals before display (e.g., player name tokens)? The literals appear fixed. (confidence: low)"
   ],
   "main_function": {
-    "name": "U8P_SGBOOK::0080",
+    "name": "U8P_SGBOOK::func0080",
     "execution_form": "process",
-    "purpose": "Present the book titled 'THE SAGA OF BONE CRUSHER' to the player by preparing its text payload and calling the engine Book::read UI routine for the target book object.",
+    "purpose": "Start a Book::read viewer showing the text 'THE SAGA OF BONE CRUSHER' (string literal passed via str_to_ptr) and yield until the spawned reader process completes.",
     "entry_conditions": [
-      "Inferred: invoked when a player interacts with or attempts to read the corresponding in-world book object (i.e., a read/use interaction).",
-      "Pattern: an on-read/book-open handler called with the target book object pointer and an implicit player id (pid)."
+      "Invoked when the player or actor opens/requests to read the associated book object (inferred from the call to Book::read with a book text literal)."
     ],
     "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_SGBOOK::0080",
+      "name": "U8P_SGBOOK::func0080",
       "kind": "main",
-      "role": "Handler that prepares and displays the 'THE SAGA OF BONE CRUSHER' text via Book::read.",
+      "role": "Launch book viewer for 'THE SAGA OF BONE CRUSHER' and wait",
       "confidence": "high"
     },
     {
-      "name": "U8P_SGBOOK::08A3",
+      "name": "U8P_SGBOOK::func08A3",
       "kind": "helper",
-      "role": "Helper handler that prepares and displays 'Enemies of Tenebrae'.",
+      "role": "Launch book viewer for 'Enemies of Tenebrae' and wait",
       "confidence": "high"
     },
     {
-      "name": "U8P_SGBOOK::0AC9",
+      "name": "U8P_SGBOOK::func0AC9",
       "kind": "helper",
-      "role": "Helper handler that prepares and displays 'WHAT THE FISH TELL ME' (poem).",
+      "role": "Launch book viewer for 'WHAT THE FISH TELL ME' and wait",
       "confidence": "high"
     },
     {
-      "name": "U8P_SGBOOK::0CE0",
+      "name": "U8P_SGBOOK::func0CE0",
       "kind": "helper",
-      "role": "Helper handler that prepares and displays 'The Spell of Divination' description.",
+      "role": "Launch book viewer for 'The Spell of Divination' and wait",
       "confidence": "high"
     },
     {
-      "name": "U8P_SGBOOK::0E62",
+      "name": "U8P_SGBOOK::func0E62",
       "kind": "helper",
-      "role": "Helper handler that prepares and displays 'The Spell of Healing Touch'.",
+      "role": "Launch book viewer for 'The Spell of Healing Touch' and wait",
       "confidence": "high"
     },
     {
-      "name": "U8P_SGBOOK::0F95",
+      "name": "U8P_SGBOOK::func0F95",
       "kind": "helper",
-      "role": "Helper handler that prepares and displays 'The spell of Aerial Servant'.",
+      "role": "Launch book viewer for 'The spell of Aerial Servant' and wait",
       "confidence": "high"
     },
     {
-      "name": "U8P_SGBOOK::11EA",
+      "name": "U8P_SGBOOK::func11EA",
       "kind": "helper",
-      "role": "Helper handler that prepares and displays 'The Spell of Reveal'.",
+      "role": "Launch book viewer for 'The Spell of Reveal' and wait",
       "confidence": "high"
     },
     {
-      "name": "U8P_SGBOOK::13AD",
+      "name": "U8P_SGBOOK::func13AD",
       "kind": "helper",
-      "role": "Helper handler that prepares and displays 'The Spell of Restoration'.",
+      "role": "Launch book viewer for 'The Spell of Restoration' and wait",
       "confidence": "high"
     },
     {
-      "name": "U8P_SGBOOK::1598",
+      "name": "U8P_SGBOOK::func1598",
       "kind": "helper",
-      "role": "Helper handler that prepares and displays 'The Spell of Fade From Sight'.",
+      "role": "Launch book viewer for 'The Spell of Fade From Sight' and wait",
       "confidence": "high"
     },
     {
-      "name": "U8P_SGBOOK::16C8",
+      "name": "U8P_SGBOOK::func16C8",
       "kind": "helper",
-      "role": "Helper handler that prepares and displays 'The spell of Air Walk'.",
+      "role": "Launch book viewer for 'The spell of Air Walk' and wait",
       "confidence": "high"
     },
     {
-      "name": "U8P_SGBOOK::19E5",
+      "name": "U8P_SGBOOK::func19E5",
       "kind": "helper",
-      "role": "Helper handler that prepares and displays 'The Spell of Hear Truth'.",
+      "role": "Launch book viewer for 'The Spell of Hear Truth' and wait",
       "confidence": "high"
     },
     {
-      "name": "U8P_SGBOOK::1B74",
+      "name": "U8P_SGBOOK::func1B74",
       "kind": "helper",
-      "role": "Helper handler that prepares and displays 'The spell of Intervention'.",
+      "role": "Launch book viewer for 'The spell of Intervention' and wait",
       "confidence": "high"
     },
     {
-      "name": "U8P_SGBOOK::1D26",
+      "name": "U8P_SGBOOK::func1D26",
       "kind": "helper",
-      "role": "Helper handler that prepares and displays a long entry 'The Spell of Resurrection'.",
+      "role": "Launch book viewer for 'The Spell of Resurrection' and wait",
       "confidence": "high"
     },
     {
-      "name": "U8P_SGBOOK::247E",
+      "name": "U8P_SGBOOK::func247E",
       "kind": "helper",
-      "role": "Helper handler that prepares and displays a personal letter/story beginning 'My dearest Prevan,'.",
+      "role": "Launch book viewer for the personal letter text ('My dearest Prevan') and wait",
       "confidence": "high"
     },
     {
-      "name": "U8P_SGBOOK::2D4E",
+      "name": "U8P_SGBOOK::func2D4E",
       "kind": "helper",
-      "role": "Helper handler that prepares and displays 'THE CHRONICLE OF PAGAN'.",
+      "role": "Launch book viewer for 'THE CHRONICLE OF PAGAN' and wait",
       "confidence": "high"
     },
     {
       "name": "Book::read",
       "kind": "extern",
-      "role": "Engine/UI routine that opens/displays a book text to the player (called with book object context and a char* string).",
+      "role": "Engine-provided reader/viewer entry point used to display book text to the player",
       "confidence": "high"
-    },
-    {
-      "name": "U8P_SGBOOK::str to ptr",
-      "kind": "extern",
-      "role": "Runtime helper that converts an inline literal string into an allocated pointer suitable for Book::read.",
-      "confidence": "medium"
-    },
-    {
-      "name": "U8P_SGBOOK::free string",
-      "kind": "extern",
-      "role": "Runtime helper that frees temporary/allocated string memory produced by 'str to ptr'.",
-      "confidence": "medium"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_SGBOOK::0080 (and all U8P_SGBOOK helpers listed)",
-        "callee": "Book::read",
-        "purpose": "Display/open the prepared book text for the specified book object and player context; primary UI call that shows the content to the player.",
+        "caller": "U8P_SGBOOK::func0080",
+        "callee": "str_to_ptr",
+        "purpose": "Convert embedded book text literal into a pointer representation suitable for Book::read",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SGBOOK::0080 (and all U8P_SGBOOK helpers listed)",
-        "callee": "U8P_SGBOOK::str to ptr",
-        "purpose": "Allocate or otherwise convert the inline/literal pushed text to a char* pointer suitable for passing to Book::read.",
-        "confidence": "medium"
+        "caller": "U8P_SGBOOK::func0080",
+        "callee": "Book::read",
+        "purpose": "Spawn the book reader/viewer process to present the provided text pointer and source object (this) to the player",
+        "confidence": "high"
       },
       {
-        "caller": "U8P_SGBOOK::0080 (and all U8P_SGBOOK helpers listed)",
-        "callee": "U8P_SGBOOK::free string",
-        "purpose": "Free the temporary memory allocated by 'str to ptr' after Book::read returns.",
-        "confidence": "medium"
+        "caller": "U8P_SGBOOK::func0080",
+        "callee": "<=> (spawn operator)",
+        "purpose": "Spawn Book::read as a separate process and return a process id/handle captured into a temporary local",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func0080",
+        "callee": "suspend",
+        "purpose": "Yield the current script until the spawned Book::read process finishes (wait while player reads)",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func08A3",
+        "callee": "str_to_ptr",
+        "purpose": "Convert embedded book text literal for 'Enemies of Tenebrae' to a pointer",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func08A3",
+        "callee": "Book::read",
+        "purpose": "Spawn the reader for 'Enemies of Tenebrae' and wait",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func08A3",
+        "callee": "<=> (spawn operator)",
+        "purpose": "Spawn and capture the Book::read process id",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func08A3",
+        "callee": "suspend",
+        "purpose": "Wait for the reading process to complete",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func0AC9",
+        "callee": "str_to_ptr",
+        "purpose": "Convert poem literal to pointer",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func0AC9",
+        "callee": "Book::read",
+        "purpose": "Spawn the reader for 'WHAT THE FISH TELL ME' and wait",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func0AC9",
+        "callee": "<=> (spawn operator)",
+        "purpose": "Spawn and capture the Book::read process id",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func0AC9",
+        "callee": "suspend",
+        "purpose": "Wait for the reading process to complete",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func0CE0",
+        "callee": "str_to_ptr",
+        "purpose": "Convert 'The Spell of Divination' literal to pointer",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func0CE0",
+        "callee": "Book::read",
+        "purpose": "Spawn the reader for 'The Spell of Divination' and wait",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func0CE0",
+        "callee": "<=> (spawn operator)",
+        "purpose": "Spawn and capture the Book::read process id",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func0CE0",
+        "callee": "suspend",
+        "purpose": "Wait for the reading process to complete",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func0E62",
+        "callee": "str_to_ptr",
+        "purpose": "Convert 'The Spell of Healing Touch' literal to pointer",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func0E62",
+        "callee": "Book::read",
+        "purpose": "Spawn the reader for 'The Spell of Healing Touch' and wait",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func0E62",
+        "callee": "<=> (spawn operator)",
+        "purpose": "Spawn and capture the Book::read process id",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func0E62",
+        "callee": "suspend",
+        "purpose": "Wait for the reading process to complete",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func0F95",
+        "callee": "str_to_ptr",
+        "purpose": "Convert 'The spell of Aerial Servant' literal to pointer",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func0F95",
+        "callee": "Book::read",
+        "purpose": "Spawn the reader for 'The spell of Aerial Servant' and wait",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func0F95",
+        "callee": "<=> (spawn operator)",
+        "purpose": "Spawn and capture the Book::read process id",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func0F95",
+        "callee": "suspend",
+        "purpose": "Wait for the reading process to complete",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func11EA",
+        "callee": "str_to_ptr",
+        "purpose": "Convert 'The Spell of Reveal' literal to pointer",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func11EA",
+        "callee": "Book::read",
+        "purpose": "Spawn the reader for 'The Spell of Reveal' and wait",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func11EA",
+        "callee": "<=> (spawn operator)",
+        "purpose": "Spawn and capture the Book::read process id",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func11EA",
+        "callee": "suspend",
+        "purpose": "Wait for the reading process to complete",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func13AD",
+        "callee": "str_to_ptr",
+        "purpose": "Convert 'The Spell of Restoration' literal to pointer",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func13AD",
+        "callee": "Book::read",
+        "purpose": "Spawn the reader for 'The Spell of Restoration' and wait",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func13AD",
+        "callee": "<=> (spawn operator)",
+        "purpose": "Spawn and capture the Book::read process id",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func13AD",
+        "callee": "suspend",
+        "purpose": "Wait for the reading process to complete",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func1598",
+        "callee": "str_to_ptr",
+        "purpose": "Convert 'The Spell of Fade From Sight' literal to pointer",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func1598",
+        "callee": "Book::read",
+        "purpose": "Spawn the reader for 'The Spell of Fade From Sight' and wait",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func1598",
+        "callee": "<=> (spawn operator)",
+        "purpose": "Spawn and capture the Book::read process id",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func1598",
+        "callee": "suspend",
+        "purpose": "Wait for the reading process to complete",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func16C8",
+        "callee": "str_to_ptr",
+        "purpose": "Convert 'The spell of Air Walk' literal to pointer",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func16C8",
+        "callee": "Book::read",
+        "purpose": "Spawn the reader for 'The spell of Air Walk' and wait",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func16C8",
+        "callee": "<=> (spawn operator)",
+        "purpose": "Spawn and capture the Book::read process id",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func16C8",
+        "callee": "suspend",
+        "purpose": "Wait for the reading process to complete",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func19E5",
+        "callee": "str_to_ptr",
+        "purpose": "Convert 'The Spell of Hear Truth' literal to pointer",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func19E5",
+        "callee": "Book::read",
+        "purpose": "Spawn the reader for 'The Spell of Hear Truth' and wait",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func19E5",
+        "callee": "<=> (spawn operator)",
+        "purpose": "Spawn and capture the Book::read process id",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func19E5",
+        "callee": "suspend",
+        "purpose": "Wait for the reading process to complete",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func1B74",
+        "callee": "str_to_ptr",
+        "purpose": "Convert 'The spell of Intervention' literal to pointer",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func1B74",
+        "callee": "Book::read",
+        "purpose": "Spawn the reader for 'The spell of Intervention' and wait",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func1B74",
+        "callee": "<=> (spawn operator)",
+        "purpose": "Spawn and capture the Book::read process id",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func1B74",
+        "callee": "suspend",
+        "purpose": "Wait for the reading process to complete",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func1D26",
+        "callee": "str_to_ptr",
+        "purpose": "Convert 'The Spell of Resurrection' literal to pointer",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func1D26",
+        "callee": "Book::read",
+        "purpose": "Spawn the reader for 'The Spell of Resurrection' and wait",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func1D26",
+        "callee": "<=> (spawn operator)",
+        "purpose": "Spawn and capture the Book::read process id",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func1D26",
+        "callee": "suspend",
+        "purpose": "Wait for the reading process to complete",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func247E",
+        "callee": "str_to_ptr",
+        "purpose": "Convert personal letter literal to pointer",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func247E",
+        "callee": "Book::read",
+        "purpose": "Spawn the reader for the letter ('My dearest Prevan') and wait",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func247E",
+        "callee": "<=> (spawn operator)",
+        "purpose": "Spawn and capture the Book::read process id",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func247E",
+        "callee": "suspend",
+        "purpose": "Wait for the reading process to complete",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func2D4E",
+        "callee": "str_to_ptr",
+        "purpose": "Convert 'THE CHRONICLE OF PAGAN' literal to pointer",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func2D4E",
+        "callee": "Book::read",
+        "purpose": "Spawn the reader for 'THE CHRONICLE OF PAGAN' and wait",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func2D4E",
+        "callee": "<=> (spawn operator)",
+        "purpose": "Spawn and capture the Book::read process id",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SGBOOK::func2D4E",
+        "callee": "suspend",
+        "purpose": "Wait for the reading process to complete",
+        "confidence": "high"
       }
     ]
   },
@@ -167,14 +493,13 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "animation",
-    "guard"
+    "viewer",
+    "suspend"
   ],
   "quick_facts": {
-    "main_function": "SGBOOK::0080",
-    "behavior_summary_one_liner": "This script module implements a collection of book-reading handlers. Each function prepares a specific piece of in-game text (lore, letters, or spell descriptions) and invokes the engine UI routine that displays book content to a player.",
-    "external_call_count": 3,
+    "main_function": "U8P_SGBOOK::func0080",
+    "behavior_summary_one_liner": "This script provides a set of simple utility handlers that present prewritten book/letter/spell text to the player. Each named function spawns Book::read with a fixed string literal (converted via str_to_ptr) and the calling object ('this'), captures the spawn result into a temporary, and then suspends until the reader process ends.",
+    "external_call_count": 60,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

@@ -3,26 +3,24 @@
   "source_of_truth": "dialogue/json/U8P_GREENTRE.json",
   "file": "U8P_GREENTRE",
   "behavior_summary": [
-    "U8P_GREENTRE::look is the 'U8P_GREENTRE::look' (examine) handler for the green tree object. When a player (or relevant actor) inspects the tree it records/marks item information, adjusts per-player exclusion/processing state, and then requests the item to 'bark' a short description string 'tree ' to the viewer.",
-    "Sequence: set object info (info id 0x0208) on the tree instance, run a process/exclude adjustment involving the viewer pid, prepare the literal string 'tree ' and call Item::bark on the tree to present the text to the viewer, free the temporary string, evaluate the bark return value in an implication/pop pattern into a small temp, then suspend (yield) before returning."
+    "When the player examines the GREENTRE object, the U8P_GREENTRE::look process displays a single short description string ('tree') and then suspends/terminates further U8P_GREENTRE::look processing.",
+    "There is no branching, menu, dialogue, or external calls; behavior is a static short-description handler for a U8P_GREENTRE::look/examine action."
   ],
   "notable_control_flow": [
-    "Entry is event-driven: Event 0 (U8P_GREENTRE::look) triggers U8P_GREENTRE::look; the handler performs a linear sequence of state changes and a display call then suspends.",
-    "The return value from Item::bark is inspected (used in an 'implies' style check) and stored into a temporary before the routine suspends — this implies the bark return may influence immediate post-bark control/logic (exact effect is not present in the snippet).",
-    "No global flags are modified by this script; behavior is local to the item instance and the viewer's context."
+    "Single linear flow: entry -> emit bark 'tree' -> suspend/terminate the process.",
+    "No conditional branches, iterations, or external interactions are present."
   ],
   "open_questions": [
-    "What concrete semantic meaning does info id 0x0208 represent in the game's info table (e.g., 'examined' flag, encyclopedia entry, or tooltip population)?",
-    "What are the two indirect bytes pushed to 'set info' (their meaning and how they affect displayed info) — they are present in the call but not named in the disassembly summary.",
-    "What exact effect does the 'process exclude' call have for this object-player pair (temporary visibility/exclusion, interaction lockout, or UI filtering)?",
-    "What does the Item::bark return value encode (success/failure, user dismissed vs. ignored) that requires an 'implies' check before suspend?"
+    "Does the inferred 'suspend' node fully terminate the U8P_GREENTRE::look process or merely pause it for engine scheduling? (confidence: low)",
+    "Is this object referenced by any other scripts or systems that would reuse or override the U8P_GREENTRE::look behavior? (confidence: low)"
   ],
   "main_function": {
     "name": "U8P_GREENTRE::look",
     "execution_form": "process",
-    "purpose": "Handle a player/actor 'U8P_GREENTRE::look' event for the green tree object by marking item info/state for the viewer, adjusting processing/exclusion state for that viewer, and presenting a short descriptive text ('tree ') via the item's bark routine, then suspending.",
+    "purpose": "Provide the short description shown when the player uses the Look/Examine action on the GREENTRE object (emit a single bark 'tree' then end or suspend the U8P_GREENTRE::look process).",
     "entry_conditions": [
-      "Event 0 (U8P_GREENTRE::look) — triggered when a player/actor looks at or examines the green tree object."
+      "Triggered by the engine when the player examines/looks at the GREENTRE object.",
+      "Registered as a U8P_GREENTRE::look-type process (processType 0x0208) so it is invoked on inspection."
     ],
     "confidence": "high"
   },
@@ -30,44 +28,13 @@
     {
       "name": "U8P_GREENTRE::look",
       "kind": "main",
-      "role": "Event handler for the object's 'U8P_GREENTRE::look' interaction; manages per-viewer info/exclusion and emits the object's short description.",
+      "role": "Handle the object's U8P_GREENTRE::look/examine event and present a short description.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_GREENTRE::look",
-        "callee": "U8P_GREENTRE::set info",
-        "purpose": "Record or populate object information for the target item using info id 0x0208 and two bytes of indirect data — likely marks the item as examined or stores view-specific info.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_GREENTRE::look",
-        "callee": "U8P_GREENTRE::process exclude",
-        "purpose": "Adjust processing/exclusion state of the object with respect to the viewer PID (likely to prevent duplicate interactions, control visibility, or otherwise modulate further processing while the bark/display occurs).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_GREENTRE::look",
-        "callee": "Item::bark",
-        "purpose": "Request the item instance to display/emit a short text message ('tree ') to the specified viewer/pid. This is the user-facing description shown when the tree is examined.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GREENTRE::look",
-        "callee": "FREE::free",
-        "purpose": "Free the temporary string buffer allocated for the bark message after Item::bark returns.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GREENTRE::look",
-        "callee": "suspend",
-        "purpose": "Yield the process after performing the bark and post-call bookkeeping — typical for scripted item interactions that pause until UI/dialog is dismissed or next event.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -75,12 +42,14 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup"
+    "cleanup",
+    "animation",
+    "guard"
   ],
   "quick_facts": {
     "main_function": "U8P_GREENTRE::look",
-    "behavior_summary_one_liner": "U8P_GREENTRE::look is the 'U8P_GREENTRE::look' (examine) handler for the green tree object. When a player (or relevant actor) inspects the tree it records/marks item information, adjusts per-player exclusion/processing state, and then requests the item to 'bark' a short description string 'tree ' to the viewer.",
-    "external_call_count": 5,
+    "behavior_summary_one_liner": "When the player examines the GREENTRE object, the U8P_GREENTRE::look process displays a single short description string ('tree') and then suspends/terminates further U8P_GREENTRE::look processing.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

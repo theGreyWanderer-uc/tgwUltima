@@ -3,26 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_SLAYER.json",
   "file": "U8P_SLAYER",
   "behavior_summary": [
-    "When a player (or other process) looks at the Slayer object, the script prepares the object state, constructs the short label string \"Slayer \", and asks the item/process to 'bark' that string to the viewer. The handler then inspects the bark call's return value via a small logical check (an 'implies' operation), stores the result briefly, and then suspends/returns.",
-    "Before barking, the code pushes a pointer (inferred info_ptr) and the constant 0x0208 into engine ops 'set info' and 'process exclude' — likely adjusting object info/state or which processes are active/receiving events for that object so the bark appears from the intended source or is suppressed for others.",
-    "No global flags are read or written by this handler in the extracted fragment."
+    "U8P_SLAYER::look is a minimal 'U8P_SLAYER::look' (examine) handler for the SLAYER NPC/object. When the player examines the entity, the script plays a single bark line: 'Slayer '.",
+    "Immediately after emitting the bark the process issues a suspend/terminate action (inferred from an unknown 'suspend' token), so the U8P_SLAYER::look handler yields/ends without branching or further interaction.",
+    "No menu, branching, flag reads/writes, or external calls are present in the U8P_SLAYER::look handler.",
+    "The file also contains item property metadata for a special weapon (baseDamage 4, damageModifier 11, damage types ['blunt','magic','slayer']) — this is metadata associated with the SLAYER entity but is not referenced by the U8P_SLAYER::look process."
   ],
   "notable_control_flow": [
-    "Entry on Event 0 (U8P_SLAYER::look) -> set info / process-exclude operations to adjust object/process state -> build constant string \"Slayer \" -> call Item::bark(viewer_pid, \"Slayer \") -> capture return value -> apply 'implies 01 01' to return and pop into a temporary -> suspend/return.",
-    "The bark call's return value is examined but not used to set any observed global state in the snippet; the implies/pop sequence appears to be a small control/flow/flag operation local to this routine's process."
+    "Single linear control flow: U8P_SLAYER::look plays one bark then suspends/ends.",
+    "No conditional branches, no menu presentation, and no calls to other in-project functions from the U8P_SLAYER::look handler."
   ],
   "open_questions": [
-    "What is the exact meaning of info id 0x0208 pushed before the 'set info' call (what gameplay flag or display property does it change)?",
-    "Which object is targeted by the 'push indirect 02h' used with set info / process exclude (inference says a related object or the item itself, but the exact target is unclear)?",
-    "What side effects (if any) arise from the 'implies 01 01' operation applied to the bark return value — is it gating subsequent behavior elsewhere or purely a local/no-op?",
-    "Does Item::bark return values that indicate success/failure or visibility, and how are those intended to be used by the engine in this context?"
+    "What exact runtime effect does the inferred 'suspend' have here (full termination of the U8P_SLAYER::look process vs. yielding to the engine)?",
+    "Is the declared itemProperties block (weapon stats) intended to be equipped by the SLAYER NPC or simply present as metadata in this file? There is no code linking the U8P_SLAYER::look handler to that item data.",
+    "Are there other event handlers (e.g., talk, use, enterFastArea) for this entity elsewhere that reference the weapon properties or provide richer behavior?"
   ],
   "main_function": {
     "name": "U8P_SLAYER::look",
     "execution_form": "process",
-    "purpose": "Handle the item's 'U8P_SLAYER::look' event: prepare object/process info, produce a short descriptive bark ('Slayer ') directed at the viewer, inspect the bark result, then suspend/return.",
+    "purpose": "Provide the short description / single-line response when the player examines the SLAYER NPC; play the bark 'Slayer ' and then end or yield the U8P_SLAYER::look process.",
     "entry_conditions": [
-      "Event 0 (U8P_SLAYER::look) — triggered when a player or process examines/looks at the Slayer object."
+      "Player performs a 'U8P_SLAYER::look' or examine action targeting the SLAYER entity (engine invokes process type 0x0208)."
     ],
     "confidence": "high"
   },
@@ -30,50 +30,13 @@
     {
       "name": "U8P_SLAYER::look",
       "kind": "main",
-      "role": "Event handler for 'U8P_SLAYER::look' that prepares object info/exclusion and invokes Item::bark to present the item's label to the viewer.",
+      "role": "short description / examine handler that emits one bark and suspends",
       "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine that causes an item/process to emit/display/speak a short text string to a target process/player.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_SLAYER::engine:set info",
-      "kind": "extern",
-      "role": "Engine operation to assign a metadata/info key (here 0x0208) to a target object or process; used to adjust object state prior to the bark.",
-      "confidence": "medium"
-    },
-    {
-      "name": "U8P_SLAYER::engine:process exclude",
-      "kind": "extern",
-      "role": "Engine operation to exclude a process/object from normal processing or change processing routing; invoked after set info to adjust which processes act on or receive messages from the object.",
-      "confidence": "medium"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_SLAYER::look",
-        "callee": "Item::bark",
-        "purpose": "Deliver the literal string \"Slayer \" from the item/process to the viewer pid (dword [BP+06h]) so the viewer sees the item's short label/description.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SLAYER::look",
-        "callee": "U8P_SLAYER::engine:set info",
-        "purpose": "Assign info id 0x0208 to a referenced object (pointer pushed via 'push indirect 02h'); likely configures display/behavior before barking.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_SLAYER::look",
-        "callee": "U8P_SLAYER::engine:process exclude",
-        "purpose": "Exclude or change processing for the referenced object/process after setting info (likely to control which process emits or receives subsequent events/messages).",
-        "confidence": "medium"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -81,13 +44,13 @@
   },
   "ui_tags": [
     "trigger",
-    "description",
-    "speech"
+    "speech",
+    "suspend"
   ],
   "quick_facts": {
-    "main_function": "SLAYER::look",
-    "behavior_summary_one_liner": "When a player (or other process) looks at the Slayer object, the script prepares the object state, constructs the short label string \"Slayer \", and asks the item/process to 'bark' that string to the viewer. The handler then inspects the bark call's return value via a small logical check (an 'implies' operation), stores the result briefly, and then suspends/returns.",
-    "external_call_count": 3,
+    "main_function": "U8P_SLAYER::look",
+    "behavior_summary_one_liner": "U8P_SLAYER::look is a minimal 'U8P_SLAYER::look' (examine) handler for the SLAYER NPC/object. When the player examines the entity, the script plays a single bark line: 'Slayer '.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

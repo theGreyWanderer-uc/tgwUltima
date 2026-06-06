@@ -3,28 +3,29 @@
   "source_of_truth": "dialogue/json/U8P_WINCHNS.json",
   "file": "U8P_WINCHNS",
   "behavior_summary": [
-    "Provides gameplay logic for a winch item: describing it when examined, guarding use by item quality, and animating/playing sounds when successfully used.",
-    "WINCHNS::look displays a short descriptive text ('winch') via Item::bark when the player inspects the object.",
-    "WINCHNS::use checks the item's quality (Item::getQuality). If quality == 0 it plays a locked sound and barks 'locked'; if usable it calls a FREE-class routine (FREE::2A56) and spawns a worker (WINCHNS::0110) to animate and sound the winch turning.",
-    "WINCHNS::0110 is a spawned worker that repeatedly plays a winch sound, cycles the object's displayed frame indices (0..3) via Item::setFrame, and inserts short delays by spawning FREE::1C19 between frame steps. The worker repeats the full frame sequence multiple times (outer loop up to an inferred 3 cycles)."
+    "This script implements a world object 'winch' with three routines: an inspect handler (U8P_WINCHNS::look), a U8P_WINCHNS::use handler (U8P_WINCHNS::use), and an internal animation/progression routine (U8P_WINCHNS::func0110).",
+    "U8P_WINCHNS::look: when the player examines the object it emits a short descriptive bark ('winch') and then suspends/ends — purely informational.",
+    "U8P_WINCHNS::use: when the player attempts to U8P_WINCHNS::use the winch it reads the item's quality (Item::getQuality). If the quality is zero the script plays a failure sound and barks 'locked' then suspends and does not proceed. If the quality is nonzero it calls FREE::resetRef(0x0205h, this) to clear a process reference and starts the active sequence by invoking U8P_WINCHNS::func0110.",
+    "U8P_WINCHNS::func0110: drives a timed/stepped animation/progression for the winch. It runs nested progression loops (outer loop limited, inner loop stepping frames), plays SFX at each outer step, sets the item's visual frame via Item::setFrame during inner steps, spawns FREE::func1C19 for per-step side-effects, and uses suspend points between steps to space the progression over game ticks."
   ],
   "notable_control_flow": [
-    "Event-driven: WINCHNS::look and WINCHNS::use are invoked by player actions (U8P_WINCHNS::look/use). WINCHNS::0110 is spawned as a separate process to run multi-frame animation over time.",
-    "Guard on use: Item::getQuality acts as a gate for two different branches — locked (quality==0) vs. usable (quality>0).",
-    "Animation worker uses nested loops: an outer counter running a fixed small number of cycles and an inner frame index iterating frames 0..3; between frame updates the worker spawns a short timer (FREE::1C19) to produce visible animation timing."
+    "U8P_WINCHNS::use branches on Item::getQuality(this) == 0: locked/failure path vs operable path.",
+    "U8P_WINCHNS::func0110 contains nested iterative progression: an outer counter (local1) running a small number of cycles (inferred <= 2) and an inner frame counter (local2) stepping multiple frames (inferred <= 3).",
+    "Multiple suspend points are used inside U8P_WINCHNS::func0110 (and after barks) to space actions across ticks rather than doing them instantly.",
+    "U8P_WINCHNS::use resets a process/reference via FREE::resetRef before starting the internal process to ensure no duplicate/overlapping state."
   ],
   "open_questions": [
-    "Exact semantics and side effects of FREE::2A56 called in WINCHNS::use (inferred to be pre-use resource or lock management) — not visible in the excerpt.",
-    "Precise sound IDs and their in-game audio mapping (which SFX IDs correspond to 'locked' vs. 'winch-turn' sounds).",
-    "Exact number of outer animation cycles in WINCHNS::0110: disassembly shows loop until counter > 2 (appears to run 3 cycles), but intent (timing/design) is inferred.",
-    "Whether any global state beyond the item instance (e.g., world flags) is affected by using the winch — none observed but not exhaustively proven from this excerpt."
+    "Exact numeric meanings and thresholds (why outer loop runs 0..2 and inner loop 0..3) — inferred from decompilation but not explicit.",
+    "Precise semantics of FREE::resetRef(0x0205h, this) and how it interacts with the spawned FREE::func1C19 processes (cleanup vs ownership vs scheduling).",
+    "Meaning and effect of the spawn argument (0x00000000) passed to FREE::func1C19 — what that helper does in the broader system is unknown.",
+    "Whether Item::getQuality returning values >1 imply different behavior beyond the binary locked/operable split — only a zero-vs-nonzero check is present here."
   ],
   "main_function": {
     "name": "U8P_WINCHNS::look",
     "execution_form": "process",
-    "purpose": "Handle the player's 'U8P_WINCHNS::look' (examine) action on the winch; produce a short descriptive message via Item::bark.",
+    "purpose": "Provide an inspect/description response when the player looks at the winch (emit a short bark and end).",
     "entry_conditions": [
-      "Event 0: invoked when an actor/player performs the 'U8P_WINCHNS::look' action on the winch object (examine trigger)."
+      "Triggered by the engine when the player issues a 'U8P_WINCHNS::look' or examine action on this object (processType 0x0208)."
     ],
     "confidence": "high"
   },
@@ -32,151 +33,67 @@
     {
       "name": "U8P_WINCHNS::look",
       "kind": "main",
-      "role": "Present a short description when the winch is examined (calls Item::bark).",
+      "role": "inspect/description handler (bark 'winch')",
       "confidence": "high"
     },
     {
       "name": "U8P_WINCHNS::use",
       "kind": "helper",
-      "role": "Handle the 'use' action: check item quality, branch to locked message or prepare and spawn the animation worker.",
+      "role": "player-U8P_WINCHNS::use handler: guard/validate operability using Item::getQuality then start active behavior or play locked SFX/bark",
       "confidence": "high"
     },
     {
-      "name": "U8P_WINCHNS::0110",
+      "name": "U8P_WINCHNS::func0110",
       "kind": "helper",
-      "role": "Spawned worker that performs the multi-frame animation and plays winch sound effects with short delays between frames.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine to display or vocalize short text to the player.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getQuality",
-      "kind": "extern",
-      "role": "Return the item's quality/usability metric used to determine whether the winch is locked.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_WINCHNS::playSFX",
-      "kind": "extern",
-      "role": "Play a sound effect (used for locked feedback and winch-turning sounds).",
-      "confidence": "high"
-    },
-    {
-      "name": "FREE::2A56",
-      "kind": "extern",
-      "role": "FREE-class routine invoked on successful use; likely performs pre-use bookkeeping or resource/lock management (purpose inferred).",
+      "role": "animation/progression routine: steps frames, plays SFX, spawns side-effect helper and suspends between steps",
       "confidence": "medium"
-    },
-    {
-      "name": "FREE::1C19",
-      "kind": "extern",
-      "role": "Timer/delay helper spawned between frame changes to create animation timing.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::setFrame",
-      "kind": "extern",
-      "role": "Set the displayed object frame to animate the winch sprite.",
-      "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
-        "caller": "U8P_WINCHNS::look",
-        "callee": "Item::bark",
-        "purpose": "Display the item's short description string when examined.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_WINCHNS::use",
-        "callee": "Item::getQuality",
-        "purpose": "Check whether the winch is usable or locked (quality == 0 implies locked).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_WINCHNS::use",
-        "callee": "FREE::2A56",
-        "purpose": "Pre-use routine invoked when the winch is usable; likely resource/lock/prep work before animation spawn (inferred).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_WINCHNS::use",
-        "callee": "U8P_WINCHNS::0110",
-        "purpose": "Spawn the animation/sound worker to run asynchronously and animate the winch turning.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_WINCHNS::0110",
-        "callee": "U8P_WINCHNS::playSFX",
-        "purpose": "Play the winch-turning sound at the start of each animation cycle.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_WINCHNS::0110",
-        "callee": "Item::setFrame",
-        "purpose": "Update the object's displayed frame index (0..3) to animate rotation.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_WINCHNS::0110",
-        "callee": "FREE::1C19",
-        "purpose": "Spawn short delays between frame steps to pace the animation (timer helper).",
+        "callee": "U8P_WINCHNS::func0110",
+        "purpose": "Start the winch's active animation/progression routine when the item is operable.",
         "confidence": "high"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_WINCHNS::look",
-        "callee": "Item::bark",
-        "purpose": "Emit the literal descriptive string ('winch ') to the inspecting player.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_WINCHNS::use",
         "callee": "Item::getQuality",
-        "purpose": "Determine if the winch is locked (quality==0) or usable.",
+        "purpose": "Read the item's quality/state to decide if the winch is locked (quality==0) or operable (nonzero).",
         "confidence": "high"
       },
       {
         "caller": "U8P_WINCHNS::use",
-        "callee": "U8P_WINCHNS::playSFX",
-        "purpose": "Play a 'locked' sound when Item::getQuality returns 0.",
+        "callee": "playSFX",
+        "purpose": "Play a failure SFX when the winch is locked (args: this, 0x64, 0x5A inferred).",
         "confidence": "high"
       },
       {
         "caller": "U8P_WINCHNS::use",
-        "callee": "Item::bark",
-        "purpose": "Bark a 'locked' message to the player when the winch is unusable.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_WINCHNS::use",
-        "callee": "FREE::2A56",
-        "purpose": "Perform a pre-animation/pre-use action on the item (precise role inferred).",
+        "callee": "FREE::resetRef",
+        "purpose": "Reset/clear a process reference for process/type id 0x0205 on this object before starting the active sequence.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_WINCHNS::0110",
-        "callee": "U8P_WINCHNS::playSFX",
-        "purpose": "Play winch-turning sound each cycle.",
-        "confidence": "high"
+        "caller": "U8P_WINCHNS::func0110",
+        "callee": "playSFX",
+        "purpose": "Play an action/step sound at the start of each outer progression cycle (audio feedback for the animation).",
+        "confidence": "medium"
       },
       {
-        "caller": "U8P_WINCHNS::0110",
-        "callee": "FREE::1C19",
-        "purpose": "Introduce brief delays between frame updates to animate over time.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_WINCHNS::0110",
+        "caller": "U8P_WINCHNS::func0110",
         "callee": "Item::setFrame",
-        "purpose": "Step the item's displayed frame index to show rotation frames 0..3.",
-        "confidence": "high"
+        "purpose": "Set the visual frame of the item for each inner-step to animate the winch (arguments: frame index local2, this).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_WINCHNS::func0110",
+        "callee": "FREE::func1C19 (spawn)",
+        "purpose": "Spawn a helper/side-effect routine during each inner-step (argument shown as 0x00000000); likely produces parallel or delayed effects tied to the frame step.",
+        "confidence": "low"
       }
     ]
   },
@@ -191,9 +108,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_WINCHNS::WINCHNS::look",
-    "behavior_summary_one_liner": "Provides gameplay logic for a winch item: describing it when examined, guarding use by item quality, and animating/playing sounds when successfully used.",
-    "external_call_count": 8,
+    "main_function": "U8P_WINCHNS::look",
+    "behavior_summary_one_liner": "This script implements a world object 'winch' with three routines: an inspect handler (U8P_WINCHNS::look), a U8P_WINCHNS::use handler (U8P_WINCHNS::use), and an internal animation/progression routine (U8P_WINCHNS::func0110).",
+    "external_call_count": 6,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

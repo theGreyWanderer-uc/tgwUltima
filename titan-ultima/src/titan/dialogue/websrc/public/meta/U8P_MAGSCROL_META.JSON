@@ -3,28 +3,27 @@
   "source_of_truth": "dialogue/json/U8P_MAGSCROL.json",
   "file": "U8P_MAGSCROL",
   "behavior_summary": [
-    "Provides item-specific behavior for a magic scroll item. When examined (U8P_MAGSCROL::look), the script reads the scroll's quality/type byte and presents a short human-readable name to the player via the item's bark.",
-    "When used (use helper), the script reads the same quality/type byte and spawns a corresponding SCROLL1/SCROLL2 effect script entry point to perform the scroll's in-game effect.",
-    "Known quality values are mapped to specific descriptive strings (for U8P_MAGSCROL::look) and to specific SCROLL1/SCROLL2 entry addresses (for use). If the quality byte is not matched, the script falls back to generic defaults (generic 'magic scroll' text or a default spawn target).",
-    "Item::getQuality is the single source of truth for scroll identity; Item::bark reports names to the player and spawn starts the effect implementation."
+    "This script implements the player-facing description (U8P_MAGSCROL::look) for a magic scroll item and a helper 'U8P_MAGSCROL::use' process that launches the scroll's effect.",
+    "U8P_MAGSCROL::look reads the item's quality/type via Item::getQuality(this) and shows a short label (Bark) chosen from explicit cases (e.g., \"default scroll\", \"scroll of healing\", \"scroll of invisibility\"). If the quality code isn't recognized it falls back to a generic \"magic scroll\" label.",
+    "U8P_MAGSCROL::use reads the same quality/type value and spawns a scroll-effect process appropriate to that quality (various SCROLL1::... or SCROLL2::... entry points). If no explicit mapping matches, it falls back to spawning a default SCROLL1 effect.",
+    "Most detailed runtime behavior (what the scroll actually does) is implemented in the spawned SCROLL1/SCROLL2 functions; this script only maps quality codes to labels/effect entry points and launches them."
   ],
   "notable_control_flow": [
-    "U8P_MAGSCROL::look: fetch quality via Item::getQuality -> switch/compare on quality byte -> call Item::bark(pid, <string>, item) with a hard-coded string for matched values -> fall back to generic strings when no match.",
-    "U8P_MAGSCROL::use: fetch quality via Item::getQuality -> switch/compare on quality byte -> select and pass a SCROLL1 or SCROLL2 entry address to spawn(pid, address) to create the effect process -> default spawn target used if no mapping matches.",
-    "Dispatch is quality-driven: the single byte returned by Item::getQuality determines both the player-visible name and which effect implementation is executed."
+    "U8P_MAGSCROL::look: switch-like dispatch on Item::getQuality(this) -> choose a Bark string for specific quality codes; default case emits \"magic scroll\".",
+    "U8P_MAGSCROL::use: switch-like dispatch on Item::getQuality(this) -> spawn corresponding SCROLL1::funcXXXX or SCROLL2::funcXXXX entry point; default case spawns SCROLL1::func0080, then suspend/wait.",
+    "Both processes are short-lived: U8P_MAGSCROL::look emits a single bark and suspends/ends; U8P_MAGSCROL::use spawns an effect and then suspends, handing behavior to the spawned process."
   ],
   "open_questions": [
-    "Complete mapping of all possible quality byte values to descriptive strings and spawn targets — only several concrete mappings were observed (examples include 0x00, 0x01, 0x32..0x37 and others).",
-    "Exact semantics and required parameters of the spawned SCROLL1/SCROLL2 entry points (their internal effects are external to this script and only inferred).",
-    "Whether the pid passed into Item::bark is always the viewing player's PID or sometimes a different process — inferred as the viewer's PID but not explicitly documented here.",
-    "Whether any global flags or item-info fields are modified by these handlers beyond the spawn/bark operations (none observed in disassembly excerpt)."
+    "Are all quality codes handled in-game covered by the explicit cases shown, or do additional qualities exist that map to other SCROLL functions?",
+    "Do any spawned SCROLL1/SCROLL2 entry points require parameters or actor context beyond the item pointer passed here (inferred as addressof(this))?",
+    "Is there any additional state change (e.g., item consumption/destruction) performed by the spawned SCROLL entry points rather than by this script?"
   ],
   "main_function": {
     "name": "U8P_MAGSCROL::look",
     "execution_form": "process",
-    "purpose": "When the scroll is examined by a player/actor, read the scroll's quality/type byte and present a short human-readable scroll name via Item::bark. Use a lookup of known quality codes and fall back to generic labels when unknown.",
+    "purpose": "When the player examines the scroll item, read the item's quality/type and display a short descriptive label (Bark) appropriate to that scroll type; fall back to a generic label for unknown types.",
     "entry_conditions": [
-      "Event 0: the 'U8P_MAGSCROL::look' (examine) event, triggered when an actor inspects the scroll item."
+      "Invoked by the engine when the player performs a 'U8P_MAGSCROL::look' or examine action on this scroll item (process-type 0x0208)."
     ],
     "confidence": "high"
   },
@@ -32,60 +31,61 @@
     {
       "name": "U8P_MAGSCROL::look",
       "kind": "main",
-      "role": "Handle the item's 'U8P_MAGSCROL::look' event: read quality and bark an appropriate descriptive string to the viewer.",
+      "role": "Provide short player-facing description (Bark) for the scroll based on its Item::getQuality code.",
       "confidence": "high"
     },
     {
       "name": "U8P_MAGSCROL::use",
       "kind": "helper",
-      "role": "Handle the item's 'use' event: read quality and spawn the corresponding scroll-effect script (SCROLL1/SCROLL2 entry points).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getQuality",
-      "kind": "extern",
-      "role": "Engine/Item API call used to retrieve the scroll's quality/type byte (dispatch key).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/Item API call used to display/speak a short text string from the item to the player/process.",
-      "confidence": "high"
-    },
-    {
-      "name": "spawn",
-      "kind": "extern",
-      "role": "Runtime/engine call used to start another usecode script/process (used by U8P_MAGSCROL::use to invoke SCROLL1/SCROLL2 entry points).",
-      "confidence": "high"
+      "role": "Launch the scroll's effect by spawning the appropriate SCROLL1/SCROLL2 entry point based on Item::getQuality; acts as the 'U8P_MAGSCROL::use' handler for the item.",
+      "confidence": "medium"
     }
   ],
   "call_analysis": {
-    "internal_calls": [],
+    "internal_calls": [
+      {
+        "caller": "U8P_MAGSCROL::look",
+        "callee": "U8P_MAGSCROL::use",
+        "purpose": "No evidence of a direct call; listed as a helper in the same script but not invoked by U8P_MAGSCROL::look in the recovered nodes.",
+        "confidence": "low"
+      }
+    ],
     "external_calls": [
       {
         "caller": "U8P_MAGSCROL::look",
         "callee": "Item::getQuality",
-        "purpose": "Obtain the scroll's quality/type byte to decide which descriptive string to show.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_MAGSCROL::look",
-        "callee": "Item::bark",
-        "purpose": "Present the chosen human-readable scroll name to the player/process that triggered the U8P_MAGSCROL::look event (passed pid and the item instance).",
+        "purpose": "Retrieve the item's quality/type code used to select which short label (Bark) to show.",
         "confidence": "high"
       },
       {
         "caller": "U8P_MAGSCROL::use",
         "callee": "Item::getQuality",
-        "purpose": "Obtain the scroll's quality/type byte to determine which effect script to spawn.",
+        "purpose": "Retrieve the item's quality/type code used to select which scroll-effect entry point to spawn.",
         "confidence": "high"
       },
       {
         "caller": "U8P_MAGSCROL::use",
         "callee": "spawn",
-        "purpose": "Start the appropriate SCROLL1 or SCROLL2 script entry point that implements the scroll's effect, passing the initiating pid and the target entry address.",
+        "purpose": "Create/launch a scroll-effect process/thread (calls various SCROLL1::funcXXXX or SCROLL2::funcXXXX entry points).",
         "confidence": "high"
+      },
+      {
+        "caller": "U8P_MAGSCROL::use",
+        "callee": "SCROLL1::func0080",
+        "purpose": "Default effect entry point spawned for unspecified or default quality codes (explicit mapping shows many SCROLL1::funcXXXX variants handled similarly).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_MAGSCROL::use",
+        "callee": "SCROLL2::func0080",
+        "purpose": "Alternate effect entry point spawned for certain quality codes (explicit mapping uses SCROLL2 variants for other scroll types).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_MAGSCROL::use",
+        "callee": "SCROLL1/SCROLL2::funcXXXX (various)",
+        "purpose": "Mapped effect implementations for specific quality codes (examples: 0x32->SCROLL2::func0520, 0x34->SCROLL2::func0AF5, 0x34/0x35/0x36/0x37 etc.).",
+        "confidence": "medium"
       }
     ]
   },
@@ -95,14 +95,12 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "animation",
     "guard"
   ],
   "quick_facts": {
     "main_function": "U8P_MAGSCROL::look",
-    "behavior_summary_one_liner": "Provides item-specific behavior for a magic scroll item. When examined (U8P_MAGSCROL::look), the script reads the scroll's quality/type byte and presents a short human-readable name to the player via the item's bark.",
-    "external_call_count": 4,
+    "behavior_summary_one_liner": "This script implements the player-facing description (U8P_MAGSCROL::look) for a magic scroll item and a helper 'U8P_MAGSCROL::use' process that launches the scroll's effect.",
+    "external_call_count": 6,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

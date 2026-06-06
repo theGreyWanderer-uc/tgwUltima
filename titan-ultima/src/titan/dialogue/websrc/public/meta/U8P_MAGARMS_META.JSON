@@ -3,25 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_MAGARMS.json",
   "file": "U8P_MAGARMS",
   "behavior_summary": [
-    "Handles the 'U8P_MAGARMS::look' (examine) event for the Magic Arm Guards item: when a player (or relevant actor) inspects the item, the script marks the item/process as informational/excluded from further immediate processing, emits a short descriptive text \"magic arm guards \", and indicates the U8P_MAGARMS::look event was handled so no further default processing occurs."
+    "This script implements the object's U8P_MAGARMS::look/examine handler: when the player inspects the item, it shows a short descriptive text and then yields control back to the engine.",
+    "There are no conditionals, flags, or state changes; the behavior is a single, hardcoded presentation of the string \"magic arm guards \" followed by a suspend/return operation.",
+    "Item metadata (for example an armourClass value) exists in the file metadata but is not read or modified by this script."
   ],
   "notable_control_flow": [
-    "On entry (Event 0 / U8P_MAGARMS::look): push the item/process pointer and perform an engine 'set info' / 'process exclude' sequence to mark the instance as informational and exclude it from further processing (inferred).",
-    "Allocate/prepare a temporary string containing the literal \"magic arm guards \".",
-    "Call Item::bark with the item/process pointer and the string to display the description to the player.",
-    "Free the temporary string, capture the return value from Item::bark, use an 'implies' operation to mark the event as handled, then pop a small temp and suspend/return."
+    "U8P_MAGARMS::look executes as a process-type handler and performs a straight-line sequence: call Bark (display text) -> suspend (return control).",
+    "No branching, loops, menu presentation, or flag checks are present."
   ],
   "open_questions": [
-    "What exact info key/value is being set by the 'set info' operation (the disassembly implies an info id but it is not documented here)?",
-    "Does the process-exclude step persist beyond the immediate event (i.e., is the item permanently excluded or only suppressed for the current processing pass)?",
-    "Is the return value from Item::bark used by other systems, or only consumed locally for the implies/handled sequence?"
+    "Is the trailing space in the displayed string \"magic arm guards \" intentional or an artifact of the disassembly?",
+    "Is the armourClass / other item properties carried in the file used elsewhere by gameplay systems even though this script does not reference them?",
+    "Are there other processes or external scripts that respond to this item (use/destroy) not captured here?"
   ],
   "main_function": {
     "name": "U8P_MAGARMS::look",
     "execution_form": "process",
-    "purpose": "Respond to the 'U8P_MAGARMS::look' event for the Magic Arm Guards by displaying a short description and marking the item as informational/handled to suppress further default processing.",
+    "purpose": "Provide the short player-facing description when the player examines the item (display a bark) and then suspend/return control to the engine.",
     "entry_conditions": [
-      "Event 0 (U8P_MAGARMS::look) — triggered when the Avatar or relevant actor examines/looks at the Magic Arm Guards item."
+      "Invoked by the engine when the player performs the 'U8P_MAGARMS::look' / examine action on this object (processType 0x0208)."
     ],
     "confidence": "high"
   },
@@ -29,7 +29,7 @@
     {
       "name": "U8P_MAGARMS::look",
       "kind": "main",
-      "role": "Handle the U8P_MAGARMS::look/examine event for the Magic Arm Guards item; perform set-info/process-exclude, call Item::bark to show \"magic arm guards \", then mark the event handled.",
+      "role": "U8P_MAGARMS::look/examine handler that displays the object's description",
       "confidence": "high"
     }
   ],
@@ -38,9 +38,15 @@
     "external_calls": [
       {
         "caller": "U8P_MAGARMS::look",
-        "callee": "Item::bark",
-        "purpose": "Emit/display the provided short text string (\"magic arm guards \") from the item/process to the player/process that looked at it.",
+        "callee": "Bark",
+        "purpose": "Display the short descriptive text \"magic arm guards \" to the player.",
         "confidence": "high"
+      },
+      {
+        "caller": "U8P_MAGARMS::look",
+        "callee": "suspend",
+        "purpose": "Yield or terminate the U8P_MAGARMS::look process to return control to the engine (inferred engine control operation).",
+        "confidence": "medium"
       }
     ]
   },
@@ -56,8 +62,8 @@
   ],
   "quick_facts": {
     "main_function": "U8P_MAGARMS::look",
-    "behavior_summary_one_liner": "Handles the 'U8P_MAGARMS::look' (examine) event for the Magic Arm Guards item: when a player (or relevant actor) inspects the item, the script marks the item/process as informational/excluded from further immediate processing, emits a short descriptive text \"magic arm guards \", and indicates the U8P_MAGARMS::look event was handled so no further default processing occurs.",
-    "external_call_count": 1,
+    "behavior_summary_one_liner": "This script implements the object's U8P_MAGARMS::look/examine handler: when the player inspects the item, it shows a short descriptive text and then yields control back to the engine.",
+    "external_call_count": 2,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

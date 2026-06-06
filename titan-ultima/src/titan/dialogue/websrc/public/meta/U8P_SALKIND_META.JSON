@@ -3,33 +3,35 @@
   "source_of_truth": "dialogue/json/U8P_SALKIND.json",
   "file": "U8P_SALKIND",
   "behavior_summary": [
-    "Provides the AI and interaction handlers for the NPC Salkind. The script implements how Salkind responds when the player 'looks' at him, how he starts/stops scheduled behaviors when the avatar enters/leaves a proximity trigger, how he reacts if the avatar steals from him, and how he responds to being targeted/cast on.",
-    "SALKIND::look chooses among short description/bark strings based on global naming/title flags (salkindName, salkindJob) and whether the NPC is dead (Npc::isDead), then issues the chosen string via Item::bark to the querying player.",
-    "enterFastArea and leaveFastArea act as trigger-driven schedule control: they reset movement/path references (resetRef) and spawn one of two schedule branches (U8P_SALKIND::04B6 or U8P_SALKIND::05F7) depending on SalkindSchedule and state flags like secondexecution and toranDead.",
-    "AvatarStoleSomething marks the NPC as angry (sets salkindPissed), orients/spawns a short pursuit/animation (METHOD::091C) toward the stolen item, barks an accusation, and then invokes the enterFastArea logic to begin active response.",
-    "cast handles being targeted by spells or abilities: it checks the NPC's current target, may spawn short face/motion actions and a guard reaction (CALGUARD spawn), and uses randomness and small timers (urandom, FREE::1C19) to vary behavior.",
-    "The schedule branches (U8P_SALKIND::04B6 and U8P_SALKIND::05F7) implement walking/animation scripts and periodic barks, using Item::getFrame, Item::getStatus, Npc::pathfind, spawn/METHOD helpers and somebodyTalking gating to coordinate movement and speech."
+    "This script implements Salkind, an NPC with: a 'U8P_SALKIND::look' short-description, area-triggered idle behavior/schedules, reactions to theft and being targeted, and an interactive conversation menu.",
+    "U8P_SALKIND::look supplies the short description shown when the player examines Salkind, choosing among name/title variants and dead/alive phrasing depending on salkindName, salkindJob, and Npc::isDead(this).",
+    "U8P_SALKIND::enterFastArea and U8P_SALKIND::leaveFastArea clear internal refs on area entry/exit; U8P_SALKIND::enterFastArea additionally dispatches U8P_SALKIND::schedule-specific utilities (U8P_SALKIND::func04B6 or U8P_SALKIND::func05F7) based on the SalkindSchedule global flag unless gated by toranDead, secondexecution, or NPC death.",
+    "U8P_SALKIND::func04B6 and U8P_SALKIND::func05F7 are U8P_SALKIND::schedule utilities that perform randomized idle behavior: U8P_SALKIND::func04B6 searches/attempts pathfinds to targets and triggers short monologues or delayed retries; U8P_SALKIND::func05F7 runs a smaller randomized sequence of calls and timers for an alternate U8P_SALKIND::schedule.",
+    "U8P_SALKIND::func072E is a larger idle/monologue routine that picks from many barks based on distance, item state and random buckets; U8P_SALKIND::func0DA5 is a small targeted bark ('Who keeps opening these?').",
+    "U8P_SALKIND::AvatarStoleSomething is the theft reaction: when active it sets salkindPissed, prepares the NPC (METHOD::func091C), barks an accusation, and triggers follow-on behavior.",
+    "U8P_SALKIND::cast handles being targeted/attacked: waits briefly for a target, possibly calls METHOD::func15E7 and CALGUARD::guardRespondToCrime, and issues panic barks chosen randomly.",
+    "U8P_SALKIND::use builds a dynamic conversation menu (local3), presents choices to the player, captures the selection, updates flags (e.g., salkindMet, salkindName), and modifies the menu according to state (adds/removes topics such as Devon/Bentic lines)."
   ],
   "notable_control_flow": [
-    "SALKIND::look: branch tree based on global flags salkindName and salkindJob (combined and individual checks) and a Npc::isDead check to select one of several short description strings.",
-    "U8P_SALKIND::enterFastArea: early-return if toranDead OR Npc::isDead(self) is true or if secondexecution indicates skipping; otherwise reset multiple refs and spawn a schedule branch chosen by SalkindSchedule (value 1 -> U8P_SALKIND::04B6, value 2 -> U8P_SALKIND::05F7).",
-    "AvatarStoleSomething: conditional on schedule and NPC alive state, clears refs, sets salkindPissed, computes direction to stolen item (Item::getDirToItem) and spawns METHOD::091C, barks an accusation, then reuses enterFastArea to start pursuit.",
-    "U8P_SALKIND::cast: compares incoming caster/spell id against Npc::getTarget return; may spawn METHOD::15E7 with Npc::getDir and a CALGUARD spawn, and schedules small delays via FREE::1C19; includes randomized bark selection via urandom in some branches."
+    "U8P_SALKIND::look: selects among textual variants by testing salkindName and salkindJob flags, then Npc::isDead(this) to choose 'dead' vs 'alive' wording.",
+    "U8P_SALKIND::enterFastArea: early-exits if toranDead set, NPC dead, or secondexecution set; otherwise resetRef() is called to clear internal refs and then U8P_SALKIND::schedule-specific helper is invoked based on SalkindSchedule (0x01 -> U8P_SALKIND::func04B6, 0x02 -> U8P_SALKIND::func05F7).",
+    "U8P_SALKIND::func04B6: loop-like iteration over candidate targets, Item::getFrame then Npc::pathfind -> suspend -> branch on process_result(); on success either call U8P_SALKIND::func0DA5 for a specific index or U8P_SALKIND::func072E for idle talk (only if somebodyTalking is false); spawn timers with FREE::func1C19 for retries/delays on different branches.",
+    "U8P_SALKIND::cast: retry/wait loop that spawns FREE::func1C19 while no target and a counter > 0, then checks Npc::getTarget result to decide whether to call METHOD::func15E7 and alert guards, then choose a panic bark via urandom.",
+    "U8P_SALKIND::use: constructs menu array local3 based on flags (salkindMet, salkindPissed, devonJailed, metDevonInJail), presents it (Ask + SuspendAssign into local2), strcmp on the choice to set flags and add/remove menu entries; loop continues until player picks 'bye'."
   ],
   "open_questions": [
-    "Exact text strings used by SALKIND::look variants and the full set of phrasing differences between salkindName/salkindJob combinations (disassembly indicates variants but literal strings are not all enumerated here).",
-    "Meaning and full possible domain of SalkindSchedule beyond observed values (1 and 2) and how schedule variants map to in-game times/behaviors outside this excerpt.",
-    "Precise semantics of secondexecution and how it is set elsewhere in the game (it gates enterFastArea behavior but origin is not shown).",
-    "Whether toranDead is a global representing a nearby character's death affecting Salkind's schedule, and what game events set/clear it.",
-    "Details of what resetRef keys correspond to (which movement/waypoint/state slots are cleared) and how they map to engine-level behavior."
+    "Exact semantic contents and types of globals like salkindName and salkindJob (appear to be boolean/string presence flags) — their storage format is not explicit in the snippet.",
+    "The full semantics of METHOD::func091C and METHOD::func15E7: they appear to prepare speaking state and handle reaction bookkeeping respectively, but exact side-effects are inferred not proven.",
+    "Whether SALKIND::func021B referenced by U8P_SALKIND::AvatarStoleSomething is exactly U8P_SALKIND::enterFastArea (process type 0x021B) or another internal continuation — mapping inferred from process type IDs but not proven.",
+    "Precise timing values and how FREE::func1C19 delays are chosen across branches (only numeric expressions visible; meaning of those timers in gameplay pacing is inferred)."
   ],
   "main_function": {
     "name": "U8P_SALKIND::look",
     "execution_form": "process",
-    "purpose": "Handle the player 'U8P_SALKIND::look' (examine) interaction for NPC Salkind: determine and emit an appropriate short description/bark based on naming/title global flags and the NPC's alive/dead state.",
+    "purpose": "Return the NPC short description when the player examines Salkind, selecting among name/title variants and using dead/alive phrasing.",
     "entry_conditions": [
-      "Invoked when a player or viewer examines/looks at the Salkind NPC (event-driven).",
-      "Depends on parameters: pid (viewer/process id) and the NPC process pointer (self)."
+      "Invoked by the engine when the player 'looks at' or inspects the NPC Salkind.",
+      "Branches within depend on runtime flags salkindName and salkindJob and on Npc::isDead(this)."
     ],
     "confidence": "high"
   },
@@ -37,276 +39,313 @@
     {
       "name": "U8P_SALKIND::look",
       "kind": "main",
-      "role": "Respond to player 'U8P_SALKIND::look' events with a short description/bark, choosing wording from flag combinations and dead/alive state.",
+      "role": "Provide 'U8P_SALKIND::look' short description for Salkind; display different text depending on name/job presence and death state.",
       "confidence": "high"
     },
     {
       "name": "U8P_SALKIND::schedule",
       "kind": "helper",
-      "role": "Minimal schedule initializer / placeholder called by the environment to configure process info/exclude; appears to be a trivial process setup.",
+      "role": "NPC scheduling entry point (placeholder for routine movement/timing).",
       "confidence": "medium"
     },
     {
       "name": "U8P_SALKIND::enterFastArea",
       "kind": "helper",
-      "role": "Trigger handler for entering the NPC's fast-area: resets path/state refs and spawns schedule behavior based on SalkindSchedule, respecting toranDead, secondexecution and NPC alive checks.",
+      "role": "Fast-area entry handler: reset internal refs and dispatch U8P_SALKIND::schedule utilities based on SalkindSchedule unless gated.",
       "confidence": "high"
     },
     {
       "name": "U8P_SALKIND::leaveFastArea",
       "kind": "helper",
-      "role": "Trigger handler for leaving the fast-area: clears references to stop active schedule/movement.",
+      "role": "Fast-area exit handler: clear refs / cleanup.",
       "confidence": "high"
     },
     {
       "name": "U8P_SALKIND::AvatarStoleSomething",
       "kind": "helper",
-      "role": "React to the avatar stealing: if enabled and NPC alive, clear refs, set salkindPissed, orient/spawn a short action toward the stolen item, bark accusation and start pursuit via enterFastArea.",
+      "role": "Theft reaction: set salkindPissed, call preparation method, bark at the player, and trigger follow-up behavior.",
       "confidence": "high"
     },
     {
       "name": "U8P_SALKIND::cast",
       "kind": "helper",
-      "role": "Handle being targeted/cast on by spells or abilities: check target, spawn short animations, schedule guard/response behaviors, and emit randomized pleas/barks.",
+      "role": "Handle being targeted/attacked: wait/retry for target, call reaction bookkeeping, notify guards, and issue panic barks.",
       "confidence": "high"
     },
     {
-      "name": "U8P_SALKIND::04B6",
+      "name": "U8P_SALKIND::func04B6",
       "kind": "helper",
-      "role": "Primary schedule implementation: parse scripted loop/frame commands, evaluate Item::getFrame/Status, pathfind and spawn movement/animation and speech as part of the schedule.",
+      "role": "Schedule utility: iterate candidate targets, attempt pathfinds, and trigger short monologues or retries based on results.",
       "confidence": "high"
     },
     {
-      "name": "U8P_SALKIND::05F7",
+      "name": "U8P_SALKIND::func05F7",
       "kind": "helper",
-      "role": "Alternate schedule branch: random timing, orient toward items, spawn short actions and barks; used when SalkindSchedule indicates branch 2.",
+      "role": "Alternative U8P_SALKIND::schedule utility: randomized short sequences and timers for a different U8P_SALKIND::schedule state.",
       "confidence": "high"
     },
     {
-      "name": "U8P_SALKIND::072E",
+      "name": "U8P_SALKIND::func072E",
       "kind": "helper",
-      "role": "Short reaction subroutine used by schedule code to check status bits and possibly bark/animate ('Leave me be!') when interrupted or when someone else is talking.",
-      "confidence": "medium"
-    },
-    {
-      "name": "Npc::isDead",
-      "kind": "extern",
-      "role": "External query used to check whether the NPC is dead to change wording and to block schedule/reactive behavior.",
+      "role": "Idle/monologue routine with many barks chosen by distance, item state, and randomness.",
       "confidence": "high"
     },
     {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "External routine used to emit short strings/dialog lines to the player/process that triggered the event.",
+      "name": "U8P_SALKIND::func0DA5",
+      "kind": "helper",
+      "role": "Short targeted monologue and possible door-U8P_SALKIND::use spawn: 'Who keeps opening these?'.",
       "confidence": "high"
     },
     {
-      "name": "U8P_SALKIND::resetRef",
-      "kind": "extern",
-      "role": "Engine helper to clear internal movement/waypoint/state references for the NPC.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getDirToItem",
-      "kind": "extern",
-      "role": "Compute facing direction from NPC to an item/target; used to orient spawn calls before animations.",
-      "confidence": "high"
-    },
-    {
-      "name": "METHOD::091C",
-      "kind": "extern",
-      "role": "Spawned helper to perform a facing/short action in a direction (animation/movement).",
-      "confidence": "high"
-    },
-    {
-      "name": "Npc::getTarget",
-      "kind": "extern",
-      "role": "Return NPC's current interaction/combat target; used by cast to compare against caster/spell id.",
-      "confidence": "high"
-    },
-    {
-      "name": "Npc::getDir",
-      "kind": "extern",
-      "role": "Return NPC current facing direction; used as input to spawn METHOD reactions.",
-      "confidence": "high"
-    },
-    {
-      "name": "urandom",
-      "kind": "extern",
-      "role": "Random number generator used to vary timing and dialog selection.",
-      "confidence": "high"
-    },
-    {
-      "name": "FREE::1C19",
-      "kind": "extern",
-      "role": "Spawned helper used as a delay/timer or light-weight process wrapper to schedule short deferred actions.",
-      "confidence": "medium"
-    },
-    {
-      "name": "Npc::pathfind",
-      "kind": "extern",
-      "role": "Request pathfinding/movement to coordinates or objects during scheduled routines.",
+      "name": "U8P_SALKIND::use",
+      "kind": "main",
+      "role": "Conversation handler: build menu, present options, capture choice, and update flags and menu entries accordingly.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
-        "caller": "U8P_SALKIND::look",
-        "callee": "Npc::isDead",
-        "purpose": "Decide whether to use dead/corpse/late wording and to possibly suppress active reactions; used in branching of the U8P_SALKIND::look text.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SALKIND::look",
-        "callee": "Item::bark",
-        "purpose": "Emit the chosen short description string to the player who looked at the NPC.",
+        "caller": "U8P_SALKIND::enterFastArea",
+        "callee": "U8P_SALKIND::func05F7",
+        "purpose": "Run alternate U8P_SALKIND::schedule behavior when SalkindSchedule == 0x02.",
         "confidence": "high"
       },
       {
         "caller": "U8P_SALKIND::enterFastArea",
-        "callee": "U8P_SALKIND::resetRef",
-        "purpose": "Clear movement/waypoint references to prepare for starting a schedule branch.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SALKIND::enterFastArea",
-        "callee": "U8P_SALKIND::04B6",
-        "purpose": "Spawn primary schedule branch when SalkindSchedule indicates branch 1.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SALKIND::enterFastArea",
-        "callee": "U8P_SALKIND::05F7",
-        "purpose": "Spawn alternate schedule branch when SalkindSchedule indicates branch 2.",
+        "callee": "U8P_SALKIND::func04B6",
+        "purpose": "Run primary U8P_SALKIND::schedule behavior when SalkindSchedule == 0x01.",
         "confidence": "high"
       },
       {
         "caller": "U8P_SALKIND::AvatarStoleSomething",
         "callee": "U8P_SALKIND::enterFastArea",
-        "purpose": "Reuse area-entry logic to begin pursuit/response after a theft-triggered bark and spawn.",
+        "purpose": "Trigger follow-up area/U8P_SALKIND::schedule behavior after barking (call named as func021B which matches U8P_SALKIND::enterFastArea process_type 0x021B; mapping inferred).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_SALKIND::func04B6",
+        "callee": "U8P_SALKIND::func0DA5",
+        "purpose": "Invoke short targeted monologue when a specific candidate index is found and pathfind succeeds.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SALKIND::04B6",
-        "callee": "U8P_SALKIND::072E",
-        "purpose": "Invoke short reaction subroutine during schedule path/decision logic when interruptions/status tests require a brief reaction.",
-        "confidence": "medium"
+        "caller": "U8P_SALKIND::func04B6",
+        "callee": "U8P_SALKIND::func072E",
+        "purpose": "Invoke general idle monologue when pathfind succeeds and somebodyTalking is false.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SALKIND::use",
+        "callee": "U8P_SALKIND::func072E",
+        "purpose": "Not typically invoked directly by U8P_SALKIND::use in this excerpt, but present as an idle helper called elsewhere; included for completeness.",
+        "confidence": "low"
       }
     ],
     "external_calls": [
       {
         "caller": "U8P_SALKIND::look",
-        "callee": "Item::bark",
-        "purpose": "Display the selected description string to the specified viewer process (pid).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SALKIND::look",
         "callee": "Npc::isDead",
-        "purpose": "Determine alive/dead state to choose phrasing and to gate other reactions.",
+        "purpose": "Check whether to U8P_SALKIND::use dead-phrasing for the description.",
         "confidence": "high"
       },
       {
         "caller": "U8P_SALKIND::enterFastArea",
-        "callee": "U8P_SALKIND::resetRef",
-        "purpose": "Reset multiple internal state references to stop or reinitialize movement/schedule state.",
+        "callee": "resetRef",
+        "purpose": "Clear internal script references (0x0205,0x0204,0x00F0,0x0200) on fast-area entry.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SALKIND::leaveFastArea",
+        "callee": "resetRef",
+        "purpose": "Clear internal script references on fast-area exit.",
         "confidence": "high"
       },
       {
         "caller": "U8P_SALKIND::AvatarStoleSomething",
-        "callee": "Item::getDirToItem",
-        "purpose": "Compute a facing direction toward the stolen item before spawning a facing/action METHOD.",
+        "callee": "METHOD::func091C",
+        "purpose": "Prepare/orient NPC before speaking in the theft reaction.",
         "confidence": "high"
       },
       {
         "caller": "U8P_SALKIND::AvatarStoleSomething",
-        "callee": "METHOD::091C",
-        "purpose": "Spawn a short facing/animation action toward the stolen item (visual/behavioral reaction).",
+        "callee": "CALGUARD::guardRespondToCrime",
+        "purpose": "Notify/trigger guard response as part of theft/aggro flow (indirectly via called helpers).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_SALKIND::cast",
+        "callee": "FREE::func1C19 (spawn)",
+        "purpose": "Spawn a short timer/helper used to wait/retry while no target is present.",
         "confidence": "high"
       },
       {
         "caller": "U8P_SALKIND::cast",
         "callee": "Npc::getTarget",
-        "purpose": "Obtain NPC's current target to compare with incoming caster/spell id and decide reaction.",
+        "purpose": "Determine if the NPC currently has a target to drive reaction flow.",
         "confidence": "high"
       },
       {
         "caller": "U8P_SALKIND::cast",
-        "callee": "Npc::getDir",
-        "purpose": "Get current facing direction to parameterize spawned reaction METHOD::15E7.",
+        "callee": "METHOD::func15E7",
+        "purpose": "Shared reaction/bookkeeping call before guard notification when NPC has a valid target.",
         "confidence": "high"
       },
       {
         "caller": "U8P_SALKIND::cast",
-        "callee": "METHOD::15E7",
-        "purpose": "Spawn a short movement/animation in a given direction in response to being cast on.",
-        "confidence": "medium"
+        "callee": "CALGUARD::guardRespondToCrime",
+        "purpose": "Alert guards when NPC has been targeted/attacked.",
+        "confidence": "high"
       },
       {
-        "caller": "U8P_SALKIND::cast",
-        "callee": "CALGUARD::0080",
-        "purpose": "Spawn guard/response behavior (higher-level reaction) when certain cast conditions are met.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_SALKIND::04B6",
+        "caller": "U8P_SALKIND::func04B6",
         "callee": "Npc::pathfind",
-        "purpose": "Perform movement/pathfinding to scripted coordinates or items as part of schedule playback.",
+        "purpose": "Test reachability to candidate target/item before proceeding with action or monologue.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SALKIND::04B6",
-        "callee": "Item::getFrame",
-        "purpose": "Read frame/animation indices to select schedule actions and coordinates.",
+        "caller": "U8P_SALKIND::func04B6",
+        "callee": "process_result()",
+        "purpose": "Check the result of the suspended pathfind call to choose success/failure branches.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SALKIND::04B6",
+        "caller": "U8P_SALKIND::func04B6",
+        "callee": "FREE::func1C19 (spawn)",
+        "purpose": "Schedule delayed retries or post-success follow-up timers.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SALKIND::func05F7",
+        "callee": "METHOD::func091C",
+        "purpose": "Prepare/orient NPC before speaking in randomized alternate U8P_SALKIND::schedule branches.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SALKIND::func05F7",
+        "callee": "METHOD::func15E7",
+        "purpose": "Invoke reaction bookkeeping in certain randomized branches.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SALKIND::func05F7",
+        "callee": "FREE::func1C19 (spawn)",
+        "purpose": "Spawn timers to pace the randomized sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SALKIND::func072E",
+        "callee": "FREE::getDistanceBetween",
+        "purpose": "Measure distance to choose which set of barks/behavior to run.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SALKIND::func072E",
         "callee": "Item::getStatus",
-        "purpose": "Check status bits to gate specific schedule branches or skip actions.",
+        "purpose": "Check item state (bitmask) to gate certain close-range dialogs.",
         "confidence": "high"
+      },
+      {
+        "caller": "U8P_SALKIND::func072E",
+        "callee": "urandom",
+        "purpose": "Select among multiple idle barks randomly.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SALKIND::func0DA5",
+        "callee": "DOOR_NS::useDoor (spawn)",
+        "purpose": "Spawn an action to have the NPC U8P_SALKIND::use/open a door referenced by a local handle after barking.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_SALKIND::use",
+        "callee": "FREE::resetRef",
+        "purpose": "Reset conversation/reference state before building the menu.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SALKIND::use",
+        "callee": "FREE::randomInRange0",
+        "purpose": "Choose among alternate greeting lines when salkindPissed is set.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SALKIND::use",
+        "callee": "urandom",
+        "purpose": "Randomly choose greeting variants and menu-related lines.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SALKIND::use",
+        "callee": "Npc::getMap",
+        "purpose": "Check current map to tailor greeting/flow for map-specific lines.",
+        "confidence": "medium"
       }
     ]
   },
   "global_flags": {
     "reads": [
       {
-        "name": "salkindName",
-        "likely_effect": "Select which name variant is used in SALKIND::look (affects wording of the bark).",
-        "confidence": "high"
-      },
-      {
-        "name": "salkindJob",
-        "likely_effect": "Select whether title/job text (e.g., 'Seneschal') is appended/used in SALKIND::look variants.",
+        "name": "SalkindSchedule",
+        "likely_effect": "Selects which U8P_SALKIND::schedule helper to run on area entry (0x01 -> U8P_SALKIND::func04B6, 0x02 -> U8P_SALKIND::func05F7).",
         "confidence": "high"
       },
       {
         "name": "toranDead",
-        "likely_effect": "Used with Npc::isDead to decide whether to skip enterFastArea schedule initialization; likely reflects a remote NPC's death that affects behavior.",
-        "confidence": "medium"
+        "likely_effect": "Gates area-entry behavior and conversation branches; when set it prevents certain U8P_SALKIND::schedule/entry actions.",
+        "confidence": "high"
       },
       {
         "name": "secondexecution",
-        "likely_effect": "Gates alternate enterFastArea behavior or skips initialization when set; exact origin unclear.",
-        "confidence": "medium"
-      },
-      {
-        "name": "SalkindSchedule",
-        "likely_effect": "Selects which schedule branch to spawn when entering the fast area (observed values map to U8P_SALKIND::04B6 and U8P_SALKIND::05F7).",
+        "likely_effect": "Prevents repeated execution of U8P_SALKIND::enterFastArea U8P_SALKIND::schedule behavior (execution guard).",
         "confidence": "high"
       },
       {
         "name": "somebodyTalking",
-        "likely_effect": "Prevents schedule-driven speech/spawned talk actions while someone else is talking.",
+        "likely_effect": "If true, prevents utilities (U8P_SALKIND::func04B6) from interrupting with idle dialog (used to avoid overlapping conversations).",
+        "confidence": "high"
+      },
+      {
+        "name": "salkindPissed",
+        "likely_effect": "Modifies greetings and conversation menu options when NPC is angry (read to pick angry greetings and menu entries).",
+        "confidence": "high"
+      },
+      {
+        "name": "salkindMet",
+        "likely_effect": "Determines whether introductory 'name' flow is offered; read to decide which menu items/greetings to show.",
+        "confidence": "high"
+      },
+      {
+        "name": "devonJailed",
+        "likely_effect": "Used to gate location-specific lines and whether Devon/Bentic topics are added to conversation.",
+        "confidence": "medium"
+      },
+      {
+        "name": "metDevonInJail",
+        "likely_effect": "Controls whether additional Devon/Bentic dialog options are offered.",
+        "confidence": "medium"
+      },
+      {
+        "name": "torwinMet",
+        "likely_effect": "Used to select alternate lines in idle monologue branches.",
         "confidence": "medium"
       }
     ],
     "writes": [
       {
         "name": "salkindPissed",
-        "likely_effect": "Set when the avatar steals from Salkind to mark the NPC as angry/alert and trigger pursuit/response behavior.",
+        "likely_effect": "Set to 1 when the avatar steals from Salkind to mark an angry/alert state and change later dialog/behavior.",
         "confidence": "high"
+      },
+      {
+        "name": "salkindMet",
+        "likely_effect": "Set to 1 when the player asks Salkind's name; used to alter future conversation options and lines.",
+        "confidence": "high"
+      },
+      {
+        "name": "salkindName",
+        "likely_effect": "Set when the player learns Salkind's name (tracks name revelation for U8P_SALKIND::look/menus); format/type inferred (likely boolean/presence).",
+        "confidence": "medium"
       }
     ]
   },
@@ -317,11 +356,11 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "SALKIND::look",
-    "behavior_summary_one_liner": "Provides the AI and interaction handlers for the NPC Salkind. The script implements how Salkind responds when the player 'looks' at him, how he starts/stops scheduled behaviors when the avatar enters/leaves a proximity trigger, how he reacts if the avatar steals from him, and how he responds to being targeted/cast on.",
-    "external_call_count": 12,
-    "flag_read_count": 6,
-    "flag_write_count": 1
+    "main_function": "U8P_SALKIND::look",
+    "behavior_summary_one_liner": "This script implements Salkind, an NPC with: a 'U8P_SALKIND::look' short-description, area-triggered idle behavior/schedules, reactions to theft and being targeted, and an interactive conversation menu.",
+    "external_call_count": 23,
+    "flag_read_count": 9,
+    "flag_write_count": 3
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

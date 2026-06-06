@@ -3,47 +3,59 @@
   "source_of_truth": "dialogue/json/U8P_TELPFLAG.json",
   "file": "U8P_TELPFLAG",
   "behavior_summary": [
-    "When an actor (player or NPC) enters the script's fast-area/trigger, the handler queries that actor's current map id and sets one of several global \"saw*Teleporter\" flags to record that the player has 'seen' that teleporter location.",
-    "After flagging the appropriate saw* flag(s), the routine iterates a collection of teleporter entries (inferred from a set-info/process-exclude + loop pattern) and spawns TELEPAD instances for each entry, associating each spawn with the entering actor's pid.",
-    "Each spawned TELEPAD creation is followed by the engine's suspend/imply control pattern (spawn -> implies/suspend/pop), indicating per-spawn lifecycle or scheduling behavior."
+    "U8P_TELPFLAG::hatch is a process that records that the player has 'seen' a teleporter by setting per-location saw...Teleporter global flags based on the instance's map id.",
+    "The routine queries the map id of the teleporter instance (via Npc::getMap) and sets one or more saw...Teleporter flags for known map ids (Central Tenebrae, Plateau, Upper Catacombs, Mountain King, Argentrock Isle, Carthax Lake, Daemon's Crag).",
+    "If the process instance appears active, it attempts to initialize/activate a TELEPAD (inferred: invokes/spawns TELEPAD::func0080 on a telepad object) and then suspends itself — likely to let the telepad process run independently."
   ],
   "notable_control_flow": [
-    "Entry is driven by an enter-fast-area event: U8P_TELPFLAG::hatch runs when an actor enters the trigger region.",
-    "Call to Npc::getMap early in the handler determines the actor's map id; a sequence of comparisons maps concrete ids (0x28, 0x08, 0x32, 0x1F, 0x25, 0x10, 0x1A, 0x0C) to specific saw* global flags which are written.",
-    "A loop enumerates one or more teleporter definitions/entries and calls spawn (TELEPAD::0080) with the actor pid and each loop entry pointer to instantiate visible/interactive telepads in the area.",
-    "After each spawn there is an implies/suspend/pop pattern (engine scheduling/cleanup) before continuing the loop or finishing."
+    "U8P_TELPFLAG::hatch begins by calling Npc::getMap(this) and branches on the returned map id to select which saw...Teleporter flag(s) to set.",
+    "Specific map id checks: 0x28 -> sawCentralTenebraeTeleporter, 0x08 -> sawPlateauTeleporter, 0x32 -> sawUpperCatacombsTeleporter, 0x1F -> sawMountainKingTeleporter, 0x25 -> sawArgentrockIsleTeleporter, 0x10 or 0x1A -> sawCarthaxLakeTeleporter, 0x0C -> sawDaemonsCragTeleporter.",
+    "A conditional path (when the instance is active/in context) invokes/spawns TELEPAD::func0080 (on an inferred TELEPAD object stored in local2) and then issues suspend to yield the U8P_TELPFLAG::hatch process."
   ],
   "open_questions": [
-    "What is the exact source and layout of the collection iterated to spawn TELEPADs (item list, map entity table, or explicit teleporter definition table)? This is inferred but not explicit.",
-    "What engine info key does the set info / process exclude sequence set exactly, and how does it affect which entries are enumerated by the loop?",
-    "Why do two distinct map ids (0x10 and 0x1A) both map to sawCarthaxLakeTeleporter — is this intentional aliasing of two map variants, or an ambiguous mapping in the original script?"
+    "Exactly when U8P_TELPFLAG::hatch is scheduled/triggered in gameplay (on entity creation, on player proximity/enterFastArea, or on another lifecycle event) — inferred but not explicit.",
+    "The precise identity and lifetime of local2 (the TELEPAD object pointer) and whether TELEPAD::func0080 creates or merely initializes an existing telepad instance.",
+    "Whether multiple flags can be set in one run (e.g., overlapping map id ranges) or if exactly one flag is set per invocation in practice."
   ],
   "main_function": {
     "name": "U8P_TELPFLAG::hatch",
     "execution_form": "process",
-    "purpose": "Handle an enter-fast-area event: record that the entering actor has 'seen' the local teleporter map by setting a matching saw*Teleporter global, then instantiate TELEPAD objects for teleporter entries present in the trigger area so they become active/visible to the player.",
+    "purpose": "Record that the player has seen the teleporter on the current map (set the corresponding saw...Teleporter global flag). When active, attempt to start/initialize the telepad process and then suspend the U8P_TELPFLAG::hatch process.",
     "entry_conditions": [
-      "enterFastArea — invoked when an actor enters the trigger region associated with this script."
+      "This is a process (processType 0x0210) associated with a teleporter U8P_TELPFLAG::hatch instance — invoked by the engine for the teleporter entity (exact trigger: instantiation or interaction/area entry is inferred).",
+      "Relies on the instance context ('this') so it runs for a specific teleporter object."
     ],
-    "confidence": "high"
+    "confidence": "medium"
   },
   "function_map": [
     {
       "name": "U8P_TELPFLAG::hatch",
       "kind": "main",
-      "role": "enter-fast-area handler that sets saw* flags and spawns TELEPAD instances",
+      "role": "teleporter U8P_TELPFLAG::hatch process: set location-specific 'saw...Teleporter' flags and (inferred) initialize associated TELEPAD",
       "confidence": "high"
     },
     {
       "name": "Npc::getMap",
       "kind": "extern",
-      "role": "query the entering actor's current map id (used to decide which saw* flag to set)",
+      "role": "query the map id for a given NPC/instance (used to determine which saw...Teleporter flag to set)",
       "confidence": "high"
     },
     {
-      "name": "spawn (TELEPAD::0080)",
+      "name": "TELEPAD::func0080",
       "kind": "extern",
-      "role": "create/instantiate a TELEPAD object for a teleporter entry, passing actor pid and teleporter entry pointer",
+      "role": "telepad activation/initialization routine (invoked/spawned from U8P_TELPFLAG::hatch) — semantics inferred",
+      "confidence": "medium"
+    },
+    {
+      "name": "spawn",
+      "kind": "extern",
+      "role": "engine primitive to start/spawn a separate process/function (used to run TELEPAD::func0080)",
+      "confidence": "high"
+    },
+    {
+      "name": "suspend",
+      "kind": "extern",
+      "role": "engine primitive to yield/suspend the current process (used after telepad activation attempt)",
       "confidence": "high"
     }
   ],
@@ -53,13 +65,25 @@
       {
         "caller": "U8P_TELPFLAG::hatch",
         "callee": "Npc::getMap",
-        "purpose": "Return the map/region id of the entering actor so the script can set the appropriate saw*Teleporter flag.",
+        "purpose": "Obtain the map id of the teleporter instance to decide which saw...Teleporter flag to set.",
         "confidence": "high"
       },
       {
         "caller": "U8P_TELPFLAG::hatch",
-        "callee": "spawn (TELEPAD::0080)",
-        "purpose": "Instantiate TELEPAD objects for each teleporter entry found in the trigger area, supplying the player's/process pid and the entry pointer as parameters.",
+        "callee": "TELEPAD::func0080",
+        "purpose": "Initialize or activate the telepad associated with this U8P_TELPFLAG::hatch; the call is spawned so the telepad runs as a separate process (inferred from raw spawn usage).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_TELPFLAG::hatch",
+        "callee": "spawn",
+        "purpose": "Engine primitive used to run TELEPAD::func0080 as its own process; enables asynchronous telepad initialization (inferred).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TELPFLAG::hatch",
+        "callee": "suspend",
+        "purpose": "Yield the U8P_TELPFLAG::hatch process after attempting telepad activation so other processes can run (common lifecycle behavior).",
         "confidence": "high"
       }
     ]
@@ -69,51 +93,52 @@
     "writes": [
       {
         "name": "sawCentralTenebraeTeleporter",
-        "likely_effect": "Set to 1 when the entering actor's map id equals 0x28 (40) to mark this teleporter as seen by the player.",
+        "likely_effect": "Marks that the player has seen the Central Tenebrae teleporter when the instance map id == 0x28.",
         "confidence": "high"
       },
       {
         "name": "sawPlateauTeleporter",
-        "likely_effect": "Set to 1 when the entering actor's map id equals 0x08 (8).",
+        "likely_effect": "Marks that the player has seen the Plateau teleporter when the instance map id == 0x08.",
         "confidence": "high"
       },
       {
         "name": "sawUpperCatacombsTeleporter",
-        "likely_effect": "Set to 1 when the entering actor's map id equals 0x32 (50).",
+        "likely_effect": "Marks that the player has seen the Upper Catacombs teleporter when the instance map id == 0x32.",
         "confidence": "high"
       },
       {
         "name": "sawMountainKingTeleporter",
-        "likely_effect": "Set to 1 when the entering actor's map id equals 0x1F (31).",
+        "likely_effect": "Marks that the player has seen the Mountain King teleporter when the instance map id == 0x1F.",
         "confidence": "high"
       },
       {
         "name": "sawArgentrockIsleTeleporter",
-        "likely_effect": "Set to 1 when the entering actor's map id equals 0x25 (37).",
+        "likely_effect": "Marks that the player has seen the Argentrock Isle teleporter when the instance map id == 0x25.",
         "confidence": "high"
       },
       {
         "name": "sawCarthaxLakeTeleporter",
-        "likely_effect": "Set to 1 when the entering actor's map id equals 0x10 (16) OR 0x1A (26); appears to alias two map ids to the same flag.",
-        "confidence": "medium"
+        "likely_effect": "Marks that the player has seen the Carthax Lake teleporter when the instance map id == 0x10 or 0x1A.",
+        "confidence": "high"
       },
       {
         "name": "sawDaemonsCragTeleporter",
-        "likely_effect": "Set to 1 when the entering actor's map id equals 0x0C (12).",
+        "likely_effect": "Marks that the player has seen the Daemon's Crag teleporter when the instance map id == 0x0C.",
         "confidence": "high"
       }
     ]
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "animation",
-    "guard"
+    "spawn",
+    "initialization",
+    "flagging",
+    "suspend"
   ],
   "quick_facts": {
     "main_function": "U8P_TELPFLAG::hatch",
-    "behavior_summary_one_liner": "When an actor (player or NPC) enters the script's fast-area/trigger, the handler queries that actor's current map id and sets one of several global \"saw*Teleporter\" flags to record that the player has 'seen' that teleporter location.",
-    "external_call_count": 2,
+    "behavior_summary_one_liner": "U8P_TELPFLAG::hatch is a process that records that the player has 'seen' a teleporter by setting per-location saw...Teleporter global flags based on the instance's map id.",
+    "external_call_count": 4,
     "flag_read_count": 0,
     "flag_write_count": 7
   },

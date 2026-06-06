@@ -3,33 +3,33 @@
   "source_of_truth": "dialogue/json/U8P_FLAGS.json",
   "file": "U8P_FLAGS",
   "behavior_summary": [
-    "Provides a minimal initializer for this FLAGS usecode script: it sets a single local storage slot to 1 and then returns.",
-    "No external routines are invoked and no global flags are read or written in the available excerpt.",
-    "The effect is local to the FLAGS instance and appears intended to establish a default/active state for this FLAGS object when it is created or initialized."
+    "U8P_FLAGS::func0080 is a minimal utility function whose sole observable effect is to set a temporary local variable named local1 to true (1).",
+    "No dialogue, branching, menus, or external calls are present in the excerpt; the function appears intended as a small marker/flag-setter for use by surrounding code paths.",
+    "There are no global flags read or written by this code sample."
   ],
   "notable_control_flow": [
-    "U8P_FLAGS::FLAGS::0080 executes a single write of constant 1 into the local variable [BP-02] and then returns immediately.",
-    "There are no conditionals, loops, calls, or side effects observed in this fragment; control flow is linear and trivial."
+    "Single straight-line action: write local (SetFlag local1 = 1).",
+    "No conditional branches, loops, or external calls in this function."
   ],
   "open_questions": [
-    "When exactly is U8P_FLAGS::FLAGS::0080 invoked in game flow (construction, spawn, first activation, or on a specific event)?",
-    "What higher-level meaning or game-state does the local slot [BP-02] map to (a boolean 'enabled' flag, an index, or part of a multi-field data structure)?",
-    "Is the value stored in [BP-02] later copied into a persistent object field or used only transiently by other FLAGS handlers not present in this excerpt?"
+    "Where and how is U8P_FLAGS::func0080 invoked elsewhere in the game code (which higher-level processes or scripts call it)?",
+    "What semantics does the local1 marker carry in calling contexts—i.e., what behavior does observing local1 = 1 trigger in callers?",
+    "Is local1 ephemeral to a single call frame, or is it used across a larger process context in practice?"
   ],
   "main_function": {
-    "name": "U8P_FLAGS::0080",
+    "name": "U8P_FLAGS::func0080",
     "execution_form": "process",
-    "purpose": "Initialize the FLAGS instance by setting a single local/state slot to 1, establishing a default or active state for this FLAGS object.",
+    "purpose": "Set a temporary local marker (local1) to true. Intended as a lightweight utility to mark a condition/state for consumers in surrounding code.",
     "entry_conditions": [
-      "No explicit triggers in the disassembly excerpt; inferred to run when the FLAGS instance or script is initialized or invoked by game setup logic."
+      "None visible in the excerpt — callable utility function with no explicit event/fast-area entry shown."
     ],
     "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_FLAGS::0080",
+      "name": "U8P_FLAGS::func0080",
       "kind": "main",
-      "role": "initializer / default-state setter for this FLAGS script",
+      "role": "utility - temporary local flag setter",
       "confidence": "high"
     }
   ],
@@ -43,12 +43,13 @@
   },
   "ui_tags": [
     "trigger",
-    "initialization",
+    "cleanup",
+    "animation",
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_FLAGS::FLAGS::0080",
-    "behavior_summary_one_liner": "Provides a minimal initializer for this FLAGS usecode script: it sets a single local storage slot to 1 and then returns.",
+    "main_function": "U8P_FLAGS::func0080",
+    "behavior_summary_one_liner": "U8P_FLAGS::func0080 is a minimal utility function whose sole observable effect is to set a temporary local variable named local1 to true (1).",
     "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0

@@ -3,30 +3,31 @@
   "source_of_truth": "dialogue/json/U8P_GLOBSWAP.json",
   "file": "U8P_GLOBSWAP",
   "behavior_summary": [
-    "U8P_GLOBSWAP::enterFastArea is an enter-fast-area trigger handler that runs when an actor enters a region; it scans nearby items and performs two main gameplay actions: a cleanup pass that removes specific unwanted items on the same coarse tile, and an egg-swap/respawn pass that matches egg-like items and spawns replacement items.",
-    "Cleanup pass: iterate items in the provided area/list, compare coarse tile positions (X/Y masked with 0x7E00), skip items already marked with status bit 0x0080, and destroy items whose type equals 0x49 or 2.",
-    "Egg-swap/respawn pass: find egg-candidate items (filtered by Item::getUnkEggType compared to a constant that depends on global flag postEarthQuake), compute egg identifiers via Egg::getEggId, match pairs by bitwise AND of egg IDs, create a replacement Item::create preserving type and frame, Item::pop it at a computed (x,y) and at z+1, and mark the spawned item by ORing status bit 0x0080 so it won't be reprocessed."
+    "U8P_GLOBSWAP::enterFastArea runs when an actor/item triggers the fast-area and uses the triggering instance (implicit 'this') to manage items on the same grid-aligned tile.",
+    "The routine computes grid-aligned X/Y from the trigger (masking with 0x7E00) and scans nearby items. If it finds items occupying the same masked grid cell that are not already marked (status & 0x0080), it will either destroy them (unless exempt by type) or mark them as a matched egg to later recreate/pop a replacement.",
+    "There is special handling to match egg items: it compares an egg identifier (Egg::getEggId) and an egg subtype field (Item::getUnkEggType) against a subtype chosen by the global flag postEarthQuake (0x2F when postEarthQuake == 0, 0x30 when postEarthQuake == 1). When a matching egg candidate is found the script records it and later creates a new item preserving frame/type, pops it at computed coordinates (summing Z/elevations), and ORs status 0x0080 on the created item.",
+    "The script preserves visual/frame and type when creating the replacement (Item::getFrame, Item::create), and uses Item::pop to place the new instance at combined coordinates computed from the triggering and candidate items."
   ],
   "notable_control_flow": [
-    "Handler sets iteration context (engine 'set info') and uses 'process exclude' to avoid processing the triggering actor/item.",
-    "Two distinct passes over area items: first a destruction/cleanup loop, then a nested search/compare loop to find egg matches and spawn replacements.",
-    "Branch on global flag postEarthQuake selects which egg-type constant is used for egg-candidate filtering (observed constants 0x2F vs 0x30).",
-    "Per-match behavior uses a found_flag to avoid duplicate spawns and only proceeds to create/pop a new item when a matching pair is identified."
+    "Compute masked/grid-aligned coordinates for the triggering item: local4 = Item::getX(this) & 0x7E00, local5 = Item::getY(this) & 0x7E00.",
+    "Iterate candidate items; for each candidate: read status (Item::getStatus) and skip if (status & 0x0080) is set.",
+    "Compare candidate masked coords (local6/local7) to trigger masked coords (local4/local5). If they match, either: destroy the candidate (Item::destroy) unless candidate type is 0x49 or 0x02, or treat the candidate as a matched egg if Egg::getEggId and Item::getUnkEggType match expected values.",
+    "When an egg match is recorded, keep a reference (local2) and set a boolean marker (local9). Later, create a new item with Item::getFrame and Item::create, compute final spawn coordinates (combine masked high bits with low bits from candidate), Item::pop the new item, and Item::orStatus with 0x0080 on the created item.",
+    "Global flag postEarthQuake gates which egg subtype is valid (two constants observed: 0x2F vs 0x30)."
   ],
   "open_questions": [
-    "What exact gameplay meaning do the type constants 0x49 and 2 have (specific item identities)?",
-    "What concrete semantics does status bit 0x0080 carry beyond 'marked to skip' (e.g., temporary spawn marker, persistent flag)?",
-    "What does Item::getUnkEggType return in domain terms (egg family, breed, or UI subtype) and what do the constants 0x2F / 0x30 represent?",
-    "Is the parameter at [BP+06h] strictly an item-list pointer, an area descriptor, or a combined iteration context (engine-specific)?",
-    "Are there any additional side effects (messages, animations) tied to the create/pop beyond the status bit OR that are not visible in the disassembly?"
+    "What is the exact semantic meaning of the 0x0080 status bit (skip/processed/hidden/temporary)? The code treats it as a guard but the concrete gameplay meaning is not explicit.",
+    "What gameplay object types correspond to numeric type codes 0x49 and 0x02 (they are exempt from destruction) and why are they protected?",
+    "Is the trigger always an item instance (egg) or can an NPC/avatar enter this area and cause the same behavior? The code uses an implicit 'this' but caller context is not explicit.",
+    "Are there other side effects or global flags affected by this function in other contexts (the script reads postEarthQuake but does not write any globals here)?"
   ],
   "main_function": {
     "name": "U8P_GLOBSWAP::enterFastArea",
     "execution_form": "process",
-    "purpose": "When an actor enters the fast-area trigger, tidy up unwanted items on the same tile and detect/match egg-like items to respawn or swap matching items by creating and popping replacement items while marking them to avoid reprocessing.",
+    "purpose": "When an item/actor enters this area's trigger, align coordinates to a grid, remove or reconcile conflicting items on that grid cell, detect matching eggs (by Egg::getEggId and a subtype influenced by the postEarthQuake flag), and—if a match is found—create/pop a replacement item preserving frame/type and mark it with status 0x0080.",
     "entry_conditions": [
-      "Triggered by an U8P_GLOBSWAP::enterFastArea event when an actor enters the region associated with this handler.",
-      "Requires an area/item-list pointer passed in (used as the iteration base)."
+      "Invoked by the fast-area entry event (U8P_GLOBSWAP::enterFastArea process type 0x021B).",
+      "Operates on the implicit 'this' instance (the triggering item/actor)."
     ],
     "confidence": "high"
   },
@@ -34,91 +35,7 @@
     {
       "name": "U8P_GLOBSWAP::enterFastArea",
       "kind": "main",
-      "role": "Fast-area enter trigger that performs cleanup and egg-swap/respawn logic",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getX",
-      "kind": "extern",
-      "role": "Read item X coordinate for coarse/fine position comparisons and spawn X computation",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getY",
-      "kind": "extern",
-      "role": "Read item Y coordinate for coarse/fine position comparisons and spawn Y computation",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getZ",
-      "kind": "extern",
-      "role": "Read item Z/layer used to compute spawn layer (commonly source Z + 1)",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getStatus",
-      "kind": "extern",
-      "role": "Return status flags (handler tests bit 0x0080 to skip already-marked items)",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getType",
-      "kind": "extern",
-      "role": "Return item type id; used to identify destructible types and to pass to Item::create",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getFrame",
-      "kind": "extern",
-      "role": "Return item's frame/index to preserve visual appearance when creating replacements",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::destroy",
-      "kind": "extern",
-      "role": "Destroy/remove items found in cleanup pass",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::create",
-      "kind": "extern",
-      "role": "Create a new item instance by type/frame to be later popped into the world",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::pop",
-      "kind": "extern",
-      "role": "Place/pop the created item at computed (x,y,z) coordinates",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::orStatus",
-      "kind": "extern",
-      "role": "OR status bit(s) (notably 0x0080) into an item to mark it",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getUnkEggType",
-      "kind": "extern",
-      "role": "Return an egg-related subtype used to filter egg candidates (compared to constants conditioned on postEarthQuake)",
-      "confidence": "medium"
-    },
-    {
-      "name": "Egg::getEggId",
-      "kind": "extern",
-      "role": "Return an egg identifier used for matching two eggs by bitwise AND",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_GLOBSWAP::set info",
-      "kind": "extern",
-      "role": "Engine/usecode operation to set up iteration/processing context for the fast-area scan",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_GLOBSWAP::process exclude",
-      "kind": "extern",
-      "role": "Engine/usecode operation to exclude the triggering actor/item from iteration",
+      "role": "fast-area trigger handler that manages colocated items and egg-matching/respawn behavior",
       "confidence": "high"
     }
   ],
@@ -127,86 +44,74 @@
     "external_calls": [
       {
         "caller": "U8P_GLOBSWAP::enterFastArea",
-        "callee": "U8P_GLOBSWAP::set info",
-        "purpose": "Establish iteration/handler context for scanning area items before loops begin",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GLOBSWAP::enterFastArea",
-        "callee": "U8P_GLOBSWAP::process exclude",
-        "purpose": "Exclude the fast-area trigger's actor/item from being scanned/processed",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GLOBSWAP::enterFastArea",
         "callee": "Item::getX",
-        "purpose": "Compute coarse (masked) and spawn X coordinates for comparisons and Item::pop",
+        "purpose": "Read world X coordinate of trigger and candidates to compute grid-aligned X (masking with 0x7E00).",
         "confidence": "high"
       },
       {
         "caller": "U8P_GLOBSWAP::enterFastArea",
         "callee": "Item::getY",
-        "purpose": "Compute coarse (masked) and spawn Y coordinates for comparisons and Item::pop",
+        "purpose": "Read world Y coordinate of trigger and candidates to compute grid-aligned Y (masking with 0x7E00).",
         "confidence": "high"
       },
       {
         "caller": "U8P_GLOBSWAP::enterFastArea",
         "callee": "Item::getZ",
-        "purpose": "Read source Z to determine spawn Z (typically source Z + 1)",
+        "purpose": "Read elevation/Z to compute spawn elevation when placing a created item (sum of Zs).",
         "confidence": "high"
       },
       {
         "caller": "U8P_GLOBSWAP::enterFastArea",
         "callee": "Item::getStatus",
-        "purpose": "Check status flags and skip items already marked (test 0x0080)",
+        "purpose": "Check status bits to skip already-processed/guarded items (tests bit 0x0080).",
         "confidence": "high"
       },
       {
         "caller": "U8P_GLOBSWAP::enterFastArea",
         "callee": "Item::getType",
-        "purpose": "Identify items to destroy (types 0x49 and 2) and to provide type to Item::create",
+        "purpose": "Read item type to exempt certain types (observed values 0x49 and 0x02) from destruction; also to pass type/frame into created copies.",
         "confidence": "high"
       },
       {
         "caller": "U8P_GLOBSWAP::enterFastArea",
         "callee": "Item::destroy",
-        "purpose": "Remove items selected by the cleanup pass",
+        "purpose": "Remove conflicting items that occupy the same grid cell and are not exempt by type/status.",
         "confidence": "high"
       },
       {
         "caller": "U8P_GLOBSWAP::enterFastArea",
         "callee": "Item::getUnkEggType",
-        "purpose": "Filter egg candidates by comparing returned subtype to a constant (branch depends on postEarthQuake flag)",
+        "purpose": "Read an egg-subtype field to match a specific egg subtype (compared to 0x2F or 0x30 depending on postEarthQuake).",
         "confidence": "medium"
       },
       {
         "caller": "U8P_GLOBSWAP::enterFastArea",
         "callee": "Egg::getEggId",
-        "purpose": "Retrieve egg identifier used to test matching pairs (via bitwise AND)",
-        "confidence": "high"
+        "purpose": "Obtain an egg identifier to match eggs across items (used to find a paired/matching egg).",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_GLOBSWAP::enterFastArea",
         "callee": "Item::getFrame",
-        "purpose": "Preserve visual frame when creating replacement items",
+        "purpose": "Obtain visual/frame index from a candidate item so the created/replaced item preserves appearance.",
         "confidence": "high"
       },
       {
         "caller": "U8P_GLOBSWAP::enterFastArea",
         "callee": "Item::create",
-        "purpose": "Create replacement item instance of matched type/frame before popping",
+        "purpose": "Instantiate a new item (using preserved frame/type) before popping it into the world.",
         "confidence": "high"
       },
       {
         "caller": "U8P_GLOBSWAP::enterFastArea",
         "callee": "Item::pop",
-        "purpose": "Place the created item in world at computed (x,y,z) coordinates",
+        "purpose": "Place the newly created item into the world at the computed X/Y and elevation.",
         "confidence": "high"
       },
       {
         "caller": "U8P_GLOBSWAP::enterFastArea",
         "callee": "Item::orStatus",
-        "purpose": "Set status bit 0x0080 on spawned/created item to mark it (prevent reprocessing)",
+        "purpose": "Set status bits (observed OR with 0x0080) on the created item to mark it and avoid reprocessing.",
         "confidence": "high"
       }
     ]
@@ -215,8 +120,8 @@
     "reads": [
       {
         "name": "postEarthQuake",
-        "likely_effect": "Select which egg-type constant is used for egg candidate filtering (observed constants 0x2F when 0, 0x30 when 1), altering which eggs are matched/spawned",
-        "confidence": "high"
+        "likely_effect": "Selects which egg subtype is considered a valid match (0x2F when clear/0, 0x30 when set/1). This influences which candidate eggs are paired and recreated.",
+        "confidence": "medium"
       }
     ],
     "writes": []
@@ -224,13 +129,13 @@
   "ui_tags": [
     "trigger",
     "cleanup",
-    "animation",
+    "spawn",
     "guard"
   ],
   "quick_facts": {
     "main_function": "U8P_GLOBSWAP::enterFastArea",
-    "behavior_summary_one_liner": "U8P_GLOBSWAP::enterFastArea is an enter-fast-area trigger handler that runs when an actor enters a region; it scans nearby items and performs two main gameplay actions: a cleanup pass that removes specific unwanted items on the same coarse tile, and an egg-swap/respawn pass that matches egg-like items and spawns replacement items.",
-    "external_call_count": 14,
+    "behavior_summary_one_liner": "U8P_GLOBSWAP::enterFastArea runs when an actor/item triggers the fast-area and uses the triggering instance (implicit 'this') to manage items on the same grid-aligned tile.",
+    "external_call_count": 12,
     "flag_read_count": 1,
     "flag_write_count": 0
   },

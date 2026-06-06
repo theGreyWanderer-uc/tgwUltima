@@ -3,26 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_FEBARSNS.json",
   "file": "U8P_FEBARSNS",
   "behavior_summary": [
-    "Responds to the 'U8P_FEBARSNS::look' (examine) event for an object representing iron bars by making the engine present the short description \"iron bars \" to the requesting process/actor.",
-    "Before emitting the description the script sets up engine/VM context (push 0x0208, set info, process exclude) — likely to mark or prepare the object for the bark operation.",
-    "Calls the engine/item routine Item::bark with the pid of the viewer/target and the constructed string, then frees the string buffer and inspects the bark return value before suspending/returning."
+    "U8P_FEBARSNS::look is a simple 'U8P_FEBARSNS::look' (examine) handler that presents a one-line descriptive bark 'iron bars' when the player examines the associated object or area.",
+    "After emitting the bark the process immediately suspends/ends; there is no branching, state mutation, menu interaction, or external calls.",
+    "This handler functions purely as an informational UI trigger attached to an in-game object or trigger region (likely a gate, cell, or set of bars)."
   ],
   "notable_control_flow": [
-    "Entry on a U8P_FEBARSNS::look/examine trigger leads to immediate context setup (push 0x0208, set info/process-exclude sequence) — inferred as preparation for emitting a description.",
-    "The handler pushes the pid parameter and the literal string \"iron bars \", then calls Item::bark to produce the visible text.",
-    "After Item::bark returns the script frees the created string, examines the bark return via an implies/pop pattern (a boolean/result check), and then suspends/returns — no further branching or state mutation observed."
+    "Single linear flow: process entry -> emit Bark('iron bars') -> suspend/terminate the U8P_FEBARSNS::look process.",
+    "No conditional branches, no flag reads/writes, and no function calls observed."
   ],
   "open_questions": [
-    "What exact semantics does the pushed constant 0x0208 and the subsequent 'set info / process exclude' sequence have in the engine (visual marker, processing mask, or other state)?",
-    "What is the meaning of the return value from Item::bark in this environment and how the implies/pop result is intended to affect higher-level flow (the script only inspects it and then suspends)?",
-    "Is the pid at BP+06h always the player/viewer process, the item instance, or can it represent other actor types in some contexts?"
+    "Which concrete in-game object or world location is this script attached to (gate, cell, decorative bars, or fast-area trigger)?",
+    "Is this handler invoked by a physical object 'U8P_FEBARSNS::look' action or by entering a fast-area trigger region that also uses the U8P_FEBARSNS::look process?",
+    "Does the suspend node correspond to an engine suspend that simply ends the immediate U8P_FEBARSNS::look action, or to a longer-lived suspended process that could be resumed elsewhere?"
   ],
   "main_function": {
     "name": "U8P_FEBARSNS::look",
     "execution_form": "process",
-    "purpose": "Handle the 'U8P_FEBARSNS::look' event for the iron bars object by preparing context and invoking Item::bark to display the short description \"iron bars \" to the supplied pid.",
+    "purpose": "Provide the short on-screen description when the player examines the associated object/area by emitting the text 'iron bars' and then ending the U8P_FEBARSNS::look process.",
     "entry_conditions": [
-      "Invoked on Event 0 ('U8P_FEBARSNS::look') when an actor/player examines or enters the object's U8P_FEBARSNS::look trigger region."
+      "Invoked by the engine's 'U8P_FEBARSNS::look' (examine) action on the linked object or area.",
+      "Inferred: may also be triggered by examining an area or by entering a relevant fast-area trigger region associated with the object."
     ],
     "confidence": "high"
   },
@@ -30,26 +30,13 @@
     {
       "name": "U8P_FEBARSNS::look",
       "kind": "main",
-      "role": "Process handler for the 'U8P_FEBARSNS::look' event on the iron-bars object; prepares context and triggers Item::bark with the description string.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine used to emit/display a short text message (the item's 'bark') to a target process/player.",
+      "role": "examine/U8P_FEBARSNS::look handler that displays a descriptive bark and ends the process",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_FEBARSNS::look",
-        "callee": "Item::bark",
-        "purpose": "Emit/display the short description string \"iron bars \" to the provided pid (viewer/target).",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -57,12 +44,12 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup"
+    "informational"
   ],
   "quick_facts": {
-    "main_function": "FEBARSNS::look",
-    "behavior_summary_one_liner": "Responds to the 'U8P_FEBARSNS::look' (examine) event for an object representing iron bars by making the engine present the short description \"iron bars \" to the requesting process/actor.",
-    "external_call_count": 1,
+    "main_function": "U8P_FEBARSNS::look",
+    "behavior_summary_one_liner": "U8P_FEBARSNS::look is a simple 'U8P_FEBARSNS::look' (examine) handler that presents a one-line descriptive bark 'iron bars' when the player examines the associated object or area.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

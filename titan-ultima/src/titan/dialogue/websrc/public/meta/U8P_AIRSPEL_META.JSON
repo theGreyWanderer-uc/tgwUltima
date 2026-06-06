@@ -3,161 +3,212 @@
   "source_of_truth": "dialogue/json/U8P_AIRSPEL.json",
   "file": "U8P_AIRSPEL",
   "behavior_summary": [
-    "Provides logic for detecting and using an \"Air\" focus item. The small detector (AIRSPEL::0080) scans a collection of items and returns true if any item matches the Air-focus criteria (checks item frame==3 and item type bitmask).",
-    "The main handler (AIRSPEL::00CF) implements the \"read/use focus\" behaviour: it verifies and deducts NPC mana, optionally selects a 'breath' effect variant (based on global hasBreath or presence test), spawns oriented visual/sound/timed effects, awards a small intelligence reward, constructs a descriptive message about the focus reading (location fragment + time/day), and makes the item/NPC 'bark' that message to the player."
+    "This script implements a suite of short \"air\" spell/focus handlers and a small predicate helper. Each helper performs resource checks (mana, breath), plays shared casting animations/effects, spawns timed visual processes, deducts mana on success, grants intelligence XP, and emits player-facing barks (incantations or status messages).",
+    "U8P_AIRSPEL::func0080 is a compact predicate that inspects a local Item (local1) by frame/type and sets a temporary/passive result (temp) indicating whether the item matches a narrow set of allowed frame/type combinations. That predicate is used by multiple casting helpers to gate alternate visual/effect flows.",
+    "Larger helpers (for example U8P_AIRSPEL::func00CF, ::func0BEB, ::func11AA, ::func1E4B, ::func27ED) implement distinct focus behaviors: target selection (suspend/menu), distance/type validation for animal targets, item creation/manipulation visuals, an air-walk toggle (Npc::setAirWalkEnabled) and temporary state changes (immortal, hearTruthActive, item status bits).",
+    "Most helpers share a repeating pattern: FREE::closeAllGumps UI cleanup -> resource checks (Npc::getMana / hasBreath) -> METHOD::func15E7 animation calls and spawn -> suspend sequences (FREE::func29D8 / FREE::func1C19) -> Npc::setMana to pay cost -> AccumulateIntelligence(0x14) -> bark incantation -> optional item/target manipulation and cleanup."
   ],
   "notable_control_flow": [
-    "AIRSPEL::0080 loops over a collection of item references and returns immediately (true) when a matching Air-focus is found; otherwise returns false after iteration.",
-    "AIRSPEL::00CF branches early if the caster lacks sufficient mana; otherwise it subtracts cost and continues.",
-    "AIRSPEL::00CF branches based on the global hasBreath flag to choose between a 'breath' spawn sequence and the standard spawn sequence; it also consults U8P_AIRSPEL::AIRSPEL::0080 to decide on certain effect variants in some paths.",
-    "String construction in AIRSPEL::00CF is incremental: it maps the caster's map id to a location code (FREE::36E7), selects/appends a location fragment, then appends time/day text computed from TimeInGameHours and numToStr before calling Item/Npc::bark."
+    "Many functions branch on a low-mana check (Npc::getMana - cost < 0) and run an alternate visual/spawn+suspend sequence without deducting mana.",
+    "A breath-available branch often calls U8P_AIRSPEL::func0080() and, if that predicate returns 0, runs a short fallback visual/effect flow instead of the normal cast.",
+    "Targeted spells (U8P_AIRSPEL::func0BEB, ::func1E4B, ::func11AA) prompt/select a target when param1 is absent (SuspendAssign into local1), then validate type/frame and distance (FREE::getDistanceBetween) and abort with a bark on failure ('The animal must be closer!').",
+    "U8P_AIRSPEL::func27ED toggles an 'air-walk' state: it reads Npc::getAirWalkEnabled then either disables (plays effects, destroys temp visuals) or enables (checks mana, deducts cost, creates visual item, sets Npc::setAirWalkEnabled(1), awards XP) with a brief local cooldown/counting guard using TimeInMinutes.",
+    "Several item-manipulation paths create temporary items (Item::create/pop), animate them (spawn/instance-method calls), toggle status bits (METHOD::toggleStatusFlag / Item::orStatus), then destroy the temporary to produce visual effects around the target item."
   ],
   "open_questions": [
-    "What exact collection does AIRSPEL::0080 iterate? (inventory, equipped slots, nearby ground items, or a list returned by an engine call) — inferred but not explicit.",
-    "What does FREE::36E7 precisely return or compute from Npc::getMap (a normalized location id, a lookup index, or formatted text)?",
-    "What specific visual/audio effects are produced by METHOD::15E7 and FREE::29D8 spawn calls (spell projectile, breath cone, sound identifiers)?",
-    "Are there other global flags that influence which location fragment or day/time string is used beyond hasBreath?"
+    "What exact item type/frame combinations U8P_AIRSPEL::func0080 is intended to represent in game terms (specific equipment or spell focus items)? (predicate intent is inferred from frame/type constants but not named).",
+    "What are the in-game meanings of some unnamed local counters/flags (local3/local5/local6) used across multiple helpers — are they cooldown counters, attempt trackers, or UI-state markers?",
+    "What player-visible UI/menu choices are presented by functions with SuspendAssign locals (local1/local2) — the decompiled text shows suspend points but the menu content/keys are not present in this excerpt.",
+    "Are any of these helpers bound to particular player spells/verbs (spell names) externally, or are they invoked by higher-level engine bindings not visible in this file?"
   ],
   "main_function": {
-    "name": "U8P_AIRSPEL::0080",
+    "name": "U8P_AIRSPEL::func0080",
     "execution_form": "process",
-    "purpose": "Scan a collection of items (likely an inventory or nearby item list) and detect whether any item matches the Air-focus criteria (item frame and type bitmask). Return 1 if a qualifying item is found, otherwise 0.",
+    "purpose": "A narrow predicate that checks an Item (local1) for specific frame/type combinations and sets a temporary boolean-like flag (temp) to indicate a match. Used by multiple air-spell helpers to gate alternate effect/visual flows.",
     "entry_conditions": [
-      "Called when code needs to know whether an Air spell focus item is present (invoked from U8P_AIRSPEL::AIRSPEL::00CF and possibly other callers).",
-      "Executed as a simple loop over a provided/implicit collection of item references."
+      "Called by other U8P_AIRSPEL helpers when they need to decide an alternate breath/mana visual flow or item-targeted behavior.",
+      "Not an independent player-facing process; invoked as a utility predicate within casting flows."
     ],
     "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_AIRSPEL::0080",
+      "name": "U8P_AIRSPEL::func0080",
       "kind": "main",
-      "role": "Presence-test helper that scans items and returns boolean indicating if an Air-focus exists (frame==3 + type mask).",
+      "role": "item frame/type predicate used to gate alternate spell/effect branches",
       "confidence": "high"
     },
     {
-      "name": "U8P_AIRSPEL::00CF",
+      "name": "U8P_AIRSPEL::func00CF",
       "kind": "helper",
-      "role": "Primary 'use/read focus' handler: mana check/cost, spawn visual/sound effects, award intelligence, build and bark descriptive message, choose breath variant if applicable.",
+      "role": "multi-step spell: mana/breath checks, animations/spawns, deducts 3 mana, grants intelligence, and builds/barks a verbose location string",
       "confidence": "high"
     },
     {
-      "name": "Item::getFrame",
-      "kind": "extern",
-      "role": "Engine API returning an item's frame/variant (used to filter Air-focus by frame==3).",
+      "name": "U8P_AIRSPEL::func0BEB",
+      "kind": "helper",
+      "role": "targeted spell with suspend/menu target selection, distance/type validation for animal targets, visual/animation sequences, deducts 5 mana",
       "confidence": "high"
     },
     {
-      "name": "Item::getType",
-      "kind": "extern",
-      "role": "Engine API returning an item's type bitmask (used for type-based filtering).",
+      "name": "U8P_AIRSPEL::func11AA",
+      "kind": "helper",
+      "role": "menu-driven spell that checks inventory/encumbrance, creates/manipulates items visually, deducts mana and sets levitateAvatar in some paths",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_AIRSPEL::func1E4B",
+      "kind": "helper",
+      "role": "targeted spell (Vas In Mani style): resource checks, animations, distance/type checks for animals and mana deduction",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_AIRSPEL::func2506",
+      "kind": "helper",
+      "role": "small single-effect spell wrapper that toggles item status bits over a timed loop and barks 'Quas An Lor'",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_AIRSPEL::func27ED",
+      "kind": "helper",
+      "role": "air-walk toggle: enable/disable Npc::setAirWalkEnabled, UI effects, create/destroy temporary visual items, and local cooldown tracking",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_AIRSPEL::func2CC0",
+      "kind": "helper",
+      "role": "short spell: animations/spawns, deduct 3 mana, set hearTruthActive state and timed clearing",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_AIRSPEL::func2F00",
+      "kind": "helper",
+      "role": "short spell: temporary immortal window (Npc::setImmortal), animations/spawns, mana deduction, then clear immortal",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_AIRSPEL::func3139",
+      "kind": "helper",
+      "role": "tiny utility: UI cleanup (FREE::closeAllGumps)",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_AIRSPEL::func314A",
+      "kind": "helper",
+      "role": "short spell wrapper that manipulates items (create/pop/push/setFrame) and barks 'Ort Lor'",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
-        "caller": "U8P_AIRSPEL::00CF",
-        "callee": "U8P_AIRSPEL::0080",
-        "purpose": "Ask whether a qualifying Air-focus item is present to decide on effect variant/behavior.",
+        "caller": "U8P_AIRSPEL::func00CF",
+        "callee": "U8P_AIRSPEL::func0080",
+        "purpose": "predicate gating an alternate breath/mana visual/effect path",
         "confidence": "high"
+      },
+      {
+        "caller": "U8P_AIRSPEL::func0BEB",
+        "callee": "U8P_AIRSPEL::func0080",
+        "purpose": "predicate used in the hasBreath branch to decide fallback visuals instead of normal cast",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AIRSPEL::func11AA",
+        "callee": "U8P_AIRSPEL::func0080",
+        "purpose": "predicate consulted in the breath-available branch to select an alternate effect flow",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AIRSPEL::func1E4B",
+        "callee": "U8P_AIRSPEL::func0080",
+        "purpose": "predicate invoked in breath-check branch to choose fallback visuals when item test fails",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_AIRSPEL::func2506",
+        "callee": "U8P_AIRSPEL::func0080",
+        "purpose": "predicate consulted to guard an early short-effect path in hasBreath branch",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_AIRSPEL::func2CC0",
+        "callee": "U8P_AIRSPEL::func0080",
+        "purpose": "predicate used to choose breath-specific branch behavior",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_AIRSPEL::func2F00",
+        "callee": "U8P_AIRSPEL::func0080",
+        "purpose": "predicate consulted in breath path to choose alternate effects",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_AIRSPEL::func314A",
+        "callee": "U8P_AIRSPEL::func0080",
+        "purpose": "predicate used in hasBreath branch to decide early visual behavior",
+        "confidence": "medium"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_AIRSPEL::0080",
-        "callee": "Item::getFrame",
-        "purpose": "Read each item's frame/variant to filter for the Air-focus visual/state (frame==3).",
+        "caller": "U8P_AIRSPEL::func00CF, U8P_AIRSPEL::func0BEB, U8P_AIRSPEL::func11AA, U8P_AIRSPEL::func1E4B, U8P_AIRSPEL::func2506, U8P_AIRSPEL::func27ED, U8P_AIRSPEL::func2CC0, U8P_AIRSPEL::func2F00, U8P_AIRSPEL::func314A",
+        "callee": "METHOD::func15E7",
+        "purpose": "Play casting animation/sound/visual effect around suspend/spawn points; central shared animation helper",
         "confidence": "high"
       },
       {
-        "caller": "U8P_AIRSPEL::0080",
-        "callee": "Item::getType",
-        "purpose": "Read item type flags/bitmask to identify focus items via mask comparisons.",
+        "caller": "U8P_AIRSPEL::func00CF, U8P_AIRSPEL::func0BEB, U8P_AIRSPEL::func11AA, U8P_AIRSPEL::func1E4B, U8P_AIRSPEL::func2506, U8P_AIRSPEL::func27ED, U8P_AIRSPEL::func2CC0, U8P_AIRSPEL::func2F00, U8P_AIRSPEL::func314A",
+        "callee": "FREE::closeAllGumps",
+        "purpose": "Close open UI windows before casting/target selection",
         "confidence": "high"
       },
       {
-        "caller": "U8P_AIRSPEL::00CF",
-        "callee": "Npc::getMap",
-        "purpose": "Obtain caster/NPC map id used to select a location fragment for the focus reading message.",
+        "caller": "U8P_AIRSPEL::func00CF, U8P_AIRSPEL::func0BEB, U8P_AIRSPEL::func11AA, U8P_AIRSPEL::func1E4B, U8P_AIRSPEL::func2506, U8P_AIRSPEL::func2CC0, U8P_AIRSPEL::func2F00, U8P_AIRSPEL::func27ED, U8P_AIRSPEL::func314A",
+        "callee": "FREE::func29D8",
+        "purpose": "Spawn timed/visual background processes used for cast timing and visual accompaniment (spawn -> suspend patterns)",
         "confidence": "high"
       },
       {
-        "caller": "U8P_AIRSPEL::00CF",
-        "callee": "FREE::36E7",
-        "purpose": "Transform or map the raw map id into a location code/index used to pick message fragments (exact mapping inferred).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_AIRSPEL::00CF",
-        "callee": "Npc::getMana",
-        "purpose": "Read caster's current mana to determine if the focus can be used.",
+        "caller": "U8P_AIRSPEL::func0BEB, U8P_AIRSPEL::func1E4B, U8P_AIRSPEL::func11AA",
+        "callee": "FREE::getDistanceBetween",
+        "purpose": "Measure distance between caster and target (used to enforce proximity for animal-targeted spells)",
         "confidence": "high"
       },
       {
-        "caller": "U8P_AIRSPEL::00CF",
-        "callee": "Npc::setMana",
-        "purpose": "Write back the reduced mana after charging the focus cost.",
+        "caller": "U8P_AIRSPEL::func11AA, U8P_AIRSPEL::func2506, U8P_AIRSPEL::func314A",
+        "callee": "Item::create, Item::pop, Item::destroy, Item::getStatus, Item::setFrame, Item::push, Item::touch",
+        "purpose": "Create temporary visual items, position/pop them near target, toggle status bits and set visual frames as part of spell effects",
         "confidence": "high"
       },
       {
-        "caller": "U8P_AIRSPEL::00CF",
-        "callee": "METHOD::15E7 (spawned)",
-        "purpose": "Spawn visual/animation effects oriented by caster direction (projectile/cone/etc.).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_AIRSPEL::00CF",
-        "callee": "FREE::29D8 (spawned)",
-        "purpose": "Spawn helper for playing sound or timed auxiliary effects during the focus use.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_AIRSPEL::00CF",
-        "callee": "AccumulateIntelligence",
-        "purpose": "Award/increment a small intelligence-related reward when the focus is read.",
+        "caller": "U8P_AIRSPEL::func11AA, U8P_AIRSPEL::func1E4B, U8P_AIRSPEL::func0BEB",
+        "callee": "Item::getType, Item::getFrame, Item::getDirToItem",
+        "purpose": "Inspect target item type/frame and compute direction to target for directional effects/spawns",
         "confidence": "high"
       },
       {
-        "caller": "U8P_AIRSPEL::00CF",
-        "callee": "U8P_AIRSPEL::TimeInGameHours",
-        "purpose": "Get current in-game time to compute time-of-day and day for the message appended to the focus reading.",
+        "caller": "U8P_AIRSPEL::func27ED",
+        "callee": "Npc::getAirWalkEnabled, Npc::setAirWalkEnabled",
+        "purpose": "Read and toggle the NPC/player \"air-walk\" movement state",
         "confidence": "high"
       },
       {
-        "caller": "U8P_AIRSPEL::00CF",
-        "callee": "U8P_AIRSPEL::numToStr",
-        "purpose": "Convert computed numeric day/time values into strings for message construction.",
+        "caller": "U8P_AIRSPEL::func2F00",
+        "callee": "Npc::setImmortal, Npc::clrImmortal",
+        "purpose": "Temporarily make the caster immortal during an effect window and clear it afterwards",
         "confidence": "high"
       },
       {
-        "caller": "U8P_AIRSPEL::00CF",
-        "callee": "FREE::28F9",
-        "purpose": "(Inferred) Return a town/region index or related value used to append a location/town name fragment to the message.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_AIRSPEL::00CF",
-        "callee": "process Item::bark",
-        "purpose": "Display the constructed focus-reading string to the player (item or NPC 'speaks' the message).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_AIRSPEL::00CF",
-        "callee": "Npc::getDir",
-        "purpose": "Obtain caster direction to orient spawned effects correctly.",
+        "caller": "U8P_AIRSPEL::func00CF, U8P_AIRSPEL::func0BEB, U8P_AIRSPEL::func11AA, U8P_AIRSPEL::func1E4B, U8P_AIRSPEL::func2506, U8P_AIRSPEL::func2CC0, U8P_AIRSPEL::func2F00, U8P_AIRSPEL::func314A",
+        "callee": "Npc::getMana, Npc::setMana, AccumulateIntelligence",
+        "purpose": "Check and deduct mana cost for casts; award intelligence XP on successful casts",
         "confidence": "high"
       }
     ]
   },
   "global_flags": {
-    "reads": [
-      {
-        "name": "hasBreath",
-        "likely_effect": "Selects whether a 'breath' variant of the Air effect/spawn sequence should be used instead of the standard sequence.",
-        "confidence": "high"
-      }
-    ],
+    "reads": [],
     "writes": []
   },
   "ui_tags": [
@@ -167,10 +218,10 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_AIRSPEL::AIRSPEL::0080",
-    "behavior_summary_one_liner": "Provides logic for detecting and using an \"Air\" focus item. The small detector (AIRSPEL::0080) scans a collection of items and returns true if any item matches the Air-focus criteria (checks item frame==3 and item type bitmask).",
-    "external_call_count": 14,
-    "flag_read_count": 1,
+    "main_function": "U8P_AIRSPEL::func0080",
+    "behavior_summary_one_liner": "This script implements a suite of short \"air\" spell/focus handlers and a small predicate helper. Each helper performs resource checks (mana, breath), plays shared casting animations/effects, spawns timed visual processes, deducts mana on success, grants intelligence XP, and emits player-facing barks (incantations or status messages).",
+    "external_call_count": 9,
+    "flag_read_count": 0,
     "flag_write_count": 0
   },
   "hypotheses": {

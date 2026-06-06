@@ -3,32 +3,30 @@
   "source_of_truth": "dialogue/json/U8P_CATAPORT.json",
   "file": "U8P_CATAPORT",
   "behavior_summary": [
-    "CATAPORT::hatch handles the game event where an egg object hatches: it checks preconditions, hides the screen, teleports the hatched NPC to a destination determined by the egg type, then restores the screen.",
-    "The handler first aborts if the global flag postEarthQuake is set (preventing hatching during/post-earthquake).",
-    "It compares two Z (height) values obtained from the egg (Item::getZ called twice) and only proceeds if the values differ (guarding against an unwanted vertical condition).",
-    "If guards pass, it calls a process FadeToBlack(pid), suspends to let the fade complete, queries the egg type via Egg::getEggId, obtains a map id via Npc::getMap, teleports the resulting NPC via Npc::teleport to one of two hard-coded coordinate pairs depending on egg id, then calls process FadeFromBlack(pid) and suspends again to complete the transition."
+    "U8P_CATAPORT::hatch is a process that orchestrates an egg-hatching transition: it verifies positional requirements, performs a fade-to-black, moves/teleports a referenced actor/item to one of two hard-coded destinations chosen by egg type, then fades the screen back in.",
+    "The sequence only proceeds when the Z (elevation) of a referenced object (stack slot SP-00h) matches the egg's Z (this), and the egg's id (Egg::getEggId(this)) chooses which teleport coordinates are used.",
+    "Fade transitions are started as separate processes (FadeToBlack, FadeFromBlack) and the U8P_CATAPORT::hatch process suspends/waits for them to complete around the teleport call."
   ],
   "notable_control_flow": [
-    "Guard: read of global postEarthQuake -> immediate return if true (prevents U8P_CATAPORT::hatch).",
-    "Guard: two calls to Item::getZ on the egg -> if Z values are equal the function returns early (only continue when vertical positions differ).",
-    "Visual-suspension sequence: FadeToBlack(pid) is called and the process suspends/waits for completion before teleport; similarly FadeFromBlack(pid) is called and the process suspends again after teleport.",
-    "Branching on egg type: Egg::getEggId() selects between two teleport coordinate pairs passed to Npc::teleport.",
-    "Map id is dynamically retrieved from the egg/NPC with Npc::getMap and passed into the teleport call."
+    "Guard: A decompiled 'not postEarthQuake' condition is present and appears to act as a precondition/guard around part of the routine (no actions shown in excerpt).",
+    "Positional gate: Item::getZ(addressof([SP-00h])) == Item::getZ(this) must hold for the fade/teleport sequence to run.",
+    "Branch by egg type: If Egg::getEggId(this) == 0x01 then use one hard-coded coordinate pair; otherwise use an alternate coordinate pair when calling Npc::teleport.",
+    "Synchronized transitions: process FadeToBlack() is started and its pid stored (temp) and the process suspends/waits; after teleport the process FadeFromBlack() is started and waited for similarly."
   ],
   "open_questions": [
-    "Why are two Item::getZ() values compared on the same egg? (appears to be a vertical-state guard — exact intent is inferred).",
-    "Which exact entity is being teleported after hatching (the egg object, an associated NPC spawn, or another linked instance)? The code teleports an NPC-like object using Npc::teleport but the identity is inferred.",
-    "What are the semantic meanings of the two hard-coded destination coordinate pairs (are they staging positions, different nests, quest-specific locations)?",
-    "Are there additional side effects (inventory, quest progression, object destruction) performed elsewhere when an egg hatches that this handler relies on?"
+    "What exactly is held in SP-00h (player, NPC, or another item)? It is used as the map/position reference for teleport but its identity is inferred.",
+    "What data is returned or written into SP+08h by Npc::teleport (orientation, handle, or status) and how is it later used? The code passes this as an output buffer but uses are not visible in the excerpt.",
+    "What behavior is gated by the 'postEarthQuake' global flag in the full game logic? The decompiled guard exists but the excerpt shows no actions inside it.",
+    "Are any other game systems (scripts or events) triggered by the teleport or fade processes (e.g., spawn effects)? Not visible in excerpt."
   ],
   "main_function": {
     "name": "U8P_CATAPORT::hatch",
     "execution_form": "process",
-    "purpose": "Handle an egg hatching event: ensure preconditions are met, perform a fade-to-black visual transition, teleport the hatched NPC to a destination chosen by egg type, then fade back in.",
+    "purpose": "Coordinate an egg hatching transition: verify Z-level match with a referenced object, fade the screen out, teleport the relevant actor/item to a destination chosen by egg id, then fade the screen back in.",
     "entry_conditions": [
-      "Triggered on the egg U8P_CATAPORT::hatch event (Event 7).",
-      "Only executes when global flag postEarthQuake is false.",
-      "Only continues when two Item::getZ() results differ (inferred vertical-condition guard)."
+      "Invoked as the item's 'U8P_CATAPORT::hatch' process (process type 0x0210).",
+      "Only proceeds when Item::getZ(addressof([SP-00h])) == Item::getZ(this).",
+      "Decompiled guard includes 'not postEarthQuake' (appears to be read and act as a conditional pre-check)."
     ],
     "confidence": "high"
   },
@@ -36,43 +34,43 @@
     {
       "name": "U8P_CATAPORT::hatch",
       "kind": "main",
-      "role": "Event handler for egg hatching (Event 7).",
+      "role": "Orchestrates egg hatching: guards, fades, teleports",
       "confidence": "high"
     },
     {
       "name": "Item::getZ",
       "kind": "extern",
-      "role": "Query an object's Z/elevation coordinate; used as a guard.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_CATAPORT::process FadeToBlack",
-      "kind": "extern",
-      "role": "Start a fade-to-black for the calling process (visual hide before teleport).",
+      "role": "Query Z/elevation for positional gate",
       "confidence": "high"
     },
     {
       "name": "Egg::getEggId",
       "kind": "extern",
-      "role": "Return egg type identifier to choose teleport destination.",
+      "role": "Return egg type/id used to select teleport destination",
       "confidence": "high"
     },
     {
       "name": "Npc::getMap",
       "kind": "extern",
-      "role": "Retrieve map id for the NPC/egg to pass into teleport.",
+      "role": "Provide the map/context of SP-00h for teleport target",
       "confidence": "high"
     },
     {
       "name": "Npc::teleport",
       "kind": "extern",
-      "role": "Move an NPC to specified map coordinates; used to place the hatched creature.",
+      "role": "Move/teleport the referenced NPC/item to the chosen coordinates on the same map",
       "confidence": "high"
     },
     {
-      "name": "U8P_CATAPORT::process FadeFromBlack",
+      "name": "process FadeToBlack",
       "kind": "extern",
-      "role": "End the fade-to-black (fade back in) for the calling process.",
+      "role": "Start fade-to-black transition (pid returned and awaited)",
+      "confidence": "high"
+    },
+    {
+      "name": "process FadeFromBlack",
+      "kind": "extern",
+      "role": "Start fade-in transition (pid returned and awaited)",
       "confidence": "high"
     }
   ],
@@ -81,38 +79,38 @@
     "external_calls": [
       {
         "caller": "U8P_CATAPORT::hatch",
-        "callee": "Item::getZ",
-        "purpose": "Read egg's Z/elevation twice to compare and gate hatching on a vertical condition.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_CATAPORT::hatch",
-        "callee": "U8P_CATAPORT::process FadeToBlack",
-        "purpose": "Visually hide the scene before teleporting the hatched entity; the process suspends to wait for completion.",
+        "callee": "process FadeToBlack",
+        "purpose": "Initiate and wait for a fade-to-black before teleporting; pid stored in local 'temp' and process suspends until completion.",
         "confidence": "high"
       },
       {
         "caller": "U8P_CATAPORT::hatch",
         "callee": "Egg::getEggId",
-        "purpose": "Determine egg type / U8P_CATAPORT::hatch outcome to select teleport destination.",
+        "purpose": "Read the egg's type/id to decide which hard-coded teleport coordinates to use.",
         "confidence": "high"
       },
       {
         "caller": "U8P_CATAPORT::hatch",
         "callee": "Npc::getMap",
-        "purpose": "Obtain the map id for the teleport destination arguments.",
+        "purpose": "Obtain the map/context for the object referenced at addressof([SP-00h]) so teleport destinations are applied on the same map.",
         "confidence": "high"
       },
       {
         "caller": "U8P_CATAPORT::hatch",
         "callee": "Npc::teleport",
-        "purpose": "Teleport the hatched NPC to a coordinate pair chosen by egg id on the obtained map.",
+        "purpose": "Teleport the referenced actor/item to one of two coordinate pairs (selected by egg id); passes addressof([SP+08h]) as an output/extra parameter.",
         "confidence": "high"
       },
       {
         "caller": "U8P_CATAPORT::hatch",
-        "callee": "U8P_CATAPORT::process FadeFromBlack",
-        "purpose": "Reveal the scene after teleport; the process suspends to wait for completion.",
+        "callee": "process FadeFromBlack",
+        "purpose": "Initiate and wait for fade-in after the teleport; pid stored in local 'temp' and process suspends until completion.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CATAPORT::hatch",
+        "callee": "Item::getZ",
+        "purpose": "Compare Z coordinate of addressof([SP-00h]) and this (egg) to gate whether the U8P_CATAPORT::hatch/teleport sequence runs.",
         "confidence": "high"
       }
     ]
@@ -121,8 +119,8 @@
     "reads": [
       {
         "name": "postEarthQuake",
-        "likely_effect": "When true, prevents CATAPORT::hatch from running (hatching disabled during/post earthquake).",
-        "confidence": "high"
+        "likely_effect": "Appears to act as a guard (read-only) that can prevent or alter hatching behavior before/after an earthquake state.",
+        "confidence": "medium"
       }
     ],
     "writes": []
@@ -134,8 +132,8 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "CATAPORT::hatch",
-    "behavior_summary_one_liner": "CATAPORT::hatch handles the game event where an egg object hatches: it checks preconditions, hides the screen, teleports the hatched NPC to a destination determined by the egg type, then restores the screen.",
+    "main_function": "U8P_CATAPORT::hatch",
+    "behavior_summary_one_liner": "U8P_CATAPORT::hatch is a process that orchestrates an egg-hatching transition: it verifies positional requirements, performs a fade-to-black, moves/teleports a referenced actor/item to one of two hard-coded destinations chosen by egg type, then fades the screen back in.",
     "external_call_count": 6,
     "flag_read_count": 1,
     "flag_write_count": 0

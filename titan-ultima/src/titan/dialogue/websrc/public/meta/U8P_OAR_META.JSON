@@ -3,28 +3,24 @@
   "source_of_truth": "dialogue/json/U8P_OAR.json",
   "file": "U8P_OAR",
   "behavior_summary": [
-    "Responds to a 'U8P_OAR::look' (enterFastArea) event on an OAR instance by preparing and presenting the object's descriptive/info text, then applies exclusion processing.",
-    "Selects a specific message/resource id (0x0208), supplies the viewing actor/context and the object reference as parameters to the engine's info-display routine, and then runs exclusion logic to limit or filter propagation of that info.",
-    "All behavior is local to the event handler; no global flags are read or written in this script."
+    "Defines a single process handler for the 'U8P_OAR::look' (examine) action on NPC/object OAR. The handler contains no structured nodes in the excerpt (only an Unknown node), so it performs no observable gameplay effects in the provided data.",
+    "No dialogue, menus, flag reads/writes, or external calls are present; treat this as an effectively empty or unimplemented U8P_OAR::look handler in this excerpt."
   ],
   "notable_control_flow": [
-    "U8P_OAR::look triggered by enterFastArea (the 'U8P_OAR::look' event).",
-    "Push constant message id 0x0208, push caller/actor context (BP+06h), push object reference (indirect at offset 0x02).",
-    "Call external routine 'set info' to present/queue the object's descriptive text.",
-    "Call external routine 'process exclude' to apply exclusion rules, then return."
+    "Process U8P_OAR::look is triggered by a U8P_OAR::look/examine event and contains a single Unknown node; there is no branching, loops, or calls visible in the excerpt.",
+    "Because no flags or external functions are invoked, there are no side effects recorded in the provided excerpt."
   ],
   "open_questions": [
-    "What exact descriptive text or resource corresponds to message id 0x0208 (the mapping to a concrete string table entry is not present here)?",
-    "Precise semantics of 'process exclude' — whether it excludes the object from future processing, filters recipients of the info, or both.",
-    "Exact identity/meaning of the BP+06h parameter (caller_actor): appears to be the viewing actor PID or context but that is inferred.",
-    "Exact layout and nature of the indirect reference at offset 0x02: appears to be the current object instance pointer/reference but is inferred."
+    "Is the Unknown node a truncated excerpt and does the full script include descriptive text or a bark?",
+    "If this is intentional, is the U8P_OAR::look handler meant to be a no-op placeholder for OAR, or are behavior/dialogue implemented elsewhere (e.g., via inheritance, external resources, or other linked scripts)?",
+    "Are there other related files or sections in the package that implement OAR's visible description or U8P_OAR::look text?"
   ],
   "main_function": {
     "name": "U8P_OAR::look",
     "execution_form": "process",
-    "purpose": "Handle the object's 'U8P_OAR::look' event by selecting and delivering a descriptive/info message (resource 0x0208) to the viewer/context and then applying exclusion logic.",
+    "purpose": "Handle the player's Look/examine action for NPC or object OAR; in this excerpt it contains no observable behavior and appears to be an empty stub.",
     "entry_conditions": [
-      "Event 0: enterFastArea — the actor (player) looks at or inspects this OAR instance."
+      "Invoked when the player/actor uses the Look verb on OAR (processType 0x0208 indicates a U8P_OAR::look/examine process)."
     ],
     "confidence": "high"
   },
@@ -32,53 +28,25 @@
     {
       "name": "U8P_OAR::look",
       "kind": "main",
-      "role": "Event handler for the object's 'U8P_OAR::look' (enterFastArea) — prepares and delivers descriptive text and runs exclusion processing.",
+      "role": "U8P_OAR::look/examine handler for OAR (processType 0x0208); appears to be no-op in excerpt",
       "confidence": "high"
-    },
-    {
-      "name": "U8P_OAR::set info",
-      "kind": "extern",
-      "role": "Engine routine invoked to display or queue an information/description message (uses message id and context parameters).",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_OAR::process exclude",
-      "kind": "extern",
-      "role": "Engine routine invoked after set info to apply exclusion rules (suppresses or manages recipients/propagation).",
-      "confidence": "medium"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_OAR::look",
-        "callee": "U8P_OAR::set info",
-        "purpose": "Deliver or queue the object's descriptive/info text using message id 0x0208 with the viewer/context and object reference as parameters.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_OAR::look",
-        "callee": "U8P_OAR::process exclude",
-        "purpose": "Apply exclusion logic after presenting info — likely filters recipients or marks the info as excluded from further processing.",
-        "confidence": "medium"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
     "writes": []
   },
   "ui_tags": [
-    "trigger",
-    "cleanup",
-    "animation",
-    "guard"
+    "trigger"
   ],
   "quick_facts": {
-    "main_function": "OAR::look",
-    "behavior_summary_one_liner": "Responds to a 'U8P_OAR::look' (enterFastArea) event on an OAR instance by preparing and presenting the object's descriptive/info text, then applies exclusion processing.",
-    "external_call_count": 2,
+    "main_function": "U8P_OAR::look",
+    "behavior_summary_one_liner": "Defines a single process handler for the 'U8P_OAR::look' (examine) action on NPC/object OAR. The handler contains no structured nodes in the excerpt (only an Unknown node), so it performs no observable gameplay effects in the provided data.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

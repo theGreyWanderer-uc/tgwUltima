@@ -3,43 +3,42 @@
   "source_of_truth": "dialogue/json/U8P_BRIBOOK5.json",
   "file": "U8P_BRIBOOK5",
   "behavior_summary": [
-    "Presents a long block of book text to the player by assembling a temporary string, marking an information flag associated with the acting player/process, and handing the text to the book UI routine Book::read.",
-    "Frees the temporary string after invoking Book::read, suspends/waits while the player reads, and returns Book::read's result to the caller.",
-    "Implicitly associates the read action with a player/process id (pid) so that the information flag is set for that actor; the exact info id is not present in the excerpt and is inferred as a 'set info' operation."
+    "U8P_BRIBOOK5::func0080 spawns a Book::read process to present a long block of lore text to the player, passing a string pointer containing the book text and the book object (this).",
+    "The returned process id is stored in local 'temp'.",
+    "Immediately after spawning Book::read the function calls suspend, yielding/pausing the current process. This function appears to be the 'read/activate' handler for the book object."
   ],
   "notable_control_flow": [
-    "Assemble literal text on the stack and obtain a pointer to it.",
-    "Push pid/context, perform a 'set info' operation to record that the actor has read/seen this content.",
-    "Call external UI routine Book::read(text_ptr, context_id) and wait (suspend) for it to complete.",
-    "Free the temporary text buffer and return Book::read's return value."
+    "Spawn external process Book::read(...) and capture its pid in local 'temp'.",
+    "Call suspend right after spawning, causing the current process to yield (likely to let the reader UI/process run).",
+    "No branching, menu interactions, or global flag reads/writes occur in this function."
   ],
   "open_questions": [
-    "What exact global/info identifier is written by the 'set info' opcode (the disassembly shows a set-info but not the numeric id)?",
-    "What precise in-game trigger calls BRIBOOK5::0080 — is it the object's 'use'/'read' event, an area enter, or a scripted sequence?",
-    "Is the pid a true explicit parameter or an implicit process/player pushed by the caller environment (the disassembly shows pid pushed but context/ownership semantics remain inferred)?",
-    "Are there any additional side effects (e.g., quest progression) tied to the info flag being set that are outside this function's excerpt?"
+    "Exact trigger: is U8P_BRIBOOK5::func0080 invoked by a player 'use/activate/read' action (inferred but not explicitly encoded)?",
+    "Does the calling/suspended process later resume or inspect 'temp' (the stored pid), or is 'temp' only used for local bookkeeping here?",
+    "How Book::read schedules its own completion or returns control — does the original process resume automatically or remain suspended until an external signal?"
   ],
   "main_function": {
-    "name": "U8P_BRIBOOK5::0080 (Func_80)",
+    "name": "U8P_BRIBOOK5::func0080",
     "execution_form": "process",
-    "purpose": "When invoked (inferred: on player 'read' / object-use), show a long book text to the player via Book::read, set an information flag tied to the acting pid, manage temporary memory for the text, wait for the read UI to finish, and return the UI's result.",
+    "purpose": "Start a Book::read process to display the book's text to the player and then yield/suspend the current process.",
     "entry_conditions": [
-      "Inferred: called when the player or relevant actor reads/interacts with the BRIBOOK5 object (object 'use' / read event).",
-      "The function expects a context id parameter (BP+06h) which is forwarded to Book::read."
+      "Inferred: invoked when the player activates/uses/reads this book object.",
+      "Spawns Book::read with (string pointer -> long lore text, this -> the book object).",
+      "Suspends the current process immediately after spawning."
     ],
     "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_BRIBOOK5::0080 (Func_80)",
+      "name": "U8P_BRIBOOK5::func0080",
       "kind": "main",
-      "role": "Assemble and present book text to player, set info flag, manage temporary text buffer, and return Book::read result.",
+      "role": "activate/read handler that spawns a Book::read reader process and yields",
       "confidence": "high"
     },
     {
       "name": "Book::read",
       "kind": "extern",
-      "role": "External UI routine that renders a book-reading window given a text pointer and context id, waits for player completion, and returns a status/result.",
+      "role": "UI/process that displays book text to the player and associates the reader with the source book object",
       "confidence": "high"
     }
   ],
@@ -47,35 +46,29 @@
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_BRIBOOK5::0080 (Func_80)",
+        "caller": "U8P_BRIBOOK5::func0080",
         "callee": "Book::read",
-        "purpose": "Open the book-reading UI with text_ptr and context_id, block/suspend until the player finishes reading, and return a result used by the caller.",
+        "purpose": "Display the provided long book text to the player and start a reader process tied to the book object (string pointer, this).",
         "confidence": "high"
       }
     ]
   },
   "global_flags": {
     "reads": [],
-    "writes": [
-      {
-        "name": "info (set via 'set info' opcode)",
-        "likely_effect": "Record that the acting player/process has read or been shown this book text (used to gate future interactions or to mark lore as seen). Exact numeric info id is not present in the excerpt.",
-        "confidence": "medium"
-      }
-    ]
+    "writes": []
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "animation",
-    "guard"
+    "display",
+    "suspend",
+    "lore"
   ],
   "quick_facts": {
-    "main_function": "BRIBOOK5::0080 (Func_80)",
-    "behavior_summary_one_liner": "Presents a long block of book text to the player by assembling a temporary string, marking an information flag associated with the acting player/process, and handing the text to the book UI routine Book::read.",
+    "main_function": "U8P_BRIBOOK5::func0080",
+    "behavior_summary_one_liner": "U8P_BRIBOOK5::func0080 spawns a Book::read process to present a long block of lore text to the player, passing a string pointer containing the book text and the book object (this).",
     "external_call_count": 1,
     "flag_read_count": 0,
-    "flag_write_count": 1
+    "flag_write_count": 0
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

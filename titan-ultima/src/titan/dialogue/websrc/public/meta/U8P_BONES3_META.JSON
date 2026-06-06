@@ -3,30 +3,27 @@
   "source_of_truth": "dialogue/json/U8P_BONES3.json",
   "file": "U8P_BONES3",
   "behavior_summary": [
-    "Provides item event handlers for a skeleton prop: an inspect ('U8P_BONES3::look') handler that presents a short description, and a use/activate handler that either closes a UI gump, opens a gump, or emits a curse message depending on item state and chance.",
-    "Both handlers set the item's info/process-exclude state at start (per-item bookkeeping) before performing their primary action.",
-    "BONES3::look simply sends the static string \"skeleton \" to the inspecting player's PID (via Item::bark) and then yields/suspends.",
-    "BONES3::use reads the item's status word (Item::getStatus). If bit 0x0100 is clear it closes any open gump (Item::closeGump) and returns. If bit 0x0100 is set it generates a random number in 0..99 (urandom(0x64)) and: if random > 0x5F opens a gump with parameter 0x0C (Item::openGump(0x0C)); otherwise barks \"A curse be upon your soul! \" to the player and suspends."
+    "This script implements a simple examine ('U8P_BONES3::look') description and a 'U8P_BONES3::use' interaction for a skeleton-themed item.",
+    "U8P_BONES3::look shows a single short description ('skeleton') when the player examines the item and then suspends the U8P_BONES3::look process.",
+    "U8P_BONES3::use queries the item's status (via Item::getStatus). If a particular status bit (tested as local1 & 0x0100) is set, it closes the item's UI/gump (Item::closeGump).",
+    "If that bit is not set, U8P_BONES3::use invokes urandom(100) and, on a low-probability outcome (random value above a threshold), emits a negative bark ('A curse be upon your soul!') and suspends. Otherwise it opens the item's UI with Item::openGump(0x0C, this)."
   ],
   "notable_control_flow": [
-    "Entry: handlers are triggered by item events (U8P_BONES3::look/use). Execution begins by setting per-item info/process-exclude flags.",
-    "In use: a status-word test (Item::getStatus & 0x0100) is the primary guard that decides between immediate gump-close and the randomized branch.",
-    "If the 0x0100 bit is set, urandom(100) is compared to 0x5F; two mutually-exclusive outcomes follow: open gump (success/high roll) or bark a curse and suspend (low roll).",
-    "Look handler is linear: set flags → Item::bark(\"skeleton \") → bookkeeping (implies/pop) → suspend/return."
+    "U8P_BONES3::look: linear flow — display bark 'skeleton' then suspend.",
+    "U8P_BONES3::use: read status -> branch on (local1 & 0x0100): true -> Item::closeGump(this); false -> check random chance -> if hit -> bark 'A curse be upon your soul!' + suspend; else -> Item::openGump(0x0C, this).",
+    "Both functions end with suspend points where the process yields control to the engine after producing UI or dialogue effects."
   ],
   "open_questions": [
-    "Exact semantic meaning of the status bit 0x0100 on the item (appears to be an 'active' or 'has-gump' flag, inferred).",
-    "Precise purpose or contents of the gump identified/parameterized by 0x0C (inferred to be a UI dialog specific to this skeleton).",
-    "Meaning and broader effects of the 'info/process-exclude' flags set at handler start (they are per-item and likely prevent duplicate processing or mark the item as being handled).",
-    "Whether the suspend after the curse bark implies a timed pause visible to players or simply a script yield/internal scheduling detail."
+    "What precise semantic meaning does the status bit 0x0100 represent for this item (gump-open flag, locked state, or other)? This is inferred but not explicit.",
+    "The random threshold is inferred from urandom(100) compared to 0x5F (95) yielding ~4% chance; the exact comparison operator and inclusive/exclusive bounds in the original Usecode are not present and slightly uncertain.",
+    "local1 is annotated low-confidence in the decompilation (it 'appears' to hold Item::getStatus result); confirmation of its bit layout and other flag bits would clarify additional behavior."
   ],
   "main_function": {
     "name": "U8P_BONES3::look",
     "execution_form": "process",
-    "purpose": "Handle the 'U8P_BONES3::look' (inspect) event for the skeleton item by presenting a short description string to the inspecting player and performing script bookkeeping.",
+    "purpose": "Provide the short description shown when the player examines the item (display 'skeleton').",
     "entry_conditions": [
-      "Invoked by the engine when an actor/player inspects or 'looks at' the skeleton item (Event 0 semantics / enterFastArea style trigger).",
-      "Item pointer is passed implicitly (inferred at BP+06h)."
+      "Invoked by the engine when the player performs a 'U8P_BONES3::look' (examine) action on the item (process type 0x0208)."
     ],
     "confidence": "high"
   },
@@ -34,43 +31,37 @@
     {
       "name": "U8P_BONES3::look",
       "kind": "main",
-      "role": "Inspect handler that displays the skeleton description to the player and suspends.",
+      "role": "examine/description handler (shows short description and suspends)",
       "confidence": "high"
     },
     {
       "name": "U8P_BONES3::use",
       "kind": "helper",
-      "role": "Use/activate handler that gates behavior on a status bit and a random roll to either close/open gumps or emit a curse.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine-provided call used to send/display text from an item to a player/process.",
+      "role": "player 'U8P_BONES3::use' interaction handler (status check, possible curse bark, open/close gump)",
       "confidence": "high"
     },
     {
       "name": "Item::getStatus",
       "kind": "extern",
-      "role": "Engine-provided call returning an item's status word/flags used for conditional logic.",
+      "role": "read item status/flags (called by U8P_BONES3::use)",
       "confidence": "high"
     },
     {
       "name": "Item::closeGump",
       "kind": "extern",
-      "role": "Engine call to close any open UI gump associated with the item.",
+      "role": "close the item's UI/gump when status indicates",
       "confidence": "high"
     },
     {
       "name": "urandom",
       "kind": "extern",
-      "role": "Random number generator used to introduce chance (called with 0x64 to produce 0..99).",
+      "role": "produce a random integer 0..N-1 used to implement low-probability outcomes",
       "confidence": "high"
     },
     {
       "name": "Item::openGump",
       "kind": "extern",
-      "role": "Engine call to open a UI gump on the item (called with parameter 0x0C in this script).",
+      "role": "open the item's UI/gump (gump id 0x0C)",
       "confidence": "high"
     }
   ],
@@ -78,39 +69,27 @@
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_BONES3::look",
-        "callee": "Item::bark",
-        "purpose": "Display the static inspect string \"skeleton \" to the inspecting player PID.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_BONES3::use",
         "callee": "Item::getStatus",
-        "purpose": "Retrieve the item's status word to test bit 0x0100 and decide the branch of behavior.",
+        "purpose": "Read the current item's status/flags into a temporary (local1) for subsequent bit tests.",
         "confidence": "high"
       },
       {
         "caller": "U8P_BONES3::use",
         "callee": "Item::closeGump",
-        "purpose": "Close any open UI gump when the 0x0100 status bit is clear.",
+        "purpose": "Close the item's UI/gump when the tested status bit (0x0100) is set.",
         "confidence": "high"
       },
       {
         "caller": "U8P_BONES3::use",
         "callee": "urandom",
-        "purpose": "Produce a 0..99 random value (urandom(0x64)) to choose between opening a gump or barking a curse.",
+        "purpose": "Generate a 0..99 random value to decide a low-probability negative outcome (curse bark).",
         "confidence": "high"
       },
       {
         "caller": "U8P_BONES3::use",
         "callee": "Item::openGump",
-        "purpose": "Open a UI gump with parameter 0x0C when the random check passes (random > 0x5F).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_BONES3::use",
-        "callee": "Item::bark",
-        "purpose": "Emit the curse string \"A curse be upon your soul! \" to the player's PID on the failing/random branch, then suspend.",
+        "purpose": "Open the item's UI/gump (gump id 0x0C) when no close-gump bit or curse outcome applies.",
         "confidence": "high"
       }
     ]
@@ -126,9 +105,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_BONES3::BONES3::look",
-    "behavior_summary_one_liner": "Provides item event handlers for a skeleton prop: an inspect ('U8P_BONES3::look') handler that presents a short description, and a use/activate handler that either closes a UI gump, opens a gump, or emits a curse message depending on item state and chance.",
-    "external_call_count": 6,
+    "main_function": "U8P_BONES3::look",
+    "behavior_summary_one_liner": "This script implements a simple examine ('U8P_BONES3::look') description and a 'U8P_BONES3::use' interaction for a skeleton-themed item.",
+    "external_call_count": 4,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

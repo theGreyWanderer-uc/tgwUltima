@@ -3,30 +3,29 @@
   "source_of_truth": "dialogue/json/U8P_STRATHAT.json",
   "file": "U8P_STRATHAT",
   "behavior_summary": [
-    "This script implements a STRATHAT game object with a small area-trigger cleanup (U8P_STRATHAT::leaveFastArea) and a more complex egg/rock interaction sequence (hatch, STRATHAT::01D7, STRATHAT::024A).",
-    "U8P_STRATHAT::leaveFastArea runs when an actor/item exits the object's fast-area trigger: it marks/updates the object state, excludes it from some processing, then calls FREE::2A56(object, 1) to deregister/clear the object relative to that trigger.",
-    "U8P_STRATHAT::hatch is the primary egg-handling routine. It reads the egg ID (Egg::getEggId) and has two main branches: id == 0 spawns effects, manipulates avatar stasis/NPC movement, adjusts item quality, attempts NPC movement (pathfind or teleport), and iterates nearby items calling Item::use on matches; id == 1 calls FREE::2A56 on the egg, spawns U8P_STRATHAT::STRATHAT::01D7 and may reset the egg id after scanning nearby items.",
-    "U8P_STRATHAT::STRATHAT::01D7 gates behavior on the global stratosTakenBreath flag; when allowed it scans nearby items and either spawns U8P_STRATHAT::STRATHAT::024A (rock-taken narrative branch) or spawns a FREE::1C19 effect fallback.",
-    "U8P_STRATHAT::STRATHAT::024A implements the one-time rock-taking narrative: if avatarTookRock is unset it spawns effects, sets avatarTookRock=1 and hasBreath=1, plays music, and causes an entity to bark a long narrative string."
+    "U8P_STRATHAT::leaveFastArea: A simple cleanup handler triggered when an actor leaves the fast-area trigger; it clears a stored object reference using FREE::resetRef to avoid stale references.",
+    "U8P_STRATHAT::hatch: Orchestrates an egg-hatching sequence. It reads the egg type (Egg::getEggId) and branches: for eggId==0 it runs a multi-step sequence using spawn/suspend delays, checks item Z, sets item quality, places the avatar in stasis, moves or teleports NPCs, and may invoke Item::use; for eggId==1 it clears a stored FREE reference, calls the timing/gating helper (U8P_STRATHAT::func01D7), and may reset the egg id (Egg::setEggId) to 0 to re-initiate the other flow.",
+    "U8P_STRATHAT::func01D7: A gating/timing helper that checks a persistent gate (stratosTakenBreath). If the gate is not set it uses spawn/suspend delays and a local gate (local1) to eventually call the reaction handler (U8P_STRATHAT::func024A). Acts as a one-shot or queued invoker.",
+    "U8P_STRATHAT::func024A: The reaction that runs when the player takes a rock: it guards on avatarTookRock to avoid repeats, uses spawn/suspend delay helpers, sets avatarTookRock and hasBreath, plays music, emits a short bark line, and then restores music. Uses repeated short spawned timers to sequence audio and speech."
   ],
   "notable_control_flow": [
-    "Event-driven: main entry is a trigger event (U8P_STRATHAT::leaveFastArea) plus several 'hatch' style events that spawn and suspend on other processes (FREE::1C19, EFFECTs, METHOD::15E7).",
-    "Branching on Egg::getEggId inside U8P_STRATHAT::hatch creates two distinct flows (id==0 vs id==1) with different external interactions and spawned processes.",
-    "U8P_STRATHAT::STRATHAT::01D7 uses a global guard (stratosTakenBreath) to short-circuit breath-related behavior; if allowed it iterates nearby items and may route into the narrative branch (STRATHAT::024A) or spawn fallback effects.",
-    "Multiple spawn-and-wait points: many operations suspend while waiting for spawned effects/processes to complete (as indicated by spawn + implies/pop patterns)."
+    "Branching on Egg::getEggId inside U8P_STRATHAT::hatch to choose between two distinct hatching sequences.",
+    "Frequent pattern of spawning an external helper process (spawn -> FREE::func1C19) and immediately suspending to implement short, non-blocking delays.",
+    "Gating via script/global flags: U8P_STRATHAT::func01D7 reads stratosTakenBreath to skip work if already done; U8P_STRATHAT::func024A reads/writes avatarTookRock and writes hasBreath to prevent repeat reactions.",
+    "Simple cleanup call in U8P_STRATHAT::leaveFastArea performing FREE::resetRef(0x01, this)."
   ],
   "open_questions": [
-    "Exact meanings of some item property tests used during nearby-item scans (shape/frame/value checks) — shapes and frame constants are inferred but not named here.",
-    "Precise timing and UX effects of the various spawned FREE::1C19 variants (what visual/audio effects each byte code corresponds to).",
-    "Which in-world entity produces the long bark text in STRATHAT::024A (the disassembly shows Item::bark but the identity of that item/NPC in the scene is not explicit).",
-    "Whether Egg::setEggId is intended to permanently reset eggs or only for a temporary state change (the script sets 0 in one branch; intent is inferred)."
+    "Exact semantics and parameters of the spawned helper FREE::func1C19 (appears to be a short timer/delay but its contract is not explicit).",
+    "Precise meaning of kernel reference 0x0203 that Kernel::resetRef modifies during the eggId==0 path (system-level state vs. sequence-specific flag).",
+    "Whether Egg::setEggId(0) in the eggId==1 branch permanently converts the object or just stages a second-phase U8P_STRATHAT::hatch; the persistence semantics are inferred but not certain.",
+    "Precise in-world targets of the NPC pathfind/teleport coordinates (map 0x70, x/y values) — inferred to position an NPC for the U8P_STRATHAT::hatch event but mapping to world content is unknown."
   ],
   "main_function": {
     "name": "U8P_STRATHAT::leaveFastArea",
     "execution_form": "process",
-    "purpose": "Handle an object/actor leaving the STRATHAT fast-area trigger: mark/update object info, exclude it from some processing path, and call FREE::2A56(object, 1) to deregister or clear the object's association with this trigger.",
+    "purpose": "Cleanup when an actor leaves the fast-area trigger: removes a stored/freeable reference to this object so it is no longer tracked by the FREE reference table.",
     "entry_conditions": [
-      "Event 10: invoked when the avatar (or relevant actor) exits the STRATHAT fast-area trigger region."
+      "Triggered by the engine on area exit (U8P_STRATHAT::leaveFastArea event) when the avatar or relevant actor leaves the object's fast-area trigger region."
     ],
     "confidence": "high"
   },
@@ -34,180 +33,138 @@
     {
       "name": "U8P_STRATHAT::leaveFastArea",
       "kind": "main",
-      "role": "fast-area exit handler / cleanup and deregistration",
+      "role": "area-exit cleanup; frees stored object reference via FREE::resetRef",
       "confidence": "high"
     },
     {
       "name": "U8P_STRATHAT::hatch",
       "kind": "helper",
-      "role": "primary egg-hatching routine; spawns effects, controls avatar/NPC state, iterates nearby items and triggers uses or further scripts",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_STRATHAT::01D7",
-      "kind": "helper",
-      "role": "breath/rock gating routine; checks global guard and scans nearby items to decide whether to invoke the rock narrative branch or a fallback effect",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_STRATHAT::024A",
-      "kind": "helper",
-      "role": "one-time rock-taking narrative: set flags (avatarTookRock, hasBreath), play music, spawn effects, and present a long bark/dialogue",
-      "confidence": "high"
-    },
-    {
-      "name": "FREE::2A56",
-      "kind": "extern",
-      "role": "external cleanup/deregister/update routine called with (object, byte flag)",
-      "confidence": "high"
-    },
-    {
-      "name": "FREE::1C19",
-      "kind": "extern",
-      "role": "external effect/process spawn used repeatedly for animations/effects",
-      "confidence": "high"
-    },
-    {
-      "name": "Egg::getEggId",
-      "kind": "extern",
-      "role": "query egg state/id used to decide hatch behavior",
-      "confidence": "high"
-    },
-    {
-      "name": "Egg::setEggId",
-      "kind": "extern",
-      "role": "set/reset the egg's id/state",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::* (getZ, use, setQuality, bark)",
-      "kind": "extern",
-      "role": "item utilities: read elevation, invoke use behavior, change quality, and make items/NPCs emit text",
-      "confidence": "high"
-    },
-    {
-      "name": "Npc::* (getDir, pathfind, teleport, getMap)",
-      "kind": "extern",
-      "role": "NPC utilities used to query direction, move via pathfinding or teleport, and read map id",
-      "confidence": "high"
-    },
-    {
-      "name": "METHOD::15E7",
-      "kind": "extern",
-      "role": "directional NPC action/method spawned with the NPC direction",
+      "role": "orchestrates egg-hatching sequences (branch on Egg::getEggId), handles spawning/delays, item quality, avatar stasis, NPC movement/teleport, and item use",
       "confidence": "medium"
     },
     {
-      "name": "U8P_STRATHAT::setAvatarInStasis",
-      "kind": "extern",
-      "role": "puts the avatar into/out of stasis during sequences",
-      "confidence": "high"
-    },
-    {
-      "name": "Kernel::resetRef",
-      "kind": "extern",
-      "role": "reset kernel/process reference used as a setup step",
+      "name": "U8P_STRATHAT::func01D7",
+      "kind": "helper",
+      "role": "timing/gating helper for the 'breath' reaction; checks stratosTakenBreath and conditionally invokes the reaction handler (U8P_STRATHAT::func024A) after delays",
       "confidence": "medium"
     },
     {
-      "name": "playMusic",
-      "kind": "extern",
-      "role": "play music/sound cues used around the rock/breath interaction",
-      "confidence": "high"
+      "name": "U8P_STRATHAT::func024A",
+      "kind": "helper",
+      "role": "executes the one-shot reaction when the player takes the rock: sets avatarTookRock and hasBreath, plays music, emits a bark, and sequences delays",
+      "confidence": "medium"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
         "caller": "U8P_STRATHAT::hatch",
-        "callee": "U8P_STRATHAT::01D7",
-        "purpose": "When Egg::getEggId==1 hatch spawns the STRATHAT::01D7 guard/routing routine to continue the breath/rock interaction flow",
-        "confidence": "high"
+        "callee": "U8P_STRATHAT::func01D7",
+        "purpose": "Invoke the gating/timing helper when eggId==1 to coordinate a breath/reaction sequence before possibly converting the egg id.",
+        "confidence": "medium"
       },
       {
-        "caller": "U8P_STRATHAT::01D7",
-        "callee": "U8P_STRATHAT::024A",
-        "purpose": "STRATHAT::01D7 may spawn STRATHAT::024A when a nearby-item scan matches the rock-taking condition",
-        "confidence": "high"
+        "caller": "U8P_STRATHAT::func01D7",
+        "callee": "U8P_STRATHAT::func024A",
+        "purpose": "Call the rock/breath reaction handler when the timing/gate conditions are satisfied (local gate or post-delay).",
+        "confidence": "medium"
       }
     ],
     "external_calls": [
       {
         "caller": "U8P_STRATHAT::leaveFastArea",
-        "callee": "FREE::2A56",
-        "purpose": "Deregister/clear object relative to free/trigger system on area-leave (called as FREE::2A56(object, 1))",
+        "callee": "FREE::resetRef",
+        "purpose": "Clear/free the stored reference id (0x01) for this object during area-exit cleanup.",
         "confidence": "high"
       },
       {
         "caller": "U8P_STRATHAT::hatch",
         "callee": "Egg::getEggId",
-        "purpose": "Read egg state to branch hatch behavior",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_STRATHAT::hatch",
-        "callee": "FREE::1C19",
-        "purpose": "Spawn visual/audio/process effects during hatching sequences",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_STRATHAT::hatch",
-        "callee": "U8P_STRATHAT::setAvatarInStasis",
-        "purpose": "Temporarily immobilize or change avatar state during parts of the hatch/NPC sequence",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_STRATHAT::hatch",
-        "callee": "Npc::getDir",
-        "purpose": "Read NPC direction to select/launch a direction-specific METHOD::15E7 action",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_STRATHAT::hatch",
-        "callee": "METHOD::15E7",
-        "purpose": "Spawn a direction-specific NPC action/movement as part of the hatch sequence",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_STRATHAT::hatch",
-        "callee": "Npc::pathfind",
-        "purpose": "Attempt to move an NPC toward a target; fallback is Npc::teleport if pathfinding fails",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_STRATHAT::hatch",
-        "callee": "Item::getZ",
-        "purpose": "Check item elevation/Z to gate certain hatch behaviors (check against constant 0x70)",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_STRATHAT::hatch",
-        "callee": "Item::use",
-        "purpose": "Invoke use behavior on nearby items that match shape/frame/value filters",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_STRATHAT::024A",
-        "callee": "FREE::1C19",
-        "purpose": "Spawn effects before and during the narrative rock-taking sequence",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_STRATHAT::024A",
-        "callee": "Item::bark",
-        "purpose": "Make an in-world entity speak a long narrative string when the avatar takes the rock",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_STRATHAT::024A",
-        "callee": "playMusic",
-        "purpose": "Play music cues surrounding the narrative/effect to signal the event",
+        "purpose": "Read the egg's type/id to decide which U8P_STRATHAT::hatch sequence to run (critical branch condition).",
         "confidence": "high"
       },
       {
         "caller": "U8P_STRATHAT::hatch",
         "callee": "Egg::setEggId",
-        "purpose": "Reset the egg id (set to 0) in one branch after scanning nearby items (intent inferred as resetting egg state)",
+        "purpose": "Reset or change an egg's id (used in the eggId==1 path to set id 0 and prepare a different sequence).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_STRATHAT::hatch",
+        "callee": "FREE::func1C19 (spawned)",
+        "purpose": "Spawned helper used as a short timer/delay at multiple points in the hatching sequence.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_STRATHAT::hatch",
+        "callee": "Kernel::resetRef",
+        "purpose": "Reset a kernel-level reference/flag (0x0203) as part of the eggId==0 setup/cleanup.",
+        "confidence": "low"
+      },
+      {
+        "caller": "U8P_STRATHAT::hatch",
+        "callee": "Item::getZ",
+        "purpose": "Check the Z coordinate/height of the item before continuing the eggId==0 path.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_STRATHAT::hatch",
+        "callee": "Item::setQuality",
+        "purpose": "Set the hatched item's quality/flags as part of completion of the eggId==0 sequence.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_STRATHAT::hatch",
+        "callee": "setAvatarInStasis",
+        "purpose": "Put the avatar into stasis during the hatching choreography to control player movement/input.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_STRATHAT::hatch",
+        "callee": "Npc::getDir",
+        "purpose": "Read an NPC's facing direction to configure spawned helper movement (passed into METHOD::func15E7).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_STRATHAT::hatch",
+        "callee": "METHOD::func15E7 (on spawned object)",
+        "purpose": "Configure movement/orientation on a spawned helper object based on NPC direction and flags before a delay.",
+        "confidence": "low"
+      },
+      {
+        "caller": "U8P_STRATHAT::hatch",
+        "callee": "Npc::pathfind",
+        "purpose": "Request an NPC to pathfind to specific map coordinates (used with suspend to wait for completion) as part of the sequence.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_STRATHAT::hatch",
+        "callee": "Npc::teleport",
+        "purpose": "Teleport an NPC to the target coordinates (immediate placement or fallback to pathfinding).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_STRATHAT::hatch",
+        "callee": "process Item::use",
+        "purpose": "Invoke item usage as a process on the newly hatched item and suspend to capture result/effects.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_STRATHAT::func01D7",
+        "callee": "FREE::func1C19 (spawned)",
+        "purpose": "Spawn a short delay helper and suspend to implement timing for the breath gating logic.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_STRATHAT::func024A",
+        "callee": "FREE::func1C19 (spawned)",
+        "purpose": "Use the spawned helper as a short timer for sequencing music and speech in the reaction.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_STRATHAT::func024A",
+        "callee": "playMusic",
+        "purpose": "Play an audio track to mark the start (0x73) and later restore music (0x61) around the bark/sequence.",
         "confidence": "medium"
       }
     ]
@@ -215,26 +172,26 @@
   "global_flags": {
     "reads": [
       {
-        "name": "stratosTakenBreath",
-        "likely_effect": "Gate whether breath-related behavior should proceed (read by U8P_STRATHAT::STRATHAT::01D7 to return early if breath already taken or otherwise disallowed)",
-        "confidence": "high"
+        "name": "avatarTookRock",
+        "likely_effect": "Prevents repeating the rock/breath reaction; read to gate whether U8P_STRATHAT::func024A should run.",
+        "confidence": "medium"
       },
       {
-        "name": "avatarTookRock",
-        "likely_effect": "Check whether the avatar already took the rock; if set the narrative branch in U8P_STRATHAT::STRATHAT::024A returns early",
-        "confidence": "high"
+        "name": "stratosTakenBreath",
+        "likely_effect": "A gating flag read by U8P_STRATHAT::func01D7 to skip the breath/timing sequence if already set.",
+        "confidence": "medium"
       }
     ],
     "writes": [
       {
         "name": "avatarTookRock",
-        "likely_effect": "Set to 1 in U8P_STRATHAT::STRATHAT::024A to record that the avatar has taken the rock and prevent repetition",
-        "confidence": "high"
+        "likely_effect": "Set to 1 when the player takes the rock (in U8P_STRATHAT::func024A) to record the event and avoid replaying the reaction.",
+        "confidence": "medium"
       },
       {
         "name": "hasBreath",
-        "likely_effect": "Set to 1 in U8P_STRATHAT::STRATHAT::024A indicating the avatar regained 'breath' as part of the event",
-        "confidence": "high"
+        "likely_effect": "Set to 1 alongside avatarTookRock to record/grant the 'breath' effect when the reaction occurs.",
+        "confidence": "medium"
       }
     ]
   },
@@ -246,8 +203,8 @@
   ],
   "quick_facts": {
     "main_function": "U8P_STRATHAT::leaveFastArea",
-    "behavior_summary_one_liner": "This script implements a STRATHAT game object with a small area-trigger cleanup (U8P_STRATHAT::leaveFastArea) and a more complex egg/rock interaction sequence (hatch, STRATHAT::01D7, STRATHAT::024A).",
-    "external_call_count": 13,
+    "behavior_summary_one_liner": "U8P_STRATHAT::leaveFastArea: A simple cleanup handler triggered when an actor leaves the fast-area trigger; it clears a stored object reference using FREE::resetRef to avoid stale references.",
+    "external_call_count": 16,
     "flag_read_count": 2,
     "flag_write_count": 2
   },

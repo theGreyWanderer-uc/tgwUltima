@@ -3,222 +3,242 @@
   "source_of_truth": "dialogue/json/U8P_SPELCMBT.json",
   "file": "U8P_SPELCMBT",
   "behavior_summary": [
-    "Implements the combat-spell placement and effect-spawning logic for a 'spell combat' action: compute a target position relative to a caster/target, validate placement, spawn one or more effect processes, and emit vocal taunts/barks.",
-    "Supports multiple spell subtypes/variants (controlled by a local subtype byte) that change placement offsets, number/orientation of spawned effects, and choice of taunt strings.",
-    "Performs a placement gating check (canExistAt) using computed X/Y/Z and a fixed height/flag parameter before any persistent effect processes are spawned; aborts if placement is invalid.",
-    "Uses helper/free routines to query additional state that alters which taunt/effect branch is taken and whether multi-directional or multi-instance spawns occur.",
-    "Contains small registration/initializer wrappers to register the handler and larger helpers that iterate items/frames to bulk-spawn FIRESPEL visual effects."
+    "This script implements spell-combat utilities for an NPC/actor that primarily launches fire- and demon-themed spell effects. It contains targeting/spawn helpers, per-projectile frame handlers, a randomized variant chooser, and a suspend-driven combat loop that repeatedly spawns and dispatches those effects.",
+    "U8P_SPELCMBT::func00A4 computes candidate spawn offsets around a target item/object, validates positions (canExistAt), spawns an effect actor when a valid spot is found, and issues a randomized combat bark — inferred to be the fire-spell targeting+spawn routine.",
+    "U8P_SPELCMBT::func04F7 manages per-projectile/per-frame behavior for active fire effects (calls FIRESPEL handlers when an item/frame condition is met and uses suspend points for timing).",
+    "U8P_SPELCMBT::func05D1 randomly selects among several effect variants (DAEMSPEL vs multiple FIRESPEL variants), sets parameters/flags, calls the chosen handler, and issues barks/spawns as needed.",
+    "U8P_SPELCMBT::combatSpellLoop is the runtime loop: it maintains spawn retries, manages target acquisition and range checks, toggles avatar stasis briefly, and repeatedly invokes the chooser/handlers to produce sustained spell attacks."
   ],
   "notable_control_flow": [
-    "Major branching on a local subtype flag ([BP-0Fh]) selecting offset constants, taunt text, and effect variants (branches for values 0..7).",
-    "Placement validation: computed coordinates call canExistAt; a placement-valid flag ([BP-10h]) gates whether spawn and bark actions proceed.",
-    "Behavior further conditioned by return values from helper/free calls (FREE::1A85 and FREE::2A56) which select alternate taunt/effect sequences.",
-    "Helper routines (U8P_SPELCMBT::04F7 and U8P_SPELCMBT::05D1) iterate over item/frame collections to spawn repeated FIRESPEL or DAEMSPEL processes for area effects.",
-    "Spawning of METHOD/DAEMSPEL/FIRESPEL/FREE processes uses the caster pid and computed direction/orientation (Item::getDirToItem) when multi-directional placements are required."
+    "Target acquisition and range gating in U8P_SPELCMBT::combatSpellLoop: get current target -> if none attempt limited spawns -> if target dead search nearest enemy candidate -> choose behavior by distance and target type (close-range DAEMSPEL vs ranged FIRESPEL).",
+    "Spawn search in U8P_SPELCMBT::func00A4: iterate an 8-direction step pattern (local7 0..7) with expanding radius (local4) -> compute local2/local1/local0 coords -> call canExistAt -> on success spawn via FREE::func1C19 and invoke FIRESPEL handler, otherwise continue searching until failure.",
+    "Variant selection in U8P_SPELCMBT::func05D1: compute a cap from caster type -> draw random bucket (FREE::randomInRange0) -> branch into DAEMSPEL or one of multiple FIRESPEL variants, reset references (FREE::resetRef) and spawn visual actors with barks.",
+    "Per-projectile life-step in U8P_SPELCMBT::func04F7: maintain two boolean flags (local0, local1) and call FIRESPEL::func177A or FIRESPEL::func1CEB depending on presence of the referenced item and its animation frame, inserting suspend points for timing.",
+    "Loop/frame progression inside U8P_SPELCMBT::func04F7; treated as control-flow, not explicit internal call."
   ],
   "open_questions": [
-    "Exact semantic meanings of the function's formal parameters (BP+06h, BP+0Ah, and BP+0Bh) — inferred as pid/caster/item/target id but not explicitly documented.",
-    "Precise return semantics and full purpose of FREE::1A85 and FREE::2A56 (used to choose branches); they appear to be query helpers but exact provenance is uncertain.",
-    "Meaning and units of the numeric offset constants applied to X/Y (e.g., 0x14, 0x20, 0xE0, 0x60) and how they map to in-game distances.",
-    "Whether U8P_SPELCMBT::05D1 and U8P_SPELCMBT::04F7 are invoked only by external events or also by U8P_SPELCMBT::00A4 in some cases (call graph between internal helpers is inferred but not fully verified)."
+    "U8P_SPELCMBT::func0080, U8P_SPELCMBT::func008C, U8P_SPELCMBT::func0098 and U8P_SPELCMBT::func0BD0 have no visible bodies in the excerpt — what precise roles do they play (dispatch, initialization, cleanup, or unused placeholders)?",
+    "Exact numeric spawn id(s) and masks passed to FREE::func1C19 / FREE::resetRef are inferred but not confirmed in the excerpt; what concrete spawn templates/entities are created?",
+    "Precise global flag names/semantics: the analysis infers avatarMasterSorcerer is written and MalchirTest is read — are these canonical global script flags and what downstream systems depend on them?",
+    "What are the exact parameter conventions for U8P_SPELCMBT::combatSpellLoop (param1) and U8P_SPELCMBT::func05D1 (param2) in live usage (caller-provided selector index vs sentinel 0xFFFFFFFF)?",
+    "Edge cases for canExistAt: how often and under what map constraints will U8P_SPELCMBT::func00A4 fail to find a spawn location in practice (performance/timeout behavior)?"
   ],
   "main_function": {
-    "name": "U8P_SPELCMBT::00A4",
+    "name": "U8P_SPELCMBT::func0080",
     "execution_form": "process",
-    "purpose": "Handle a combat spell cast: compute target coordinates/offsets from caster/target and subtype, validate placement with canExistAt, spawn visual/effect processes (FIRESPEL/DAEMSPEL/METHOD/FREE), and emit taunt/bark strings based on subtype and helper-query results.",
+    "purpose": "Declared module entry/utility for the spell-combat script; in the provided excerpt it contains no actionable nodes but serves as the canonical entry point name for this script's utilities.",
     "entry_conditions": [
-      "Triggered when a combat spell is activated/cast (registered handler invoked with caster pid and parameters).",
-      "Requires a target word parameter (inferred target/item id) and a subtype byte that determine offsets and behavior.",
-      "Attempt to place an effect at computed coordinates — proceeds only if canExistAt indicates valid placement."
+      "Inferred: invoked when spell-combat behavior for this NPC/module is initiated (e.g., combat start or when the actor chooses to cast).",
+      "Not tied to look/shop/dialogue events; used by combat/process code paths or spawned by other scripts."
     ],
-    "confidence": "high"
+    "confidence": "medium"
   },
   "function_map": [
     {
-      "name": "U8P_SPELCMBT::00A4",
+      "name": "U8P_SPELCMBT::func0080",
       "kind": "main",
-      "role": "Primary combat-spell handler: compute placement, validate, spawn effects, and produce taunts.",
+      "role": "module entry utility / canonical main for this spell-combat script (no body shown in excerpt)",
       "confidence": "high"
     },
     {
-      "name": "U8P_SPELCMBT::0080",
+      "name": "U8P_SPELCMBT::func00A4",
       "kind": "helper",
-      "role": "Small registration/initializer wrapper that calls engine set-info to register the handler.",
+      "role": "targeting and spawn helper for fire effects (computes offset pattern, checks canExistAt, spawns actor and calls FIRESPEL handler, plays randomized barks)",
       "confidence": "high"
     },
     {
-      "name": "U8P_SPELCMBT::008C",
+      "name": "U8P_SPELCMBT::func04F7",
       "kind": "helper",
-      "role": "Registration/initializer wrapper similar to ::0080.",
+      "role": "per-projectile/per-frame handler for active fire effects (calls FIRESPEL::func177A and FIRESPEL::func1CEB based on frame/flags)",
       "confidence": "high"
     },
     {
-      "name": "U8P_SPELCMBT::0098",
+      "name": "U8P_SPELCMBT::func05D1",
       "kind": "helper",
-      "role": "Registration/initializer wrapper similar to ::0080/008C.",
+      "role": "spell-variant chooser/dispatcher (randomized selection between DAEMSPEL and FIRESPEL variants, handles barks and spawn sequencing)",
       "confidence": "high"
     },
     {
-      "name": "U8P_SPELCMBT::04F7",
+      "name": "U8P_SPELCMBT::combatSpellLoop",
       "kind": "helper",
-      "role": "Iterates over items/frames and spawns FIRESPEL processes for frame ranges — a bulk/area visual-effect applier.",
+      "role": "suspend-driven loop that manages repeated spell attacks, target management, spawn retries, and distance-based behavior switching",
       "confidence": "high"
     },
     {
-      "name": "U8P_SPELCMBT::05D1",
+      "name": "U8P_SPELCMBT::func008C",
       "kind": "helper",
-      "role": "Alternate/more complex handler that branches on item flags and spawns daemon/firespell variants across an area with loops and additional checks.",
-      "confidence": "high"
+      "role": "unknown / utility (body not present in excerpt)",
+      "confidence": "low"
     },
     {
-      "name": "Item::getX",
-      "kind": "extern",
-      "role": "Engine-provided accessor returning an Item's X coordinate.",
-      "confidence": "high"
+      "name": "U8P_SPELCMBT::func0098",
+      "kind": "helper",
+      "role": "unknown / utility (body not present in excerpt)",
+      "confidence": "low"
     },
     {
-      "name": "Item::getY",
-      "kind": "extern",
-      "role": "Engine-provided accessor returning an Item's Y coordinate.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getZ",
-      "kind": "extern",
-      "role": "Engine-provided accessor returning an Item's Z (level) used for placement validation.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_SPELCMBT::canExistAt",
-      "kind": "extern",
-      "role": "World-space validator that determines whether an effect/process can be placed at computed X/Y/Z with given flags/height.",
-      "confidence": "high"
-    },
-    {
-      "name": "spawn",
-      "kind": "extern",
-      "role": "Engine process-creation primitive used to spawn FREE, FIRESPEL, METHOD, DAEMSPEL processes for visual and gameplay effects.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getDirToItem",
-      "kind": "extern",
-      "role": "Compute direction/orientation from caster/item to a target item id to orient spawned effects.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Cause the caster/item to emit a text string (taunt/attack message) to the player or process.",
-      "confidence": "high"
-    },
-    {
-      "name": "FREE::1A85",
-      "kind": "extern",
-      "role": "Helper/free routine used as a query whose return value influences branch selection for taunts/effects.",
-      "confidence": "medium"
-    },
-    {
-      "name": "FREE::2A56",
-      "kind": "extern",
-      "role": "Additional helper/free routine referenced similarly to FREE::1A85; used to choose branches.",
-      "confidence": "medium"
+      "name": "U8P_SPELCMBT::func0BD0",
+      "kind": "helper",
+      "role": "unknown / utility (body not present in excerpt)",
+      "confidence": "low"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
-        "caller": "U8P_SPELCMBT::00A4",
-        "callee": "U8P_SPELCMBT::04F7",
-        "purpose": "(inferred) Use the area-iteration helper to spawn multiple FIRESPEL effects when subtype/flags indicate bulk application.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_SPELCMBT::00A4",
-        "callee": "U8P_SPELCMBT::05D1",
-        "purpose": "Select alternate, more complex area-effect behavior (spawning daemon/firespell variants) depending on item flags/bytes.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_SPELCMBT::0080",
-        "callee": "U8P_SPELCMBT::set info",
-        "purpose": "Register handler metadata with the engine (initializer wrapper).",
+        "caller": "U8P_SPELCMBT::func05D1",
+        "callee": "U8P_SPELCMBT::func00A4",
+        "purpose": "Use spawn/target helper to place a firespell effect or spawn visual actor as part of an attack variant",
         "confidence": "high"
+      },
+      {
+        "caller": "U8P_SPELCMBT::combatSpellLoop",
+        "callee": "U8P_SPELCMBT::func05D1",
+        "purpose": "Invoke the variant chooser/dispatcher each loop iteration to perform a spell attack toward the current target",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SPELCMBT::combatSpellLoop",
+        "callee": "U8P_SPELCMBT::func00A4",
+        "purpose": "Possibly call the spawn helper for targeted placement when ranged firespell behavior is chosen",
+        "confidence": "medium"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_SPELCMBT::00A4",
-        "callee": "Item::getX",
-        "purpose": "Retrieve base X coordinate of the target/caster to compute placement X with subtype offsets.",
+        "caller": "U8P_SPELCMBT::func00A4",
+        "callee": "FREE::func1C19",
+        "purpose": "Spawn/create a visual/spell actor at a validated position",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SPELCMBT::00A4",
-        "callee": "Item::getY",
-        "purpose": "Retrieve base Y coordinate of the target/caster to compute placement Y with subtype offsets.",
+        "caller": "U8P_SPELCMBT::func00A4",
+        "callee": "FIRESPEL::func0E47",
+        "purpose": "Apply the firespell effect logic to the spawned actor/location",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SPELCMBT::00A4",
-        "callee": "Item::getZ",
-        "purpose": "Retrieve Z/level for placement validation via canExistAt.",
+        "caller": "U8P_SPELCMBT::func04F7",
+        "callee": "FIRESPEL::func177A",
+        "purpose": "Advance early-phase firespell animation/behavior when item frame <= threshold",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SPELCMBT::00A4",
-        "callee": "U8P_SPELCMBT::canExistAt",
-        "purpose": "Validate whether the computed position can host the planned effect (gates spawn and barking).",
+        "caller": "U8P_SPELCMBT::func04F7",
+        "callee": "FIRESPEL::func1CEB",
+        "purpose": "Invoke fallback/late-phase firespell handling when conditions meet the alternate branch",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SPELCMBT::00A4",
-        "callee": "Item::getDirToItem",
-        "purpose": "Compute direction from caster to target id for orienting METHOD/DAEMSPEL spawns in multi-directional cases.",
+        "caller": "U8P_SPELCMBT::func05D1",
+        "callee": "DAEMSPEL::func0080",
+        "purpose": "Dispatch a demonic-spell variant as an alternative attack branch",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SPELCMBT::00A4",
-        "callee": "Item::bark",
-        "purpose": "Emit taunt/attack strings selected by subtype and helper-query results to the player/process.",
+        "caller": "U8P_SPELCMBT::func05D1",
+        "callee": "FIRESPEL::func110F",
+        "purpose": "Dispatch a firespell variant chosen by the random selector",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SPELCMBT::00A4",
-        "callee": "spawn",
-        "purpose": "Create effect processes (FREE, FIRESPEL, METHOD, DAEMSPEL) with pid, type bytes, caster pointer, direction and placeholders.",
+        "caller": "U8P_SPELCMBT::func05D1",
+        "callee": "FIRESPEL::func195D",
+        "purpose": "Dispatch another firespell variant from the chooser",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SPELCMBT::00A4",
-        "callee": "FREE::1A85",
-        "purpose": "Query helper used to decide taunt/effect branch selection.",
-        "confidence": "medium"
+        "caller": "U8P_SPELCMBT::combatSpellLoop",
+        "callee": "DAEMSPEL::func0AD8",
+        "purpose": "Execute a close-range demonic spell when the target is within a short distance",
+        "confidence": "high"
       },
       {
-        "caller": "U8P_SPELCMBT::00A4",
-        "callee": "FREE::2A56",
-        "purpose": "Alternate query helper used similarly to FREE::1A85 for branch decisions.",
-        "confidence": "medium"
+        "caller": "U8P_SPELCMBT::combatSpellLoop",
+        "callee": "METHOD::func091C",
+        "purpose": "Play an animation/sound or perform a pre-attack action before spawning or attacking",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SPELCMBT::func05D1",
+        "callee": "FREE::randomInRange0",
+        "purpose": "Choose a random bucket for selecting spell/bark variants",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SPELCMBT::func05D1",
+        "callee": "FREE::resetRef",
+        "purpose": "Reset a per-actor reference/flag before issuing a bark/spawn to ensure fresh state",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SPELCMBT::combatSpellLoop",
+        "callee": "FREE::getDistanceBetween",
+        "purpose": "Compare distances to select the nearest candidate target when the current target is dead or absent",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SPELCMBT::combatSpellLoop",
+        "callee": "Npc::getTarget",
+        "purpose": "Fetch the NPC's current target for attack decision-making",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SPELCMBT::combatSpellLoop",
+        "callee": "Npc::isDead",
+        "purpose": "Check if the target is dead to drive target-clearing and candidate search logic",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SPELCMBT::combatSpellLoop",
+        "callee": "Npc::isEnemy",
+        "purpose": "Filter nearby NPCs when searching for a replacement target",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SPELCMBT::combatSpellLoop",
+        "callee": "Npc::clrInCombat",
+        "purpose": "Clear the NPC's in-combat status when no valid target remains",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SPELCMBT::combatSpellLoop",
+        "callee": "setAvatarInStasis",
+        "purpose": "Temporarily toggle avatar movement/stasis while spells are being executed",
+        "confidence": "high"
       }
     ]
   },
   "global_flags": {
-    "reads": [],
-    "writes": []
+    "reads": [
+      {
+        "name": "MalchirTest",
+        "likely_effect": "Used as a numeric gate in a special-case to decide whether to set avatarMasterSorcerer for a given caster id",
+        "confidence": "medium"
+      }
+    ],
+    "writes": [
+      {
+        "name": "avatarMasterSorcerer",
+        "likely_effect": "Marked/written for certain caster IDs as a 'master sorcerer' state that likely alters downstream spell or avatar behavior",
+        "confidence": "medium"
+      }
+    ]
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
+    "spawn",
     "animation",
+    "randomization",
+    "combat",
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_SPELCMBT::00A4",
-    "behavior_summary_one_liner": "Implements the combat-spell placement and effect-spawning logic for a 'spell combat' action: compute a target position relative to a caster/target, validate placement, spawn one or more effect processes, and emit vocal taunts/barks.",
-    "external_call_count": 9,
-    "flag_read_count": 0,
-    "flag_write_count": 0
+    "main_function": "U8P_SPELCMBT::func0080",
+    "behavior_summary_one_liner": "This script implements spell-combat utilities for an NPC/actor that primarily launches fire- and demon-themed spell effects. It contains targeting/spawn helpers, per-projectile frame handlers, a randomized variant chooser, and a suspend-driven combat loop that repeatedly spawns and dispatches those effects.",
+    "external_call_count": 17,
+    "flag_read_count": 1,
+    "flag_write_count": 1
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

@@ -3,26 +3,27 @@
   "source_of_truth": "dialogue/json/U8P_TAPESTNS.json",
   "file": "U8P_TAPESTNS",
   "behavior_summary": [
-    "When the tapestry item is examined (looked at), the script prepares object/process context, constructs the literal string \"tapestry \", and invokes the item's bark routine to produce the short description visible to the player.",
-    "Context setup includes setting item info/process exclusion so the bark is emitted with appropriate context (who sees it or how it is attributed).",
-    "The temporary string is freed after the bark call, and the bark return value is preserved and propagated as the handler's return value (after an implied control check)."
+    "U8P_TAPESTNS::look is a short U8P_TAPESTNS::look/inspect handler that displays a single player-facing bark 'tapestry' and then suspends the process.",
+    "The routine contains no conditionals, menus, flag reads/writes, or external gameplay logic beyond presenting the text and pausing.",
+    "This is a purely descriptive handler for a tapestry object — it does not change game state or call other game systems."
   ],
   "notable_control_flow": [
-    "Entry on a U8P_TAPESTNS::look/examine event: setup/init opcodes run to prepare context (set info and process-exclude operations).",
-    "Push current process/player id (pid) and the literal string \"tapestry \" as arguments, then call Item::bark on the target item.",
-    "Free the temporary string, handle the bark return value (store/inspect), perform an 'implies' style operation, and then suspend/return while propagating the bark result."
+    "Linear: display bark text then suspend/pause the process.",
+    "No branching, loops, or flag-based guards are present.",
+    "Appears to be triggered by the engine's U8P_TAPESTNS::look/inspect process (processType 0x0208); may also run on fast-area entry but that is inferred."
   ],
   "open_questions": [
-    "The exact engine semantics of the 'set info' and 'process exclude' opcodes used before barking — what precise audience or visibility rules they enforce is inferred but not canonical.",
-    "The meaning of the 'implies' operation applied to the bark return value — whether it gates additional behavior or is purely stack housekeeping is uncertain.",
-    "Whether BP+06h absolutely refers to the tapestry item instance (rather than the actor/process invoking the U8P_TAPESTNS::look) is strongly likely but technically inferred from calling convention."
+    "Is U8P_TAPESTNS::look invoked only by the explicit player 'U8P_TAPESTNS::look' command, or also by entering a fast-area tied to the tapestry?",
+    "Does the suspend node merely yield to the engine (brief pause), or does it wait for player dismissal/confirmation?",
+    "Are there other related scripts that provide a longer tapestry description under different conditions (not present in this file)?"
   ],
   "main_function": {
     "name": "U8P_TAPESTNS::look",
     "execution_form": "process",
-    "purpose": "Handle the 'U8P_TAPESTNS::look' (examine) interaction for the tapestry item by emitting a short descriptive bark ('tapestry ') through Item::bark after preparing per-process/item context, then return the bark result.",
+    "purpose": "Provide the short inspect/description response for the tapestry object: show the text 'tapestry' to the player and suspend the process.",
     "entry_conditions": [
-      "Event 0 — invoked when a player/actor performs a 'U8P_TAPESTNS::look' (examine) on the tapestry item."
+      "Invoked by the game's 'U8P_TAPESTNS::look'/inspect action on the TAPESTNS object (canonical: processType 0x0208).",
+      "Likely (inferred) also runnable when the player enters a U8P_TAPESTNS::look-type fast-area associated with the object."
     ],
     "confidence": "high"
   },
@@ -30,13 +31,7 @@
     {
       "name": "U8P_TAPESTNS::look",
       "kind": "main",
-      "role": "Process event handler for the tapestry's 'U8P_TAPESTNS::look' interaction; prepares context and delegates to Item::bark to present the description.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine-provided routine used to emit/display a short text message from an item/process to a player/process (used here to show the tapestry description).",
+      "role": "Short U8P_TAPESTNS::look/inspect handler that emits a single bark and then suspends; no state changes.",
       "confidence": "high"
     }
   ],
@@ -45,9 +40,15 @@
     "external_calls": [
       {
         "caller": "U8P_TAPESTNS::look",
-        "callee": "Item::bark",
-        "purpose": "Emit/display the short description string 'tapestry ' to the relevant process/player; receives the target item/process reference (BP+06h) and a temporary string argument.",
+        "callee": "Bark",
+        "purpose": "Display the short player-facing text 'tapestry'.",
         "confidence": "high"
+      },
+      {
+        "caller": "U8P_TAPESTNS::look",
+        "callee": "suspend",
+        "purpose": "Pause or yield the process immediately after the bark is shown.",
+        "confidence": "medium"
       }
     ]
   },
@@ -57,14 +58,12 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "animation",
-    "guard"
+    "description"
   ],
   "quick_facts": {
-    "main_function": "TAPESTNS::look",
-    "behavior_summary_one_liner": "When the tapestry item is examined (looked at), the script prepares object/process context, constructs the literal string \"tapestry \", and invokes the item's bark routine to produce the short description visible to the player.",
-    "external_call_count": 1,
+    "main_function": "U8P_TAPESTNS::look",
+    "behavior_summary_one_liner": "U8P_TAPESTNS::look is a short U8P_TAPESTNS::look/inspect handler that displays a single player-facing bark 'tapestry' and then suspends the process.",
+    "external_call_count": 2,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

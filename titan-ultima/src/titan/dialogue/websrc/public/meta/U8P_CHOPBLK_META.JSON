@@ -3,28 +3,22 @@
   "source_of_truth": "dialogue/json/U8P_CHOPBLK.json",
   "file": "U8P_CHOPBLK",
   "behavior_summary": [
-    "Handles the player's 'U8P_CHOPBLK::look' (examine) interaction with a chopping block item: it prepares the item/process state, causes the item to emit the short descriptive text \"chopping block \", and then marks the U8P_CHOPBLK::look event as handled/suspended so no further processing occurs for this interaction.",
-    "Uses a process-local sequence to set item info and exclude the process from further immediate processing in the context of this event (inferred from set-info/process-exclude opcodes).",
-    "Calls Item::bark to present the literal item name to the inspecting process; the bark return value is captured and fed into a short implies/pop sequence before the handler suspends."
+    "U8P_CHOPBLK::look is the object's U8P_CHOPBLK::look/inspection handler. When the player examines the chopping block, it displays a single short bark: \"chopping block\".",
+    "After showing the bark the process issues a suspend (inferred), which likely yields/waits until the player proceeds or the engine continues the process.",
+    "No menus, conditions, flags, parameters, locals, or external subsystem calls are present; the routine is purely descriptive UI feedback for inspection."
   ],
   "notable_control_flow": [
-    "Entry: the event handler runs on the 'U8P_CHOPBLK::look' event for the chopping block (triggered when the actor inspects the object).",
-    "Setup: initialize locals and execute set-info/process-exclude operations targeting the item/process (likely to mark the object as being inspected or to suppress concurrent processing).",
-    "Action: push the item/process pointer and a string literal \"chopping block \", call Item::bark to emit the text to the inspecting process.",
-    "Tear-down: free temporary string, use bark's return value in an implies/pop pattern and then execute suspend — indicating the event is treated as handled and processing is paused/terminated for this event."
+    "U8P_CHOPBLK::look -> emit a Bark node with text \"chopping block\".",
+    "U8P_CHOPBLK::look -> follow the Bark with a suspend/yield instruction (inferred from the presence of a Suspend/terminate node)."
   ],
-  "open_questions": [
-    "Which exact info id is being set by the set-info opcode and what persistent gameplay semantics (if any) does that info field represent?",
-    "Does process-exclude persist beyond the immediate handler (i.e., does it permanently exclude the item from some processing queues) or is it only for the duration of this event?",
-    "What is the semantic meaning of the implies/pop sequence using Item::bark's return value (control flow marker, conditional side-effect, or engine bookkeeping)?",
-    "Is the [BP+06h] parameter strictly the item process id (pid) in all call-sites, or can it sometimes be an alternate object reference in other contexts?"
-  ],
+  "open_questions": [],
   "main_function": {
     "name": "U8P_CHOPBLK::look",
     "execution_form": "process",
-    "purpose": "Respond to an actor's 'U8P_CHOPBLK::look' (examine) action on the chopping block by setting local/process info, making the item emit the short descriptive text \"chopping block \", and suspending further handling of the event.",
+    "purpose": "Provide the short descriptive text when the player examines the chopping block object.",
     "entry_conditions": [
-      "Event 0 — 'U8P_CHOPBLK::look' or examine action invoked on the chopping block item (player or actor inspects the object)."
+      "Invoked by the engine's U8P_CHOPBLK::look/inspect event for this object (process type 0x0208).",
+      "Also conceptually triggered when the player enters the object's fast-area for an inspection action (enterFastArea semantics inferred)."
     ],
     "confidence": "high"
   },
@@ -32,20 +26,13 @@
     {
       "name": "U8P_CHOPBLK::look",
       "kind": "main",
-      "role": "Event handler for the chopping block 'U8P_CHOPBLK::look' (examine) action; prepares object state, emits a descriptive message, and suspends further processing.",
+      "role": "object U8P_CHOPBLK::look/inspection handler — displays a single descriptive bark and yields",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_CHOPBLK::look",
-        "callee": "Item::bark",
-        "purpose": "Cause the item to emit/display the literal string \"chopping block \" to the inspecting process; return value is captured and used in a subsequent implies/pop sequence (likely engine bookkeeping or conditional suppression).",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -53,13 +40,13 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "guard"
+    "description",
+    "suspend"
   ],
   "quick_facts": {
-    "main_function": "U8P_CHOPBLK::CHOPBLK::look",
-    "behavior_summary_one_liner": "Handles the player's 'U8P_CHOPBLK::look' (examine) interaction with a chopping block item: it prepares the item/process state, causes the item to emit the short descriptive text \"chopping block \", and then marks the U8P_CHOPBLK::look event as handled/suspended so no further processing occurs for this interaction.",
-    "external_call_count": 1,
+    "main_function": "U8P_CHOPBLK::look",
+    "behavior_summary_one_liner": "U8P_CHOPBLK::look is the object's U8P_CHOPBLK::look/inspection handler. When the player examines the chopping block, it displays a single short bark: \"chopping block\".",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

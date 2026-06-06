@@ -3,28 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_DESKPICT.json",
   "file": "U8P_DESKPICT",
   "behavior_summary": [
-    "Responds to the 'U8P_DESKPICT::look' event for the desk-picture item by preparing and delivering a short description string ('painting ') to the viewer via the item's bark/display routine.",
-    "Before emitting the description it sets an info/config mask (constant 0x0208) and applies a process-exclude-like state to the object, likely to control how the bark/display is handled or to prevent re-entrance while the message is shown.",
-    "The routine constructs the literal string, calls Item::bark with the item and the string (targeted at the invoking PID), frees the constructed string, uses the bark return value in an implies operation, then suspends/returns."
+    "When the player uses the 'U8P_DESKPICT::look' (examine) verb on the DESKPICT object, the script emits a single short bark: \"painting \".",
+    "After showing the bark the process yields/suspends; there are no menus, branches, flags, or external calls in the excerpt.",
+    "The script functions as a minimal inspect/U8P_DESKPICT::look handler that provides a one-line description and then stops."
   ],
   "notable_control_flow": [
-    "Event trigger: runs on Event 0 (U8P_DESKPICT::look) for the desk-picture item.",
-    "Set info (constant 0x0208) then set process-exclude state on the object — acts as a guard/behavior modifier prior to output.",
-    "Construct string 'painting ', push PID and string, call external Item::bark, capture return value.",
-    "Free the temporary string, apply an implies operation using the bark return value, then suspend/return the process."
+    "Single-entry process (U8P_DESKPICT::look) triggered by the engine's U8P_DESKPICT::look/inspect action for this object (process-type 0x0208).",
+    "Linear flow: display bark text then suspend/yield; no conditional branches or additional actions present."
   ],
   "open_questions": [
-    "Exact semantics of info mask 0x0208: what precise display/behavior options it encodes is inferred but not confirmed.",
-    "Precise mapping of stack/frame params: BP+06h is inferred to be the desk-picture object instance ('this') and a pushed pid directs the bark, but exact calling convention details are not explicit.",
-    "Whether the process-exclude state is permanent or temporary for the duration of the bark operation, and whether it prevents only this object's processing or broader interactions.",
-    "Meaning and effect of the implies operation on the bark return value — inferred to influence control flow but exact semantics remain uncertain."
+    "Is the trailing space in the bark text \"painting \" intentional (formatting/concatenation artifact) or an extraction artifact?",
+    "Does the suspend represent a short pause for player readability or a termination of the U8P_DESKPICT::look process in the engine's semantics?",
+    "Are there any implicit engine-side conditions (e.g., fast-area entry/visibility) that gate invocation beyond the U8P_DESKPICT::look verb?"
   ],
   "main_function": {
     "name": "U8P_DESKPICT::look",
     "execution_form": "process",
-    "purpose": "Handle an item 'U8P_DESKPICT::look' event by presenting a short textual description ('painting ') to the viewing actor, with brief state/config adjustments around that action.",
+    "purpose": "Provide the short descriptive text when the player inspects/examines the DESKPICT object; then suspend the process.",
     "entry_conditions": [
-      "Event 0 — 'U8P_DESKPICT::look' invoked when a player or actor examines the desk picture (area/inspect trigger)."
+      "Invoked by the game's U8P_DESKPICT::look/examine action for this object (process-type 0x0208)."
     ],
     "confidence": "high"
   },
@@ -32,41 +29,25 @@
     {
       "name": "U8P_DESKPICT::look",
       "kind": "main",
-      "role": "Event handler for the desk-picture object's 'U8P_DESKPICT::look' action; prepares and emits the description string and manages temporary info/processing flags.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine used to display or emit a short message on behalf of an item/process; invoked to show 'painting '.",
+      "role": "Inspect/U8P_DESKPICT::look handler that displays a short descriptive bark and then suspends.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_DESKPICT::look",
-        "callee": "Item::bark",
-        "purpose": "Deliver the short description string ('painting ') to the specified pid/viewer via the item's display/bark mechanism.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
     "writes": []
   },
   "ui_tags": [
-    "trigger",
-    "cleanup",
-    "guard",
-    "animation"
+    "trigger"
   ],
   "quick_facts": {
-    "main_function": "DESKPICT::look",
-    "behavior_summary_one_liner": "Responds to the 'U8P_DESKPICT::look' event for the desk-picture item by preparing and delivering a short description string ('painting ') to the viewer via the item's bark/display routine.",
-    "external_call_count": 1,
+    "main_function": "U8P_DESKPICT::look",
+    "behavior_summary_one_liner": "When the player uses the 'U8P_DESKPICT::look' (examine) verb on the DESKPICT object, the script emits a single short bark: \"painting \".",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

@@ -3,26 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_VIVDAGR.json",
   "file": "U8P_VIVDAGR",
   "behavior_summary": [
-    "Responds to a 'U8P_VIVDAGR::look' (examine) event on the object by emitting a short descriptive text (a bark) reading \"ceremonial dagger \".",
-    "Sets object-level info/state to avoid duplicate or reentrant processing (inferred 'process exclude' behavior), then calls the item's bark routine addressed to the viewing process/player.",
-    "Frees the temporary string buffer after the bark call, performs a simple return-value/implication check, then suspends and returns control."
+    "U8P_VIVDAGR::look is a simple 'U8P_VIVDAGR::look' (examine) handler: when the player examines the object/NPC it displays a single player-facing text/bark \"ceremonial dagger \" and then suspends/ends the process.",
+    "There is no branching, no menu interaction, no global flag reads or writes, and no external function calls recorded.",
+    "The function's behavior is linear and purely descriptive — it appears to provide the short in-game description for an object labeled as a ceremonial dagger."
   ],
   "notable_control_flow": [
-    "Entry on the object's U8P_VIVDAGR::look/examine trigger; set object info/flags (process exclude) to guard against reentry before producing output (confidence: medium).",
-    "Prepare call: push the item/process as 'this' and the viewing pid, supply the literal string \"ceremonial dagger \", and invoke external Item::bark (confidence: high).",
-    "After Item::bark returns, free the string, evaluate the returned value via an implies/pop sequence (purpose inferred as minor control/cleanup), suspend, and then return (confidence: medium)."
+    "Linear sequence: enter U8P_VIVDAGR::look process -> emit single Bark \"ceremonial dagger \" -> suspend/terminate process.",
+    "No conditional branches, loops, or menu-driven paths are present."
   ],
   "open_questions": [
-    "Exactly which info/state bit(s) are set by the 'set info' and 'process exclude' opcodes and whether they have side effects beyond guarding reentrancy (confidence: low).",
-    "What precise meaning/control is encoded by the bark return value and the implies/pop check — is it used for branching in other contexts or purely discarded here (confidence: medium).",
-    "Are there additional events this script handles beyond Event 0 (U8P_VIVDAGR::look) that are not present in the disassembly snippet (confidence: low)."
+    "The displayed text contains a trailing space (\"ceremonial dagger \"); is this intentional (padding/concatenation) or an artifact of extraction?",
+    "Unknown nodes present in the raw indicate low-confidence remnants (\"{\" and \"suspend\"); do they represent any subtle behavior not captured by the structured Bark + suspend interpretation?"
   ],
   "main_function": {
     "name": "U8P_VIVDAGR::look",
     "execution_form": "process",
-    "purpose": "Handle the item's 'U8P_VIVDAGR::look' (examine) event by preventing duplicate processing and producing a short descriptive bark 'ceremonial dagger ' directed at the viewer/process.",
+    "purpose": "Provide the short description when the player examines/looks at the object/NPC; present a single descriptive text and then suspend the U8P_VIVDAGR::look process.",
     "entry_conditions": [
-      "Event 0: invoked when an actor/player looks at or examines the object (fast-area entry interpreted as the U8P_VIVDAGR::look trigger)."
+      "Invoked when the player uses the 'U8P_VIVDAGR::look' (examine) action on the associated object/NPC.",
+      "Also callable by engine U8P_VIVDAGR::look-type triggers/fast-area entry that map to processType 0x0208."
     ],
     "confidence": "high"
   },
@@ -30,26 +29,13 @@
     {
       "name": "U8P_VIVDAGR::look",
       "kind": "main",
-      "role": "U8P_VIVDAGR::look/examine event handler for the ceremonial dagger object",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "engine/item API used to display/emit a short text (bark) to a process/player",
+      "role": "Handles the object's U8P_VIVDAGR::look/examine event: emits description text and suspends.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_VIVDAGR::look",
-        "callee": "Item::bark",
-        "purpose": "Ask the item to display/emit the short description string \"ceremonial dagger \" to the viewing process/player (passed pid and item as 'this').",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -57,13 +43,13 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "guard"
+    "description",
+    "suspend"
   ],
   "quick_facts": {
-    "main_function": "VIVDAGR::look",
-    "behavior_summary_one_liner": "Responds to a 'U8P_VIVDAGR::look' (examine) event on the object by emitting a short descriptive text (a bark) reading \"ceremonial dagger \".",
-    "external_call_count": 1,
+    "main_function": "U8P_VIVDAGR::look",
+    "behavior_summary_one_liner": "U8P_VIVDAGR::look is a simple 'U8P_VIVDAGR::look' (examine) handler: when the player examines the object/NPC it displays a single player-facing text/bark \"ceremonial dagger \" and then suspends/ends the process.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

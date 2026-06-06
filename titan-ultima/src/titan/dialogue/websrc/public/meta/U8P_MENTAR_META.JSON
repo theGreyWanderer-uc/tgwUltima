@@ -3,26 +3,29 @@
   "source_of_truth": "dialogue/json/U8P_MENTAR.json",
   "file": "U8P_MENTAR",
   "behavior_summary": [
-    "Provides event handlers for a Mentar sorcerer-type object that delegate all meaningful gameplay behavior to centralized sorcerer and spell-combat routines rather than implementing logic inline.",
-    "On U8P_MENTAR::look (examine), use, enterFastArea, leaveFastArea, and cast events the script prepares a context and an object info block, marks/excludes the object from normal processing, then spawns an external handler to perform the actual behavior.",
-    "The script forwards an implicit pid, a context pointer, an object info/state block, and (for cast) a uword parameter to the external routines; it then checks the spawned return value with an 'implies' test before suspending/returning."
+    "This script is a thin glue layer for a sorcerer NPC. Its processes mostly forward engine events to shared sorcerer and spell-combat routines rather than implement behavior locally.",
+    "U8P_MENTAR::look delegates U8P_MENTAR::look/update logic to SORCERER::func039C when the engine queries or updates the NPC's perception.",
+    "U8P_MENTAR::use forwards 'U8P_MENTAR::use' interactions to SORCERER::func05EC.",
+    "Fast-area triggers are handled: U8P_MENTAR::enterFastArea notifies the sorcerer AI of an entering actor via SORCERER::sorcererDetectPlayer, and U8P_MENTAR::leaveFastArea resets activity via SORCERER::sorcererResetActivity.",
+    "U8P_MENTAR::cast hands off casting to SPELCMBT::combatSpellLoop (likely passing its parameter) and then yields."
   ],
   "notable_control_flow": [
-    "Each event handler follows a repeatable sequence: push context ([BP+06h]) and object info (push indirect 02h bytes) -> set info / process exclude -> push pid and other args -> spawn external routine -> free temporary string (if used) -> pop/spawn retval -> implies check -> suspend/return.",
-    "Handlers do not perform local game-logic branching; they act as thin wrappers that forward to SORCERER or SPELCMBT modules.",
-    "The 'cast' handler forwards a cast parameter (uword) in addition to the standard context/info/pid stack used by other events."
+    "All process entry points immediately call external subsystem routines (SORCERER or SPELCMBT) and then suspend — the script itself contains no branching or state changes.",
+    "U8P_MENTAR::enterFastArea and U8P_MENTAR::leaveFastArea act as event triggers that call detection/reset routines for the sorcerer AI.",
+    "U8P_MENTAR::cast is an entry point for spellcasting that delegates to the shared combat spell loop; parameter passing is present but the meaning is inferred."
   ],
   "open_questions": [
-    "The exact binary layout and semantics of the 'object info' pushed via 'push indirect 02h bytes' is not explicit; it appears to be an object instance or info block but its fields are unknown (inferred).",
-    "Exact parameter order and full signature (types) of the external routines SORCERER::039C, SORCERER::05EC, SORCERER::258C, SORCERER::25D2, and SPELCMBT::084D are inferred from calling convention but not documented concretely.",
-    "Meaning of any 'info id' set by the 'set info' opcode prior to spawning the handlers is not shown in the disassembly and is therefore only inferred as a processing flag/state marker."
+    "What concrete value/meaning does the uword parameter to U8P_MENTAR::cast (param1) carry — likely a spell id or code but not confirmed.",
+    "Which in-game events (AI scheduler vs. direct player action) call U8P_MENTAR::cast in typical encounters?",
+    "Are there any higher-level global flags or state changes elsewhere in the codebase triggered by the called SORCERER or SPELCMBT routines that affect this NPC?"
   ],
   "main_function": {
     "name": "U8P_MENTAR::look",
     "execution_form": "process",
-    "purpose": "Handle the 'U8P_MENTAR::look' (examine) event for the Mentar object by preparing context and object info, excluding the object from processing, and spawning a centralized sorcerer routine (SORCERER::039C) to perform the actual presentation/logic.",
+    "purpose": "Serve as the NPC's 'U8P_MENTAR::look' / update entry point and delegate perception/AI U8P_MENTAR::look logic to a shared sorcerer handler.",
     "entry_conditions": [
-      "Event 0 (object looked at / examine)"
+      "Invoked by the engine when the NPC is examined or the game updates NPC perception (U8P_MENTAR::look/update process).",
+      "Acts as the canonical U8P_MENTAR::look handler for this sorcerer-type NPC and immediately forwards to SORCERER::func039C."
     ],
     "confidence": "high"
   },
@@ -30,62 +33,62 @@
     {
       "name": "U8P_MENTAR::look",
       "kind": "main",
-      "role": "Main event handler for examine/U8P_MENTAR::look; packages context and object info and spawns SORCERER::039C to implement the behavior.",
+      "role": "U8P_MENTAR::look/update entry point that delegates to sorcerer-specific handler",
       "confidence": "high"
     },
     {
       "name": "U8P_MENTAR::use",
       "kind": "helper",
-      "role": "Event handler for 'use' that delegates to SORCERER::05EC after preparing context and object info.",
+      "role": "utility entry point for 'U8P_MENTAR::use' interactions; delegates to sorcerer utility",
       "confidence": "high"
     },
     {
       "name": "U8P_MENTAR::enterFastArea",
       "kind": "helper",
-      "role": "Triggered when an actor enters the object's fast-area trigger; delegates to SORCERER::258C.",
+      "role": "fast-area trigger; notifies sorcerer AI of entering actor",
       "confidence": "high"
     },
     {
       "name": "U8P_MENTAR::leaveFastArea",
       "kind": "helper",
-      "role": "Triggered when an actor leaves the object's fast-area trigger; delegates to SORCERER::25D2.",
+      "role": "fast-area exit trigger; requests sorcerer activity reset",
       "confidence": "high"
     },
     {
       "name": "U8P_MENTAR::cast",
       "kind": "helper",
-      "role": "Handles spell-cast/combat event by forwarding the cast parameter and context to SPELCMBT::084D.",
+      "role": "initiates spellcasting by delegating to the combat spell loop (accepts a uword parameter)",
+      "confidence": "medium"
+    },
+    {
+      "name": "SORCERER::func039C",
+      "kind": "extern",
+      "role": "external sorcerer handler for U8P_MENTAR::look/update (called by U8P_MENTAR::look)",
       "confidence": "high"
     },
     {
-      "name": "SORCERER::039C",
+      "name": "SORCERER::func05EC",
       "kind": "extern",
-      "role": "External routine that implements the U8P_MENTAR::look/examine behavior for sorcerer-type objects (receives pid, identifier 'Mentar', context, object info).",
-      "confidence": "medium"
+      "role": "external sorcerer utility for U8P_MENTAR::use interactions (called by U8P_MENTAR::use)",
+      "confidence": "high"
     },
     {
-      "name": "SORCERER::05EC",
+      "name": "SORCERER::sorcererDetectPlayer",
       "kind": "extern",
-      "role": "External routine that implements 'use' behavior for sorcerer-type objects.",
-      "confidence": "medium"
+      "role": "detect player presence / update AI state (called by U8P_MENTAR::enterFastArea)",
+      "confidence": "high"
     },
     {
-      "name": "SORCERER::258C",
+      "name": "SORCERER::sorcererResetActivity",
       "kind": "extern",
-      "role": "External handler invoked on fast-area entry for sorcerer-type objects.",
-      "confidence": "medium"
+      "role": "reset sorcerer activity/state (called by U8P_MENTAR::leaveFastArea)",
+      "confidence": "high"
     },
     {
-      "name": "SORCERER::25D2",
+      "name": "SPELCMBT::combatSpellLoop",
       "kind": "extern",
-      "role": "External handler invoked on fast-area exit for sorcerer-type objects.",
-      "confidence": "medium"
-    },
-    {
-      "name": "SPELCMBT::084D",
-      "kind": "extern",
-      "role": "External spell-combat handler invoked by the cast event; receives the cast parameter plus pid/context/object info.",
-      "confidence": "medium"
+      "role": "shared combat spellcasting loop invoked by U8P_MENTAR::cast",
+      "confidence": "high"
     }
   ],
   "call_analysis": {
@@ -93,33 +96,33 @@
     "external_calls": [
       {
         "caller": "U8P_MENTAR::look",
-        "callee": "SORCERER::039C",
-        "purpose": "Delegate presentation/logic for examining the Mentar object (passes implicit pid, 'Mentar' identifier, context, and object info).",
+        "callee": "SORCERER::func039C",
+        "purpose": "Perform the sorcerer-specific U8P_MENTAR::look/update logic for the NPC (delegation)",
         "confidence": "high"
       },
       {
         "caller": "U8P_MENTAR::use",
-        "callee": "SORCERER::05EC",
-        "purpose": "Delegate the 'use' event behavior for Mentar (passes pid, 'Mentar', context, object info).",
+        "callee": "SORCERER::func05EC",
+        "purpose": "Handle sorcerer-specific 'U8P_MENTAR::use' interaction behavior (delegation)",
         "confidence": "high"
       },
       {
         "caller": "U8P_MENTAR::enterFastArea",
-        "callee": "SORCERER::258C",
-        "purpose": "Handle an actor entering the object's trigger area by delegating to a centralized sorcerer area-entry routine.",
+        "callee": "SORCERER::sorcererDetectPlayer",
+        "purpose": "Notify sorcerer AI that an actor (likely the player) has entered the fast-area trigger so it can respond (alert/engage)",
         "confidence": "high"
       },
       {
         "caller": "U8P_MENTAR::leaveFastArea",
-        "callee": "SORCERER::25D2",
-        "purpose": "Handle an actor leaving the object's trigger area by delegating to a centralized sorcerer area-exit routine.",
+        "callee": "SORCERER::sorcererResetActivity",
+        "purpose": "Request that the sorcerer AI reset its activity/state when the actor leaves range",
         "confidence": "high"
       },
       {
         "caller": "U8P_MENTAR::cast",
-        "callee": "SPELCMBT::084D",
-        "purpose": "Forward the cast parameter and context to the spell-combat handler to perform spell-specific behavior for this object.",
-        "confidence": "high"
+        "callee": "SPELCMBT::combatSpellLoop",
+        "purpose": "Run the NPC's combat spellcasting loop, likely consuming the uword parameter as a spell identifier (inferred)",
+        "confidence": "medium"
       }
     ]
   },
@@ -135,7 +138,7 @@
   ],
   "quick_facts": {
     "main_function": "U8P_MENTAR::look",
-    "behavior_summary_one_liner": "Provides event handlers for a Mentar sorcerer-type object that delegate all meaningful gameplay behavior to centralized sorcerer and spell-combat routines rather than implementing logic inline.",
+    "behavior_summary_one_liner": "This script is a thin glue layer for a sorcerer NPC. Its processes mostly forward engine events to shared sorcerer and spell-combat routines rather than implement behavior locally.",
     "external_call_count": 5,
     "flag_read_count": 0,
     "flag_write_count": 0

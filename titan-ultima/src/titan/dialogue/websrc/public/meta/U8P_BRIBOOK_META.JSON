@@ -3,44 +3,37 @@
   "source_of_truth": "dialogue/json/U8P_BRIBOOK.json",
   "file": "U8P_BRIBOOK",
   "behavior_summary": [
-    "Presents the full BRIBOOK text to the engine's book-reader routine so a player/actor can read the book.",
-    "Initializes some item/display metadata (via a 'set info' opcode) before creating the temporary string containing the book text.",
-    "Creates a large literal string (the book content), converts it to a pointer, calls Book::read with that pointer and a caller-supplied buffer/context, then frees the temporary string.",
-    "Propagates the return value from Book::read as this routine's return value, executes a suspend, and then returns."
+    "U8P_BRIBOOK::func0080 starts a Book::read process to display a long in-game book text (the biography/story of 'Moriens') to the player and then suspends until that reader process completes.",
+    "There is no branching, menu, or flag manipulation; the routine simply launches the reader UI with the provided string and waits for the read process to finish."
   ],
   "notable_control_flow": [
-    "Executes a 'set info' opcode prior to pushing the book text (initialization of display/item metadata).",
-    "Allocates or materializes a large literal string for the book, converts it to a pointer and passes it to Book::read.",
-    "Calls Book::read and captures its return value, then frees the temporary string buffer.",
-    "Performs a suspend before returning the Book::read result to the caller."
+    "Call Book::read with (pointer to long Moriens text, this) and store returned pid in local 'temp'.",
+    "Suspend the current script/process until the Book::read process (pid stored in temp) completes."
   ],
   "open_questions": [
-    "Which exact info field is being set by the 'set info' opcode and how does it affect book presentation or item state?",
-    "What is the precise meaning/structure of the caller-supplied buffer_ptr passed at BP+06h (UI buffer, book object, or caller context)?",
-    "Are there any side effects of Book::read beyond display (e.g., logging progress, advancing quests) that this script relies on?",
-    "Is the large literal stored in script data or allocated at runtime, and are there edge cases in memory management for very long texts?"
+    "Exact event that invokes U8P_BRIBOOK::func0080 is not present in the excerpt — inferred to be 'player uses/reads the book' (confidence: medium).",
+    "Whether any other scripts check the returned pid or interact with the Book::read process instance is not visible in this excerpt (confidence: low)."
   ],
   "main_function": {
-    "name": "U8P_BRIBOOK::0080",
+    "name": "U8P_BRIBOOK::func0080",
     "execution_form": "process",
-    "purpose": "Prepare and supply the BRIBOOK narrative text to the engine's book-reading routine so the player/actor can read the book; manage temporary string lifecycle and return the reader's result.",
+    "purpose": "Launch the book-reading/display routine to show a long book text (Moriens biography) to the player and wait for it to finish.",
     "entry_conditions": [
-      "Triggered when the in-game book item is activated/used (player or actor opens/reads the book).",
-      "Inferred: invoked by an item use/read event mapped to the BRIBOOK script."
+      "Inferred: invoked when the player uses/opens/reads the book object (object-use/read trigger)."
     ],
     "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_BRIBOOK::0080",
+      "name": "U8P_BRIBOOK::func0080",
       "kind": "main",
-      "role": "Provide book text, initialize display metadata, call Book::read, and manage the temporary string lifecycle.",
+      "role": "Starts an external Book::read process to present book content and then suspends until completion.",
       "confidence": "high"
     },
     {
       "name": "Book::read",
       "kind": "extern",
-      "role": "Engine routine to render/process/display the provided book text to the player; returns a status/result propagated by BRIBOOK::0080.",
+      "role": "External engine/utility function that displays provided text as a readable book UI and returns a process id for that reader instance.",
       "confidence": "high"
     }
   ],
@@ -48,9 +41,9 @@
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_BRIBOOK::0080",
+        "caller": "U8P_BRIBOOK::func0080",
         "callee": "Book::read",
-        "purpose": "Render/process/display the supplied book text to the player; receives a pointer to the temporary string and a caller-supplied buffer/context pointer and returns a result propagated by the script.",
+        "purpose": "Display the full Moriens biography text to the player; returns a pid used to suspend until the reading UI is closed.",
         "confidence": "high"
       }
     ]
@@ -61,11 +54,13 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup"
+    "cleanup",
+    "animation",
+    "guard"
   ],
   "quick_facts": {
-    "main_function": "BRIBOOK::0080",
-    "behavior_summary_one_liner": "Presents the full BRIBOOK text to the engine's book-reader routine so a player/actor can read the book.",
+    "main_function": "U8P_BRIBOOK::func0080",
+    "behavior_summary_one_liner": "U8P_BRIBOOK::func0080 starts a Book::read process to display a long in-game book text (the biography/story of 'Moriens') to the player and then suspends until that reader process completes.",
     "external_call_count": 1,
     "flag_read_count": 0,
     "flag_write_count": 0

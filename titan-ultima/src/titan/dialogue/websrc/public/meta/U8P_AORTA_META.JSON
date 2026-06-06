@@ -3,29 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_AORTA.json",
   "file": "U8P_AORTA",
   "behavior_summary": [
-    "U8P_AORTA::look is an Event 0 (U8P_AORTA::look/examine) handler for the AORTA item that presents a short descriptive text to the viewer: the literal string \"Zealan ceremonial shield \".",
-    "Before presenting text it performs the usual item 'set info' / 'process exclude' opcodes (engine-level bookkeeping to mark info/state and exclude the object from some processing), then calls Item::bark to deliver the description to the invoking process (caller PID).",
-    "After barking it frees the temporary string, pushes a truthy return value and performs an implies/pop sequence (inferred to return/acknowledge success), then suspends/returns control."
+    "When the player uses the U8P_AORTA::look/examine action on the AORTA object/entity, the script emits a single short description line: \"Zealan ceremonial shield \".",
+    "The U8P_AORTA::look handler is a process-type function that displays the bark and then immediately suspends/ends; there is no branching, menu interaction, or state mutation.",
+    "No global flags, parameters, locals, or external calls are used by this script; behavior is self-contained and purely descriptive."
   ],
   "notable_control_flow": [
-    "Entry is driven by Event 0 (U8P_AORTA::look) and expects a caller PID parameter.",
-    "Performs set-info and process-exclude engine operations prior to producing output (likely to set an examine-state or prevent reprocessing).",
-    "Calls external Item::bark with (caller_pid, \"Zealan ceremonial shield \") and then cleans up the message buffer.",
-    "Pushes a truthy return value and uses an implies/pop sequence — interpreted as returning an acknowledgement to the caller before suspend/return."
+    "U8P_AORTA::look runs as a process (U8P_AORTA::look/examine handler), executes a single Bark node, and then issues a suspend/terminate — i.e., one-step linear flow.",
+    "There are no conditional branches, menu prompts, or follow-up processes triggered by this function."
   ],
   "open_questions": [
-    "Exact semantic meaning and numeric id of the set-info opcode used (what in-game state 0x210 or similar corresponds to).",
-    "Precise semantics of the implies/pop sequence and whether the pushed value is consumed by engine flow or used by callers (interpreted but not proven).",
-    "Whether the set info / process exclude calls modify any global flags or persistent quest state (no globals observed in the disassembly for this script).",
-    "Whether any conditional branching can prevent the bark call under rarer circumstances (disassembly snippet shows the straightforward path only)."
+    "The bark text contains a trailing space (\"Zealan ceremonial shield \"); is this intentional (e.g., concatenated elsewhere) or a minor text artifact?",
+    "Is AORTA an inventory item, static world object, or NPC-mounted item? The script only provides a descriptive line and does not disambiguate the entity type.",
+    "Are there other processes (use/activate) associated with this entity elsewhere in data that would change behavior beyond this U8P_AORTA::look handler?"
   ],
   "main_function": {
     "name": "U8P_AORTA::look",
     "execution_form": "process",
-    "purpose": "When a player/actor 'looks at' the AORTA item, present a short description ('Zealan ceremonial shield ') to that actor and return a truthy acknowledgement; also perform item info/state bookkeeping (set-info / process-exclude) before display.",
+    "purpose": "Provide the short examination description shown to the player when they 'U8P_AORTA::look' at the AORTA entity.",
     "entry_conditions": [
-      "Triggered by Event 0 (U8P_AORTA::look/examine) targeted at this item.",
-      "Requires caller PID passed as a parameter (viewer/actor process id)."
+      "Invoked by the engine when the player performs the U8P_AORTA::look/examine action on the AORTA object (inferred from process type 0x0208 and function classification 'U8P_AORTA::look')."
     ],
     "confidence": "high"
   },
@@ -33,26 +29,13 @@
     {
       "name": "U8P_AORTA::look",
       "kind": "main",
-      "role": "Event 0 handler — display item description and perform item bookkeeping",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine used to display/emote text from the item to the given process/player",
+      "role": "examine/U8P_AORTA::look handler that displays a single descriptive bark",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_AORTA::look",
-        "callee": "Item::bark",
-        "purpose": "Deliver the examine/U8P_AORTA::look text to the invoking process; called with (caller_pid, \"Zealan ceremonial shield \").",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -60,14 +43,13 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "animation",
-    "guard"
+    "examine",
+    "short_description"
   ],
   "quick_facts": {
     "main_function": "U8P_AORTA::look",
-    "behavior_summary_one_liner": "U8P_AORTA::look is an Event 0 (U8P_AORTA::look/examine) handler for the AORTA item that presents a short descriptive text to the viewer: the literal string \"Zealan ceremonial shield \".",
-    "external_call_count": 1,
+    "behavior_summary_one_liner": "When the player uses the U8P_AORTA::look/examine action on the AORTA object/entity, the script emits a single short description line: \"Zealan ceremonial shield \".",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

@@ -3,37 +3,40 @@
   "source_of_truth": "dialogue/json/U8P_BRIBOOK4.json",
   "file": "U8P_BRIBOOK4",
   "behavior_summary": [
-    "When this book object is activated/read, the script sets an in-game info flag to mark discovery/progression and presents a long explanatory book text to the player.",
-    "The displayed text directs the player toward the Slayer and mentions a cousin who can provide the Slayer's location.",
-    "After constructing the text, the script calls the engine Book::read(book_ptr, string_ptr, pid) to show the UI, frees the constructed string, inspects Book::read's return value (via an implies-style check), then suspends/returns."
+    "U8P_BRIBOOK4::func0080 launches a Book::read process to show a hard-coded book text (a teaser/instructional passage referencing the 'Slayer') to the player.",
+    "The function captures the returned process id into a local variable named 'temp' and then suspends, yielding until the spawned read/display process completes or yields.",
+    "No global flags are read or written by this code; behavior is limited to spawning the read UI/process and waiting for it."
   ],
   "notable_control_flow": [
-    "Entry on book-read activation of the book object.",
-    "Immediate write of an info/quest state (via 'set info', inferred id 1) to mark this book as seen/processed.",
-    "Dynamic construction of a long text buffer which is passed to Book::read along with the book object pointer and the player id (pid).",
-    "Post-call cleanup of the constructed string and an inspection of the Book::read return (used in an implies/pop sequence) before suspending."
+    "Call Book::read(pointer_to_hardcoded_string, this) -> return stored in local 'temp'.",
+    "Immediate suspend after spawning the read process (function yields control to the read UI/process).",
+    "No conditional branches, menu interactions, or flag modifications are present in the snippet."
   ],
   "open_questions": [
-    "The exact game-level meaning of the info id written (inferred as id 1) — which quest/flag it maps to in higher-level design is not explicit.",
-    "Which subsystem/function actually frees the constructed string buffer (the disassembly shows a free step but the concrete runtime function is not named in the canonical facts).",
-    "Whether the Book::read return value influences additional logic elsewhere (only an implies/pop observed here; no further branching in this script).",
-    "Which player/process id (pid) value is supplied in all contexts (single-player vs. multiplayer semantics) — only a pid parameter is observed."
+    "Exact trigger/entry: the snippet does not show how/when U8P_BRIBOOK4::func0080 is invoked (likely on player 'use' or 'read' of the book item, but this is inferred).",
+    "Process classification ambiguity: metadata lists process_type 0x0001 but 'is_process' false; whether the function is registered as a persistent engine process or a simple handler is not explicit.",
+    "Whether the hard-coded text string is localized or references other data (we only have the raw English text in the disassembly)."
   ],
   "main_function": {
-    "name": "U8P_BRIBOOK4::0080",
+    "name": "U8P_BRIBOOK4::func0080",
     "execution_form": "process",
-    "purpose": "Handle the book 'read' activation: mark an in-game info/quest state and present the book's full text to the invoking player via Book::read, then perform cleanup and suspend.",
+    "purpose": "Start a Book::read display process with a specific hard-coded book text (instructions/teaser about the Slayer) and suspend until that read process yields/completes.",
     "entry_conditions": [
-      "Activated when the book object is read/activated by the player (book-read event).",
-      "Called with a book pointer/handle (book_ptr) and a pid identifying the viewing player/process."
+      "Inferred: invoked when the player uses/reads/activates the book item or object in the game world."
     ],
-    "confidence": "high"
+    "confidence": "medium"
   },
   "function_map": [
     {
-      "name": "U8P_BRIBOOK4::0080",
+      "name": "U8P_BRIBOOK4::func0080",
       "kind": "main",
-      "role": "Book read handler that marks an info flag and displays a long explanatory text via Book::read.",
+      "role": "Spawns an in-game book read/display process with a fixed message and suspends until completion.",
+      "confidence": "high"
+    },
+    {
+      "name": "Book::read",
+      "kind": "extern",
+      "role": "Engine/UI service that creates a read/display process for in-game books and returns a process id.",
       "confidence": "high"
     }
   ],
@@ -41,40 +44,16 @@
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_BRIBOOK4::0080",
-        "callee": "U8P_BRIBOOK4::set info",
-        "purpose": "Engine/script opcode used to write an info/quest flag (inferred id 1) on the object to record that the book has been seen or processed.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_BRIBOOK4::0080",
+        "caller": "U8P_BRIBOOK4::func0080",
         "callee": "Book::read",
-        "purpose": "Open the book-reading UI and display the dynamically constructed book text to the player; parameters: book_ptr, pointer-to-text, pid. Return value is observed and used in an implies/pop sequence.",
+        "purpose": "Display the provided book text to the player by spawning a read/display process; returns a process id which is stored locally.",
         "confidence": "high"
-      },
-      {
-        "caller": "U8P_BRIBOOK4::0080",
-        "callee": "suspend",
-        "purpose": "Engine operation that suspends the script/process after handling the read and cleanup.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_BRIBOOK4::0080",
-        "callee": "U8P_BRIBOOK4::string-free (unnamed/free step)",
-        "purpose": "A runtime free/cleanup of the dynamically constructed text buffer after Book::read returns (callee not explicitly named in canonical facts; inferred cleanup behavior).",
-        "confidence": "medium"
       }
     ]
   },
   "global_flags": {
     "reads": [],
-    "writes": [
-      {
-        "name": "info flag (id 1)",
-        "likely_effect": "Marks that the player has read/seen this book or progressed the related Slayer information; prevents redundant discovery or drives quest/dialog state.",
-        "confidence": "medium"
-      }
-    ]
+    "writes": []
   },
   "ui_tags": [
     "trigger",
@@ -83,11 +62,11 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_BRIBOOK4::0080",
-    "behavior_summary_one_liner": "When this book object is activated/read, the script sets an in-game info flag to mark discovery/progression and presents a long explanatory book text to the player.",
-    "external_call_count": 4,
+    "main_function": "U8P_BRIBOOK4::func0080",
+    "behavior_summary_one_liner": "U8P_BRIBOOK4::func0080 launches a Book::read process to show a hard-coded book text (a teaser/instructional passage referencing the 'Slayer') to the player.",
+    "external_call_count": 1,
     "flag_read_count": 0,
-    "flag_write_count": 1
+    "flag_write_count": 0
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

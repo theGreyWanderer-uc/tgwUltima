@@ -3,27 +3,29 @@
   "source_of_truth": "dialogue/json/U8P_EMRICHOL.json",
   "file": "U8P_EMRICHOL",
   "behavior_summary": [
-    "This script implements Emrichol NPC event stubs that delegate almost all gameplay logic to shared SORCERER-class handlers and a spell-combat handler.",
-    "U8P_EMRICHOL::look, ::use, ::enterFastArea, and ::leaveFastArea prepare object context, mark the object as excluded from normal processing, push identifying data (including the literal \"Emrichol\") and spawn corresponding SORCERER handlers to perform the actual interaction/area behavior.",
-    "U8P_EMRICHOL::cast forwards a spell id and the actor/context to SPELCMBT::084D to perform the spell-casting mechanics.",
-    "After spawning the external handler the script frees any pushed string, processes the spawn return via an implies/pop pattern, and suspends — indicating a handoff of control to the spawned handler."
+    "This NPC (Emrichol) delegates most behavior to shared sorcerer routines rather than containing bespoke logic.",
+    "U8P_EMRICHOL::look handles player 'examine' / U8P_EMRICHOL::look events by calling a shared sorcerer inspect routine and then suspending.",
+    "U8P_EMRICHOL::use delegates interaction handling to a shared sorcerer utility routine and then suspends.",
+    "U8P_EMRICHOL::enterFastArea and U8P_EMRICHOL::leaveFastArea are proximity triggers that call sorcerer detection/reset routines to start or stop NPC activity when an actor enters or leaves the fast trigger region.",
+    "U8P_EMRICHOL::cast forwards a numeric parameter to the combat spell engine (SPELCMBT::combatSpellLoop) to execute spell effects."
   ],
   "notable_control_flow": [
-    "Each event handler sets per-object info (push indirect 02h) and sets a process-exclude before spawning an external handler — ensuring the object is in an appropriate state before delegation (high confidence).",
-    "Delegation pattern: spawn(external_handler, actor/context, pid, [optional string or spell id]) → free string if allocated → implies/pop retval → suspend; this repeats across events (high confidence).",
-    "No local game-state modifications or global flags are written by this script itself; it acts as a thin wrapper and delegator (high confidence)."
+    "Each public process in this script (U8P_EMRICHOL::look, U8P_EMRICHOL::use, U8P_EMRICHOL::enterFastArea, U8P_EMRICHOL::leaveFastArea, U8P_EMRICHOL::cast) immediately forwards to a shared external routine and then suspends — the script itself contains no branching, menus, or dialogue in the excerpt.",
+    "Proximity handling is separated into fast-area entry/exit: U8P_EMRICHOL::enterFastArea -> SORCERER::sorcererDetectPlayer, U8P_EMRICHOL::leaveFastArea -> SORCERER::sorcererResetActivity.",
+    "Casting is performed by forwarding the provided uword parameter to SPELCMBT::combatSpellLoop; the script acts as a simple adapter for combat spell execution."
   ],
   "open_questions": [
-    "What exact semantics does the pushed object-info (push indirect 02h) encode for the SORCERER handlers? (inferred use but exact meaning unknown).",
-    "Which exact actor/process id is contained in [BP+06h] in all contexts — is it always the player Avatar or can it be other processes? (likely Avatar but not certain).",
-    "Are there additional side effects performed by the invoked SORCERER::039C / 05EC / 258C / 25D2 handlers that depend on other hidden object fields set elsewhere? (unknown)."
+    "What exact game-facing text or description (if any) SORCERER::func039C displays when U8P_EMRICHOL::look is invoked — the script delegates this so the visible output is in the shared routine (appears likely but not shown).",
+    "What specific behaviors SORCERER::func05EC implements for 'U8P_EMRICHOL::use' interactions (conversation, trading, or other interaction) — the script only delegates to it.",
+    "What the numeric parameter passed into U8P_EMRICHOL::cast maps to (a spell id or spell slot) and which concrete spells Emrichol can U8P_EMRICHOL::cast are not present in this excerpt (likely a spell id but low confidence)."
   ],
   "main_function": {
     "name": "U8P_EMRICHOL::look",
     "execution_form": "process",
-    "purpose": "Handle the player/actor looking at Emrichol by preparing object context and delegating the actual dialog/response to a shared SORCERER dialog/interaction handler.",
+    "purpose": "Handle the player examining or targeting Emrichol by delegating to a shared sorcerer inspect routine.",
     "entry_conditions": [
-      "Event 0: triggered when the Avatar (or relevant actor) looks at or inspects the Emrichol NPC (inferred from standard 'U8P_EMRICHOL::look' event pattern)."
+      "Invoked by the engine when the player issues a 'U8P_EMRICHOL::look' / examine action on this NPC.",
+      "Runs as the NPC's U8P_EMRICHOL::look handler (process type 0x0208)."
     ],
     "confidence": "high"
   },
@@ -31,61 +33,61 @@
     {
       "name": "U8P_EMRICHOL::look",
       "kind": "main",
-      "role": "Prepare context and delegate NPC 'U8P_EMRICHOL::look' interaction to SORCERER::039C",
+      "role": "Examine/U8P_EMRICHOL::look handler that delegates to SORCERER::func039C.",
       "confidence": "high"
     },
     {
       "name": "U8P_EMRICHOL::use",
       "kind": "helper",
-      "role": "Prepare context and delegate 'use' interaction to SORCERER::05EC",
+      "role": "Use/interaction handler that delegates to SORCERER::func05EC.",
       "confidence": "high"
     },
     {
       "name": "U8P_EMRICHOL::enterFastArea",
       "kind": "helper",
-      "role": "Prepare context and delegate fast-area entry behavior to SORCERER::258C",
+      "role": "Fast-area entry trigger that calls SORCERER::sorcererDetectPlayer to begin proximity behavior.",
       "confidence": "high"
     },
     {
       "name": "U8P_EMRICHOL::leaveFastArea",
       "kind": "helper",
-      "role": "Prepare context and delegate fast-area exit behavior to SORCERER::25D2",
+      "role": "Fast-area exit trigger that calls SORCERER::sorcererResetActivity to stop/clear proximity behavior.",
       "confidence": "high"
     },
     {
       "name": "U8P_EMRICHOL::cast",
       "kind": "helper",
-      "role": "Forward spell-cast requests (uword spell id) to SPELCMBT::084D while preparing context",
+      "role": "Spell-casting adapter that forwards a uword parameter to SPELCMBT::combatSpellLoop to execute the spell.",
       "confidence": "high"
     },
     {
-      "name": "SORCERER::039C",
+      "name": "SORCERER::func039C",
       "kind": "extern",
-      "role": "External dialog/interaction handler invoked for 'U8P_EMRICHOL::look' (provided by shared SORCERER logic)",
+      "role": "Shared sorcerer 'U8P_EMRICHOL::look'/inspect routine called by U8P_EMRICHOL::look.",
       "confidence": "high"
     },
     {
-      "name": "SORCERER::05EC",
+      "name": "SORCERER::func05EC",
       "kind": "extern",
-      "role": "External handler invoked for 'use' interactions",
+      "role": "Shared sorcerer 'U8P_EMRICHOL::use' / interaction routine called by U8P_EMRICHOL::use.",
+      "confidence": "medium"
+    },
+    {
+      "name": "SORCERER::sorcererDetectPlayer",
+      "kind": "extern",
+      "role": "Detection routine used to mark/detect player proximity and initiate NPC reaction.",
       "confidence": "high"
     },
     {
-      "name": "SORCERER::258C",
+      "name": "SORCERER::sorcererResetActivity",
       "kind": "extern",
-      "role": "External handler for fast-area entry events",
+      "role": "Routine to reset detection state or ongoing activity when player leaves proximity.",
       "confidence": "high"
     },
     {
-      "name": "SORCERER::25D2",
+      "name": "SPELCMBT::combatSpellLoop",
       "kind": "extern",
-      "role": "External handler for fast-area exit events",
-      "confidence": "high"
-    },
-    {
-      "name": "SPELCMBT::084D",
-      "kind": "extern",
-      "role": "Spell-combat/casting handler invoked by the script's cast event",
+      "role": "Combat spell execution loop receiving a spell identifier; called by U8P_EMRICHOL::cast.",
       "confidence": "high"
     }
   ],
@@ -94,32 +96,32 @@
     "external_calls": [
       {
         "caller": "U8P_EMRICHOL::look",
-        "callee": "SORCERER::039C",
-        "purpose": "Delegate the NPC 'U8P_EMRICHOL::look' (examine/dialog) behavior to the shared SORCERER handler; passes actor/context ([BP+06h]), pid, object info, and the string 'Emrichol'.",
+        "callee": "SORCERER::func039C",
+        "purpose": "Perform the shared sorcerer inspect/U8P_EMRICHOL::look behavior for this NPC (presentation and any examine text/effects).",
         "confidence": "high"
       },
       {
         "caller": "U8P_EMRICHOL::use",
-        "callee": "SORCERER::05EC",
-        "purpose": "Delegate the 'use' interaction to SORCERER::05EC; passes actor/context, pid, object info, and 'Emrichol'.",
-        "confidence": "high"
+        "callee": "SORCERER::func05EC",
+        "purpose": "Handle the player 'U8P_EMRICHOL::use' interaction via a shared sorcerer routine (exact behavior unknown from excerpt).",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_EMRICHOL::enterFastArea",
-        "callee": "SORCERER::258C",
-        "purpose": "Delegate fast-area entry logic to the SORCERER fast-entry handler; passes actor/context, pid, and object info.",
+        "callee": "SORCERER::sorcererDetectPlayer",
+        "purpose": "Detect player entering proximity and begin NPC reaction/engagement.",
         "confidence": "high"
       },
       {
         "caller": "U8P_EMRICHOL::leaveFastArea",
-        "callee": "SORCERER::25D2",
-        "purpose": "Delegate fast-area exit logic to the SORCERER fast-exit handler; passes actor/context, pid, and object info.",
+        "callee": "SORCERER::sorcererResetActivity",
+        "purpose": "Reset detection state or stop activity started on U8P_EMRICHOL::enterFastArea.",
         "confidence": "high"
       },
       {
         "caller": "U8P_EMRICHOL::cast",
-        "callee": "SPELCMBT::084D",
-        "purpose": "Forward a spell-cast request including the uword spell id ([BP+0Ah]) and the actor/context to the spell-combat handler to perform casting mechanics.",
+        "callee": "SPELCMBT::combatSpellLoop",
+        "purpose": "Execute the combat spell logic for the provided uword parameter (likely a spell id).",
         "confidence": "high"
       }
     ]
@@ -130,16 +132,13 @@
   },
   "ui_tags": [
     "trigger",
-    "delegation",
-    "npc",
+    "proximity",
     "spell",
-    "area",
-    "cleanup",
-    "guard"
+    "delegation"
   ],
   "quick_facts": {
     "main_function": "U8P_EMRICHOL::look",
-    "behavior_summary_one_liner": "This script implements Emrichol NPC event stubs that delegate almost all gameplay logic to shared SORCERER-class handlers and a spell-combat handler.",
+    "behavior_summary_one_liner": "This NPC (Emrichol) delegates most behavior to shared sorcerer routines rather than containing bespoke logic.",
     "external_call_count": 5,
     "flag_read_count": 0,
     "flag_write_count": 0

@@ -3,27 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_COBWEB.json",
   "file": "U8P_COBWEB",
   "behavior_summary": [
-    "When the cobweb object is hit (U8P_COBWEB::gotHit event), the script records/marks a target with an internal info key and excludes it from further processing, then destroys the provided item/entity reference.",
-    "The primary visible gameplay effect is cleanup: removing the referenced item/entity from the world (via Item::destroy).",
-    "Internal 'set info' and 'process exclude' operations likely prevent further interactions or AI processing for the marked target after the hit."
+    "U8P_COBWEB::gotHit is a short process that runs when the cobweb object receives a hit and immediately removes the object instance from the world.",
+    "The process does not manipulate global flags, present dialogue, or perform branching; its visible effect is cleanup/destruction of the cobweb.",
+    "Two parameters (uword, word) are present on entry but unused in the shown code; they likely carry attacker/source metadata or damage type but are not referenced here."
   ],
   "notable_control_flow": [
-    "Entry on Event 6 (U8P_COBWEB::gotHit) causes immediate state changes and a destroy call — no prolonged loops or waits are present in the excerpt.",
-    "The routine pushes a constant info id (observed 0x20C/0x210-style constant in related scripts) and the first parameter to perform the 'set info' / 'process exclude' operations before calling Item::destroy.",
-    "No global flags are read or written by this snippet; control flow is short and deterministic: mark/exclude -> destroy -> return/suspend."
+    "Entry to U8P_COBWEB::gotHit is the only observable event; control flow is linear and consists of a single external call to Item::destroy(this).",
+    "There are no conditional branches, menu interactions, or flag reads/writes in the provided function.",
+    "After calling Item::destroy(this) the process ends (implicit cleanup)."
   ],
   "open_questions": [
-    "Is the destroyed item (BP+06h) the cobweb itself or the entity that struck the cobweb? The disassembly shows the first parameter is destroyed but calling convention context is not present in the excerpt.",
-    "What exact semantic meaning corresponds to the info id constant (0x20C / 0x210 inferred from related scripts)?",
-    "Does 'process exclude' prevent only AI processing or also player interactions and collisions for the marked object?",
-    "Is the second parameter (BP+08h / param_1) ever used in other variants of this handler (it is unused in the provided excerpt)?"
+    "What concrete game data do the parameters 'uword' and 'word' carry for U8P_COBWEB::gotHit (attacker ID, hit type, damage)?",
+    "Does destruction trigger any implicit effects elsewhere (drop items, play sound/animation) not visible in this snippet?",
+    "Is U8P_COBWEB::gotHit invoked for all damage types or only specific interactions (player attacks vs. environment)?"
   ],
   "main_function": {
     "name": "U8P_COBWEB::gotHit",
     "execution_form": "process",
-    "purpose": "Handle the cobweb being struck: set an internal info/state on a target and exclude that target from further processing, then destroy the passed-in item/entity.",
+    "purpose": "Handle the object being struck/hit by removing the cobweb instance from the game world (one-hit removal).",
     "entry_conditions": [
-      "Event 6 (U8P_COBWEB::gotHit) — invoked when this cobweb process/object is hit by something"
+      "Process starts when the cobweb object receives a hit event (U8P_COBWEB::gotHit is invoked by the engine on damage interaction)."
     ],
     "confidence": "high"
   },
@@ -31,36 +30,23 @@
     {
       "name": "U8P_COBWEB::gotHit",
       "kind": "main",
-      "role": "Event handler for the cobweb 'U8P_COBWEB::gotHit' event; updates target info/exclusion state and destroys the referenced item/entity",
+      "role": "Hit handler that destroys the cobweb instance",
       "confidence": "high"
     },
     {
       "name": "Item::destroy",
       "kind": "extern",
-      "role": "Engine/item API call to remove/destroy an item or object instance from the game world",
+      "role": "Engine/item API used to remove/destroy an item instance",
       "confidence": "high"
     }
   ],
   "call_analysis": {
-    "internal_calls": [
-      {
-        "caller": "U8P_COBWEB::gotHit",
-        "callee": "U8P_COBWEB::engine:set_info",
-        "purpose": "Attach/record an info/state value (observed constant pushed) on a target object so the engine or scripts can treat it differently",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_COBWEB::gotHit",
-        "callee": "U8P_COBWEB::engine:process_exclude",
-        "purpose": "Exclude the marked object from normal processing (likely prevents further AI/interaction); paired with the set_info call",
-        "confidence": "medium"
-      }
-    ],
+    "internal_calls": [],
     "external_calls": [
       {
         "caller": "U8P_COBWEB::gotHit",
         "callee": "Item::destroy",
-        "purpose": "Remove/destroy the item/entity whose reference was passed in (parameter at BP+06h). This is the primary observable effect of the handler.",
+        "purpose": "Delete/remove the cobweb item instance (passed as 'this') from the game world",
         "confidence": "high"
       }
     ]
@@ -77,7 +63,7 @@
   ],
   "quick_facts": {
     "main_function": "U8P_COBWEB::gotHit",
-    "behavior_summary_one_liner": "When the cobweb object is hit (U8P_COBWEB::gotHit event), the script records/marks a target with an internal info key and excludes it from further processing, then destroys the provided item/entity reference.",
+    "behavior_summary_one_liner": "U8P_COBWEB::gotHit is a short process that runs when the cobweb object receives a hit and immediately removes the object instance from the world.",
     "external_call_count": 1,
     "flag_read_count": 0,
     "flag_write_count": 0

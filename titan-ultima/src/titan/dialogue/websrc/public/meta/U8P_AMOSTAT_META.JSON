@@ -3,26 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_AMOSTAT.json",
   "file": "U8P_AMOSTAT",
   "behavior_summary": [
-    "AMOSTAT::look handles the game's 'U8P_AMOSTAT::look' (inspect) interaction for the Amoras statue/object.",
-    "When a player (pid) looks at the object (Event 0), the script reads the global flag ancientOnesMet and chooses between two short item bark strings: if ancientOnesMet == 0 it requests Item::bark to display \"Amoras\", otherwise it requests Item::bark to display \"female statue \".",
-    "The script does not modify any global flags; it calls Item::bark, captures its return, performs the implied/pop flow (engine dialog/flow handling), then suspends/returns."
+    "This script is the 'U8P_AMOSTAT::look' (examine) handler for a statue/NPC. When the player looks at the object it shows a single short bark line and then pauses/waits.",
+    "Which bark is shown depends on the global flag ancientOnesMet: if that flag is true the script barks 'Amoras', otherwise it barks 'female statue '.",
+    "After emitting the bark the code calls suspend to wait for player acknowledgement or to advance the interaction."
   ],
   "notable_control_flow": [
-    "Entry on Event 0 (U8P_AMOSTAT::look) -> read global flag ancientOnesMet -> conditional branch selecting one of two static strings -> call Item::bark(pid, string) on the item instance -> capture return value (retval) and drive implies/pop sequence -> suspend/return.",
-    "No global writes or state changes performed by this script; it is purely descriptive/response logic for inspection."
+    "U8P_AMOSTAT::look branches on the global flag ancientOnesMet (read) to select one of two short barks.",
+    "Both branches converge on a call to suspend, so regardless of branch the process pauses after displaying the message."
   ],
   "open_questions": [
-    "Is the trailing space in the string \"female statue \" intentional for downstream concatenation/formatting, or an artifact of extraction? (confidence: medium)",
-    "Are there additional events or states where AMOSTAT has different behavior (other events than Event 0) not present in this disassembly? (confidence: low)",
-    "What higher-level quest or dialog logic sets ancientOnesMet and how that affects other objects besides AMOSTAT is outside the scope of this script. (confidence: low)"
+    "What code elsewhere sets or clears ancientOnesMet and what precise game milestone does it represent? (inferred to track meeting the Ancient Ones)",
+    "Is the trailing space in the bark 'female statue ' intentional or a transcription artifact?",
+    "Are there any additional side-effects (logs, achievements, quest progress) triggered by showing this description outside this script? (none evident here)"
   ],
   "main_function": {
     "name": "U8P_AMOSTAT::look",
     "execution_form": "process",
-    "purpose": "Provide the short examination (U8P_AMOSTAT::look) description for the Amoras statue/item, selecting one of two brief bark messages depending on whether the Ancient Ones have been met.",
+    "purpose": "Provide the short description shown when the player examines this statue/NPC; choose between two short barks based on a global flag, then pause.",
     "entry_conditions": [
-      "Event 0 (U8P_AMOSTAT::look) — triggered when a player/actor looks at or inspects the object.",
-      "Invocation with parameters: pid (viewer/process id) and item pointer/this (object instance at BP+06h)."
+      "Triggered by a U8P_AMOSTAT::look/examine interaction (process U8P_AMOSTAT::look)",
+      "Runs when the engine invokes the object's U8P_AMOSTAT::look process (process type 0x0208)"
     ],
     "confidence": "high"
   },
@@ -30,7 +30,13 @@
     {
       "name": "U8P_AMOSTAT::look",
       "kind": "main",
-      "role": "Handle the 'U8P_AMOSTAT::look' (examine) event for the Amoras statue; choose description based on ancientOnesMet and call Item::bark.",
+      "role": "U8P_AMOSTAT::look/examine handler that selects and displays a short bark based on a global flag",
+      "confidence": "high"
+    },
+    {
+      "name": "suspend",
+      "kind": "extern",
+      "role": "engine-provided pause/wait called after displaying bark",
       "confidence": "high"
     }
   ],
@@ -39,8 +45,8 @@
     "external_calls": [
       {
         "caller": "U8P_AMOSTAT::look",
-        "callee": "Item::bark",
-        "purpose": "Request the item to display a short description/message to the specified player/process (pid). Called with pid and a pointer to the chosen static string.",
+        "callee": "suspend",
+        "purpose": "Pause or wait after showing the bark so the player can acknowledge/advance",
         "confidence": "high"
       }
     ]
@@ -49,7 +55,7 @@
     "reads": [
       {
         "name": "ancientOnesMet",
-        "likely_effect": "Guards which bark string to display: 0 -> \"Amoras\", otherwise -> \"female statue \". Does not get modified by this script.",
+        "likely_effect": "Selects which short description/bark to display; inferred to record whether the party has met the Ancient Ones",
         "confidence": "high"
       }
     ],
@@ -57,12 +63,12 @@
   },
   "ui_tags": [
     "trigger",
-    "description",
-    "dialog"
+    "guard",
+    "bark"
   ],
   "quick_facts": {
-    "main_function": "AMOSTAT::look",
-    "behavior_summary_one_liner": "AMOSTAT::look handles the game's 'U8P_AMOSTAT::look' (inspect) interaction for the Amoras statue/object.",
+    "main_function": "U8P_AMOSTAT::look",
+    "behavior_summary_one_liner": "This script is the 'U8P_AMOSTAT::look' (examine) handler for a statue/NPC. When the player looks at the object it shows a single short bark line and then pauses/waits.",
     "external_call_count": 1,
     "flag_read_count": 1,
     "flag_write_count": 0

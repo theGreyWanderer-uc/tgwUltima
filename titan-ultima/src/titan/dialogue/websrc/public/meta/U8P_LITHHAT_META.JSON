@@ -3,30 +3,29 @@
   "source_of_truth": "dialogue/json/U8P_LITHHAT.json",
   "file": "U8P_LITHHAT",
   "behavior_summary": [
-    "LITHHAT::hatch runs when the lith hat 'hatches' and drives per-mapped-entry 'use' behavior for entries referenced by the item's map-array.",
-    "It reads the item's map-array (flags/array word), checks a specific 0x80 bit as a guard/condition, ensures that bit is set (ORs in 0x80) and writes the updated map-array back, then iterates the referenced entries.",
-    "For each referenced entry the script invokes Item::use as a process call (passing the current pid and the entry address) and yields/suspends between iterations so each use is processed in turn.",
-    "If the 0x80 guard check indicates the wrong state (inferred from the branch), the handler returns without iterating."
+    "U8P_LITHHAT::hatch is a short-lived process that ensures an item instance is marked as 'hatched' by setting bit 0x0080 in the item's map-array flags, and then (if the item exists) spawns Item::use as a child process before suspending itself.",
+    "The function guards against repeated activation by checking the item's map-array for bit 0x0080 and doing nothing if that bit is already set.",
+    "After setting the flag it evaluates a numeric expression (0x70 * 0x20) which appears related to a timer/delay or internal value computation; the precise use of that value is not present in the excerpt.",
+    "When the item instance ('this') is present, the code starts Item::use with a reference/address (local1) and suspends the U8P_LITHHAT::hatch process, implying asynchronous execution of the item's use/U8P_LITHHAT::hatch behavior."
   ],
   "notable_control_flow": [
-    "Entry via Event 7 (U8P_LITHHAT::hatch) — the function is executed as a process-level handler.",
-    "Early-exit guard based on testing bit 0x80 in the item's map-array; if the guard fails the function returns immediately.",
-    "When guard passes, the map-array word is updated to include 0x80 and written back to the item before iterating.",
-    "Loop over mapped/list entries where each iteration calls process Item::use(pid, entry_address) and the caller suspends between iterations (sequential per-entry processing)."
+    "U8P_LITHHAT::hatch reads the item's map-array via Item::getMapArray(this) and tests for bit 0x0080.",
+    "If bit 0x0080 is not set, it calls Item::setMapArray(local2 | 0x0080, this) to set the hatched bit.",
+    "After updating flags it computes 0x70 * 0x20 (purpose inferred as timing/delay) and, if the item instance exists, spawns Item::use(addressof(local1)) capturing the child pid.",
+    "The process then calls suspend to yield until the spawned Item::use runs/completes."
   ],
   "open_questions": [
-    "Is the branch semantics such that the function proceeds only when 0x80 is set, or only when it is not set? (disassembly structure makes this slightly ambiguous; behavior inferred as 'requires 0x80 to be set').",
-    "What is the exact structure/meaning of the item 'map-array' returned by Item::getMapArray (bitfield vs pointer to a list)?",
-    "What concrete in-game objects or effects are represented by each mapped entry invoked via Item::use (eg. spawning creatures, producing items, triggering effects)?",
-    "What is the provenance and exact meaning of the pid passed to Item::use (the actor that caused the U8P_LITHHAT::hatch vs the item process itself)?"
+    "What is the intended semantic meaning of the numeric expression 0x70 * 0x20 (timer length, ticks, or a data offset)?",
+    "What exactly is stored in local1 (the address passed to Item::use) and how does Item::use interpret that reference?",
+    "Under what game events or player actions is U8P_LITHHAT::hatch invoked (explicit callers are not present in the excerpt)?"
   ],
   "main_function": {
     "name": "U8P_LITHHAT::hatch",
     "execution_form": "process",
-    "purpose": "Handle the lith hat's U8P_LITHHAT::hatch event by guarding on a map-array bit, persisting that bit state, and invoking Item::use for each entry referenced by the item's map/list so that per-entry U8P_LITHHAT::hatch effects occur sequentially.",
+    "purpose": "Mark the item as hatched/activated (set map-array bit 0x0080) and trigger the item's use behavior asynchronously.",
     "entry_conditions": [
-      "Event 7 (U8P_LITHHAT::hatch) triggers this handler.",
-      "A guard based on the item's map-array bit 0x80 must be satisfied for the function to proceed (inferred)."
+      "Invoked as a utility process: process U8P_LITHHAT::hatch() (process type 0x0210).",
+      "Internally only proceeds when the item's map-array bit 0x0080 is not already set."
     ],
     "confidence": "high"
   },
@@ -34,25 +33,7 @@
     {
       "name": "U8P_LITHHAT::hatch",
       "kind": "main",
-      "role": "Event handler for the lith hat's U8P_LITHHAT::hatch action; checks/writes a map-array flag and drives per-entry use calls.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getMapArray",
-      "kind": "extern",
-      "role": "Retrieve the item's map-array/flags (word or pointer) used to select entries to process.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::setMapArray",
-      "kind": "extern",
-      "role": "Persist the updated map-array/flags word back to the item (used to record the 0x80 state).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::use",
-      "kind": "extern",
-      "role": "Invoked as a process call for each mapped entry to execute the per-entry U8P_LITHHAT::hatch behavior, passed pid and an entry address/reference.",
+      "role": "Guarded activation/U8P_LITHHAT::hatch handler — marks the item as hatched and starts Item::use",
       "confidence": "high"
     }
   ],
@@ -62,19 +43,25 @@
       {
         "caller": "U8P_LITHHAT::hatch",
         "callee": "Item::getMapArray",
-        "purpose": "Obtain the item's map-array/flags word or pointer used to test and iterate mapped entries.",
+        "purpose": "Read the item's map-array flags/metadata to test whether the hatched bit (0x0080) is set.",
         "confidence": "high"
       },
       {
         "caller": "U8P_LITHHAT::hatch",
         "callee": "Item::setMapArray",
-        "purpose": "Write back the map-array/flags after OR-ing in 0x80 to persist the guard/state change.",
+        "purpose": "Write back updated map-array flags for the item (set bit 0x0080 to mark as hatched).",
         "confidence": "high"
       },
       {
         "caller": "U8P_LITHHAT::hatch",
-        "callee": "Item::use (process call)",
-        "purpose": "Execute per-mapped-entry behavior for each entry referenced by the map-array; called with the current pid and the entry address and executed sequentially with suspends between calls.",
+        "callee": "Item::use",
+        "purpose": "Spawn/use the item as a separate process (likely runs U8P_LITHHAT::hatch/use animation/effect); the code passes addressof(local1) and captures the pid.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LITHHAT::hatch",
+        "callee": "suspend",
+        "purpose": "Yield the current U8P_LITHHAT::hatch process, likely waiting for the spawned Item::use child process to run or finish.",
         "confidence": "high"
       }
     ]
@@ -90,9 +77,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "LITHHAT::hatch",
-    "behavior_summary_one_liner": "LITHHAT::hatch runs when the lith hat 'hatches' and drives per-mapped-entry 'use' behavior for entries referenced by the item's map-array.",
-    "external_call_count": 3,
+    "main_function": "U8P_LITHHAT::hatch",
+    "behavior_summary_one_liner": "U8P_LITHHAT::hatch is a short-lived process that ensures an item instance is marked as 'hatched' by setting bit 0x0080 in the item's map-array flags, and then (if the item exists) spawns Item::use as a child process before suspending itself.",
+    "external_call_count": 4,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

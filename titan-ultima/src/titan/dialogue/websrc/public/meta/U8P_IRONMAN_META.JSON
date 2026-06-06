@@ -3,27 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_IRONMAN.json",
   "file": "U8P_IRONMAN",
   "behavior_summary": [
-    "Handles the 'U8P_IRONMAN::look' (examine) action for the IRONMAN object: when an actor inspects the object, the script marks the object with transient info/state flags, asks the object to 'bark' a short descriptive text \"Stone throne \", and then returns/suspends.",
-    "The visible effect to players is a short description string emitted by the item (via Item::bark).",
-    "The script allocates/pushes a literal string, invokes Item::bark on the IRONMAN instance, frees the string, consumes the bark return value in a follow-up logical step, and then suspends/returns control."
+    "U8P_IRONMAN exposes a single U8P_IRONMAN::look-type process (U8P_IRONMAN::look) that presents a short inspection text to the player: \"Stone throne\".",
+    "There is no branching, menu interaction, or global flag manipulation in the provided excerpt — the routine's sole observable effect is emitting a bark/description and then yielding.",
+    "This behavior is typically invoked by the game's U8P_IRONMAN::look/inspect action or the engine's U8P_IRONMAN::look-type process entry (process type 0x0208)."
   ],
   "notable_control_flow": [
-    "On entry the script sets an info flag and a process-exclude flag on the object to control processing while handling the U8P_IRONMAN::look.",
-    "It constructs/pushes the literal \"Stone throne \", calls Item::bark on the object, and frees the string after the call.",
-    "It captures the return value from Item::bark, applies an 'implies' operation to that return (inferred control/logical check), then pops the result and suspends/returns."
+    "Straight-line: enter U8P_IRONMAN::look process -> emit single Bark ('Stone throne') -> suspend/terminate the U8P_IRONMAN::look process.",
+    "No conditional logic, loops, or external calls are present in the excerpt."
   ],
   "open_questions": [
-    "Exact semantics and numeric id of the 'info' value set at the function start (opcode shows a set-info but its higher-level meaning is inferred).",
-    "Precise effect of 'process_exclude' in this context (appears to prevent further processing/reentrancy for the object, but exact engine behavior is inferred).",
-    "Meaning and effect of the 'implies' operation applied to Item::bark's return value (control flow guard, conditional side-effect, or engine convention?).",
-    "Whether the string lifetime/freeing is a direct FREE::* call or engine-managed (inference: it is freed immediately after the bark call)."
+    "Are there any other processes or helper functions in the full object that were not included in this excerpt (use, talk, or interaction handlers)?",
+    "Do the Unknown nodes labeled \"{\" and \"suspend\" represent only expected process framing and a standard suspend, or do they encode additional engine semantics not visible in the excerpt?"
   ],
   "main_function": {
     "name": "U8P_IRONMAN::look",
     "execution_form": "process",
-    "purpose": "Respond to the examine/U8P_IRONMAN::look verb on the IRONMAN item: mark object state for processing, present a short description to the viewer by calling Item::bark with the literal \"Stone throne \", then finalize and suspend.",
+    "purpose": "When the player examines or 'looks' at this entity, display a brief description/bark: 'Stone throne'.",
     "entry_conditions": [
-      "Event 0 — invoked when a player/actor performs the 'U8P_IRONMAN::look' (examine) action on the IRONMAN object (inferred from opcode pattern and related scripts)."
+      "Triggered by the game's U8P_IRONMAN::look/inspect action for this entity (player uses 'U8P_IRONMAN::look' or inspects the object).",
+      "May also be invoked by engine-level U8P_IRONMAN::look/fast-area entry for U8P_IRONMAN::look-type processes (process type 0x0208)."
     ],
     "confidence": "high"
   },
@@ -31,41 +29,17 @@
     {
       "name": "U8P_IRONMAN::look",
       "kind": "main",
-      "role": "Handles the 'U8P_IRONMAN::look' verb for the IRONMAN object; coordinates flag setting, message construction, and calling Item::bark.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine used to emit/display a short text or message for an item/process (called by the U8P_IRONMAN::look handler).",
+      "role": "Inspect/description handler — emits a single bark text and yields.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_IRONMAN::look",
-        "callee": "Item::bark",
-        "purpose": "Cause the IRONMAN item to emit/display the short descriptive string \"Stone throne \" to the viewing process/player.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
-    "writes": [
-      {
-        "name": "info",
-        "likely_effect": "Set a transient/display-related info key on the object to indicate an information/display action is occurring (inferred).",
-        "confidence": "medium"
-      },
-      {
-        "name": "process_exclude",
-        "likely_effect": "Exclude the object from normal processing while the U8P_IRONMAN::look handler runs (inferred guard against reentrancy or other processing).",
-        "confidence": "medium"
-      }
-    ]
+    "writes": []
   },
   "ui_tags": [
     "trigger",
@@ -74,11 +48,11 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "IRONMAN::look",
-    "behavior_summary_one_liner": "Handles the 'U8P_IRONMAN::look' (examine) action for the IRONMAN object: when an actor inspects the object, the script marks the object with transient info/state flags, asks the object to 'bark' a short descriptive text \"Stone throne \", and then returns/suspends.",
-    "external_call_count": 1,
+    "main_function": "U8P_IRONMAN::look",
+    "behavior_summary_one_liner": "U8P_IRONMAN exposes a single U8P_IRONMAN::look-type process (U8P_IRONMAN::look) that presents a short inspection text to the player: \"Stone throne\".",
+    "external_call_count": 0,
     "flag_read_count": 0,
-    "flag_write_count": 2
+    "flag_write_count": 0
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

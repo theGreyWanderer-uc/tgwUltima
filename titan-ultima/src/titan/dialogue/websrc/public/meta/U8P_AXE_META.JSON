@@ -3,55 +3,41 @@
   "source_of_truth": "dialogue/json/U8P_AXE.json",
   "file": "U8P_AXE",
   "behavior_summary": [
-    "Services the 'look' (examine) event for an axe item: configures an item-info context, sets a process exclusion/guard, builds the prefix string \"axe \", and invokes the engine display/vocalization routine to present the axe description to the viewer.",
-    "The routine passes the axe instance and a short prefix string to Item::bark, frees the temporary string, captures Item::bark's return value, and returns that value as its own result.",
-    "No global flags are read or written by this script. Several engine-level operations (set info, process exclude) are used to prepare context for the bark."
+    "Provides the item's response to the 'U8P_AXE::look' (inspect/examine) action: when the player examines the axe, the script displays a single short bark text \"axe \".",
+    "Immediately after emitting the bark the process suspends/ends, so no further interaction or branching occurs.",
+    "No parameters, conditions, flags, or external calls are used; this is a minimal inspect/display handler.",
+    "Item metadata (external to the process) indicates overlay.animationStyle = 'axe' and usedBy = ['axe','deceiver'], which likely affect rendering/usage contexts but are not referenced by the script logic."
   ],
   "notable_control_flow": [
-    "Entry on Event 0 triggers: push a constant (0x0208) and run a 'set info' operation to configure item-info state.",
-    "Push the object instance id (function parameter) and a process id, then call 'process exclude' to create a processing guard/context for the subsequent display.",
-    "Construct / push the literal string pointer for \"axe \", then call external Item::bark with the item reference and the string.",
-    "Free the temporary string, store the bark return value in a local (retval), and return that value to the caller (function suspends then returns)."
+    "U8P_AXE::look emits one Bark node containing the text \"axe \" and then hits a suspend/terminate node, yielding a single-step display-then-stop flow.",
+    "There are no conditional branches, menu interactions, or calls to other functions; control flow is linear and terminal."
   ],
   "open_questions": [
-    "Exact semantic meaning of the info constant 0x0208 used with 'set info' (inferred to be an examine/description context but not canonical).",
-    "Precise argument order and parameter types for Item::bark (disassembly pushes both an object id and a string pointer; the documented call shows only a string).",
-    "Whether the pushed process id for 'process exclude' is the viewer's pid or an internal item/process pid (inferred from usage).",
-    "Exact type/meaning of the return value from Item::bark (appears to be a handled/success flag but not explicitly defined)."
+    "Does the 'suspend' node here represent a temporary pause or a definitive end/return of the U8P_AXE::look process in engine terms for this object?",
+    "Is the trailing space in the bark text \"axe \" intentional (formatting for concatenation) or an artifact of extraction?",
+    "How (and where) the item-level metadata fields overlay.animationStyle and usedBy are consumed at runtime — by engine/item renderer or by other scripts — is not specified in this snippet."
   ],
   "main_function": {
-    "name": "U8P_AXE::look (Func_80, Event 0)",
+    "name": "U8P_AXE::look",
     "execution_form": "process",
-    "purpose": "Handle the player/actor 'look' action for an axe: set item-info state and a process exclusion guard, present the short prefix \"axe \", call Item::bark to display/vocalize the axe's description, and return the bark routine's result.",
+    "purpose": "Display the axe's short description/label to the player when they inspect the item, then end the U8P_AXE::look process.",
     "entry_conditions": [
-      "Event 0 (look) — invoked when the Avatar or relevant actor inspects/examines the axe."
+      "Triggered by the engine when the player uses the 'U8P_AXE::look' (inspect/examine) action on the axe item.",
+      "Implicit entry via the item's U8P_AXE::look/inspect handler (process type 0x0208)."
     ],
     "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_AXE::look (Func_80, Event 0)",
+      "name": "U8P_AXE::look",
       "kind": "main",
-      "role": "Event handler for examining the axe; prepares context and delegates description to Item::bark.",
+      "role": "inspect/display handler for the axe item (emits a single bark and suspends)",
       "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine routine used to present or vocalize an item's message/description; here invoked with an item reference and the prefix string 'axe '.",
-      "confidence": "medium"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_AXE::look (Func_80, Event 0)",
-        "callee": "Item::bark",
-        "purpose": "Display/vocalize the axe description to the viewer, using a provided prefix string ('axe ') and the axe instance reference so the bark routine can produce the correct text.",
-        "confidence": "medium"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -59,12 +45,14 @@
   },
   "ui_tags": [
     "trigger",
+    "cleanup",
+    "animation",
     "guard"
   ],
   "quick_facts": {
-    "main_function": "AXE::look (Func_80, Event 0)",
-    "behavior_summary_one_liner": "Services the 'look' (examine) event for an axe item: configures an item-info context, sets a process exclusion/guard, builds the prefix string \"axe \", and invokes the engine display/vocalization routine to present the axe description to the viewer.",
-    "external_call_count": 1,
+    "main_function": "U8P_AXE::look",
+    "behavior_summary_one_liner": "Provides the item's response to the 'U8P_AXE::look' (inspect/examine) action: when the player examines the axe, the script displays a single short bark text \"axe \".",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },
