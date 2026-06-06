@@ -1,6 +1,38 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-interface BookEntry {
+interface LibraryItem {
+  id: string;
+  kind: string;
+  quality: number | null;
+  qualityHex: string;
+  title: string;
+  category: string;
+  text: string | null;
+  paragraphs?: string[];
+  source?: string;
+  school?: string;
+  details?: Record<string, string | number | string[] | null>;
+}
+
+interface LibrarySection {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+  itemClass: string;
+  totalItems: number;
+  itemsWithText: number;
+  items: LibraryItem[];
+}
+
+interface LibraryData {
+  schemaVersion: string;
+  totalSections: number;
+  totalItems: number;
+  sections: LibrarySection[];
+}
+
+interface LegacyBookEntry {
   quality: number;
   qualityHex: string;
   title: string;
@@ -10,11 +42,11 @@ interface BookEntry {
   source?: string;
 }
 
-interface BooksData {
+interface LegacyBooksData {
   itemClass: string;
   totalBooks: number;
   booksWithText: number;
-  books: BookEntry[];
+  books: LegacyBookEntry[];
 }
 
 interface BookPanelProps {
@@ -23,40 +55,88 @@ interface BookPanelProps {
   onClose: () => void;
 }
 
-let cachedBooks: BooksData | null = null;
+let cachedLibrary: LibraryData | null = null;
 
-async function loadBooks(): Promise<BooksData> {
-  if (cachedBooks) return cachedBooks;
-  const resp = await fetch('./data/books.json');
-  if (!resp.ok) {
-    throw new Error(`Failed to load books.json: ${resp.status}`);
+async function loadLibrary(): Promise<LibraryData> {
+  if (cachedLibrary) return cachedLibrary;
+
+  const libraryResp = await fetch('./data/library.json');
+  if (libraryResp.ok) {
+    cachedLibrary = await libraryResp.json();
+    return cachedLibrary!;
   }
-  cachedBooks = await resp.json();
-  return cachedBooks!;
+
+  const booksResp = await fetch('./data/books.json');
+  if (!booksResp.ok) {
+    throw new Error(`Failed to load library.json (${libraryResp.status}) and books.json (${booksResp.status})`);
+  }
+  const books = (await booksResp.json()) as LegacyBooksData;
+  const items: LibraryItem[] = books.books.map(book => ({
+    ...book,
+    id: `book-${book.qualityHex}`,
+    kind: 'book',
+  }));
+  cachedLibrary = {
+    schemaVersion: 'legacy-books',
+    totalSections: 1,
+    totalItems: items.length,
+    sections: [{
+      id: 'books',
+      title: 'Books',
+      description: 'Readable books indexed from BASEBOOK quality branches.',
+      icon: 'book',
+      itemClass: books.itemClass,
+      totalItems: books.totalBooks,
+      itemsWithText: books.booksWithText,
+      items,
+    }],
+  };
+  return cachedLibrary;
+}
+
+function iconFor(section: LibrarySection | LibraryItem): string {
+  const key = 'icon' in section ? section.icon : section.kind;
+  switch (key) {
+    case 'scroll': return '📜';
+    case 'grave': return '▥';
+    case 'plaque': return '▣';
+    case 'spell': return '✦';
+    default: return '📖';
+  }
+}
+
+function stringifyDetail(value: string | number | string[] | null): string {
+  if (Array.isArray(value)) return value.join(', ');
+  if (value === null) return '';
+  return String(value);
 }
 
 export function BookPanel({ npcName, open, onClose }: BookPanelProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const [books, setBooks] = useState<BooksData | null>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [library, setLibrary] = useState<LibraryData | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [selectedBook, setSelectedBook] = useState<BookEntry | null>(null);
+  const [selectedItem, setSelectedItem] = useState<LibraryItem | null>(null);
+  const [activeSectionId, setActiveSectionId] = useState<string>('books');
   const [filterCategory, setFilterCategory] = useState<string>('All');
   const [search, setSearch] = useState('');
-  const contentRef = useRef<HTMLDivElement>(null);
 
-  // Load books data on first open
   useEffect(() => {
-    if (open && !books) {
+    if (open && !library) {
       setLoadError(null);
-      loadBooks()
-        .then(setBooks)
+      loadLibrary()
+        .then(data => {
+          setLibrary(data);
+          if (!data.sections.some(section => section.id === activeSectionId)) {
+            setActiveSectionId(data.sections[0]?.id ?? 'books');
+          }
+        })
         .catch((err: unknown) => {
           setLoadError(err instanceof Error ? err.message : String(err));
         });
     }
-  }, [open, books]);
+  }, [open, library, activeSectionId]);
 
-  // Sync dialog open/close
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
@@ -64,17 +144,15 @@ export function BookPanel({ npcName, open, onClose }: BookPanelProps) {
     else if (!open && dialog.open) dialog.close();
   }, [open]);
 
-  // Reset selection when reopened
   useEffect(() => {
     if (open) {
-      setSelectedBook(null);
+      setSelectedItem(null);
       setFilterCategory('All');
       setSearch('');
       setLoadError(null);
     }
   }, [open]);
 
-  // Handle native close (Escape key)
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
@@ -83,7 +161,6 @@ export function BookPanel({ npcName, open, onClose }: BookPanelProps) {
     return () => dialog.removeEventListener('close', h);
   }, [onClose]);
 
-  // Backdrop click
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
@@ -92,46 +169,62 @@ export function BookPanel({ npcName, open, onClose }: BookPanelProps) {
     return () => dialog.removeEventListener('click', h);
   }, [onClose]);
 
-  // Scroll to top when book changes
   useEffect(() => {
     contentRef.current?.scrollTo(0, 0);
-  }, [selectedBook]);
+  }, [selectedItem, activeSectionId]);
+
+  const activeSection = useMemo(() => {
+    if (!library) return null;
+    return library.sections.find(section => section.id === activeSectionId) ?? library.sections[0] ?? null;
+  }, [library, activeSectionId]);
 
   const categories = useMemo(() => {
-    if (!books) return [];
-    const cats = [...new Set(books.books.map(b => b.category))];
+    if (!activeSection) return [];
+    const cats = [...new Set(activeSection.items.map(item => item.category))];
     return ['All', ...cats.sort()];
-  }, [books]);
+  }, [activeSection]);
 
-  const filteredBooks = useMemo(() => {
-    if (!books) return [];
-    let list = books.books;
+  const filteredItems = useMemo(() => {
+    if (!activeSection) return [];
+    let list = activeSection.items;
     if (filterCategory !== 'All') {
-      list = list.filter(b => b.category === filterCategory);
+      list = list.filter(item => item.category === filterCategory);
     }
     if (search.trim()) {
       const q = search.trim().toLowerCase();
-      list = list.filter(b =>
-        b.title.toLowerCase().includes(q) ||
-        (b.text && b.text.toLowerCase().includes(q))
-      );
+      list = list.filter(item => {
+        const detailText = item.details
+          ? Object.values(item.details).map(stringifyDetail).join(' ')
+          : '';
+        return item.title.toLowerCase().includes(q)
+          || item.category.toLowerCase().includes(q)
+          || (item.text ? item.text.toLowerCase().includes(q) : false)
+          || detailText.toLowerCase().includes(q);
+      });
     }
     return list;
-  }, [books, filterCategory, search]);
+  }, [activeSection, filterCategory, search]);
+
+  const selectSection = (sectionId: string) => {
+    setActiveSectionId(sectionId);
+    setSelectedItem(null);
+    setFilterCategory('All');
+    setSearch('');
+  };
 
   return (
     <dialog ref={dialogRef} className="book-dialog">
       <div className="book-modal">
         <div className="book-modal-header">
           <h2 className="book-modal-title">
-            <span className="book-icon">📖</span>
-            {selectedBook ? selectedBook.title : `Library: ${npcName}`}
+            <span className="book-icon">{selectedItem ? iconFor(selectedItem) : '📚'}</span>
+            {selectedItem ? selectedItem.title : `Library: ${npcName}`}
           </h2>
           <div className="book-modal-header-actions">
-            {selectedBook && (
+            {selectedItem && (
               <button
                 className="btn btn-tiny"
-                onClick={() => setSelectedBook(null)}
+                onClick={() => setSelectedItem(null)}
                 type="button"
                 title="Back to list"
               >
@@ -144,18 +237,35 @@ export function BookPanel({ npcName, open, onClose }: BookPanelProps) {
 
         <div className="book-modal-body" ref={contentRef}>
           {loadError ? (
-            <p className="book-loading">Failed to load books: {loadError}</p>
-          ) : !books ? (
-            <p className="book-loading">Loading books…</p>
-          ) : selectedBook ? (
-            <BookReader book={selectedBook} />
+            <p className="book-loading">Failed to load library: {loadError}</p>
+          ) : !library || !activeSection ? (
+            <p className="book-loading">Loading library…</p>
+          ) : selectedItem ? (
+            <LibraryReader item={selectedItem} />
           ) : (
             <>
+              <div className="book-section-tabs" role="tablist" aria-label="Library sections">
+                {library.sections.map(section => (
+                  <button
+                    key={section.id}
+                    className={`book-section-tab ${section.id === activeSection.id ? 'active' : ''}`}
+                    onClick={() => selectSection(section.id)}
+                    type="button"
+                    role="tab"
+                    aria-selected={section.id === activeSection.id}
+                  >
+                    <span aria-hidden="true">{iconFor(section)}</span>
+                    <span>{section.title}</span>
+                    <span className="book-section-count">{section.totalItems}</span>
+                  </button>
+                ))}
+              </div>
+
               <div className="book-toolbar">
                 <input
                   type="text"
                   className="book-search"
-                  placeholder="Search books…"
+                  placeholder={`Search ${activeSection.title.toLowerCase()}…`}
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                 />
@@ -171,24 +281,27 @@ export function BookPanel({ npcName, open, onClose }: BookPanelProps) {
               </div>
 
               <div className="book-count">
-                {filteredBooks.length} of {books.totalBooks} books
-                {books.booksWithText < books.totalBooks &&
-                  ` (${books.booksWithText} with readable text)`}
+                {filteredItems.length} of {activeSection.totalItems} {activeSection.title.toLowerCase()}
+                {activeSection.itemsWithText < activeSection.totalItems &&
+                  ` (${activeSection.itemsWithText} with readable text)`}
               </div>
 
               <div className="book-list">
-                {filteredBooks.map(book => (
+                {filteredItems.map(item => (
                   <button
-                    key={book.quality}
-                    className={`book-list-item ${!book.text ? 'book-list-item-empty' : ''}`}
-                    onClick={() => book.text ? setSelectedBook(book) : undefined}
-                    disabled={!book.text}
+                    key={item.id}
+                    className={`book-list-item ${!item.text && !item.details ? 'book-list-item-empty' : ''}`}
+                    onClick={() => (item.text || item.details) ? setSelectedItem(item) : undefined}
+                    disabled={!item.text && !item.details}
                     type="button"
                   >
-                    <span className="book-list-title">{book.title}</span>
+                    <span className="book-list-title">
+                      <span className="book-list-kind" aria-hidden="true">{iconFor(item)}</span>
+                      {item.title}
+                    </span>
                     <span className="book-list-meta">
-                      <span className="book-list-category">{book.category}</span>
-                      <span className="book-list-quality">{book.qualityHex}</span>
+                      <span className="book-list-category">{item.category}</span>
+                      <span className="book-list-quality">{item.qualityHex}</span>
                     </span>
                   </button>
                 ))}
@@ -201,22 +314,36 @@ export function BookPanel({ npcName, open, onClose }: BookPanelProps) {
   );
 }
 
-function BookReader({ book }: { book: BookEntry }) {
-  const paragraphs = book.paragraphs ?? [];
+function LibraryReader({ item }: { item: LibraryItem }) {
+  const paragraphs = item.paragraphs ?? [];
+  const detailEntries = Object.entries(item.details ?? {})
+    .filter(([, value]) => stringifyDetail(value).trim().length > 0);
+
   return (
     <div className="book-reader">
       <div className="book-reader-meta">
-        <span className="book-reader-category">{book.category}</span>
-        <span className="book-reader-quality">Quality: {book.qualityHex}</span>
-        {book.source && <span className="book-reader-source">{book.source}</span>}
+        <span className="book-reader-category">{item.category}</span>
+        <span className="book-reader-quality">Quality: {item.qualityHex}</span>
+        {item.school && <span className="book-reader-source">{item.school}</span>}
+        {item.source && <span className="book-reader-source">{item.source}</span>}
       </div>
+      {detailEntries.length > 0 && (
+        <dl className="book-reader-details">
+          {detailEntries.map(([key, value]) => (
+            <div key={key} className="book-reader-detail">
+              <dt>{key.replace(/([A-Z])/g, ' $1').trim()}</dt>
+              <dd>{stringifyDetail(value)}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
       <div className="book-reader-content">
         {paragraphs.length > 0 ? (
           paragraphs.map((p, i) => <p key={i}>{p}</p>)
-        ) : book.text ? (
-          <p>{book.text}</p>
-        ) : (
-          <p className="book-reader-empty">No text content available for this book.</p>
+        ) : item.text ? (
+          <p>{item.text}</p>
+        ) : detailEntries.length > 0 ? null : (
+          <p className="book-reader-empty">No text content available for this entry.</p>
         )}
       </div>
     </div>
