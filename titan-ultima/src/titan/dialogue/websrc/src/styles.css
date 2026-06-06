@@ -1501,6 +1501,43 @@ h3 {
   padding: 40px 0;
 }
 
+/* ── Library Sections ── */
+
+.book-section-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.book-section-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-main);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 7px 9px;
+  white-space: nowrap;
+}
+
+.book-section-tab.active {
+  border-color: var(--accent);
+  background: var(--book-chip-bg);
+  color: var(--text);
+}
+
+.book-section-count {
+  color: var(--text-muted);
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+}
+
 /* ── Toolbar ── */
 
 .book-toolbar {
@@ -1573,6 +1610,9 @@ h3 {
 }
 
 .book-list-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-weight: 500;
   flex: 1;
   min-width: 0;
@@ -1580,6 +1620,12 @@ h3 {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-soft);
+}
+
+.book-list-kind {
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
 }
 
 .book-list-meta {
@@ -1627,6 +1673,34 @@ h3 {
 
 .book-reader-source {
   font-family: var(--font-mono, monospace);
+}
+
+.book-reader-details {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 18px;
+}
+
+.book-reader-detail {
+  display: grid;
+  grid-template-columns: minmax(110px, 160px) 1fr;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--book-chip-bg) 42%, transparent);
+}
+
+.book-reader-detail dt {
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.book-reader-detail dd {
+  color: var(--text);
+  font-size: 13px;
+  margin: 0;
 }
 
 .book-reader-content {

@@ -10,6 +10,7 @@ import { downloadDialogueWalkMarkdown } from './exportDialogueWalker';
 import type { DialogueMessage, NPCFile, DialogueNode, VariableHint } from './types';
 
 const OPEN_GLOBAL_FLAGS_EVENT = 'open-global-flags';
+const LIBRARY_CLASSES = new Set(['BASEBOOK', 'BASESCRL', 'GRAVE_NS', 'PLAQUENS', 'KEYONEC', 'PENT', 'NEC1', 'SCROLL1', 'EARTHMAG']);
 
 export function DialoguePlayer() {
   const {
@@ -82,7 +83,7 @@ export function DialoguePlayer() {
   const hasLook = !!findLookFunction(selectedNpc);
   const hasShop = !!findShopFunction(selectedNpc);
   const canUndo = undoStack.length > 0;
-  const hasBooks = selectedNpc.npc === 'BASEBOOK';
+  const hasLibrary = LIBRARY_CLASSES.has(selectedNpc.npc);
   const hasUtil = !hasTalk
     && !hasLook
     && !hasShop
@@ -155,9 +156,9 @@ export function DialoguePlayer() {
                 {selectedNpc.npc}&apos;s Shop
               </button>
             )}
-            {hasBooks && (
+            {hasLibrary && (
               <button className="btn" onClick={() => setBookOpen(true)}>
-                📖 Read Books
+                📖 {selectedNpc.npc === 'BASEBOOK' ? 'Read Books' : 'Open Library'}
               </button>
             )}
             {hasUtil && (
@@ -166,7 +167,7 @@ export function DialoguePlayer() {
               </button>
             )}
           </div>
-          {!hasTalk && !hasLook && !hasShop && !hasBooks && !hasUtil && (
+          {!hasTalk && !hasLook && !hasShop && !hasLibrary && !hasUtil && (
             <div className="empty-state">
               <p>No interactive functions available.</p>
             </div>
@@ -190,7 +191,7 @@ export function DialoguePlayer() {
             onClose={() => setShopOpen(false)}
           />
         )}
-        {hasBooks && (
+        {hasLibrary && (
           <BookPanel
             npcName={selectedNpc.npc}
             open={bookOpen}

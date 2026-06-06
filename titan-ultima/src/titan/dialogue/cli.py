@@ -19,6 +19,7 @@ from titan._config import get_config
 from titan.dialogue.pipeline.build_data import build_data
 from titan.dialogue.pipeline.extract_ast import main as extract_ast_main
 from titan.dialogue.pipeline.extract_books import main as extract_books_main
+from titan.dialogue.pipeline.extract_library import main as extract_library_main
 from titan.dialogue.pipeline.lint_json import run_lint
 from titan.dialogue.pipeline.run_fold import FoldRunError, get_effective_fold_path, run_fold
 
@@ -153,13 +154,13 @@ def _run_prepare(
         for pattern in ("U8P_*.txt",):
             for file in dirs.fold.glob(pattern):
                 file.unlink()
-        for pattern in ("U8P_*.json", "all_dialogue.json", "manifest.json"):
+        for pattern in ("U8P_*.json", "all_dialogue.json", "manifest.json", "books.json", "library.json"):
             for file in dirs.json.glob(pattern):
                 file.unlink()
-        for pattern in ("U8P_*.json", "all_dialogue.json", "manifest.json"):
+        for pattern in ("U8P_*.json", "all_dialogue.json", "manifest.json", "books.json", "library.json"):
             for file in dirs.web_data.glob(pattern):
                 file.unlink()
-        for pattern in ("U8P_*.json", "all_dialogue.json", "manifest.json", "flag_metadata.json"):
+        for pattern in ("U8P_*.json", "all_dialogue.json", "manifest.json", "flag_metadata.json", "books.json", "library.json"):
             for file in websrc_data.glob(pattern):
                 file.unlink()
 
@@ -214,8 +215,8 @@ def _run_prepare(
 
     typer.echo("Starting book extraction...")
     books_rc = extract_books_main([
-        "--fold-dir",
-        str(dirs.fold),
+        "--json-dir",
+        str(dirs.json),
         "--out",
         str(dirs.json / "books.json"),
     ])
@@ -224,6 +225,19 @@ def _run_prepare(
         return books_rc
 
     _ok("Book extraction complete")
+
+    typer.echo("Starting library extraction...")
+    library_rc = extract_library_main([
+        "--json-dir",
+        str(dirs.json),
+        "--out",
+        str(dirs.json / "library.json"),
+    ])
+    if library_rc != 0:
+        _bad(f"Library extraction failed with exit code {library_rc}")
+        return library_rc
+
+    _ok("Library extraction complete")
 
     typer.echo("Copying JSON files and writing manifests...")
 
@@ -275,6 +289,145 @@ def _validate_pipeline_outputs(runtime_root: Path, expected_classes: int, run_co
 
     def _count(pattern_dir: Path, pattern: str) -> int:
         return sum(1 for _ in pattern_dir.glob(pattern))
+
+    def _validate_books_json(path: Path, label: str) -> None:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            _bad(f"{label} books data is not valid JSON: {path} ({exc})")
+            return
+
+        if not isinstance(payload, dict):
+            _bad(f"{label} books data is not a JSON object: {path}")
+            return
+
+        books = payload.get("books")
+        if payload.get("itemClass") != "BASEBOOK":
+            _bad(f"{label} books itemClass mismatch: expected BASEBOOK in {path}")
+        if not isinstance(books, list) or not books:
+            _bad(f"{label} books list is missing or empty: {path}")
+            return
+
+        total_books = payload.get("totalBooks")
+        if total_books != len(books):
+            _bad(f"{label} totalBooks mismatch: declared {total_books}, actual {len(books)} in {path}")
+
+        seen_qualities: set[int] = set()
+        readable = 0
+        bad_entries = 0
+        for index, entry in enumerate(books):
+            if not isinstance(entry, dict):
+                bad_entries += 1
+                continue
+
+            quality = entry.get("quality")
+            quality_hex = entry.get("qualityHex")
+            title = entry.get("title")
+            category = entry.get("category")
+            text = entry.get("text")
+            paragraphs = entry.get("paragraphs")
+
+            if not isinstance(quality, int):
+                bad_entries += 1
+                continue
+            if quality in seen_qualities:
+                _bad(f"{label} duplicate book quality 0x{quality:02X} in {path}")
+            seen_qualities.add(quality)
+
+            expected_hex = f"0x{quality:02X}"
+            if quality_hex != expected_hex:
+                _bad(
+                    f"{label} book #{index} qualityHex mismatch: "
+                    f"expected {expected_hex}, found {quality_hex!r} in {path}"
+                )
+            if not isinstance(title, str) or not title.strip():
+                _bad(f"{label} book {expected_hex} has missing title in {path}")
+            if not isinstance(category, str) or not category.strip():
+                _bad(f"{label} book {expected_hex} has missing category in {path}")
+
+            if isinstance(text, str):
+                readable += 1
+                if not isinstance(paragraphs, list) or not all(isinstance(p, str) for p in paragraphs):
+                    _bad(f"{label} book {expected_hex} has text but invalid paragraphs in {path}")
+            elif text is not None:
+                _bad(f"{label} book {expected_hex} text must be string or null in {path}")
+
+        if bad_entries:
+            _bad(f"{label} books data contains {bad_entries} malformed entries in {path}")
+
+        books_with_text = payload.get("booksWithText")
+        if books_with_text != readable:
+            _bad(
+                f"{label} booksWithText mismatch: declared {books_with_text}, "
+                f"actual {readable} in {path}"
+            )
+        else:
+            _ok(f"{label} books data: {len(books)} books, {readable} with text")
+
+    def _validate_library_json(path: Path, label: str) -> None:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            _bad(f"{label} library data is not valid JSON: {path} ({exc})")
+            return
+
+        if not isinstance(payload, dict):
+            _bad(f"{label} library data is not a JSON object: {path}")
+            return
+
+        sections = payload.get("sections")
+        if not isinstance(sections, list) or not sections:
+            _bad(f"{label} library sections missing or empty: {path}")
+            return
+
+        expected_sections = {"books", "scrolls", "graves", "plaques", "spells"}
+        seen_sections = {
+            section.get("id")
+            for section in sections
+            if isinstance(section, dict) and isinstance(section.get("id"), str)
+        }
+        missing = expected_sections - seen_sections
+        if missing:
+            _bad(f"{label} library sections missing {sorted(missing)} in {path}")
+
+        total_items = 0
+        malformed = 0
+        for section in sections:
+            if not isinstance(section, dict):
+                malformed += 1
+                continue
+            items = section.get("items")
+            if not isinstance(items, list) or not items:
+                _bad(f"{label} library section {section.get('id')!r} has no items in {path}")
+                continue
+            if section.get("totalItems") != len(items):
+                _bad(
+                    f"{label} library section {section.get('id')!r} totalItems mismatch: "
+                    f"declared {section.get('totalItems')}, actual {len(items)} in {path}"
+                )
+            total_items += len(items)
+            for item in items:
+                if not isinstance(item, dict):
+                    malformed += 1
+                    continue
+                if not isinstance(item.get("id"), str) or not item.get("id"):
+                    malformed += 1
+                if not isinstance(item.get("title"), str) or not item.get("title"):
+                    malformed += 1
+                if not isinstance(item.get("kind"), str) or not item.get("kind"):
+                    malformed += 1
+                if not isinstance(item.get("category"), str) or not item.get("category"):
+                    malformed += 1
+
+        if payload.get("totalItems") != total_items:
+            _bad(
+                f"{label} library totalItems mismatch: declared {payload.get('totalItems')}, "
+                f"actual {total_items} in {path}"
+            )
+        if malformed:
+            _bad(f"{label} library data contains {malformed} malformed item(s) in {path}")
+        else:
+            _ok(f"{label} library data: {len(sections)} sections, {total_items} items")
 
     typer.secho("Dialogue pipeline validation", fg=typer.colors.BRIGHT_BLUE, bold=True)
     typer.echo(f"Runtime root: {runtime_root}")
@@ -370,7 +523,13 @@ def _validate_pipeline_outputs(runtime_root: Path, expected_classes: int, run_co
     if not runtime_books.is_file():
         _bad(f"Runtime books data missing: {runtime_books}")
     else:
-        _ok(f"Runtime books data: {runtime_books}")
+        _validate_books_json(runtime_books, "Runtime")
+
+    runtime_library = dirs.web_data / "library.json"
+    if not runtime_library.is_file():
+        _bad(f"Runtime library data missing: {runtime_library}")
+    else:
+        _validate_library_json(runtime_library, "Runtime")
 
     websrc_manifest = websrc_data / "manifest.json"
     if not websrc_manifest.is_file():
@@ -388,7 +547,13 @@ def _validate_pipeline_outputs(runtime_root: Path, expected_classes: int, run_co
     if not websrc_books.is_file():
         _bad(f"Websrc books data missing (for npx vite): {websrc_books}")
     else:
-        _ok(f"Websrc books data: {websrc_books}")
+        _validate_books_json(websrc_books, "Websrc")
+
+    websrc_library = websrc_data / "library.json"
+    if not websrc_library.is_file():
+        _bad(f"Websrc library data missing (for npx vite): {websrc_library}")
+    else:
+        _validate_library_json(websrc_library, "Websrc")
 
     if not websrc_meta.is_dir():
         _bad(f"Websrc meta directory missing (required for dialogue launch): {websrc_meta}")
