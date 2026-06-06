@@ -153,13 +153,13 @@ def _run_prepare(
         for pattern in ("U8P_*.txt",):
             for file in dirs.fold.glob(pattern):
                 file.unlink()
-        for pattern in ("U8P_*.json", "all_dialogue.json", "manifest.json"):
+        for pattern in ("U8P_*.json", "all_dialogue.json", "manifest.json", "books.json"):
             for file in dirs.json.glob(pattern):
                 file.unlink()
-        for pattern in ("U8P_*.json", "all_dialogue.json", "manifest.json"):
+        for pattern in ("U8P_*.json", "all_dialogue.json", "manifest.json", "books.json"):
             for file in dirs.web_data.glob(pattern):
                 file.unlink()
-        for pattern in ("U8P_*.json", "all_dialogue.json", "manifest.json", "flag_metadata.json"):
+        for pattern in ("U8P_*.json", "all_dialogue.json", "manifest.json", "flag_metadata.json", "books.json"):
             for file in websrc_data.glob(pattern):
                 file.unlink()
 
@@ -214,8 +214,8 @@ def _run_prepare(
 
     typer.echo("Starting book extraction...")
     books_rc = extract_books_main([
-        "--fold-dir",
-        str(dirs.fold),
+        "--json-dir",
+        str(dirs.json),
         "--out",
         str(dirs.json / "books.json"),
     ])
@@ -275,6 +275,80 @@ def _validate_pipeline_outputs(runtime_root: Path, expected_classes: int, run_co
 
     def _count(pattern_dir: Path, pattern: str) -> int:
         return sum(1 for _ in pattern_dir.glob(pattern))
+
+    def _validate_books_json(path: Path, label: str) -> None:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            _bad(f"{label} books data is not valid JSON: {path} ({exc})")
+            return
+
+        if not isinstance(payload, dict):
+            _bad(f"{label} books data is not a JSON object: {path}")
+            return
+
+        books = payload.get("books")
+        if payload.get("itemClass") != "BASEBOOK":
+            _bad(f"{label} books itemClass mismatch: expected BASEBOOK in {path}")
+        if not isinstance(books, list) or not books:
+            _bad(f"{label} books list is missing or empty: {path}")
+            return
+
+        total_books = payload.get("totalBooks")
+        if total_books != len(books):
+            _bad(f"{label} totalBooks mismatch: declared {total_books}, actual {len(books)} in {path}")
+
+        seen_qualities: set[int] = set()
+        readable = 0
+        bad_entries = 0
+        for index, entry in enumerate(books):
+            if not isinstance(entry, dict):
+                bad_entries += 1
+                continue
+
+            quality = entry.get("quality")
+            quality_hex = entry.get("qualityHex")
+            title = entry.get("title")
+            category = entry.get("category")
+            text = entry.get("text")
+            paragraphs = entry.get("paragraphs")
+
+            if not isinstance(quality, int):
+                bad_entries += 1
+                continue
+            if quality in seen_qualities:
+                _bad(f"{label} duplicate book quality 0x{quality:02X} in {path}")
+            seen_qualities.add(quality)
+
+            expected_hex = f"0x{quality:02X}"
+            if quality_hex != expected_hex:
+                _bad(
+                    f"{label} book #{index} qualityHex mismatch: "
+                    f"expected {expected_hex}, found {quality_hex!r} in {path}"
+                )
+            if not isinstance(title, str) or not title.strip():
+                _bad(f"{label} book {expected_hex} has missing title in {path}")
+            if not isinstance(category, str) or not category.strip():
+                _bad(f"{label} book {expected_hex} has missing category in {path}")
+
+            if isinstance(text, str):
+                readable += 1
+                if not isinstance(paragraphs, list) or not all(isinstance(p, str) for p in paragraphs):
+                    _bad(f"{label} book {expected_hex} has text but invalid paragraphs in {path}")
+            elif text is not None:
+                _bad(f"{label} book {expected_hex} text must be string or null in {path}")
+
+        if bad_entries:
+            _bad(f"{label} books data contains {bad_entries} malformed entries in {path}")
+
+        books_with_text = payload.get("booksWithText")
+        if books_with_text != readable:
+            _bad(
+                f"{label} booksWithText mismatch: declared {books_with_text}, "
+                f"actual {readable} in {path}"
+            )
+        else:
+            _ok(f"{label} books data: {len(books)} books, {readable} with text")
 
     typer.secho("Dialogue pipeline validation", fg=typer.colors.BRIGHT_BLUE, bold=True)
     typer.echo(f"Runtime root: {runtime_root}")
@@ -370,7 +444,7 @@ def _validate_pipeline_outputs(runtime_root: Path, expected_classes: int, run_co
     if not runtime_books.is_file():
         _bad(f"Runtime books data missing: {runtime_books}")
     else:
-        _ok(f"Runtime books data: {runtime_books}")
+        _validate_books_json(runtime_books, "Runtime")
 
     websrc_manifest = websrc_data / "manifest.json"
     if not websrc_manifest.is_file():
@@ -388,7 +462,7 @@ def _validate_pipeline_outputs(runtime_root: Path, expected_classes: int, run_co
     if not websrc_books.is_file():
         _bad(f"Websrc books data missing (for npx vite): {websrc_books}")
     else:
-        _ok(f"Websrc books data: {websrc_books}")
+        _validate_books_json(websrc_books, "Websrc")
 
     if not websrc_meta.is_dir():
         _bad(f"Websrc meta directory missing (required for dialogue launch): {websrc_meta}")
