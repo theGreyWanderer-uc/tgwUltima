@@ -34,6 +34,9 @@ This project uses [Semantic Versioning](https://semver.org/):
 - Improved dialogue web branch reporting:
   - Random branch roll/chance reporting.
   - Flag-branch ending hints to suggest alternate outcomes.
+- Added dialogue web library generation in `titan dialogue prepare` /
+  `validate`, covering books, scrolls, graves, plaques, and spell catalog
+  entries with a sectioned web library browser.
 
 ### Fixed
 
