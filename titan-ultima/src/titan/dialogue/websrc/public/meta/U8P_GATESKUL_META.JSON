@@ -3,30 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_GATESKUL.json",
   "file": "U8P_GATESKUL",
   "behavior_summary": [
-    "This script implements the 'U8P_GATESKUL::look' (examine) handler for the GATESKUL object. When an actor examines the skull, the handler sets per-process state/flags, calls the object's Item::bark routine to emit the short text \"skull \", then suspends and returns the bark result.",
-    "The handler treats the stack parameter at BP+06h as the target object/process ('this') and supplies a pid (viewer/process id) when invoking Item::bark so the message is directed to the examiner.",
-    "No persistent global game flags are modified by this handler; the writes are limited to process-scoped info (set info and process-exclude) that affect how the object's process is handled subsequently."
+    "When the player examines the GATESKUL object/NPC, the U8P_GATESKUL::look handler displays a single short description text 'skull ' and then suspends/pauses the U8P_GATESKUL::look process.",
+    "There are no menu choices, conditionals, external calls, or global flag reads/writes involved; the behavior is minimal and deterministic.",
+    "The suspend at the end indicates the engine will wait for player acknowledgement or resume before finishing the U8P_GATESKUL::look process."
   ],
   "notable_control_flow": [
-    "Entry on examine event (Event 0 / U8P_GATESKUL::look).",
-    "Set per-process info/state via a 'set info' opcode (inferred) for the target process.",
-    "Set process exclusion state for the target process (process exclude opcode) so it is excluded from some processing.",
-    "Push pid and the literal string \"skull \" and call Item::bark(this=BP+06h, \"skull \", pid).",
-    "Free the temporary string, capture the return value from Item::bark into retval.",
-    "Perform an implies/pop style sequence with retval, suspend the process, and return the bark result."
+    "Single straight-line flow: emit a bark 'skull ' then suspend; no branches or loops.",
+    "Execution is driven by the engine's U8P_GATESKUL::look/examine process (process type 0x0208) and runs immediately when invoked.",
+    "No internal or external calls alter state; control returns to the engine only after the suspend completes."
   ],
   "open_questions": [
-    "Which exact info key/value is written by the 'set info' opcode in this handler (the disassembly shows a set info but the specific info id/value is not present in the extracted excerpt)?",
-    "Does the process-exclude write represent a temporary exclusion (only during this handler) or a persistent state preventing later processing of this object?",
-    "Are there any side-effects of the Item::bark call beyond producing UI text (e.g., triggering sounds or additional scripted callbacks) in the engine context?"
+    "Is the trailing space in the text 'skull ' intentional (formatting for concatenation) or an artifact of extraction?",
+    "Is this object referenced by any fast-area triggers or other scripts that perform additional behavior beyond the U8P_GATESKUL::look handler?",
+    "Does the suspend represent a short UI pause for the player or a longer process wait used by other systems (inventory, dialogues)?"
   ],
   "main_function": {
     "name": "U8P_GATESKUL::look",
     "execution_form": "process",
-    "purpose": "Handle the in-game 'U8P_GATESKUL::look' (examine) event for the skull object: prepare per-process state, make the object emit the short description text \"skull \", then suspend and return the bark result.",
+    "purpose": "Provide the short descriptive text shown when the player uses the 'U8P_GATESKUL::look' (examine) action on the GATESKUL entity and then pause the U8P_GATESKUL::look process.",
     "entry_conditions": [
-      "Event 0 (U8P_GATESKUL::look) — triggered when a player/actor examines or 'looks' at the GATESKUL object.",
-      "BP+06h must contain a valid process/item pointer for the object being examined."
+      "Invoked when the player examines/looks at the GATESKUL object (engine U8P_GATESKUL::look/examine action)."
     ],
     "confidence": "high"
   },
@@ -34,54 +30,29 @@
     {
       "name": "U8P_GATESKUL::look",
       "kind": "main",
-      "role": "Examine/U8P_GATESKUL::look event handler for the GATESKUL (skull) object.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item call used to present short text or message (the object's description) to a target process/player.",
+      "role": "Handle U8P_GATESKUL::look/examine for the GATESKUL entity: display a short description and suspend the process.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_GATESKUL::look",
-        "callee": "Item::bark",
-        "purpose": "Cause the skull item/process to 'bark' the short examination text \"skull \" directed at the viewer (pid). The bark return value is captured and returned by the handler.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
-    "writes": [
-      {
-        "name": "process info (per-process set via set info opcode)",
-        "likely_effect": "Modify an info/state entry on the skull's process so it records or alters internal processing state (exact key/value not present in excerpt).",
-        "confidence": "medium"
-      },
-      {
-        "name": "process exclude (per-process exclusion state)",
-        "likely_effect": "Mark the skull's process as excluded from some regular processing/AI loops (prevents further or concurrent processing while excluded).",
-        "confidence": "medium"
-      }
-    ]
+    "writes": []
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "animation",
-    "guard"
+    "suspend",
+    "description"
   ],
   "quick_facts": {
     "main_function": "U8P_GATESKUL::look",
-    "behavior_summary_one_liner": "This script implements the 'U8P_GATESKUL::look' (examine) handler for the GATESKUL object. When an actor examines the skull, the handler sets per-process state/flags, calls the object's Item::bark routine to emit the short text \"skull \", then suspends and returns the bark result.",
-    "external_call_count": 1,
+    "behavior_summary_one_liner": "When the player examines the GATESKUL object/NPC, the U8P_GATESKUL::look handler displays a single short description text 'skull ' and then suspends/pauses the U8P_GATESKUL::look process.",
+    "external_call_count": 0,
     "flag_read_count": 0,
-    "flag_write_count": 2
+    "flag_write_count": 0
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

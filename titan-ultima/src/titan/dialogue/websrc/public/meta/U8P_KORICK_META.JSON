@@ -3,33 +3,33 @@
   "source_of_truth": "dialogue/json/U8P_KORICK.json",
   "file": "U8P_KORICK",
   "behavior_summary": [
-    "Defines Korick NPC gameplay behavior: how he is described when examined, how he responds to theft and hostile actions, how he participates in shop/dialog interactions, and how schedule/area triggers move or update his behavior.",
-    "KORICK::look (main) makes Korick produce different short barks depending on life state and whether the player has previously met him (uses global korickMet).",
-    "When the player steals near Korick (AvatarStoleSomething) the script checks stolen item types and, if appropriate and guards haven't already been called, clears tracked references, shouts 'Stop! Thief!' and spawns guards.",
-    "Area-enter and area-leave handlers (enterFastArea / leaveFastArea) perform reference cleanup and either spawn schedule-related routines or teleport Korick randomly on exit.",
-    "A schedule routine computes and writes korickSchedule based on engine state and spawns external schedule handlers to apply behaviors. Cast (spell-targeted) logic may call for help or summon guards/sorcerer depending on target and randomness.",
-    "Shop/dialog helpers present choice lists to the player (armor and weapons), handle selection via Item::ask, and call engine money/transaction routines to perform purchases."
+    "U8P_KORICK implements the NPC Korick (a smith/shopkeeper) behavior: short 'U8P_KORICK::look' descriptions, area-entry/exit scheduling and presence management, shop dialogs for armor and weapons, a crafting branch for forging a focus, and reactions to theft/hostility that can summon guards.",
+    "Nearby-area handlers (U8P_KORICK::enterFastArea / U8P_KORICK::leaveFastArea) clear transient refs (FREE::resetRef) and delegate to U8P_KORICK::schedule-specific behavior (korickSchedule drives U8P_KORICK::func16D8 vs U8P_KORICK::func1051).",
+    "U8P_KORICK::schedule() computes Korick's daily state (korickSchedule) based on time-of-day (FREE::getTimeOfDayPeriod), presents/awaits a selection (METHOD::func143A), and applies the chosen U8P_KORICK::schedule (METHOD::func133F).",
+    "Conversation/U8P_KORICK::use() builds a dynamic menu, tracks meeting state (korickMet), guards against angry states (korickRealPissed / korickPissed), and routes to internal shop/crafting functions: U8P_KORICK::func0420 (armor), U8P_KORICK::func09BF (weapons), and U8P_KORICK::func6662 (focus crafting).",
+    "U8P_KORICK::AvatarStoleSomething(uword) and U8P_KORICK::cast(uword) detect stealing/attacks, bark (e.g., 'Stop! Thief!', 'Help me, Beren!'), reset refs and call CALGUARD::guardRespondToCrime to involve guards."
   ],
   "notable_control_flow": [
-    "KORICK::look: check Npc::isDead -> if dead bark 'dead Korick' and exit; else read global korickMet -> bark either 'Korick the Smith' (if not met) or 'man' (if met).",
-    "U8P_KORICK::AvatarStoleSomething: read stolen item pointer ([BP-02h]); call Item::getType repeatedly to match item categories; read global guardsCalled to avoid duplicate summons; if conditions met, call resetRef on multiple ref slots, bark alert, and spawn CALGUARD::0080.",
-    "U8P_KORICK::enterFastArea: clear references (resetRef), read global korickSchedule and spawn either U8P_KORICK::16D8 when schedule==2 or U8P_KORICK::1051 when schedule==1 to run schedule-specific behaviors.",
-    "U8P_KORICK::schedule: if Npc::isDead then return; otherwise call FREE::28F9 to get a state, map it to a small schedule value, write korickSchedule, and spawn METHOD::133F (and also METHOD::143A) to apply/update schedule.",
-    "U8P_KORICK::cast: loop a small number of times; if no combat target call FREE::1C19 (request help); if targeted by player then probabilistically bark a plea ('Help me, Beren!' or 'Town Sorcerer!') and spawn CALGUARD::0080.",
-    "U8P_KORICK::leaveFastArea: free references via FREE::2A56; if Korick is alive, call urandom to generate coordinates and Npc::teleport to a random nearby location."
+    "Main U8P_KORICK::look process (U8P_KORICK::look) is a short conditional: if dead -> 'dead Korick', else if korickMet -> 'Korick the Smith', else -> 'man'.",
+    "Area enter path: U8P_KORICK::enterFastArea always clears runtime refs, then branches on korickSchedule (== 0x02 -> U8P_KORICK::func16D8, == 0x01 -> U8P_KORICK::func1051).",
+    "U8P_KORICK::schedule() chooses between two preconfigured state sets based on FREE::getTimeOfDayPeriod() (<3 vs >=3), calls METHOD::func143A and, if process_result() true, stores the selected index into korickSchedule then calls METHOD::func133F.",
+    "Dialog/U8P_KORICK::use() constructs menu options dynamically and uses SuspendAssign + strcmp branches to route choices; selecting buy routes to U8P_KORICK::func0420 or U8P_KORICK::func09BF, the crafting option to U8P_KORICK::func6662.",
+    "Movement/approach helpers (U8P_KORICK::func1051, U8P_KORICK::func16D8, U8P_KORICK::func1C3F) attempt Npc::pathfind asynchronously and test process_result() to decide success/failure flows, calling monologue helpers (U8P_KORICK::func119A, U8P_KORICK::func181B, U8P_KORICK::func1D82) on success or spawning fallback timers (FREE::func1C19) on failure."
   ],
   "open_questions": [
-    "Exact numeric item type codes checked by AvatarStoleSomething and which concrete item categories they represent (strings/types inferred but not canonical).",
-    "Precise mapping table used in schedule() between FREE::28F9 return values and the concrete korickSchedule numbers (only inferred mapping to small integers).",
-    "Exact behavior and code bodies of spawned internal routines U8P_KORICK::16D8 and U8P_KORICK::1051 referenced by enterFastArea (their names/roles inferred only from spawn targets).",
-    "Whether guardsCalled is written elsewhere in game code (script reads it to gate summons) and exactly where that write occurs."
+    "Exact persistent storage/namespace of flags: which flags are global persistent vs script-local (metadata shows korickMet, korickSchedule, korickPissed, korickRealPissed and passedCenteredTest used but canonical global flag listing was empty). Confidence about persistence is inferred, not guaranteed.",
+    "Precise semantics and side-effects of METHOD::func143A / METHOD::func133F: they appear to present/resolve U8P_KORICK::schedule selection, but the concrete UI/selection mechanism is external and not fully recovered.",
+    "Meaning of numeric/state constants set in U8P_KORICK::schedule() (local0/local1/local2): they are large hex values likely encoding movement/state but the mapping to world routes or animations is not explicit.",
+    "Some Unknown nodes and raw usecode remnants (spawn/temps) appear in multiple functions; the exact timing/ordering of spawned FREE::func1C19 tasks (delays/cleanup) is inferred but not precisely reconstructed."
   ],
   "main_function": {
     "name": "U8P_KORICK::look",
     "execution_form": "process",
-    "purpose": "Handle the player 'U8P_KORICK::look' (examine) interaction with the Korick NPC: if Korick is dead, make him bark a 'dead' message; otherwise choose a short identification bark depending on whether the player previously met Korick (korickMet).",
+    "purpose": "Provide the short description when the player inspects Korick, choosing a bark that reflects whether Korick is dead, previously met, or unknown to the player.",
     "entry_conditions": [
-      "Event 0 (U8P_KORICK::look) — invoked when the Avatar or another actor examines this NPC/process."
+      "Triggered when the player 'looks at' or inspects the NPC (U8P_KORICK::look/inspect action).",
+      "Checks Npc::isDead(this) first; if true outputs 'dead Korick'.",
+      "Reads korickMet to decide between 'Korick the Smith' (met) and generic 'man' (unmet)."
     ],
     "confidence": "high"
   },
@@ -37,168 +37,234 @@
     {
       "name": "U8P_KORICK::look",
       "kind": "main",
-      "role": "Player examination handler; reports Korick's description and playing-state-dependent barks.",
+      "role": "short inspect/U8P_KORICK::look response selecting dead/met/unmet bark",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_KORICK::use",
+      "kind": "helper",
+      "role": "conversation entry / menu-driven dialog (greeting, shop entry, crafting option), builds dynamic menus and routes to shop/craft handlers",
       "confidence": "high"
     },
     {
       "name": "U8P_KORICK::AvatarStoleSomething",
       "kind": "helper",
-      "role": "Respond to nearby theft: check stolen item types, clear references, shout and summon guards (if guards not already called).",
+      "role": "react to theft: filter stolen item types, shout, clear refs, and call guard response",
       "confidence": "high"
     },
     {
       "name": "U8P_KORICK::enterFastArea",
       "kind": "helper",
-      "role": "Fast-area entry trigger: reset stored references and spawn schedule-dependent internal handlers based on korickSchedule.",
+      "role": "area-entry trigger: clear transient refs then dispatch to U8P_KORICK::schedule-specific behavior",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_KORICK::leaveFastArea",
+      "kind": "helper",
+      "role": "area-exit cleanup: clear refs and teleport/hide the NPC if dead",
       "confidence": "high"
     },
     {
       "name": "U8P_KORICK::schedule",
       "kind": "helper",
-      "role": "Compute and set korickSchedule (read engine state via FREE::28F9), then spawn external schedule application routines (METHOD::143A / METHOD::133F).",
+      "role": "compute and apply NPC daily U8P_KORICK::schedule (korickSchedule) using time-of-day and external method-driven selection",
       "confidence": "high"
     },
     {
       "name": "U8P_KORICK::cast",
       "kind": "helper",
-      "role": "React to spell/target events: possibly call for help, bark pleas, and summon guards or town sorcerer depending on target and randomness.",
-      "confidence": "medium"
-    },
-    {
-      "name": "U8P_KORICK::leaveFastArea",
-      "kind": "helper",
-      "role": "Fast-area exit trigger: clear references and, if alive, teleport Korick to a random nearby location.",
+      "role": "react to being targeted/attacked: randomized barks and guard-alert invocation",
       "confidence": "high"
     },
     {
-      "name": "U8P_KORICK::0420",
+      "name": "U8P_KORICK::func0420",
       "kind": "helper",
-      "role": "Armor shop/dialog entry: present armor choices and proceed to purchase/amount handling.",
+      "role": "armor shop menu and purchase flow (present options, set price/item locals, attempt equip, check payment, handle insufficient funds or hold-for-later)",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_KORICK::func09BF",
+      "kind": "helper",
+      "role": "weapons shop menu and purchase flow (analogous to U8P_KORICK::func0420 for weapons)",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_KORICK::func6662",
+      "kind": "helper",
+      "role": "crafting dialog for forging a focus: ask yes/no about silver ore, check inventory, present focus options and record selection",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_KORICK::func1051",
+      "kind": "helper",
+      "role": "movement/approach helper used by U8P_KORICK::schedule/U8P_KORICK::enterFastArea: inspect a target, attempt pathfind, call follow-up monologues on success/failure",
       "confidence": "medium"
     },
     {
-      "name": "U8P_KORICK::09BF",
+      "name": "U8P_KORICK::func16D8",
       "kind": "helper",
-      "role": "Weapon shop/dialog entry: present melee weapon choices and execute purchase logic (prices, inventory, transactions).",
+      "role": "alternate movement/approach helper (U8P_KORICK::schedule variant) that iterates candidate frames and pathfinds to them, calling different monologues on success",
       "confidence": "medium"
+    },
+    {
+      "name": "U8P_KORICK::func119A",
+      "kind": "helper",
+      "role": "short monologue generator: distance-aware randomized barks and associated animation/timing calls",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_KORICK::func181B",
+      "kind": "helper",
+      "role": "ambient stroll/out-of-shop monologue generator with distance/randomization",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_KORICK::func1C3F",
+      "kind": "helper",
+      "role": "approach/interaction retry routine: inspect frame, pathfind, spawn fallbacks and call arrival monologues (U8P_KORICK::func1D82)",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_KORICK::func1D82",
+      "kind": "helper",
+      "role": "bedroom/indoor monologue set with randomized lines and animation calls",
+      "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
         "caller": "U8P_KORICK::enterFastArea",
-        "callee": "U8P_KORICK::16D8",
-        "purpose": "Spawn a schedule-specific routine when korickSchedule == 2 (internal schedule behavior).",
-        "confidence": "medium"
+        "callee": "U8P_KORICK::func16D8",
+        "purpose": "Run U8P_KORICK::schedule-state-specific behavior when korickSchedule == 0x02",
+        "confidence": "high"
       },
       {
         "caller": "U8P_KORICK::enterFastArea",
-        "callee": "U8P_KORICK::1051",
-        "purpose": "Spawn a schedule-specific routine when korickSchedule == 1 (internal schedule behavior).",
+        "callee": "U8P_KORICK::func1051",
+        "purpose": "Run U8P_KORICK::schedule-state-specific behavior when korickSchedule == 0x01",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KORICK::use",
+        "callee": "U8P_KORICK::func0420",
+        "purpose": "Enter armor shop flow when player chooses 'Armor' in dialog",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KORICK::use",
+        "callee": "U8P_KORICK::func09BF",
+        "purpose": "Enter weapons shop flow when player chooses 'Weapons' in dialog",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KORICK::use",
+        "callee": "U8P_KORICK::func6662",
+        "purpose": "Enter focus-crafting flow when player picks 'Make me a focus.'",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KORICK::func1051",
+        "callee": "U8P_KORICK::func119A",
+        "purpose": "Invoke a monologue/animation helper after successful pathfinding",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_KORICK::func16D8",
+        "callee": "U8P_KORICK::func181B",
+        "purpose": "Call walk/ambient monologue when pathfind succeeds and nobody is talking",
         "confidence": "medium"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_KORICK::look",
-        "callee": "Npc::isDead",
-        "purpose": "Check if Korick is dead to choose dead-vs-alive dialog path.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_KORICK::look",
-        "callee": "process Item::bark",
-        "purpose": "Make Korick produce the short identification or dead bark to the inspecting player/process.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_KORICK::AvatarStoleSomething",
         "callee": "Item::getType",
-        "purpose": "Determine the stolen item's type/category to decide whether to summon guards/trigger theft response.",
+        "purpose": "Determine stolen item's type to decide whether to raise an alarm",
         "confidence": "high"
       },
       {
         "caller": "U8P_KORICK::AvatarStoleSomething",
-        "callee": "U8P_KORICK::resetRef",
-        "purpose": "Clear NPC reference slots that tracked stolen items or related state prior to summoning guards.",
+        "callee": "CALGUARD::guardRespondToCrime",
+        "purpose": "Notify/dispatch guards when a qualifying item is stolen",
         "confidence": "high"
       },
       {
-        "caller": "U8P_KORICK::AvatarStoleSomething",
-        "callee": "CALGUARD::0080",
-        "purpose": "Spawn or call guard routine in response to theft.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_KORICK::schedule",
-        "callee": "FREE::28F9",
-        "purpose": "Obtain an engine state/value used to map to a korickSchedule number.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_KORICK::schedule",
-        "callee": "METHOD::143A",
-        "purpose": "Spawn/notify an external method as part of schedule computation (used in schedule workflow).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_KORICK::schedule",
-        "callee": "METHOD::133F",
-        "purpose": "Spawn external schedule-application method after korickSchedule is set.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_KORICK::cast",
-        "callee": "Npc::getTarget",
-        "purpose": "Check current AI/combat target to decide help request or retaliatory behavior.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_KORICK::cast",
-        "callee": "FREE::1C19",
-        "purpose": "Request help/alert when Korick has no target (call for assistance).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_KORICK::cast",
-        "callee": "CALGUARD::0080",
-        "purpose": "Spawn guards in response to being targeted (especially if target is player).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_KORICK::leaveFastArea",
-        "callee": "FREE::2A56",
-        "purpose": "Free/clear stored references on area exit.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_KORICK::leaveFastArea",
-        "callee": "urandom",
-        "purpose": "Generate pseudorandom coordinates used before teleporting Korick on area exit.",
+        "caller": "U8P_KORICK::enterFastArea",
+        "callee": "FREE::resetRef",
+        "purpose": "Clear transient runtime references on area entry",
         "confidence": "high"
       },
       {
         "caller": "U8P_KORICK::leaveFastArea",
         "callee": "Npc::teleport",
-        "purpose": "Teleport Korick to a random new location when leaving the fast area (if alive).",
+        "purpose": "Teleport (hide/respawn) the NPC when leaving area while dead",
         "confidence": "high"
       },
       {
-        "caller": "U8P_KORICK::0420",
-        "callee": "process Item::ask",
-        "purpose": "Present multiple-choice dialog (armor choices) to player and receive selection.",
+        "caller": "U8P_KORICK::schedule",
+        "callee": "FREE::getTimeOfDayPeriod",
+        "purpose": "Read coarse time-of-day to choose U8P_KORICK::schedule/state values",
         "confidence": "high"
       },
       {
-        "caller": "U8P_KORICK::09BF",
-        "callee": "process Item::ask",
-        "purpose": "Present weapon choices and manage the player's purchase selection/flow.",
+        "caller": "U8P_KORICK::schedule",
+        "callee": "METHOD::func143A",
+        "purpose": "Present/compute U8P_KORICK::schedule selection (suspend and test process_result())",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_KORICK::schedule",
+        "callee": "METHOD::func133F",
+        "purpose": "Finalize/apply selected U8P_KORICK::schedule state after process_result()",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_KORICK::func0420",
+        "callee": "FREE::equipItem",
+        "purpose": "Attempt to give/equip purchased armor to the player",
         "confidence": "high"
       },
       {
-        "caller": "U8P_KORICK::0420",
-        "callee": "FREE::1EE2",
-        "purpose": "Call engine money/transaction check/transfer routines during purchase handling (inferred from dialog flow).",
+        "caller": "U8P_KORICK::func0420",
+        "callee": "FREE::findNearbyItems",
+        "purpose": "Check for payment (nearby coins) after a purchase attempt",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KORICK::func09BF",
+        "callee": "FREE::equipItem",
+        "purpose": "Attempt to give/equip purchased weapon to the player",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KORICK::func09BF",
+        "callee": "FREE::findNearbyItems",
+        "purpose": "Check for payment (nearby coins) after weapon purchase attempt",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KORICK::cast",
+        "callee": "CALGUARD::guardRespondToCrime",
+        "purpose": "Alert guards when Korick is targeted/attacked",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KORICK::func1051",
+        "callee": "Npc::pathfind",
+        "purpose": "Request asynchronous pathfinding to a target; flow uses process_result() to drive success/failure behavior",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KORICK::func16D8",
+        "callee": "Npc::pathfind",
+        "purpose": "Iterate pathfind attempts over candidate frames/targets",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_KORICK::multiple",
+        "callee": "FREE::func1C19",
+        "purpose": "Spawned helper/timer used as a delayed fallback or effect after pathfind success/failure and around some barks",
         "confidence": "medium"
       }
     ]
@@ -207,24 +273,44 @@
     "reads": [
       {
         "name": "korickMet",
-        "likely_effect": "Controls whether Korick uses the long title ('Korick the Smith') or a generic description ('man') when examined.",
+        "likely_effect": "Used by U8P_KORICK::look and U8P_KORICK::use to choose greeting/description variants (met vs generic)",
         "confidence": "high"
       },
       {
+        "name": "korickRealPissed",
+        "likely_effect": "If set, dialog refuses to speak normally (immediate angry refusal in U8P_KORICK::use())",
+        "confidence": "high"
+      },
+      {
+        "name": "korickPissed",
+        "likely_effect": "Restricts menu options and influences initial dialog lines in U8P_KORICK::use()",
+        "confidence": "high"
+      },
+      {
+        "name": "passedCenteredTest",
+        "likely_effect": "Adds the 'Make me a focus.' crafting option to the dialog menu when true",
+        "confidence": "medium"
+      },
+      {
         "name": "korickSchedule",
-        "likely_effect": "Read by enterFastArea to decide which schedule-specific internal routine to spawn; influences NPC daily/periodic behavior.",
+        "likely_effect": "Read by U8P_KORICK::enterFastArea and U8P_KORICK::use() to decide whether Korick is in-shop vs out-of-shop; influences which behavior helper runs",
         "confidence": "high"
       },
       {
         "name": "guardsCalled",
-        "likely_effect": "Gating flag consulted by AvatarStoleSomething to avoid re-calling guards multiple times for the same incident.",
-        "confidence": "high"
+        "likely_effect": "Checked to avoid repeated guard calls when theft is reported (presence read-only in this script excerpt)",
+        "confidence": "medium"
       }
     ],
     "writes": [
       {
+        "name": "korickMet",
+        "likely_effect": "Set to mark that the player has greeted/met Korick (written in U8P_KORICK::use() when player selects a greeting) — affects future U8P_KORICK::look()/U8P_KORICK::use() behavior",
+        "confidence": "high"
+      },
+      {
         "name": "korickSchedule",
-        "likely_effect": "Written by U8P_KORICK::schedule based on engine state so enterFastArea and schedule-application methods know which routine/state to run.",
+        "likely_effect": "Updated by U8P_KORICK::schedule() after a successful selection (process_result()) to control daily/area behavior",
         "confidence": "high"
       }
     ]
@@ -236,11 +322,11 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "KORICK::look",
-    "behavior_summary_one_liner": "Defines Korick NPC gameplay behavior: how he is described when examined, how he responds to theft and hostile actions, how he participates in shop/dialog interactions, and how schedule/area triggers move or update his behavior.",
-    "external_call_count": 17,
-    "flag_read_count": 3,
-    "flag_write_count": 1
+    "main_function": "U8P_KORICK::look",
+    "behavior_summary_one_liner": "U8P_KORICK implements the NPC Korick (a smith/shopkeeper) behavior: short 'U8P_KORICK::look' descriptions, area-entry/exit scheduling and presence management, shop dialogs for armor and weapons, a crafting branch for forging a focus, and reactions to theft/hostility that can summon guards.",
+    "external_call_count": 15,
+    "flag_read_count": 6,
+    "flag_write_count": 2
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

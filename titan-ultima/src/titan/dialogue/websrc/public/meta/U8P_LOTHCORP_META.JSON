@@ -3,26 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_LOTHCORP.json",
   "file": "U8P_LOTHCORP",
   "behavior_summary": [
-    "When the Lothian corpse object is examined (U8P_LOTHCORP::look event), the script marks the object with object-local info/process-exclude flags and causes the examining process to 'bark' the literal string \"Lothian\" (i.e., display or speak the name).",
-    "The return value from Item::bark is captured and tested with an implication-style opcode; the result is stored into a small temporary and the script then suspends/returns.",
-    "All observable effects are local to the object/process interaction—no global script flags are read or written by this handler."
+    "This script implements a simple 'U8P_LOTHCORP::look' (examine) handler for an NPC/object. When the player examines the entity, the process U8P_LOTHCORP::look issues a single bark containing the text \"Lothian\" and then suspends the process.",
+    "There is no branching, no menus, no parameter use, no reads or writes of global flags, and no external function calls in the observed code. The behavior is purely a one-line U8P_LOTHCORP::look response intended to present the short description/bark to the player and then pause until dismissal."
   ],
   "notable_control_flow": [
-    "Entry on U8P_LOTHCORP::look/examine event -> set object info / process-exclude -> call Item::bark(viewer/process, \"Lothian\") -> free temporary string -> test bark return (implies) -> store implication result -> suspend/return",
-    "The implication opcode and subsequent suspend suggest the bark return may influence whether further processing or notification occurs, but control always reaches the suspend/return after the check."
+    "U8P_LOTHCORP::look executes linearly: emit Bark(\"Lothian\") → Suspend. No conditional or loop constructs are present.",
+    "The process form (process type 0x0208) indicates this runs in response to an engine 'U8P_LOTHCORP::look' (examine) event rather than a standalone utility function."
   ],
   "open_questions": [
-    "Exact meaning and numeric id of the object info bit set by the handler (opcode shows a set-info but the specific semantic meaning is inferred, not explicit).",
-    "Precise semantics of the 'implies' opcode and how its result affects game behavior beyond storing a temporary value and suspending (e.g., whether it gates additional logic elsewhere).",
-    "Whether Item::bark's return value indicates success/failure, player-visible acknowledgement, or a queued display result (the script only tests it and does not branch locally)."
+    "Does the suspend correspond to waiting for the player to dismiss the bark/dialog, or is it a process-yield for other engine scheduling reasons? (inferred: likely waits for dismissal; confidence: medium)",
+    "Is the bark text \"Lothian\" used as the visible short name only, or is it also routed into any larger dialog system elsewhere? (confidence: low)",
+    "Are there any contextual entry predicates (e.g., proximity/fast-area) beyond the 'U8P_LOTHCORP::look' verb that could also invoke this U8P_LOTHCORP::look process in certain engine states? (confidence: low)"
   ],
   "main_function": {
     "name": "U8P_LOTHCORP::look",
     "execution_form": "process",
-    "purpose": "Handle the 'U8P_LOTHCORP::look' (examine) event for a Lothian corpse: mark the object with info/process-exclude and make the examining process emit/display the name \"Lothian\".",
+    "purpose": "Present a short inspection response when the player 'looks at' or examines this NPC/object by emitting a single bark with the text \"Lothian\" and then suspending the process.",
     "entry_conditions": [
-      "Triggered when an actor/process looks at or examines the LOTHCORP object (the 'U8P_LOTHCORP::look' event).",
-      "Invoked with the viewer/process pointer passed in (BP+06h)."
+      "Invoked by the engine when the player uses the 'U8P_LOTHCORP::look' verb on this NPC/object (process type 0x0208).",
+      "Interpreted as triggered by examine/inspect interaction rather than by menus, flags, or timers."
     ],
     "confidence": "high"
   },
@@ -30,26 +29,13 @@
     {
       "name": "U8P_LOTHCORP::look",
       "kind": "main",
-      "role": "Examine/inspect event handler for the Lothian corpse object that sets object-local state and requests a bark from the viewer process.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item method used to make a process or item emit/display/say a short text string (here: \"Lothian\").",
+      "role": "Handle the 'U8P_LOTHCORP::look' (examine) interaction; display the short bark/text and pause the process.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_LOTHCORP::look",
-        "callee": "Item::bark",
-        "purpose": "Ask the provided process/viewer (BP+06h) to emit/display/say the literal string \"Lothian\" so the corpse's name is presented to the player/process.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -57,12 +43,13 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup"
+    "bark",
+    "suspend"
   ],
   "quick_facts": {
-    "main_function": "U8P_LOTHCORP::LOTHCORP::look",
-    "behavior_summary_one_liner": "When the Lothian corpse object is examined (U8P_LOTHCORP::look event), the script marks the object with object-local info/process-exclude flags and causes the examining process to 'bark' the literal string \"Lothian\" (i.e., display or speak the name).",
-    "external_call_count": 1,
+    "main_function": "U8P_LOTHCORP::look",
+    "behavior_summary_one_liner": "This script implements a simple 'U8P_LOTHCORP::look' (examine) handler for an NPC/object. When the player examines the entity, the process U8P_LOTHCORP::look issues a single bark containing the text \"Lothian\" and then suspends the process.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

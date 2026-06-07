@@ -3,28 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_NITSTAND.json",
   "file": "U8P_NITSTAND",
   "behavior_summary": [
-    "Handles the 'U8P_NITSTAND::look' (examine) event for a nightstand item: when an actor inspects the nightstand the script prepares context, marks the item state (set info) and excludes it from further processing (process exclude), then constructs the description prefix \"nightstand \" and invokes the item's bark routine to present that text to the viewer.",
-    "The handler passes viewer/process context (inferred from BP+06h), an item/object reference (pushed indirectly), the description string pointer, and the calling process id to Item::bark, captures the return value, performs an implies/pop sequence with the return value, then suspends/returns.",
-    "Transient resources (the constructed string) are freed after the call. The script's visible effect is producing the short description text for the nightstand; state-writing (info and process_exclude) appear intended to guard or annotate the item to avoid re-entrance/duplicate processing."
+    "U8P_NITSTAND::look is the object's U8P_NITSTAND::look/examine handler. When the player examines the nightstand it presents a single short on-screen label/bark reading \"nightstand\".",
+    "Immediately after displaying the label the process issues a suspend; this is inferred to terminate or yield the U8P_NITSTAND::look interaction so no further behavior runs in this handler.",
+    "There are no dialog menus, branching conditions, flag reads/writes, or external function calls recorded in this script."
   ],
   "notable_control_flow": [
-    "Entry on Event 0 (U8P_NITSTAND::look) yields a single linear sequence: set info -> process exclude -> prepare string -> push viewer+item+pid -> call Item::bark -> free string -> capture return -> implies/pop -> suspend/return.",
-    "The script captures and briefly uses Item::bark's return value (via an implies/pop) — its impact on further flow is limited to the immediate implies/pop sequence before suspension.",
-    "There are no observed loops or asynchronous spawns inside this handler; it acts as a short-lived process that performs state writes then delegates text display to Item::bark."
+    "U8P_NITSTAND::look executes linearly: emit Bark(\"nightstand\") -> Suspend. No conditional branches or loops are present.",
+    "The handler is implemented as a process (process type 0x0208) and runs in response to an engine-driven U8P_NITSTAND::look/examine event."
   ],
   "open_questions": [
-    "Exact identity and numeric value of the 'info' key written by the 'set info' opcode (the disassembly shows a push of an info constant but its semantic meaning is inferred).",
-    "Precise object pointer targeted by the indirect push prior to set info/process exclude (which instance is being annotated: the nightstand object itself or a related object?).",
-    "Exact calling convention and parameter order of Item::bark in this engine (which pushed args map to pid, viewer, message, and object reference is inferred but not canonical).",
-    "Whether the process_exclude write is persistent across saves or only a transient in-memory guard, and whether other scripts check that flag elsewhere.",
-    "The functional meaning of the implies/pop sequence and the bark return value in higher-level game logic (does the return indicate success, text routed, or a branching decision?)."
+    "Does the 'suspend' call terminate the process permanently or merely yield/resume later in engine context? (inferred behavior only; confidence: low)",
+    "Are there any other related handlers for the same object (use, pickup, fast-area entry) not present in this excerpt that modify behavior? (confidence: low)"
   ],
   "main_function": {
     "name": "U8P_NITSTAND::look",
     "execution_form": "process",
-    "purpose": "Respond to the player/actor examining the nightstand by preparing item state and delegating a short description text (prefix \"nightstand \") to the engine's Item::bark routine so the viewer receives the description.",
+    "purpose": "Provide the short description when the player examines the nightstand: display the label \"nightstand\" and then suspend/end the U8P_NITSTAND::look interaction.",
     "entry_conditions": [
-      "Event 0 (U8P_NITSTAND::look) — invoked when an actor/player inspects or 'looks at' the nightstand"
+      "Invoked when the player uses the 'U8P_NITSTAND::look' or examine action on this object",
+      "Registered as a process of type 0x0208 (engine U8P_NITSTAND::look/description handler)"
     ],
     "confidence": "high"
   },
@@ -32,53 +29,30 @@
     {
       "name": "U8P_NITSTAND::look",
       "kind": "main",
-      "role": "Event handler that produces the nightstand's examination text and marks item state to avoid reprocessing.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine called to emit/display the provided short description string to a target process/player; exact signature is inferred from pushes.",
+      "role": "Responds to the object's U8P_NITSTAND::look/examine event by showing a short label and suspending the process",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_NITSTAND::look",
-        "callee": "Item::bark",
-        "purpose": "Deliver/display the nightstand's examination text (prefix 'nightstand ' plus any item-specific content) to the viewer/process. Called with the constructed string, viewer/process context, an object pointer, and the calling pid (all argument roles inferred).",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
-    "writes": [
-      {
-        "name": "info (set by 'set info' opcode)",
-        "likely_effect": "Annotates the target object with an info/state key (appears to mark inspected state or attach metadata to the nightstand).",
-        "confidence": "medium"
-      },
-      {
-        "name": "process_exclude (set by 'process exclude' opcode)",
-        "likely_effect": "Prevents recursive or concurrent processing of the annotated object (a guard to avoid re-entrance while barking/handling).",
-        "confidence": "medium"
-      }
-    ]
+    "writes": []
   },
   "ui_tags": [
     "trigger",
-    "guard",
-    "cleanup"
+    "label",
+    "suspend",
+    "inspect"
   ],
   "quick_facts": {
     "main_function": "U8P_NITSTAND::look",
-    "behavior_summary_one_liner": "Handles the 'U8P_NITSTAND::look' (examine) event for a nightstand item: when an actor inspects the nightstand the script prepares context, marks the item state (set info) and excludes it from further processing (process exclude), then constructs the description prefix \"nightstand \" and invokes the item's bark routine to present that text to the viewer.",
-    "external_call_count": 1,
+    "behavior_summary_one_liner": "U8P_NITSTAND::look is the object's U8P_NITSTAND::look/examine handler. When the player examines the nightstand it presents a single short on-screen label/bark reading \"nightstand\".",
+    "external_call_count": 0,
     "flag_read_count": 0,
-    "flag_write_count": 2
+    "flag_write_count": 0
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

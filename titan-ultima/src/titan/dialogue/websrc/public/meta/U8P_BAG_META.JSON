@@ -3,26 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_BAG.json",
   "file": "U8P_BAG",
   "behavior_summary": [
-    "Provides gameplay logic for a bag item: when a player 'looks' at the bag it emits a short description ('bag ') to the viewer; when a player 'uses' the bag the script checks an item status bit and opens or closes the bag UI (gump) accordingly.",
-    "BAG::look constructs a short literal message and delegates display to Item::bark so the viewing actor receives the description, then yields/suspends as typical for a U8P_BAG::look handler.",
-    "BAG::use obtains the bag's status word (Item::getStatus), tests bit 0x0100, and calls Item::openGump with argument 0x03 if set, otherwise calls Item::closeGump. This implements opening/closing the bag interface on use."
+    "This item script implements a simple inspect (U8P_BAG::look) label and a U8P_BAG::use action that toggles the bag UI (gump).",
+    "U8P_BAG::look: when the player examines the bag, the script emits a short bark/label 'bag' and then the U8P_BAG::look process suspends.",
+    "U8P_BAG::use: when the player uses the bag, the script reads the item's status word (via Item::getStatus). It tests bit 0x0100; if that bit is set it calls Item::closeGump(this), otherwise it calls Item::openGump(0x03, this). This effectively toggles the bag's UI open/closed state."
   ],
   "notable_control_flow": [
-    "U8P_BAG::BAG::look: linear flow — build literal 'bag ' -> call Item::bark(viewer_pid, 'bag ') -> store return in a temp -> suspend.",
-    "U8P_BAG::BAG::use: conditional branch based on (Item::getStatus() & 0x0100) — true path calls Item::openGump(item, 0x03), false path calls Item::closeGump(item).",
-    "No global flags are modified by these handlers; behavior is localized to the item context and the viewer process."
+    "U8P_BAG::look is a single-entry process that immediately barks a short label and suspends (no branching).",
+    "U8P_BAG::use reads a status word into a temporary (local1), performs a single conditional on bit 0x0100, and dispatches one of two external calls (Item::closeGump or Item::openGump)."
   ],
   "open_questions": [
-    "Exact semantic meaning of the 0x03 argument passed to Item::openGump (likely a mode/page id) remains inferred, not explicit.",
-    "Precise calling convention/order of parameters for Item::* calls is inferred from push order; confirmation would require ABI documentation.",
-    "Whether the tested status bit 0x0100 represents 'closed' vs 'open' is inferred from the branch direction — the precise meaning of the bit is not documented here."
+    "Does the status bit 0x0100 uniformly indicate 'gump is open' for all containers, or is this bit bag-specific? (inferred to indicate open, confidence: medium)",
+    "What UI is associated with gump id 0x03 (exact inventory/gump layout is not present in the excerpt)?",
+    "Are there other side effects (permissions, ownership checks) outside this script that affect when U8P_BAG::use is allowed to open/close the gump?"
   ],
   "main_function": {
     "name": "U8P_BAG::look",
     "execution_form": "process",
-    "purpose": "Respond to the 'U8P_BAG::look' (examine) event on a bag item by producing a short description ('bag ') directed to the viewing actor via Item::bark, then suspend; this is the item's presentation/inspect handler.",
+    "purpose": "Provide the short descriptive label when the player inspects/looks at the bag.",
     "entry_conditions": [
-      "Event 0 (U8P_BAG::look) — triggered when an actor inspects/examines the bag item (viewer PID passed in)."
+      "Triggered when the player inspects/examines the bag (engine U8P_BAG::look/inspect event mapped to this process)."
     ],
     "confidence": "high"
   },
@@ -30,65 +29,35 @@
     {
       "name": "U8P_BAG::look",
       "kind": "main",
-      "role": "Handle the U8P_BAG::look/examine event: create and send short description ('bag ') to the viewer via Item::bark.",
+      "role": "examine/label handler; emits short bark 'bag' then suspends",
       "confidence": "high"
     },
     {
       "name": "U8P_BAG::use",
       "kind": "helper",
-      "role": "Handle the use/interact event: check item's status bit 0x0100 and open (openGump(0x03)) or close (closeGump) the bag UI accordingly.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item method used to display/send a short text message from the item to a process/player (used for the U8P_BAG::look description).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getStatus",
-      "kind": "extern",
-      "role": "Engine/item method returning the item's status word/flags; used to test bit 0x0100 in BAG::use.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::openGump",
-      "kind": "extern",
-      "role": "Engine/item method to open the item's UI/gump (called with argument 0x03 here; likely a mode/page id).",
+      "role": "toggle bag UI/gump open-close based on item status word",
       "confidence": "medium"
-    },
-    {
-      "name": "Item::closeGump",
-      "kind": "extern",
-      "role": "Engine/item method to close the item's UI/gump.",
-      "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_BAG::look",
-        "callee": "Item::bark",
-        "purpose": "Deliver the short U8P_BAG::look-description string ('bag ') to the viewing actor/process so they see the item's short name/description.",
+        "caller": "U8P_BAG::use",
+        "callee": "Item::getStatus",
+        "purpose": "Read the bag item's status/flags word so the script can test specific bits (status stored into local1).",
         "confidence": "high"
       },
       {
         "caller": "U8P_BAG::use",
-        "callee": "Item::getStatus",
-        "purpose": "Retrieve the bag's status flags/word to determine whether to open or close the gump (test bit 0x0100).",
+        "callee": "Item::closeGump",
+        "purpose": "Close the bag's UI/gump when the status bit 0x0100 indicates the gump is open.",
         "confidence": "high"
       },
       {
         "caller": "U8P_BAG::use",
         "callee": "Item::openGump",
-        "purpose": "Open the bag UI/gump when the inspected status bit suggests the gump should be opened; passed argument 0x03 (likely a mode/page id).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_BAG::use",
-        "callee": "Item::closeGump",
-        "purpose": "Close the bag UI/gump when the inspected status bit suggests it should be closed.",
+        "purpose": "Open the bag's UI/gump with id 0x03 when the status bit 0x0100 indicates the gump is closed.",
         "confidence": "high"
       }
     ]
@@ -99,14 +68,14 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "animation",
-    "guard"
+    "toggle-ui",
+    "label",
+    "open-close"
   ],
   "quick_facts": {
-    "main_function": "U8P_BAG::BAG::look",
-    "behavior_summary_one_liner": "Provides gameplay logic for a bag item: when a player 'looks' at the bag it emits a short description ('bag ') to the viewer; when a player 'uses' the bag the script checks an item status bit and opens or closes the bag UI (gump) accordingly.",
-    "external_call_count": 4,
+    "main_function": "U8P_BAG::look",
+    "behavior_summary_one_liner": "This item script implements a simple inspect (U8P_BAG::look) label and a U8P_BAG::use action that toggles the bag UI (gump).",
+    "external_call_count": 3,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

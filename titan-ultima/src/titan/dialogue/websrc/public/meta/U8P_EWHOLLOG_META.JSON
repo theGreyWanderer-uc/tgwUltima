@@ -3,24 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_EWHOLLOG.json",
   "file": "U8P_EWHOLLOG",
   "behavior_summary": [
-    "Handles the 'U8P_EWHOLLOG::look' (examine) event for a hollow log item instance. When the player (or relevant actor) examines the hollow log, the handler prepares the literal text \"hollow log \", sets instance-local info/processing flags to control processing while performing the action, invokes the item's bark/display routine to present that text to the player, frees the temporary string, processes the bark return value, and then suspends/returns."
+    "When the player examines the hollow log, the object's U8P_EWHOLLOG::look handler displays a short descriptive line ('hollow log ') and then suspends the process.",
+    "No decisions, flags, parameters, or external calls are used — the behavior is a simple, single-line descriptive response tied to the 'U8P_EWHOLLOG::look' verb."
   ],
   "notable_control_flow": [
-    "On entry (Event 0 / U8P_EWHOLLOG::look), the script sets instance info and a process-exclude flag on the item to control processing during the examine action (inferred from set-info/process-exclude opcodes).",
-    "The script constructs or converts the literal string \"hollow log \", passes it as a pointer to Item::bark, and invokes bark on the hollow log instance.",
-    "After Item::bark returns the value is used in an 'implies' + pop sequence (likely a control/interrupt handling pattern), then the temporary string is freed and the routine suspends/returns."
+    "U8P_EWHOLLOG::look executes a single bark (player-facing text) and then immediately issues a suspend, ending/pausing the U8P_EWHOLLOG::look process.",
+    "There are no conditional branches, menu interactions, or subsequent actions in the routine."
   ],
   "open_questions": [
-    "What exact engine/info key(s) are being set by the set-info / process-exclude operations and what in-game state do they correspond to (the disassembly shows instance-local flag ops but not the semantic label)?",
-    "Does Item::bark target the player process implicitly via 'this' (item) or is an explicit viewer PID involved elsewhere in the engine call path (caller pushes 'this' and string only in this excerpt)?",
-    "What is the semantic purpose of the 'implies' + pop sequence after the bark return (interrupt handling, conditional flow, or engine bookkeeping)?"
+    "Is the trailing space in the bark text 'hollow log ' intentional (formatting/concatenation) or an artifact of extraction?",
+    "Could this U8P_EWHOLLOG::look handler also be triggered by fast-area entry semantics in addition to explicit player 'U8P_EWHOLLOG::look' actions? (engine may call U8P_EWHOLLOG::look-type processes on fast-area entry; inferred but unconfirmed)",
+    "Is there any higher-level context that modifies this description (different states, global flags, or localization) that the disassembly fragment does not show?"
   ],
   "main_function": {
     "name": "U8P_EWHOLLOG::look",
     "execution_form": "process",
-    "purpose": "Respond to an examine/U8P_EWHOLLOG::look event on a hollow log instance by producing the short description text \"hollow log \" via the item bark/display routine while temporarily marking the instance to exclude or control processing during the operation.",
+    "purpose": "Provide the short description shown when the player examines the hollow log; present a single bark string and suspend the process.",
     "entry_conditions": [
-      "Event 0: invoked when the player or actor looks at / examines the hollow log object (entering the item's U8P_EWHOLLOG::look trigger)."
+      "Explicit player 'U8P_EWHOLLOG::look' / examine action on the hollow log (primary).",
+      "Possibly invoked by engine fast-area/U8P_EWHOLLOG::look-type process entry semantics (secondary/inferred)."
     ],
     "confidence": "high"
   },
@@ -28,26 +29,13 @@
     {
       "name": "U8P_EWHOLLOG::look",
       "kind": "main",
-      "role": "Examine/Look event handler for hollow log instances",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine to display or emit text from an item/process to a player or process",
+      "role": "handle 'U8P_EWHOLLOG::look' (examine) event; display short description and suspend",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_EWHOLLOG::look",
-        "callee": "Item::bark",
-        "purpose": "Make the hollow log item display/say the provided string \"hollow log \" to the viewer/actor (text output from the item).",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -55,13 +43,13 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "guard"
+    "description",
+    "suspend"
   ],
   "quick_facts": {
-    "main_function": "EWHOLLOG::look",
-    "behavior_summary_one_liner": "Handles the 'U8P_EWHOLLOG::look' (examine) event for a hollow log item instance. When the player (or relevant actor) examines the hollow log, the handler prepares the literal text \"hollow log \", sets instance-local info/processing flags to control processing while performing the action, invokes the item's bark/display routine to present that text to the player, frees the temporary string, processes the bark return value, and then suspends/returns.",
-    "external_call_count": 1,
+    "main_function": "U8P_EWHOLLOG::look",
+    "behavior_summary_one_liner": "When the player examines the hollow log, the object's U8P_EWHOLLOG::look handler displays a short descriptive line ('hollow log ') and then suspends the process.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

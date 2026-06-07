@@ -3,26 +3,22 @@
   "source_of_truth": "dialogue/json/U8P_NSSHELF.json",
   "file": "U8P_NSSHELF",
   "behavior_summary": [
-    "Handles the 'U8P_NSSHELF::look' (inspect) event for a shelf object. When a player/actor examines the shelf, the script prepares the item for inspection, constructs the short description string \"shelf \", invokes the item's bark routine to present that string to the viewer, cleans up the temporary string, returns a truthy result, and suspends the process.",
-    "The item/pid passed in (parameter at BP+06h) is used as the target for Item::bark and for inferred 'set info' / process-exclude operations that prepare the object for the inspection interaction.",
-    "No global game flags are read or written by this handler in the extracted snippet; effects are local to the item's info/state and the process interaction."
+    "When the player 'looks at' the shelf, the script emits a short descriptive text ('shelf ') and then yields/suspends the process back to the engine.",
+    "No branching, menus, flags, parameters, or local variables are used; behavior is a simple one-shot U8P_NSSHELF::look/description handler."
   ],
   "notable_control_flow": [
-    "On Event 0 (U8P_NSSHELF::look) entry: set item info / apply process-exclude (inferred), allocate a short string literal.",
-    "Call external Item::bark with the target item/pid and the allocated string to display the short description.",
-    "Free the allocated string, push a truthy return value (inferred 01), then suspend the process (end handler)."
+    "U8P_NSSHELF::look calls Bark('shelf ') to display the short description, immediately followed by a suspend operation that yields/terminates the U8P_NSSHELF::look process."
   ],
   "open_questions": [
-    "Exact semantics and key of the 'set info' invocation (0x210 inferred in other scripts) and whether it affects other systems beyond excluding the process.",
-    "Precise return and suspension semantics: the snippet implies a truthy result and a process suspend but the exact control semantics (return value interpretation by the engine) are inferred.",
-    "Whether any other objects or global state are affected by the process-exclude step in contexts not present in this snippet."
+    "Does the suspend call terminate the process permanently or only yield to the engine with potential resume semantics? (inferred as termination/yield; confidence: low)"
   ],
   "main_function": {
     "name": "U8P_NSSHELF::look",
     "execution_form": "process",
-    "purpose": "Respond to the player/actor looking at (inspecting) a shelf by presenting a short description and marking the item as prepared/excluded for processing.",
+    "purpose": "Provide the short description shown to the player when they examine the shelf.",
     "entry_conditions": [
-      "Event 0 (U8P_NSSHELF::look) — triggered when an actor/player inspects or examines the shelf object"
+      "Invoked by the engine's U8P_NSSHELF::look/examine interaction for the shelf object (processType 0x0208).",
+      "Triggered when the player inspects or 'looks at' this shelf in-game."
     ],
     "confidence": "high"
   },
@@ -30,14 +26,20 @@
     {
       "name": "U8P_NSSHELF::look",
       "kind": "main",
-      "role": "Event handler for the shelf's U8P_NSSHELF::look/inspect interaction; prepares item state and issues a bark with the literal \"shelf \".",
+      "role": "U8P_NSSHELF::look/description handler for the shelf object",
       "confidence": "high"
     },
     {
-      "name": "Item::bark",
+      "name": "Bark",
       "kind": "extern",
-      "role": "Engine/item routine invoked to emit/display a short text string from the item/process to a player/process.",
+      "role": "output player-facing short description text",
       "confidence": "high"
+    },
+    {
+      "name": "suspend",
+      "kind": "extern",
+      "role": "yield/terminate the script process back to the engine",
+      "confidence": "medium"
     }
   ],
   "call_analysis": {
@@ -45,9 +47,15 @@
     "external_calls": [
       {
         "caller": "U8P_NSSHELF::look",
-        "callee": "Item::bark",
-        "purpose": "Ask the item/process to display/emit the short description string \"shelf \" to the viewer/process.",
+        "callee": "Bark",
+        "purpose": "Emit the player-facing short description text 'shelf '.",
         "confidence": "high"
+      },
+      {
+        "caller": "U8P_NSSHELF::look",
+        "callee": "suspend",
+        "purpose": "Yield or end the U8P_NSSHELF::look process after outputting the description (engine control handoff).",
+        "confidence": "medium"
       }
     ]
   },
@@ -56,15 +64,12 @@
     "writes": []
   },
   "ui_tags": [
-    "trigger",
-    "cleanup",
-    "animation",
-    "guard"
+    "trigger"
   ],
   "quick_facts": {
     "main_function": "U8P_NSSHELF::look",
-    "behavior_summary_one_liner": "Handles the 'U8P_NSSHELF::look' (inspect) event for a shelf object. When a player/actor examines the shelf, the script prepares the item for inspection, constructs the short description string \"shelf \", invokes the item's bark routine to present that string to the viewer, cleans up the temporary string, returns a truthy result, and suspends the process.",
-    "external_call_count": 1,
+    "behavior_summary_one_liner": "When the player 'looks at' the shelf, the script emits a short descriptive text ('shelf ') and then yields/suspends the process back to the engine.",
+    "external_call_count": 2,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

@@ -3,187 +3,389 @@
   "source_of_truth": "dialogue/json/U8P_MYTHRAN.json",
   "file": "U8P_MYTHRAN",
   "behavior_summary": [
-    "Provides Mythran NPC behaviour for several player interactions: handling 'look' (examine) output, offering/selling a Scroll of Dispelling Magical Portals, offering/selling reagents by magic school, scheduling NPC daily behaviour, and reacting to actors entering/leaving a fast-area trigger.",
-    "MYTHRAN::look chooses which short description the NPC speaks (personal name or job/title) based on global flags and calls the engine bark routine to present that text to the player.",
-    "A transactional dialog (U8P_MYTHRAN::01EF) offers a specialized scroll with a cost and uses lock flags to avoid repeating long explanations; it charges the player and gives the scroll using engine helper routines.",
-    "A reagent-sale flow (U8P_MYTHRAN::08A6) presents school/reagent choice lists, configures item/price parameters and uses engine helpers to complete the sale; it sets a flag so the long explanation is shown only once.",
-    "Scheduling (U8P_MYTHRAN::schedule) queries a scheduler helper (FREE::28F9) with small codes to pick a parameter set and spawns a METHOD implementing the chosen schedule.",
-    "Fast-area handlers (U8P_MYTHRAN::enterFastArea and U8P_MYTHRAN::leaveFastArea) set an activity for entering actors if the NPC is alive and perform cleanup when actors leave."
+    "This script implements the NPC 'Mythran'. It provides: a short U8P_MYTHRAN::look/identify response, a menu-driven conversation system (greetings, lore, shops, and lessons), three shop flows (single-U8P_MYTHRAN::use Scroll of Dispelling, reagent categories, and spell/lesson offering), basic daily scheduling, fast-area entry/exit handlers to set/clear NPC activity, and a casting behavior that spawns effects and runs a small monologue/animation sequence.",
+    "Dialogue is Ask/SuspendAssign driven: menus are built/modified in arrays (locals like local1/local4/local5/local8) and compared via strcmp to dispatch into subroutines. Several persistent flags gate availability of menu options and prevent repeated explanatory text.",
+    "Purchases validate payment by searching for obsidian (FREE::findNearbyItems), then attempt to directly equip the created item to the player (FREE::equipItem) and fall back to creating the item at a nearby location (FREE::createItemsAtLocation) if equip fails.",
+    "Schedule() computes time-of-day dependent parameters and calls an engine helper (METHOD::func133F) to apply movement/activity. U8P_MYTHRAN::enterFastArea sets an activity via Npc::cSetActivity when actors enter a trigger; U8P_MYTHRAN::leaveFastArea clears the fast-area reference via FREE::resetRef.",
+    "U8P_MYTHRAN::cast(uword) is a behavior process that either repeatedly spawns effects when no valid target exists (countdown loop) or, if a living target exists, puts the avatar into stasis, runs staged spawn/call sequences (METHOD::func15E7 & spawn helpers) and invokes a short monologue/visual sequence (U8P_MYTHRAN::func9ED6)."
   ],
   "notable_control_flow": [
-    "MYTHRAN::look branches on globals mythranName and mythranJob to decide which static string to bark; default or fallback text is used otherwise (high confidence).",
-    "Sale of the Scroll (U8P_MYTHRAN::01EF) uses lockSpellSpeech to gate a long explanation; heardScrollJust controls phrasing about cost; on acceptance it runs a sequence of helper calls to check/charge money and create/give the scroll (medium-high confidence).",
-    "Reagent selling (U8P_MYTHRAN::08A6) shows either a long explanation or a short prompt depending on knowAboutReagents, then presents nested choice lists (school -> reagent) and computes item id/quantity/prices in locals before performing the transaction (medium confidence).",
-    "Scheduling (U8P_MYTHRAN::schedule) queries FREE::28F9 with several small byte codes, stores the selected parameter triplet into locals and then spawns METHOD::133F with those parameters to apply the schedule (medium confidence).",
-    "enterFastArea checks Npc::isDead() and only calls Npc::cSetActivity for the entering actor when Mythran is alive; leaveFastArea calls FREE::2A56 for cleanup (high confidence)."
+    "Main conversation loops: central dispatcher U8P_MYTHRAN::func27B4 (and variants U8P_MYTHRAN::func65C3 / U8P_MYTHRAN::func87A8) build a menu array each iteration, Ask -> SuspendAssign captures the player's choice, then strcmp branches to calls or lines. MenuSet/MenuUnion/MenuAdd/MenuRemove mutate options across iterations.",
+    "Guard flags prevent repeated long explanations: lockSpellSpeech and knowAboutReagents are read to decide whether to show long explanatory text and are written after the long text is shown.",
+    "Shop transaction flow (U8P_MYTHRAN::func01EF): explain -> confirm menu -> check for 50 obsidian via FREE::findNearbyItems -> if found, get Item::getX/Y/Z -> attempt FREE::equipItem -> fallback FREE::createItemsAtLocation -> set temporary phrasing flags like heardScrollJust.",
+    "Scheduling: U8P_MYTHRAN::schedule queries FREE::getTimeOfDayPeriod and assigns period-specific locals, then calls METHOD::func133F to commit activity/position values.",
+    "Fast-area handling: U8P_MYTHRAN::enterFastArea spawns an activity (Npc::cSetActivity) if NPC not dead; U8P_MYTHRAN::leaveFastArea calls FREE::resetRef for cleanup.",
+    "Casting: U8P_MYTHRAN::cast(uword) uses a numeric countdown (local1) in a spawn/suspend loop when no target; when target present and alive it sequences stasis, repeated METHOD::func15E7 calls, then invokes U8P_MYTHRAN::func9ED6 for a visual/dialog sequence."
   ],
   "open_questions": [
-    "Exact numeric constants for items, reagent IDs and prices (e.g., the scroll's item id and whether the price is exactly 50 obsidian) are inferred from patterns but not proven by the disassembly (medium confidence).",
-    "Precise semantics and return values of FREE::28F9 scheduler queries (what each small byte code maps to in schedule/time) remain unspecified (low-medium confidence).",
-    "Exact wording of the long explanatory dialogue strings and their variations (beyond inferred intents) are not included here (low confidence).",
-    "Whether METHOD::133F launches an immediate behavior or schedules it for later ticks and how its parameters map to engine-specified schedule slots is not fully determined (medium confidence)."
+    "Exact numeric meanings of many local hex constants used by U8P_MYTHRAN::schedule and U8P_MYTHRAN::func143C (they appear to encode positions/spell ids/costs but mapping to in-game IDs is not recovered).",
+    "Precise item proto/id values used when creating the Scroll of Dispelling or reagents (the script calls FREE::createItemsAtLocation and equip but proto ids are inferred only from context).",
+    "Parameter semantics for U8P_MYTHRAN::cast(uword): the single uword likely selects a spell/effect, but the mapping between that parameter and displayed/created effects is inferred, not explicit.",
+    "Whether any of the set flags written by shops/lessons (e.g., heardScrollJust) persist beyond the conversation instance or are transient script flags managed by the engine (the metadata suggests persistent global flags but exact persistence is unclear)."
   ],
   "main_function": {
-    "name": "U8P_MYTHRAN::look (Func_80, Event 0)",
+    "name": "U8P_MYTHRAN::look",
     "execution_form": "process",
-    "purpose": "Respond to a player 'look' (examine) event by choosing an appropriate short description (personal name vs job/title) using global flags and calling the engine bark routine to display it to the requesting process/player.",
+    "purpose": "Provide the short examine/identify response for Mythran. Chooses a brief bark depending on persistent identity flags (emit proper name 'Mythran' if mythranName is set; otherwise job label if mythranJob is set; default 'man ').",
     "entry_conditions": [
-      "Triggered by Event 0 when a process/player looks at the Mythran NPC.",
-      "Reads global flags mythranName and mythranJob to choose which string to bark."
+      "Triggered by the engine when the player inspects/looks at the NPC (U8P_MYTHRAN::look/examine action)."
     ],
     "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_MYTHRAN::look (Func_80, Event 0)",
+      "name": "U8P_MYTHRAN::look",
       "kind": "main",
-      "role": "Handles the 'look' event; selects which short text Mythran speaks and invokes Item::bark.",
+      "role": "Short U8P_MYTHRAN::look/examine response selecting between 'Mythran', 'mage ', or 'man ' based on mythranName/mythranJob flags.",
       "confidence": "high"
     },
     {
-      "name": "U8P_MYTHRAN::schedule (Func_F3, Event 8)",
+      "name": "U8P_MYTHRAN::schedule",
       "kind": "helper",
-      "role": "Query scheduler helper (FREE::28F9) to select schedule parameters, store them in locals and spawn a METHOD (METHOD::133F) to implement the NPC's schedule.",
-      "confidence": "medium"
-    },
-    {
-      "name": "U8P_MYTHRAN::enterFastArea (Func_1A7, Event F)",
-      "kind": "helper",
-      "role": "Handle actor entering Mythran's fast-area trigger: if NPC is alive call Npc::cSetActivity (activity 0) for the actor/pid.",
+      "role": "Compute and apply Mythran's per-time-of-day U8P_MYTHRAN::schedule/position values and call METHOD::func133F to apply them.",
       "confidence": "high"
     },
     {
-      "name": "U8P_MYTHRAN::leaveFastArea (Func_1D4, Event 10)",
+      "name": "U8P_MYTHRAN::enterFastArea",
       "kind": "helper",
-      "role": "Handle actor leaving fast-area: invoke FREE::2A56 to clear per-actor fast-area state/cleanup.",
+      "role": "Fast-area entry handler: if NPC alive spawn/set an activity via Npc::cSetActivity.",
       "confidence": "high"
     },
     {
-      "name": "U8P_MYTHRAN::01EF (Func_1EF)",
+      "name": "U8P_MYTHRAN::leaveFastArea",
       "kind": "helper",
-      "role": "Dialog and transaction flow to offer/sell the Scroll of Dispelling Magical Portals: explanatory bark, confirmation ask, charge/check money via FREE helpers and give the scroll.",
-      "confidence": "medium"
+      "role": "Fast-area exit handler: clear stored fast-area ref via FREE::resetRef.",
+      "confidence": "high"
     },
     {
-      "name": "U8P_MYTHRAN::08A6 (Func_8A6)",
+      "name": "U8P_MYTHRAN::func01EF",
       "kind": "helper",
-      "role": "Offer and sell reagents by magic school: present choice lists, configure item/price parameters in locals and call engine/FREE helpers to perform sale/give operations.",
-      "confidence": "medium"
+      "role": "Scroll-of-Dispelling shop flow: explain scroll, check for 50 obsidian, create/equip or drop scroll, set temporary phrasing flags.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MYTHRAN::func08A6",
+      "kind": "helper",
+      "role": "Reagent shop submenu: present reagent categories and specific reagent choices, prepare parameters for purchase flow.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MYTHRAN::func143C",
+      "kind": "helper",
+      "role": "Spell-teaching/lesson selector: check progression flags to offer teachable spells or deny if too early, set local parameters for teaching.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MYTHRAN::use",
+      "kind": "helper",
+      "role": "Conversation entry point: BeginConversation, clear wantsSpells/wantsScrolls/didReagents, greet and dispatch to appropriate greeting/menu subroutines.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MYTHRAN::func219B",
+      "kind": "helper",
+      "role": "Greeting/root conversation builder: assemble initial menu, handle asking player's name and first-time meeting flow, dispatch into central dialog.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MYTHRAN::func27B4",
+      "kind": "helper",
+      "role": "Central conversation/menu dispatcher: dynamic menu construction and routing into shops, lore, and teaching branches.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MYTHRAN::func48FE",
+      "kind": "helper",
+      "role": "Short monologue about Mythran's essay/book and loaning it to the player.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MYTHRAN::func4A45",
+      "kind": "helper",
+      "role": "Longer lore branch about the people of Pagan and schools of magic; dynamic menu loop and conditional lore lines.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MYTHRAN::func64C5",
+      "kind": "helper",
+      "role": "Confirmation submenu (Yes/No) that routes to U8P_MYTHRAN::func01EF/U8P_MYTHRAN::func08A6/U8P_MYTHRAN::func143C depending on wantsScrolls/wantsReagents/wantsSpells.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MYTHRAN::func65C3",
+      "kind": "helper",
+      "role": "Friend/shopkeeper conversation branch assembling many menu options and dispatching to shops, lore and teaching helpers.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MYTHRAN::func87A8",
+      "kind": "helper",
+      "role": "Alternate greeting/menu builder used in special contexts (e.g., mythranSaidBlackLore) similar to U8P_MYTHRAN::func65C3.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MYTHRAN::cast",
+      "kind": "helper",
+      "role": "Spell-U8P_MYTHRAN::cast/behavior process with a uword parameter: spawn loop when no target; staged stasis-and-effect sequence when a target exists.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_MYTHRAN::func9ED6",
+      "kind": "helper",
+      "role": "Monologue/effect sequence invoked by U8P_MYTHRAN::cast: spawns visual/projectile effects, animates temporary items, applies hits and sound, and drives timing.",
+      "confidence": "high"
     }
   ],
   "call_analysis": {
-    "internal_calls": [],
+    "internal_calls": [
+      {
+        "caller": "U8P_MYTHRAN::use",
+        "callee": "U8P_MYTHRAN::func219B",
+        "purpose": "Dispatch to first-meet greeting/root conversation when mythranMet is false.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MYTHRAN::use",
+        "callee": "U8P_MYTHRAN::func65C3",
+        "purpose": "Default conversation branch for friend/shopkeeper interactions.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MYTHRAN::use",
+        "callee": "U8P_MYTHRAN::func87A8",
+        "purpose": "Alternate greeting/menu branch selected under special item/frame or lore state.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MYTHRAN::func27B4",
+        "callee": "U8P_MYTHRAN::func01EF",
+        "purpose": "Invoke the scroll-selling shop flow when the player selects to buy scrolls.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MYTHRAN::func27B4",
+        "callee": "U8P_MYTHRAN::func08A6",
+        "purpose": "Invoke reagent submenu for reagent purchases.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MYTHRAN::func27B4",
+        "callee": "U8P_MYTHRAN::func143C",
+        "purpose": "Invoke spell teaching/shop decision routine when player wants lessons.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MYTHRAN::cast",
+        "callee": "U8P_MYTHRAN::func9ED6",
+        "purpose": "Run the monologue/effect sequence at the end of a target-directed casting sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MYTHRAN::func219B",
+        "callee": "U8P_MYTHRAN::func27B4",
+        "purpose": "Hand off to central conversation/menu system after name/intro handling.",
+        "confidence": "high"
+      }
+    ],
     "external_calls": [
       {
-        "caller": "U8P_MYTHRAN::look (Func_80, Event 0)",
-        "callee": "process Item::bark",
-        "purpose": "Make the NPC speak the chosen short string to the player/process (display dialogue).",
+        "caller": "U8P_MYTHRAN::schedule",
+        "callee": "FREE::getTimeOfDayPeriod",
+        "purpose": "Query current time-of-day to select U8P_MYTHRAN::schedule/position parameters.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_MYTHRAN::01EF (Func_1EF)",
-        "callee": "process Item::ask",
-        "purpose": "Present a confirmation/choice prompt to the player (buy/decline) and receive the result string/selection.",
+        "caller": "U8P_MYTHRAN::schedule",
+        "callee": "METHOD::func133F",
+        "purpose": "Apply movement/activity/scheduling values computed by U8P_MYTHRAN::schedule().",
         "confidence": "high"
       },
       {
-        "caller": "U8P_MYTHRAN::01EF (Func_1EF)",
-        "callee": "FREE::20B8 / FREE::1EE2 / FREE::24A7 / FREE::2A56 (various FREE::* helpers)",
-        "purpose": "Check player funds, charge obsidean coins, allocate/create and give the scroll item; helpers used to implement money and inventory transactions.",
+        "caller": "U8P_MYTHRAN::enterFastArea",
+        "callee": "Npc::cSetActivity",
+        "purpose": "Request/launch an NPC activity when an actor enters the fast region.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MYTHRAN::leaveFastArea",
+        "callee": "FREE::resetRef",
+        "purpose": "Clear the stored fast-area reference for this NPC when an actor exits the region.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MYTHRAN::func01EF",
+        "callee": "FREE::findNearbyItems",
+        "purpose": "Locate 50 obsidian (player payment) in inventory/nearby to validate purchase.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MYTHRAN::func01EF",
+        "callee": "Item::getX",
+        "purpose": "Get X coordinate of the located payment item to compute item drop/create location.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MYTHRAN::func01EF",
+        "callee": "Item::getY",
+        "purpose": "Get Y coordinate for create/spawn fallback placement.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MYTHRAN::func01EF",
+        "callee": "Item::getZ",
+        "purpose": "Get Z coordinate/stack height for placement calculations.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MYTHRAN::func01EF",
+        "callee": "FREE::equipItem",
+        "purpose": "Attempt to equip/give the purchased scroll directly to the player; used to complete the sale cleanly.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MYTHRAN::func01EF",
+        "callee": "FREE::createItemsAtLocation",
+        "purpose": "Fallback to create the purchased item at a nearby location if equip fails.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MYTHRAN::cast",
+        "callee": "FREE::func1C19",
+        "purpose": "Spawn helper used in no-target spawn loop to create temporary actors/effects.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_MYTHRAN::01EF (Func_1EF)",
-        "callee": "Item::getX / Item::getY / Item::getZ",
-        "purpose": "Obtain coordinates used when creating/placing the sold scroll item near the NPC/player.",
+        "caller": "U8P_MYTHRAN::cast",
+        "callee": "METHOD::func15E7",
+        "purpose": "Lower-level step used repeatedly during a target-directed U8P_MYTHRAN::cast sequence.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_MYTHRAN::08A6 (Func_8A6)",
-        "callee": "process Item::ask",
-        "purpose": "Present nested choice lists (school -> reagent) and obtain the player's selection string.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_MYTHRAN::08A6 (Func_8A6)",
-        "callee": "FREE::* helpers (inventory/money/item create helpers)",
-        "purpose": "Perform reagent sale/give transactions, using locals configured as item id/qty/price parameters.",
+        "caller": "U8P_MYTHRAN::cast",
+        "callee": "setAvatarInStasis",
+        "purpose": "Put the avatar in stasis during a target-directed casting sequence.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_MYTHRAN::schedule (Func_F3, Event 8)",
-        "callee": "FREE::28F9",
-        "purpose": "Query scheduler/availability with small byte codes to choose schedule parameters.",
+        "caller": "U8P_MYTHRAN::func9ED6",
+        "callee": "Item::getX",
+        "purpose": "Compute positions for temporary effect items created during the monologue/attack sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MYTHRAN::func9ED6",
+        "callee": "Item::getY",
+        "purpose": "Compute positions for temporary effect items.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MYTHRAN::func9ED6",
+        "callee": "Item::getZ",
+        "purpose": "Compute Z offset for popping temporary items into world space.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MYTHRAN::func9ED6",
+        "callee": "Item::setFrame",
+        "purpose": "Animate temporary items over multiple frames during the visual sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MYTHRAN::func9ED6",
+        "callee": "Item::receiveHit",
+        "purpose": "Apply visual/mechanical hit to a target NPC (uses HP/Dir), part of the scripted attack.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MYTHRAN::func9ED6",
+        "callee": "Npc::setDead",
+        "purpose": "Mark the NPC dead as part of the scripted sequence (appears to be used during the effect sequence).",
         "confidence": "medium"
-      },
-      {
-        "caller": "U8P_MYTHRAN::schedule (Func_F3, Event 8)",
-        "callee": "METHOD::133F (spawn)",
-        "purpose": "Spawn or start a METHOD that applies the chosen schedule/behavior using prepared parameters.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_MYTHRAN::enterFastArea (Func_1A7, Event F)",
-        "callee": "Npc::isDead",
-        "purpose": "Guard: check whether Mythran is dead before setting activity for entering actor.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_MYTHRAN::enterFastArea (Func_1A7, Event F)",
-        "callee": "process Npc::cSetActivity",
-        "purpose": "Set the NPC's activity/state (animation/behavior) for the entering actor when NPC is alive.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_MYTHRAN::leaveFastArea (Func_1D4, Event 10)",
-        "callee": "FREE::2A56",
-        "purpose": "Cleanup per-actor fast-area state or UI when actor leaves the trigger.",
-        "confidence": "high"
       }
     ]
   },
   "global_flags": {
     "reads": [
       {
-        "name": "mythranName (global [0121])",
-        "likely_effect": "Controls whether Mythran speaks his personal name when looked at (choose name text).",
+        "name": "mythranName",
+        "likely_effect": "When true, causes the U8P_MYTHRAN::look() bark to U8P_MYTHRAN::use the NPC's proper name ('Mythran').",
         "confidence": "high"
       },
       {
-        "name": "mythranJob (global [0122])",
-        "likely_effect": "Alternate choice: if mythranName is not set and this is set, Mythran speaks his job/title when looked at.",
+        "name": "mythranJob",
+        "likely_effect": "When true and mythranName is false, causes the U8P_MYTHRAN::look() bark to emit job label ('mage ').",
         "confidence": "high"
       },
       {
-        "name": "lockSpellSpeech (global [0135])",
-        "likely_effect": "Guards whether to present the long explanatory dialog for the Scroll sale; read to decide showing explanation.",
+        "name": "lockSpellSpeech",
+        "likely_effect": "Prevents repeating the long explanatory spell-of-opening speech; read to decide variant phrasing.",
         "confidence": "high"
       },
       {
-        "name": "heardScrollJust (global [024B])",
-        "likely_effect": "Read to decide alternate phrasing about the scroll's price; indicates recent price-info was given.",
+        "name": "knowAboutReagents",
+        "likely_effect": "Controls whether Mythran gives a long reagent explanation or a short reminder; used to avoid repetition.",
+        "confidence": "high"
+      },
+      {
+        "name": "mythranMet",
+        "likely_effect": "Controls first-meeting flow; when false triggers first-meet greeting and name-handling branches.",
+        "confidence": "high"
+      },
+      {
+        "name": "mythranAvaName",
+        "likely_effect": "Used to personalize greeting with player's name when set.",
+        "confidence": "high"
+      },
+      {
+        "name": "wantsSpells",
+        "likely_effect": "When true, causes menu flows to include spell-teaching and related reagent options.",
+        "confidence": "high"
+      },
+      {
+        "name": "mythranScrolls",
+        "likely_effect": "Enables the 'I wish to buy scrolls.' menu option in conversation menus.",
+        "confidence": "high"
+      },
+      {
+        "name": "mythReagents",
+        "likely_effect": "Controls availability of reagent-purchase options across menus.",
+        "confidence": "high"
+      },
+      {
+        "name": "benticSaidMythran",
+        "likely_effect": "Used to gate certain world-lore menu options (e.g., how to leave Pagan).",
         "confidence": "medium"
-      },
-      {
-        "name": "knowAboutReagents (global [0249])",
-        "likely_effect": "Read to decide whether to give a long reagents explanation or a short prompt during reagent sale.",
-        "confidence": "high"
       }
     ],
     "writes": [
       {
-        "name": "lockSpellSpeech (global [0135])",
-        "likely_effect": "Set after the scroll explanatory speech is presented so it won't repeat on subsequent conversations.",
+        "name": "lockSpellSpeech",
+        "likely_effect": "Set after Mythran gives the long explanatory scroll speech to suppress repeat explanations later.",
         "confidence": "high"
       },
       {
-        "name": "heardScrollJust (global [024B])",
-        "likely_effect": "Set to record that the player was just informed about the scroll price; affects subsequent phrasings.",
-        "confidence": "medium"
+        "name": "heardScrollJust",
+        "likely_effect": "Temporarily set when the scroll price/explanation was given to alter immediate subsequent phrasing.",
+        "confidence": "high"
       },
       {
-        "name": "knowAboutReagents (global [0249])",
-        "likely_effect": "Set after the reagents topic is first discussed so future reagent offers are shorter.",
+        "name": "knowAboutReagents",
+        "likely_effect": "Set when Mythran explains reagent availability so the long explanatory line is not repeated.",
+        "confidence": "high"
+      },
+      {
+        "name": "mythranName",
+        "likely_effect": "Set when the player asks Mythran his name (marks that his proper name should be used in U8P_MYTHRAN::look/bark).",
+        "confidence": "high"
+      },
+      {
+        "name": "mythranAvaName",
+        "likely_effect": "Set when the player gives their name to Mythran (records that Mythran learned the avatar's name).",
+        "confidence": "high"
+      },
+      {
+        "name": "mythranMet",
+        "likely_effect": "Set to mark that the player has met Mythran (used by future greeting/branch logic).",
         "confidence": "high"
       }
     ]
@@ -195,11 +397,11 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "MYTHRAN::look (Func_80, Event 0)",
-    "behavior_summary_one_liner": "Provides Mythran NPC behaviour for several player interactions: handling 'look' (examine) output, offering/selling a Scroll of Dispelling Magical Portals, offering/selling reagents by magic school, scheduling NPC daily behaviour, and reacting to actors entering/leaving a fast-area trigger.",
-    "external_call_count": 11,
-    "flag_read_count": 5,
-    "flag_write_count": 3
+    "main_function": "U8P_MYTHRAN::look",
+    "behavior_summary_one_liner": "This script implements the NPC 'Mythran'. It provides: a short U8P_MYTHRAN::look/identify response, a menu-driven conversation system (greetings, lore, shops, and lessons), three shop flows (single-U8P_MYTHRAN::use Scroll of Dispelling, reagent categories, and spell/lesson offering), basic daily scheduling, fast-area entry/exit handlers to set/clear NPC activity, and a casting behavior that spawns effects and runs a small monologue/animation sequence.",
+    "external_call_count": 19,
+    "flag_read_count": 10,
+    "flag_write_count": 6
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

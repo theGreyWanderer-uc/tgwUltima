@@ -3,25 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_SKULCAND.json",
   "file": "U8P_SKULCAND",
   "behavior_summary": [
-    "This script implements the 'U8P_SKULCAND::look' (examine) handler for the skull candle item. When a player/actor inspects the item the script marks the item with an info/state (id 0x0208), applies a process-exclude step, and emits a short descriptive text 'skull candle ' to the viewer via Item::bark. The temporary string used for the bark is freed and the handler suspends/returns."
+    "U8P_SKULCAND::look is a simple 'U8P_SKULCAND::look' (examine) handler for a skull-candle object. When the player inspects the object it displays a single short player-facing text/bark: \"skull candle \".",
+    "Immediately after showing the bark the process suspends/terminates, so no further interaction or branching occurs.",
+    "No global flags are read or written, and there are no external function calls or menu/dialogue interactions."
   ],
   "notable_control_flow": [
-    "U8P_SKULCAND::look sets an info id (0x0208) on the item/process target before performing any output.",
-    "A process-exclude step runs after setting the info (likely to prevent further immediate processing or reentrancy for this process/object).",
-    "Item::bark is invoked to show the literal 'skull candle ' text to the examining process/player.",
-    "The temporary string is freed, the bark return value is observed/used in an implication/pop sequence, then the process suspends/returns."
+    "Entry on a U8P_SKULCAND::look/examine event (process form, processType 0x0208).",
+    "Single output action: emit a Bark line containing the text \"skull candle \".",
+    "Followed by a suspend/terminate of the U8P_SKULCAND::look process; linear flow, no conditionals or loops."
   ],
   "open_questions": [
-    "The exact semantic meaning of info id 0x0208 (what gameplay state it encodes) is not explicit and is inferred from usage.",
-    "Precise semantics of the 'process-exclude' step (what it excludes and for how long) are inferred but not confirmed.",
-    "Whether the BP+06h parameter is strictly the item instance 'this' or a process/player PID interacting with the item (or both) is inferred from calling pattern."
+    "The bark text contains a trailing space (\"skull candle \"). Is this intentional or an artifact of extraction/encoding?",
+    "The disassembly shows two Unknown nodes alongside the Bark node; do they encode any additional side effects (e.g., logging or analytics) not visible in the structured output?"
   ],
   "main_function": {
     "name": "U8P_SKULCAND::look",
     "execution_form": "process",
-    "purpose": "Handle the in-game 'U8P_SKULCAND::look' (examine) event for the skull candle: set an item info/state, exclude the process from further immediate processing, and display the item's short description ('skull candle ') to the viewer.",
+    "purpose": "Provide the short description shown to the player when they examine the skull-candle item; display the single bark text and end the U8P_SKULCAND::look process.",
     "entry_conditions": [
-      "Triggered when an actor/player looks at or examines the skull candle item (Event 0 / U8P_SKULCAND::look)."
+      "Invoked by the engine when the player performs a 'U8P_SKULCAND::look' (examine) action on the skull-candle object (processType 0x0208)."
     ],
     "confidence": "high"
   },
@@ -29,74 +29,13 @@
     {
       "name": "U8P_SKULCAND::look",
       "kind": "main",
-      "role": "Examine/U8P_SKULCAND::look event handler for the skull candle item.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item API used to display a short text message (bark) to a target process/player.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_SKULCAND::set_info (engine)",
-      "kind": "extern",
-      "role": "Engine operation used to set an info/state key (0x0208) on the target object; inferred as a state marker.",
-      "confidence": "medium"
-    },
-    {
-      "name": "U8P_SKULCAND::process_exclude (engine)",
-      "kind": "extern",
-      "role": "Engine operation that excludes the process/object from further processing (inferred behavior).",
-      "confidence": "medium"
-    },
-    {
-      "name": "FREE::free (engine)",
-      "kind": "extern",
-      "role": "Free the temporary string buffer used to hold the literal passed to Item::bark (inferred).",
-      "confidence": "medium"
-    },
-    {
-      "name": "U8P_SKULCAND::suspend (engine)",
-      "kind": "extern",
-      "role": "Suspend/return the script/process after finishing the handler (inferred from final suspend/return opcodes).",
+      "role": "Item U8P_SKULCAND::look/examine handler that emits a single descriptive bark and then suspends/ends the process.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_SKULCAND::look",
-        "callee": "U8P_SKULCAND::set_info (engine)",
-        "purpose": "Annotate the target object with info id 0x0208 prior to output; likely marks a state such as 'has been examined'.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_SKULCAND::look",
-        "callee": "U8P_SKULCAND::process_exclude (engine)",
-        "purpose": "Exclude the current process/object from further immediate processing (likely to prevent reentrancy or duplicate handling).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_SKULCAND::look",
-        "callee": "Item::bark",
-        "purpose": "Display the short description 'skull candle ' to the examining process/player.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SKULCAND::look",
-        "callee": "FREE::free",
-        "purpose": "Release the temporary string buffer previously allocated for the bark text.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_SKULCAND::look",
-        "callee": "suspend",
-        "purpose": "End or pause the script's execution after performing the U8P_SKULCAND::look handling.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -104,14 +43,13 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "guard",
-    "description"
+    "description",
+    "suspend"
   ],
   "quick_facts": {
     "main_function": "U8P_SKULCAND::look",
-    "behavior_summary_one_liner": "This script implements the 'U8P_SKULCAND::look' (examine) handler for the skull candle item. When a player/actor inspects the item the script marks the item with an info/state (id 0x0208), applies a process-exclude step, and emits a short descriptive text 'skull candle ' to the viewer via Item::bark. The temporary string used for the bark is freed and the handler suspends/returns.",
-    "external_call_count": 5,
+    "behavior_summary_one_liner": "U8P_SKULCAND::look is a simple 'U8P_SKULCAND::look' (examine) handler for a skull-candle object. When the player inspects the object it displays a single short player-facing text/bark: \"skull candle \".",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

@@ -3,25 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_OAKTBLEW.json",
   "file": "U8P_OAKTBLEW",
   "behavior_summary": [
-    "U8P_OAKTBLEW::look handles the 'U8P_OAKTBLEW::look' (examine) event for the object. It sets local object info / applies a process-exclude state, allocates the literal string \"table \", and calls Item::bark to make the object emit the short identifying text \"table \" to the requesting process. After the bark call the routine frees the string, uses the bark return value with an 'implies' operation, and then yields/returns to indicate the event was handled."
+    "U8P_OAKTBLEW::look is a U8P_OAKTBLEW::look/examine handler for the NPC/object OAKTBLEW. When the player uses the Look action on this entity, the process emits a single short bark: \"table\".",
+    "Immediately after emitting the bark the process issues a suspend/yield. The suspend likely pauses the U8P_OAKTBLEW::look process to allow the text to be shown; exact wake conditions are not present in the excerpt.",
+    "There are no dialogue menus, branching, global flag reads/writes, or external function calls observed in the provided fragment — the behavior is minimal and linear."
   ],
   "notable_control_flow": [
-    "Event-driven entry: executed in response to a 'U8P_OAKTBLEW::look' event for the object (trigger behavior).",
-    "Local state changes: the function sets an object-level info/process-exclude before performing the bark (appears to prevent reprocessing while handling).",
-    "Resource alloc/free: allocates a literal string pointer for the bark call and frees it afterward (cleanup).",
-    "Return handling: return value from Item::bark is pushed and used with an 'implies' opcode to indicate success/handling; function then suspends/returns to caller."
+    "Simple linear sequence: process entry (U8P_OAKTBLEW::look trigger) -> Bark(\"table\") -> suspend/yield.",
+    "No conditional branches, Ask/Menu/strcmp logic, or calls to other game systems are present in the excerpt."
   ],
   "open_questions": [
-    "Which exact info key(s) are set by the 'set info / process-exclude' sequence and what in-game semantics do they represent for this object? (inferred but not explicit)",
-    "What precise effect does the 'implies' operation have on the calling process in this engine (suspend, consume event, or other control signaling)?",
-    "Are there any conditional branches not visible in the snippet that change the emitted string or skip the bark under some circumstances?"
+    "What the suspend is waiting for (time, player input, or engine cleanup) is not explicit and must be inferred from engine conventions.",
+    "Whether other processes or scripts augment OAKTBLEW's behavior elsewhere (e.g., enterFastArea/leaveFastArea, or other process types) is not known from this fragment.",
+    "Are there additional localized strings or alternate U8P_OAKTBLEW::look responses in other localization or script fragments for this entity?"
   ],
   "main_function": {
     "name": "U8P_OAKTBLEW::look",
     "execution_form": "process",
-    "purpose": "Respond to a viewer performing a 'U8P_OAKTBLEW::look' on this object by marking local processing state and emitting the short identifying text \"table \" to the requester via Item::bark, then indicate the event was handled.",
+    "purpose": "Provide the short description / examine response for OAKTBLEW by emitting the text 'table' and then yielding the process.",
     "entry_conditions": [
-      "Event 0 (U8P_OAKTBLEW::look) — invoked when an actor/Avatar looks at or inspects this object."
+      "Triggered by the player's Look/examine action on the NPC/object (processType 0x0208).",
+      "Invoked when the engine routes a U8P_OAKTBLEW::look/examine event to this entity."
     ],
     "confidence": "high"
   },
@@ -29,40 +30,25 @@
     {
       "name": "U8P_OAKTBLEW::look",
       "kind": "main",
-      "role": "Handle the object's U8P_OAKTBLEW::look/examine event: set local info/process-exclude state, call Item::bark with \"table \", and return/suspend indicating handling.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine-provided routine to emit/display a short text message from an item/process to a target process/player; here invoked to show \"table \".",
+      "role": "Look/examine handler that emits a single bark ('table') and then suspends the process.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_OAKTBLEW::look",
-        "callee": "Item::bark",
-        "purpose": "Make the item/process emit the short identifying string \"table \" to the requesting process (the dword passed at BP+06h).",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
     "writes": []
   },
   "ui_tags": [
-    "trigger",
-    "cleanup",
-    "guard"
+    "trigger"
   ],
   "quick_facts": {
-    "main_function": "OAKTBLEW::look",
-    "behavior_summary_one_liner": "U8P_OAKTBLEW::look handles the 'U8P_OAKTBLEW::look' (examine) event for the object. It sets local object info / applies a process-exclude state, allocates the literal string \"table \", and calls Item::bark to make the object emit the short identifying text \"table \" to the requesting process. After the bark call the routine frees the string, uses the bark return value with an 'implies' operation, and then yields/returns to indicate the event was handled.",
-    "external_call_count": 1,
+    "main_function": "U8P_OAKTBLEW::look",
+    "behavior_summary_one_liner": "U8P_OAKTBLEW::look is a U8P_OAKTBLEW::look/examine handler for the NPC/object OAKTBLEW. When the player uses the Look action on this entity, the process emits a single short bark: \"table\".",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

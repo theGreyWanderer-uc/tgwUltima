@@ -3,24 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_BIGWEBNS.json",
   "file": "U8P_BIGWEBNS",
   "behavior_summary": [
-    "When this object receives a 'U8P_BIGWEBNS::gotHit' event, the handler records a small info record (info id 0x20C) referencing the incoming item/object parameter, marks that referenced object for exclusion from normal processing, then destroys the incoming item/object. This cleans up the hitting object (likely a projectile) rather than the hit actor.",
-    "No global flags are read or written by this handler; it operates only on the passed-in object reference."
+    "U8P_BIGWEBNS::gotHit is a short process that immediately removes the object instance when it receives a hit/damage event.",
+    "Gameplay effect: the entity (inferred to be a web) vanishes when struck, with no branching, dialogue, or state changes.",
+    "The routine accepts two parameters (uword, word) from the engine but contains a single call to Item::destroy(this) and does not use the parameters."
   ],
   "notable_control_flow": [
-    "U8P_BIGWEBNS::gotHit executes linearly: push info id (0x20C) and the item pointer -> set info -> process exclude -> call Item::destroy on the same pointer -> return.",
-    "There are no branches or global-state-dependent guards in the observed excerpt; behavior is unconditional on the provided parameter."
+    "Single-path: on entry the process invokes Item::destroy(this) and then terminates; there are no conditionals or loops.",
+    "No global flags are read or written; no menus or player-facing text are involved."
   ],
   "open_questions": [
-    "What is the concrete semantic meaning of info id 0x20C (what gameplay state or tag does it represent)?",
-    "Is the destroyed parameter always a projectile or can it be other item types (e.g., thrown item vs. weapon)?",
-    "Does marking the referenced object with info 0x20C affect other subsystems (logging, scoring, quest state) beyond excluding it from processing?"
+    "Why the declared parameters (uword, word) exist if they are unused — are they engine-provided hit metadata supplied to all hit handlers?",
+    "Does destroying this instance trigger any additional engine-side effects (particles, score, or quest checks) not visible in this script?",
+    "Is this behavior intended for temporary/fragile obstacles (e.g., webs) only, or used by multiple object types that should vanish on impact?"
   ],
   "main_function": {
     "name": "U8P_BIGWEBNS::gotHit",
     "execution_form": "process",
-    "purpose": "Handle the 'U8P_BIGWEBNS::gotHit' event by tagging the incoming object with info id 0x20C, excluding it from further processing, and destroying the object (cleanup of the hitting item).",
+    "purpose": "Handle a hit/damage event by destroying the current item instance so it disappears from the game world.",
     "entry_conditions": [
-      "Event 6 (U8P_BIGWEBNS::gotHit) — invoked when this entity is hit (collision/damage event)."
+      "Invoked by the engine when the object receives a hit/damage event (process type 0x020C).",
+      "Receives two parameters (uword, word) from the engine, likely hit-related data (inferred)."
     ],
     "confidence": "high"
   },
@@ -28,36 +30,23 @@
     {
       "name": "U8P_BIGWEBNS::gotHit",
       "kind": "main",
-      "role": "Event handler for 'U8P_BIGWEBNS::gotHit' that tags/excludes and destroys the hitting object.",
+      "role": "destroy-on-hit handler for the object instance",
       "confidence": "high"
     },
     {
       "name": "Item::destroy",
       "kind": "extern",
-      "role": "Engine/item routine used to remove/destroy the supplied item/object instance.",
+      "role": "engine/item API to remove/destroy an item instance from the world",
       "confidence": "high"
     }
   ],
   "call_analysis": {
-    "internal_calls": [
-      {
-        "caller": "U8P_BIGWEBNS::gotHit",
-        "callee": "U8P_BIGWEBNS::engine:set_info",
-        "purpose": "Attach/set info id 0x20C on the referenced object (record metadata/state).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_BIGWEBNS::gotHit",
-        "callee": "U8P_BIGWEBNS::engine:process_exclude",
-        "purpose": "Mark the referenced object as excluded from further processing (prevent further AI/updates).",
-        "confidence": "medium"
-      }
-    ],
+    "internal_calls": [],
     "external_calls": [
       {
         "caller": "U8P_BIGWEBNS::gotHit",
         "callee": "Item::destroy",
-        "purpose": "Destroy/remove the item/object passed as the parameter (cleanup of the hitting item).",
+        "purpose": "Remove/destroy the current item instance (cleanup/removal from map).",
         "confidence": "high"
       }
     ]
@@ -74,7 +63,7 @@
   ],
   "quick_facts": {
     "main_function": "U8P_BIGWEBNS::gotHit",
-    "behavior_summary_one_liner": "When this object receives a 'U8P_BIGWEBNS::gotHit' event, the handler records a small info record (info id 0x20C) referencing the incoming item/object parameter, marks that referenced object for exclusion from normal processing, then destroys the incoming item/object. This cleans up the hitting object (likely a projectile) rather than the hit actor.",
+    "behavior_summary_one_liner": "U8P_BIGWEBNS::gotHit is a short process that immediately removes the object instance when it receives a hit/damage event.",
     "external_call_count": 1,
     "flag_read_count": 0,
     "flag_write_count": 0

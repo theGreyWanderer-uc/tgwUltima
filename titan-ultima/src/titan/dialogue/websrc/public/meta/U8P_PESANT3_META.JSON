@@ -3,34 +3,32 @@
   "source_of_truth": "dialogue/json/U8P_PESANT3.json",
   "file": "U8P_PESANT3",
   "behavior_summary": [
-    "Implements a peasant/beggar NPC with three primary gameplay interactions: being looked at (examine), being used (beg/receive donations), and being cast upon/attacked (call for help and possibly spawn guards).",
-    "PESANT3::look produces a short spoken line (bark) that differs if the NPC is dead vs alive.",
-    "PESANT3::use drives a donation flow: it inspects player inventory quantities, prompts the player for an amount (slider), attempts coin transfer via shared routines, and selects follow-up dialog and minor spawned actions based on the transfer outcome.",
-    "PESANT3::cast reacts to hostile targeting or spells by checking target state, clearing combat state, using randomness to pick vocal responses, and spawning helper routines including guard alerts when appropriate.",
-    "Proximity handlers (enterFastArea / leaveFastArea) manage short-lived proximity behavior: enter may spawn a helper routine to start nearby behavior; leave clears several stored references/state keys."
+    "This script implements a beggar NPC's in-world behaviour: a short U8P_PESANT3::look/description, an attention/fast-area routine to call out to nearby players, a player 'U8P_PESANT3::use' (talk) flow that begs for donations and can accept items/coins (with a slider to choose amount) and reward larger donations with random advice barks, a U8P_PESANT3::cast/attack handler that notifies guards and shouts for help, and cleanup when an actor leaves the trigger area.",
+    "U8P_PESANT3::look returns a short description — 'dead beggar' if the NPC is dead, otherwise 'beggar'.",
+    "U8P_PESANT3::enterFastArea watches for actors entering range and (when a numeric/distance guard and not-dead checks pass) calls U8P_PESANT3::func0B53 to attract attention (short barks and spawn/timer pacing).",
+    "U8P_PESANT3::use runs the interactive begging/conversation: plays a randomized greeting, opens conversation UI (beginConversationNoMap), asks the player if they will give money, queries available quantity (Item::getQuantity), requests a donation amount via Item::getSliderInput, moves/creates donated items (FREE::findNearbyItems), thanks the player, and for sufficiently large donations selects one of several random advice barks (FREE::randomInRange0).",
+    "U8P_PESANT3::cast responds to aggression: runs a short countdown/timer loop if no target, or when there is an aggressor it calls CALGUARD::guardRespondToCrime, spawns a timer process, clears in-combat state, and barks an alarm (two variants chosen by random).",
+    "U8P_PESANT3::leaveFastArea clears several stored references/process links (FREE::resetRef) to stop area-linked behaviors and timers."
   ],
   "notable_control_flow": [
-    "Event-driven: handlers are triggered by events - U8P_PESANT3::look (Event 0), use (Event 1), cast (Event 11), enterFastArea, leaveFastArea.",
-    "PESANT3::look: check Npc::isDead() -> select 'dead beggar' vs 'beggar' string -> call Item::bark() -> suspend/return.",
-    "PESANT3::use: set per-NPC info, call FREE::2A56 to update refs, choose a greeting via urandom, spawn UI/animation/helper methods (METHOD::0E4F, FREE::1C19, METHOD::15E7), enumerate items with Item::getQuantity to compute available coins, present Item::getSliderInput to player, call FREE::20B8 to effect the transfer, call FREE::1A85 to obtain an outcome code, then branch to different gratitude/response barks and spawn finalizing methods (METHOD::1090) or other free routines.",
-    "PESANT3::cast: check Npc::getTarget(); if target==player spawn CALGUARD::0080 (guard alert) and FREE::1C19, clear in-combat flag via Npc::clrInCombat(), and choose one of multiple bark lines via urandom.",
-    "PESANT3::enterFastArea: if an info/ref key is below a threshold and NPC is alive, spawn internal helper U8P_PESANT3::0B53 to start proximity behavior.",
-    "PESANT3::leaveFastArea: clear state by calling resetRef(...) for multiple reference ids (tidy/cleanup)."
+    "Look path: immediate IsDead(this) check -> choose between two short bark/description outputs -> suspend.",
+    "Fast-area entry: numeric/distance check + IsDead(this) guard -> on success call U8P_PESANT3::func0B53 for a staged attention routine (randomized barks with spawn/suspend timing).",
+    "Use/talk flow: greeting -> beginConversationNoMap -> ask Yes/No (FREE::askYesNo) -> on Yes accumulate Item::getQuantity into a donation upper bound -> ask slider Item::getSliderInput for donation amount -> call FREE::findNearbyItems to effect transfer -> if donation > threshold play thanks + advice chosen by FREE::randomInRange0.",
+    "Cast flow: branch on Npc::getTarget(this) -> no-target loop uses spawn FREE::func1C19 and a countdown local -> aggressor path calls CALGUARD::guardRespondToCrime, spawns timer, calls Npc::clrInCombat(this), then emits a randomly-chosen alarm bark.",
+    "Loop/frame progression inside U8P_PESANT3::func0B53; treated as control-flow, not explicit internal call."
   ],
   "open_questions": [
-    "Exact semantics and id meanings of the per-NPC 'info' / reference keys used (which keys map to which gameplay timers/flags) remain inferred rather than explicitly named.",
-    "Precise behavior of several spawned shared routines (FREE::1C19, FREE::1A85, FREE::20B8, FREE::1AD0, FREE::2A56) is inferred from call context (UI, transfer, state update) but not definitively known.",
-    "Contents and behavior of the spawned helper U8P_PESANT3::0B53 are truncated in the excerpt — its full greeting/timing behavior is therefore inferred.",
-    "Whether the donation transfer can fail for reasons other than quantity (e.g., permissions, inventory locks) is not explicit; outcome branching uses FREE::1A85 return but mapping of codes to messages is inferred."
+    "What precisely does the numeric check 'this > 0x00FAh' represent in U8P_PESANT3::enterFastArea/U8P_PESANT3::use (distance, actor ID, or another gating value)?",
+    "What exact UI mechanics FREE::findNearbyItems uses for transferring donated coins/items (stack creation vs direct inventory transfer)?",
+    "Is somebodyTalking a global flag shared across scripts (it is read to avoid interrupting speech) and what exact name/namespace does it U8P_PESANT3::use at runtime?"
   ],
   "main_function": {
     "name": "U8P_PESANT3::look",
     "execution_form": "process",
-    "purpose": "Respond to the player's 'U8P_PESANT3::look' interaction by emitting a short bark describing the peasant as either alive ('beggar') or dead ('dead beggar'), then yield and return.",
+    "purpose": "Provide the short description shown to the player when they inspect the NPC: returns 'dead beggar' if the NPC is dead, otherwise 'beggar'.",
     "entry_conditions": [
-      "Triggered by an examine/U8P_PESANT3::look event directed at the NPC (Event 0).",
-      "Uses implicit calling process id (pid) to direct Item::bark output to the viewer.",
-      "Checks Npc::isDead() to choose between two canned strings."
+      "Invoked by the engine when the player 'looks at' or inspects this NPC (standard U8P_PESANT3::look/inspect handler).",
+      "Checks Npc::isDead(this) to decide which short description to present."
     ],
     "confidence": "high"
   },
@@ -38,198 +36,126 @@
     {
       "name": "U8P_PESANT3::look",
       "kind": "main",
-      "role": "Handle 'U8P_PESANT3::look' (examine) event; choose and emit short bark depending on death state.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_PESANT3::use",
-      "kind": "helper",
-      "role": "Primary interaction/dialog: begging/donation flow, inventory enumeration, slider UI, transfer call, and multi-branch reply/cleanup.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_PESANT3::cast",
-      "kind": "helper",
-      "role": "React to spells/attacks: check target/combat, call for help, spawn guards, clear in-combat state, and emit randomized cries.",
+      "role": "short description / inspect handler",
       "confidence": "high"
     },
     {
       "name": "U8P_PESANT3::enterFastArea",
       "kind": "helper",
-      "role": "Proximity entry trigger: conditionally spawn short helper to start nearby behavior and set info keys.",
+      "role": "triggered when actor enters NPC fast area; gate checks then call attention utility",
       "confidence": "medium"
     },
     {
       "name": "U8P_PESANT3::leaveFastArea",
       "kind": "helper",
-      "role": "Proximity exit trigger: clear several stored references / reset per-NPC state keys.",
+      "role": "cleanup: reset references/process links when actor leaves trigger area",
       "confidence": "high"
     },
     {
-      "name": "U8P_PESANT3::0B53",
+      "name": "U8P_PESANT3::cast",
       "kind": "helper",
-      "role": "Spawned short helper routine invoked on proximity; likely runs greeting/timing behavior (truncated in source).",
+      "role": "handle being targeted/attacked: announce alarm and notify guards, U8P_PESANT3::use timers for repetition",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_PESANT3::use",
+      "kind": "helper",
+      "role": "player interaction/talk/begging flow: greetings, ask-for-money, accept donations, give thanks/advice",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_PESANT3::func0B53",
+      "kind": "helper",
+      "role": "attention-getting utility: distance guard, randomized barks, timed spawn/suspend sequence, calls METHOD::func15E7",
       "confidence": "medium"
-    },
-    {
-      "name": "Npc::isDead",
-      "kind": "extern",
-      "role": "Engine/NPC query to determine death state used by multiple handlers.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Emit text/dialog to a target process; primary output mechanism for barks/lines.",
-      "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
         "caller": "U8P_PESANT3::enterFastArea",
-        "callee": "U8P_PESANT3::0B53",
-        "purpose": "Spawn a short-lived helper to initiate proximity-based behavior when conditions (info key threshold and alive) are met.",
-        "confidence": "medium"
+        "callee": "U8P_PESANT3::func0B53",
+        "purpose": "When entry checks pass, delegate to the attention routine to call out to nearby players.",
+        "confidence": "high"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_PESANT3::look",
-        "callee": "Npc::isDead",
-        "purpose": "Check whether the NPC is dead to select appropriate bark text.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_PESANT3::look",
-        "callee": "Item::bark",
-        "purpose": "Emit the chosen 'beggar' or 'dead beggar' string to the inspecting player/process.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_PESANT3::enterFastArea",
-        "callee": "Npc::isDead",
-        "purpose": "Skip spawning helper behavior if the NPC is dead.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_PESANT3::enterFastArea",
-        "callee": "spawn",
-        "purpose": "Create the helper process U8P_PESANT3::0B53 to run proximity behavior.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_PESANT3::leaveFastArea",
-        "callee": "U8P_PESANT3::resetRef",
-        "purpose": "Clear multiple per-NPC reference/info keys to tidy state when player leaves proximity.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_PESANT3::cast",
-        "callee": "Npc::getTarget",
-        "purpose": "Determine current combat/target state to decide whether to call for help or spawn guards.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_PESANT3::cast",
-        "callee": "CALGUARD::0080",
-        "purpose": "Spawn a guard/ally helper when the NPC is targeted by the player (alert guards).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_PESANT3::cast",
-        "callee": "FREE::1C19",
-        "purpose": "Spawn a short shared routine during cast reaction (timing/dialog helper).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_PESANT3::cast",
-        "callee": "Npc::clrInCombat",
-        "purpose": "Clear the NPC's in-combat state as part of the cast reaction.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_PESANT3::cast",
-        "callee": "urandom",
-        "purpose": "Randomly select between alternate vocal reactions to being attacked/cast upon.",
+        "callee": "CALGUARD::guardRespondToCrime",
+        "purpose": "Notify the guard/AI system that a crime or attack occurred so guards can respond.",
         "confidence": "high"
       },
       {
         "caller": "U8P_PESANT3::use",
-        "callee": "FREE::2A56",
-        "purpose": "Set or update per-NPC info/state at the start of the use/donation flow.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_PESANT3::use",
-        "callee": "urandom",
-        "purpose": "Choose among greeting/dialog variants to add variety to the begging interaction.",
+        "callee": "METHOD::beginConversationNoMap",
+        "purpose": "Open the conversation UI/session with the player without changing maps, used at the start of the talk flow.",
         "confidence": "high"
       },
       {
         "caller": "U8P_PESANT3::use",
-        "callee": "METHOD::0E4F",
-        "purpose": "Spawn an animation/UI-related method early in the use flow (likely animate or prepare UI).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_PESANT3::use",
-        "callee": "FREE::1C19",
-        "purpose": "Spawn a timing/dialog helper shared routine during use.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_PESANT3::use",
-        "callee": "Npc::getDir",
-        "purpose": "Get NPC direction to orient and spawn METHOD::15E7 for turning/animation.",
+        "callee": "FREE::askYesNo",
+        "purpose": "Present a Yes/No prompt asking the player if they will give money; result examined with process_result().",
         "confidence": "high"
-      },
-      {
-        "caller": "U8P_PESANT3::use",
-        "callee": "METHOD::15E7",
-        "purpose": "Animate/turn the NPC toward the player using the retrieved direction.",
-        "confidence": "medium"
       },
       {
         "caller": "U8P_PESANT3::use",
         "callee": "Item::getQuantity",
-        "purpose": "Iterate inventory to sum available coin/item quantities before prompting the player.",
+        "purpose": "Query how many of the offered item/coin the player can give to determine the slider upper bound.",
         "confidence": "high"
       },
       {
         "caller": "U8P_PESANT3::use",
         "callee": "Item::getSliderInput",
-        "purpose": "Present a slider UI so the player chooses how many coins to give.",
+        "purpose": "Ask the player to choose a donation amount via a slider between 0/1 and the available quantity; result stored in a local (local3).",
         "confidence": "high"
       },
       {
         "caller": "U8P_PESANT3::use",
-        "callee": "FREE::20B8",
-        "purpose": "Perform the actual coin transfer / giving action via a shared routine.",
+        "callee": "FREE::findNearbyItems",
+        "purpose": "Transfer or create the donated items/coins near the NPC/player to effect the donation.",
         "confidence": "medium"
       },
       {
         "caller": "U8P_PESANT3::use",
-        "callee": "FREE::1A85",
-        "purpose": "Obtain a return/outcome code after transfer to select appropriate follow-up dialog and actions.",
+        "callee": "FREE::randomInRange0",
+        "purpose": "Select a random index to choose which advice/thank-you bark to speak after a larger donation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PESANT3::func0B53",
+        "callee": "METHOD::func15E7",
+        "purpose": "Advance or finalize attention/interaction state after barks; likely notifies other subsystems or progresses conversation state.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_PESANT3::use",
-        "callee": "FREE::1AD0",
-        "purpose": "Spawned during dialog/confirmation; its resulting process value is inspected to continue the flow (UI/confirmation helper).",
+        "caller": "U8P_PESANT3::func0B53",
+        "callee": "FREE::getDistanceBetween",
+        "purpose": "Measure distance to the actor/player to decide whether to emit attention barks.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_PESANT3::use",
-        "callee": "METHOD::1090",
-        "purpose": "Spawn finalizing method(s) after dialog/transfer to complete interaction (UI/cleanup).",
-        "confidence": "medium"
+        "caller": "U8P_PESANT3::cast",
+        "callee": "FREE::func1C19",
+        "purpose": "Spawn a short-lived timer/helper process used to pace repeated behaviour (spawn/suspend loops).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PESANT3::leaveFastArea",
+        "callee": "FREE::resetRef",
+        "purpose": "Clear stored process references (IDs) associated with the NPC so area-linked behaviours and timers stop.",
+        "confidence": "high"
       }
     ]
   },
   "global_flags": {
-    "reads": [],
+    "reads": [
+      {
+        "name": "somebodyTalking",
+        "likely_effect": "Used as a guard to avoid emitting attention barks when other speech is active (prevent interrupting).",
+        "confidence": "medium"
+      }
+    ],
     "writes": []
   },
   "ui_tags": [
@@ -239,10 +165,10 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "PESANT3::look",
-    "behavior_summary_one_liner": "Implements a peasant/beggar NPC with three primary gameplay interactions: being looked at (examine), being used (beg/receive donations), and being cast upon/attacked (call for help and possibly spawn guards).",
-    "external_call_count": 22,
-    "flag_read_count": 0,
+    "main_function": "U8P_PESANT3::look",
+    "behavior_summary_one_liner": "This script implements a beggar NPC's in-world behaviour: a short U8P_PESANT3::look/description, an attention/fast-area routine to call out to nearby players, a player 'U8P_PESANT3::use' (talk) flow that begs for donations and can accept items/coins (with a slider to choose amount) and reward larger donations with random advice barks, a U8P_PESANT3::cast/attack handler that notifies guards and shouts for help, and cleanup when an actor leaves the trigger area.",
+    "external_call_count": 11,
+    "flag_read_count": 1,
     "flag_write_count": 0
   },
   "hypotheses": {

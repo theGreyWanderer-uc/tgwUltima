@@ -3,33 +3,33 @@
   "source_of_truth": "dialogue/json/U8P_GUARD10.json",
   "file": "U8P_GUARD10",
   "behavior_summary": [
-    "Implements a palace guardsman NPC's observable behaviors: how it appears when examined, how it responds to theft, area entry and periodic scheduling (used to revive/reset the NPC), and a small dialog tree when 'used' (talked to).",
-    "U8P_GUARD10::look describes the NPC as either \"dead guardsman\" or \"guardsman\" depending on its dead state and directs that short description at the observing process/player.",
-    "U8P_GUARD10::enterFastArea is an area-trigger that, if the guard is dead, clears dead/in-combat state and teleports the NPC to spawn coordinates; otherwise it spawns a behavior method (likely an alert/approach routine).",
-    "U8P_GUARD10::schedule periodically spawns a scheduling method and, based on its result, can clear the 'dead' flag and spawn a revival/reinitialization method.",
-    "U8P_GUARD10::AvatarStoleSomething checks the type of a stolen item against guarded types and, if guards haven't already been called (global guardsCalled false), barks 'Stop! Thief!' and spawns a guard-calling process.",
-    "U8P_GUARD10::use presents a small talk dialog to the player: chooses one of two intro lines randomly, builds a choice list (Who are you?, What is your duty?, Where am I?, goodbye), branches on the answer and barks context-appropriate replies. A global flag devonInRule affects the 'Where am I?' response."
+    "This script implements a palace guardsman NPC with: a simple U8P_GUARD10::look/description handler, fast-area activation (used to respawn/relocate or activate the guard), a scheduling/init routine that can finalize respawn, a theft-response handler that alerts other guards when certain item types are stolen, and a short conversation flow with a small removable menu.",
+    "U8P_GUARD10::look: when the player 'looks' at the NPC it emits a short bark — 'dead guardsman' if the NPC is flagged dead, otherwise 'guardsman'.",
+    "U8P_GUARD10::enterFastArea: triggered by entering the NPC's fast-area; if the NPC is dead it clears dead/in-combat state and teleports the NPC to fixed coordinates (map 0x29, x=0x64, y=0x64) to effectively revive/relocate it; if not dead it invokes an internal activation method and suspends.",
+    "U8P_GUARD10::schedule: writes local U8P_GUARD10::schedule temporaries, calls engine U8P_GUARD10::schedule/apply hooks, suspends, and on a positive process_result() clears dead and invokes a finalization method — effectively a scheduled respawn/activation path.",
+    "U8P_GUARD10::AvatarStoleSomething(uword): called when the Avatar steals an item; it checks Item::getType on the stolen item and, for specific guarded item types and if 'guardsCalled' is not set, barks 'Stop! Thief!' and calls CALGUARD::guardRespondToCrime to alert other guards.",
+    "U8P_GUARD10::use: a short conversation process that picks one of a couple of greetings at random, builds a menu of four choices (Who are you?, What is your duty?, Where am I?, goodbye), removes options as they are asked, gives canned replies, and uses the global flag 'devonInRule' to choose the 'Where am I?' reply."
   ],
   "notable_control_flow": [
-    "U8P_GUARD10::look: branch on Npc::isDead(self) -> Item::bark(pid,self,\"dead guardsman \") OR Item::bark(pid,self,\"guardsman \").",
-    "U8P_GUARD10::enterFastArea: if Npc::isDead(self) then Npc::clrDead(self), Npc::clrInCombat(self), Npc::teleport(self, 0x29,0x00,0x64,0x64) else spawn METHOD::15E7(pid,self).",
-    "U8P_GUARD10::schedule: spawn METHOD::143A; if its result indicates a particular state (zero/inactive) then call Npc::clrDead(self) and spawn METHOD::133F for reinitialization.",
-    "U8P_GUARD10::AvatarStoleSomething: call Item::getType(item_pid) and compare against a set of guarded item type constants; if any match AND global guardsCalled is false then bark 'Stop! Thief!' and spawn CALGUARD::0080 to call other guards.",
-    "U8P_GUARD10::use: call urandom(100) to pick one of two starter lines, build an slist of dialog choices, call Item::ask(pid,slist,self) and branch on the returned string; devonInRule controls one branch's content."
+    "Look handler branches on Npc::isDead(this) to select one of two short barks and then suspends.",
+    "U8P_GUARD10::enterFastArea branches on Npc::isDead(this): the dead branch clears Npc::dead and in-combat flags then teleports the NPC; the alive branch calls METHOD::func15E7 then suspends.",
+    "U8P_GUARD10::schedule sets several local U8P_GUARD10::schedule temporaries, calls an engine scheduling method, suspends, then checks (word)process_result() and on true clears Npc::dead and calls METHOD::func133F before suspending again.",
+    "U8P_GUARD10::AvatarStoleSomething tests Item::getType(local1) against a set of guarded type constants; if matched and guards haven't yet been called, it barks, suspends, and invokes CALGUARD::guardRespondToCrime.",
+    "U8P_GUARD10::use runs a conversation loop: Ask -> SuspendAssign local1 (menu choice) -> strcmp-based branches -> MenuRemove removes asked options -> loop or EndConversation on 'goodbye' or specific branches that terminate early."
   ],
   "open_questions": [
-    "Exact numeric meanings of the teleport parameters passed to Npc::teleport (map X/Y/orientation/level) and how they map to a spawn location.",
-    "Precise item type constants checked in AvatarStoleSomething (the exact type IDs and which in-game items they correspond to).",
-    "Detailed behavior of the spawned methods (METHOD::15E7, METHOD::143A, METHOD::133F, METHOD::0BCF, CALGUARD::0080, FREE::1C19, FREE::2A56): their internal logic is external to this file and only inferred from usage.",
-    "Whether guardsCalled is set/reset elsewhere in game code and the exact lifecycle intended for that throttle flag.",
-    "The intended frequency and triggering semantics of the schedule method (timing parameters are present but mapping to game time is inferred)."
+    "Exact semantics and effects of METHOD::func15E7, METHOD::func143A and METHOD::func133F: they appear to be engine/internal hooks for activation/scheduling but their precise role is inferred.",
+    "Whether teleport coordinates in U8P_GUARD10::enterFastArea always represent a canonical respawn point or a relocation for a specific patrol route (inferred as respawn/relocate).",
+    "Whether 'guardsCalled' is a local/global campaign flag elsewhere set by CALGUARD::guardRespondToCrime or by other scripts; here it is only read, not written.",
+    "Precise engine behavior of the U8P_GUARD10::schedule suspend/process_result() handshake: inferred as a wait-for-engine-apply step but details (timing/conditions) are unknown."
   ],
   "main_function": {
     "name": "U8P_GUARD10::look",
     "execution_form": "process",
-    "purpose": "When a player/process examines this guardsman NPC, present a short descriptive line that reflects whether the NPC is dead or alive and direct that line to the examining process.",
+    "purpose": "Provide the short examine/description response for this guardsman NPC; choose a 'dead guardsman' or 'guardsman' bark depending on the NPC's dead state.",
     "entry_conditions": [
-      "Event 0: the Avatar (or other actor) looks at / inspects this guard NPC (area-neutral U8P_GUARD10::look/examine interaction)."
+      "Invoked by the engine when the player examines/looks at the NPC (standard U8P_GUARD10::look/examine event).",
+      "Branches depend on Npc::isDead(this)."
     ],
     "confidence": "high"
   },
@@ -37,212 +37,128 @@
     {
       "name": "U8P_GUARD10::look",
       "kind": "main",
-      "role": "Examine handler that decides and emits a one-line description (alive vs dead) to the viewer.",
+      "role": "simple U8P_GUARD10::look/examine handler producing short bark based on Npc::isDead",
       "confidence": "high"
     },
     {
       "name": "U8P_GUARD10::enterFastArea",
       "kind": "helper",
-      "role": "Area-enter trigger: revives/teleports the guard when dead or spawns an approach/alert behavior when alive.",
+      "role": "fast-area trigger handler that revives/relocates or activates the NPC on area entry",
       "confidence": "high"
     },
     {
       "name": "U8P_GUARD10::schedule",
       "kind": "helper",
-      "role": "Periodic scheduler: spawns timing methods and may clear dead state and reinitialize the guard based on results.",
+      "role": "initial scheduling/respawn initializer that calls engine U8P_GUARD10::schedule hooks and may finalize activation on process_result()",
       "confidence": "medium"
     },
     {
       "name": "U8P_GUARD10::AvatarStoleSomething",
       "kind": "helper",
-      "role": "Responds to theft events: checks stolen item types, prevents repeat calling via guardsCalled, and alerts/spawns guard-response when needed.",
+      "role": "monologue-style reaction to theft: checks item type and alerts guards for guarded items",
       "confidence": "high"
     },
     {
       "name": "U8P_GUARD10::use",
       "kind": "helper",
-      "role": "Talk/use interaction: randomizes an opening line, presents a dialog choice list to the player, and barks context-appropriate replies (uses devonInRule to vary one branch).",
+      "role": "dialogue process: random greeting, present/remove small menu of questions, supply canned answers (conditional on devonInRule for location answer)",
       "confidence": "high"
-    },
-    {
-      "name": "Npc::isDead",
-      "kind": "extern",
-      "role": "Engine/utility query to test if an NPC is flagged as dead.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Emit a short spoken/text line from an item/process to a target process/player.",
-      "confidence": "high"
-    },
-    {
-      "name": "Npc::clrDead",
-      "kind": "extern",
-      "role": "Clear the NPC 'dead' flag (used when reviving/resetting).",
-      "confidence": "high"
-    },
-    {
-      "name": "Npc::clrInCombat",
-      "kind": "extern",
-      "role": "Clear the NPC 'in combat' flag (used during revive/reset).",
-      "confidence": "high"
-    },
-    {
-      "name": "Npc::teleport",
-      "kind": "extern",
-      "role": "Teleport/place the NPC at specific coordinates/orientation (used for respawn/placement).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getType",
-      "kind": "extern",
-      "role": "Return the type/ID of an item (used to decide whether a stolen item should trigger guards).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::ask",
-      "kind": "extern",
-      "role": "Present a list of dialog options to the player and return the chosen string/index.",
-      "confidence": "high"
-    },
-    {
-      "name": "urandom",
-      "kind": "extern",
-      "role": "Random number generator used to randomize dialog selection.",
-      "confidence": "high"
-    },
-    {
-      "name": "spawn",
-      "kind": "extern",
-      "role": "Spawn/launch another process/method (used to call AI routines, guard calls, free callbacks, etc.).",
-      "confidence": "high"
-    },
-    {
-      "name": "FREE::1C19",
-      "kind": "extern",
-      "role": "Framework free/callback used in dialog flow (inferred cleanup or delayed callback).",
-      "confidence": "medium"
-    },
-    {
-      "name": "FREE::2A56",
-      "kind": "extern",
-      "role": "Framework free/callback used in dialog flow (inferred cleanup or delayed callback).",
-      "confidence": "medium"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_GUARD10::look",
-        "callee": "Npc::isDead",
-        "purpose": "Check whether the guard is dead to choose the correct description.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GUARD10::look",
-        "callee": "Item::bark",
-        "purpose": "Emit the short description ('dead guardsman ' or 'guardsman ') to the examining process/player.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GUARD10::enterFastArea",
-        "callee": "Npc::isDead",
-        "purpose": "Decide whether to perform revive/teleport sequence or spawn an approach behavior.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_GUARD10::enterFastArea",
         "callee": "Npc::clrDead",
-        "purpose": "Clear the dead flag as part of reviving/resetting the NPC.",
+        "purpose": "Clear the NPC's dead flag (used to revive/reset the NPC in the fast-area dead branch).",
         "confidence": "high"
       },
       {
         "caller": "U8P_GUARD10::enterFastArea",
         "callee": "Npc::clrInCombat",
-        "purpose": "Clear in-combat state as part of revive/reset.",
+        "purpose": "Clear the NPC's in-combat state during revive/reset in fast-area handling.",
         "confidence": "high"
       },
       {
         "caller": "U8P_GUARD10::enterFastArea",
         "callee": "Npc::teleport",
-        "purpose": "Teleport the NPC to specific coordinates/orientation when reviving/resetting.",
+        "purpose": "Move the NPC to fixed map/coordinates (map 0x29, x=0x64, y=0x64) as part of revive/relocate behavior.",
         "confidence": "high"
       },
       {
         "caller": "U8P_GUARD10::enterFastArea",
-        "callee": "spawn",
-        "purpose": "Spawn METHOD::15E7(pid,self) when an actor enters the fast-area and the guard is alive (likely an alert/approach routine).",
-        "confidence": "high"
+        "callee": "METHOD::func15E7",
+        "purpose": "An internal/engine method called when entering fast-area and NPC is not dead; likely performs activation or AI setup (inferred).",
+        "confidence": "low"
       },
       {
         "caller": "U8P_GUARD10::schedule",
-        "callee": "spawn",
-        "purpose": "Spawn periodic scheduling method METHOD::143A and later possibly METHOD::133F for revival based on result.",
+        "callee": "METHOD::func143A",
+        "purpose": "Apply/register U8P_GUARD10::schedule or pass U8P_GUARD10::schedule state to the engine (inferred from scheduling context).",
         "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GUARD10::schedule",
+        "callee": "process_result",
+        "purpose": "Check suspend return value to decide whether to continue with respawn/finalization.",
+        "confidence": "high"
       },
       {
         "caller": "U8P_GUARD10::schedule",
         "callee": "Npc::clrDead",
-        "purpose": "Clear dead flag if the schedule result indicates revival should occur.",
+        "purpose": "Clear NPC dead flag when scheduling indicates activation should proceed (respawn path).",
         "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GUARD10::schedule",
+        "callee": "METHOD::func133F",
+        "purpose": "Finalize activation/respawn after clearing dead (inferred).",
+        "confidence": "low"
       },
       {
         "caller": "U8P_GUARD10::AvatarStoleSomething",
         "callee": "Item::getType",
-        "purpose": "Obtain the stolen item's type to check whether it is guarded and should trigger an alarm.",
+        "purpose": "Query the stolen item's type so the script can decide whether the theft should trigger a guard response.",
         "confidence": "high"
       },
       {
         "caller": "U8P_GUARD10::AvatarStoleSomething",
-        "callee": "Item::bark",
-        "purpose": "Shout 'Stop! Thief!' to the player/process when a guarded item is stolen and guards haven't yet been called.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GUARD10::AvatarStoleSomething",
-        "callee": "spawn",
-        "purpose": "Spawn CALGUARD::0080 to call other guards/respond to theft when appropriate.",
+        "callee": "CALGUARD::guardRespondToCrime",
+        "purpose": "Alert/summon other guards when a guarded item type is stolen.",
         "confidence": "high"
       },
       {
         "caller": "U8P_GUARD10::use",
-        "callee": "Item::bark",
-        "purpose": "Emit initial greeting/bark when the player uses/talks to the guard and for subsequent replies.",
-        "confidence": "high"
+        "callee": "spawn->FREE::func1C19",
+        "purpose": "Part of conversation setup/engine housekeeping (returns a pid/temp used during dialog setup; exact effect unclear).",
+        "confidence": "low"
+      },
+      {
+        "caller": "U8P_GUARD10::use",
+        "callee": "FREE::resetRef",
+        "purpose": "Engine housekeeping during conversation setup/teardown (exact semantics unclear).",
+        "confidence": "low"
       },
       {
         "caller": "U8P_GUARD10::use",
         "callee": "urandom",
-        "purpose": "Randomly choose between two opening lines to make dialog less repetitive.",
+        "purpose": "Choose a random greeting variant at conversation start.",
         "confidence": "high"
-      },
-      {
-        "caller": "U8P_GUARD10::use",
-        "callee": "Item::ask",
-        "purpose": "Present the short choice list (Who are you?, What is your duty?, Where am I?, goodbye) and receive the player's selection.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GUARD10::use",
-        "callee": "spawn",
-        "purpose": "Spawn FREE::1C19 and FREE::2A56 (free/callbacks) and METHOD::0BCF during dialog flow (cleanup/timing or auxiliary behaviors).",
-        "confidence": "medium"
       }
     ]
   },
   "global_flags": {
     "reads": [
       {
-        "name": "guardsCalled",
-        "likely_effect": "Throttles or records whether guards have already been alerted/called to prevent repeated alarm behavior; read when deciding whether to bark and spawn guard-calling.",
+        "name": "devonInRule",
+        "likely_effect": "Used to select the 'Where am I?' reply in U8P_GUARD10::use; if true reply is 'You are in the palace, of course!', otherwise a hostile/terminating response is used.",
         "confidence": "high"
       },
       {
-        "name": "devonInRule",
-        "likely_effect": "Alters dialog content in the 'Where am I?' branch of U8P_GUARD10::use; indicates presence/state of some rule or character 'Devon' that changes reply tone/content.",
-        "confidence": "medium"
+        "name": "guardsCalled",
+        "likely_effect": "Checked (negated) in U8P_GUARD10::AvatarStoleSomething to prevent repeated guard alerts; script only reads it here.",
+        "confidence": "high"
       }
     ],
     "writes": []
@@ -255,8 +171,8 @@
   ],
   "quick_facts": {
     "main_function": "U8P_GUARD10::look",
-    "behavior_summary_one_liner": "Implements a palace guardsman NPC's observable behaviors: how it appears when examined, how it responds to theft, area entry and periodic scheduling (used to revive/reset the NPC), and a small dialog tree when 'used' (talked to).",
-    "external_call_count": 16,
+    "behavior_summary_one_liner": "This script implements a palace guardsman NPC with: a simple U8P_GUARD10::look/description handler, fast-area activation (used to respawn/relocate or activate the guard), a scheduling/init routine that can finalize respawn, a theft-response handler that alerts other guards when certain item types are stolen, and a short conversation flow with a small removable menu.",
+    "external_call_count": 13,
     "flag_read_count": 2,
     "flag_write_count": 0
   },

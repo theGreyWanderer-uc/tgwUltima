@@ -3,27 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_BROKCHAR.json",
   "file": "U8P_BROKCHAR",
   "behavior_summary": [
-    "When a player or actor examines the broken-chair item (U8P_BROKCHAR::look event), the script composes the literal string \"broken chair \" and asks the item/process to 'bark' that string to the viewer, producing a short textual description.",
-    "The routine performs only transient context manipulation (pushes a process/info exclusion flag) around the bark call; it does not set persistent global flags or change long-term object state.",
-    "Return/response from Item::bark is consumed locally (used in an implies/pop pattern) and discarded before the script suspends/returns."
+    "When the player uses the 'U8P_BROKCHAR::look' (examine) action on this object/NPC, the script plays a single short bark reading \"broken chair\".",
+    "The U8P_BROKCHAR::look process then suspends/ends; there are no menu choices, branching conditions, global flag reads/writes, or external calls.",
+    "Overall behavior is purely descriptive and has no side effects on game state."
   ],
   "notable_control_flow": [
-    "Entry via Event 0 (U8P_BROKCHAR::look/examine) for the broken-chair item triggers the routine.",
-    "Transient process/info context bits are pushed (inferred flag 0x0208) and applied before calling Item::bark to alter messaging/processing for the duration of the call.",
-    "Item::bark is called with the item/process context and the literal string; its return value is consumed locally via an implies/pop sequence and does not affect persistent state.",
-    "The script frees the temporary message buffer and then suspends/returns immediately after the bark call."
+    "Single-entry process handler: U8P_BROKCHAR::look is invoked and immediately emits a bark, followed by a suspend/terminate of the process.",
+    "No conditional branches or calls are present; control flow is linear and short-lived."
   ],
   "open_questions": [
-    "What is the precise meaning/effect of the pushed info/process-exclude flag (inferred 0x0208) and how it modifies Item::bark behavior?",
-    "Does Item::bark ever produce side effects beyond presenting text (e.g., triggers, logging) that this script relies on implicitly?",
-    "Why the return value from Item::bark is used in an implies/pop sequence here — is that purely control-flow convention in the engine or does it reflect a conditional side-effect in other contexts?"
+    "The raw representation included two 'Unknown' nodes (samples: '{', 'suspend') — do these represent in-engine bookkeeping or are they artifacts of disassembly?",
+    "Is the 'suspend' node intended to pause the U8P_BROKCHAR::look process until player input, or does it simply end the process immediately in this context?"
   ],
   "main_function": {
     "name": "U8P_BROKCHAR::look",
     "execution_form": "process",
-    "purpose": "Handle the 'U8P_BROKCHAR::look' (examine) event for the broken-chair item by emitting a short description ('broken chair ') to the examining process; perform only transient context setup and then return.",
+    "purpose": "Provide the short descriptive response when the player examines this object/NPC; play a single bark \"broken chair\" and end the U8P_BROKCHAR::look process.",
     "entry_conditions": [
-      "Event 0: the player/actor issues a 'U8P_BROKCHAR::look' (examine) action on the broken-chair item."
+      "Invoked by the engine when the player performs the 'U8P_BROKCHAR::look' (examine) action on the object/NPC.",
+      "Classified as a U8P_BROKCHAR::look-type process (processType 0x0208) which the engine dispatches for examination events."
     ],
     "confidence": "high"
   },
@@ -31,20 +29,13 @@
     {
       "name": "U8P_BROKCHAR::look",
       "kind": "main",
-      "role": "Respond to the U8P_BROKCHAR::look/examine event for the broken-chair item by producing a short descriptive bark.",
+      "role": "Examine/U8P_BROKCHAR::look handler that emits a single descriptive bark and terminates.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_BROKCHAR::look",
-        "callee": "Item::bark",
-        "purpose": "Ask the item/process to emit/display the short description string 'broken chair ' to the examining process.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -52,13 +43,13 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "guard"
+    "description",
+    "suspend"
   ],
   "quick_facts": {
-    "main_function": "BROKCHAR::look",
-    "behavior_summary_one_liner": "When a player or actor examines the broken-chair item (U8P_BROKCHAR::look event), the script composes the literal string \"broken chair \" and asks the item/process to 'bark' that string to the viewer, producing a short textual description.",
-    "external_call_count": 1,
+    "main_function": "U8P_BROKCHAR::look",
+    "behavior_summary_one_liner": "When the player uses the 'U8P_BROKCHAR::look' (examine) action on this object/NPC, the script plays a single short bark reading \"broken chair\".",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

@@ -3,30 +3,32 @@
   "source_of_truth": "dialogue/json/U8P_STRATOS.json",
   "file": "U8P_STRATOS",
   "behavior_summary": [
-    "Provides examine ('U8P_STRATOS::look') and interact ('use') behaviors for the Stratos NPC/object.",
-    "STRATOS::look displays a short name string to the player: either the full name ('Stratos, the Air Titan') if the global flag stratosName is set, or a generic title ('Titan') otherwise.",
-    "STRATOS::use runs a multi-stage scripted interaction: it spawns animation/effect processes, plays music, temporarily stuns/levitates the avatar, creates and positions temporary items around Stratos, invokes those items' use behaviors, and drives a branching dialog tree that updates quest and recognition flags and may grant a reward.",
-    "The use flow coordinates many helper processes (spawned METHOD::* and FREE::* processes and internal STRATOS helper routines) and uses Item::* APIs (create/legal_create/getX/getY/getZ/move/orStatus/use/pop/push) together with Item::bark and Item::ask to carry out visible effects and dialog."
+    "This script implements the in-game behavior for the NPC Stratos. It provides a simple U8P_STRATOS::look/inspect response (U8P_STRATOS::look) and a richer interaction/cutscene flow (U8P_STRATOS::use) where Stratos speaks, may reveal his name, reacts to the player returning the 'Breath of Wind', and can grant a reward (a Focus that enables Air Walk).",
+    "U8P_STRATOS::look: when the player inspects Stratos it shows either 'Stratos, the Air Titan' if the global flag stratosName is set, otherwise it shows 'Titan'. The process then suspends.",
+    "U8P_STRATOS::use: orchestrates a short staged encounter: background music and SFX are played, the avatar may be put into stasis/levitation (setAvatarInStasis / SetFlag levitateAvatar), the camera is manipulated, timed helper processes are spawned to sequence visuals/sfx, several temporary items are created/previewed/placed (Item::create, Item::pop, Item::legal_create, Item::push, Item::look, Item::move) and a conversation menu is built and presented to the player (local4 menu array, captured into local2). Choices set persistent flags (stratosName, stratosMet, rewardMe, stratosTakenBreath) and can cause U8P_STRATOS::func13AA to run to create/give the Focus reward.",
+    "Helper utilities: U8P_STRATOS::func126B implements a small vertical oscillation/levitation loop that moves an item up/down in steps and uses spawn timers for pacing; U8P_STRATOS::func1327 is a short timer/SFX helper that may randomly play ambient SFX while levitation is active; U8P_STRATOS::func13AA is the item-creation/presentation routine that creates and shows the Focus and related temporary items, sequences animations and destroys temporaries."
   ],
   "notable_control_flow": [
-    "STRATOS::look: single conditional check on global flag stratosName to choose which display string to pass to Item::bark, then suspends/returns.",
-    "STRATOS::use: complex branching driven by multiple global flags (stratosMet, stratosTakenBreath, spokenAboutBreath, rewardMe) and by the player's choices returned from Item::ask. Branches include first-meeting greeting, explaining the 'Breath of Wind', accepting a returned Breath of Wind (setting stratosTakenBreath), and optionally granting a reward (setting rewardMe).",
-    "STRATOS::use sequences: start-of-interaction setup (reset refs, playMusic, spawn helper processes), avatar stasis/levitation toggling, a repeated loop that creates/moves/activates temporary items and spawns delays/effects, then dialog/quest-state updates and cleanup (clearing levitateAvatar, ending spawned helpers).",
-    "Many side-effects are performed by spawned helper routines (METHOD::*, FREE::* and internal STRATOS helper spawns) rather than inline; timing and visual behavior rely on these asynchronous spawns."
+    "Conversation menu construction dynamically adds/removes options (MenuSet / MenuUnion / MenuRemove) into local4 before calling Ask; the player's selection is captured via SuspendAssign into local2 and dispatched with strcmp/IfStatement to set flags and branch to reward or exposition paths.",
+    "Multiple spawn calls to FREE::* helper routines are used with suspend/pid to implement delays between visual steps (timed sequencing rather than blocking loops).",
+    "A levitation/movement loop in U8P_STRATOS::func126B increments/decrements a local accumulator (local1) bounded by +/-5 and calls Item::move each step; behavior is gated by the global flag levitateAvatar.",
+    "Reward granting is segregated into U8P_STRATOS::func13AA: create/pop/U8P_STRATOS::look/push item operations and timed spawns produce the visible gift, then temporary items are destroyed. U8P_STRATOS::use triggers this helper conditionally based on menu/flags.",
+    "Audio effects are gated by checks to avoid overlapping SFX (isSFXPlaying) and U8P_STRATOS::use urandom to add probabilistic variation in U8P_STRATOS::func1327."
   ],
   "open_questions": [
-    "Exact item IDs and shapes created by Item::create / Item::legal_create during the use sequence (reward Focus ID and Breath of Wind item ID are inferred from behavior but not explicitly listed).",
-    "Precise responsibilities of spawned helper routines METHOD::03CD, METHOD::091C, METHOD::15E7 and FREE::* (1C19, 29D8, 1C6D) — they appear to be animation, delay, or cleanup helpers but their concrete effects are not proven here.",
-    "Exact parameters and mechanics of the reward grant (which concrete Focus object is given and whether additional inventory checks apply) are inferred rather than explicit.",
-    "Whether any of the internal helper routines (STRATOS::1327, STRATOS::126B, STRATOS::13AA) perform persistent state changes beyond visual effects (they appear to be ephemeral animation/effect helpers)."
+    "Exact textual menu options and the full set of strcmp branches in U8P_STRATOS::use — the JSON lists only high-level menu operations and one strcmp; more branches probably exist in the raw but are low-confidence.",
+    "Precise mapping of the reward item id (inferred 0x01E1 => Focus) and any inventory vs world-placement logic (Item::push vs Item::legal_create) — this is inferred from calls but not explicitly labeled.",
+    "Exact semantics of some spawned METHOD calls (addressof(...)->METHOD::func091C / func15E7 / func03CD): their visual/animation effects are inferred but not concretely named.",
+    "Whether some Unknown nodes correspond to camera manipulation or additional actor animations — the structure implies cameraFollowAvatar usage but the decompiled names are ambiguous.",
+    "Potential edge cases when stratosTakenBreath or rewardMe are already set: the branching prevents duplicate reward creation but the exact player-visible fallback text is not fully reconstructible from the extracted nodes."
   ],
   "main_function": {
     "name": "U8P_STRATOS::look",
     "execution_form": "process",
-    "purpose": "Handle the examine/U8P_STRATOS::look event for the Stratos object: decide which short name to show (full name if previously recognized, otherwise a generic title) and invoke the engine bark/display routine to show that text to the player.",
+    "purpose": "Provide the short in-world inspection text for Stratos and reveal his full title if previously learned.",
     "entry_conditions": [
-      "Triggered when an actor/player examines or 'looks' at the Stratos object.",
-      "Runs a simple conditional on the global flag stratosName to choose the displayed string."
+      "Invoked when the player inspects or 'looks at' the Stratos NPC (U8P_STRATOS::look event).",
+      "Branches on the global flag stratosName to decide whether to display the full name/title or a generic label."
     ],
     "confidence": "high"
   },
@@ -34,253 +36,179 @@
     {
       "name": "U8P_STRATOS::look",
       "kind": "main",
-      "role": "Examine/display name behavior for Stratos; small, deterministic routine that selects a display string and calls Item::bark.",
+      "role": "short inspection handler (shows bark text; respects stratosName)",
       "confidence": "high"
     },
     {
       "name": "U8P_STRATOS::use",
       "kind": "helper",
-      "role": "Primary interaction handler: orchestrates animation/effects, item creation/movement, avatar stasis/levitation, dialog choices, and quest-state updates including potential reward granting.",
+      "role": "primary interaction/cutscene/dialogue process (menu building, flag setting, orchestration of music/camera/items/reward)",
       "confidence": "high"
     },
     {
-      "name": "U8P_STRATOS::1327",
+      "name": "U8P_STRATOS::func126B",
       "kind": "helper",
-      "role": "Spawned helper (likely animation/effect) used during STRATOS::use sequence.",
+      "role": "timed vertical movement/levitation loop for item animation (Item::move driven by small accumulator)",
       "confidence": "medium"
     },
     {
-      "name": "U8P_STRATOS::126B",
+      "name": "U8P_STRATOS::func1327",
       "kind": "helper",
-      "role": "Spawned helper (likely related to movement/effect) used in the interaction.",
+      "role": "short timer/SFX helper that may play ambient sounds while levitation is active",
       "confidence": "medium"
     },
     {
-      "name": "U8P_STRATOS::13AA",
+      "name": "U8P_STRATOS::func13AA",
       "kind": "helper",
-      "role": "Spawned helper (visual or timing helper) used in the interaction.",
-      "confidence": "medium"
+      "role": "reward creation and presentation routine (creates, pops/places, previews and cleans up Focus and decorative items)",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::* / playMusic / playSFX / spawn / FREE::* / addressof(...)->METHOD::*",
+      "kind": "extern",
+      "role": "engine subsystems used for items, audio, timers, and method/animation invocation",
+      "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
         "caller": "U8P_STRATOS::use",
-        "callee": "U8P_STRATOS::1327",
-        "purpose": "Spawned during the interaction to provide an animation/effect or sequence-specific behavior tied to Stratos.",
+        "callee": "U8P_STRATOS::func126B",
+        "purpose": "Drive item vertical movement/levitation animation during the scene (timed loop using Item::move).",
         "confidence": "medium"
       },
       {
         "caller": "U8P_STRATOS::use",
-        "callee": "U8P_STRATOS::126B",
-        "purpose": "Spawned helper likely involved in directional movement/visual effect during the scripted sequence.",
+        "callee": "U8P_STRATOS::func1327",
+        "purpose": "Trigger short timed ambient SFX/short effects while levitation or scene is active.",
         "confidence": "medium"
       },
       {
         "caller": "U8P_STRATOS::use",
-        "callee": "U8P_STRATOS::13AA",
-        "purpose": "Spawned helper likely used for timing or another visual subroutine in the sequence.",
-        "confidence": "medium"
+        "callee": "U8P_STRATOS::func13AA",
+        "purpose": "Create and hand out the reward Focus (presented visually and possibly given to the player) when the dialog flow grants a reward.",
+        "confidence": "high"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_STRATOS::look",
-        "callee": "Item::bark",
-        "purpose": "Display a short text string (NPC/item speech or name) to the player who examined Stratos.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_STRATOS::use",
-        "callee": "Item::bark",
-        "purpose": "Show dialogue lines or NPC speech during the interaction.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_STRATOS::use",
-        "callee": "Item::ask",
-        "purpose": "Present dialog/choice lists to the player and receive the selected option to drive branching dialog and quest choices.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_STRATOS::use",
-        "callee": "Item::create",
-        "purpose": "Create temporary items/processes used as visual or effect objects around Stratos.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_STRATOS::use",
-        "callee": "Item::legal_create",
-        "purpose": "Create items at specific coordinates (with legality checks) to position them relative to Stratos.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_STRATOS::use",
-        "callee": "Item::getX",
-        "purpose": "Query created item/process world X coordinate for positioning/movement calculations.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_STRATOS::use",
-        "callee": "Item::getY",
-        "purpose": "Query created item/process world Y coordinate for positioning/movement calculations.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_STRATOS::use",
-        "callee": "Item::getZ",
-        "purpose": "Query created item/process world Z coordinate for positioning/movement calculations.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_STRATOS::use",
-        "callee": "Item::move",
-        "purpose": "Move created items to computed positions around Stratos as part of the visual/effect loop.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_STRATOS::use",
-        "callee": "Item::use (process)",
-        "purpose": "Invoke the use behavior of newly created items so they perform their in-world effects during the sequence.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_STRATOS::use",
-        "callee": "Item::orStatus",
-        "purpose": "Set status bits on created items (e.g., visibility/active) during the sequence.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_STRATOS::use",
-        "callee": "Item::pop",
-        "purpose": "Manipulate temporary item descriptors or pass created-item references between engine calls.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_STRATOS::use",
-        "callee": "Item::push",
-        "purpose": "Push temporary descriptors/references as part of preparing calls to Item::use or other APIs.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_STRATOS::use",
         "callee": "playMusic",
-        "purpose": "Start a music track or sound effect at the start of the interaction to highlight the sequence.",
+        "purpose": "Start background music for the encounter (example id 0x73 seen).",
         "confidence": "high"
       },
       {
         "caller": "U8P_STRATOS::use",
-        "callee": "U8P_STRATOS::setAvatarInStasis",
-        "purpose": "Put the avatar/player into stasis (prevent movement/input) for the duration of the scripted sequence.",
+        "callee": "setAvatarInStasis",
+        "purpose": "Disable or restrict player control during the cutscene sections.",
         "confidence": "high"
       },
       {
         "caller": "U8P_STRATOS::use",
-        "callee": "spawn",
-        "purpose": "Start auxiliary processes for animations, delays, and cleanup (several spawn targets including METHOD::* and FREE::*).",
+        "callee": "cameraFollowAvatar / addressof(...)->METHOD::*",
+        "purpose": "Control camera focus and animated camera movements for staging the encounter.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_STRATOS::use",
+        "callee": "Item::create / Item::pop / Item::legal_create / Item::push / Item::look / Item::move / Item::orStatus",
+        "purpose": "Create, preview, place, animate and/or give item(s) used as the reward or decorative elements during the scene.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_STRATOS::use",
-        "callee": "FREE::*",
-        "purpose": "Use engine-provided short-lived helper processes for delays/effects/cleanup during the sequence.",
+        "caller": "U8P_STRATOS::func1327",
+        "callee": "playSFX",
+        "purpose": "Play short ambient SFX (examples SFX ids 0x73/0x74) on a timer with random chance.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_STRATOS::use",
-        "callee": "METHOD::*",
-        "purpose": "Spawned engine/utility methods likely used for movement/direction/animation helpers; exact roles inferred from context.",
-        "confidence": "medium"
+        "caller": "U8P_STRATOS::func126B",
+        "callee": "spawn -> FREE::func1C19",
+        "purpose": "Spawn a timer helper process to implement delays between movement steps in the oscillation loop.",
+        "confidence": "high"
       },
       {
-        "caller": "U8P_STRATOS::use",
-        "callee": "Npc::getDir",
-        "purpose": "Query Stratos's facing/direction for computing spawn offsets or directional effects.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_STRATOS::use",
-        "callee": "U8P_STRATOS::resetRef",
-        "purpose": "Reset internal references/state at the start of the use sequence.",
-        "confidence": "medium"
+        "caller": "U8P_STRATOS::func13AA",
+        "callee": "spawn -> FREE::func29D8 / spawn -> FREE::func1C19",
+        "purpose": "Spawn timing/effect helpers to sequence presentation/animations when creating and showing reward items.",
+        "confidence": "high"
       }
     ]
   },
   "global_flags": {
     "reads": [
       {
-        "name": "stratosName",
-        "likely_effect": "Determines whether STRATOS::look shows the full name or a generic title; read by dialog branches to avoid repeating naming info.",
-        "confidence": "high"
-      },
-      {
         "name": "stratosMet",
-        "likely_effect": "Controls first-meeting vs subsequent greeting branches in STRATOS::use.",
+        "likely_effect": "Controls greeting branches so Stratos can treat the player as already met or unfamiliar.",
         "confidence": "high"
       },
       {
         "name": "stratosTakenBreath",
-        "likely_effect": "Indicates whether the Breath of Wind quest item has been returned/taken; read to gate dialog branches.",
-        "confidence": "high"
-      },
-      {
-        "name": "spokenAboutBreath",
-        "likely_effect": "Prevents repeating the Breath of Wind explanation once given; read to gate explanatory dialog.",
+        "likely_effect": "Determines whether the 'Breath of Wind' return branch should run (prevents repeat handling).",
         "confidence": "high"
       },
       {
         "name": "rewardMe",
-        "likely_effect": "Indicates whether the player has asked for or been given a reward; read to select reward-related branches.",
+        "likely_effect": "Gates whether reward-related dialogue/options are presented/offered.",
+        "confidence": "medium"
+      },
+      {
+        "name": "spokenAboutBreath",
+        "likely_effect": "Used to decide whether to include/offer 'I must have the Breath of Wind' style menu options.",
+        "confidence": "medium"
+      },
+      {
+        "name": "stratosName",
+        "likely_effect": "Controls whether the full Stratos title is revealed in U8P_STRATOS::look() and is set when the player asks 'Who are you?'.",
+        "confidence": "high"
+      },
+      {
+        "name": "levitateAvatar",
+        "likely_effect": "Gates levitation/animation branches and enables oscillation/sfx behaviors during the encounter.",
         "confidence": "high"
       }
     ],
     "writes": [
       {
         "name": "stratosName",
-        "likely_effect": "Set to record that the player asked 'Who are you?' (enables full-name display in future looks).",
+        "likely_effect": "Set when the player asks for Stratos's name so future U8P_STRATOS::look() calls show the full title.",
         "confidence": "high"
       },
       {
         "name": "stratosMet",
-        "likely_effect": "Set on first interaction to shorten future greetings and record that Stratos has been met.",
+        "likely_effect": "Marked when the player completes the initial meeting/interaction to prevent repeat introductory dialog.",
         "confidence": "high"
       },
       {
         "name": "stratosTakenBreath",
-        "likely_effect": "Set when the player returns the Breath of Wind, marking quest progress.",
-        "confidence": "high"
-      },
-      {
-        "name": "spokenAboutBreath",
-        "likely_effect": "Set when Stratos explains the Breath of Wind to the player, preventing repetition.",
+        "likely_effect": "Set when the Breath of Wind is returned to prevent repeated reward/handling.",
         "confidence": "high"
       },
       {
         "name": "rewardMe",
-        "likely_effect": "Set when the player selects the reward branch during dialog, gating future reward logic.",
-        "confidence": "high"
+        "likely_effect": "Set when the player requests a reward, used to gate later offering/granting of the Focus.",
+        "confidence": "medium"
       },
       {
         "name": "levitateAvatar",
-        "likely_effect": "Toggled (set then cleared) during the interaction to cause the avatar to levitate for visual effect; used in coordination with setAvatarInStasis.",
+        "likely_effect": "Set during the scene to enable vertical movement/levitation animation and related SFX behavior.",
         "confidence": "high"
       }
     ]
   },
   "ui_tags": [
     "trigger",
-    "animation",
-    "dialog",
-    "quest",
     "cleanup",
+    "animation",
     "guard"
   ],
   "quick_facts": {
-    "main_function": "STRATOS::look",
-    "behavior_summary_one_liner": "Provides examine ('U8P_STRATOS::look') and interact ('use') behaviors for the Stratos NPC/object.",
-    "external_call_count": 20,
-    "flag_read_count": 5,
-    "flag_write_count": 6
+    "main_function": "U8P_STRATOS::look",
+    "behavior_summary_one_liner": "This script implements the in-game behavior for the NPC Stratos. It provides a simple U8P_STRATOS::look/inspect response (U8P_STRATOS::look) and a richer interaction/cutscene flow (U8P_STRATOS::use) where Stratos speaks, may reveal his name, reacts to the player returning the 'Breath of Wind', and can grant a reward (a Focus that enables Air Walk).",
+    "external_call_count": 7,
+    "flag_read_count": 6,
+    "flag_write_count": 5
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

@@ -3,27 +3,24 @@
   "source_of_truth": "dialogue/json/U8P_INTERN.json",
   "file": "U8P_INTERN",
   "behavior_summary": [
-    "U8P_INTERN::look responds to a 'U8P_INTERN::look' (Event 0) trigger by causing the referenced process/object to emit a short descriptive message.",
-    "The handler builds the literal text \"Human Remains \", arranges call context flags (set info / process exclude), calls Item::bark on the target process to display that text, frees the temporary string, inspects the bark return value via an implies/pop sequence, and then suspends/returns.",
-    "Effect in gameplay: when the player (or relevant actor) examines the INTERN object, they are shown the short description \"Human Remains \"."
+    "U8P_INTERN::look is a simple U8P_INTERN::look/examine handler that displays a single short description to the player: the text 'Human Remains'.",
+    "The process runs when the engine invokes the object's U8P_INTERN::look/examine process and immediately emits the bark and suspends; there is no branching, menu, or external interaction.",
+    "Inference: the INTERN entity is likely a corpse or collection of remains based on the displayed text."
   ],
   "notable_control_flow": [
-    "Entry on Event 0 (U8P_INTERN::look): minimal init then create temporary string 'Human Remains '.",
-    "Set context flags (inferred: 'set info' and 'process exclude') to control recipient/context before invoking Item::bark.",
-    "Call Item::bark with the target process (inferred BP+06h) and the constructed string; free the string afterwards.",
-    "Capture Item::bark return, feed it through an implies/pop sequence (exact effect unclear), then suspend and return."
+    "U8P_INTERN::look is implemented as a process (processType 0x0208) triggered by player 'U8P_INTERN::look/examine'.",
+    "Control flow: enter U8P_INTERN::look -> emit Bark('Human Remains') -> suspend/end process. No conditionals or further logic are present."
   ],
   "open_questions": [
-    "What precisely does the implies/pop sequence do with Item::bark's return value (flow control, conditional suppression, or engine bookkeeping)?",
-    "What exact semantic effect do the context flags 'set info' and 'process exclude' have for this call (which processes see the bark or are excluded)?",
-    "Is BP+06h always the player/process that triggered the U8P_INTERN::look, or can it be other processes (NPCs, scripts) in some contexts?"
+    "Is the INTERN instance only a static decoration/corpse (purely descriptive), or does it have relevance to any quest or flag elsewhere in the game? No flags or calls in this script reference broader quest state.",
+    "The source contains two low-confidence 'Unknown' nodes in the decompiled output; are those remnants meaningful in other contexts (they appear to be structural/decompiler artifacts and do not change behavior here)."
   ],
   "main_function": {
     "name": "U8P_INTERN::look",
     "execution_form": "process",
-    "purpose": "Handle the object's 'U8P_INTERN::look' (examine) event by producing a short on-screen description ('Human Remains ') via Item::bark, then perform minimal cleanup and return.",
+    "purpose": "Provide the short descriptive text when the player examines the INTERN entity.",
     "entry_conditions": [
-      "Event 0 (U8P_INTERN::look) — triggered when an actor (typically the player) examines or looks at the INTERN object."
+      "Invoked by the engine when the player performs a 'U8P_INTERN::look' or 'examine' action on the INTERN object/NPC (processType 0x0208)."
     ],
     "confidence": "high"
   },
@@ -31,53 +28,30 @@
     {
       "name": "U8P_INTERN::look",
       "kind": "main",
-      "role": "Event handler for the object's 'U8P_INTERN::look' action; prepares context, issues Item::bark with a literal description, and returns.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine used to display a short text message or description originating from an item/process.",
+      "role": "Look/examine handler that emits a single bark describing the object as 'Human Remains'.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_INTERN::look",
-        "callee": "Item::bark",
-        "purpose": "Request the target process/object to emit/display the short description string 'Human Remains ' to the viewer/process context.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
-    "writes": [
-      {
-        "name": "set info (context key, inferred 0x210 usage)",
-        "likely_effect": "Appearsto set an info/context bit on the calling or target process to influence the subsequent bark call or processing.",
-        "confidence": "medium"
-      },
-      {
-        "name": "process exclude (contextual exclusion)",
-        "likely_effect": "Likely excludes certain processes or the caller from further handling or receiving the bark; used to control recipients/context of the message.",
-        "confidence": "medium"
-      }
-    ]
+    "writes": []
   },
   "ui_tags": [
     "trigger",
     "cleanup",
+    "animation",
     "guard"
   ],
   "quick_facts": {
     "main_function": "U8P_INTERN::look",
-    "behavior_summary_one_liner": "U8P_INTERN::look responds to a 'U8P_INTERN::look' (Event 0) trigger by causing the referenced process/object to emit a short descriptive message.",
-    "external_call_count": 1,
+    "behavior_summary_one_liner": "U8P_INTERN::look is a simple U8P_INTERN::look/examine handler that displays a single short description to the player: the text 'Human Remains'.",
+    "external_call_count": 0,
     "flag_read_count": 0,
-    "flag_write_count": 2
+    "flag_write_count": 0
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

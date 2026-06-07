@@ -3,27 +3,28 @@
   "source_of_truth": "dialogue/json/U8P_BUG.json",
   "file": "U8P_BUG",
   "behavior_summary": [
-    "U8P_BUG::BUG::look: When the object is examined (Event 0) it sets instance info/exclude state, emits the literal text \"Mandril \" via Item::bark, frees the temporary string, and then suspends. This implements the item's short description/response to being looked at.",
-    "U8P_BUG::BUG::gotHit: When the object receives a hit it examines incoming parameters and an instance field. If a threshold check (against 0x0100) passes and a referenced NPC/pid reports as dead (Npc::isDead), it iterates a collection of items/elements (driven by the saved first parameter). For each iterated item it queries weight (Item::getWeightIncludingContents) and checks a per-item flag; if weight >= 3 or the flag is set it plays SFX 0x55 and calls Item::receiveHit with fixed small-constant arguments on the item — effectively propagating additional damage/effects to qualifying nearby/heavy items."
+    "Provides a minimal 'U8P_BUG::look' (inspect) handler that displays a single bark string \"Mandril \" when the player examines this NPC/item.",
+    "Implements a hit handler U8P_BUG::gotHit(uword, word) that gates hit propagation with several guards: ignores some large 'this' values, skips processing if the NPC is dead, and—when conditions pass—plays a hit SFX and forwards the hit to Item::receiveHit with fixed constants and a runtime value.",
+    "The hit-handler uses item-related queries (weight or id check) to decide whether to propagate the hit, and plays SFX id 0x55 when propagation occurs."
   ],
   "notable_control_flow": [
-    "Event-driven entry for U8P_BUG::look: U8P_BUG::BUG::look runs under Event 0 (examine) and ends with suspend.",
-    "Guarded early exits in U8P_BUG::BUG::gotHit: multiple tests return early if the instance field check or Npc::isDead check fails.",
-    "Iterative loop in U8P_BUG::BUG::gotHit: the saved first parameter ([BP-02h]) is used to iterate elements; each element can trigger SFX+receiveHit.",
-    "Branching per element: weight >= 3 OR per-item flag causes the SFX + receiveHit path; otherwise the loop continues without effect."
+    "U8P_BUG::look: trivial control flow — emits a single bark then suspends/returns.",
+    "U8P_BUG::gotHit: early-exit guard comparing a runtime 'this' value against 0x0100 (skip if above threshold).",
+    "U8P_BUG::gotHit: calls Npc::isDead(addressof(local2)) and aborts if the NPC is dead.",
+    "U8P_BUG::gotHit: requires 'this' nonzero and either Item::getWeightIncludingContents(local1) >= 3 or local1 == 1 to play SFX and call Item::receiveHit."
   ],
   "open_questions": [
-    "What exactly are the numeric constants pushed to Item::receiveHit (their damage types/amounts/flags) and how do they map to in-game effects?",
-    "What is the exact identity and origin of the iterated collection referenced by the saved first parameter ([BP-02h]) — nearby inventory, equipment slots, or an explicit linked list?",
-    "What is the semantic meaning of the tested instance field compared against 0x0100 (attacker type, source mask, or other classifier)?",
-    "What precise per-item flag is being compared against 1 (which flag bit/meaning triggers the effect)?"
+    "What exactly does the second 'word' parameter represent at runtime (damage amount, flags, or a special 'this' token)?",
+    "What are the precise meanings of the numeric constants passed to Item::receiveHit (0x04, 0x0096, 0x08, 0x01) in game terms?",
+    "Is the comparison against 0x0100 an object-type sentinel, a priority/bitmask guard, or a damage threshold?",
+    "What does item id == 1 represent in the game's item taxonomy (special-case lightweight/heavy item)?"
   ],
   "main_function": {
     "name": "U8P_BUG::look",
     "execution_form": "process",
-    "purpose": "Provide the item's description/response when examined: set info/exclude state on the instance, call Item::bark with the literal string \"Mandril \", then suspend the process.",
+    "purpose": "Respond to player 'U8P_BUG::look/examine' by presenting a short descriptive bark string for the NPC/item.",
     "entry_conditions": [
-      "Event 0 — the actor examines/looks at the object (examine/observe trigger)."
+      "Invoked when the player inspects/examines this NPC/item (standard U8P_BUG::look/inspect action, processType 0x0208)."
     ],
     "confidence": "high"
   },
@@ -31,78 +32,42 @@
     {
       "name": "U8P_BUG::look",
       "kind": "main",
-      "role": "Examine/U8P_BUG::look handler that emits the item's short description and suspends.",
+      "role": "inspect/U8P_BUG::look handler that displays the short description/bark",
       "confidence": "high"
     },
     {
       "name": "U8P_BUG::gotHit",
       "kind": "helper",
-      "role": "Hit handler: validate source/attacker conditions, iterate a collection and apply SFX+receiveHit to qualifying items.",
+      "role": "hit/damage handler that gates and forwards hits to item damage logic",
       "confidence": "medium"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Emit/display a short string or message tied to an item/process (used by U8P_BUG::look to show \"Mandril \").",
-      "confidence": "high"
-    },
-    {
-      "name": "Npc::isDead",
-      "kind": "extern",
-      "role": "Return whether a referenced NPC/pid is dead; used as a gating condition in gotHit.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getWeightIncludingContents",
-      "kind": "extern",
-      "role": "Return an item's weight including its contents; used to decide whether to apply the hit effect to that item.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_BUG::playSFX",
-      "kind": "extern",
-      "role": "Play a sound effect (called with id 0x55 before applying receiveHit).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::receiveHit",
-      "kind": "extern",
-      "role": "Apply hit/damage/effect to an item/NPC instance; invoked with fixed constants on qualifying items.",
-      "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_BUG::look",
-        "callee": "Item::bark",
-        "purpose": "Emit the literal description string \"Mandril \" to the examining actor/process.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_BUG::gotHit",
         "callee": "Npc::isDead",
-        "purpose": "Check whether a referenced NPC/pid (derived from the instance) is dead; only proceed with the loop if true.",
+        "purpose": "Check whether the referenced NPC/object is dead and abort hit processing if so.",
         "confidence": "high"
       },
       {
         "caller": "U8P_BUG::gotHit",
         "callee": "Item::getWeightIncludingContents",
-        "purpose": "Retrieve per-item weight (including contents) to decide whether the item qualifies for SFX+receiveHit.",
-        "confidence": "high"
+        "purpose": "Query an item's weight (including contents) to decide whether to propagate the hit (weight >= 3 inferred).",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_BUG::gotHit",
-        "callee": "U8P_BUG::playSFX",
-        "purpose": "Play sound effect 0x55 immediately before applying receiveHit to a qualifying item.",
+        "callee": "playSFX",
+        "purpose": "Play a hit sound effect (sound id 0x55) when the hit propagation conditions are satisfied.",
         "confidence": "high"
       },
       {
         "caller": "U8P_BUG::gotHit",
         "callee": "Item::receiveHit",
-        "purpose": "Apply a hit/damage/effect to qualifying items using several small constant arguments (propagates damage/effect).",
-        "confidence": "high"
+        "purpose": "Forward/apply the hit to the item/entity using several constant parameters and the runtime 'this' value.",
+        "confidence": "medium"
       }
     ]
   },
@@ -113,13 +78,13 @@
   "ui_tags": [
     "trigger",
     "guard",
-    "area-effect",
-    "sfx"
+    "sfx",
+    "propagate-hit"
   ],
   "quick_facts": {
-    "main_function": "U8P_BUG::BUG::look",
-    "behavior_summary_one_liner": "U8P_BUG::BUG::look: When the object is examined (Event 0) it sets instance info/exclude state, emits the literal text \"Mandril \" via Item::bark, frees the temporary string, and then suspends. This implements the item's short description/response to being looked at.",
-    "external_call_count": 5,
+    "main_function": "U8P_BUG::look",
+    "behavior_summary_one_liner": "Provides a minimal 'U8P_BUG::look' (inspect) handler that displays a single bark string \"Mandril \" when the player examines this NPC/item.",
+    "external_call_count": 4,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

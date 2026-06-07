@@ -3,26 +3,27 @@
   "source_of_truth": "dialogue/json/U8P_BELLOWS.json",
   "file": "U8P_BELLOWS",
   "behavior_summary": [
-    "BELLOWS::look responds to an examine/U8P_BELLOWS::look action by preparing a short description string \"bellows \", applying a processing/recipient exclusion so the bark is targeted, and invoking Item::bark to present that text to the examining actor/process. It then cleans up and suspends/returns.",
-    "BELLOWS::use toggles the bellows' visible state with a short animation: it queries the current frame (Item::getFrame) and chooses one of two 6-frame sequences (0..5 contraction or 6..11 expansion). For each frame in the chosen sequence it sets the frame (Item::setFrame), spawns a FREE::1C19 helper/effect with the invoking pid, suspends to allow timing between frames, and at the middle frame plays a sound (playSFX). The sequence results in a visual toggle between compressed and expanded bellows states."
+    "U8P_BELLOWS::look is the inspection handler for the Bellows item: when the player 'looks at' the item it emits a short bark/text label \"bellows\" and the U8P_BELLOWS::look process then suspends.",
+    "U8P_BELLOWS::use is the runtime 'U8P_BELLOWS::use' handler for the Bellows. It reads the item's current frame (Item::getFrame(this)), chooses one of two frame ranges (0x00–0x05 or 0x06–0x0B) based on that frame, sets the visible frame (Item::setFrame(local1, this)), spawns a short transient effect/task (spawn -> FREE::func1C19), suspends briefly to allow the effect/animation to run, conditionally plays a sound (playSFX with id 0x64) when particular frame indices are reached (inferred 0x02 or 0x08), and increments a local frame/index (local1) for the next U8P_BELLOWS::use.",
+    "No global flags are read or written by these routines in the extracted code."
   ],
   "notable_control_flow": [
-    "BELLOWS::look: linear sequence — build text -> set processing/info exclusion -> call Item::bark(item, \"bellows \") -> free temp string -> implication/pop housekeeping -> suspend/return.",
-    "BELLOWS::use: conditional branch on Item::getFrame(item): if frame < 6 then iterate frames 0..5 else iterate frames 6..11. Each iteration: Item::setFrame(item, frame) -> spawn FREE::1C19(pid, 0) -> suspend; at midpoint frame (2 or 8) also call playSFX(0x64, 0x10)."
+    "U8P_BELLOWS::look: linear single-action flow — bark then suspend.",
+    "U8P_BELLOWS::use: branch on current Item::getFrame(this) into two frame-range handling paths; each path initializes a local index, bounds-checks it against the range, calls Item::setFrame, spawns an effect, suspends, conditionally plays SFX for specific indices, then increments the index.",
+    "Use contains multiple IfStatement checks around the frame index and at least two SetFlag/StringAssign style operations in the decompilation remnants, but no persistent global flags are set."
   ],
   "open_questions": [
-    "What exact visual or gameplay effect does FREE::1C19 produce when spawned each frame (likely a short-lived visual or cleanup helper)?",
-    "What recipient filtering/exclusion semantics are applied in U8P_BELLOWS::look (which processes are excluded/included by the set-info/process-exclude calls)?",
-    "What is the exact suspend duration between frames (the disassembly shows suspend but not the timing constant)?",
-    "Is the sound id 0x64 mapped to a named sound resource in the game data, and does param 0x10 indicate volume or channel?"
+    "Exact wrap/clamping behavior of the local frame/index (local1) across uses — whether it wraps back to the range start or stops at the end is inferred but not explicit.",
+    "Precise semantics and parameters of the spawned task FREE::func1C19 (visual effect, timing, ownership) and how its pid is tracked — present as low-confidence raw artifacts.",
+    "Whether there are other entry points that alter the Bellows' frame outside these processes (not visible in this excerpt)."
   ],
   "main_function": {
     "name": "U8P_BELLOWS::look",
     "execution_form": "process",
-    "purpose": "Handle the player's 'U8P_BELLOWS::look' (examine) action on the bellows item by announcing a short description ('bellows ') to the examining actor/process, applying recipient filtering to target the bark appropriately.",
+    "purpose": "Provide the short inspection/description when the player examines the Bellows (emit a short bark/label and then suspend).",
     "entry_conditions": [
-      "Triggered when an actor/player examines or 'looks' at the bellows item (examine/U8P_BELLOWS::look verb).",
-      "Invoked with the item/process context (inferred item reference and caller pid)."
+      "Triggered when the player performs a 'U8P_BELLOWS::look' or 'examine' action on the Bellows item.",
+      "Acts as the object's U8P_BELLOWS::look/inspect event handler (engine U8P_BELLOWS::look-type process)."
     ],
     "confidence": "high"
   },
@@ -30,13 +31,37 @@
     {
       "name": "U8P_BELLOWS::look",
       "kind": "main",
-      "role": "Respond to examine/U8P_BELLOWS::look verb by barking the description and applying recipient/process exclusion.",
+      "role": "inspection/U8P_BELLOWS::look handler that shows the short label/bark to the player and ends the process",
       "confidence": "high"
     },
     {
       "name": "U8P_BELLOWS::use",
       "kind": "helper",
-      "role": "Respond to use verb by animating the bellows between two visual states (frames 0..5 vs 6..11), spawning per-frame helpers and playing a midpoint sound.",
+      "role": "U8P_BELLOWS::use-handler that advances/sets the item's visual frame, spawns a transient effect, possibly plays SFX, and advances an internal frame index",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::getFrame",
+      "kind": "extern",
+      "role": "external API to read an item instance's current frame/index (called by U8P_BELLOWS::use)",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::setFrame",
+      "kind": "extern",
+      "role": "external API to set an item instance's visible frame/index (called by U8P_BELLOWS::use)",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::func1C19 (spawned)",
+      "kind": "extern",
+      "role": "transient spawned task/effect invoked by U8P_BELLOWS::use (visual/temporal effect inferred)",
+      "confidence": "low"
+    },
+    {
+      "name": "playSFX",
+      "kind": "extern",
+      "role": "plays a sound effect when certain frame indices are reached during U8P_BELLOWS::use",
       "confidence": "high"
     }
   ],
@@ -44,34 +69,34 @@
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_BELLOWS::look",
-        "callee": "Item::bark",
-        "purpose": "Display/announce the short description text ('bellows ') to the examining actor/process; the call is performed after setting processing/exclusion info so recipients are filtered.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_BELLOWS::use",
         "callee": "Item::getFrame",
-        "purpose": "Obtain the item's current visual frame to decide which 6-frame animation sequence to run (contraction vs expansion).",
+        "purpose": "Read the Bellows' current animation/frame index to decide which frame-range branch to run.",
         "confidence": "high"
       },
       {
         "caller": "U8P_BELLOWS::use",
         "callee": "Item::setFrame",
-        "purpose": "Update the item's visual frame each iteration to animate the bellows.",
+        "purpose": "Apply the computed/selected frame index (local1) to the Bellows so its visible state advances/changes.",
         "confidence": "high"
       },
       {
         "caller": "U8P_BELLOWS::use",
-        "callee": "spawn FREE::1C19",
-        "purpose": "Create a short-lived helper/effect process tied to the animation frame (likely visual/cleanup) with the invoking pid and argument 0.",
+        "callee": "spawn -> FREE::func1C19",
+        "purpose": "Spawn a transient task/effect (likely visual or timing-related) immediately after setting the frame; used to drive or accompany the animation.",
         "confidence": "medium"
       },
       {
         "caller": "U8P_BELLOWS::use",
-        "callee": "U8P_BELLOWS::playSFX",
-        "purpose": "Play a sound cue at the midpoint of the animation (sound id 0x64, param 0x10) to emphasize the bellows action.",
+        "callee": "suspend",
+        "purpose": "Pause the U8P_BELLOWS::use process briefly to allow the spawned effect/animation to play.",
         "confidence": "high"
+      },
+      {
+        "caller": "U8P_BELLOWS::use",
+        "callee": "playSFX",
+        "purpose": "Play audible feedback (SFX id 0x64, flags 0x10) when the frame index reaches particular values (inferred 0x02 or 0x08).",
+        "confidence": "medium"
       }
     ]
   },
@@ -86,8 +111,8 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_BELLOWS::BELLOWS::look",
-    "behavior_summary_one_liner": "BELLOWS::look responds to an examine/U8P_BELLOWS::look action by preparing a short description string \"bellows \", applying a processing/recipient exclusion so the bark is targeted, and invoking Item::bark to present that text to the examining actor/process. It then cleans up and suspends/returns.",
+    "main_function": "U8P_BELLOWS::look",
+    "behavior_summary_one_liner": "U8P_BELLOWS::look is the inspection handler for the Bellows item: when the player 'looks at' the item it emits a short bark/text label \"bellows\" and the U8P_BELLOWS::look process then suspends.",
     "external_call_count": 5,
     "flag_read_count": 0,
     "flag_write_count": 0

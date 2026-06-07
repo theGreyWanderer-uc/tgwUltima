@@ -3,81 +3,65 @@
   "source_of_truth": "dialogue/json/U8P_FIREITEM.json",
   "file": "U8P_FIREITEM",
   "behavior_summary": [
-    "Provides the gameplay logic for 'fire-focus' items (wands/rods/staves/talismans/symbols and a special key type).",
-    "FIREITEM::0080 (main helper) walks an item's container/parent chain to locate an ancestor with status bit 0x08 set and returns that ancestor (used to enforce 'must be held' preconditions).",
-    "U8P_FIREITEM::look (Event 0) builds and emits a human-readable description of the focus: it decodes the encoded spell id and remaining-charge count from Item::getQuality(), reads the item's frame/type from Item::getFrame(), selects the appropriate spell name and pluralization, optionally appends party/owner text based on global flags (baneJoined, vardionJoined, keyOfTheAcolyte), and calls Item::bark to display the text.",
-    "U8P_FIREITEM::use (Event 1) handles activation: it decodes the spell index and charge count from quality/frame, enforces preconditions (party membership flags and/or held status via U8P_FIREITEM::0080), gives error barks if checks fail, spawns the concrete spell script for the decoded spell, plays SFX and creates a sprite effect, decrements charges and updates or destroys the focus when expended, and calls various project utilities (FREE::*, AccumulateIntelligence, FREE::2A56) for housekeeping.",
-    "U8P_FIREITEM::enterFastArea (Event F) is a fast-area entry handler stub that sets process info/exclude and prepares the item context for fast-area triggers."
+    "This script implements a family of behaviors for a 'fire-focus' item (wand/rod/staff/talisman/symbol): describing the item, handling player U8P_FIREITEM::use (spawning fire/daemon spell processes, playing VFX/SFX, consuming charges), and managing fast-area quick-interaction state when a player enters or leaves the item's proximity.",
+    "U8P_FIREITEM::func0080 is a small utility that reads the item's status and, when a particular status bit is set, replaces the item reference with its container/holder — callers U8P_FIREITEM::use it to ensure actions operate on the held/focused object.",
+    "U8P_FIREITEM::look builds a human-readable name/description for the focus by reading Item::getFrame and Item::getQuality, mapping frames to type prefixes (wand/rod/etc.), decoding a spell index from quality, optionally appending a keyed spell name and a remaining-uses suffix (when keyOfTheAcolyte is set), then presents that string to the player.",
+    "U8P_FIREITEM::use enforces the focus-is-held requirement (calls U8P_FIREITEM::func0080), may early-out with explanatory bark or randomized confused bark, then dispatches a spell/effect based on quality/frame: spawning FIRESPEL/DAEMSPEL processes, playing visual/sound effects and applying hits in special cases (frame 0x14), and decrementing or clearing item quality to consume a charge.",
+    "U8P_FIREITEM::enterFastArea maps frame and low-quality values into alternate frames/indexes for quick actions, sets multiple local flags and may spawn auxiliary FREE::* processes to manage visuals/effects for immediate interaction.",
+    "U8P_FIREITEM::leaveFastArea resets the fast-area reference created on enter (calls FREE::resetRef) to undo quick-interaction state."
   ],
   "notable_control_flow": [
-    "U8P_FIREITEM::0080: iterative ascend of container chain using Item::getContainer(); at each step tests Item::getStatus() & 0x08 and returns the first matching ancestor or 0.",
-    "U8P_FIREITEM::look: read-only flow that gathers Item::getQuality() and Item::getFrame(), decodes a spell id (via shifts/masks), composes strings (numToStr, pluralization flag BP-03) and calls Item::bark; consults global flags (baneJoined, vardionJoined, keyOfTheAcolyte) for owner text.",
-    "U8P_FIREITEM::use: guarded activation pipeline — run FREE::1A85 checks and party/held gating; if allowed, map decoded spell index (BP-06) to a spawn target, call spawn(script, params), play SFX (playSFX) and create visual sprite (createSprite) at coordinates from Item::getZ/Y/X, then decrement quality/charges and update/destroy the item; call cleanup/notifications (FREE::2A56) and AccumulateIntelligence.",
-    "Fast-area entry (U8P_FIREITEM::enterFastArea) sets process info/exclude then defers to the usual item read/processing flow."
+    "U8P_FIREITEM::func0080: Read Item::getStatus(this) and if status bit 0x08 is set, call Item::getContainer and U8P_FIREITEM::use that container as the effective reference.",
+    "U8P_FIREITEM::look: Read Item::getQuality -> shift/mask to compute spell index; if index>0 and (baneJoined || vardionJoined) append 'of <spell>' and, if keyOfTheAcolyte is set, compute and append remaining-uses text; otherwise prepend a type prefix based on Item::getFrame.",
+    "U8P_FIREITEM::use: Compute selector from Item::getQuality; call U8P_FIREITEM::func0080 and abort with bark if the check does not indicate the item is held; if both baneJoined and vardionJoined are false there is a random chance to abort with a confused bark; for frame==0x14 perform a special explosive one-shot (createSprite, playSFX, METHOD::receiveHitWrapper, Item::setQuality(0)); otherwise spawn the appropriate FIRESPEL/DAEMSPEL process and decrement quality.",
+    "U8P_FIREITEM::enterFastArea: If low byte of quality == 0 map frame ranges to quick-action frames (0x0F-0x13) and set via Item::setFrame; else compute alternate quick-action index and spawn FREE::func1C19 with that index. Suspends are used after spawns to allow asynchronous effects.",
+    "U8P_FIREITEM::leaveFastArea: Call FREE::resetRef(0x021Bh, this) to clear the fast-area association."
   ],
   "open_questions": [
-    "Exact bitfield layout of Item::getQuality() (how many bits for spell index vs charges and any secondary flags); mapping from each decoded spell index to the concrete spawned script is partially inferred but not exhaustively enumerated here.",
-    "Precise semantics of status bit 0x08: it appears to indicate 'held/equipped' based on usage, but the engine-level definition is not present in this extract.",
-    "Exact behaviors and purposes of project utilities FREE::1A85, FREE::36E7, FREE::1A96 and FREE::2A56 — they appear to be permission/availability checks, timing/resource selection, and cleanup signaling respectively, but details are uncertain.",
-    "Special-case semantics for frame 0x14 (the 'key/acolyte' frame) and how the keyOfTheAcolyte global interacts with use()/look() beyond textual differences."
+    "What exact boolean/return convention does U8P_FIREITEM::func0080 U8P_FIREITEM::use? The code writes a normalized reference into 'temp' and callers test for a return value of 0x01; the explicit return node is not present in the excerpt (inferred behavior).",
+    "Precise encoding of Item::getQuality bits: the script shifts and masks quality to produce a spell index and a remaining-uses count, but the full bit layout and all spell-index mappings are only partially explicit.",
+    "Exact parameter meanings and target selection for each FIRESPEL/DAEMSPEL spawn (which argument is target vs. caster/context) are inferred from call patterns but not explicit in the excerpt.",
+    "Which global game conditions determine the random 'confused bark' behavior (aside from checking baneJoined and vardionJoined) and the probabilities used by FREE::randomInRange0 calls?"
   ],
   "main_function": {
-    "name": "U8P_FIREITEM::0080",
+    "name": "U8P_FIREITEM::func0080",
     "execution_form": "process",
-    "purpose": "Given an item pointer, climb the item's container/parent chain and return the first ancestor whose Item::getStatus() has bit 0x08 set; used by callers to determine whether the focus (or an ancestor) is 'held' so activation can be gated.",
+    "purpose": "Utility/normalizer that inspects an item's status and, when a specific status bit is set, resolves the reference to the item's container/holder so callers operate on the holder instead of the contained item.",
     "entry_conditions": [
-      "Called as a helper from U8P_FIREITEM::use when the code needs to verify that the focus (or a holder in its containment chain) is currently held/equipped.",
-      "Takes a single parameter: the item pointer to start the container walk from."
+      "Called by other item handlers (e.g., U8P_FIREITEM::use) when they need to verify or normalize the target/reference before performing actions.",
+      "Triggered on-demand; not an autonomous process in the available excerpt."
     ],
-    "confidence": "high"
+    "confidence": "medium"
   },
   "function_map": [
     {
-      "name": "U8P_FIREITEM::0080",
+      "name": "U8P_FIREITEM::func0080",
       "kind": "main",
-      "role": "Container-chain walker helper that finds an ancestor with status bit 0x08 set (used to enforce 'held' preconditions).",
-      "confidence": "high"
+      "role": "utility that normalizes item reference / checks held/focus state for callers",
+      "confidence": "medium"
     },
     {
       "name": "U8P_FIREITEM::look",
       "kind": "helper",
-      "role": "Event 0 handler: compose and emit item description text including spell name and remaining uses; consults party/global flags for owner text.",
+      "role": "build and display the item's descriptive string (type, keyed spell name, remaining uses)",
       "confidence": "high"
     },
     {
       "name": "U8P_FIREITEM::use",
       "kind": "helper",
-      "role": "Event 1 handler: activation pipeline — validate conditions, spawn spell script, play effects, decrement/destroy charges, call housekeeping utilities.",
+      "role": "handle player 'U8P_FIREITEM::use' action: enforce held requirement, spawn FIRESPEL/DAEMSPEL effects, play VFX/SFX, consume charges, handle special-case explosive frame",
       "confidence": "high"
     },
     {
       "name": "U8P_FIREITEM::enterFastArea",
       "kind": "helper",
-      "role": "Event F handler: fast-area entry stub that sets process info/exclude and prepares the item context for fast-area triggers.",
+      "role": "manage fast-area quick-interaction visuals/state when an actor enters the item's trigger region (frame remapping, spawn auxiliary effects)",
       "confidence": "high"
     },
     {
-      "name": "Item::getStatus",
-      "kind": "extern",
-      "role": "Engine/Item API call used to read status bits on an item (tested for 0x08 by FIREITEM::0080).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getContainer",
-      "kind": "extern",
-      "role": "Engine/Item API to obtain parent/container used to climb the containment chain.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getQuality",
-      "kind": "extern",
-      "role": "Read encoded quality/charges and spell index used by look/use to decode spell and remaining uses.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getFrame",
-      "kind": "extern",
-      "role": "Read item frame/type to distinguish wand/rod/staff/talisman/symbol/special key behavior.",
+      "name": "U8P_FIREITEM::leaveFastArea",
+      "kind": "helper",
+      "role": "cleanup fast-area association created by U8P_FIREITEM::enterFastArea (reset references)",
       "confidence": "high"
     }
   ],
@@ -85,119 +69,107 @@
     "internal_calls": [
       {
         "caller": "U8P_FIREITEM::use",
-        "callee": "U8P_FIREITEM::0080",
-        "purpose": "Check whether the focus (or an ancestor) is held/equipped before allowing use.",
+        "callee": "U8P_FIREITEM::func0080",
+        "purpose": "Require/verify that the focus is held or normalize the reference to the holder before performing the U8P_FIREITEM::use action; abort with bark if check fails",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIREITEM::enterFastArea",
+        "callee": "U8P_FIREITEM::func0080",
+        "purpose": "Referenced as related helper in the same script family (not directly invoked in the provided U8P_FIREITEM::enterFastArea excerpt) — mentioned as the canonical held-check utility",
+        "confidence": "medium"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_FIREITEM::func0080",
+        "callee": "Item::getStatus",
+        "purpose": "Read item status bits to decide whether to resolve the reference to the item's container",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIREITEM::func0080",
+        "callee": "Item::getContainer",
+        "purpose": "Return the container/holder when status indicates the item is contained/attached, replacing the original reference",
         "confidence": "high"
       },
       {
         "caller": "U8P_FIREITEM::look",
         "callee": "Item::getQuality",
-        "purpose": "Read encoded spell index and charge count to form the description.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FIREITEM::use",
-        "callee": "Item::getQuality",
-        "purpose": "Decode which spell to spawn and how many charges remain.",
-        "confidence": "high"
-      }
-    ],
-    "external_calls": [
-      {
-        "caller": "U8P_FIREITEM::0080",
-        "callee": "Item::getStatus",
-        "purpose": "Test each ancestor's status bits to find bit 0x08.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FIREITEM::0080",
-        "callee": "Item::getContainer",
-        "purpose": "Move up one link in the item's container/parent chain.",
+        "purpose": "Read encoded quality/charge to derive spell index and possibly remaining uses",
         "confidence": "high"
       },
       {
         "caller": "U8P_FIREITEM::look",
         "callee": "Item::getFrame",
-        "purpose": "Determine the focus type for description and special-case formatting (e.g., key/frame 0x14).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FIREITEM::look",
-        "callee": "U8P_FIREITEM::numToStr",
-        "purpose": "Format remaining-use counts into text for the bark.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FIREITEM::look",
-        "callee": "Item::bark",
-        "purpose": "Emit the assembled descriptive string to the player/viewer.",
+        "purpose": "Classify item as wand/rod/staff/talisman/symbol to select descriptive prefix and some keyed exceptions",
         "confidence": "high"
       },
       {
         "caller": "U8P_FIREITEM::use",
-        "callee": "FREE::1A85",
-        "purpose": "Project-specific guard/permission check invoked prior to some activation sequences.",
+        "callee": "FREE::closeAllGumps",
+        "purpose": "Close GUI windows before performing the U8P_FIREITEM::use action",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIREITEM::use",
+        "callee": "FREE::randomInRange0 / FREE::randomInRange",
+        "purpose": "Supply randomness for chance-based early-outs, damage variation, and AccumulateIntelligence argument",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIREITEM::use",
+        "callee": "createSprite",
+        "purpose": "Spawn visual effect for the special-case frame (0x14) explosive behavior",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIREITEM::use",
+        "callee": "playSFX",
+        "purpose": "Play sound effect associated with the U8P_FIREITEM::use/explosive effect",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIREITEM::use",
+        "callee": "METHOD::receiveHitWrapper",
+        "purpose": "Apply damage/hit to a target during the special-case explosive behavior",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIREITEM::use",
+        "callee": "Item::setQuality",
+        "purpose": "Consume a charge or clear quality when the item is used",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIREITEM::use",
+        "callee": "FIRESPEL::func059A / func0AF5 / func0E47 / func110F / func195D / func1AFE / func177A / func12DF / func1CEB",
+        "purpose": "Spawn the appropriate fire-spell process based on the decoded spell index to implement the chosen effect",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIREITEM::use",
+        "callee": "DAEMSPEL::func0080 / func0AD8 / func122E",
+        "purpose": "Spawn daemon-spell processes for certain selected indexes (some indexes map to daemon effects)",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_FIREITEM::use",
-        "callee": "FREE::36E7",
-        "purpose": "Project utility invoked in the use path (likely housekeeping/conditional check).",
-        "confidence": "low"
-      },
-      {
-        "caller": "U8P_FIREITEM::use",
-        "callee": "FREE::1A96",
-        "purpose": "Utility used around SFX/spawn sequence (timing or resource selection inferred).",
-        "confidence": "low"
-      },
-      {
-        "caller": "U8P_FIREITEM::use",
-        "callee": "Item::getZ",
-        "purpose": "Obtain Z coordinate for createSprite / effect placement.",
+        "caller": "U8P_FIREITEM::enterFastArea",
+        "callee": "Item::getFrame / Item::getQuality / Item::setFrame",
+        "purpose": "Read frame and quality, compute quick-action mapping, and write new frame to update item visuals for fast interactions",
         "confidence": "high"
       },
       {
-        "caller": "U8P_FIREITEM::use",
-        "callee": "Item::getY",
-        "purpose": "Obtain Y coordinate for createSprite / effect placement.",
+        "caller": "U8P_FIREITEM::enterFastArea",
+        "callee": "FREE::func1C19",
+        "purpose": "Spawn auxiliary helper process with constants or a computed index to trigger immediate visual/effect behavior upon enter",
         "confidence": "high"
       },
       {
-        "caller": "U8P_FIREITEM::use",
-        "callee": "Item::getX",
-        "purpose": "Obtain X coordinate for createSprite / effect placement.",
+        "caller": "U8P_FIREITEM::leaveFastArea",
+        "callee": "FREE::resetRef",
+        "purpose": "Clear the reference/association created for fast-area interaction when leaving the trigger region",
         "confidence": "high"
-      },
-      {
-        "caller": "U8P_FIREITEM::use",
-        "callee": "U8P_FIREITEM::createSprite",
-        "purpose": "Spawn a temporary visual effect at the item's coordinates when the focus is used.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FIREITEM::use",
-        "callee": "U8P_FIREITEM::playSFX",
-        "purpose": "Play sound effects associated with casting/activation.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FIREITEM::use",
-        "callee": "spawn",
-        "purpose": "Launch the concrete spell script/process corresponding to the decoded spell index.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FIREITEM::use",
-        "callee": "FREE::2A56",
-        "purpose": "Cleanup/notification routine called near the end of use() to signal item state changes.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_FIREITEM::use",
-        "callee": "AccumulateIntelligence",
-        "purpose": "Award or accumulate intelligence/skill/XP based on the action/spell used.",
-        "confidence": "medium"
       }
     ]
   },
@@ -205,18 +177,18 @@
     "reads": [
       {
         "name": "baneJoined",
-        "likely_effect": "Used to decide whether to append owner/party text in descriptions and to gate certain uses; indicates if the party member 'Bane' is present.",
+        "likely_effect": "Used when building item description and to influence random 'confused bark' early-out in U8P_FIREITEM::use",
         "confidence": "high"
       },
       {
         "name": "vardionJoined",
-        "likely_effect": "Used similarly to baneJoined to influence description and use preconditions; indicates presence of 'Vardion'.",
+        "likely_effect": "Same role as baneJoined: read to decide whether keyed items append 'of <spell>' and to influence randomized U8P_FIREITEM::use behavior",
         "confidence": "high"
       },
       {
         "name": "keyOfTheAcolyte",
-        "likely_effect": "Toggles special text and consumption/formatting behavior when the focus's frame/type is the special acolyte key (frame 0x14).",
-        "confidence": "medium"
+        "likely_effect": "When set, triggers additional quality masking to compute and append remaining-uses text for keyed foci (except when frame == 0x14)",
+        "confidence": "high"
       }
     ],
     "writes": []
@@ -228,9 +200,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "FIREITEM::0080",
-    "behavior_summary_one_liner": "Provides the gameplay logic for 'fire-focus' items (wands/rods/staves/talismans/symbols and a special key type).",
-    "external_call_count": 16,
+    "main_function": "U8P_FIREITEM::func0080",
+    "behavior_summary_one_liner": "This script implements a family of behaviors for a 'fire-focus' item (wand/rod/staff/talisman/symbol): describing the item, handling player U8P_FIREITEM::use (spawning fire/daemon spell processes, playing VFX/SFX, consuming charges), and managing fast-area quick-interaction state when a player enters or leaves the item's proximity.",
+    "external_call_count": 15,
     "flag_read_count": 3,
     "flag_write_count": 0
   },

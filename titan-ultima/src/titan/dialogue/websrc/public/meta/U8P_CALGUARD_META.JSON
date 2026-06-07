@@ -3,110 +3,70 @@
   "source_of_truth": "dialogue/json/U8P_CALGUARD.json",
   "file": "U8P_CALGUARD",
   "behavior_summary": [
-    "This script implements a guard-enforcement sequence: when invoked it checks limits and NPC state, accuses a target, sequences spoken barks, and applies punishments/effects such as stasis, spawn effects, temporary items, fire-spell visuals, and teleportation.",
-    "It defers or aborts when global limits are reached (a pre-check compared to 0x14) or when the relevant guard NPC is dead, and it attempts to validate candidate positions before placing effects or teleporting the accused.",
-    "Speech is synchronized (inferred somebodyTalking behavior) and the routine performs cleanup of temporary items and clears combat state at the end."
+    "U8P_CALGUARD::guardRespondToCrime coordinates an in-world guard response when a crime is reported: it checks basic entry conditions, briefly freezes the avatar, summons or directs guard NPCs toward the offender/scene, issues short verdict barks (theft/assault/murder), plays animations/effects on the offender, and recenters the camera on the scene.",
+    "The routine avoids duplicate responses (a guards-called guard is set when proceeding), and performs spatial placement/search logic (appears to iterate offsets in a spiral or stepped pattern) to find spawn/placement/facing positions for guards near the scene.",
+    "Many low-level spawn/invocation details are present as engine/system calls or raw method IDs; these are invoked to create NPC actions, play body/animation effects, and move the camera."
   ],
   "notable_control_flow": [
-    "Early abort if FREE::1E6A pre-check indicates the routine should not proceed (return compared against 0x14).",
-    "Abort/skip if the guard NPC is dead (Npc::isDead check).",
-    "Branching on an entry flag parameter ([BP+0Ah]) to select different accusation/sentencing lines and associated effect sequences.",
-    "Sequence of actions gated by validation checks (canExistAt-style checks via coordinate computations and FREE spawn helpers) before creating/popping temporary items or teleporting the target.",
-    "Sets/updates a global guard-call indicator (guardsCalled) and uses short waits/timers (FREE::2A56, FREE::1C19, METHOD::0113) to pace barks and effects."
+    "Early-exit if the referenced target/offender is already dead (Npc::isDead check) — prevents running the sequence on dead actors.",
+    "Early-exit if a distance threshold test fails (FREE::getDistanceInTiles(this, 0x01) >= 0x14) — avoids responding to far-away events.",
+    "Early-exit if a guards-called marker is already set (prevents duplicate summons).",
+    "If checks pass, the routine sets guards-called, freezes the avatar (setAvatarInStasis), resets or clears internal refs (FREE::resetRef), then runs a loop/iterative placement routine driven by temporaries (local5, local6, local7, local8) to position or spawn guard actions and issue barks/effects.",
+    "Sequence ends after spawning/directing guard actions, playing offender effects, and focusing camera (FREE::cameraFollowAvatar)."
   ],
   "open_questions": [
-    "Exact semantic meaning and naming of the numeric pre-check (FREE::1E6A) and the reason for the threshold 0x14 (20) — inferred as a guard-call rate/limit but not proven.",
-    "Precise identity and semantics of the entry_flag byte at [BP+0Ah] (which accusation modes it encodes and whether it maps to in-world crime types).",
-    "The exact effect and mechanics of several spawned methods (METHOD::091C, METHOD::15E7, BODYPART::0080, FIRESPEL::1F65) — their purposes are inferred from call patterns but visuals/damage behavior are not confirmed.",
-    "Whether 'pid' always refers to the player avatar or may sometimes be another NPC/actor in context (inferred from repeated use but not explicitly typed)."
+    "What exact value(s) and semantics does param1 represent (e.g., crime severity, specific offender id, or bark selector)?",
+    "Which concrete global flag name(s) in game state correspond to the 'guardsCalled' behavior observed in the script (metadata lacked canonical flag entries)?",
+    "Precise behavior and side effects of METHOD::func091C and the raw method IDs called against bodypart/METHOD objects — whether they spawn NPCs, change AI state, or only play animations.",
+    "Exact spawn coordinates/placement rules for guards — the code iterates offsets but the spawn target selection and collision/validity checks are unclear from low-level nodes."
   ],
   "main_function": {
-    "name": "U8P_CALGUARD::0080",
+    "name": "U8P_CALGUARD::guardRespondToCrime",
     "execution_form": "process",
-    "purpose": "Handle a guard NPC's reaction to an observed crime/incident: validate whether enforcement should occur, produce accusation/sentencing barks, spawn visual/effect sequences (stasis/fire/animations/items), possibly teleport or punish the accused, and clean up state.",
+    "purpose": "Run a short scripted guard-response sequence when a crime is observed: gate execution by distance/target-liveness/guards-called, freeze the player, summon or direct guards to the scene, deliver verdict barks and play offender effects, and center the camera on the event.",
     "entry_conditions": [
-      "Invoked when a guard should process an offending party or an area-triggered crime event (inferred from repeated NPC/item calls and use of an entry_flag).",
-      "Routine checks a precondition (FREE::1E6A) and the guard's alive state before proceeding."
+      "Invoked by a crime-report event (inferred from name and behavior).",
+      "Returns immediately if the offender/target is dead (Npc::isDead).",
+      "Returns immediately if the event is sufficiently far away (FREE::getDistanceInTiles threshold >= 0x14).",
+      "Returns immediately if a guards-called marker is present (to avoid duplicate responses)."
     ],
-    "confidence": "high"
+    "confidence": "medium"
   },
   "function_map": [
     {
-      "name": "U8P_CALGUARD::0080",
+      "name": "U8P_CALGUARD::guardRespondToCrime",
       "kind": "main",
-      "role": "Guard enforcement handler (accuse, sentence, spawn effects, teleport and cleanup).",
+      "role": "orchestrates guard response sequence (checks, stasis, spawn/commands, barks, camera)",
       "confidence": "high"
     },
     {
-      "name": "FREE::1E6A",
+      "name": "FREE::getDistanceInTiles",
       "kind": "extern",
-      "role": "Pre-check/count helper used to rate-limit or gate guard actions.",
-      "confidence": "medium"
+      "role": "distance check utility used by the main routine",
+      "confidence": "high"
     },
     {
       "name": "Npc::isDead",
       "kind": "extern",
-      "role": "Check whether a given NPC is dead (used to abort behavior).",
+      "role": "offender liveness check to short-circuit response",
       "confidence": "high"
     },
     {
-      "name": "Item::bark",
+      "name": "setAvatarInStasis",
       "kind": "extern",
-      "role": "Emit a short spoken/printed line from an actor/item (accusations and replies).",
+      "role": "freeze player/avatar during scripted sequence",
       "confidence": "high"
     },
     {
-      "name": "U8P_CALGUARD::setAvatarInStasis",
+      "name": "METHOD::func091C",
       "kind": "extern",
-      "role": "Place the avatar/target into stasis as part of sentencing.",
+      "role": "spawn or command NPC action (movement/facing) — exact semantics inferred",
       "confidence": "medium"
     },
     {
-      "name": "Item::getX",
+      "name": "FREE::cameraFollowAvatar",
       "kind": "extern",
-      "role": "Read X coordinate from context item/NPC (used to compute spawn/teleport positions).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getY",
-      "kind": "extern",
-      "role": "Read Y coordinate from context item/NPC.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getZ",
-      "kind": "extern",
-      "role": "Read Z coordinate from context item/NPC.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::create",
-      "kind": "extern",
-      "role": "Create a temporary item used for visual/effect placement.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::pop",
-      "kind": "extern",
-      "role": "Place/pop the created temporary item into the world at chosen coordinates.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::destroy",
-      "kind": "extern",
-      "role": "Destroy temporary items to clean up after effects.",
-      "confidence": "high"
-    },
-    {
-      "name": "Npc::teleport",
-      "kind": "extern",
-      "role": "Teleport the accused to a computed destination as part of punishment.",
-      "confidence": "high"
-    },
-    {
-      "name": "Npc::clrInCombat",
-      "kind": "extern",
-      "role": "Clear combat state for the NPC after enforcement concludes.",
+      "role": "recenter camera on event coordinates",
       "confidence": "high"
     }
   ],
@@ -114,105 +74,87 @@
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_CALGUARD::0080",
-        "callee": "FREE::1E6A",
-        "purpose": "Rate-limit/pre-check to decide whether guard logic should proceed (return is compared to 0x14).",
-        "confidence": "medium"
+        "caller": "U8P_CALGUARD::guardRespondToCrime",
+        "callee": "FREE::getDistanceInTiles",
+        "purpose": "Measure tile distance from the caller to the reported event/target to decide whether guards should respond (distance threshold cut-off).",
+        "confidence": "high"
       },
       {
-        "caller": "U8P_CALGUARD::0080",
+        "caller": "U8P_CALGUARD::guardRespondToCrime",
         "callee": "Npc::isDead",
-        "purpose": "Verify the guard or context NPC is alive; abort if dead.",
+        "purpose": "Check whether the referenced NPC/offender is dead to avoid running the response.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_CALGUARD::0080",
-        "callee": "Item::bark",
-        "purpose": "Make the guard and/or accused speak accusation and sentencing lines; used multiple times for speech sequencing.",
+        "caller": "U8P_CALGUARD::guardRespondToCrime",
+        "callee": "setAvatarInStasis",
+        "purpose": "Temporarily freeze the player/avatar while the guard dramatized sequence runs.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_CALGUARD::0080",
-        "callee": "U8P_CALGUARD::setAvatarInStasis",
-        "purpose": "Apply stasis punishment to the avatar/target for a duration during sentencing.",
+        "caller": "U8P_CALGUARD::guardRespondToCrime",
+        "callee": "FREE::resetRef",
+        "purpose": "Reset or release internal references/resources before spawning or sequencing guard-related objects/actions (cleanup).",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_CALGUARD::0080",
+        "caller": "U8P_CALGUARD::guardRespondToCrime",
+        "callee": "METHOD::func091C",
+        "purpose": "Spawn or instruct guard NPCs to perform an action (likely move/facing) using an action code and a direction parameter (used repeatedly during placement loop).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_CALGUARD::guardRespondToCrime",
         "callee": "Item::getDirToItem",
-        "purpose": "Compute facing/direction from guard/context to target for orienting spawned effects.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_CALGUARD::0080",
-        "callee": "METHOD::091C",
-        "purpose": "Spawn a short directional animation/action oriented at the accused (used repeatedly with directions and actor id).",
+        "purpose": "Compute direction from a prospective guard spawn/position to the offender/scene so spawned guards face or move correctly toward the scene.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_CALGUARD::0080",
-        "callee": "METHOD::15E7",
-        "purpose": "Spawned visual/effect helper used for directional effects around accused or guard.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_CALGUARD::0080",
-        "callee": "FREE::2A56",
-        "purpose": "Small wait/timing or bookkeeping call to pace barks and actions.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_CALGUARD::0080",
-        "callee": "FREE::1C6D",
-        "purpose": "Spawned routine to create ground/projectile/visual effect at computed coordinates (used for fire and similar effects).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_CALGUARD::0080",
-        "callee": "FIRESPEL::1F65",
-        "purpose": "Spawned fire-spell visual/damage effect used after a 'consign you to the flames' line during punishment.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_CALGUARD::0080",
-        "callee": "Item::create",
-        "purpose": "Create temporary items used as part of visual/spawn effects before popping them into the world.",
+        "caller": "U8P_CALGUARD::guardRespondToCrime",
+        "callee": "FREE::cameraFollowAvatar",
+        "purpose": "Center the camera on specified coordinates (the crime scene/avatar) to emphasize the event.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_CALGUARD::0080",
-        "callee": "Item::pop",
-        "purpose": "Place a created temporary item into the world at validated coordinates to realize an effect.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_CALGUARD::0080",
-        "callee": "Item::destroy",
-        "purpose": "Destroy temporary items used for effects during cleanup.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_CALGUARD::0080",
-        "callee": "Npc::teleport",
-        "purpose": "Teleport the accused as part of punishment; coordinates and map are computed/validated first.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_CALGUARD::0080",
-        "callee": "Npc::clrInCombat",
-        "purpose": "Clear the guard's or target's in-combat flag at the end of the sequence.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_CALGUARD::0080",
-        "callee": "METHOD::087D",
-        "purpose": "Spawned helper to generate a short reply/animation from the accused (e.g., 'I can explain!').",
+        "caller": "U8P_CALGUARD::guardRespondToCrime",
+        "callee": "addressof(...)->BODYPART::func0080",
+        "purpose": "Trigger a bodypart-related effect/animation on the offender (likely visual reaction or hit animation).",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_CALGUARD::0080",
-        "callee": "METHOD::0113",
-        "purpose": "Small timing/UX helper invoked repeatedly for pacing or minor visual cues during the punishment sequence.",
+        "caller": "U8P_CALGUARD::guardRespondToCrime",
+        "callee": "addressof(...)->METHOD::func15E7",
+        "purpose": "Play directional animation/effect on NPCs using observed facing direction and numeric effect ids.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_CALGUARD::guardRespondToCrime",
+        "callee": "Item::getX",
+        "purpose": "Read world X coordinate of an item/NPC for spawn placement and camera centering.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CALGUARD::guardRespondToCrime",
+        "callee": "Item::getY",
+        "purpose": "Read world Y coordinate of an item/NPC for spawn placement and camera centering.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_CALGUARD::guardRespondToCrime",
+        "callee": "Item::getZ",
+        "purpose": "Read world Z coordinate of an item/NPC for spawn placement and camera centering.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_CALGUARD::guardRespondToCrime",
+        "callee": "Npc::getDir",
+        "purpose": "Obtain the offender's facing direction to drive directional effects or to orient spawned actors.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_CALGUARD::guardRespondToCrime",
+        "callee": "FREE::absValue",
+        "purpose": "Compute absolute differences used for proximity/placement checks in the placement/search logic.",
         "confidence": "medium"
       }
     ]
@@ -221,19 +163,14 @@
     "reads": [
       {
         "name": "guardsCalled",
-        "likely_effect": "Used to decide whether to proceed with guard enforcement (rate-limiting or avoiding repeated simultaneous guard actions).",
-        "confidence": "high"
+        "likely_effect": "Read to determine if a guard response has already been initiated (prevents duplicate responses).",
+        "confidence": "medium"
       }
     ],
     "writes": [
       {
         "name": "guardsCalled",
-        "likely_effect": "Set/updated to record that a guard action has been initiated so subsequent calls can be gated.",
-        "confidence": "medium"
-      },
-      {
-        "name": "somebodyTalking",
-        "likely_effect": "Set during speech sequences to prevent overlapping dialogue from other processes (inferred from sequencing/suspend behavior).",
+        "likely_effect": "Set when the routine proceeds to mark that guards have been summoned/responded for this event.",
         "confidence": "medium"
       }
     ]
@@ -245,11 +182,11 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_CALGUARD::0080",
-    "behavior_summary_one_liner": "This script implements a guard-enforcement sequence: when invoked it checks limits and NPC state, accuses a target, sequences spoken barks, and applies punishments/effects such as stasis, spawn effects, temporary items, fire-spell visuals, and teleportation.",
-    "external_call_count": 17,
+    "main_function": "U8P_CALGUARD::guardRespondToCrime",
+    "behavior_summary_one_liner": "U8P_CALGUARD::guardRespondToCrime coordinates an in-world guard response when a crime is reported: it checks basic entry conditions, briefly freezes the avatar, summons or directs guard NPCs toward the offender/scene, issues short verdict barks (theft/assault/murder), plays animations/effects on the offender, and recenters the camera on the scene.",
+    "external_call_count": 14,
     "flag_read_count": 1,
-    "flag_write_count": 2
+    "flag_write_count": 1
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

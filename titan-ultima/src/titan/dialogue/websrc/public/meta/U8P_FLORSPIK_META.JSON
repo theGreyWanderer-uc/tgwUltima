@@ -3,31 +3,29 @@
   "source_of_truth": "dialogue/json/U8P_FLORSPIK.json",
   "file": "U8P_FLORSPIK",
   "behavior_summary": [
-    "Handles the 'got hit' event for a floor-spike object: when struck the spike may play an effect/animation, change its visual type/state, possibly fling (hurl) a struck actor/NPC with randomized direction, and then disable itself.",
-    "The handler first guards on the spike's quantity (Item::getQ) and returns immediately if zero. If non-zero it forces quantity to 1 (Item::setQ) to ensure the hit processing runs.",
-    "Behavior splits on the second argument passed to the event: when that argument is zero the spike follows a simple spawn+frame-animation path (sets type 0x0339, plays effects/frames, then sets type 0x033A and clears quantity).",
-    "When the second argument is non-zero the code attempts a target-specific branch: if the item refers to an NPC and that NPC is alive it invokes an NPC-specific method (METHOD::0080) with randomized parameters; otherwise it computes randomized velocities and calls Item::hurl to fling the target. Both variants then run spawn/frame animations and finalize by changing type to 0x033A and setting quantity to 0."
+    "U8P_FLORSPIK::gotHit handles the item being struck: it guards against duplicate processing using a per-item Q flag, switches the item's type to a 'hit' variant, spawns a visual effect, runs a short frame animation sequence, then either applies damage to an NPC target (if the incoming parameter refers to a living NPC) or hurls the item with randomized velocity. After handling it sets a final item type and clears the per-item Q flag.",
+    "The routine uses Item::getQ/Item::setQ as a reentrancy/processing guard, Item::setType and Item::setFrame to change visuals, spawn->FREE::func2A12 to create effects, spawn->FREE::func1C19 as a short animation/tick delay, and either METHOD::receiveHitWrapper to deliver damage to an NPC or Item::hurl to throw the item."
   ],
   "notable_control_flow": [
-    "Early guard: Item::getQ == 0 -> immediate return (prevents repeated activation).",
-    "Initial normalization: Item::setQ(this, 1) is called to ensure single-hit processing.",
-    "Primary branch by second parameter (word): value == 0 -> 'type 0x0339' path; value != 0 -> 'targeted hurl/interaction' path.",
-    "Animation loop: repeated calls to spawn FREE::1C19 and Item::setFrame interleaved with suspend/ticks to animate frames over several iterations.",
-    "Post-effect cleanup: Item::setType(this, 0x033A) and Item::setQ(this, 0) clear the spike for future interactions."
+    "Early exit if Item::getQ(this) != 0 to avoid duplicate handling.",
+    "On first entry, Item::setQ(this, 0x01) sets a per-item guard; cleared at end with Item::setQ(this, 0x00).",
+    "Item::setType(this, 0x0339) is called immediately after setting the Q flag to switch to a 'hit' visual/state; later Item::setType(this, 0x033A) sets a subsequent/final type.",
+    "A short animation loop increments local2 from 0 up to 4 calling Item::setFrame(this, frameIndex) with small suspends via spawn->FREE::func1C19 between frames.",
+    "Branch: if the incoming parameter (stored to local1) refers to an NPC and Npc::isDead(addressOf(local3)) reports 'not dead', call METHOD::receiveHitWrapper to apply randomized damage; otherwise call Item::hurl with randomized velocities and a target/location pointer derived from local1."
   ],
   "open_questions": [
-    "The semantic meaning of numeric type IDs 0x0339 and 0x033A (exact visuals/state names) is inferred but not concretely known.",
-    "The provenance of the second parameter (BP+0Ah): whether it is always an attacker PID, a boolean flag, or sometimes another identifier is not fully certain.",
-    "Exact behavior and side effects of METHOD::0080 when called for live NPCs are unclear; it likely applies an impulse but implementation details are unknown.",
-    "Precise semantics of the spawn prototypes FREE::2A12 and FREE::1C19 (what visual/sound they produce) are inferred from usage patterns rather than explicit identifiers."
+    "Exact semantic meaning of the numeric type constants (0x0339, 0x033A) and effect ids (0x10, 0x09) — likely visual/behavior variants but exact mapping is uncertain.",
+    "Precise role of the first parameter (uword, declared as param1) — inferred as the hitting actor or hit target reference but not certain.",
+    "Meaning of some numeric flags passed into Item::hurl (0x04, 0x0F) — inferred use/semantics from common engine patterns but not explicitly labeled.",
+    "Whether the animation loop always runs (both branches) or differs subtly by branch — inferred to run in both but raw nodes leave small uncertainty."
   ],
   "main_function": {
     "name": "U8P_FLORSPIK::gotHit",
     "execution_form": "process",
-    "purpose": "Respond to the spike being hit: play spawn/effect animations, possibly fling a struck actor/NPC with randomized impulse, change the spike's visual/type state, and disable it (clear quantity).",
+    "purpose": "Process the item being hit: prevent re-entrant handling, change visuals, spawn effects, animate a short frame sequence, then either apply damage to a valid NPC target or hurl the item; finally restore final type and clear the per-item processing flag.",
     "entry_conditions": [
-      "Invoked by the item's 'got hit' event handler.",
-      "Only proceeds if Item::getQ(this) != 0 (otherwise returns immediately)."
+      "This process is invoked when the item receives a hit (engine calls process U8P_FLORSPIK::gotHit).",
+      "Function proceeds only if Item::getQ(this) == 0 (per-item Q flag clear)."
     ],
     "confidence": "high"
   },
@@ -35,73 +33,7 @@
     {
       "name": "U8P_FLORSPIK::gotHit",
       "kind": "main",
-      "role": "Primary event handler for spike being struck; coordinates guard, branching, animation, optional hurl, and cleanup.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getQ",
-      "kind": "extern",
-      "role": "Read the spike's quantity to decide whether to process the hit.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::setQ",
-      "kind": "extern",
-      "role": "Set/normalize the spike quantity at start (to 1) and clear it at end (to 0) to control re-triggering.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::setType",
-      "kind": "extern",
-      "role": "Swap the spike's type/visual state (used with values 0x0339 and 0x033A during hit lifecycle).",
-      "confidence": "high"
-    },
-    {
-      "name": "spawn FREE::2A12",
-      "kind": "extern",
-      "role": "Spawn a larger effect at the start of the hit sequence (visual/sound effect).",
-      "confidence": "medium"
-    },
-    {
-      "name": "spawn FREE::1C19",
-      "kind": "extern",
-      "role": "Spawn a short-duration per-frame effect or sound used inside the animation loop.",
-      "confidence": "medium"
-    },
-    {
-      "name": "Item::setFrame",
-      "kind": "extern",
-      "role": "Set the item's animation/display frame during the animation loop.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::isNpc",
-      "kind": "extern",
-      "role": "Query whether the referenced item refers to an NPC to select NPC-specific handling.",
-      "confidence": "high"
-    },
-    {
-      "name": "Npc::isDead",
-      "kind": "extern",
-      "role": "Check NPC life state to avoid interacting with dead NPCs.",
-      "confidence": "high"
-    },
-    {
-      "name": "urandom",
-      "kind": "extern",
-      "role": "Produce small random numbers used to compute randomized hurl impulses/angles.",
-      "confidence": "high"
-    },
-    {
-      "name": "METHOD::0080",
-      "kind": "extern",
-      "role": "An inlined/engine method called for live NPC targets with computed args; likely applies specialized NPC impulse or reaction.",
-      "confidence": "medium"
-    },
-    {
-      "name": "Item::hurl",
-      "kind": "extern",
-      "role": "Apply a physical hurl/launch to a non-NPC target using computed x/y velocities/angles.",
+      "role": "primary hit handler / item-impact process",
       "confidence": "high"
     }
   ],
@@ -111,68 +43,56 @@
       {
         "caller": "U8P_FLORSPIK::gotHit",
         "callee": "Item::getQ",
-        "purpose": "Guard: return early if quantity is zero.",
+        "purpose": "Read per-item 'Q' flag to detect and avoid double-processing/reentrancy.",
         "confidence": "high"
       },
       {
         "caller": "U8P_FLORSPIK::gotHit",
         "callee": "Item::setQ",
-        "purpose": "Normalize to quantity 1 at start of processing and clear quantity (0) at end to disable spike.",
+        "purpose": "Set (0x01) the per-item processing guard on entry and clear (0x00) it on exit.",
         "confidence": "high"
       },
       {
         "caller": "U8P_FLORSPIK::gotHit",
         "callee": "Item::setType",
-        "purpose": "Switch visual/state: set to 0x0339 on immediate-hit branch, then to 0x033A at completion.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FLORSPIK::gotHit",
-        "callee": "spawn FREE::2A12",
-        "purpose": "Create an initial hit effect at the spike's location.",
+        "purpose": "Switch the item's type/state to visual/behavior variants (0x0339 on hit, 0x033A after handling).",
         "confidence": "medium"
       },
       {
         "caller": "U8P_FLORSPIK::gotHit",
-        "callee": "spawn FREE::1C19",
-        "purpose": "Play repeated short per-frame effects/sounds during the animation loop.",
+        "callee": "spawn->FREE::func2A12",
+        "purpose": "Spawn a visual/particle effect associated with the hit (observed effect ids 0x10 and 0x09).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FLORSPIK::gotHit",
+        "callee": "spawn->FREE::func1C19",
+        "purpose": "Short delay/animation-tick used between Item::setFrame updates; execution suspends after this call.",
         "confidence": "medium"
       },
       {
         "caller": "U8P_FLORSPIK::gotHit",
         "callee": "Item::setFrame",
-        "purpose": "Animate the spike over several frames during the hit sequence.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FLORSPIK::gotHit",
-        "callee": "Item::isNpc",
-        "purpose": "Determine whether to take an NPC-specific interaction branch.",
-        "confidence": "high"
+        "purpose": "Advance item animation frames during a brief sequence driven by a small counter (local2).",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_FLORSPIK::gotHit",
         "callee": "Npc::isDead",
-        "purpose": "Check for NPC being alive before applying NPC-specific method/impulse.",
+        "purpose": "Check whether the candidate target NPC is dead; used to decide whether to apply damage or hurl the item.",
         "confidence": "high"
       },
       {
         "caller": "U8P_FLORSPIK::gotHit",
-        "callee": "urandom",
-        "purpose": "Generate randomized components for hurl/impulse vectors.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FLORSPIK::gotHit",
-        "callee": "METHOD::0080",
-        "purpose": "Invoke NPC-specific interaction (likely apply impulse/reaction) for live NPC targets with computed random parameters.",
+        "callee": "METHOD::receiveHitWrapper",
+        "purpose": "Deliver randomized small damage/hit to a valid alive NPC target (called with urandom-derived damage and hit-type).",
         "confidence": "medium"
       },
       {
         "caller": "U8P_FLORSPIK::gotHit",
         "callee": "Item::hurl",
-        "purpose": "Apply a randomized hurl/launch to non-NPC targets (x/y velocity arguments computed from urandom).",
-        "confidence": "high"
+        "purpose": "Launch/hurl the item with flags and randomized x/y velocity when no valid alive NPC target is present.",
+        "confidence": "medium"
       }
     ]
   },
@@ -187,9 +107,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "FLORSPIK::gotHit",
-    "behavior_summary_one_liner": "Handles the 'got hit' event for a floor-spike object: when struck the spike may play an effect/animation, change its visual type/state, possibly fling (hurl) a struck actor/NPC with randomized direction, and then disable itself.",
-    "external_call_count": 11,
+    "main_function": "U8P_FLORSPIK::gotHit",
+    "behavior_summary_one_liner": "U8P_FLORSPIK::gotHit handles the item being struck: it guards against duplicate processing using a per-item Q flag, switches the item's type to a 'hit' variant, spawns a visual effect, runs a short frame animation sequence, then either applies damage to an NPC target (if the incoming parameter refers to a living NPC) or hurls the item with randomized velocity. After handling it sets a final item type and clears the per-item Q flag.",
+    "external_call_count": 9,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

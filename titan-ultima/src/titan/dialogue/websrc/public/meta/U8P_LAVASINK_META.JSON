@@ -3,31 +3,38 @@
   "source_of_truth": "dialogue/json/U8P_LAVASINK.json",
   "file": "U8P_LAVASINK",
   "behavior_summary": [
-    "When the lava-sink item is struck (U8P_LAVASINK::gotHit) it checks its visual frame and a numeric quality value. If the frame equals the terminal value (frame==8) it does nothing; otherwise it proceeds only when the container's quality falls inside a guarded numeric window.",
-    "If the container qualifies, the script inspects contained stack entries: each contained item's quality is read, decremented by one, and compared to the container quality. Contained entries that meet the comparison are scheduled for a per-item transform/release helper (spawned as a helper), while other flows result in spawning a coordinator helper on the container itself.",
-    "The coordinator helper plays a sound effect and spawns two further internal helpers that perform the staged conversion/release of container and contained items: setting types/frames, popping items into the world at the container's coordinates, handling ethereal-stack fallbacks, and finally making released items fall. A FREE cleanup script is spawned for post-release cleanup.",
-    "Alternate triggers exist: a release event handler runs similar checks and may award a small dexterity gain to the player before spawning the same coordinator; look shows an item description; enter/leave fast-area handlers set process info/exclude without extra game logic in the excerpt."
+    "This script implements a \"stepping stone\" world item that responds to hits and U8P_LAVASINK::release interactions by running a multi-stage visual/state transition (push/pop of tiles, frame/type changes and SFX).",
+    "U8P_LAVASINK::gotHit is the hit handler: it only proceeds when the item's frame equals 0x08 and then inspects the item's quality to decide behavior. For certain quality values (quality == 1 or quality >= 100) it runs the transition; when an adjacent item's quality equals this item's quality+1 it will spawn a complementary transform (U8P_LAVASINK::func0374) on that neighbor.",
+    "U8P_LAVASINK::release handles a player U8P_LAVASINK::release interaction: when the item's quality is in a mid-range (10..99) it may either grant AccumulateDexterity(0x0F) and then invoke the same transition sequence (U8P_LAVASINK::func01E0) or set local guards that prevent the award. It suspends while the effect sequence runs.",
+    "U8P_LAVASINK::func01E0 orchestrates the animation: read frame, playSFX, call transform helper(s) (U8P_LAVASINK::func022D then U8P_LAVASINK::func04E8) and suspend between stages.",
+    "U8P_LAVASINK::func022D and U8P_LAVASINK::func0374 perform the core push/pop animation steps. They temporarily change item type (0x02F3), set/advance/decrement frames, push this and eligible ethereal neighbors, spawn a FREE:: helper (FREE::func1C19) to schedule timing/cleanup, suspend, and repeat up to a bounded number of cycles (appears <= 8). U8P_LAVASINK::func0374 pops this item at Z+1 in its main loop (inverse direction) while U8P_LAVASINK::func022D uses base Z pops; both restore ethereal neighbors afterwards.",
+    "U8P_LAVASINK::func04E8 finalizes the transition: sets a different temporary type (0x02FB) for this item, resets frame to 0, pops it into place, and iterates popped ethereal items to call Item::fall on them as cleanup.",
+    "U8P_LAVASINK::look simply returns the short player-facing description 'stepping stone '.",
+    "U8P_LAVASINK::enterFastArea and U8P_LAVASINK::leaveFastArea hooks are present but decompiled as no-ops (no recovered logic)."
   ],
   "notable_control_flow": [
-    "Early-exit guard in U8P_LAVASINK::gotHit if Item::getFrame(item) == 8 (no further processing).",
-    "Quality threshold gating: container quality read into BP-02h is compared against constants (including 1 and 100) to determine whether iteration and spawning occur.",
-    "Per-contained-item branch: inside a loop the script decrements contained_entry_quality and compares it to container quality. If the condition holds, it spawns U8P_LAVASINK::0374 for that contained entry; otherwise it continues scanning. If no per-item spawn is taken, it spawns the container coordinator U8P_LAVASINK::01E0.",
-    "Staged spawn chain: U8P_LAVASINK::01E0 -> (plays SFX) -> spawn U8P_LAVASINK::022D (container release) and U8P_LAVASINK::04E8 (finalizer). Helper U8P_LAVASINK::022D and U8P_LAVASINK::0374 also spawn FREE::1C19 for cleanup."
+    "U8P_LAVASINK::gotHit: early guard requires Item::getFrame(this) == 0x08; if false the hit handler returns without running the effect.",
+    "U8P_LAVASINK::gotHit: conditional branches on Item::getQuality(this): special handling when quality == 1 or quality >= 100; for quality >= 100, checks a nearby item and may spawn U8P_LAVASINK::func0374 on that neighbor if its quality-1 equals this item's quality.",
+    "U8P_LAVASINK::release: only proceeds when quality is in 10..99; inside that branch local flags determine whether AccumulateDexterity(0x0F) is awarded and whether U8P_LAVASINK::func01E0 is invoked.",
+    "U8P_LAVASINK::func01E0 sequences effects with suspend points: playSFX, call U8P_LAVASINK::func022D, suspend, call U8P_LAVASINK::func04E8, suspend — allowing asynchronous visual progression.",
+    "U8P_LAVASINK::func022D/U8P_LAVASINK::func0374: each runs a bounded loop (local3 from 1 to <=8) that pushes/pops items, spawns FREE::func1C19 with different small args, and suspends between iterations. Both collect eligible ethereal neighbors and later pop/restore them.",
+    "spawn calls schedule FREE::func1C19 (cleanup/timer) with different numeric args (observed 0x08 and 0x05 variants) depending on the transform helper, which affects timing/variant behavior."
   ],
   "open_questions": [
-    "Exact numeric inclusivity/exclusivity of the quality thresholds (the disassembly compares against 1 and 0x64/100, but whether equals passes or fails is inferred).",
-    "Precise semantics of the type-constant used to detect special contained items (a constant is compared to Item::getType inside helpers) — what concrete game object/type does it represent?",
-    "Behavior for mixed stacks with both ethereal and tangible entries: exact ordering and fallbacks use getEtherealTop and pop but the full lifecycle semantics (ownership, stack indexing) are inferred, not canonical.",
-    "Whether AccumulateDexterity call in U8P_LAVASINK::release should be credited to the player universally or only under specific release subconditions (inference from small stat adjust call)."
+    "Precise semantic meaning of the various Item::quality numeric ranges (1, 10..99, >=100) — quality appears to encode state or linked-pair relationships but exact mapping is inferred.",
+    "Exact role and final meaning of temporary type ids 0x02F3 and 0x02FB used during transform sequences (likely temporary visual/state markers but exact gameplay semantics unknown).",
+    "Origin and semantics of the 'local2' value tested in U8P_LAVASINK::release (its source is not present in the decompiled excerpt).",
+    "Why spawn arguments to FREE::func1C19 differ between U8P_LAVASINK::func022D and U8P_LAVASINK::func0374 (0x08 vs 0x05 observed) — likely controls timing or variant cleanup behavior but not confirmed.",
+    "Meaning of ethereal item type 0x0199 (excluded from pushes/pops) — what items it represents in the game world."
   ],
   "main_function": {
     "name": "U8P_LAVASINK::gotHit",
     "execution_form": "process",
-    "purpose": "Respond to an item being hit by conditionally initiating a staged release/transform sequence that converts contained items (and possibly the container) into visible/falling world objects, with audiovisual feedback and cleanup.",
+    "purpose": "Handle when this stepping-stone item is struck: conditionally trigger a multi-stage tile/item transform animation and possibly spawn a complementary transform on a neighboring item based on frame and quality checks.",
     "entry_conditions": [
-      "Event 6 (U8P_LAVASINK::gotHit) invoked on the item.",
-      "Early return if Item::getFrame(item) == 8.",
-      "Proceeds only when Item::getQuality(item) falls within a numeric window inferred from comparisons to 1 and 100 (0x64)."
+      "Invoked by the engine when the item receives a hit (U8P_LAVASINK::gotHit event).",
+      "Only proceeds if Item::getFrame(this) == 0x08 (guarded early in the function).",
+      "Further gated by Item::getQuality(this) values (special behavior when quality == 1 or quality >= 100; adjacency-based spawn when a neighbor's quality-1 equals this quality)."
     ],
     "confidence": "high"
   },
@@ -35,169 +42,181 @@
     {
       "name": "U8P_LAVASINK::gotHit",
       "kind": "main",
-      "role": "Entry point for hit handling; inspects frame/quality and spawns coordinator or per-item release helpers.",
+      "role": "Event handler for hits that triggers the stepping-stone transform sequence when frame/quality conditions match.",
       "confidence": "high"
     },
     {
       "name": "U8P_LAVASINK::release",
       "kind": "helper",
-      "role": "Alternate entry (Event 9) that checks quality bounds, may call AccumulateDexterity, and spawns the coordinator U8P_LAVASINK::01E0.",
+      "role": "Player 'U8P_LAVASINK::release' interaction: gates on mid-range quality, may award AccumulateDexterity and invoke the shared effect sequence (U8P_LAVASINK::func01E0).",
       "confidence": "medium"
     },
     {
       "name": "U8P_LAVASINK::look",
       "kind": "helper",
-      "role": "Event 0: show the item description via Item::bark ('stepping stone ').",
+      "role": "Look/inspect handler that returns the short description 'stepping stone '.",
       "confidence": "high"
     },
     {
       "name": "U8P_LAVASINK::enterFastArea",
       "kind": "helper",
-      "role": "Event F: set process info and set process exclude (fast-area marker); no gameplay logic in excerpt.",
+      "role": "Fast-area entry hook present but decompiled as no-op / no recovered logic.",
       "confidence": "high"
     },
     {
       "name": "U8P_LAVASINK::leaveFastArea",
       "kind": "helper",
-      "role": "Event 10: same as enterFastArea in excerpt — set info/process exclude and return.",
+      "role": "Fast-area exit hook present but decompiled as no-op / no recovered logic.",
       "confidence": "high"
     },
     {
-      "name": "U8P_LAVASINK::01E0",
+      "name": "U8P_LAVASINK::func01E0",
       "kind": "helper",
-      "role": "Coordinator: read frame flag, playSFX, then spawn the release (022D) and finalizer (04E8) helpers.",
+      "role": "High-level effect sequencer: play SFX, call transform helpers (U8P_LAVASINK::func022D then U8P_LAVASINK::func04E8) and suspend between stages to animate the transition.",
       "confidence": "high"
     },
     {
-      "name": "U8P_LAVASINK::022D",
+      "name": "U8P_LAVASINK::func022D",
       "kind": "helper",
-      "role": "Container-release implementation: set container type/frame, pop container or contained entries into world at container coordinates, iterate contained stacks, handle getEtherealTop fallback, spawn FREE::1C19, loop to release multiple entries.",
-      "confidence": "high"
+      "role": "Transform helper that pushes/pops this item and eligible ethereal neighbors, sets temporary type/frame, advances frames, spawns FREE::func1C19, and repeats up to a bounded number of cycles (one direction of the stepping-stone animation).",
+      "confidence": "medium"
     },
     {
-      "name": "U8P_LAVASINK::0374",
+      "name": "U8P_LAVASINK::func0374",
       "kind": "helper",
-      "role": "Per-contained-item release: set type/frame on the contained entry, pop it (with ethereal fallback) and spawn FREE::1C19; used when U8P_LAVASINK::gotHit selects a specific contained entry.",
-      "confidence": "high"
+      "role": "Complementary transform helper to U8P_LAVASINK::func022D that adjusts frames in the opposite direction and pops this item at Z+1 during animation cycles; spawns FREE::func1C19 for timing/cleanup.",
+      "confidence": "medium"
     },
     {
-      "name": "U8P_LAVASINK::04E8",
+      "name": "U8P_LAVASINK::func04E8",
       "kind": "helper",
-      "role": "Finalizer: iterate contained entries, detect specific type constant, set frame/type and call Item::pop and Item::fall to make released items drop physically.",
-      "confidence": "high"
+      "role": "Finalizer helper that sets a different temporary type/frame, pops this item into final position, and pops/falls any previously pushed ethereal neighbors as cleanup.",
+      "confidence": "medium"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
         "caller": "U8P_LAVASINK::gotHit",
-        "callee": "U8P_LAVASINK::01E0",
-        "purpose": "Spawn the coordinator helper to play sound and start staged release when no per-contained spawn or after scanning.",
+        "callee": "U8P_LAVASINK::func01E0",
+        "purpose": "Invoke the high-level effect/animation sequence after frame/quality checks.",
         "confidence": "high"
       },
       {
         "caller": "U8P_LAVASINK::gotHit",
-        "callee": "U8P_LAVASINK::0374",
-        "purpose": "Spawn a per-contained-item release helper for contained entries that pass the quality comparison.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LAVASINK::01E0",
-        "callee": "U8P_LAVASINK::022D",
-        "purpose": "Spawn the container-release helper (flag/frame-dependent behavior).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LAVASINK::01E0",
-        "callee": "U8P_LAVASINK::04E8",
-        "purpose": "Spawn the finalizer helper to execute Item::fall and finalize popping/falling behavior.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LAVASINK::022D",
-        "callee": "U8P_LAVASINK::04E8",
-        "purpose": "Coordination in some flows — 022D prepares and may hand off to 04E8 for final falling (inferred from spawn/ordering).",
+        "callee": "U8P_LAVASINK::func0374",
+        "purpose": "Spawn the complementary transform on an adjacent item when that neighbor's quality-1 equals this item's quality (adjacency-linked transition).",
         "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LAVASINK::release",
+        "callee": "U8P_LAVASINK::func01E0",
+        "purpose": "Run the same effect sequence on U8P_LAVASINK::release when conditions (quality range and local flags) allow.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LAVASINK::func01E0",
+        "callee": "U8P_LAVASINK::func022D",
+        "purpose": "Start the first stage of the transform/animation (type/frame change and push/pop behavior).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LAVASINK::func01E0",
+        "callee": "U8P_LAVASINK::func04E8",
+        "purpose": "Complete the transform/animation with final type/frame set and cleanup of ethereal neighbors.",
+        "confidence": "high"
       }
     ],
     "external_calls": [
       {
         "caller": "U8P_LAVASINK::gotHit",
         "callee": "Item::getFrame",
-        "purpose": "Guard early-exit if the item is already in a terminal visual state (frame==8).",
+        "purpose": "Read the item's current frame to gate hit behavior (guard requires frame == 0x08).",
         "confidence": "high"
       },
       {
         "caller": "U8P_LAVASINK::gotHit",
         "callee": "Item::getQuality",
-        "purpose": "Read the container quality to decide whether to proceed and to compare against contained entries.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LAVASINK::gotHit",
-        "callee": "Item::push",
-        "purpose": "Iterate contained stack entries to inspect types and qualities.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LAVASINK::01E0",
-        "callee": "U8P_LAVASINK::playSFX",
-        "purpose": "Play audiovisual feedback when the release sequence starts.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LAVASINK::022D",
-        "callee": "Item::setType",
-        "purpose": "Convert an item or container into a stepping-stone/visible object type before popping it into the world.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LAVASINK::022D",
-        "callee": "Item::setFrame",
-        "purpose": "Adjust visual frame as part of transformation/release, dependent on a flag derived from the container frame.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LAVASINK::022D",
-        "callee": "Item::pop",
-        "purpose": "Remove items from the container/stack and place them at the container's X,Y,Z in the world.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LAVASINK::022D",
-        "callee": "U8P_LAVASINK::getEtherealTop",
-        "purpose": "Fallback to locate ethereal-only entries when ordinary stack iteration yields none, prior to popping them.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LAVASINK::022D",
-        "callee": "FREE::1C19 (spawned)",
-        "purpose": "Spawn an external cleanup/free helper after popping/releasing items.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LAVASINK::0374",
-        "callee": "Item::pop",
-        "purpose": "Pop the specific contained entry into the world (with ethereal fallback).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LAVASINK::04E8",
-        "callee": "Item::fall",
-        "purpose": "Cause released items to fall physically after pop (final animation/physics step).",
+        "purpose": "Read this item's quality to decide whether to run transitions or spawn complementary transforms on neighbors.",
         "confidence": "high"
       },
       {
         "caller": "U8P_LAVASINK::release",
-        "callee": "U8P_LAVASINK::AccumulateDexterity",
-        "purpose": "Adjust the player's dexterity slightly when the release event path triggers (inferred reward/feedback).",
+        "callee": "Item::getQuality",
+        "purpose": "Gate U8P_LAVASINK::release behavior on quality being within 10..99.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LAVASINK::release",
+        "callee": "AccumulateDexterity",
+        "purpose": "Award or accumulate dexterity (0x0F) when U8P_LAVASINK::release conditions indicate success.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_LAVASINK::look",
-        "callee": "Item::bark",
-        "purpose": "Show the textual description 'stepping stone ' to the viewer.",
+        "caller": "U8P_LAVASINK::func01E0",
+        "callee": "playSFX",
+        "purpose": "Play a sound effect to accompany the transition/animation.",
         "confidence": "high"
+      },
+      {
+        "caller": "U8P_LAVASINK::func022D",
+        "callee": "Item::setType",
+        "purpose": "Temporarily change this item's type to 0x02F3 for animation staging.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LAVASINK::func022D",
+        "callee": "Item::setFrame",
+        "purpose": "Set or advance frames to animate the item during the transform.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LAVASINK::func022D",
+        "callee": "Item::push",
+        "purpose": "Temporarily place this item or nearby ethereal items on the world stack prior to pop operations during animation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LAVASINK::func022D",
+        "callee": "Item::pop",
+        "purpose": "Place/move this item or ethereal neighbors at computed world coordinates (getZ/getY/getX) as part of animation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LAVASINK::func022D",
+        "callee": "getEtherealTop",
+        "purpose": "Retrieve ethereal/top neighbor items for potential inclusion in push/pop cycles.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LAVASINK::func022D",
+        "callee": "spawn",
+        "purpose": "Spawn FREE::func1C19 for timing/cleanup during the transform; used to schedule asynchronous helper tasks.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LAVASINK::func0374",
+        "callee": "Item::setType",
+        "purpose": "Temporarily change this item's type to 0x02F3 for the inverse-direction animation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LAVASINK::func0374",
+        "callee": "Item::pop",
+        "purpose": "Pop this item at Z+1 during the main animation loop (raises or lowers it by one level depending on direction).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LAVASINK::func04E8",
+        "callee": "Item::setType",
+        "purpose": "Set temporary type 0x02FB for final placement during the finishing stage.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LAVASINK::func04E8",
+        "callee": "Item::fall",
+        "purpose": "Make popped ethereal neighbors fall/settle as part of cleanup.",
+        "confidence": "medium"
       }
     ]
   },
@@ -213,8 +232,8 @@
   ],
   "quick_facts": {
     "main_function": "U8P_LAVASINK::gotHit",
-    "behavior_summary_one_liner": "When the lava-sink item is struck (U8P_LAVASINK::gotHit) it checks its visual frame and a numeric quality value. If the frame equals the terminal value (frame==8) it does nothing; otherwise it proceeds only when the container's quality falls inside a guarded numeric window.",
-    "external_call_count": 13,
+    "behavior_summary_one_liner": "This script implements a \"stepping stone\" world item that responds to hits and U8P_LAVASINK::release interactions by running a multi-stage visual/state transition (push/pop of tiles, frame/type changes and SFX).",
+    "external_call_count": 15,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

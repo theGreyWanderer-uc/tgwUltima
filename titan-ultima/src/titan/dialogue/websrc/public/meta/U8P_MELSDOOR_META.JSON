@@ -3,26 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_MELSDOOR.json",
   "file": "U8P_MELSDOOR",
   "behavior_summary": [
-    "MELSDOOR::leaveFastArea: When the egg object (the function's 'this' at [BP+06h]) leaves a configured fast-area trigger, the script reads the egg's EggId. If the EggId is 100 or greater, it subtracts 100 and writes the reduced value back. This normalizes or 'wraps down' certain egg id states on area exit.",
-    "MELSDOOR::hatch: On the hatch event the script extracts an internal item pointer from the egg, then iterates a fixed/derived number of times to spawn instances (spawn DOOR_NS::08B4). For each spawned item it reads the quality flags, clears the 0x0400 bit, writes the modified quality back, and after completing the loop destroys the original item extracted from the egg. This performs batched spawn + flag-normalization and then cleans up the source."
+    "U8P_MELSDOOR::leaveFastArea: When the actor/item leaves the fast-area trigger, the script reads the egg's numeric ID via Egg::getEggId(this). If the ID is >= 100, it subtracts 100 and writes the result back with Egg::setEggId(this, newId). This effectively decrements or wraps an egg-related counter by 100 on area exit.",
+    "U8P_MELSDOOR::hatch: Spawns/creates another object, invokes DOOR_NS::useDoor on the spawned object (script suspends until that completes), reads the spawned object's quality bitfield via Item::getQuality, clears bit 0x0400 from that bitfield and writes it back via Item::setQuality, then destroys the original egg item with Item::destroy. This sequence appears to finalize a 'U8P_MELSDOOR::hatch' and remove an 'unhatched' flag from the created object."
   ],
   "notable_control_flow": [
-    "U8P_MELSDOOR::leaveFastArea performs a simple conditional: call Egg::getEggId; if EggId >= 0x64 then compute EggId - 0x64 and call Egg::setEggId with the new value.",
-    "hatch contains a repeat loop (bounds inferred from pushed immediates) that: spawn -> wait/suspend for spawn result -> Item::getQuality -> clear bit 0x0400 -> Item::setQuality, repeated for multiple spawned items, then Item::destroy on the original stored item.",
-    "hatch uses an implies/suspend pattern around spawn (immediate use of spawned object), indicating synchronous handling of each spawned instance before proceeding."
+    "Conditional branch in U8P_MELSDOOR::leaveFastArea: if Egg::getEggId(this) >= 0x64 then Egg::setEggId(this, Egg::getEggId(this) - 0x64).",
+    "U8P_MELSDOOR::hatch performs a spawn + DOOR_NS::useDoor call and suspends until completion, then performs quality-bit manipulation (clear 0x0400) and destroys the original egg item."
   ],
   "open_questions": [
-    "Exact loop count and the precise numeric formula driving the number of spawned instances in MELSDOOR::hatch (loop bounds are inferred from immediates but not explicitly documented).",
-    "Precise semantics and game-meaning of the 0x0400 quality bit that is cleared on spawned items (what gameplay flag this corresponds to).",
-    "Exact identity/role of DOOR_NS::08B4 (spawn target) — the symbol suggests a door-like entity but that interpretation is inferred.",
-    "What event(s) in the engine call MELSDOOR::hatch (inferred as Event 7/hatch) and whether hatch can be triggered by other conditions beyond a simple 'hatch' event."
+    "What exact object/type is spawned by U8P_MELSDOOR::hatch (spawn parameters are not present in the excerpt)?",
+    "What is the semantic meaning of bit 0x0400 in the quality bitfield (inferred as an 'unhatched' flag but not confirmed)?",
+    "Under which explicit game events/processes is U8P_MELSDOOR::hatch invoked in normal gameplay (the file shows it exists as a process but not where it is triggered)?",
+    "Does subtracting 100 from the egg ID represent an index wrap, a stage decrement, or a multi-egg count mechanic? (inferred but not explicit)"
   ],
   "main_function": {
     "name": "U8P_MELSDOOR::leaveFastArea",
     "execution_form": "process",
-    "purpose": "Normalize an egg's EggId when the egg leaves a fast-area trigger: if EggId is >= 100, subtract 100 and write it back.",
+    "purpose": "On leaving the fast-area trigger, ensure the egg's internal numeric ID is wrapped/decremented by 100 if it is 100 or greater. This maintains or normalizes the egg's internal counter/state when the actor exits the region.",
     "entry_conditions": [
-      "Event 10: U8P_MELSDOOR::leaveFastArea — invoked by the engine when the relevant actor/object leaves the configured fast-area trigger region"
+      "Triggered by the fast-area 'leave' event (actor/item exits the trigger region).",
+      "Implicit parameter: 'this' refers to the egg item instance being processed."
     ],
     "confidence": "high"
   },
@@ -30,49 +30,55 @@
     {
       "name": "U8P_MELSDOOR::leaveFastArea",
       "kind": "main",
-      "role": "Area-exit handler that inspects and adjusts egg state (EggId) when leaving the fast-area trigger.",
+      "role": "area-exit guard that normalizes/wraps an egg ID by subtracting 100 when >=100",
       "confidence": "high"
     },
     {
       "name": "U8P_MELSDOOR::hatch",
       "kind": "helper",
-      "role": "Hatch-event handler that spawns multiple instances, clears a quality bit (0x0400) on each spawned item, and destroys the source item.",
-      "confidence": "high"
+      "role": "spawn-and-finalize helper that creates the hatched entity, clears a specific quality bit (0x0400) on it, and destroys the source egg",
+      "confidence": "medium"
     },
     {
       "name": "Egg::getEggId",
       "kind": "extern",
-      "role": "API used to read the egg's EggId value.",
+      "role": "read egg numeric ID/counter",
       "confidence": "high"
     },
     {
       "name": "Egg::setEggId",
       "kind": "extern",
-      "role": "API used to write back the modified EggId value.",
+      "role": "write egg numeric ID/counter",
       "confidence": "high"
     },
     {
-      "name": "spawn (DOOR_NS::08B4)",
+      "name": "spawn",
       "kind": "extern",
-      "role": "Engine spawn routine used by hatch to create new DOOR_NS::08B4 instances synchronously.",
+      "role": "instantiate/create another object and return a reference",
       "confidence": "high"
+    },
+    {
+      "name": "DOOR_NS::useDoor",
+      "kind": "extern",
+      "role": "run the spawned object's activation/door-use behavior (called and awaited during U8P_MELSDOOR::hatch)",
+      "confidence": "medium"
     },
     {
       "name": "Item::getQuality",
       "kind": "extern",
-      "role": "Reads an item's quality/flags word so the script can modify it.",
+      "role": "read item quality/flags bitfield",
       "confidence": "high"
     },
     {
       "name": "Item::setQuality",
       "kind": "extern",
-      "role": "Writes back a modified quality/flags word to an item.",
+      "role": "write modified quality/flags bitfield",
       "confidence": "high"
     },
     {
       "name": "Item::destroy",
       "kind": "extern",
-      "role": "Destroys/removes an item instance (used to clean up the original item after hatch processing).",
+      "role": "destroy/remove an item instance",
       "confidence": "high"
     }
   ],
@@ -82,37 +88,43 @@
       {
         "caller": "U8P_MELSDOOR::leaveFastArea",
         "callee": "Egg::getEggId",
-        "purpose": "Read the current EggId to decide whether adjustment is needed.",
+        "purpose": "Read the egg's numeric ID to decide whether to subtract 100.",
         "confidence": "high"
       },
       {
         "caller": "U8P_MELSDOOR::leaveFastArea",
         "callee": "Egg::setEggId",
-        "purpose": "Write back EggId - 100 when EggId was >= 100 (normalize/wrap behavior).",
+        "purpose": "Write the decremented/wrapped egg ID (original - 100) back to the egg instance if threshold met.",
         "confidence": "high"
       },
       {
         "caller": "U8P_MELSDOOR::hatch",
-        "callee": "spawn (DOOR_NS::08B4)",
-        "purpose": "Create each spawned instance used in the hatch sequence (spawn arguments include pid and an item/object pointer).",
+        "callee": "spawn",
+        "purpose": "Create/instantiate the target object that represents the hatched entity; returned reference stored to a local.",
         "confidence": "high"
+      },
+      {
+        "caller": "U8P_MELSDOOR::hatch",
+        "callee": "DOOR_NS::useDoor",
+        "purpose": "Invoke the spawned object's activation/door logic; the script suspends until this completes, part of the U8P_MELSDOOR::hatch flow.",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_MELSDOOR::hatch",
         "callee": "Item::getQuality",
-        "purpose": "Read the quality/flags word of each spawned item prior to modification.",
+        "purpose": "Read the spawned item's quality/flags so a specific bit (0x0400) can be cleared.",
         "confidence": "high"
       },
       {
         "caller": "U8P_MELSDOOR::hatch",
         "callee": "Item::setQuality",
-        "purpose": "Write the modified quality/flags word (with bit 0x0400 cleared) back to each spawned item.",
+        "purpose": "Write the modified quality back after clearing bit 0x0400.",
         "confidence": "high"
       },
       {
         "caller": "U8P_MELSDOOR::hatch",
         "callee": "Item::destroy",
-        "purpose": "Destroy the original item pointer extracted from the egg once spawned items are created and patched.",
+        "purpose": "Destroy the original egg item after U8P_MELSDOOR::hatch finalization.",
         "confidence": "high"
       }
     ]
@@ -128,9 +140,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "MELSDOOR::leaveFastArea",
-    "behavior_summary_one_liner": "MELSDOOR::leaveFastArea: When the egg object (the function's 'this' at [BP+06h]) leaves a configured fast-area trigger, the script reads the egg's EggId. If the EggId is 100 or greater, it subtracts 100 and writes the reduced value back. This normalizes or 'wraps down' certain egg id states on area exit.",
-    "external_call_count": 6,
+    "main_function": "U8P_MELSDOOR::leaveFastArea",
+    "behavior_summary_one_liner": "U8P_MELSDOOR::leaveFastArea: When the actor/item leaves the fast-area trigger, the script reads the egg's numeric ID via Egg::getEggId(this). If the ID is >= 100, it subtracts 100 and writes the result back with Egg::setEggId(this, newId). This effectively decrements or wraps an egg-related counter by 100 on area exit.",
+    "external_call_count": 7,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

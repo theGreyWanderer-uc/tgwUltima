@@ -3,29 +3,28 @@
   "source_of_truth": "dialogue/json/U8P_BARRKILL.json",
   "file": "U8P_BARRKILL",
   "behavior_summary": [
-    "U8P_BARRKILL::hatch executes on a 'U8P_BARRKILL::hatch' trigger and, only when a global guard condition is satisfied, scans a provided area/container for matching items and destroys each matched item.",
-    "The routine first inspects the global flag 'metNec1' and returns early if the value does not meet the expected condition.",
-    "If the guard passes, the function configures a scan (pushes tokens including the constant 0x0210 and several small bytes), iterates the returned results, and calls Item::destroy for every item found."
+    "U8P_BARRKILL::hatch is a background process that performs a short timed/compute step and then conditionally destroys a temporary item.",
+    "The process runs only when the global flag 'metNec1' is true. After a fixed computation/wait (literal 0x0F * 0x20 = 480), it checks a follow-up condition and, if that condition holds, calls Item::destroy on a local temporary item (local1).",
+    "Overall the routine appears to finalize or clean up a hatching-related object (for example an egg) when prerequisites are met."
   ],
   "notable_control_flow": [
-    "Entry on Event 7 ('U8P_BARRKILL::hatch').",
-    "Immediate read/check of the global flag 'metNec1' followed by a conditional early return if the check fails (guarding the destructive behavior).",
-    "A configured scanning step runs only after the guard passes; results are iterated with a loop that calls Item::destroy on each loop variable entry.",
-    "Stack and loop cleanup occur after iteration, ensuring no lingering iterator state."
+    "Entry is as a process (process type 0x0210) rather than an immediate function call: U8P_BARRKILL::hatch executes in background/timed context.",
+    "Primary gate: reads global flag 'metNec1' and only proceeds when it is true.",
+    "Performs a fixed computation or delay (0x0F * 0x20 = 480) before performing the secondary check.",
+    "Secondary check (referred to as 'this' in the disassembly) controls whether Item::destroy(addressof(local1)) is invoked."
   ],
   "open_questions": [
-    "What exact comparison/value is used when checking 'metNec1' (the disassembly shows a branch but not the explicit expected value)?",
-    "What precise set of items or criteria are selected by the scan tokens (meaning of the pushed bytes and the 0x0210 token is engine-specific and not explicitly documented)?",
-    "Is [BP+06h] always an area/container reference, or can it be an actor/inventory handle in different contexts?",
-    "When during gameplay does Event 7 ('U8P_BARRKILL::hatch') fire for this object (e.g., area-entry, time-based hatching, or other triggers)?"
+    "What exactly does the 'this' check represent in the original script (boolean condition on the current object, a liveness check, or something else)?",
+    "What concrete game object does local1 reference (an egg, spawn placeholder, or other temporary item)?",
+    "When and how is U8P_BARRKILL::hatch started/attached to the item lifecycle (what event creates this process)?"
   ],
   "main_function": {
     "name": "U8P_BARRKILL::hatch",
     "execution_form": "process",
-    "purpose": "Guarded cleanup: on a U8P_BARRKILL::hatch event, conditionally scan a referenced area/container and destroy matching items if a global prerequisite (metNec1) is satisfied.",
+    "purpose": "Timed cleanup/finalization for a hatching-related object: wait/compute a short fixed interval, then conditionally destroy a temporary item.",
     "entry_conditions": [
-      "Triggered by Event 7 (U8P_BARRKILL::hatch).",
-      "Requires the global flag 'metNec1' to match the expected condition; otherwise the function returns without performing the scan or destruction."
+      "Runs as a background/timer process (process type 0x0210).",
+      "Only proceeds when the global flag 'metNec1' is true."
     ],
     "confidence": "high"
   },
@@ -33,7 +32,13 @@
     {
       "name": "U8P_BARRKILL::hatch",
       "kind": "main",
-      "role": "Event handler that performs a guarded area/container scan and destroys matched items",
+      "role": "background/timed cleanup process for a hatching-related object",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::destroy",
+      "kind": "extern",
+      "role": "engine-level removal/destruction of an item instance",
       "confidence": "high"
     }
   ],
@@ -43,7 +48,7 @@
       {
         "caller": "U8P_BARRKILL::hatch",
         "callee": "Item::destroy",
-        "purpose": "Remove/destroy each item found by the scan (called once per matched item using the loop variable at [BP-02h]).",
+        "purpose": "Remove/destroy the temporary item referenced by local1 (cleanup/finalization).",
         "confidence": "high"
       }
     ]
@@ -52,7 +57,7 @@
     "reads": [
       {
         "name": "metNec1",
-        "likely_effect": "A prerequisite/quest-state guard that must match an expected value before the scan-and-destroy sequence runs; read early to decide whether to proceed.",
+        "likely_effect": "Gate that enables the U8P_BARRKILL::hatch cleanup logic when true.",
         "confidence": "high"
       }
     ],
@@ -61,11 +66,12 @@
   "ui_tags": [
     "trigger",
     "cleanup",
+    "animation",
     "guard"
   ],
   "quick_facts": {
-    "main_function": "BARRKILL::hatch",
-    "behavior_summary_one_liner": "U8P_BARRKILL::hatch executes on a 'U8P_BARRKILL::hatch' trigger and, only when a global guard condition is satisfied, scans a provided area/container for matching items and destroys each matched item.",
+    "main_function": "U8P_BARRKILL::hatch",
+    "behavior_summary_one_liner": "U8P_BARRKILL::hatch is a background process that performs a short timed/compute step and then conditionally destroys a temporary item.",
     "external_call_count": 1,
     "flag_read_count": 1,
     "flag_write_count": 0

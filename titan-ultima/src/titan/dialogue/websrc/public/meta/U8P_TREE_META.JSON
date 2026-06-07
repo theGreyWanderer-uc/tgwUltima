@@ -3,26 +3,24 @@
   "source_of_truth": "dialogue/json/U8P_TREE.json",
   "file": "U8P_TREE",
   "behavior_summary": [
-    "Responds to the item's 'U8P_TREE::look' (examine) event by composing a short descriptive message beginning with the literal \"tree \".",
-    "Delivers that message to the inspecting process/player by calling Item::bark with the constructed string and the viewer's process id.",
-    "Does not modify persistent game state or global flags; its effect is purely communicative/visual to the viewer.",
-    "Allocates/fills a temporary string buffer for the message, passes it to Item::bark, frees the temporary, and then processes the return value before suspending/returning."
+    "This script implements the item's/NPC's 'U8P_TREE::look' (examine) handler. When the player examines the TREE object it displays a short label/bark 'tree ' to the player and then yields (suspends) the process.",
+    "There is no branching, menu, flag read/write, or external calls; the behavior is a minimal descriptive response to the U8P_TREE::look action."
   ],
   "notable_control_flow": [
-    "Entry on U8P_TREE::look/examine event -> build message string (prefix \"tree \") -> push viewer pid and string -> call Item::bark -> free temporary string -> handle return value (implies/pop) -> suspend/return.",
-    "No loops, no branching that changes game state; control flow is linear and event-driven."
+    "U8P_TREE::look: Emit a single Bark/dialogue line 'tree ' and then execute a suspend/yield, ending or pausing the U8P_TREE::look process.",
+    "No conditional branches or subsequent actions are present in the process; control flow is linear: show text -> suspend."
   ],
   "open_questions": [
-    "What additional item-specific text (if any) is concatenated to the literal \"tree \" inside the constructed_string? The disassembly shows allocation and concatenation but not the exact source of any suffix.",
-    "Is BP+06h always the viewer/process id in every caller context, or are there edge cases where a different pid is passed? (Inference from stack usage is high but not formally verified).",
-    "Are there any localized side-effects of Item::bark (e.g., logging, UI focus changes) not visible in this script that might affect player experience?"
+    "Is the trailing space in the bark text 'tree ' intentional or an artifact of extraction?",
+    "If the process is resumed after suspend, is there any engine-level follow-up not represented in this script? (No resume behavior is present in the decompiled fragment.)"
   ],
   "main_function": {
     "name": "U8P_TREE::look",
     "execution_form": "process",
-    "purpose": "Handle the object's U8P_TREE::look/examine event by constructing a short description starting with \"tree \" and asking the item to 'bark' that message to the inspecting process/player.",
+    "purpose": "Handle player 'U8P_TREE::look'/examine action for the TREE object: present a short descriptive bark and then suspend the process.",
     "entry_conditions": [
-      "Event 0 — the U8P_TREE::look/examine event triggered when an actor inspects or looks at the tree item."
+      "Triggered by the game's U8P_TREE::look/examine event for the TREE object (process type 0x0208).",
+      "Invoked when the player inspects or targets the TREE using the 'U8P_TREE::look' action."
     ],
     "confidence": "high"
   },
@@ -30,20 +28,13 @@
     {
       "name": "U8P_TREE::look",
       "kind": "main",
-      "role": "U8P_TREE::look/examine event handler for the tree item",
+      "role": "U8P_TREE::look handler that shows a short description/bark for the TREE object",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_TREE::look",
-        "callee": "Item::bark",
-        "purpose": "Deliver/display the constructed text message (\"tree ...\") to the viewer/process id provided; act as the item's output mechanism for descriptions.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -51,12 +42,13 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup"
+    "description",
+    "suspend"
   ],
   "quick_facts": {
-    "main_function": "TREE::look",
-    "behavior_summary_one_liner": "Responds to the item's 'U8P_TREE::look' (examine) event by composing a short descriptive message beginning with the literal \"tree \".",
-    "external_call_count": 1,
+    "main_function": "U8P_TREE::look",
+    "behavior_summary_one_liner": "This script implements the item's/NPC's 'U8P_TREE::look' (examine) handler. When the player examines the TREE object it displays a short label/bark 'tree ' to the player and then yields (suspends) the process.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

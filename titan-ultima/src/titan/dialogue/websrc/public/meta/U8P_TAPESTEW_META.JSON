@@ -3,22 +3,24 @@
   "source_of_truth": "dialogue/json/U8P_TAPESTEW.json",
   "file": "U8P_TAPESTEW",
   "behavior_summary": [
-    "U8P_TAPESTEW::look runs when the tapestry item is examined. It sets an item info key (0x0208) and applies a process exclusion step to adjust the item's processing/visibility state, then asks the item/process to 'bark' the literal short description string 'tapestry ' to the viewer. The bark return value is captured and a small implies/pop sequence is executed before the process suspends and returns."
+    "When the player examines the tapestry object (the engine invokes the object's U8P_TAPESTEW::look process), the script emits a single short bark/text: \"tapestry\".",
+    "After producing the bark the process suspends/pauses, indicating the U8P_TAPESTEW::look/description interaction ends with no state changes, branching, or external calls."
   ],
   "notable_control_flow": [
-    "U8P_TAPESTEW::look: set_info(0x0208) -> process_exclude -> push literal 'tapestry ' -> Item::bark(item_ptr, 'tapestry ') -> capture retval -> implies/pop -> suspend/return"
+    "U8P_TAPESTEW::look runs as a process-type handler: it issues one Bark node with the text \"tapestry\" and then immediately suspends — a straight-line, single-output flow.",
+    "No conditional branches, menus, or function calls alter execution; the function is minimal and terminates by suspension."
   ],
   "open_questions": [
-    "The concrete semantics of info id 0x0208 (what game state or UI behavior it toggles) are not explicit and are inferred from common patterns.",
-    "The exact target/viewer PID for Item::bark (whether the bark is emitted by the item to the player process or routed differently) is only inferred from usage patterns.",
-    "The purpose and effect of the implies/pop sequence after the bark return value is captured is unclear (likely a small control/return-value handling idiom)."
+    "The original disassembly contains two 'Unknown' nodes; what precise engine-level instructions those represent (timing, minor side-effects, or decompiler remnants) is unclear but they do not appear to change observable behavior.",
+    "Is this U8P_TAPESTEW::look handler tied to any fast-area enter/leave triggers in the map (metadata infers a U8P_TAPESTEW::look/examine invocation but not the exact in-world trigger region)?"
   ],
   "main_function": {
     "name": "U8P_TAPESTEW::look",
     "execution_form": "process",
-    "purpose": "Handle the player's examine/U8P_TAPESTEW::look action on the tapestry: prepare item state and present the short description/name ('tapestry ') via the item bark routine, then suspend.",
+    "purpose": "Provide the short description when the player examines/looks at the tapestry; display the single label 'tapestry' and then suspend the U8P_TAPESTEW::look process.",
     "entry_conditions": [
-      "Triggered when the player (or relevant actor/process) examines or looks at the tapestry item."
+      "Invoked by the game's 'U8P_TAPESTEW::look' (examine) action on the tapestry object or the engine's U8P_TAPESTEW::look-type process.",
+      "Runs when the player inspects the tapestry or when the object's U8P_TAPESTEW::look check triggers."
     ],
     "confidence": "high"
   },
@@ -26,52 +28,25 @@
     {
       "name": "U8P_TAPESTEW::look",
       "kind": "main",
-      "role": "Examine/U8P_TAPESTEW::look event handler for the tapestry item; prepares item info/state and invokes presentation (Item::bark).",
+      "role": "Handle the object's U8P_TAPESTEW::look/examine interaction by emitting a single bark ('tapestry') then suspending.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_TAPESTEW::look",
-        "callee": "Item::bark",
-        "purpose": "Request the item/process to emit a short description message ('tapestry ') to the appropriate target/viewer.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_TAPESTEW::look",
-        "callee": "U8P_TAPESTEW::set_info",
-        "purpose": "Engine operation that sets info key 0x0208 on the referenced object; used to change item state/metadata prior to barking (inferred).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_TAPESTEW::look",
-        "callee": "U8P_TAPESTEW::process_exclude",
-        "purpose": "Engine operation to exclude or adjust processing for the object (likely to prevent further automatic processing while barking/displaying).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_TAPESTEW::look",
-        "callee": "suspend",
-        "purpose": "Suspend the current process after completing the bark and cleanup sequence.",
-        "confidence": "medium"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
     "writes": []
   },
   "ui_tags": [
-    "trigger",
-    "description",
-    "process-control"
+    "trigger"
   ],
   "quick_facts": {
     "main_function": "U8P_TAPESTEW::look",
-    "behavior_summary_one_liner": "U8P_TAPESTEW::look runs when the tapestry item is examined. It sets an item info key (0x0208) and applies a process exclusion step to adjust the item's processing/visibility state, then asks the item/process to 'bark' the literal short description string 'tapestry ' to the viewer. The bark return value is captured and a small implies/pop sequence is executed before the process suspends and returns.",
-    "external_call_count": 4,
+    "behavior_summary_one_liner": "When the player examines the tapestry object (the engine invokes the object's U8P_TAPESTEW::look process), the script emits a single short bark/text: \"tapestry\".",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

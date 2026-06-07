@@ -3,28 +3,24 @@
   "source_of_truth": "dialogue/json/U8P_TROUGHNS.json",
   "file": "U8P_TROUGHNS",
   "behavior_summary": [
-    "Provides the 'U8P_TROUGHNS::look' (examine) handler for a trough object. When an actor (typically the player) inspects the trough, the script prepares the item/process context, invokes the trough item's bark/display routine with the literal string \"trough \", then captures the bark result and yields/suspends.",
-    "The routine's effects are localized to the item/process call: it does not read or write any global flags in the observed snippet.",
-    "Small housekeeping occurs around the bark call (setup of info/exclusion opcodes, allocation and free of the string literal pointer, and use of the bark return value in a subsequent implies/pop sequence before suspend)."
+    "This script implements a minimal 'U8P_TROUGHNS::look' (examine) handler for the object/NPC TROUGHNS. When the player inspects or 'looks at' this entity, the script emits a single short bark text 'trough ' and then suspends/ends the U8P_TROUGHNS::look process.",
+    "There is no branching, no menus, no reads or writes to global flags, and no external engine calls detected. The behavior is purely descriptive and intended to provide the short label shown to the player on inspection.",
+    "The presence of a suspend/terminate node is inferred from the decompilation; thus after producing the bark the process yields or finishes."
   ],
   "notable_control_flow": [
-    "Entry as an event-driven process handler: U8P_TROUGHNS::look runs when the trough receives a 'U8P_TROUGHNS::look' event.",
-    "Performs context setup (inferred 'set info' and 'process exclude' opcodes) before invoking the display routine.",
-    "Calls external Item::bark with parameters (trough instance, pointer to the literal \"trough \").",
-    "Frees the temporary string pointer, uses the Item::bark return value in an 'implies' sequence, then suspends/returns control."
+    "U8P_TROUGHNS::look: start -> Bark('trough ') -> suspend/terminate (process yields or ends)."
   ],
   "open_questions": [
-    "Exact semantics of the observed 'set info' and 'process exclude' opcodes: which info key is set and whether this prevents further processing of the item or only adjusts how the bark is delivered.",
-    "Precise meaning of the 'implies' operation applied to the bark return value and how it influences subsequent process scheduling or message routing.",
-    "Whether the literal \"trough \" is the full text presented to the player or a prefix that the Item::bark method combines with other state when forming the visible description."
+    "Is the trailing space in the bark text 'trough ' intentional (formatting for concatenation) or an artifact of decompilation?",
+    "Is this handler also invoked via a fast-area entry (enterFastArea) in addition to an explicit 'U8P_TROUGHNS::look' action, as other U8P_TROUGHNS::look handlers sometimes are? The decompilation hints at fast-area semantics but does not show explicit fast-area nodes."
   ],
   "main_function": {
     "name": "U8P_TROUGHNS::look",
     "execution_form": "process",
-    "purpose": "Handle the U8P_TROUGHNS::look/examine event for a trough instance: set up item/process context, ask the trough to emit its short description by barking the literal \"trough \", then handle the bark return and suspend.",
+    "purpose": "Provide the short descriptive label when the player examines/looks at the TROUGHNS object/NPC by emitting a single bark 'trough ' and then suspending or ending the U8P_TROUGHNS::look process.",
     "entry_conditions": [
-      "Event 0: triggered when an actor (typically the Avatar) looks at or inspects the trough",
-      "Invoked as the trough object's 'U8P_TROUGHNS::look' handler in the event-driven game scripting system"
+      "Player performs a 'U8P_TROUGHNS::look' (examine) action on this object/NPC.",
+      "Inferred: may also be invoked by entering the object's 'fast-area' U8P_TROUGHNS::look trigger region (enterFastArea)."
     ],
     "confidence": "high"
   },
@@ -32,26 +28,13 @@
     {
       "name": "U8P_TROUGHNS::look",
       "kind": "main",
-      "role": "Look/examine event handler for the trough item",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine used to display or emit short text/messages for an item (called to show the trough description)",
+      "role": "Handle 'U8P_TROUGHNS::look' (examine) interaction; emit short descriptive bark and end the process.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_TROUGHNS::look",
-        "callee": "Item::bark",
-        "purpose": "Request the trough item to produce/display a short text message; passed the trough instance and the C-string literal \"trough \".",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -59,14 +42,12 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "display",
-    "guard"
+    "display"
   ],
   "quick_facts": {
     "main_function": "U8P_TROUGHNS::look",
-    "behavior_summary_one_liner": "Provides the 'U8P_TROUGHNS::look' (examine) handler for a trough object. When an actor (typically the player) inspects the trough, the script prepares the item/process context, invokes the trough item's bark/display routine with the literal string \"trough \", then captures the bark result and yields/suspends.",
-    "external_call_count": 1,
+    "behavior_summary_one_liner": "This script implements a minimal 'U8P_TROUGHNS::look' (examine) handler for the object/NPC TROUGHNS. When the player inspects or 'looks at' this entity, the script emits a single short bark text 'trough ' and then suspends/ends the U8P_TROUGHNS::look process.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

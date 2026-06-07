@@ -3,30 +3,32 @@
   "source_of_truth": "dialogue/json/U8P_ENDPYRO.json",
   "file": "U8P_ENDPYRO",
   "behavior_summary": [
-    "This script implements a 'U8P_ENDPYRO::hatch'/eruption sequence for pyro-related items: when triggered it scans for matching items and for each match spawns a per-item worker that runs an animated eruption producing sounds, sprites, area damage and optionally spawns NPCs or fire-spell effects.",
-    "Work is performed asynchronously: the entry point (ENDPYRO::hatch) enumerates targets and spawns helper workers (ENDPYRO::00F7) rather than performing the long sequence inline. Those workers in turn spawn smaller helper routines (ENDPYRO::00BC, ENDPYRO::0548 and multiple external FREE/PYROS/METHOD tasks) to orchestrate timed effects, sound, visuals and cleanup.",
-    "Randomness (urandom) and per-item frame/status checks are used to vary visual/sound outcomes and whether an item is converted into NPCs or simply animated and destroyed/populated with effects.",
-    "A global guard (pyrosQuitPlayingAround) is read early to allow the engine or scripts to suppress further pyro activity if set."
+    "Provides the hatching/cinematic sequence for a 'pyros' item/instance. When triggered, the script runs a coordinated sequence that disables player control, moves the camera, plays music/SFX, advances the item's visual frames, spawns helper/timer processes, creates sprite/particle effects, applies periodic hit/damage bursts, and ultimately either transforms the item into a spawned NPC or restores normal control.",
+    "U8P_ENDPYRO::hatch (process) is a small entry check that, when its trigger condition is true, delegates the full choreography to U8P_ENDPYRO::func00F7.",
+    "U8P_ENDPYRO::func00F7 is the orchestration routine: it toggles avatar stasis, centers camera on the item, starts music, spawns helper timers and other instance methods (pyrosTransformForward/Reverse, pyrosBarkAndTransform, func20A1/func1EFA), repeatedly calls U8P_ENDPYRO::func0548 to step frames and check status, and drives repeated effect/damage loops until a terminating condition.",
+    "U8P_ENDPYRO::func0548 updates the item's animation frame/status and contains a branch that can create and initialize a new NPC at the item's location (Npc::create, set stats, pop into world) and then destroy the original item.",
+    "U8P_ENDPYRO::func00BC appears to be a short helper that spawns brief timed helpers and waits for them (used for pacing)."
   ],
   "notable_control_flow": [
-    "Event-driven entry: U8P_ENDPYRO::hatch runs on a U8P_ENDPYRO::hatch trigger and enumerates candidate items using loop/set-info/process-exclude semantics, spawning one worker per match.",
-    "Asynchronous chaining: U8P_ENDPYRO::00F7 spawns U8P_ENDPYRO::0548 (detailed processor) plus several PYROS/METHOD/FREE helpers and suspends between stages to let those sub-tasks run in parallel/timed order.",
-    "Guarded loops: worker routines regularly check the global pyrosQuitPlayingAround flag and will exit early if it is set, stopping further effects.",
-    "Conditional branching based on item state/frame/quantity: U8P_ENDPYRO::0548 examines Item::getFrame/Item::getQ and chooses between creating NPCs/fire spells or animating/destroying the item."
+    "Entry guard: U8P_ENDPYRO::hatch checks the process trigger ('this' condition) and early-exits if not satisfied, otherwise calls U8P_ENDPYRO::func00F7.",
+    "Sequencing via spawn/pid/suspend: U8P_ENDPYRO::func00F7 and U8P_ENDPYRO::func0548 repeatedly spawn short timer/free helper processes (FREE::func1C19, FREE::func29D8, FREE::func1C8B) and suspend until they complete to create precise delays between steps.",
+    "Status-bit gating: item status bit 0x20 is cleared and later set (Item::andStatus / Item::orStatus) to lock/unlock state during the cinematic and to select branches inside U8P_ENDPYRO::func0548.",
+    "Looping/effect bursts: a local counter in U8P_ENDPYRO::func00F7 iterates (e.g., <= 6) to produce repeated sprite, SFX, and Item::receiveHit bursts while timing helpers pace the sequence.",
+    "Transform/creation branch: U8P_ENDPYRO::func0548 inspects Item::getFrame and an item 'Q' field and may enter a branch that creates an NPC (Npc::create), initializes stats (Npc::setStr / setInt / setDex / setHp), pop/spawn it into world, toggles NPC flags, calls NPC methods, and puts it into combat/targeting."
   ],
   "open_questions": [
-    "Exact parameter names and types for the script entry (confirmed as pid and an item pointer by inference but not explicit).",
-    "Precise meanings of some item info/status bits toggled via Item::andStatus/Item::orStatus (which specific flags are set/cleared).",
-    "Full behavior and parameters of many spawned PYROS/METHOD/FREE extern helpers (they are referenced but their internal semantics are not fully recovered here).",
-    "Whether any of the spawned NPCs are intended as allies or hostile — Npc::create and stat-setting are present but allegiance/context requires game data not in the disassembly."
+    "Exact numeric meanings: the specific numeric frame values, status-bit semantics beyond 0x20, and the immediate hex literals near spawn sites are inferred but their precise gameplay meanings remain unclear.",
+    "FREE::* helpers: the precise behavior of FREE::func1C19, FREE::func1C8B, FREE::func29D8 and other 'FREE' functions (timers, random providers, or other utilities) is inferred from context but not confirmed.",
+    "PYROS instance methods: exact content and text of pyrosBarkAndTransform / pyrosTransformForward/Reverse / func20A1/func1EFA—these are instance methods and their internal effects/dialogue are not present in this script JSON.",
+    "Exact conditions that force the NPC-spawn branch in U8P_ENDPYRO::func0548 (what Item::getQ compares against and how that maps to world/design variants).",
+    "Whether any global script flags outside item status bits are intended to be set by this script (metadata shows none)."
   ],
   "main_function": {
     "name": "U8P_ENDPYRO::hatch",
     "execution_form": "process",
-    "purpose": "Entry handler for a pyro/egg 'U8P_ENDPYRO::hatch' event. Scan for relevant items/instances and spawn dedicated per-item worker processes to run the eruption/animation/effects sequence.",
+    "purpose": "Entry trigger that checks the item/activation condition and, when true, starts the pyros hatching cinematic by calling the orchestration routine U8P_ENDPYRO::func00F7.",
     "entry_conditions": [
-      "Triggered by the 'U8P_ENDPYRO::hatch' event (inferred event 7/area-trigger semantics).",
-      "Activated when there are one or more matching pyro items nearby or targeted by the initial item/context the event was invoked with."
+      "Triggered by the 'this' activation/area entry condition (processType 0x0210) — interpreted as a fast-area or activation event for the item/actor."
     ],
     "confidence": "high"
   },
@@ -34,138 +36,126 @@
     {
       "name": "U8P_ENDPYRO::hatch",
       "kind": "main",
-      "role": "Event entry: enumerate matching items and spawn per-item worker processes to perform the eruption sequence.",
+      "role": "entry guard that delegates to the orchestration routine when the activation condition is met",
       "confidence": "high"
     },
     {
-      "name": "U8P_ENDPYRO::00F7",
+      "name": "U8P_ENDPYRO::func00F7",
       "kind": "helper",
-      "role": "Per-item worker: orchestrates the high-level eruption steps (stasis, music/SFX, status flips, spawn other PYROS/METHOD/FREE helpers, create sprites, call U8P_ENDPYRO::0548 for detailed processing).",
+      "role": "primary hatching orchestration: controls avatar stasis, camera, music, spawned timing helpers, animation transforms, effects, hit bursts, and repeated calls to frame updater",
       "confidence": "high"
     },
     {
-      "name": "U8P_ENDPYRO::00BC",
+      "name": "U8P_ENDPYRO::func0548",
       "kind": "helper",
-      "role": "Timed/cleanup helper that repeatedly spawns FREE helpers and suspends, used for scheduling or brief repeated effects.",
+      "role": "advances item animation frames, checks item status and fields, and may spawn and initialize an NPC to replace the item",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ENDPYRO::func00BC",
+      "kind": "helper",
+      "role": "short-timer/timing helper that spawns brief processes and waits for them (used for pacing/synchronization)",
       "confidence": "medium"
-    },
-    {
-      "name": "U8P_ENDPYRO::0548",
-      "kind": "helper",
-      "role": "Detailed per-item processor: inspects item frame/quantity/status, possibly creates NPCs (Npc::create) and fire spells, animates frames, spawns sprites and applies Item::receiveHit/destroy/pop logic.",
-      "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
         "caller": "U8P_ENDPYRO::hatch",
-        "callee": "U8P_ENDPYRO::00F7",
-        "purpose": "Spawn a per-item worker for each matched item so the detailed eruption work runs asynchronously.",
+        "callee": "U8P_ENDPYRO::func00F7",
+        "purpose": "Delegates full U8P_ENDPYRO::hatch choreography when the entry trigger is true.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_ENDPYRO::00F7",
-        "callee": "U8P_ENDPYRO::0548",
-        "purpose": "Delegate detailed per-item conversion/animation/damage lifecycle to a specialized routine while 00F7 coordinates other effects and timing.",
+        "caller": "U8P_ENDPYRO::func00F7",
+        "callee": "U8P_ENDPYRO::func0548",
+        "purpose": "Advance the item's visual frame and check for the NPC-spawn/branch; used repeatedly as part of the timed sequence.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_ENDPYRO::00F7",
-        "callee": "U8P_ENDPYRO::00BC",
-        "purpose": "Spawn a short timer/cleanup helper to schedule repeated frees or minor effects during the eruption sequence.",
+        "caller": "U8P_ENDPYRO::func00F7",
+        "callee": "U8P_ENDPYRO::func00BC",
+        "purpose": "Spawn pacing/timing helper processes early in the orchestration to create short delays and synchronization points.",
         "confidence": "medium"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_ENDPYRO::00F7",
-        "callee": "Item::getFrame",
-        "purpose": "Read the current animation/frame index of the item to determine branch and animation start state.",
+        "caller": "U8P_ENDPYRO::func00F7",
+        "callee": "setAvatarInStasis",
+        "purpose": "Disable/enable player control during the cinematic sequence.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_ENDPYRO::00F7",
-        "callee": "U8P_ENDPYRO::setAvatarInStasis",
-        "purpose": "Temporarily put the avatar/player into stasis to prevent actions during key parts of the eruption sequence (player freeze effect).",
+        "caller": "U8P_ENDPYRO::func00F7",
+        "callee": "cameraFollowAvatar",
+        "purpose": "Center/move camera toward the pyros/item coordinates for the cinematic moment.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_ENDPYRO::00F7",
+        "caller": "U8P_ENDPYRO::func00F7",
         "callee": "playMusic",
-        "purpose": "Play a short music cue at the start of the U8P_ENDPYRO::hatch/eruption.",
+        "purpose": "Start background music (id observed in raw) for the U8P_ENDPYRO::hatch cinematic.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_ENDPYRO::00F7",
-        "callee": "U8P_ENDPYRO::playSFX",
-        "purpose": "Play explosion/eruption sound effects, often varied via randomness.",
+        "caller": "U8P_ENDPYRO::func00F7",
+        "callee": "playSFX",
+        "purpose": "Play sound effects at key moments during the U8P_ENDPYRO::hatch (impact/crack/burst).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_ENDPYRO::00F7",
-        "callee": "spawn PYROS::*",
-        "purpose": "Spawn other PYROS scripts to create visual/dialogue/auxiliary effects associated with the eruption.",
+        "caller": "U8P_ENDPYRO::func00F7",
+        "callee": "createSprite",
+        "purpose": "Spawn visual particle/sprite effects around the item's coordinates during the U8P_ENDPYRO::hatch.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_ENDPYRO::00F7",
-        "callee": "FREE::*",
-        "purpose": "Spawn small helper/timer/cleanup tasks to schedule future actions and free resources asynchronously.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_ENDPYRO::0548",
-        "callee": "Npc::create / Npc::setStr / Npc::setInt / Npc::setDex / Npc::setHp",
-        "purpose": "Create NPCs and initialize their stats when an item converts into active enemies as part of the eruption.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_ENDPYRO::0548",
-        "callee": "FIRESPEL::1F65",
-        "purpose": "Spawn a fire spell/effect tied to the eruption to cause continued flame/damage behavior.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_ENDPYRO::0548",
+        "caller": "U8P_ENDPYRO::func00F7",
         "callee": "Item::receiveHit",
-        "purpose": "Apply area damage/effects at computed positions during the eruption (explosion damage).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_ENDPYRO::0548",
-        "callee": "Item::destroy / Item::pop / Item::setFrame",
-        "purpose": "Animate and ultimately remove or update the initiating item as part of the eruption lifecycle.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_ENDPYRO::00F7",
-        "callee": "U8P_ENDPYRO::createSprite",
-        "purpose": "Create temporary visual sprites (explosion debris, flames) at positions computed from item coordinates and urandom offsets.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_ENDPYRO::00F7",
-        "callee": "urandom",
-        "purpose": "Generate random values to vary sprite positions, timings and branching decisions for non-deterministic effects.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_ENDPYRO::0548",
-        "callee": "METHOD::*",
-        "purpose": "Spawn object-method helpers for repeated updates to NPCs or items (movement, animation, state changes).",
+        "purpose": "Apply periodic hit/damage bursts as part of the effect sequence (damage flags and magnitudes randomized).",
         "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ENDPYRO::func00F7",
+        "callee": "spawn / suspend (process primitives)",
+        "purpose": "Spawn PYROS instance methods and FREE::* helper processes then suspend to wait for completion, sequencing the choreography.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDPYRO::func0548",
+        "callee": "Item::getFrame / Item::setFrame",
+        "purpose": "Read and write the item's animation frame to advance or reset visual state used by the U8P_ENDPYRO::hatch.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDPYRO::func0548",
+        "callee": "Item::getStatus / Item::andStatus / Item::orStatus",
+        "purpose": "Check and toggle item status bit 0x20 to select behavior branch and lock/unlock the item during processing.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDPYRO::func0548",
+        "callee": "Npc::create / Npc::setStr / Npc::setInt / Npc::setDex / Npc::setHp / Item::pop / Item::destroy",
+        "purpose": "When branch conditions meet, create and initialize an NPC, place it at the item's coordinates, and remove the original item.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDPYRO::func0548",
+        "callee": "FREE::func1C19 / FREE::func1C8B / FREE::func29D8 / FREE::randomInRange / urandom",
+        "purpose": "Use library/free utility functions for timed waits, randomness, and short helper tasks used to pace frame changes and randomize effect parameters.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ENDPYRO::func00F7",
+        "callee": "PYROS methods (pyrosTransformForward, pyrosTransformReverse, pyrosBarkAndTransform, func20A1, func1EFA)",
+        "purpose": "Invoke instance-specific transform/bark animations and behaviors on the pyros object during the sequence.",
+        "confidence": "high"
       }
     ]
   },
   "global_flags": {
-    "reads": [
-      {
-        "name": "pyrosQuitPlayingAround",
-        "likely_effect": "Global stop/suppression guard: when set the script's per-item loops and effect spawn sequences early-exit to stop further pyro activity.",
-        "confidence": "high"
-      }
-    ],
+    "reads": [],
     "writes": []
   },
   "ui_tags": [
@@ -175,10 +165,10 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "ENDPYRO::hatch",
-    "behavior_summary_one_liner": "This script implements a 'U8P_ENDPYRO::hatch'/eruption sequence for pyro-related items: when triggered it scans for matching items and for each match spawns a per-item worker that runs an animated eruption producing sounds, sprites, area damage and optionally spawns NPCs or fire-spell effects.",
-    "external_call_count": 13,
-    "flag_read_count": 1,
+    "main_function": "U8P_ENDPYRO::hatch",
+    "behavior_summary_one_liner": "Provides the hatching/cinematic sequence for a 'pyros' item/instance. When triggered, the script runs a coordinated sequence that disables player control, moves the camera, plays music/SFX, advances the item's visual frames, spawns helper/timer processes, creates sprite/particle effects, applies periodic hit/damage bursts, and ultimately either transforms the item into a spawned NPC or restores normal control.",
+    "external_call_count": 12,
+    "flag_read_count": 0,
     "flag_write_count": 0
   },
   "hypotheses": {

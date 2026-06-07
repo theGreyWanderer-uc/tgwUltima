@@ -3,210 +3,310 @@
   "source_of_truth": "dialogue/json/U8P_METHOD.json",
   "file": "U8P_METHOD",
   "behavior_summary": [
-    "This script primarily provides small method wrappers and utility routines for an in-game item/actor. The principal exported behavior (METHOD::0080) simply forwards hit/damage events into the underlying item implementation (Item::receiveHit).",
-    "Helper routines implement utilities: compute direction to coordinates, present choice prompts to a player/process and wait for a reply, toggle or ensure status bits, update animation frames, and run movement/step decision logic that tests candidate positions with Item::legal_move and issues Item::move when appropriate.",
-    "One helper (METHOD::0676) appears to handle a terminal condition: if a specific status bit and containment condition hold it emits a farewell string (Item::bark/suspend) and spawns a BODYPART process, inferred as a death/dismemberment action."
+    "This script implements a collection of item/NPC helpers (movement/path checks, animation dispatch, conversational entry/exit, idle wander and short monologues) plus a tiny wrapper that forwards hit/damage events to the core Item::receiveHit handler.",
+    "U8P_METHOD::receiveHitWrapper is a minimal entrypoint used by the engine when this object/NPC is struck; it forwards a fixed hit type (0x01) and the wrapper's arguments into Item::receiveHit so the engine's item damage logic handles the effect.",
+    "Conversation helpers (U8P_METHOD::beginConversation, U8P_METHOD::beginConversationNoMap, U8P_METHOD::endConversation, U8P_METHOD::checkConversationRange variants) coordinate UI ref resets, camera adjustments, avatar stasis, orientation/animation preparation, and wait-for-avatar-in-fast-area behavior so dialogues start and end cleanly.",
+    "Movement and path utilities (U8P_METHOD::func013E, U8P_METHOD::func03CD, U8P_METHOD::pathfindToItemByFrame, U8P_METHOD::func133F, U8P_METHOD::func143A) compute deltas, choose dominant axis, compute step counts and repeatedly call Item::legal_move / Item::move to validate or perform incremental steps — used for pathfinding, step validation, and teleport decisions.",
+    "Animation/turn/idle helpers (U8P_METHOD::func15E7, U8P_METHOD::func091C, U8P_METHOD::npcIdleWander, U8P_METHOD::reverseAnimFrame) manage facing, play Npc::doAnim with specific parameters, and implement idle wandering including randomized choices.",
+    "Dialogue/monologue utilities (U8P_METHOD::func00A9, U8P_METHOD::barkAndWait, U8P_METHOD::barkIfNotBusy, U8P_METHOD::func0676) present menus, emit barks with blocking waits, and produce short scripted effects (SFX, spawn body-part effect, and optionally apply receiveHit damage) as part of NPC behavior."
   ],
   "notable_control_flow": [
-    "U8P_METHOD::METHOD::0080 is a straight-through wrapper: push parameters (this, three uword args) plus an implicit byte 0x01, call Item::receiveHit, return immediately (no suspends or loops).",
-    "Several helpers use suspend/wait semantics around Item::ask and around movement checks (movement helpers repeatedly suspend and call Item::legal_move to probe candidate points).",
-    "Movement helpers perform multi-step arithmetic (delta, normalization, div/mod, clamping) and loop until a legal move or failure is found; they use FREE::1C52 as a numeric conversion helper in those calculations.",
-    "State-manipulation helper (METHOD::0113) branches based on Item::getStatus and either calls Item::orStatus or Item::andStatus to set/clear bits."
+    "U8P_METHOD::receiveHitWrapper: single-step forwarder with no branching — ensures damage events are handled by Item::receiveHit with a canonical hit type (0x01).",
+    "Menu/ask loop (U8P_METHOD::func00A9): uses a suspend/Ask and a small retry counter (local3) compared to param2 to limit attempts before returning the captured selection.",
+    "Conversation startup (U8P_METHOD::beginConversation / U8P_METHOD::beginConversationNoMap): resets UI refs, optionally freezes the avatar (setAvatarInStasis), spawns orientation/animation helper (U8P_METHOD::func091C), plays randomized bark sequences depending on item status bits, and waits for avatar proximity (Item::enterFastArea) before finalizing.",
+    "Movement/path helpers (U8P_METHOD::func013E / U8P_METHOD::func03CD): compute dx/dy, pick a dominant axis using absolute-value comparisons, produce division/modulo-derived step distributions, possibly apply vertical/frame alignment logic, then iterate simulated steps calling Item::legal_move to determine move legality.",
+    "Animation stepping (U8P_METHOD::func091C): repeatedly adjusts Npc::getDir toward a target direction in small increments with suspend points and an attempt counter that can probabilistically abort further incremental turning.",
+    "Conversation teardown (U8P_METHOD::endConversation): waits for avatar entering fast-area, then chooses a short cleanup/transition spawn based on distance, clears somebodyTalking and un-stases the avatar.",
+    "Loop/frame progression inside U8P_METHOD::func00A9; treated as control-flow, not explicit internal call."
   ],
   "open_questions": [
-    "Exact semantics and full parameter meanings for the movement helpers (METHOD::013E, METHOD::03CD) — e.g., whether the 5th byte parameter is step size, stride, or a direction flag — are inferred but not certain.",
-    "Precise behavior of FREE::1C52: it appears to be a numeric conversion/normalization helper used extensively in movement math, but its exact conversion rules are unknown.",
-    "Whether METHOD::0676 is invoked only on death or also on other detachment/containment transitions (the triggering conditions are inferred from a tested 0x08 status bit and root container check).",
-    "Whether any helper functions are externally exposed as item events (beyond METHOD::0080) or remain internal utility methods called by a larger AI/engine system."
+    "Exact numeric meanings of several numeric constants used in frame/vertical alignment math (for example the divisor 0x14 in U8P_METHOD::func013E) — inferred as frame/height granularity but not certain.",
+    "Precise semantic of param3/param4 in U8P_METHOD::func013E/U8P_METHOD::func03CD: they are used for z/frame comparisons and sign/multiplier flipping but their calling contract (units and callers) is not fully explicit.",
+    "Which global or script-level flags beyond somebodyTalking and avatar stasis are relied upon across broader game logic (some flags are read/written locally but global flag table in metadata is sparse).",
+    "Whether some of the Unknown nodes represent subtle side effects (special-case spawns or implicit resource references) that the decompiler could not structure — these could affect corner behavior of movement or conversation."
   ],
   "main_function": {
-    "name": "U8P_METHOD::0080",
+    "name": "U8P_METHOD::receiveHitWrapper",
     "execution_form": "process",
-    "purpose": "Thin wrapper that forwards a received hit/damage event to the item implementation by calling Item::receiveHit with the provided parameters and an implicit byte flag (0x01).",
+    "purpose": "Expose an engine-visible receive-hit entry that forwards the hit to the core item damage handler (Item::receiveHit) with a standardized hit type (0x01) and the wrapper's parameters.",
     "entry_conditions": [
-      "Called when this method receives a hit/damage event (inferred from its call to Item::receiveHit).",
-      "No fast-area enter/leave markers present; behaves as an event handler wrapper."
+      "Called when the engine registers a hit on this object/NPC (damage event).",
+      "Invoked by the runtime as the object's receive-hit entrypoint (implicit 'this' receiver)."
     ],
     "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_METHOD::0080",
+      "name": "U8P_METHOD::receiveHitWrapper",
       "kind": "main",
-      "role": "Forward hit/damage events to Item::receiveHit (thin wrapper).",
+      "role": "damage-event entrypoint / forwarder to Item::receiveHit",
       "confidence": "high"
     },
     {
-      "name": "U8P_METHOD::0094",
+      "name": "U8P_METHOD::getDirToCoordsWrapper",
       "kind": "helper",
-      "role": "Compute direction to given coordinates by calling Item::getDirToCoords and returning the result.",
+      "role": "adapter that calls Item::getDirToCoords with reordered args",
       "confidence": "high"
     },
     {
-      "name": "U8P_METHOD::00A9",
+      "name": "U8P_METHOD::func00A9",
       "kind": "helper",
-      "role": "Present a choice list / dialog via Item::ask, suspend to wait for response, process and return the selection string/result.",
-      "confidence": "medium"
-    },
-    {
-      "name": "U8P_METHOD::0113",
-      "kind": "helper",
-      "role": "Toggle/ensure/clear status bits on the item using Item::getStatus then Item::orStatus or Item::andStatus accordingly.",
+      "role": "present an Ask menu, suspend until player selection, return selection (retry-limited)",
       "confidence": "high"
     },
     {
-      "name": "U8P_METHOD::013E",
+      "name": "U8P_METHOD::toggleStatusFlag",
       "kind": "helper",
-      "role": "Complex movement/position computation and legality checking routine that probes candidate positions and may call Item::legal_move or Item::move; likely used for NPC/item pathing.",
+      "role": "flip specified bits in Item::getStatus via Item::andStatus/Item::orStatus",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_METHOD::func013E",
+      "kind": "helper",
+      "role": "movement/step validation utility (delta math, step distribution and Item::legal_move calls)",
       "confidence": "medium"
     },
     {
-      "name": "U8P_METHOD::03CD",
+      "name": "U8P_METHOD::func03CD",
       "kind": "helper",
-      "role": "Variant movement/step routine similar in purpose to METHOD::013E (movement decision and execution).",
+      "role": "alternate movement/step validation utility similar to U8P_METHOD::func013E",
       "confidence": "medium"
     },
     {
-      "name": "U8P_METHOD::0610",
+      "name": "U8P_METHOD::reverseAnimFrame",
       "kind": "helper",
-      "role": "Frame/animation updater: inspects Item::getFrame bits and calls Item::setFrame to adjust animation state.",
+      "role": "adjust animation frame backward by a small delta to affect sprite sequencing",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_METHOD::func0676",
+      "kind": "helper",
+      "role": "short monologue/effect: spawn SFX/sprite, optional bark and spawn, optionally destroy and apply damage via Item::receiveHit",
       "confidence": "medium"
     },
     {
-      "name": "U8P_METHOD::0676",
+      "name": "U8P_METHOD::barkAndWait",
       "kind": "helper",
-      "role": "Conditional death/special-state handler: checks a status bit and root container, then barks a farewell message and spawns a BODYPART process (inferred death/dismemberment behavior).",
+      "role": "emit a bark/dialogue line and wait synchronously for completion",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_METHOD::barkIfNotBusy",
+      "kind": "helper",
+      "role": "guarded bark that only plays if the NPC/item is not busy",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_METHOD::func091C",
+      "kind": "helper",
+      "role": "direction/turn helper that steps NPC facing toward a target and dispatches animations",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_METHOD::checkConversationRange",
+      "kind": "helper",
+      "role": "timed loop that advances a small animation counter and spawns Npc::doAnim to keep NPC in pre-conversation state",
       "confidence": "medium"
+    },
+    {
+      "name": "U8P_METHOD::npcIdleWander",
+      "kind": "helper",
+      "role": "idle wander/behavior dispatcher that chooses random idle animations and occasional rotation",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_METHOD::beginConversation",
+      "kind": "helper",
+      "role": "conversation startup: UI cleanup, avatar stasis, orientation, barks, camera handling and waiting for avatar proximity",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_METHOD::beginConversationNoMap",
+      "kind": "helper",
+      "role": "U8P_METHOD::beginConversation variant that omits map-specific behavior but performs the same conversation prep",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_METHOD::endConversation",
+      "kind": "helper",
+      "role": "conversation teardown: wait for avatar enter-fast-area, spawn cleanup/transition, clear somebodyTalking and un-stasis avatar",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_METHOD::getWeaponDirFromFrame",
+      "kind": "helper",
+      "role": "map animation frame ranges to weapon-facing/direction codes",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_METHOD::getNpcSocialGroup",
+      "kind": "helper",
+      "role": "classify the NPC/item into a social group code used by higher logic",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_METHOD::checkConversationRangeAlt",
+      "kind": "helper",
+      "role": "alternate conversation-range sequence; runs three animation dispatches and optionally stases avatar",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_METHOD::func133F",
+      "kind": "helper",
+      "role": "teleport decision & execution helper (distance/map checks, then Npc::teleport when warranted)",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_METHOD::func143A",
+      "kind": "helper",
+      "role": "proximity + map-check helper returning whether a target is far/different-map",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_METHOD::pathfindToItemByFrame",
+      "kind": "helper",
+      "role": "iterate items by frame id and spawn Npc::pathfind to located frame-marked items (looped with retries)",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_METHOD::func15E7",
+      "kind": "helper",
+      "role": "animation dispatcher that resets a ref and spawns Npc::doAnim(anim=0x00,duration=0x2710,param2,param1)",
+      "confidence": "high"
     }
   ],
   "call_analysis": {
-    "internal_calls": [],
+    "internal_calls": [
+      {
+        "caller": "U8P_METHOD::func091C",
+        "callee": "U8P_METHOD::func15E7",
+        "purpose": "play an animation or animation-step while stepping NPC facing; used between suspend points",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_METHOD::beginConversation",
+        "callee": "U8P_METHOD::func091C",
+        "purpose": "spawn orientation/turn helper so NPC faces player before dialog",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_METHOD::beginConversation",
+        "callee": "U8P_METHOD::barkAndWait",
+        "purpose": "play opening barks and wait for them to complete during conversation startup",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_METHOD::npcIdleWander",
+        "callee": "U8P_METHOD::func091C",
+        "purpose": "rotate NPC toward a randomly chosen direction when wandering",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_METHOD::npcIdleWander",
+        "callee": "U8P_METHOD::func15E7",
+        "purpose": "trigger idle animation(s) each wander cycle",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_METHOD::pathfindToItemByFrame",
+        "callee": "U8P_METHOD::func15E7",
+        "purpose": "used for pacing/animation around pathfinding attempts (suspend/animation loop)",
+        "confidence": "medium"
+      }
+    ],
     "external_calls": [
       {
-        "caller": "U8P_METHOD::0080",
+        "caller": "U8P_METHOD::receiveHitWrapper",
         "callee": "Item::receiveHit",
-        "purpose": "Deliver incoming hit/damage event to the underlying item implementation (parameters forwarded including implicit byte 0x01).",
+        "purpose": "deliver the damage/hit event to the item's canonical handler with hit type 0x01 and forwarded parameters",
         "confidence": "high"
       },
       {
-        "caller": "U8P_METHOD::0094",
+        "caller": "U8P_METHOD::getDirToCoordsWrapper",
         "callee": "Item::getDirToCoords",
-        "purpose": "Return direction from this item to supplied coordinates.",
+        "purpose": "compute facing/direction from this item to a target coordinate",
         "confidence": "high"
       },
       {
-        "caller": "U8P_METHOD::00A9",
-        "callee": "Item::ask",
-        "purpose": "Present a slist/choices to a process/player and suspend to wait for the response; returns a string/result.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_METHOD::0113",
-        "callee": "Item::getStatus",
-        "purpose": "Read current status bits to decide whether to set or clear bits.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_METHOD::0113",
-        "callee": "Item::andStatus",
-        "purpose": "Clear specified status bits when the test indicates they are not set (ensures bits cleared).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_METHOD::0113",
-        "callee": "Item::orStatus",
-        "purpose": "Set specified status bits when the test indicates they should be set (ensures bits set).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_METHOD::013E",
+        "caller": "U8P_METHOD::func013E",
         "callee": "Item::getX",
-        "purpose": "Obtain current X coordinate used in movement/delta calculations.",
+        "purpose": "read current X for delta/step calculations",
         "confidence": "high"
       },
       {
-        "caller": "U8P_METHOD::013E",
-        "callee": "Item::getY",
-        "purpose": "Obtain current Y coordinate used in movement/delta calculations.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_METHOD::013E",
-        "callee": "Item::getZ",
-        "purpose": "Obtain current Z coordinate used in movement/delta calculations.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_METHOD::013E",
-        "callee": "FREE::1C52",
-        "purpose": "Perform numeric conversion/normalization used repeatedly in movement arithmetic (inferred).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_METHOD::013E",
+        "caller": "U8P_METHOD::func013E",
         "callee": "Item::legal_move",
-        "purpose": "Test whether a candidate WorldPoint is a legal move (collision/terrain check) before moving.",
+        "purpose": "validate each simulated incremental step for collision/terrain legality",
         "confidence": "high"
       },
       {
-        "caller": "U8P_METHOD::013E",
-        "callee": "Item::move",
-        "purpose": "Execute an actual move to validated coordinates with a direction/flag byte.",
+        "caller": "U8P_METHOD::func15E7",
+        "callee": "Npc::doAnim",
+        "purpose": "spawn/play an NPC animation (anim id 0x00, duration 0x2710) with forwarded parameters",
         "confidence": "high"
       },
       {
-        "caller": "U8P_METHOD::03CD",
-        "callee": "Item::legal_move",
-        "purpose": "Probe candidate positions for legality as part of movement variant logic.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_METHOD::03CD",
-        "callee": "Item::move",
-        "purpose": "Issue movement when a candidate is acceptable.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_METHOD::0610",
-        "callee": "Item::getFrame",
-        "purpose": "Read current animation/frame word to compute next frame.",
+        "caller": "U8P_METHOD::barkAndWait",
+        "callee": "FREE::func1C19",
+        "purpose": "spawn a short helper process used as a timed wait or to manage bark playback, then suspend on it",
         "confidence": "high"
       },
       {
-        "caller": "U8P_METHOD::0610",
-        "callee": "Item::setFrame",
-        "purpose": "Set updated animation/frame value.",
+        "caller": "U8P_METHOD::beginConversation",
+        "callee": "FREE::resetRef",
+        "purpose": "clear UI/process references and close UI gumps before/after conversation start",
         "confidence": "high"
       },
       {
-        "caller": "U8P_METHOD::0676",
-        "callee": "Item::getStatus",
-        "purpose": "Check the specific 0x08 status bit prior to performing farewell/spawn actions.",
-        "confidence": "medium"
+        "caller": "U8P_METHOD::beginConversationNoMap",
+        "callee": "FREE::cameraFollowAvatar",
+        "purpose": "spawn a camera-follow helper when avatar is far to adjust camera for conversation",
+        "confidence": "high"
       },
       {
-        "caller": "U8P_METHOD::0676",
-        "callee": "Item::getRootContainer",
-        "purpose": "Verify containment/root conditions before barking and spawning a BODYPART.",
-        "confidence": "medium"
+        "caller": "U8P_METHOD::endConversation",
+        "callee": "Item::enterFastArea",
+        "purpose": "wait for the avatar to enter the NPC's fast-area trigger as part of conversation teardown synchronization",
+        "confidence": "high"
       },
       {
-        "caller": "U8P_METHOD::0676",
-        "callee": "process Item::bark",
-        "purpose": "Emit a farewell message string to the associated pid/process (suspends after bark).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_METHOD::0676",
-        "callee": "spawn BODYPART::0080",
-        "purpose": "Spawn a body-part process/object as part of the terminal action (inferred dismember/ death effect).",
+        "caller": "U8P_METHOD::func0676",
+        "callee": "Item::receiveHit",
+        "purpose": "apply damage/hit to a target after playing visual/sound effects and randomizing damage",
         "confidence": "medium"
       }
     ]
   },
   "global_flags": {
-    "reads": [],
-    "writes": []
+    "reads": [
+      {
+        "name": "avatarInStasis",
+        "likely_effect": "checked to decide whether to set avatar stasis during conversation startup",
+        "confidence": "medium"
+      },
+      {
+        "name": "Item status bit 0x10",
+        "likely_effect": "read to choose alternate bark sequences in U8P_METHOD::beginConversation/NoMap",
+        "confidence": "high"
+      },
+      {
+        "name": "devonInRule",
+        "likely_effect": "used in U8P_METHOD::getNpcSocialGroup to select a particular social group mapping in conjunction with 'this' == 0x02",
+        "confidence": "low"
+      }
+    ],
+    "writes": [
+      {
+        "name": "somebodyTalking",
+        "likely_effect": "set to 1 at conversation start to mark conversation state; cleared by U8P_METHOD::endConversation during teardown",
+        "confidence": "high"
+      },
+      {
+        "name": "avatarInStasis",
+        "likely_effect": "set to 1 to freeze the avatar for conversation prep and later cleared to 0 to restore control",
+        "confidence": "high"
+      }
+    ]
   },
   "ui_tags": [
     "trigger",
@@ -215,11 +315,11 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_METHOD::METHOD::0080",
-    "behavior_summary_one_liner": "This script primarily provides small method wrappers and utility routines for an in-game item/actor. The principal exported behavior (METHOD::0080) simply forwards hit/damage events into the underlying item implementation (Item::receiveHit).",
-    "external_call_count": 20,
-    "flag_read_count": 0,
-    "flag_write_count": 0
+    "main_function": "U8P_METHOD::receiveHitWrapper",
+    "behavior_summary_one_liner": "This script implements a collection of item/NPC helpers (movement/path checks, animation dispatch, conversational entry/exit, idle wander and short monologues) plus a tiny wrapper that forwards hit/damage events to the core Item::receiveHit handler.",
+    "external_call_count": 10,
+    "flag_read_count": 3,
+    "flag_write_count": 2
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

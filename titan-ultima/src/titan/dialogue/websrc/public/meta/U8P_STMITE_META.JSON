@@ -3,26 +3,28 @@
   "source_of_truth": "dialogue/json/U8P_STMITE.json",
   "file": "U8P_STMITE",
   "behavior_summary": [
-    "STMITE::look handles the player (or other actor) examining a stalagmite item: it sets up item context bookkeeping, constructs the short description string \"stalagmite \", invokes the item's bark/display routine to present that text to the viewer, and then yields/suspends.",
-    "A helper, U8P_STMITE::STMITE::00AE, implements a frame-driven animation/behavior loop for the stalagmite: it repeatedly sets frames, pushes the item for processing, reads the resulting frame, maps certain frames to short state codes, spawns debris/effect at the item's coordinates (Item::pop) and creates a FREE::1C19 spawn tied to the actor (pid).",
-    "When the helper reaches its terminating condition it changes the item type to 0x0305 and sets its frame to 0, which appears to convert the stalagmite into a broken/alternate state (inferred from the setType call)."
+    "U8P_STMITE::look is a simple examine handler that displays the short descriptive bark \"stalagmite \" to the player and then suspends the U8P_STMITE::look process.",
+    "U8P_STMITE::func00AE is a helper routine that runs a short frame-based visual/placement animation on the item instance: it iterates a frame index, sets the item's frame, updates scene stacking (push/pop) with a small Z offset derived from the current frame, spawns a short-lived helper process each iteration, suspends between iterations, and finally resets the item's type and frame.",
+    "The helper operates on the implicit item instance (this). It uses two temporary locals (local1 as an iteration counter and local2 as a small Z-offset/bitmask derived from the current frame).",
+    "Several engine Item::* APIs are used for visual manipulation (Item::setFrame, Item::push, Item::getFrame, Item::pop, Item::getZ/getY/getX, Item::setType) and spawn is used to start FREE::func1C19 for transient work."
   ],
   "notable_control_flow": [
-    "U8P_STMITE::STMITE::look: set info/process-exclude bookkeeping -> build constant string \"stalagmite \" -> call Item::bark(pid, \"stalagmite \") -> suspend/yield.",
-    "U8P_STMITE::STMITE::00AE: initialize loop counter ([BP-02h]=1) and state code ([BP-04h]=0) -> loop: Item::setFrame(counter), Item::push(), Item::getFrame() -> map frame to a small code -> compute spawn coordinates using Item::getX/Y/Z (Z adjusted) -> Item::pop(x,y,z,0x0A) -> spawn FREE::1C19(pid,0x0A,0) -> suspend -> increment counter and repeat until termination condition -> Item::setType(0x0305); Item::setFrame(0)."
+    "U8P_STMITE::look: immediate bark of text \"stalagmite \" then suspend — no branching or external calls.",
+    "U8P_STMITE::func00AE: initialize local1=1, local2=0; loop while local1 < 12: call Item::setFrame(local1,this), Item::push(this), read Item::getFrame(this) and map certain frame values to small offsets (local2), call Item::pop(getZ(this)+local2, getY(this), getX(this), this), spawn FREE::func1C19(0), suspend, increment local1; after loop call Item::setType(0x0305,this) and Item::setFrame(0,this).",
+    "Frame->offset mapping is frame values in the range (0x05..0x0A) mapped to small offsets (examples: 0x05->0x01, 0x06->0x02, 0x07->0x04, 0x08->0x04, 0x09->0x02, 0x0A->0x04)."
   ],
   "open_questions": [
-    "Exact semantic meaning of item type 0x0305 (inferred to be a broken stalagmite state but not confirmed).",
-    "Precise mapping of individual frame values to the code stored in [BP-04h] and what each code specifically represents beyond triggering debris/spawn behavior.",
-    "Where and when U8P_STMITE::STMITE::00AE is invoked in-game (what event triggers the helper: e.g., collision, damage, scripted timer?).",
-    "Detailed behavior and properties of the spawned FREE::1C19 effect (visual vs. gameplay effect, lifetime, interaction with pid)."
+    "The exact behavior and purpose of spawned FREE::func1C19(0) are not present in this script and remain unknown (likely a transient visual effect or cleanup).",
+    "Precise timing and visual effect perceived by players (e.g., how long each suspend yields, and whether these appear as a smooth animation) is inferred but not explicit.",
+    "Reason for setting item type to 0x0305 at the end: inferred to be a final state change but the gameplay semantics of that type id in the wider game are not shown here."
   ],
   "main_function": {
     "name": "U8P_STMITE::look",
     "execution_form": "process",
-    "purpose": "Provide the examine/U8P_STMITE::look behavior for the stalagmite item by presenting a short description to the viewer and performing necessary item bookkeeping.",
+    "purpose": "Provide the player-facing short description when the item is examined (bark \"stalagmite \") and then suspend/end the U8P_STMITE::look process.",
     "entry_conditions": [
-      "Invoked when an actor examines/looks at the stalagmite item (event: U8P_STMITE::look/examine / area-enter semantics)."
+      "Invoked when the player performs the 'U8P_STMITE::look' / examine action on this item (engine triggers the object's U8P_STMITE::look handler).",
+      "Runs as the object's U8P_STMITE::look/inspection process (processType 0x0208)."
     ],
     "confidence": "high"
   },
@@ -30,168 +32,95 @@
     {
       "name": "U8P_STMITE::look",
       "kind": "main",
-      "role": "Handle the 'U8P_STMITE::look' (examine) event for the stalagmite; prepare item context and call Item::bark to display 'stalagmite '.",
+      "role": "examine/U8P_STMITE::look handler that emits a short description",
       "confidence": "high"
     },
     {
-      "name": "U8P_STMITE::00AE",
+      "name": "U8P_STMITE::func00AE",
       "kind": "helper",
-      "role": "Frame-driven animation/behavior loop; spawns debris/effects and eventually converts the item type to 0x0305 (broken state).",
+      "role": "frame-based visual/placement animation loop operating on the item instance (implicit this)",
       "confidence": "medium"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Display or emit a short text/message from an item to a target actor/process (used to show the 'stalagmite ' text).",
-      "confidence": "high"
     },
     {
       "name": "Item::setFrame",
       "kind": "extern",
-      "role": "Set the item's animation/frame index used by the helper to drive state changes.",
+      "role": "engine API to set visible item frame",
       "confidence": "high"
     },
     {
       "name": "Item::push",
       "kind": "extern",
-      "role": "Engine bookkeeping to apply frame changes or queue the item for processing so subsequent getFrame reflects the update.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getFrame",
-      "kind": "extern",
-      "role": "Return current frame index for decision logic inside the helper.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getX",
-      "kind": "extern",
-      "role": "Get item's X coordinate for spawning debris/effects.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getY",
-      "kind": "extern",
-      "role": "Get item's Y coordinate for spawning debris/effects.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getZ",
-      "kind": "extern",
-      "role": "Get item's Z coordinate for spawning debris/effects (helper adjusts Z slightly).",
+      "role": "engine API to push/update scene/stack state for an item",
       "confidence": "high"
     },
     {
       "name": "Item::pop",
       "kind": "extern",
-      "role": "Spawn/create an object/effect at given coordinates and byte parameter (used to place debris).",
+      "role": "engine API to pop/remove item at a location (used here with Z offset)",
       "confidence": "high"
     },
     {
-      "name": "spawn FREE::1C19",
+      "name": "spawn ->FREE::func1C19",
       "kind": "extern",
-      "role": "Spawn a free-standing debris/effect actor tied to pid and a byte parameter (0x0A).",
-      "confidence": "medium"
-    },
-    {
-      "name": "Item::setType",
-      "kind": "extern",
-      "role": "Change the item's type/identity (used to convert stalagmite to type 0x0305 at helper termination).",
-      "confidence": "medium"
+      "role": "spawn of a short-lived/free helper process for transient effect or cleanup",
+      "confidence": "low"
     }
   ],
   "call_analysis": {
-    "internal_calls": [
-      {
-        "caller": "U8P_STMITE::look",
-        "callee": "Item::bark",
-        "purpose": "Present the short description string 'stalagmite ' to the viewing actor/process.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_STMITE::00AE",
-        "callee": "Item::setFrame",
-        "purpose": "Set successive frames to drive the animation/behavior loop.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_STMITE::00AE",
-        "callee": "Item::push",
-        "purpose": "Ensure the item processes its new frame value before reading it back via getFrame.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_STMITE::00AE",
-        "callee": "Item::getFrame",
-        "purpose": "Read the current frame to decide which debris/spawn behavior to execute.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_STMITE::00AE",
-        "callee": "Item::getX",
-        "purpose": "Obtain X coordinate for placing spawned debris/effect.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_STMITE::00AE",
-        "callee": "Item::getY",
-        "purpose": "Obtain Y coordinate for placing spawned debris/effect.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_STMITE::00AE",
-        "callee": "Item::getZ",
-        "purpose": "Obtain Z coordinate (adjusted) for placing spawned debris/effect.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_STMITE::00AE",
-        "callee": "Item::pop",
-        "purpose": "Create debris/effect at the computed coordinates with parameter 0x0A.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_STMITE::00AE",
-        "callee": "spawn FREE::1C19",
-        "purpose": "Spawn an associated free actor/effect (debris/particle) tied to the actor pid and parameter 0x0A.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_STMITE::00AE",
-        "callee": "Item::setType",
-        "purpose": "On termination, change the item type to 0x0305 (inferred to mark it broken/changed).",
-        "confidence": "medium"
-      }
-    ],
+    "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_STMITE::look",
-        "callee": "Item::bark",
-        "purpose": "Emit/display the string 'stalagmite ' to the viewer PID.",
+        "caller": "U8P_STMITE::func00AE",
+        "callee": "Item::setFrame",
+        "purpose": "Change the item's visible animation/frame index each iteration and finally reset frame to 0.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_STMITE::00AE",
-        "callee": "Item::setFrame / Item::push / Item::getFrame",
-        "purpose": "Drive and sample frame changes as the animation/behavior loop evolves.",
+        "caller": "U8P_STMITE::func00AE",
+        "callee": "Item::push",
+        "purpose": "Update scene/stack state before computing offsets/pop placement (prepares visual state).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_STMITE::00AE",
-        "callee": "Item::getX / Item::getY / Item::getZ / Item::pop",
-        "purpose": "Compute spawn location and create debris/effects in the world at the item's location.",
+        "caller": "U8P_STMITE::func00AE",
+        "callee": "Item::getFrame",
+        "purpose": "Read current frame in order to map certain frame values to a small Z offset (drives local2).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_STMITE::00AE",
-        "callee": "spawn FREE::1C19",
-        "purpose": "Create a visible/audible free actor effect associated with pid (used when certain frames are reached).",
-        "confidence": "medium"
+        "caller": "U8P_STMITE::func00AE",
+        "callee": "Item::getZ",
+        "purpose": "Read base Z coordinate to compute pop Z = getZ + local2.",
+        "confidence": "high"
       },
       {
-        "caller": "U8P_STMITE::00AE",
+        "caller": "U8P_STMITE::func00AE",
+        "callee": "Item::getY",
+        "purpose": "Provide Y coordinate for Item::pop placement.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STMITE::func00AE",
+        "callee": "Item::getX",
+        "purpose": "Provide X coordinate for Item::pop placement.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STMITE::func00AE",
+        "callee": "Item::pop",
+        "purpose": "Reposition/pop the item at computed coordinates (Z+local2, Y, X) to create the stepped visual placement.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STMITE::func00AE",
+        "callee": "spawn ->FREE::func1C19",
+        "purpose": "Trigger a short-lived/free helper process each iteration, likely for a transient visual effect or cleanup; spawn return/pid is not used further here.",
+        "confidence": "low"
+      },
+      {
+        "caller": "U8P_STMITE::func00AE",
         "callee": "Item::setType",
-        "purpose": "Finalize the transformation of the item into type 0x0305 when the helper ends.",
+        "purpose": "Set the item's type to 0x0305 at the end of the helper routine as a final state change.",
         "confidence": "medium"
       }
     ]
@@ -207,9 +136,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "STMITE::look",
-    "behavior_summary_one_liner": "STMITE::look handles the player (or other actor) examining a stalagmite item: it sets up item context bookkeeping, constructs the short description string \"stalagmite \", invokes the item's bark/display routine to present that text to the viewer, and then yields/suspends.",
-    "external_call_count": 5,
+    "main_function": "U8P_STMITE::look",
+    "behavior_summary_one_liner": "U8P_STMITE::look is a simple examine handler that displays the short descriptive bark \"stalagmite \" to the player and then suspends the U8P_STMITE::look process.",
+    "external_call_count": 9,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

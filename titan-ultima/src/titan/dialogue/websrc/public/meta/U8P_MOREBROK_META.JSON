@@ -3,27 +3,24 @@
   "source_of_truth": "dialogue/json/U8P_MOREBROK.json",
   "file": "U8P_MOREBROK",
   "behavior_summary": [
-    "MOREBROK::look is a short 'U8P_MOREBROK::look' (Event 0) handler for the MOREBROK item. When an actor/player examines the object it: sets object/info state to mark the lookup and exclude normal processing, constructs a transient string \"debris \", calls Item::bark on the item to present that string to the viewer, frees the transient string, inspects the bark call's return via an implies/pop sequence, and then suspends/returns.",
-    "The visible gameplay effect is that examining the MOREBROK object causes the game to display the description text \"debris \" (via the item's bark mechanism).",
-    "No global flags are read or written by this handler (it only manipulates the item/process state and the transient message)."
+    "Provides the response when the MOREBROK entity is examined: it displays a short descriptive bark 'debris ' to the player and then suspends the process.",
+    "No conditional logic, menus, external calls, or global flag interactions are present—this is a minimal U8P_MOREBROK::look/description handler.",
+    "The trailing suspend indicates the process yields or ends after delivering the bark, preventing further immediate actions from this handler."
   ],
   "notable_control_flow": [
-    "Entry on Event 0 (U8P_MOREBROK::look) triggers immediate setup: set object info and apply process-exclude semantics so the item is prepared/excluded from other processing before messaging.",
-    "A transient string literal \"debris \" is allocated/pushed and passed to Item::bark with the item instance and the viewer pid.",
-    "After Item::bark returns, the return value is pushed and evaluated with an implies/pop pattern (the script consumes that result) before suspending/returning.",
-    "The transient string is freed after the bark call (cleanup of allocated message buffer)."
+    "U8P_MOREBROK::look executes on the object's U8P_MOREBROK::look/examine event, issues a single Bark ('debris '), then immediately suspends the process.",
+    "There are no branches, loops, or calls; control flow is linear: bark -> suspend."
   ],
   "open_questions": [
-    "What exact engine-info id(s) are set by the 'set info' opcodes used here, and what concrete gameplay state do they represent for MOREBROK (the script only shows that info/state is set and the process is excluded)?",
-    "What does the implies/pop evaluation of Item::bark's return value influence in higher-level logic (the value is inspected but not obviously used within this short handler)?",
-    "Are there any conditional effects from the bark return that affect subsequent scripts or global state elsewhere in the game (not visible in this single-handler excerpt)?"
+    "Is the trailing space in the bark text 'debris ' intentional (formatting/concatenation artifact) or an authoring typo?",
+    "Does the suspend imply the engine expects a later resume of this process, or is it simply used to terminate the U8P_MOREBROK::look handler in this context?"
   ],
   "main_function": {
     "name": "U8P_MOREBROK::look",
     "execution_form": "process",
-    "purpose": "Handle the player's examine/U8P_MOREBROK::look interaction by preparing the item state and emitting the short description \"debris \" to the viewer via Item::bark.",
+    "purpose": "Serve as the U8P_MOREBROK::look/examine handler for the MOREBROK entity, presenting a short description to the player.",
     "entry_conditions": [
-      "Event 0 (U8P_MOREBROK::look) — invoked when an actor/player looks at or inspects the MOREBROK object"
+      "Player performs a U8P_MOREBROK::look/examine action on MOREBROK (engine invokes the 0x0208 U8P_MOREBROK::look process)."
     ],
     "confidence": "high"
   },
@@ -31,26 +28,13 @@
     {
       "name": "U8P_MOREBROK::look",
       "kind": "main",
-      "role": "Event handler for the item's 'U8P_MOREBROK::look' (examine) interaction; prepares object state and issues a bark/description.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine used to display or emit a short text message from an item/process to a player/process (used here to show the string \"debris \").",
+      "role": "examine/U8P_MOREBROK::look handler that shows a short description (bark) and suspends",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_MOREBROK::look",
-        "callee": "Item::bark",
-        "purpose": "Display/emit the item's short description text (passes the item instance, a transient string \"debris \", and the viewer pid).",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -58,13 +42,13 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "guard"
+    "description",
+    "suspend"
   ],
   "quick_facts": {
-    "main_function": "MOREBROK::look",
-    "behavior_summary_one_liner": "MOREBROK::look is a short 'U8P_MOREBROK::look' (Event 0) handler for the MOREBROK item. When an actor/player examines the object it: sets object/info state to mark the lookup and exclude normal processing, constructs a transient string \"debris \", calls Item::bark on the item to present that string to the viewer, frees the transient string, inspects the bark call's return via an implies/pop sequence, and then suspends/returns.",
-    "external_call_count": 1,
+    "main_function": "U8P_MOREBROK::look",
+    "behavior_summary_one_liner": "Provides the response when the MOREBROK entity is examined: it displays a short descriptive bark 'debris ' to the player and then suspends the process.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

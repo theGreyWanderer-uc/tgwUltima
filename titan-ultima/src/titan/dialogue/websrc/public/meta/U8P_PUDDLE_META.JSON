@@ -3,74 +3,36 @@
   "source_of_truth": "dialogue/json/U8P_PUDDLE.json",
   "file": "U8P_PUDDLE",
   "behavior_summary": [
-    "U8P_PUDDLE::enterFastArea is run when an actor/item enters the puddle trigger region. It checks the global rainStormActive flag and, if no rain storm is active, attempts to spawn a puddle item at the entering actor's location (using that actor's X, Y, Z and frame). If creation succeeds, it marks the new puddle with a status bitmask (0x0080). If rainStormActive is set or creation fails, it returns without creating or marking a puddle."
+    "When an actor enters the object's fast-area, the script checks whether a rain storm is active. If rainStormActive is true, it attempts to create an item of prototype 0x02BA at this object's world coordinates and frame. If creation succeeds, the script ORs status bit 0x0080 into the newly created item. This implements spawning/marking a puddle-like object during rain, guarded by placement legality checks."
   ],
   "notable_control_flow": [
-    "On entry, read global rainStormActive; if non-zero, return immediately (guard prevents puddle creation during storms).",
-    "Read trigger_item's frame and coordinates via Item::getFrame, Item::getX, Item::getY, Item::getZ to produce creation parameters.",
-    "Call Item::legal_create with constants (type/id and variant/frame) plus the fetched frame and coordinates, passing an out-parameter for the created item.",
-    "If Item::legal_create indicates failure, return without further action.",
-    "If Item::legal_create indicates success, call Item::orStatus on the created item to OR in mask 0x0080, then return."
+    "Entry: fast-area trigger (U8P_PUDDLE::enterFastArea) initiates the process.",
+    "Guard: the routine only proceeds when the global/engine condition rainStormActive is true.",
+    "Attempted action: calls Item::legal_create with this object's Z, Y, X, Frame and proto 0x02BA; the created item is returned via an out parameter (local1).",
+    "Postcondition: on successful creation (Item::legal_create returns success), Item::orStatus is invoked to set status bit 0x0080 on the created item."
   ],
   "open_questions": [
-    "Precise semantic meaning of the status mask 0x0080 applied via Item::orStatus (appears to mark puddles for special processing or lifetime behavior) — confidence: medium.",
-    "Exact interpretation of the constant type/id and variant/frame passed to Item::legal_create (0x021B and 0x02BA appear used) — confidence: medium.",
-    "Whether Item::legal_create uses zero or non-zero as the canonical success return across the engine (inference from calling pattern suggests one convention) — confidence: medium.",
-    "Persistence and lifetime of the created puddle item (does it auto-expire, interact with other systems) are not determined from this script — confidence: low."
+    "What concrete prototype does 0x02BA represent in-game (exact visual/interaction semantics of the spawned object)?",
+    "What is the precise gameplay meaning of status bit 0x0080 (visual only, non-collidable, transient, etc.)?",
+    "Is rainStormActive a global flag, world condition, or process_result() check and are there edge cases where the creation is suppressed despite rain?"
   ],
   "main_function": {
     "name": "U8P_PUDDLE::enterFastArea",
     "execution_form": "process",
-    "purpose": "When an actor or item enters the puddle's fast-area trigger, attempt to create a puddle item at that actor's current location and mark it with a status flag, but only if no rain storm is active.",
+    "purpose": "On fast-area entry, spawn/attempt to place a puddle-like item (proto 0x02BA) at this object's location when a rain storm is active; if placement succeeds, mark the created item by ORing status 0x0080 into its status flags.",
     "entry_conditions": [
-      "Triggered by fast-area entry (U8P_PUDDLE::enterFastArea) for the puddle region.",
-      "Receives a parameter trigger_item (the entering actor/item).",
-      "Only proceeds when global rainStormActive is false/zero (guard)."
+      "fast-area entry (U8P_PUDDLE::enterFastArea)",
+      "rainStormActive == true",
+      "Item::legal_create(this.Z, this.Y, this.X, this.Frame, 0x02BA, &local1) returns success"
     ],
-    "confidence": "high"
+    "confidence": "medium"
   },
   "function_map": [
     {
       "name": "U8P_PUDDLE::enterFastArea",
       "kind": "main",
-      "role": "Handle the puddle area entry event: conditionally spawn and mark a puddle item at the entering actor's location.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getZ",
-      "kind": "extern",
-      "role": "Read the Z (height) coordinate from the trigger_item for creation parameters.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getY",
-      "kind": "extern",
-      "role": "Read the Y coordinate from the trigger_item for creation parameters.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getX",
-      "kind": "extern",
-      "role": "Read the X coordinate from the trigger_item for creation parameters.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getFrame",
-      "kind": "extern",
-      "role": "Obtain the trigger_item's frame/index to pass into the creation parameters.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::legal_create",
-      "kind": "extern",
-      "role": "Attempt to create the puddle item at a given type/variant/frame/X/Y/Z and return the created-item via an out-parameter; success/failure influences control flow.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::orStatus",
-      "kind": "extern",
-      "role": "Apply a status bitmask to the newly created puddle item (used here to OR in mask 0x0080).",
-      "confidence": "high"
+      "role": "fast-area entry handler that spawns/marks a puddle-like item during rain",
+      "confidence": "medium"
     }
   ],
   "call_analysis": {
@@ -78,63 +40,57 @@
     "external_calls": [
       {
         "caller": "U8P_PUDDLE::enterFastArea",
-        "callee": "Item::getFrame",
-        "purpose": "Fetch trigger_item's frame/index to pass to Item::legal_create.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_PUDDLE::enterFastArea",
-        "callee": "Item::getX",
-        "purpose": "Fetch trigger_item's X coordinate for puddle placement.",
+        "callee": "Item::getZ",
+        "purpose": "Retrieve this object's Z coordinate to pass to Item::legal_create",
         "confidence": "high"
       },
       {
         "caller": "U8P_PUDDLE::enterFastArea",
         "callee": "Item::getY",
-        "purpose": "Fetch trigger_item's Y coordinate for puddle placement.",
+        "purpose": "Retrieve this object's Y coordinate to pass to Item::legal_create",
         "confidence": "high"
       },
       {
         "caller": "U8P_PUDDLE::enterFastArea",
-        "callee": "Item::getZ",
-        "purpose": "Fetch trigger_item's Z coordinate for puddle placement.",
+        "callee": "Item::getX",
+        "purpose": "Retrieve this object's X coordinate to pass to Item::legal_create",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PUDDLE::enterFastArea",
+        "callee": "Item::getFrame",
+        "purpose": "Retrieve this object's frame to pass to Item::legal_create",
         "confidence": "high"
       },
       {
         "caller": "U8P_PUDDLE::enterFastArea",
         "callee": "Item::legal_create",
-        "purpose": "Attempt to create the puddle item with specific type/variant/frame and coordinates; returns created-item via out-parameter and indicates success/failure.",
+        "purpose": "Attempt to create/place prototype 0x02BA at the supplied coordinates/frame; returns the created item via an out parameter (local1) if successful. Acts as a legality/placement check.",
         "confidence": "high"
       },
       {
         "caller": "U8P_PUDDLE::enterFastArea",
         "callee": "Item::orStatus",
-        "purpose": "Apply status mask 0x0080 to the created puddle to mark it for special handling.",
-        "confidence": "high"
+        "purpose": "Bitwise-OR status mask 0x0080 into the created item's status flags to mark it with a specific property (inferred marking of puddle behavior).",
+        "confidence": "medium"
       }
     ]
   },
   "global_flags": {
-    "reads": [
-      {
-        "name": "rainStormActive",
-        "likely_effect": "When non-zero, suppress puddle creation; acts as a global guard preventing spawning of puddles during active rain storms.",
-        "confidence": "high"
-      }
-    ],
+    "reads": [],
     "writes": []
   },
   "ui_tags": [
     "trigger",
-    "spawn",
     "guard",
-    "status"
+    "spawn",
+    "mark"
   ],
   "quick_facts": {
     "main_function": "U8P_PUDDLE::enterFastArea",
-    "behavior_summary_one_liner": "U8P_PUDDLE::enterFastArea is run when an actor/item enters the puddle trigger region. It checks the global rainStormActive flag and, if no rain storm is active, attempts to spawn a puddle item at the entering actor's location (using that actor's X, Y, Z and frame). If creation succeeds, it marks the new puddle with a status bitmask (0x0080). If rainStormActive is set or creation fails, it returns without creating or marking a puddle.",
+    "behavior_summary_one_liner": "When an actor enters the object's fast-area, the script checks whether a rain storm is active. If rainStormActive is true, it attempts to create an item of prototype 0x02BA at this object's world coordinates and frame. If creation succeeds, the script ORs status bit 0x0080 into the newly created item. This implements spawning/marking a puddle-like object during rain, guarded by placement legality checks.",
     "external_call_count": 6,
-    "flag_read_count": 1,
+    "flag_read_count": 0,
     "flag_write_count": 0
   },
   "hypotheses": {

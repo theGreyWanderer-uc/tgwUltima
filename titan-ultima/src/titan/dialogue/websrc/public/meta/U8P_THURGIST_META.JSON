@@ -3,30 +3,30 @@
   "source_of_truth": "dialogue/json/U8P_THURGIST.json",
   "file": "U8P_THURGIST",
   "behavior_summary": [
-    "Provides the gameplay behavior for a 'theurgist' NPC: housekeeping when leaving an area, short examine responses, a defensive/alert reaction when 'cast' at/attacked, and a multi-branch conversation when 'used' (talked to).",
-    "U8P_THURGIST::leaveFastArea clears several area/region references that tie the NPC to a trigger and marks the process excluded so the area no longer treats the NPC as present.",
-    "U8P_THURGIST::look makes the NPC emit a short bark depending on whether it is dead ('dead theurgist ' vs 'theurgist ').",
-    "U8P_THURGIST::cast polls for a valid combat target (up to a short retry count), and if a hostile/valid target is found it triggers alert barks, spawns visual/sound effects, changes animation/frame state, and may teleport the target by random offsets.",
-    "U8P_THURGIST::use runs a random greeting, then inspects the NPC's frame/state and branches into dialogue/animation/activity choices (busy/unavailable responses, spawn animations, set activity)."
+    "This script controls a theurgist NPC's basic lifecycle: area-trigger cleanup, brief U8P_THURGIST::look descriptions, combat/alert behavior, and player conversation branches.",
+    "U8P_THURGIST::leaveFastArea is an area-exit cleanup handler that clears several runtime references so the NPC is no longer considered active/in-area.",
+    "U8P_THURGIST::look returns one of two short barks depending on whether the NPC is dead or alive.",
+    "U8P_THURGIST::cast implements an alert/combat response: while the NPC has no target it runs a short countdown loop (spawning short-timer processes); if the NPC acquires a target and is alive it issues an alarm bark, runs repeated behavior/animation calls, toggles an item/NPC 0x10 status bit, may change the visual frame, spawn visual/effect processes, and finally teleports the NPC.",
+    "U8P_THURGIST::use handles player-initiated conversation: it resets runtime refs, picks a greeting at random, begins a conversation, reads an item/frame value (local4) to choose among several short dialogue branches (including an advice branch and a vow-of-silence branch that spawns an effect), then ends the conversation and schedules restoring the NPC activity."
   ],
   "notable_control_flow": [
-    "U8P_THURGIST::leaveFastArea: straight-line cleanup — set info / exclude process, then call resetRef for multiple reference ids (0x0205, 0x0204, 0x00F0, 0x0200) passing the NPC pointer.",
-    "U8P_THURGIST::look: query Npc::isDead() and select one of two static bark strings, then suspend.",
-    "U8P_THURGIST::cast: initialize a small counter (BP-02 = 5) and loop polling Npc::getTarget() with short suspends (FREE::1C19) until a valid target or timeout; on success check target != self, target not dead, and Item::getStatus(target) has bit 0x10 before performing the alert/effect sequence, changing frames, spawning multiple effect methods, and applying Npc::teleport with urandom offsets.",
-    "U8P_THURGIST::use: choose greeting by urandom, spawn interaction animation/effect (METHOD::0BCF, FREE::1C19), then obtain Item::getFrame() (via loopscr evaluation) into BP-08 and branch on its value to select dialogue, spawn METHOD::1090 in branches and call Npc::cSetActivity to record post-conversation activity."
+    "U8P_THURGIST::leaveFastArea: immediate sequence of resetRef calls to clear runtime references — a deterministic cleanup executed on fast-area exit.",
+    "U8P_THURGIST::look: checks Npc::isDead(this) then issues one of two barks and suspends.",
+    "U8P_THURGIST::cast: initializes a small counter (local1 = 5) and loops with spawn+suspend while Npc::getTarget(this) is false; when a target appears and NPC is alive it performs a multi-step alert sequence (bark, repeated METHOD::func15E7 calls with suspends, toggle status bit 0x10, set frame, spawn visual processes, teleport).",
+    "U8P_THURGIST::use: resets refs, selects a random greeting via urandom, calls Item::getFrame (result -> local4) and switches on that frame value across several branches to produce different dialogue flows; branches may spawn short-lived processes and always end by resetting NPC activity via Npc::cSetActivity."
   ],
   "open_questions": [
-    "Exact semantic meaning of the various 'info' ids set at the start of handlers (0x021C, 0x0208, 0x021D, 0x0207) — likely engine metadata/state markers but precise semantics unknown.",
-    "Precise game-level meanings of the resetRef reference ids (0x0205, 0x0204, 0x00F0, 0x0200): which map/area lists they correspond to is inferred but not certain.",
-    "Exact effects and parameters of METHOD::15E7, METHOD::0113, METHOD::0BCF, METHOD::1090 and FREE::* spawn codes — they appear to be visual/animation/effect spawns but their concrete in-game appearance or timing is not documented here.",
-    "The encoding/values of Item::getFrame() used by use() to drive dialogue branches: only relative behavior is clear (0,1 produce specific responses) but full frame enumeration is unknown."
+    "Exact semantics and side effects of METHOD::func15E7 called repeatedly during the alert sequence (appears to drive animation/sound/AI updates but its concrete effect is unknown).",
+    "Precise meaning of the item/NPC status bit 0x10 (read/written by Item::getStatus/METHOD::toggleStatusFlag) — inferred to control visible/active state but not definitively identified.",
+    "Parameters and visual/functional variants produced by FREE::func29D8 spawns (numeric args like 0x64/0x74 appear to tune effect type/duration).",
+    "Whether teleport in U8P_THURGIST::cast is unconditional on entering the alert branch or conditional on other game-state not captured by the disassembly."
   ],
   "main_function": {
     "name": "U8P_THURGIST::leaveFastArea",
     "execution_form": "process",
-    "purpose": "When the NPC leaves a fast-area trigger, remove area/region references for that NPC and mark the process excluded so the area no longer considers the NPC present.",
+    "purpose": "Reset/clear NPC runtime references so the NPC no longer counts as 'in-area' or active when the Avatar (or relevant actor) leaves the NPC's fast-area trigger.",
     "entry_conditions": [
-      "Triggered by U8P_THURGIST::leaveFastArea event — interpreted as the actor leaving the function's trigger region (area exit)."
+      "Triggered automatically when the Avatar or other relevant actor leaves the NPC's fast-area trigger region (area-exit event)."
     ],
     "confidence": "high"
   },
@@ -34,43 +34,25 @@
     {
       "name": "U8P_THURGIST::leaveFastArea",
       "kind": "main",
-      "role": "Cleanup/reset references when the actor leaves a fast-area trigger; clear multiple resetRef slots and mark the process excluded.",
+      "role": "fast-area exit cleanup (reset runtime refs)",
       "confidence": "high"
     },
     {
       "name": "U8P_THURGIST::look",
       "kind": "helper",
-      "role": "Respond to examine/look interactions; choose a short bark depending on Npc::isDead() and suspend.",
+      "role": "examine/U8P_THURGIST::look handler (emit short bark based on death state)",
       "confidence": "high"
     },
     {
       "name": "U8P_THURGIST::cast",
       "kind": "helper",
-      "role": "Defensive/alert behavior invoked on a cast/attack-like event: poll for target, spawn effects, change frame/state, possibly teleport target.",
-      "confidence": "high"
+      "role": "combat/alert responder (timer loop, alert bark, animations/effects, toggle status, teleport)",
+      "confidence": "medium"
     },
     {
       "name": "U8P_THURGIST::use",
       "kind": "helper",
-      "role": "Handle 'use' (talk/interact) event: random greeting, read frame state, branch on frame to select dialogue/animations and set NPC activity.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_THURGIST::resetRef",
-      "kind": "extern",
-      "role": "Engine utility to clear/reset a reference entry tying a process to an area/slot; called with a reference id and the actor/process id.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_THURGIST::set info (opcode 77)",
-      "kind": "extern",
-      "role": "Engine opcode to set process/item info/metadata used before marking process excluded.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_THURGIST::process exclude (opcode 78)",
-      "kind": "extern",
-      "role": "Engine opcode to mark process excluded from some processing lists.",
+      "role": "player conversation handler (random greeting + frame-driven dialogue branches)",
       "confidence": "high"
     }
   ],
@@ -79,147 +61,99 @@
     "external_calls": [
       {
         "caller": "U8P_THURGIST::leaveFastArea",
-        "callee": "U8P_THURGIST::set info (opcode 77)",
-        "purpose": "Mark the process with an info id (0x021C) before exclusion; likely records U8P_THURGIST::leaveFastArea/area-state change.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_THURGIST::leaveFastArea",
-        "callee": "U8P_THURGIST::process exclude (opcode 78)",
-        "purpose": "Exclude the process from further processing in the area after leaving.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_THURGIST::leaveFastArea",
-        "callee": "U8P_THURGIST::resetRef",
-        "purpose": "Clear multiple area/region reference slots for the NPC so it is no longer associated with the fast-area trigger (ids: 0x0205, 0x0204, 0x00F0, 0x0200).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_THURGIST::look",
-        "callee": "U8P_THURGIST::set info (opcode 77)",
-        "purpose": "Set info id 0x0208, probably to mark that the look handler ran or to set temporary state before exclusion.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_THURGIST::look",
-        "callee": "U8P_THURGIST::process exclude (opcode 78)",
-        "purpose": "Exclude process briefly while look handling occurs.",
+        "callee": "FREE::resetRef",
+        "purpose": "Clear multiple runtime references on this NPC (ref ids observed: 0x0205, 0x0204, 0x00F0, 0x0200) to unregister it as 'in-area' or active.",
         "confidence": "high"
       },
       {
         "caller": "U8P_THURGIST::look",
         "callee": "Npc::isDead",
-        "purpose": "Decide which bark string to emit based on whether the NPC is dead.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_THURGIST::look",
-        "callee": "Item::bark",
-        "purpose": "Emit the short description/bark string ('dead theurgist ' or 'theurgist ').",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_THURGIST::cast",
-        "callee": "U8P_THURGIST::set info (opcode 77)",
-        "purpose": "Set info id 0x021D before exclusion/behavior sequence.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_THURGIST::cast",
-        "callee": "U8P_THURGIST::process exclude (opcode 78)",
-        "purpose": "Exclude process during cast handling.",
+        "purpose": "Query whether the NPC is dead in order to choose which bark/description to emit.",
         "confidence": "high"
       },
       {
         "caller": "U8P_THURGIST::cast",
         "callee": "Npc::getTarget",
-        "purpose": "Poll for a valid target to react to; looped with a small counter and short suspend waits.",
+        "purpose": "Detect whether the NPC currently has a combat target to decide between idle timer-loop and alert sequence.",
         "confidence": "high"
+      },
+      {
+        "caller": "U8P_THURGIST::cast",
+        "callee": "Npc::isDead",
+        "purpose": "Prevent running alert sequence if NPC is dead.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_THURGIST::cast",
+        "callee": "METHOD::func15E7",
+        "purpose": "Repeatedly invoked during the alert sequence; likely drives animation, sound, or AI update steps associated with the 'Help me' bark/alert.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_THURGIST::cast",
+        "callee": "METHOD::toggleStatusFlag",
+        "purpose": "Toggle/set the item/NPC 0x10 status bit to change visible/active state as part of the alert transition.",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_THURGIST::cast",
         "callee": "Item::getStatus",
-        "purpose": "Read status bits of the target (test bit 0x10) to decide whether to perform the alert reaction.",
+        "purpose": "Read item/NPC status bits (checked with & 0x10) to conditionally drive behavior.",
         "confidence": "high"
       },
       {
         "caller": "U8P_THURGIST::cast",
-        "callee": "Item::bark",
-        "purpose": "Emit an alarm/help bark when a valid hostile target is found.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_THURGIST::cast",
-        "callee": "METHOD::15E7 / FREE::29D8 / FREE::1C19 / METHOD::0113 / FREE::29D8",
-        "purpose": "Spawn various visual/sound/timed effects and a short wait while performing the reaction sequence.",
+        "callee": "Item::setFrame",
+        "purpose": "Update the visual frame/state of the NPC/item after toggling status during the alert sequence.",
         "confidence": "medium"
       },
       {
         "caller": "U8P_THURGIST::cast",
-        "callee": "Item::getFrame / Item::setFrame",
-        "purpose": "Read and update the NPC frame/state during the reaction sequence.",
-        "confidence": "high"
+        "callee": "FREE::func1C19",
+        "purpose": "Spawn a short/timed helper process used as a brief delay/timer during the no-target loop or other short waits.",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_THURGIST::cast",
-        "callee": "urandom",
-        "purpose": "Generate random offsets used in one call to Npc::teleport for variability in teleport behavior.",
-        "confidence": "high"
+        "callee": "FREE::func29D8",
+        "purpose": "Spawn a longer/different visual/effect process (numeric spawn args suggest variant/duration control).",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_THURGIST::cast",
         "callee": "Npc::teleport",
-        "purpose": "Apply a random teleport offset to the target as part of the reaction.",
+        "purpose": "Move/teleport the NPC to new randomized coordinates as a final step in the alert/engaged sequence.",
         "confidence": "medium"
       },
       {
         "caller": "U8P_THURGIST::use",
-        "callee": "U8P_THURGIST::set info (opcode 77)",
-        "purpose": "Set info id 0x0207 and exclude the process before handling conversation/interaction.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_THURGIST::use",
-        "callee": "U8P_THURGIST::process exclude (opcode 78)",
-        "purpose": "Exclude process during use handling.",
+        "callee": "FREE::resetRef",
+        "purpose": "Clear/reset runtime references at conversation start (cleanup similar to U8P_THURGIST::leaveFastArea).",
         "confidence": "high"
       },
       {
         "caller": "U8P_THURGIST::use",
         "callee": "urandom",
-        "purpose": "Choose between two greeting phrases with a probabilistic split.",
+        "purpose": "Select a random greeting variant at the start of conversation.",
         "confidence": "high"
-      },
-      {
-        "caller": "U8P_THURGIST::use",
-        "callee": "Item::bark",
-        "purpose": "Speak the chosen greeting or subsequent dialogue lines to the player.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_THURGIST::use",
-        "callee": "METHOD::0BCF / FREE::1C19 / METHOD::1090",
-        "purpose": "Spawn animation/effect helpers to accompany conversation branches.",
-        "confidence": "medium"
       },
       {
         "caller": "U8P_THURGIST::use",
         "callee": "Item::getFrame",
-        "purpose": "Obtain the NPC's frame/state (stored to BP-08) to select dialogue branches.",
+        "purpose": "Read an item/frame value into local4 which drives branching between multiple dialogue responses.",
         "confidence": "high"
+      },
+      {
+        "caller": "U8P_THURGIST::use",
+        "callee": "FREE::func1C19",
+        "purpose": "Spawn short timed processes during some dialogue branches (conversation suspends to wait for them).",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_THURGIST::use",
         "callee": "Npc::cSetActivity",
-        "purpose": "Set the NPC's activity/state after a dialogue branch completes (observed setting to activity 0 in branches).",
+        "purpose": "Restore/reset NPC activity state (activity id 0x00 observed) after conversation ends.",
         "confidence": "high"
-      },
-      {
-        "caller": "U8P_THURGIST::use",
-        "callee": "FREE::2A56",
-        "purpose": "Cleanup/free certain ids/resources as part of preparing the interaction state.",
-        "confidence": "medium"
       }
     ]
   },
@@ -235,8 +169,8 @@
   ],
   "quick_facts": {
     "main_function": "U8P_THURGIST::leaveFastArea",
-    "behavior_summary_one_liner": "Provides the gameplay behavior for a 'theurgist' NPC: housekeeping when leaving an area, short examine responses, a defensive/alert reaction when 'cast' at/attacked, and a multi-branch conversation when 'used' (talked to).",
-    "external_call_count": 24,
+    "behavior_summary_one_liner": "This script controls a theurgist NPC's basic lifecycle: area-trigger cleanup, brief U8P_THURGIST::look descriptions, combat/alert behavior, and player conversation branches.",
+    "external_call_count": 16,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

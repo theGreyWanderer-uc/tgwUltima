@@ -3,27 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_BATHSTUF.json",
   "file": "U8P_BATHSTUF",
   "behavior_summary": [
-    "Handles the 'U8P_BATHSTUF::look' (examine) event for a bath-related item instance and announces a short name for the specific variant of the item to the viewer.",
-    "Determines the item's variant by calling Item::getFrame() and maps numeric frame values to human-readable names (e.g., 0='wash basin', 1='water jug', 2/3/4='towel', 5='razor', 6/7='soap', 8='mirror').",
-    "For the matched frame the function builds a temporary string, calls Item::bark(pid, string) to display the name to the player/process, frees the temporary string, then invokes engine control primitives (implies and suspend) to sequence/display the message before returning."
+    "When the player 'looks' at the bathroom-stuff item, the script reads the item's frame/state and shows a short label (a single bark) describing the sub-item currently represented by that frame (e.g., 'wash basin', 'water jug', 'towel', 'razor', 'soap', 'mirror').",
+    "After emitting the label the U8P_BATHSTUF::look process yields/suspends; there are no side effects, no global flags read or written, and no branching based on player input."
   ],
   "notable_control_flow": [
-    "Branch-on-frame: the primary decision is a switch-like branch on the value returned by Item::getFrame() to select which short name to bark.",
-    "Per-branch linear flow: each branch allocates a temporary string, calls Item::bark, frees the string, then runs implies/suspend and exits via a shared return path.",
-    "Initialization/engine setup: at entry there are engine-specific 'set info / process exclude' style primitives run before the branching logic (likely standard script setup)."
+    "U8P_BATHSTUF::look is a process (processType 0x0208) triggered by the engine's U8P_BATHSTUF::look/inspect action.",
+    "Control is a simple frame-based dispatch: Item::getFrame(this) is compared against integer values (0..8) and the corresponding Bark text is shown via an if/else-if chain (switch-like).",
+    "Each branch issues a single Bark then calls suspend (process yield/end)."
   ],
   "open_questions": [
-    "Is the first argument explicitly passed pid (player/process id) or is pid supplied implicitly by the engine when calling Item::bark? The disassembly shows pid pushed but the exact source is inferred.",
-    "Exact semantics and side-effects of the 'implies' primitive and how it sequences with suspend (display timing vs script scheduling) are inferred but not explicit.",
-    "Whether the 'set info / process exclude' operations at function entry change any gameplay-visible state for this item beyond local script setup (the code shows them but intent is inferred)."
+    "Are the exact frame-to-label mappings (0='wash basin', 1='water jug', 2/3/4='towel', 5='razor', 6/7='soap', 8='mirror') authoritative, or derived solely from bark samples? (inferred from text samples; confidence medium)",
+    "Does suspend here always end the U8P_BATHSTUF::look process immediately, or merely yield to allow other engine activity? (suspend is inferred from raw nodes; confidence medium)"
   ],
   "main_function": {
     "name": "U8P_BATHSTUF::look",
     "execution_form": "process",
-    "purpose": "When an actor/player looks at this bath-related item instance, read its frame (variant) and produce a short descriptive name for that variant via the item's bark/display routine so the player sees the object type.",
+    "purpose": "Provide a short, player-facing label for the bathroom-stuff item based on its current frame/state when the player examines it.",
     "entry_conditions": [
-      "Invoked on the 'U8P_BATHSTUF::look' event for the item (player or actor inspects the object).",
-      "Runs after standard per-script engine setup (set info/process exclude) which occurs at entry."
+      "Invoked by the engine when the player uses the U8P_BATHSTUF::look/examine action on this item (processType 0x0208).",
+      "Selection of which label to show depends on Item::getFrame(this) equal to a small integer index (0..8)."
     ],
     "confidence": "high"
   },
@@ -31,43 +29,25 @@
     {
       "name": "U8P_BATHSTUF::look",
       "kind": "main",
-      "role": "Examine/description handler for bath-related item variants; maps Item::getFrame() to a short name and calls Item::bark to display it.",
+      "role": "Look/inspect handler that selects and displays a short label based on item frame",
       "confidence": "high"
     },
     {
       "name": "Item::getFrame",
       "kind": "extern",
-      "role": "Engine/item method returning the item's numeric frame/variant used to choose which name to display.",
+      "role": "Query the item's current frame/state index used to pick the label",
       "confidence": "high"
     },
     {
-      "name": "Item::bark",
+      "name": "Bark",
       "kind": "extern",
-      "role": "Engine/item method to emit/display a short text string to a target player/process (used to show the item name).",
+      "role": "Emit a short player-facing description string",
       "confidence": "high"
-    },
-    {
-      "name": "U8P_BATHSTUF::str to ptr / free string",
-      "kind": "extern",
-      "role": "Runtime helpers used to allocate a temporary pointer for a literal string and free it after use.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_BATHSTUF::implies",
-      "kind": "extern",
-      "role": "Engine control primitive used after Item::bark (likely to sequence the message or register the bark result) before suspending.",
-      "confidence": "medium"
     },
     {
       "name": "suspend",
       "kind": "extern",
-      "role": "Engine primitive called to pause/suspend the usecode thread so the displayed message can be processed or observed.",
-      "confidence": "medium"
-    },
-    {
-      "name": "U8P_BATHSTUF::set info / process exclude",
-      "kind": "extern",
-      "role": "Engine script setup operations executed at function entry; likely used to set script/info flags or exclude the object from processing while handling the event.",
+      "role": "Yield or pause the U8P_BATHSTUF::look process after showing the label",
       "confidence": "medium"
     }
   ],
@@ -77,37 +57,19 @@
       {
         "caller": "U8P_BATHSTUF::look",
         "callee": "Item::getFrame",
-        "purpose": "Obtain the item's numeric frame/variant to decide which short name to display.",
+        "purpose": "Obtain the item's frame/state index to decide which label to display",
         "confidence": "high"
       },
       {
         "caller": "U8P_BATHSTUF::look",
-        "callee": "U8P_BATHSTUF::str to ptr / free string",
-        "purpose": "Create a temporary pointer for the literal name string passed to Item::bark, and free it after bark returns.",
+        "callee": "Bark",
+        "purpose": "Present the short descriptive text corresponding to the current frame",
         "confidence": "high"
-      },
-      {
-        "caller": "U8P_BATHSTUF::look",
-        "callee": "Item::bark",
-        "purpose": "Display or queue the short name string to the target player/process (pid) so the player sees the item's name.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_BATHSTUF::look",
-        "callee": "U8P_BATHSTUF::implies",
-        "purpose": "Engine-level sequencing primitive used immediately after Item::bark (likely to handle return/result semantics or message sequencing).",
-        "confidence": "medium"
       },
       {
         "caller": "U8P_BATHSTUF::look",
         "callee": "suspend",
-        "purpose": "Pause the usecode thread after barking so the message can be displayed or processed before continuing.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_BATHSTUF::look",
-        "callee": "U8P_BATHSTUF::set info / process exclude",
-        "purpose": "Run standard script/engine setup at entry to set info keys or exclude the object from default processing while handling the event.",
+        "purpose": "Yield or end the U8P_BATHSTUF::look process after the bark; inferred from suspend nodes",
         "confidence": "medium"
       }
     ]
@@ -118,14 +80,14 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "animation",
+    "description",
+    "ui_feedback",
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_BATHSTUF::BATHSTUF::look",
-    "behavior_summary_one_liner": "Handles the 'U8P_BATHSTUF::look' (examine) event for a bath-related item instance and announces a short name for the specific variant of the item to the viewer.",
-    "external_call_count": 6,
+    "main_function": "U8P_BATHSTUF::look",
+    "behavior_summary_one_liner": "When the player 'looks' at the bathroom-stuff item, the script reads the item's frame/state and shows a short label (a single bark) describing the sub-item currently represented by that frame (e.g., 'wash basin', 'water jug', 'towel', 'razor', 'soap', 'mirror').",
+    "external_call_count": 3,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

@@ -3,31 +3,34 @@
   "source_of_truth": "dialogue/json/U8P_GUARDMAN.json",
   "file": "U8P_GUARDMAN",
   "behavior_summary": [
-    "Provides the guardsman's small interaction set: a U8P_GUARDMAN::look/examine response, an on-use conversation with a short question menu and branching replies, a cast reaction, and area-triggered coordination when the avatar enters or leaves a nearby trigger region.",
-    "U8P_GUARDMAN::look replies with an identity bark that depends on whether the NPC is dead (barks either \"dead guardsman\" or \"guardsman\").",
-    "U8P_GUARDMAN::enterFastArea/leaveFastArea manage area-specific references (resetting stored refs) and, when appropriate, spawn a short spawned routine (U8P_GUARDMAN::095B) to coordinate nearby guards (orient/move them) after randomized waits.",
-    "U8P_GUARDMAN::use implements conversational logic: it blocks conversation for special NPC frames (frame 0x14), sets a global somebodyTalking flag while refusing to speak, otherwise greets the player (randomized), offers a small ask() menu (Who are you? What is your duty? Bye) and replies with branch-specific lines. It also spawns helper/movement methods and sets NPC activity as needed.",
-    "U8P_GUARDMAN::cast simply barks a call-to-arms line ('Guardsmen, to arms!') when invoked."
+    "This script implements the behavior and dialogue for a guardsman NPC. It covers: examine/U8P_GUARDMAN::look responses, area-triggered ambient/patrol chatter, a short 'U8P_GUARDMAN::cast' alarm voice, a player conversation with a small menu, and cleanup when an actor leaves the guardsman's trigger area.",
+    "U8P_GUARDMAN::look: a simple examine handler — if the NPC is dead it barks a \"dead guardsman\" line, otherwise a standard \"guardsman\" line and the interaction ends.",
+    "U8P_GUARDMAN::enterFastArea: triggered when an actor enters the guard's fast/trigger area; performs guard-alive and map checks, clears several reference slots (resetRef) and (when allowed) calls U8P_GUARDMAN::func095B to produce ambient/patrol barks or start short guard activity.",
+    "U8P_GUARDMAN::leaveFastArea: clears the same set of area-linked references via resetRef to tear down any area state when the actor leaves.",
+    "U8P_GUARDMAN::cast(uword): a short monologue invoked on a U8P_GUARDMAN::cast-like event that barks an alarm line ('Guardsmen, to arms!'). The parameter is declared but not observed to affect output.",
+    "U8P_GUARDMAN::use: the conversation entry. It opens a small menu (Who are you?, What is your duty?, Bye), handles player choices (suspending to capture selection), branches dialogue text based on a global flag (devonInRule) and random selection (urandom), and contains an early 'refusal' path that sets somebodyTalking, spawns a short process, and emits a refusal bark when an item/frame check triggers (Item::getFrame == 0x14).",
+    "U8P_GUARDMAN::func095B: ambient/patrol routine invoked from area entry and elsewhere. It gates output on distance and somebodyTalking, uses urandom to choose lines, checks for nearby NPC/combat targets and can run a short combat-response sequence (calling METHOD::* helpers and emitting aggressive barks). It uses spawn/suspend patterns to space utterances."
   ],
   "notable_control_flow": [
-    "Early exits in enterFastArea: function returns without spawning/helper actions if the NPC is dead, if Npc::getMap(self) == 3, or if global[0063 01] (secondexecution) is set.",
-    "Conversation blocking in U8P_GUARDMAN::use: if Item::getFrame(self) == 0x14 the guard refuses to speak — sets global[000F 01] (somebodyTalking)=1, spawns a short FREE helper, barks an away message, then clears the flag and returns.",
-    "Use() chooses greeting and reply branches via urandom, then constructs a short slist and calls Item::ask to drive the dialog tree; replies may spawn movement/activity methods (METHOD::*) or set Npc::cSetActivity.",
-    "enterFastArea starts U8P_GUARDMAN::095B (spawn) which runs timed waits (urandom-based), scans nearby items/NPCs, and for eligible NPCs (Item::isNpc && not Npc::isInCombat) spawns method calls to change facing or move them toward a target."
+    "U8P_GUARDMAN::enterFastArea has early-exit guards: Npc::isDead(this) -> skip, Npc::getMap(this) == specific map -> skip, and a 'secondexecution' flag prevents repeat execution.",
+    "U8P_GUARDMAN::use implements a menu loop: build menu (local2), Ask + SuspendAssign into local1, then strcmp-driven branching per choice; MenuRemove reduces options as they are chosen and 'Bye' exits.",
+    "U8P_GUARDMAN::use contains an interrupt/refusal path: if Item::getFrame(local3) == 0x14 then set somebodyTalking=1, spawn FREE::func1C19 (short process), suspend/bark a refusal, then clear somebodyTalking — preventing normal conversation.",
+    "U8P_GUARDMAN::func095B gate logic: checks FREE::getDistanceBetween and somebodyTalking (read) to avoid barks when player is far or another conversation is in progress; uses urandom to vary lines and spawns short processes for timing between lines."
   ],
   "open_questions": [
-    "Exact semantics of frame value 0x14: why it blocks conversation and how that frame is set externally.",
-    "Precise meaning of map value 3 in Npc::getMap(self) (enterFastArea skips init on map==3) — what world state or zone does it represent?",
-    "Details of the spawned METHOD::* and FREE::* helper routines (0BCF, 1090, 091C, 15E7, 1C19, 2A56): their precise actions are inferred (movement/delay/dialog helper) but not canonical.",
-    "Which exact reference slots (ref IDs) are reset via resetRef and what gameplay entities they track (patrol points, leader, target)?",
-    "Behavior of global[0063 01] (secondexecution): inferred to suppress repeated initialization but the higher-level quest/flow conditions that set it are unknown."
+    "Exact semantics of METHOD::func091C and METHOD::func15E7 called from dialogue/behavior routines — their direct game-state effects are not present in the structured output and remain inferred (likely activity/state updates).",
+    "Precise meaning of resetRef ref IDs (0x0205, 0x0204, 0x00F0, 0x0200): they clearly clear area-linked references but what engine subsystems they map to is unspecified.",
+    "The Item::getFrame(...) == 0x14 check triggers a refusal path in U8P_GUARDMAN::use — what concrete gameplay condition or equipped item frame this represents is unknown.",
+    "Whether the uword parameter of U8P_GUARDMAN::cast affects behavior in other contexts (it is present but unused in observed nodes).",
+    "The nuance of the 'devonInRule' flag: it toggles allegiance/duty phrasing in dialogue but its world-story trigger and scope remain external to this script."
   ],
   "main_function": {
     "name": "U8P_GUARDMAN::look",
     "execution_form": "process",
-    "purpose": "Handle an examine/U8P_GUARDMAN::look interaction: check whether the guardsman NPC is dead and emit the appropriate short identity bark to the requesting process.",
+    "purpose": "Handle player examine/U8P_GUARDMAN::look interaction: produce a short descriptive bark depending on life state (dead vs alive) and end the U8P_GUARDMAN::look interaction.",
     "entry_conditions": [
-      "Event 0: player or other actor looks at this NPC (examine event triggers U8P_GUARDMAN::look(pid, self))."
+      "Invoked by the engine when the player examines/looks at the guardsman NPC.",
+      "Branches immediately on Npc::isDead(this)."
     ],
     "confidence": "high"
   },
@@ -35,46 +38,46 @@
     {
       "name": "U8P_GUARDMAN::look",
       "kind": "main",
-      "role": "Return a short identity bark ('dead guardsman' or 'guardsman') when examined.",
+      "role": "examine/description handler (process)",
       "confidence": "high"
     },
     {
       "name": "U8P_GUARDMAN::enterFastArea",
       "kind": "helper",
-      "role": "Triggered on area entry: reset area refs and, when appropriate, spawn a short routine to coordinate nearby guards.",
+      "role": "area-entry behavior; prepare/trigger ambient patrol speech",
       "confidence": "high"
     },
     {
       "name": "U8P_GUARDMAN::leaveFastArea",
       "kind": "helper",
-      "role": "Triggered on area exit: clear the same set of stored refs to reset area-specific state.",
+      "role": "area-exit cleanup; reset area-linked refs",
       "confidence": "high"
     },
     {
       "name": "U8P_GUARDMAN::cast",
       "kind": "helper",
-      "role": "Handle a cast event by barking a call-to-arms line.",
+      "role": "monologue/emote when a spell/ability event occurs (alarm bark)",
       "confidence": "high"
     },
     {
       "name": "U8P_GUARDMAN::use",
       "kind": "helper",
-      "role": "Main conversational/use handler: greeting, small question menu, branching replies, activity/movement spawns, and conversation blocking for special frames.",
+      "role": "player conversation/dialogue entry with menu, branching and refusal path",
       "confidence": "high"
     },
     {
-      "name": "U8P_GUARDMAN::095B",
+      "name": "U8P_GUARDMAN::func095B",
       "kind": "helper",
-      "role": "Spawned routine started by enterFastArea that waits, scans nearby NPCs, and issues orientation/movement spawns to coordinate guard reactions.",
-      "confidence": "medium"
+      "role": "ambient/patrol monologue routine (randomized barks, combat-response branch)",
+      "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
         "caller": "U8P_GUARDMAN::enterFastArea",
-        "callee": "U8P_GUARDMAN::095B",
-        "purpose": "Spawn a short helper routine to coordinate nearby guard NPCs after the avatar enters the fast area.",
+        "callee": "U8P_GUARDMAN::func095B",
+        "purpose": "Trigger ambient/patrol speech and short behavior sequence upon area entry",
         "confidence": "high"
       }
     ],
@@ -82,103 +85,115 @@
       {
         "caller": "U8P_GUARDMAN::look",
         "callee": "Npc::isDead",
-        "purpose": "Check whether the guardsman is dead to select between 'dead guardsman' and 'guardsman' bark strings.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GUARDMAN::look",
-        "callee": "Item::bark",
-        "purpose": "Emit the identity string to the viewing process.",
+        "purpose": "Decide whether to play a 'dead guardsman' or normal 'guardsman' U8P_GUARDMAN::look line",
         "confidence": "high"
       },
       {
         "caller": "U8P_GUARDMAN::enterFastArea",
         "callee": "Npc::getMap",
-        "purpose": "Read NPC map id and early-exit if map==3.",
-        "confidence": "high"
+        "purpose": "Skip area-entry behavior on specific maps",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_GUARDMAN::enterFastArea",
-        "callee": "U8P_GUARDMAN::resetRef",
-        "purpose": "Clear multiple stored reference slots on the NPC to reset area-specific state.",
+        "callee": "Item::getFrame",
+        "purpose": "Inspect an item/frame (local1) to decide an internal conditional path",
+        "confidence": "low"
+      },
+      {
+        "caller": "U8P_GUARDMAN::enterFastArea",
+        "callee": "resetRef",
+        "purpose": "Clear area-linked references for this NPC before starting new behavior",
         "confidence": "high"
       },
       {
         "caller": "U8P_GUARDMAN::leaveFastArea",
-        "callee": "U8P_GUARDMAN::resetRef",
-        "purpose": "Clear the same set of stored refs when leaving the trigger area.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GUARDMAN::cast",
-        "callee": "Item::bark",
-        "purpose": "Speak the 'Guardsmen, to arms!' line on cast event.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GUARDMAN::use",
-        "callee": "Item::getFrame",
-        "purpose": "Check for a special frame (0x14) that blocks conversation.",
+        "callee": "resetRef",
+        "purpose": "Tear down area-linked references when an actor leaves the trigger",
         "confidence": "high"
       },
       {
         "caller": "U8P_GUARDMAN::use",
         "callee": "Npc::getDir",
-        "purpose": "Save the NPC's facing/direction for later orientation or movement spawns.",
+        "purpose": "Capture NPC facing/direction at conversation start (stored in local4)",
         "confidence": "high"
       },
       {
         "caller": "U8P_GUARDMAN::use",
-        "callee": "Item::ask",
-        "purpose": "Present a short question list to the player and obtain their choice.",
+        "callee": "Item::getFrame",
+        "purpose": "If checked and equals 0x14, take refusal/interrupt path (set somebodyTalking and spawn short process)",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARDMAN::use",
+        "callee": "FREE::resetRef",
+        "purpose": "Housekeeping resetRef call during conversation startup (reset a reference slot)",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GUARDMAN::use",
+        "callee": "FREE::func1C19 (spawn)",
+        "purpose": "Spawn a short transient process used as a timing/interrupt during refusal path",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARDMAN::use",
+        "callee": "METHOD::func091C",
+        "purpose": "Called from dialogue flow to trigger an external side-effect (likely an activity/state change)",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GUARDMAN::func095B",
+        "callee": "FREE::getDistanceBetween",
+        "purpose": "Compute distance to actor/player and suppress barks when actor is far",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARDMAN::func095B",
+        "callee": "Item::isNpc",
+        "purpose": "Detect whether a referenced item corresponds to an NPC for a potential combat-response branch",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GUARDMAN::func095B",
+        "callee": "Npc::isInCombat",
+        "purpose": "Check if the nearby NPC is in combat to trigger aggressive response lines",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GUARDMAN::func095B",
+        "callee": "METHOD::func091C",
+        "purpose": "Part of the combat-response sequence; likely changes NPC state or starts a reaction",
+        "confidence": "low"
+      },
+      {
+        "caller": "U8P_GUARDMAN::func095B",
+        "callee": "METHOD::func15E7",
+        "purpose": "Auxiliary helper invoked around certain barks; likely handles animation/state or sound",
+        "confidence": "low"
+      },
+      {
+        "caller": "U8P_GUARDMAN::func095B",
+        "callee": "FREE::func1C19 (spawn)",
+        "purpose": "Spawn short processes used as delays between lines/actions",
         "confidence": "high"
       },
       {
         "caller": "U8P_GUARDMAN::use",
         "callee": "urandom",
-        "purpose": "Pick randomized greeting/reply variants and randomized delays in spawned routines.",
+        "purpose": "Randomize greeting/duty phrasing to add variety to dialogue responses",
         "confidence": "high"
       },
       {
-        "caller": "U8P_GUARDMAN::use",
-        "callee": "FREE::1C19",
-        "purpose": "Spawn a small helper or delay when conversation is blocked (used while somebodyTalking is set).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_GUARDMAN::use",
-        "callee": "METHOD::0BCF / METHOD::1090 / METHOD::091C / METHOD::15E7",
-        "purpose": "Spawned methods used to move/orient the NPC or change activity in response to dialog choices.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_GUARDMAN::095B",
-        "callee": "Item::isNpc",
-        "purpose": "Filter nearby items, only apply guard coordination logic to NPCs.",
+        "caller": "U8P_GUARDMAN::func095B",
+        "callee": "urandom",
+        "purpose": "Select which ambient/patrol line to speak",
         "confidence": "high"
-      },
-      {
-        "caller": "U8P_GUARDMAN::095B",
-        "callee": "Npc::isInCombat",
-        "purpose": "Skip commanding NPCs that are currently in combat.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GUARDMAN::095B",
-        "callee": "Item::getDirToItem",
-        "purpose": "Compute direction toward another item/NPC when issuing movement/orientation commands.",
-        "confidence": "medium"
       },
       {
         "caller": "U8P_GUARDMAN::use",
         "callee": "Npc::cSetActivity",
-        "purpose": "Set the NPC's scripted activity during or after conversation.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_GUARDMAN::use",
-        "callee": "FREE::2A56",
-        "purpose": "Short timed wait/delay used during conversation flow.",
+        "purpose": "Change NPC activity/state as a side-effect after certain dialogue branches",
         "confidence": "medium"
       }
     ]
@@ -186,20 +201,25 @@
   "global_flags": {
     "reads": [
       {
-        "name": "global[0063 01] (secondexecution)",
-        "likely_effect": "Suppress enterFastArea initialization/spawn when set (prevents repeated coordination).",
+        "name": "devonInRule",
+        "likely_effect": "Selects alternate allegiance/duty lines in conversation (alters phrasing of 'Who are you?' and 'What is your duty?' responses).",
         "confidence": "high"
       },
       {
-        "name": "global[0058 01] (devonInRule)",
-        "likely_effect": "Select alternate dialog branches in use() (changes replies for 'Who are you?' / 'What is your duty?').",
+        "name": "somebodyTalking",
+        "likely_effect": "Checked by U8P_GUARDMAN::func095B to suppress ambient barks if another conversation/speech is in progress.",
         "confidence": "high"
+      },
+      {
+        "name": "secondexecution",
+        "likely_effect": "Prevents U8P_GUARDMAN::enterFastArea from re-running its area-entry behavior on repeat entries.",
+        "confidence": "medium"
       }
     ],
     "writes": [
       {
-        "name": "global[000F 01] (somebodyTalking)",
-        "likely_effect": "Set to 1 to block overlapping speech/dialog while the guard refuses to speak, then cleared after the refusal sequence.",
+        "name": "somebodyTalking",
+        "likely_effect": "Set to 1 when the guard refuses to speak (prevents overlapping conversations), then cleared to 0 after the interrupt/refusal sequence.",
         "confidence": "high"
       }
     ]
@@ -212,9 +232,9 @@
   ],
   "quick_facts": {
     "main_function": "U8P_GUARDMAN::look",
-    "behavior_summary_one_liner": "Provides the guardsman's small interaction set: a U8P_GUARDMAN::look/examine response, an on-use conversation with a short question menu and branching replies, a cast reaction, and area-triggered coordination when the avatar enters or leaves a nearby trigger region.",
-    "external_call_count": 17,
-    "flag_read_count": 2,
+    "behavior_summary_one_liner": "This script implements the behavior and dialogue for a guardsman NPC. It covers: examine/U8P_GUARDMAN::look responses, area-triggered ambient/patrol chatter, a short 'U8P_GUARDMAN::cast' alarm voice, a player conversation with a small menu, and cleanup when an actor leaves the guardsman's trigger area.",
+    "external_call_count": 19,
+    "flag_read_count": 3,
     "flag_write_count": 1
   },
   "hypotheses": {

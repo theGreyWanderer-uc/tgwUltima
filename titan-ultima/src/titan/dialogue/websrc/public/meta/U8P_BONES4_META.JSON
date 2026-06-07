@@ -3,27 +3,28 @@
   "source_of_truth": "dialogue/json/U8P_BONES4.json",
   "file": "U8P_BONES4",
   "behavior_summary": [
-    "BONES4::look: When a player examines the bones/skeleton item, the script marks the item with standard 'U8P_BONES4::look' info/processing state and causes the item to emit the short description string \"skeleton \" to the examining player (via Item::bark). The handler then suspends/returns.",
-    "BONES4::use: When a player uses the bones/skeleton item, the script checks an item status word (Item::getStatus). If the 0x0100 bit is set the script closes the item's UI gump (Item::closeGump) and returns. If the bit is not set it performs a random roll (urandom(0x64)); on the common branch it barks the warning text \"Disturb my rest not, mortal!\" to the player, while on a low-probability branch it opens a special gump for the item (Item::openGump with parameter 0x0C).",
-    "Decisions and behaviors are driven by the item's internal status bits and a probabilistic random roll; no global game flags are read or written by this script fragment."
+    "U8P_BONES4::look: When the player examines the bones, the script emits a short description bark \"skeleton\" and then suspends/ends the U8P_BONES4::look process.",
+    "U8P_BONES4::use: Handles player 'U8P_BONES4::use' on the bones. It reads the item's status word into a temporary local (local1) and tests status bit 0x0100. If that bit is set the script calls Item::closeGump(this) (closing any open UI for the item).",
+    "If bit 0x0100 is clear the script performs urandom(100). On a rare roll (result > 95, i.e. values 96–99, ~4% chance) it barks \"Disturb my rest not, mortal!\" and suspends the process; otherwise it opens the item's UI/gump via Item::openGump(0x0Ch, this).",
+    "No global flags are read or written by these processes in the extracted code; behavior is local to the item instance and its UI state."
   ],
   "notable_control_flow": [
-    "Event-driven: BONES4::look runs on the 'U8P_BONES4::look' (examine) event and is a simple linear handler that ends after barking.",
-    "Conditional guard in BONES4::use: a status-bit guard (0x0100) short-circuits to Item::closeGump.",
-    "Randomized branching in BONES4::use: urandom(0x64) compared against 0x5F produces a low-probability path that opens a gump; the common path yields a bark message.",
-    "Both handlers use suspend/return semantics after performing their visible action (bark or gump open/close)."
+    "U8P_BONES4::use branches on a status-bit test: (Item::getStatus(this) & 0x0100) ? close gump : continue.",
+    "When the status bit is clear, control flows to a probabilistic branch: urandom(100) > 95 triggers a warning bark + suspend; otherwise it opens gump id 0x0C.",
+    "U8P_BONES4::look is a straight-line process that barks then suspends/ends without further branching or external calls."
   ],
   "open_questions": [
-    "Exact numeric semantics of urandom(0x64) (range and inclusive/exclusive bounds) — affects the precise probability of the special gump branch.",
-    "Precise meaning of status bit 0x0100 in the item's status word (inferred to indicate an open gump or related UI state).",
-    "Whether the string literals include trailing spaces intentionally (e.g., \"skeleton \") and whether that affects in-game display formatting."
+    "What exact semantics does status bit 0x0100 encode for this item (open UI, locked state, or other)? This is inferred but not confirmed.",
+    "Does suspend in the 'U8P_BONES4::use' branch represent aborting the U8P_BONES4::use action, waiting for player input, or queuing further logic? The code suspends but the higher-level effect is not explicit here.",
+    "What content or interaction is provided by gump id 0x0C for the bones (inventory/detail UI, context menu, or quest dialog)?"
   ],
   "main_function": {
     "name": "U8P_BONES4::look",
     "execution_form": "process",
-    "purpose": "Present the item's short description when examined: set item info/processing state and have the item emit the text 'skeleton ' to the examining player.",
+    "purpose": "Provide the short description when the player examines the bones item (display the one-word label and end the U8P_BONES4::look interaction).",
     "entry_conditions": [
-      "Event 0 — the player/actor examines (looks at) the bones/skeleton item"
+      "Player uses the Look / Examine action on the item",
+      "May also be triggered by entering the item's fast-area trigger associated with U8P_BONES4::look handlers (inferred)"
     ],
     "confidence": "high"
   },
@@ -31,43 +32,13 @@
     {
       "name": "U8P_BONES4::look",
       "kind": "main",
-      "role": "Handle the 'U8P_BONES4::look' (examine) event; set item info flags and call Item::bark with the description string.",
+      "role": "examine/description handler (produces a short bark when inspected)",
       "confidence": "high"
     },
     {
       "name": "U8P_BONES4::use",
       "kind": "helper",
-      "role": "Handle the 'use' event: close gump if status bit set, otherwise either bark a warning or open a special gump based on a random roll.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine-provided routine used to make an item display/speak a text message to a player/process.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getStatus",
-      "kind": "extern",
-      "role": "Return the item's status word/flags used for testing bits such as 0x0100.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::closeGump",
-      "kind": "extern",
-      "role": "Close the UI gump/window associated with the item.",
-      "confidence": "high"
-    },
-    {
-      "name": "urandom",
-      "kind": "extern",
-      "role": "Random number provider used to branch probabilistically in BONES4::use.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::openGump",
-      "kind": "extern",
-      "role": "Open a UI gump/window for the item (called with parameter 0x0C in the special branch).",
+      "role": "handle player 'U8P_BONES4::use' interaction: toggle/close UI if a status bit is set, otherwise possibly warn or open the item's gump",
       "confidence": "high"
     }
   ],
@@ -75,39 +46,27 @@
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_BONES4::look",
-        "callee": "Item::bark",
-        "purpose": "Emit the short description string 'skeleton ' to the examining player.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_BONES4::use",
         "callee": "Item::getStatus",
-        "purpose": "Retrieve the item's status word to test whether bit 0x0100 is set (guard for closing gump).",
+        "purpose": "Read the item's status/flag word into a temporary (local1) so the script can test bit 0x0100.",
         "confidence": "high"
       },
       {
         "caller": "U8P_BONES4::use",
         "callee": "Item::closeGump",
-        "purpose": "Close the item's gump when the 0x0100 status bit is set.",
-        "confidence": "high"
+        "purpose": "Close any open gump/UI associated with this item when status bit 0x0100 is set.",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_BONES4::use",
         "callee": "urandom",
-        "purpose": "Generate a random value (called with 0x64) used to decide between barking or opening the special gump.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_BONES4::use",
-        "callee": "Item::bark",
-        "purpose": "Emit the warning message 'Disturb my rest not, mortal!' to the player on the common branch.",
+        "purpose": "Produce a 0–99 random roll (urandom(100)) to decide a low-probability warning bark branch.",
         "confidence": "high"
       },
       {
         "caller": "U8P_BONES4::use",
         "callee": "Item::openGump",
-        "purpose": "Open a special UI gump (parameter 0x0C) on the low-probability/random branch.",
+        "purpose": "Open the item's gump/UI (gump id 0x0C) when the status bit is clear and the random check does not trigger the warning.",
         "confidence": "high"
       }
     ]
@@ -123,9 +82,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "BONES4::look",
-    "behavior_summary_one_liner": "BONES4::look: When a player examines the bones/skeleton item, the script marks the item with standard 'U8P_BONES4::look' info/processing state and causes the item to emit the short description string \"skeleton \" to the examining player (via Item::bark). The handler then suspends/returns.",
-    "external_call_count": 6,
+    "main_function": "U8P_BONES4::look",
+    "behavior_summary_one_liner": "U8P_BONES4::look: When the player examines the bones, the script emits a short description bark \"skeleton\" and then suspends/ends the U8P_BONES4::look process.",
+    "external_call_count": 4,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

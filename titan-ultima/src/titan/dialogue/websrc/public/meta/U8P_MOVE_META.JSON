@@ -3,171 +3,92 @@
   "source_of_truth": "dialogue/json/U8P_MOVE.json",
   "file": "U8P_MOVE",
   "behavior_summary": [
-    "MOVE::0080 is a repeating NPC/item AI/process attached to an entity (entity pointer passed as parameter). It periodically inspects that entity's properties, updates per-entity info slots, optionally greets the player, computes facing, and issues pathfinding/movement orders.",
-    "The script queries multiple entity attributes (via FREE::1E6A and FREE::1D62) and uses their values plus the global flag arcadionMet to choose between a short-range interaction (greet + short pathfind) and an alternate movement behavior (longer range pathfind).",
-    "When the greeting/interaction branch is taken the script: computes direction to a target (Item::getDirToItem), spawns a direction-apply helper (METHOD::091C), makes the entity bark a fixed string ('Greetings Disciple.'), and calls Npc::pathfind with a close-range parameter (0x04).",
-    "The process also spawns short-lived helpers/timers (METHOD::0AC6 with a retval from FREE::1A96, and FREE::1C19 with pid and a small numeric) to schedule follow-up/timed behavior, then suspends and repeats."
+    "Implements a periodic NPC movement/idle process that wakes, checks distance to a context/origin and to a stored target reference, and either issues pathfinding toward the stored target or performs idle wandering and reschedules itself.",
+    "If the NPC is within a near threshold (<= 0x1E tiles) it prefers active behavior: if a stored target reference (local3) exists it will pathfind toward it; otherwise it runs npcIdleWander and requeues a follow-up check after a random delay (local1).",
+    "If the NPC is farther than the near threshold it schedules a fixed short retry delay (0x1E) instead of immediate pathfinding.",
+    "If a stored target reference (local3) is present but becomes too distant (> 0x40 tiles), the process resets internal reference slots and either triggers a general pathfind or a special one-off greeting + pathfind when the NPC identity and a story flag (arcadionMet == 0) match."
   ],
   "notable_control_flow": [
-    "Entry is a periodic/suspended process (execution_form: process) that repeatedly suspends and resumes rather than returning once.",
-    "Early in the script two per-entity info slots (IDs like 0x0205 and 0x0204) are set (via FREE::2A56/set info) to prepare state before behavior decisions.",
-    "A numeric property from FREE::1E6A is compared against 0x1E and another from FREE::1D62 against 0x40; only when those checks allow does the greeting/pathfind behavior execute.",
-    "A guard using the global flag arcadionMet changes the pathfinding parameter (close 0x04 vs longer 0x28), altering movement distance/behavior.",
-    "Several actions are performed by spawning helper methods (METHOD::091C, METHOD::0AC6, FREE::1C19) rather than inline, so timing and sequencing are delegated to those spawned processes."
+    "Periodic suspended loop: process suspends/resumes and performs checks each wake.",
+    "Near-vs-far branch based on FREE::getDistanceInTiles(this, 0x01) with threshold ~0x1E tiles decides idle vs reschedule behavior.",
+    "Target-validity branch: when local3 exists, compare FREE::getDistanceBetween(local3, this) to ~0x40 tiles to decide whether to reset references and change pathfinding behavior.",
+    "Special-case branch: if this == 0x39 and global flag arcadionMet == 0, call METHOD::func091C, play a bark 'Greetings Disciple.', then start a pathfind toward local3 (one-time greeting/pathfind).",
+    "Scheduling uses spawn->FREE::func1C19 with either a random delay (local1 from FREE::randomInRange) or a fixed delay (0x1E)."
   ],
   "open_questions": [
-    "Exact semantic meanings of FREE::1E6A and FREE::1D62 returns (which concrete entity fields they read) remain uncertain — they appear to be small numeric state or type fields.",
-    "Precise semantics of entity info slots 0x0205 and 0x0204 (what each slot represents) are inferred only from their use as setup flags.",
-    "Exact trigger/activation conditions that start MOVE::0080 (area entry vs. NPC start vs. always-running update) are inferred from suspend/resume behavior but not explicit in the excerpt.",
-    "What the small numeric arguments to FREE::1C19 and METHOD::0AC6 represent (timing, priority, or animation indices) is likely but not certain."
+    "Exact semantics and storage slots of local2/local3 (which reference slots they map to and whether they point to actors or locations) remain uncertain.",
+    "Precise purpose of METHOD::func091C called before the greeting pathfind (appears preparatory but details unknown).",
+    "Whether arcadionMet is the canonical flag name in game data or an inferred alias from context (inference based on naming).",
+    "The meaning of some low-confidence 'Unknown' nodes and how they affect edge-case timing or cleanup behavior."
   ],
   "main_function": {
-    "name": "U8P_MOVE::0080",
+    "name": "U8P_MOVE::func0080",
     "execution_form": "process",
-    "purpose": "Periodic AI/update routine for an NPC/entity that inspects the entity, sets per-entity info, optionally greets the player, adjusts facing, and issues pathfinding commands while scheduling short helper tasks.",
+    "purpose": "Drive an NPC's periodic movement/idle decision loop: choose between pathfinding toward a stored target, idle wandering, or rescheduling based on distance checks and reference validity; include a special-case one-time greeting+pathfind for a specific NPC identity.",
     "entry_conditions": [
-      "Attached to an entity and runs as a suspended/resumed process (periodic update loop).",
-      "Behaviors branch based on entity properties returned by FREE::1E6A and FREE::1D62 and the global arcadionMet flag."
+      "Runs as a suspended/resumable process (periodic loop).",
+      "Primary behavioral checks occur when the process wakes: distance to context/origin via FREE::getDistanceInTiles(this, 0x01) is evaluated (near threshold <= 0x1E)."
     ],
-    "confidence": "high"
+    "confidence": "medium"
   },
   "function_map": [
     {
-      "name": "U8P_MOVE::0080",
+      "name": "U8P_MOVE::func0080",
       "kind": "main",
-      "role": "NPC/item periodic AI/update process that inspects an entity and issues movement/speech/timers.",
-      "confidence": "high"
-    },
-    {
-      "name": "METHOD::091C",
-      "kind": "extern",
-      "role": "Spawned helper that applies a computed facing/direction or starts a direction-dependent action on the entity.",
-      "confidence": "medium"
-    },
-    {
-      "name": "METHOD::0AC6",
-      "kind": "extern",
-      "role": "Spawned timed/delayed helper; accepts a small numeric parameter (retval from FREE::1A96) and the entity pointer to schedule a short action.",
-      "confidence": "medium"
-    },
-    {
-      "name": "FREE::1C19",
-      "kind": "extern",
-      "role": "Spawned timer/event helper taking pid and a small numeric to schedule a short follow-up task.",
-      "confidence": "medium"
-    },
-    {
-      "name": "Item::getDirToItem",
-      "kind": "extern",
-      "role": "Compute direction from actor/pid to target entity/item; result used to spawn METHOD::091C.",
-      "confidence": "high"
-    },
-    {
-      "name": "process Item::bark",
-      "kind": "extern",
-      "role": "Make the entity speak/display a short string (used for the greeting 'Greetings Disciple.').",
-      "confidence": "high"
-    },
-    {
-      "name": "process Npc::pathfind",
-      "kind": "extern",
-      "role": "Issue pathfinding/movement orders toward a specified target/index with a movement/range parameter (values observed: 0x04 and 0x28).",
-      "confidence": "high"
-    },
-    {
-      "name": "FREE::1E6A",
-      "kind": "extern",
-      "role": "Query a numeric property of the entity (called with a small flag 0x01); return is compared to constants (e.g., 0x1E).",
-      "confidence": "medium"
-    },
-    {
-      "name": "FREE::1D62",
-      "kind": "extern",
-      "role": "Query another numeric attribute of the entity; return compared against 0x40 to gate behavior.",
-      "confidence": "medium"
-    },
-    {
-      "name": "FREE::2A56",
-      "kind": "extern",
-      "role": "Set/modify entity info slots (called with slot ids like 0x0205 and 0x0204 and the entity pointer).",
-      "confidence": "medium"
-    },
-    {
-      "name": "FREE::1A96",
-      "kind": "extern",
-      "role": "Return a small numeric used as a parameter for METHOD::0AC6 (likely a random/timer value).",
+      "role": "NPC movement/idle process (periodic loop controlling pathfinding, idle wandering, and re-scheduling).",
       "confidence": "medium"
     }
   ],
   "call_analysis": {
-    "internal_calls": [
-      {
-        "caller": "U8P_MOVE::0080",
-        "callee": "U8P_MOVE::0080 (spawn)",
-        "purpose": "The script repeatedly suspends and effectively re-invokes/continues itself as a long-running process (periodic update).",
-        "confidence": "high"
-      }
-    ],
+    "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_MOVE::0080",
-        "callee": "FREE::2A56",
-        "purpose": "Set per-entity info slots (IDs like 0x0205 and 0x0204) for state preparation before behavior decisions.",
+        "caller": "U8P_MOVE::func0080",
+        "callee": "FREE::getDistanceInTiles",
+        "purpose": "Measure tile-distance from this actor to a context/origin (used to decide near vs far behavior).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_MOVE::0080",
-        "callee": "FREE::1E6A",
-        "purpose": "Read a numeric entity property (used to compare against 0x1E to choose the interaction branch).",
+        "caller": "U8P_MOVE::func0080",
+        "callee": "FREE::getDistanceBetween",
+        "purpose": "Measure distance between the stored target reference (local3) and this actor to detect stale/too-far targets (> 0x40) and trigger reference reset or alternate pathfinding.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_MOVE::0080",
-        "callee": "FREE::1D62",
-        "purpose": "Read an additional numeric attribute of the entity (checked against 0x40) to gate greeting/pathfinding.",
+        "caller": "U8P_MOVE::func0080",
+        "callee": "FREE::resetRef",
+        "purpose": "Clear internal reference slots for this process when a stored target is invalid or too distant.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_MOVE::0080",
-        "callee": "Item::getDirToItem",
-        "purpose": "Compute direction from pid/actor to the target to allow the entity to face the player before greeting or moving.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_MOVE::0080",
-        "callee": "METHOD::091C",
-        "purpose": "Spawn a helper to apply the computed facing/direction to the entity (uses retval from Item::getDirToItem).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_MOVE::0080",
-        "callee": "process Item::bark",
-        "purpose": "Make the entity speak the fixed greeting message 'Greetings Disciple.' in the interaction branch.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_MOVE::0080",
+        "caller": "U8P_MOVE::func0080",
         "callee": "process Npc::pathfind",
-        "purpose": "Command NPC movement toward the chosen target/index ([BP-06h]) with different range parameters (0x04 for close/greeting, 0x28 for alternate branch when arcadionMet is set).",
+        "purpose": "Start movement toward the stored target (local3); called with different pathfinding modes depending on branch (e.g., special-case vs general).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_MOVE::func0080",
+        "callee": "METHOD::npcIdleWander",
+        "purpose": "Make the NPC perform idle wandering when no active target is present and the actor is within the near threshold.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_MOVE::0080",
-        "callee": "FREE::1A96",
-        "purpose": "Obtain a small numeric (likely a delay or configuration value) which is then passed to METHOD::0AC6 for a timed helper spawn.",
+        "caller": "U8P_MOVE::func0080",
+        "callee": "spawn->FREE::func1C19",
+        "purpose": "Schedule/reschedule a delayed invocation of behavior checks; used with random or fixed delays to control the process tick rate.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_MOVE::0080",
-        "callee": "METHOD::0AC6",
-        "purpose": "Spawn a timed/delayed helper using the numeric returned by FREE::1A96 and the entity pointer.",
+        "caller": "U8P_MOVE::func0080",
+        "callee": "FREE::randomInRange",
+        "purpose": "Generate the random delay value stored into local1 for scheduling idle-wander rechecks.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_MOVE::0080",
-        "callee": "FREE::1C19",
-        "purpose": "Spawn a small timer/event helper with pid and a small numeric (0 or 0x1E depending on branch) to schedule follow-up behavior.",
-        "confidence": "medium"
+        "caller": "U8P_MOVE::func0080",
+        "callee": "METHOD::func091C",
+        "purpose": "Preparatory call immediately before the special-case greeting and pathfind; likely sets animation/state/orientation but exact effect is unclear.",
+        "confidence": "low"
       }
     ]
   },
@@ -175,22 +96,23 @@
     "reads": [
       {
         "name": "arcadionMet",
-        "likely_effect": "Alter choice of pathfinding/movement parameter (choose close-range interaction vs longer-range movement).",
-        "confidence": "high"
+        "likely_effect": "Used as a story-state guard: when arcadionMet == 0 and this actor is id 0x39, allow a one-time greeting + pathfind. Appears to gate a scripted introductory interaction.",
+        "confidence": "medium"
       }
     ],
     "writes": []
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "animation",
+    "scheduling",
+    "movement",
+    "greeting",
     "guard"
   ],
   "quick_facts": {
-    "main_function": "MOVE::0080",
-    "behavior_summary_one_liner": "MOVE::0080 is a repeating NPC/item AI/process attached to an entity (entity pointer passed as parameter). It periodically inspects that entity's properties, updates per-entity info slots, optionally greets the player, computes facing, and issues pathfinding/movement orders.",
-    "external_call_count": 10,
+    "main_function": "U8P_MOVE::func0080",
+    "behavior_summary_one_liner": "Implements a periodic NPC movement/idle process that wakes, checks distance to a context/origin and to a stored target reference, and either issues pathfinding toward the stored target or performs idle wandering and reschedules itself.",
+    "external_call_count": 8,
     "flag_read_count": 1,
     "flag_write_count": 0
   },

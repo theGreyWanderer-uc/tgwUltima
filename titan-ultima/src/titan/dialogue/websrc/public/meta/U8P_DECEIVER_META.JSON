@@ -3,28 +3,28 @@
   "source_of_truth": "dialogue/json/U8P_DECEIVER.json",
   "file": "U8P_DECEIVER",
   "behavior_summary": [
-    "DECEIVER::look is an event handler invoked when an actor inspects (looks at) a Deceiver object.",
-    "On invocation it configures per-object/process info state (opcodes that set info and process-exclude are executed immediately before output — inferred from disassembly) and then causes the inspecting process to receive a short text 'bark' with the literal string \"Deceiver \".",
-    "The handler constructs/pushes the string, pushes the interacting process PID (passed in BP+06h), calls Item::bark to present the text to that process, cleans up, runs an implies/pop sequence that sets the return/result value, then suspends and returns to signal the event was handled."
+    "This script implements a U8P_DECEIVER::look/examine handler for an in-game entity named 'Deceiver'.",
+    "When the player uses the 'U8P_DECEIVER::look' or examine action on this entity, the process emits a single short bark text: \"Deceiver \".",
+    "After emitting the bark the process suspends/ends; there is no branching, state mutation, menu, or further logic in the handler.",
+    "The script appears purely descriptive: it labels or identifies the NPC/object when inspected and does not interact with global flags or external systems."
   ],
   "notable_control_flow": [
-    "Entry as a process-event handler (execution_form: process) triggered by the U8P_DECEIVER::look/inspect event.",
-    "Performs a small sequence of engine opcodes that set object/process info and 'process exclude' immediately before producing output (these effects are inferred and labeled as such).",
-    "Calls an external routine (Item::bark) and then executes an implies/pop sequence to set/adjust the return value before a suspend/return.",
-    "No iteration or branching logic is present beyond the single bark call and the return-handling sequence — control flow is linear and short-circuited to produce the description."
+    "Single linear flow: entry -> emit Bark(\"Deceiver \") -> suspend/end.",
+    "No conditional branches, loops, menus, or external calls observed in the U8P_DECEIVER::look handler."
   ],
   "open_questions": [
-    "Exact semantic meaning of the opcodes described as 'set info' and 'process exclude' in this context: what specific flags/visibility or future-processing behavior do they change for the Deceiver object?",
-    "Whether the small implies/pop return-value manipulation conveys a success/failure code with any downstream effect, or is purely an engine-required convention for event handlers.",
-    "If there are any conditional cases where the bark is suppressed (none observed in the disassembly excerpt), or whether other processes could intercept the bark."
+    "Is the trailing space in the bark text \"Deceiver \" intentional (formatting) or an artifact of extraction?",
+    "Does any other script or game system reference this entity's item/weapon properties (metadata present but unused by U8P_DECEIVER::look)?",
+    "Is the suspend a normal end-of-process for U8P_DECEIVER::look handlers in this engine, or does it imply the process yields for further engine-driven behavior?"
   ],
   "main_function": {
     "name": "U8P_DECEIVER::look",
     "execution_form": "process",
-    "purpose": "Respond to a Look/Inspect action on a Deceiver object by presenting the label text to the inspecting process and marking/adjusting immediate object/process state prior to returning.",
+    "purpose": "Provide the short description/text when the player examines this NPC/object by emitting a single bark identifying it as 'Deceiver'.",
     "entry_conditions": [
-      "Event 0 (U8P_DECEIVER::look): triggered when an actor uses the Look/Inspect action on this Deceiver object.",
-      "The inspecting process PID is passed in as the single parameter (at BP+06h)."
+      "Player invokes the 'U8P_DECEIVER::look' or examine action on the entity.",
+      "ProcessType 0x0208 indicates this is a U8P_DECEIVER::look-type process handled by the engine.",
+      "Function concludes with a suspend (inferred end-of-U8P_DECEIVER::look behavior)."
     ],
     "confidence": "high"
   },
@@ -32,26 +32,13 @@
     {
       "name": "U8P_DECEIVER::look",
       "kind": "main",
-      "role": "Handles the item's U8P_DECEIVER::look/inspect event; prepares state and invokes Item::bark to show the item's short label to the inspecting process.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item API used to make a process/object emit/display a short string (the 'bark'). Called by DECEIVER::look to deliver the label.",
+      "role": "Handle the U8P_DECEIVER::look/examine event; emit a short identifying bark and then suspend.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_DECEIVER::look",
-        "callee": "Item::bark",
-        "purpose": "Deliver a short descriptive string ('Deceiver ') to the interacting process (PID supplied from BP+06h). Causes the target process to display/emit the message.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -59,14 +46,13 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "animation",
-    "guard"
+    "bark",
+    "inspect"
   ],
   "quick_facts": {
-    "main_function": "DECEIVER::look",
-    "behavior_summary_one_liner": "DECEIVER::look is an event handler invoked when an actor inspects (looks at) a Deceiver object.",
-    "external_call_count": 1,
+    "main_function": "U8P_DECEIVER::look",
+    "behavior_summary_one_liner": "This script implements a U8P_DECEIVER::look/examine handler for an in-game entity named 'Deceiver'.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

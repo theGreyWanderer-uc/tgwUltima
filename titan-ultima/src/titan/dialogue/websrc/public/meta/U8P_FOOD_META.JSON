@@ -3,25 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_FOOD.json",
   "file": "U8P_FOOD",
   "behavior_summary": [
-    "U8P_FOOD::FOOD::look responds to an examine/U8P_FOOD::look event by reading the item's frame (variant) and emitting a short descriptive string appropriate to that variant (one of: 'fish ', 'cooked fish ', 'Torax ribs ', 'cooked Torax ribs ').",
-    "U8P_FOOD::FOOD::use handles consuming the food item: it makes the actor/item emit a short feedback bark ('Mmmm...'), destroys the item instance, and calls FeedAvatar with an immediate value (2) to restore a small amount of the avatar's food/health meter."
+    "Provides a short in-game description when the player examines a food item and implements the item's U8P_FOOD::use/consume behavior.",
+    "U8P_FOOD::look reads the item's frame/index and displays one of four short barks: 'fish', 'cooked fish', 'Torax ribs', or 'cooked Torax ribs', selecting text by the frame value.",
+    "U8P_FOOD::use handles consuming the item: it plays a short player-facing bark ('Mmmm...'), destroys the item instance (Item::destroy(this)), and calls FeedAvatar(0x02) to apply a small, fixed feeding/nutrition effect to the Avatar."
   ],
   "notable_control_flow": [
-    "FOOD::look: synchronous sequence - call Item::getFrame -> switch on frame index (0..3) -> push speaker id and selected literal string -> call Item::bark -> suspend/return.",
-    "FOOD::use: linear sequence - push speaker id and literal 'Mmmm...' -> call Item::bark, then call Item::destroy on the same item instance, then push constant 2 and call FeedAvatar.",
-    "The U8P_FOOD::look handler branches on a small discrete domain (frame indices 0..3) to choose descriptive text; the use handler performs an ordered consume/cleanup then a global effect (FeedAvatar)."
+    "U8P_FOOD::look branches on the item's frame/index (stored to a local, local1) into four distinct bark outputs; control flow is simple conditional branching to choose the appropriate short name.",
+    "U8P_FOOD::use is linear: bark -> Item::destroy(this) -> FeedAvatar(0x02) -> suspend/terminate; there is no branching or flag manipulation."
   ],
   "open_questions": [
-    "What exact process id (pid) value is passed as the speaker to Item::bark at runtime (inferred from calling convention but not explicitly named in the disassembly)?",
-    "Do the four frame indices map to any additional gameplay differences beyond description text (e.g., differing nutrition, spoilage) or is the frame only cosmetic/textual?",
-    "Is the numeric value pushed to FeedAvatar precisely '2' in gameplay units across all contexts (inferred from the immediate pushed), and how does that map to player hunger/HP mechanics in the broader engine?"
+    "Exact numeric frame values corresponding to each displayed string are not present in the sidecar summary — which frame indices map to raw vs cooked variants?",
+    "The semantic magnitude of FeedAvatar(0x02) (how many hunger/health points are restored and whether other side-effects occur) is inferred but not explicitly known.",
+    "local1 is inferred to hold Item::getFrame(this) result; the original variable name/type and any additional uses beyond selecting text are unknown."
   ],
   "main_function": {
     "name": "U8P_FOOD::look",
     "execution_form": "process",
-    "purpose": "Provide an inspect/examine description for a food item by selecting a short text based on the item's frame/variant and emitting it to the viewer.",
+    "purpose": "When the player 'looks at' this food item, read the item's frame/index and show a short name/description appropriate to that variant (four short barks: fish/cooked fish/Torax ribs/cooked Torax ribs).",
     "entry_conditions": [
-      "Event 0 (U8P_FOOD::look/examine) — triggered when a player or actor inspects the food item."
+      "Invoked by the engine when the player examines/inspects the item (U8P_FOOD::look interaction / process type 0x0208)."
     ],
     "confidence": "high"
   },
@@ -29,37 +29,31 @@
     {
       "name": "U8P_FOOD::look",
       "kind": "main",
-      "role": "Examine/U8P_FOOD::look handler that chooses and emits a descriptive string based on Item::getFrame().",
+      "role": "Provide short description text based on item frame/index (U8P_FOOD::look/inspect handler).",
       "confidence": "high"
     },
     {
       "name": "U8P_FOOD::use",
       "kind": "helper",
-      "role": "Use/consume handler that barks a feedback string, destroys the item, and calls FeedAvatar to restore nutrition.",
+      "role": "Consume/U8P_FOOD::use handler: play eating bark, remove item, apply feeding to Avatar.",
       "confidence": "high"
     },
     {
       "name": "Item::getFrame",
       "kind": "extern",
-      "role": "Return the frame/index identifying the food variant (0..3).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Emit/display a short text string from an item/process to a target process/player.",
+      "role": "Engine/item API to read the item's current frame/index used to select variant text.",
       "confidence": "high"
     },
     {
       "name": "Item::destroy",
       "kind": "extern",
-      "role": "Remove/destroy the item instance from the world (called when consumed).",
+      "role": "Engine/item API to remove or destroy the item instance from the world/inventory.",
       "confidence": "high"
     },
     {
       "name": "FeedAvatar",
       "kind": "extern",
-      "role": "Apply a nutrition/food restore effect to the avatar; called with an immediate amount (inferred 2).",
+      "role": "Engine function to apply a feeding/nutrition (or small heal) effect to the Avatar; called with constant 0x02.",
       "confidence": "medium"
     }
   ],
@@ -69,31 +63,19 @@
       {
         "caller": "U8P_FOOD::look",
         "callee": "Item::getFrame",
-        "purpose": "Query the item's frame/variant index to decide which description string to show.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FOOD::look",
-        "callee": "Item::bark",
-        "purpose": "Display/emit the selected descriptive text to the inspecting process/player (speaker id pushed before the string).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FOOD::use",
-        "callee": "Item::bark",
-        "purpose": "Provide immediate player feedback ('Mmmm...') when the item is used/consumed.",
+        "purpose": "Read the item's frame/index to decide which short description to display.",
         "confidence": "high"
       },
       {
         "caller": "U8P_FOOD::use",
         "callee": "Item::destroy",
-        "purpose": "Remove the consumed item instance from the world/inventory after use.",
+        "purpose": "Remove/destroy the item instance after it is consumed.",
         "confidence": "high"
       },
       {
         "caller": "U8P_FOOD::use",
         "callee": "FeedAvatar",
-        "purpose": "Increase the avatar's food/health/hunger meter by a small fixed amount (immediate value 2 observed before call; maps to nutrition restoration).",
+        "purpose": "Apply a small, fixed feeding/nutrition effect to the Avatar (argument 0x02); exact quantitative effect is inferred.",
         "confidence": "medium"
       }
     ]
@@ -104,14 +86,14 @@
   },
   "ui_tags": [
     "trigger",
-    "consumption",
-    "feedback",
-    "description"
+    "cleanup",
+    "animation",
+    "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_FOOD::FOOD::look",
-    "behavior_summary_one_liner": "U8P_FOOD::FOOD::look responds to an examine/U8P_FOOD::look event by reading the item's frame (variant) and emitting a short descriptive string appropriate to that variant (one of: 'fish ', 'cooked fish ', 'Torax ribs ', 'cooked Torax ribs ').",
-    "external_call_count": 5,
+    "main_function": "U8P_FOOD::look",
+    "behavior_summary_one_liner": "Provides a short in-game description when the player examines a food item and implements the item's U8P_FOOD::use/consume behavior.",
+    "external_call_count": 3,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

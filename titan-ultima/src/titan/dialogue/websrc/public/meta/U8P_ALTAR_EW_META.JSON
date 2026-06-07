@@ -3,31 +3,29 @@
   "source_of_truth": "dialogue/json/U8P_ALTAR_EW.json",
   "file": "U8P_ALTAR_EW",
   "behavior_summary": [
-    "ALTAR_EW::look responds to a player/actor 'U8P_ALTAR_EW::look' action by barking a short label ('Altar of Focus') to the viewing process — purely a UX/inspection response.",
-    "ALTAR_EW::gotHit handles physical hits on the altar: it validates the hit, checks that the target is the expected altar type and inspects its current visual/frame state, then produces sound/animation feedback, may create a focus item, and advances or consumes visual frames accordingly.",
-    "When a focus item is created, a worker process (ALTAR_EW::0270) is spawned to position the item, step its frame forward over time, play randomized SFX while it ages, and eventually either advance its frame to a completion state or destroy it.",
-    "A global flag hasOwnFoci is set when the altar grants/creates a focus for the player — used as a one-way marker that the player now 'has own foci' (inferred from a write).",
-    "Most behaviors rely on engine primitives (Item::create/pop/setFrame/destroy, Npc::doAnim/getDir, playSFX, urandom, spawn) to implement visuals, sound, and item lifecycle rather than complex game logic."
+    "U8P_ALTAR_EW::look: When the player examines the altar it shows a short description string \"Altar of Focus\" (brief U8P_ALTAR_EW::look handler).",
+    "U8P_ALTAR_EW::gotHit: When the altar is struck or used with an item (incoming selector param), the script checks the item's type and frame. If the item matches expected criteria it plays sound effects, triggers altar NPC animations, creates and pops a temporary/spawned item into the world, updates item frames/counters, sets a global state indicating the altar now owns a focus (hasOwnFoci = 1), and delegates additional placement/progression logic to U8P_ALTAR_EW::func0270.",
+    "U8P_ALTAR_EW::func0270: A helper that creates/pops a different spawn item at coordinates derived from the provided reference, increments/maintains a local counter/frame for progression, chooses between two SFX variants on a threshold via a small random branch, sets the spawned item's visual frame, may spawn a short-lived helper process for timing, and destroys the spawned item if counters exceed an upper threshold."
   ],
   "notable_control_flow": [
-    "U8P_ALTAR_EW::ALTAR_EW::look: entry on Event 0 (U8P_ALTAR_EW::look) → call Item::bark(viewer_pid, 'Altar of Focus ') → suspend/return.",
-    "U8P_ALTAR_EW::ALTAR_EW::gotHit: entry on a hit event → guard on hit parameter validity → verify Item::getType and Item::getFrame to decide action path → playSFX and spawn a short FREE helper for immediate feedback → possibly call Npc::getDir / Npc::doAnim to animate attacker/owner → create a focus with Item::create and place it with Item::pop → write global hasOwnFoci = 1 when granting focus → optionally set altar/item frames or Item::destroy depending on stage.",
-    "U8P_ALTAR_EW::ALTAR_EW::0270 (worker): spawned by gotHit with created_item_handle → loop: position/pop item, suspend/delay, increment internal counter/frame variable, pick SFX via urandom and playSFX, setFrame on the created item or destroy it when thresholds exceeded → exit when lifecycle completes.",
-    "Decisions about creating vs advancing vs destroying items are based on Item::getFrame values and numeric thresholds (inferred constants), making frame checks the primary branching mechanism for progression."
+    "U8P_ALTAR_EW::gotHit ignores the call immediately if param1 == 0 (no selector).",
+    "Item type check: U8P_ALTAR_EW::gotHit requires the incoming item to be type 0x018C and uses its frame to gate behavior (accepted when frame < 0x08, or when frame == 0x10).",
+    "On a successful match U8P_ALTAR_EW::gotHit: several SFX calls bracket the visual work, Npc::getDir is read to orient animations, multiple Npc::doAnim processes are spawned and the code suspends/waits on them.",
+    "U8P_ALTAR_EW::gotHit creates an item (type observed as 0x00CA) and pops it at coordinates derived from the incoming item (Z+5, Y+offset, X+offset). It initializes a local frame/counter (local4 = 0), sets the spawned item's frame and increments local4, and treats a special-case when local4 == 0x05 to update the original item's frame (+0x08 or set to 0x11). If local4 > 0x0D the spawned item is destroyed and a concluding animation is played.",
+    "U8P_ALTAR_EW::func0270 creates an item (type observed as 0x01E1) at Z+5,Y,X of the provided reference, increments a local counter (local3) each run, and uses thresholds (local3 > 0x18 and > 0x23) to either reset/trigger SFX (with a small urandom choice) or destroy the spawned item when counters are too high; otherwise it sets the spawned item's frame and spawns a short helper before suspending."
   ],
   "open_questions": [
-    "Exact numeric meanings and semantics of frame thresholds (e.g., the values compared to 0x0D, 0x18, 0x23) — these determine whether focus is created, advanced or destroyed and are inferred from tests.",
-    "Precise identity and gameplay effects of the created 'focus' item (type id used in Item::create) — the disassembly shows creation but not the gameplay properties of the item.",
-    "Exact interpretation of the hit_info parameter passed to ALTAR_EW::gotHit (is it attacker id, damage, or a hit type?) — inferred from usage but not explicit.",
-    "Whether the global flag hasOwnFoci is read elsewhere to gate other gameplay functionality (no reads observed in this script).",
-    "Purpose and internal behavior of the spawned FREE::1C19 helper process (spawned several times) — likely timing/visual cleanup but not fully identified."
+    "Exact gameplay meaning of the checked item types/frames (e.g., type 0x018C and frames like <0x08, ==0x05, ==0x10) — are these specific focus items, charges, or upgrade states? (inferred, medium confidence)",
+    "Whether the local counters/frames (local3/local4) persist across multiple hits or are ephemeral per process invocation — metadata shows them as locals so persistence across separate hits is unclear. (low confidence)",
+    "Are the spawned items collectible/usable focus objects for the player, or purely visual effects? (inferred from create/pop calls but not explicit, low confidence)",
+    "Precise player-visible result and how hasOwnFoci integrates with other game systems (e.g., is it used as a permanence marker or a gating flag)? (low confidence)"
   ],
   "main_function": {
     "name": "U8P_ALTAR_EW::look",
     "execution_form": "process",
-    "purpose": "Produce a short inspect/UX response for the Altar of Focus by barking its name to the viewing process; does not mutate game state.",
+    "purpose": "Provide the short examination description for the altar (player-facing 'U8P_ALTAR_EW::look' text).",
     "entry_conditions": [
-      "Event 0 (U8P_ALTAR_EW::look) triggered when a player/actor examines the altar (viewer process pid supplied by engine)."
+      "Triggered when the player examines or 'looks at' the altar object/NPC."
     ],
     "confidence": "high"
   },
@@ -35,126 +33,144 @@
     {
       "name": "U8P_ALTAR_EW::look",
       "kind": "main",
-      "role": "Handle 'U8P_ALTAR_EW::look' (inspect) event; display the altar name to the viewer.",
+      "role": "examination/description handler (shows 'Altar of Focus')",
       "confidence": "high"
     },
     {
       "name": "U8P_ALTAR_EW::gotHit",
       "kind": "helper",
-      "role": "Handle 'hit' events: validate input, play SFX/animations, create or advance focus items, and set progression flags.",
+      "role": "interaction handler for when the altar is struck/used with an item; validates item, plays SFX/animations, spawns/pop items, updates frames and sets hasOwnFoci",
       "confidence": "high"
     },
     {
-      "name": "U8P_ALTAR_EW::0270",
+      "name": "U8P_ALTAR_EW::func0270",
       "kind": "helper",
-      "role": "Worker process spawned to manage the lifecycle, positioning, frame progression, randomized SFX, and eventual destruction/settling of a newly created focus item.",
-      "confidence": "high"
+      "role": "spawn/placement and progression helper for focus-related objects; manages a local counter and SFX/cleanup logic",
+      "confidence": "medium"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
         "caller": "U8P_ALTAR_EW::gotHit",
-        "callee": "U8P_ALTAR_EW::0270",
-        "purpose": "Spawn a worker to animate/manage the created focus item over time.",
+        "callee": "U8P_ALTAR_EW::func0270",
+        "purpose": "Delegate spawn/placement and progression logic for the focus-related object created during the hit/interaction sequence.",
         "confidence": "high"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_ALTAR_EW::look",
-        "callee": "Item::bark",
-        "purpose": "Display the altar's label/description ('Altar of Focus') to the viewer process.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_ALTAR_EW::gotHit",
-        "callee": "Npc::getDir",
-        "purpose": "Retrieve NPC/actor facing/direction to orient animations triggered by the hit.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_ALTAR_EW::gotHit",
         "callee": "Item::getType",
-        "purpose": "Verify the target object is the expected altar type before proceeding with hit logic.",
+        "purpose": "Query the incoming item's type to decide whether the altar should respond.",
         "confidence": "high"
       },
       {
         "caller": "U8P_ALTAR_EW::gotHit",
         "callee": "Item::getFrame",
-        "purpose": "Inspect current visual/state frame of the altar to branch behavior (create, advance, or destroy).",
+        "purpose": "Read the incoming item's frame/state to branch behavior (checks for <0x08, ==0x05, ==0x10 and updates frames later).",
         "confidence": "high"
       },
       {
         "caller": "U8P_ALTAR_EW::gotHit",
-        "callee": "U8P_ALTAR_EW::playSFX",
-        "purpose": "Play sound effects on hit, creation, or immediate feedback.",
+        "callee": "Npc::getDir",
+        "purpose": "Read altar/NPC facing to orient animations triggered during the interaction.",
         "confidence": "high"
-      },
-      {
-        "caller": "U8P_ALTAR_EW::gotHit",
-        "callee": "spawn",
-        "purpose": "Spawn short-lived FREE::1C19 helpers for timing/visual cleanup after SFX calls.",
-        "confidence": "medium"
       },
       {
         "caller": "U8P_ALTAR_EW::gotHit",
         "callee": "Npc::doAnim",
-        "purpose": "Trigger attacker/owner animations to provide visual feedback for the hit or focus creation.",
+        "purpose": "Start altar/NPC animations as visual feedback for the hit/interaction; processes are spawned and the code suspends/waits on them.",
         "confidence": "high"
       },
       {
         "caller": "U8P_ALTAR_EW::gotHit",
         "callee": "Item::create",
-        "purpose": "Create a new focus item instance when appropriate.",
+        "purpose": "Create a temporary/spawned item (observed type 0x00CA) as part of the altar's response.",
         "confidence": "high"
       },
       {
         "caller": "U8P_ALTAR_EW::gotHit",
         "callee": "Item::pop",
-        "purpose": "Place the created focus item into the world at offsets relative to the altar's coordinates.",
+        "purpose": "Place the created item into the world at coordinates computed from the incoming item's position (Z+5, Y+X offsets).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_ALTAR_EW::0270",
-        "callee": "urandom",
-        "purpose": "Pick randomized variants for SFX during the focus item's progression.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_ALTAR_EW::0270",
-        "callee": "U8P_ALTAR_EW::playSFX",
-        "purpose": "Play randomized SFX as the worker advances the focus item's visual frames.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_ALTAR_EW::0270",
+        "caller": "U8P_ALTAR_EW::gotHit",
         "callee": "Item::setFrame",
-        "purpose": "Advance the created focus item's frame/state during its lifecycle.",
+        "purpose": "Set the spawned item's visual frame to reflect progression and to update the original item's frame in a special case.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_ALTAR_EW::0270",
+        "caller": "U8P_ALTAR_EW::gotHit",
         "callee": "Item::destroy",
-        "purpose": "Destroy the created focus item when it reaches a terminal state or is consumed.",
+        "purpose": "Destroy the spawned item when a local progression counter exceeds a threshold.",
         "confidence": "high"
       },
       {
         "caller": "U8P_ALTAR_EW::gotHit",
-        "callee": "Item::getZ",
-        "purpose": "Read altar Z coordinate to compute pop placement for created items.",
-        "confidence": "medium"
+        "callee": "playSFX",
+        "purpose": "Play sound effects before/after animations and spawning to provide audio feedback.",
+        "confidence": "high"
       },
       {
         "caller": "U8P_ALTAR_EW::gotHit",
-        "callee": "Item::getY",
-        "purpose": "Read altar Y coordinate to compute pop placement for created items.",
+        "callee": "spawn ->FREE::func1C19",
+        "purpose": "Spawn a short-lived helper/process for timing or visual-effect delay during the interaction.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_ALTAR_EW::gotHit",
-        "callee": "Item::getX",
-        "purpose": "Read altar X coordinate to compute pop placement for created items.",
+        "caller": "U8P_ALTAR_EW::func0270",
+        "callee": "Item::create",
+        "purpose": "Create the helper/spawned item (observed type 0x01E1) used by the placement/progression logic.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ALTAR_EW::func0270",
+        "callee": "Item::pop",
+        "purpose": "Place the created helper/spawned item into the world using coordinates derived from the input reference (Z+5, Y, X).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ALTAR_EW::func0270",
+        "callee": "Item::getZ / Item::getY / Item::getX",
+        "purpose": "Read coordinates from the provided reference to compute pop placement.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ALTAR_EW::func0270",
+        "callee": "Item::getFrame",
+        "purpose": "Read the reference's frame to influence branching and SFX decisions.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ALTAR_EW::func0270",
+        "callee": "Item::setFrame",
+        "purpose": "Set the spawned item's visual frame to reflect the local counter (progression).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ALTAR_EW::func0270",
+        "callee": "Item::destroy",
+        "purpose": "Destroy the spawned item when the helper's local counter exceeds an upper threshold.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ALTAR_EW::func0270",
+        "callee": "playSFX",
+        "purpose": "Play one of two SFX variants when a lower threshold is crossed (selected via urandom).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ALTAR_EW::func0270",
+        "callee": "urandom",
+        "purpose": "Choose between SFX variants with a small random chance.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ALTAR_EW::func0270",
+        "callee": "spawn ->FREE::func1C19",
+        "purpose": "Spawn a short helper/process after setting the spawned item's frame, likely for timing/delay, then suspend.",
         "confidence": "medium"
       }
     ]
@@ -164,8 +180,8 @@
     "writes": [
       {
         "name": "hasOwnFoci",
-        "likely_effect": "Marked true (1) when the altar grants/creates a focus for the player — appears to record that the player now 'has own foci' and is a one-way progression marker in this script.",
-        "confidence": "medium"
+        "likely_effect": "Marked (set to 1) when the altar yields or accepts a focus; serves as a state indicator that the altar has produced/owns a focus.",
+        "confidence": "high"
       }
     ]
   },
@@ -176,9 +192,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "ALTAR_EW::look",
-    "behavior_summary_one_liner": "ALTAR_EW::look responds to a player/actor 'U8P_ALTAR_EW::look' action by barking a short label ('Altar of Focus') to the viewing process — purely a UX/inspection response.",
-    "external_call_count": 16,
+    "main_function": "U8P_ALTAR_EW::look",
+    "behavior_summary_one_liner": "U8P_ALTAR_EW::look: When the player examines the altar it shows a short description string \"Altar of Focus\" (brief U8P_ALTAR_EW::look handler).",
+    "external_call_count": 19,
     "flag_read_count": 0,
     "flag_write_count": 1
   },

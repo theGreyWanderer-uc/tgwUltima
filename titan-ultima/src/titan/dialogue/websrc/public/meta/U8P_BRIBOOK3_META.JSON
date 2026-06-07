@@ -3,35 +3,41 @@
   "source_of_truth": "dialogue/json/U8P_BRIBOOK3.json",
   "file": "U8P_BRIBOOK3",
   "behavior_summary": [
-    "When the book object is activated, prepare a long lore text and hand it to the engine's book-reading routine so the player sees the full book contents.",
-    "Before showing the text, set an info/metadata marker on the book object (small integer value pushed) — likely to mark that object information is present or updated.",
-    "Capture the return value from the Book::read call, apply an 'implies' style check, store the result into a temporary, then yield/suspend execution — the script yields after presenting the book."
+    "U8P_BRIBOOK3::func0080 launches a Book::read process to present a fixed block of book/lore text to the player and immediately suspends the current script.",
+    "The function passes a pointer to a long string (the book contents) and the current object reference (this) to Book::read, captures the returned process id into a local named temp, and then yields/suspends.",
+    "Invocation is not shown in the snippet but is likely triggered by player interaction with the book object (e.g., a 'read' or use action)."
   ],
   "notable_control_flow": [
-    "Push object parameter (BP+06) and other context (including a pid-like value), then invoke a set-info operation to update the object's metadata.",
-    "Convert an in-script literal string to a pointer and call Book::read with the object pointer and the string pointer to present the book text.",
-    "Receive Book::read return value, run an 'implies' opcode on it, pop/store result into a temp slot, then suspend/return — indicates the script yields while the read UI is active or records the outcome."
+    "Call to external Book::read(text_ptr, this) — returns a process id which is stored in local temp.",
+    "Immediate suspend after spawning the read process: the script yields control while the separate Book::read process runs.",
+    "No branching, menu, or flag logic present in the provided code — behavior is linear and deterministic."
   ],
   "open_questions": [
-    "Exact semantics of opcode 77 ('set info'): which info key/index is being set and what visible gameplay effect that produces (inferred as marking object info).",
-    "Meaning and source of the two-byte 'indirect' data pushed to the set-info call — what object field or meta record does it reference?",
-    "Precise interpretation of the Book::read return value and the 'implies' opcode's usage in this context (what conditions cause different post-read behavior?).",
-    "Whether the pushed 'pid' value is always the player process id or a different interacting actor id in some contexts."
+    "What exact in-game event dispatch calls U8P_BRIBOOK3::func0080 (player 'read' action, use, or engine-driven trigger)?",
+    "Does Book::read ever write or consult global flags tied to progress or unlocking subsequent interactions (not visible in this snippet)?",
+    "Is the long text literal the canonical/complete content or a pointer to a localized resource (text was embedded as a string in the disassembly but could map to localization keys)?"
   ],
   "main_function": {
-    "name": "U8P_BRIBOOK3::0080",
+    "name": "U8P_BRIBOOK3::func0080",
     "execution_form": "process",
-    "purpose": "Display a long lore/book text to the player when the book object is used and mark the object with a small info flag so its metadata reflects the read/available information.",
+    "purpose": "Spawn a Book::read process to show a fixed book/lore text to the player, track the spawned process id, and suspend the current script while the read process executes.",
     "entry_conditions": [
-      "Invoked when the book/book-object is activated by an actor (inferred from Book::read call and typical item-use handling)."
+      "Appears to be invoked when the player interacts with or attempts to read the book object (inferred).",
+      "No explicit conditional checks or flags are present in the function body."
     ],
     "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_BRIBOOK3::0080",
+      "name": "U8P_BRIBOOK3::func0080",
       "kind": "main",
-      "role": "Handle book activation: set object info and invoke Book::read to present a long text.",
+      "role": "Start a book-reading UI/process and suspend the current script while that reading runs.",
+      "confidence": "high"
+    },
+    {
+      "name": "Book::read",
+      "kind": "extern",
+      "role": "External UI/process function that displays provided text as a book reading and returns a process id/handle.",
       "confidence": "high"
     }
   ],
@@ -39,16 +45,10 @@
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_BRIBOOK3::0080",
+        "caller": "U8P_BRIBOOK3::func0080",
         "callee": "Book::read",
-        "purpose": "Present/process the supplied book text string for the given book object so the player can read the long lore text.",
+        "purpose": "Display the provided long book/lore text to the player in a separate read-process; returns a process id which is stored locally so the script can track the spawned process.",
         "confidence": "high"
-      },
-      {
-        "caller": "U8P_BRIBOOK3::0080",
-        "callee": "U8P_BRIBOOK3::set info (opcode 77)",
-        "purpose": "Set a small info/metadata value on the book object (value pushed is 1) before presenting the text — likely to mark that the object has associated info or to attach a short info flag.",
-        "confidence": "medium"
       }
     ]
   },
@@ -57,15 +57,12 @@
     "writes": []
   },
   "ui_tags": [
-    "trigger",
-    "display",
-    "guard",
-    "metadata"
+    "trigger"
   ],
   "quick_facts": {
-    "main_function": "BRIBOOK3::0080",
-    "behavior_summary_one_liner": "When the book object is activated, prepare a long lore text and hand it to the engine's book-reading routine so the player sees the full book contents.",
-    "external_call_count": 2,
+    "main_function": "U8P_BRIBOOK3::func0080",
+    "behavior_summary_one_liner": "U8P_BRIBOOK3::func0080 launches a Book::read process to present a fixed block of book/lore text to the player and immediately suspends the current script.",
+    "external_call_count": 1,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

@@ -3,26 +3,28 @@
   "source_of_truth": "dialogue/json/U8P_FIRESTRM.json",
   "file": "U8P_FIRESTRM",
   "behavior_summary": [
-    "Handles the 'U8P_FIRESTRM::hit' event for a fire-stream projectile: establishes event context, prevents further processing for relevant targets, plays a U8P_FIRESTRM::hit sound effect, and destroys the projectile instance.",
-    "Acts as a short cleanup-and-feedback routine so the projectile is removed from the world once it has been struck and the player/engine receives audio feedback."
+    "U8P_FIRESTRM implements a simple item 'U8P_FIRESTRM::hit' process: when the item is struck, it plays a specific sound effect and then destroys (removes) itself from the world.",
+    "The routine does not reference or modify any global flags and contains no branching — it is a one-shot cleanup/feedback handler tied to an impact event.",
+    "Parameters (uword, word) are declared by the process signature but are not used by the observed code; the behavior is independent of those inputs."
   ],
   "notable_control_flow": [
-    "Entry on Event 5 (U8P_FIRESTRM::hit) for the fire-stream process (U8P_FIRESTRM::hit).",
-    "Sequence: push constant (0x020B) and item instance pointer -> set info (establish event context) -> process exclude (adjust exclusion lists) -> push SFX params -> playSFX -> call Item::destroy on the projectile instance.",
-    "No branching or loops observed in this handler; it performs a linear sequence of side-effect operations and exits."
+    "U8P_FIRESTRM::hit executes as a short linear sequence: call playSFX(0x64, 0x1F) then call Item::destroy(this).",
+    "No conditional tests, menu/dialog nodes, or flag reads/writes are present; the process always performs the same actions when invoked.",
+    "The process is expected to terminate after performing the two calls (one auditory feedback, one cleanup)."
   ],
   "open_questions": [
-    "What exactly does the constant 0x020B identify in the set info/process exclude sequence (specific info key or reason code)?",
-    "What do the playSFX parameters 0x64 and 0x1F represent (volume, variant, priority, or sound id components)?",
-    "Are the declared function parameters (source_actor_or_object, hit_value_or_flags) used elsewhere or intentionally unused in this event handler?",
-    "Does process exclude target only the projectile or also other actors/items related to the event (scope of exclusion is inferred but not explicit)?"
+    "What precisely triggers the U8P_FIRESTRM::hit process in engine terms (damage event, collision, scripted U8P_FIRESTRM::hit)? This is inferred from the function name but not explicit in the snippet.",
+    "What is the semantic meaning of playSFX second parameter 0x1F (volume, variant, channel flags)?",
+    "Are the declared parameters (uword, word) reserved for engine use (e.g., damage amount, attacker id) even though this routine does not use them?",
+    "Is there any animation or particle effect that the engine performs implicitly on Item::destroy that is not visible in this code?"
   ],
   "main_function": {
     "name": "U8P_FIRESTRM::hit",
     "execution_form": "process",
-    "purpose": "On a U8P_FIRESTRM::hit, mark event context and exclusions for the projectile, play a U8P_FIRESTRM::hit SFX for feedback, and destroy the projectile to remove it from the game world.",
+    "purpose": "Handle the item being U8P_FIRESTRM::hit by providing audible feedback and removing the item instance from the game world (self-destruct on impact).",
     "entry_conditions": [
-      "Invoked by Event 5 (U8P_FIRESTRM::hit) for the fire-stream instance — triggered when the projectile is struck by an actor or object."
+      "Invoked as the item's U8P_FIRESTRM::hit handler (process U8P_FIRESTRM::hit).",
+      "Triggered when the item is struck, damaged, or otherwise receives a U8P_FIRESTRM::hit — inferred from name and behavior."
     ],
     "confidence": "high"
   },
@@ -30,31 +32,7 @@
     {
       "name": "U8P_FIRESTRM::hit",
       "kind": "main",
-      "role": "Event handler for the projectile's 'U8P_FIRESTRM::hit' event (cleanup + feedback)",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_FIRESTRM::set info",
-      "kind": "extern",
-      "role": "Engine operation to attach event/context metadata to a referenced object (used here to mark or identify the U8P_FIRESTRM::hit context)",
-      "confidence": "medium"
-    },
-    {
-      "name": "U8P_FIRESTRM::process exclude",
-      "kind": "extern",
-      "role": "Engine operation to exclude certain targets from further processing for the current event (prevents duplicate handling)",
-      "confidence": "medium"
-    },
-    {
-      "name": "U8P_FIRESTRM::playSFX",
-      "kind": "extern",
-      "role": "Play a sound effect (called to provide audio feedback on U8P_FIRESTRM::hit)",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::destroy",
-      "kind": "extern",
-      "role": "Remove/destroy the item instance representing the projectile",
+      "role": "one-shot U8P_FIRESTRM::hit handler: play U8P_FIRESTRM::hit SFX then destroy the item instance",
       "confidence": "high"
     }
   ],
@@ -63,26 +41,14 @@
     "external_calls": [
       {
         "caller": "U8P_FIRESTRM::hit",
-        "callee": "U8P_FIRESTRM::set info",
-        "purpose": "Attach a context identifier (constant 0x020B) and the projectile instance reference to the event so subsequent engine handling knows the origin/context of this U8P_FIRESTRM::hit.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_FIRESTRM::hit",
-        "callee": "U8P_FIRESTRM::process exclude",
-        "purpose": "Modify the processing/exclusion list for the current event so specific handlers or the projectile itself are skipped for further processing.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_FIRESTRM::hit",
-        "callee": "U8P_FIRESTRM::playSFX",
-        "purpose": "Play a U8P_FIRESTRM::hit sound effect using two byte parameters (0x64, 0x1F) to provide immediate audio feedback for the impact.",
+        "callee": "playSFX",
+        "purpose": "Play a specific sound effect to signal the item was U8P_FIRESTRM::hit (called with 0x64, 0x1F).",
         "confidence": "high"
       },
       {
         "caller": "U8P_FIRESTRM::hit",
         "callee": "Item::destroy",
-        "purpose": "Destroy the fire-stream projectile instance to remove it from the world and stop further interactions.",
+        "purpose": "Remove/destroy the item instance (this) from the game world as cleanup after being U8P_FIRESTRM::hit.",
         "confidence": "high"
       }
     ]
@@ -98,9 +64,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "FIRESTRM::hit",
-    "behavior_summary_one_liner": "Handles the 'U8P_FIRESTRM::hit' event for a fire-stream projectile: establishes event context, prevents further processing for relevant targets, plays a U8P_FIRESTRM::hit sound effect, and destroys the projectile instance.",
-    "external_call_count": 4,
+    "main_function": "U8P_FIRESTRM::hit",
+    "behavior_summary_one_liner": "U8P_FIRESTRM implements a simple item 'U8P_FIRESTRM::hit' process: when the item is struck, it plays a specific sound effect and then destroys (removes) itself from the world.",
+    "external_call_count": 2,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

@@ -3,28 +3,27 @@
   "source_of_truth": "dialogue/json/U8P_PLATEFOO.json",
   "file": "U8P_PLATEFOO",
   "behavior_summary": [
-    "PLATEFOO::look: When the player (or relevant actor) examines the plate item, the script checks the item's frame value and emits a short descriptive message. If the frame value indicates one or more portions remain (>0) it barks a 'plate of food' description; if the frame is zero it barks 'empty plate'.",
-    "PLATEFOO::use (helper): When the player uses the plate, if the item's frame > 0 the item barks an eating message (inferred 'Mmmm...') and the script decrements the item's frame by one (consuming one portion). If the frame is 0 no consumption occurs.",
-    "The item's frame value is used as a small integer counter encoding content/remaining portions, read with Item::getFrame and updated with Item::setFrame. Item::bark is used to show messages to the player/context."
+    "Provides U8P_PLATEFOO::look and U8P_PLATEFOO::use handlers for a plate item. The U8P_PLATEFOO::look process reports a short description based on the item's numeric frame (servings) value: if Item::getFrame(this) > 0 it shows 'plate of food', otherwise it shows 'empty plate'.",
+    "The U8P_PLATEFOO::use process allows consumption: if Item::getFrame(this) > 0 it plays a consumption bark ('Mmmm...') and decrements the frame by one via Item::setFrame(Item::getFrame(this) - 1, this).",
+    "No global flags are read or written by the routines in the excerpt; behavior is entirely local to the item instance's frame property."
   ],
   "notable_control_flow": [
-    "PLATEFOO::look reads Item::getFrame(item) and branches on frame > 0 to decide which descriptive string to pass to Item::bark.",
-    "After calling Item::bark the handler yields/suspends briefly (inferred suspend/yield sequence) and then returns to the caller.",
-    "PLATEFOO::use also guards on Item::getFrame(item) > 0; on true path it calls Item::bark with an eating string and then calls Item::setFrame(item, frame-1) to decrement the remaining portions.",
-    "No global flags are modified by these handlers; behavior is entirely local to the item instance's frame and emitted messages."
+    "U8P_PLATEFOO::look branches on Item::getFrame(this) > 0 to choose between two barks/descriptions.",
+    "U8P_PLATEFOO::use checks Item::getFrame(this) > 0 before performing consumption actions (bark + decrement).",
+    "Decrementing the serving count is performed by calling Item::setFrame(Item::getFrame(this) - 1, this) — a read-modify-write on the item's frame property."
   ],
   "open_questions": [
-    "Is the numeric frame value strictly a 'remaining portions' counter across the game, or does it also select visual/shape variants for the plate (appearance changes when frame hits 0)?",
-    "What exact PID gets passed as the message target/context to Item::bark in U8P_PLATEFOO::look (is it the examining actor, the item process, or derived from the item)?",
-    "Are the exact message strings ('plate of food', 'empty plate', 'Mmmm...') stored in the script or in a centralized localization table/resource?",
-    "Are there other events (e.g., drop, split stacks) that can change the plate's frame that this script must interoperate with?"
+    "When U8P_PLATEFOO::use is invoked and Item::getFrame(this) == 0, the excerpt shows no action — does the full script provide a negative feedback bark or deny-U8P_PLATEFOO::use message?",
+    "Are there any additional side effects (sound, animation, inventory change) tied to consuming a serving that are implemented elsewhere or by engine hooks not present in the excerpt?",
+    "Is the frame property used elsewhere to trigger other gameplay logic (e.g., replacing the item when emptied) beyond the simple decrement observed here?"
   ],
   "main_function": {
     "name": "U8P_PLATEFOO::look",
     "execution_form": "process",
-    "purpose": "Provide a short descriptive response when the player examines the plate: report that the plate contains food when its frame > 0, otherwise report that it is empty. Uses Item::getFrame to decide which message to bark and targets that bark to the viewing context before suspending and returning.",
+    "purpose": "Display the item's short description dependent on remaining servings: 'plate of food' when the internal frame (servings) > 0, otherwise 'empty plate'.",
     "entry_conditions": [
-      "Event 0: U8P_PLATEFOO::look — triggered when an actor (typically the player/avatar) inspects/examines the plate item."
+      "Invoked by the engine when the player 'looks at' or examines the plate item (U8P_PLATEFOO::look/inspect action).",
+      "Behavior is gated by the item's frame value via Item::getFrame(this) > 0."
     ],
     "confidence": "high"
   },
@@ -32,31 +31,25 @@
     {
       "name": "U8P_PLATEFOO::look",
       "kind": "main",
-      "role": "On 'U8P_PLATEFOO::look' events, read the item's frame and bark a descriptive string to the viewer indicating 'plate of food' or 'empty plate'.",
+      "role": "Examine/description handler that selects a short description based on the item's frame (servings) value.",
       "confidence": "high"
     },
     {
       "name": "U8P_PLATEFOO::use",
       "kind": "helper",
-      "role": "On 'use' events, if the plate has portions (frame > 0) bark an eating message and decrement the frame (consume one portion).",
+      "role": "Handle player 'U8P_PLATEFOO::use' action to consume one serving when available (play bark and decrement frame).",
       "confidence": "high"
     },
     {
       "name": "Item::getFrame",
       "kind": "extern",
-      "role": "Read the item's current frame/variant value (used here as a portions counter).",
+      "role": "Read numeric frame property of the item instance (used as servings/count).",
       "confidence": "high"
     },
     {
       "name": "Item::setFrame",
       "kind": "extern",
-      "role": "Update the item's frame/variant value (used to decrement remaining portions after use).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Emit a short text message from the item (shown to the player/actor) used for descriptions and eating feedback.",
+      "role": "Write numeric frame property of the item instance (used to update remaining servings).",
       "confidence": "high"
     }
   ],
@@ -66,31 +59,19 @@
       {
         "caller": "U8P_PLATEFOO::look",
         "callee": "Item::getFrame",
-        "purpose": "Read the plate's frame value to determine whether it contains food (frame > 0) or is empty (frame == 0).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_PLATEFOO::look",
-        "callee": "Item::bark",
-        "purpose": "Emit the descriptive text to the viewer: 'plate of food' when frame>0 or 'empty plate' when frame==0. The bark is targeted/contextualized to the viewer/pid.",
+        "purpose": "Read the item's frame value to decide which description/bark to show (servings > 0 vs empty).",
         "confidence": "high"
       },
       {
         "caller": "U8P_PLATEFOO::use",
         "callee": "Item::getFrame",
-        "purpose": "Check whether at least one portion remains before consuming.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_PLATEFOO::use",
-        "callee": "Item::bark",
-        "purpose": "Emit an eating feedback message (inferred 'Mmmm...') when a portion is consumed.",
+        "purpose": "Read the current frame to check if a serving is available and to compute the decremented value.",
         "confidence": "high"
       },
       {
         "caller": "U8P_PLATEFOO::use",
         "callee": "Item::setFrame",
-        "purpose": "Write back the decremented frame value (frame-1) after a successful consume action.",
+        "purpose": "Write the new frame value after consuming one serving (setFrame(getFrame(this) - 1, this)).",
         "confidence": "high"
       }
     ]
@@ -101,13 +82,13 @@
   },
   "ui_tags": [
     "trigger",
-    "guard",
-    "cleanup"
+    "consumption",
+    "description"
   ],
   "quick_facts": {
-    "main_function": "PLATEFOO::look",
-    "behavior_summary_one_liner": "PLATEFOO::look: When the player (or relevant actor) examines the plate item, the script checks the item's frame value and emits a short descriptive message. If the frame value indicates one or more portions remain (>0) it barks a 'plate of food' description; if the frame is zero it barks 'empty plate'.",
-    "external_call_count": 5,
+    "main_function": "U8P_PLATEFOO::look",
+    "behavior_summary_one_liner": "Provides U8P_PLATEFOO::look and U8P_PLATEFOO::use handlers for a plate item. The U8P_PLATEFOO::look process reports a short description based on the item's numeric frame (servings) value: if Item::getFrame(this) > 0 it shows 'plate of food', otherwise it shows 'empty plate'.",
+    "external_call_count": 3,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

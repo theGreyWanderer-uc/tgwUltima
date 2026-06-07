@@ -3,49 +3,40 @@
   "source_of_truth": "dialogue/json/U8P_AFTERNEC.json",
   "file": "U8P_AFTERNEC",
   "behavior_summary": [
-    "When the U8P_AFTERNEC::hatch event runs (U8P_AFTERNEC::hatch), the script marks a related in-game object with a specific info/state key (0x0210) and excludes that object from further engine processing.",
-    "The script sets the global flag 'talkedToDeadDudes' to true, recording quest/dialog progress.",
-    "The item instance passed into the event (the U8P_AFTERNEC::hatch item) is destroyed via Item::destroy as part of cleanup."
+    "U8P_AFTERNEC::hatch runs as a process that records that the player has \"talkedToDeadDudes\" and then removes the item instance that ran the process.",
+    "The script's effect is a one-shot state update (set global flag) followed by cleanup (Item::destroy on the current item).",
+    "There is no dialogue, branching, menu interaction, or parameterized behavior in this script; behavior is deterministic and linear."
   ],
   "notable_control_flow": [
-    "Entry via event handler U8P_AFTERNEC::hatch.",
-    "Apply engine-level set-info (id 0x0210) to a target object derived from the passed-in item, then call process-exclude on that same target.",
-    "Write the global flag talkedToDeadDudes = 1.",
-    "Call Item::destroy on the item parameter and return.",
-    "Loop/frame progression inside U8P_AFTERNEC::hatch; treated as control-flow, not explicit internal call."
+    "Linear sequence: set global flag talkedToDeadDudes = true, then call Item::destroy(this).",
+    "No conditional branches, loops, or UI/menu interactions are present."
   ],
   "open_questions": [
-    "What concrete game-state or behavior is represented by info id 0x0210 (semantic meaning is inferred but not explicit).",
-    "Exactly which object reference is targeted by the set-info/process-exclude sequence (the code derives it indirectly from the passed-in item; the relationship is inferred).",
-    "What specific in-game trigger(s) fire Event 7 ('U8P_AFTERNEC::hatch') in gameplay (area entry vs. item/creature hatching remains uncertain)."
+    "Exactly what game event starts the processType 0x0210 'U8P_AFTERNEC::hatch' (e.g., item use, timer expiry, or lifecycle completion)?",
+    "How is the global flag talkedToDeadDudes consumed elsewhere (which dialogues/quests or guards check it)?",
+    "Is destroying the item intended to prevent repeated triggering, or is the item already transient (i.e., is this the only cleanup path)?"
   ],
   "main_function": {
     "name": "U8P_AFTERNEC::hatch",
     "execution_form": "process",
-    "purpose": "Handle a U8P_AFTERNEC::hatch-related event by marking a related object with info id 0x0210, excluding that object from further processing, recording that the player 'talked to dead dudes', and destroying the U8P_AFTERNEC::hatch item.",
+    "purpose": "Mark that the player has interacted with the \"dead dudes\" (set talkedToDeadDudes) and then destroy the item instance that ran this process to perform cleanup.",
     "entry_conditions": [
-      "Event 7 (U8P_AFTERNEC::hatch) — invoked by the engine when the U8P_AFTERNEC::hatch event is triggered for the item/process."
+      "Invoked when the item-level process 'U8P_AFTERNEC::hatch' runs (processType 0x0210) — likely on item lifecycle completion, use, or a related event; exact trigger is inferred."
     ],
-    "confidence": "high"
+    "confidence": "medium"
   },
   "function_map": [
     {
       "name": "U8P_AFTERNEC::hatch",
       "kind": "main",
-      "role": "Event handler for the U8P_AFTERNEC::hatch event; coordinates state change, global flag write, and item destruction.",
+      "role": "record interaction state and cleanup (sets flag, destroys item)",
       "confidence": "high"
     },
     {
       "name": "Item::destroy",
       "kind": "extern",
-      "role": "Remove/destroy the item instance passed to U8P_AFTERNEC::hatch.",
+      "role": "engine-provided cleanup call to remove/destroy the current item instance",
       "confidence": "high"
-    },
-    {
-      "name": "U8P_AFTERNEC::set info + process exclude",
-      "kind": "extern",
-      "role": "Engine operations invoked to set info id 0x0210 on a referenced object and then exclude that object from normal processing/AI.",
-      "confidence": "medium"
     }
   ],
   "call_analysis": {
@@ -53,14 +44,8 @@
     "external_calls": [
       {
         "caller": "U8P_AFTERNEC::hatch",
-        "callee": "U8P_AFTERNEC::set info + process exclude",
-        "purpose": "Set info id 0x0210 on a target object derived from the item parameter and then exclude that object from further engine processing (likely to change state and stop AI/updates).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_AFTERNEC::hatch",
         "callee": "Item::destroy",
-        "purpose": "Destroy/remove the item instance passed into the U8P_AFTERNEC::hatch handler as cleanup.",
+        "purpose": "Destroy the current item instance (this) to remove it from the world after recording the interaction.",
         "confidence": "high"
       }
     ]
@@ -70,21 +55,21 @@
     "writes": [
       {
         "name": "talkedToDeadDudes",
-        "likely_effect": "Set to 1 to record that the player has 'talked to dead dudes' (progress/quest/dialog flag).",
-        "confidence": "high"
+        "likely_effect": "Set to true to record that the player completed/acknowledged the interaction with the 'dead dudes', likely gating subsequent dialogue or quest state.",
+        "confidence": "medium"
       }
     ]
   },
   "ui_tags": [
     "trigger",
     "cleanup",
-    "flag",
-    "exclude"
+    "animation",
+    "guard"
   ],
   "quick_facts": {
     "main_function": "U8P_AFTERNEC::hatch",
-    "behavior_summary_one_liner": "When the U8P_AFTERNEC::hatch event runs (U8P_AFTERNEC::hatch), the script marks a related in-game object with a specific info/state key (0x0210) and excludes that object from further engine processing.",
-    "external_call_count": 2,
+    "behavior_summary_one_liner": "U8P_AFTERNEC::hatch runs as a process that records that the player has \"talkedToDeadDudes\" and then removes the item instance that ran the process.",
+    "external_call_count": 1,
     "flag_read_count": 0,
     "flag_write_count": 1
   },

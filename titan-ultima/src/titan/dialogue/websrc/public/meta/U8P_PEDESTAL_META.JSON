@@ -3,24 +3,27 @@
   "source_of_truth": "dialogue/json/U8P_PEDESTAL.json",
   "file": "U8P_PEDESTAL",
   "behavior_summary": [
-    "When the pedestal is examined (U8P_PEDESTAL::look event), the script marks the pedestal with an info/flag (constant 0x208), excludes or adjusts its processing state, and causes the pedestal to 'bark' the literal text \"pedestal \" to the inspecting process/player.",
-    "The handler allocates a short string buffer for the message, calls Item::bark to present the text to the viewer, frees the temporary string, and then suspends/returns.",
-    "No global flags are read or written by this snippet; its effects are local to the pedestal object and the viewer interaction."
+    "U8P_PEDESTAL::look is a U8P_PEDESTAL::look-type process that runs when the player examines the PEDESTAL object and presents a single short description ('pedestal ').",
+    "After emitting the bark text the process appears to suspend/terminate; there is no branching, menu, or flag manipulation.",
+    "No external calls or global flags are read or written by this script excerpt."
   ],
   "notable_control_flow": [
-    "Entry on a U8P_PEDESTAL::look/inspect trigger -> push info constant (0x208) and object -> set info on the object (marks/flags it) -> process-exclude/adjust processing state -> push viewer pid -> allocate and push message string \"pedestal \" -> call Item::bark -> free string -> handle return and suspend/return."
+    "Single linear flow: entry → emit Bark('pedestal ') → suspend/terminate.",
+    "No conditional branches, menus, or loops present.",
+    "Function is implemented as a process (processType 0x0208) and is triggered by an inspect/U8P_PEDESTAL::look action on the object."
   ],
   "open_questions": [
-    "What precise semantic meaning does info id 0x208 have for items (e.g., visual marker, temporary state, or display-control)?",
-    "Which process id (pid) is being passed in exactly (player avatar, active process, or another viewer context) and where is it sourced in the broader script context?",
-    "Does the process-exclude step prevent further automatic processing of the pedestal or only modify a display/interaction flag for a short period?"
+    "Is the trailing space in the bark text 'pedestal ' intentional (formatting) or an artifact of extraction?",
+    "Is the suspend/termination explicit in the source or inferred from the process structure (behavior inferred with high confidence but the raw node was unknown)?",
+    "Are there any other event handlers (e.g., use, enterFastArea) for this object in other files that change behavior beyond this U8P_PEDESTAL::look handler?"
   ],
   "main_function": {
     "name": "U8P_PEDESTAL::look",
     "execution_form": "process",
-    "purpose": "Handle the 'U8P_PEDESTAL::look' (examine) interaction for the pedestal: set an item info/flag, prepare and emit a short descriptive bark \"pedestal \", clean up temporary resources, then suspend/return.",
+    "purpose": "Provide the short descriptive text when the player examines the pedestal; present a single bark and end the U8P_PEDESTAL::look process.",
     "entry_conditions": [
-      "Event 0 (U8P_PEDESTAL::look) — invoked when a player/actor examines or looks at the pedestal (the item's U8P_PEDESTAL::look/inspect trigger)."
+      "Triggered by the player 'U8P_PEDESTAL::look' / examine action on the PEDESTAL object",
+      "Registered as a U8P_PEDESTAL::look-type process (processType 0x0208)"
     ],
     "confidence": "high"
   },
@@ -28,26 +31,13 @@
     {
       "name": "U8P_PEDESTAL::look",
       "kind": "main",
-      "role": "Exam handler for pedestal item; applies item info and emits description to viewer.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine to display or emit a short text message from an item/process to a target process/player.",
+      "role": "Handle the object's examine/U8P_PEDESTAL::look action by emitting a short bark ('pedestal ') and then suspending/ending the process.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_PEDESTAL::look",
-        "callee": "Item::bark",
-        "purpose": "Display the pedestal's short description string \"pedestal \" to the viewer/process that triggered the U8P_PEDESTAL::look.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -55,14 +45,13 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "animation",
-    "guard"
+    "description",
+    "suspend"
   ],
   "quick_facts": {
-    "main_function": "PEDESTAL::look",
-    "behavior_summary_one_liner": "When the pedestal is examined (U8P_PEDESTAL::look event), the script marks the pedestal with an info/flag (constant 0x208), excludes or adjusts its processing state, and causes the pedestal to 'bark' the literal text \"pedestal \" to the inspecting process/player.",
-    "external_call_count": 1,
+    "main_function": "U8P_PEDESTAL::look",
+    "behavior_summary_one_liner": "U8P_PEDESTAL::look is a U8P_PEDESTAL::look-type process that runs when the player examines the PEDESTAL object and presents a single short description ('pedestal ').",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

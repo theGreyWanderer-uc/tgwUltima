@@ -3,29 +3,27 @@
   "source_of_truth": "dialogue/json/U8P_FIREFELD.json",
   "file": "U8P_FIREFELD",
   "behavior_summary": [
-    "Provides behavior for a persistent 'fire field' item: a short U8P_FIREFELD::look/description, periodic animation/tick processing that can damage/affect overlapping NPCs, and a hit handler that forwards or reflects incoming hits into actors inside the field.",
-    "U8P_FIREFELD::look responds to examination by displaying the label \"fire field \".",
-    "U8P_FIREFELD::anim runs on animation/tick events: advances or resets animation frames, may spawn a visual/particle helper process (PENT::1179) if none exist for certain frames, scans the field area for overlapping NPCs, plays SFX for special types, and forwards damage (Item::receiveHit) to overlapped NPCs when appropriate.",
-    "U8P_FIREFELD::gotHit handles incoming hits: it checks overlaps, filters NPCs, treats items of type 0x60 as a special case (plays SFX and suppresses forwarding) and otherwise computes direction and forwards the hit (damage/type) to overlapping NPCs via Item::receiveHit."
+    "A stationary 'fire field' item that: (a) shows the short description \"fire field\" when the player inspects it (U8P_FIREFELD::look), (b) runs a recurring animation/process that advances frames, spawns a persistent pentagram SFX loop if needed, detects overlapping NPCs and may damage them on specific frames (U8P_FIREFELD::anim), and (c) reacts to incoming hits/interactions by identifying a source/overlapping entity and potentially playing SFX and applying damage back to that entity (U8P_FIREFELD::gotHit).",
+    "Damage application is conditional: overlaps and isNpc checks filter valid targets, behavior is gated by local flags to avoid repeated effects, some type-specific cases (e.g., type == 0x60) trigger alternate SFX and gating behavior, and damage uses a random range for variability."
   ],
   "notable_control_flow": [
-    "Event mapping: U8P_FIREFELD::look = Event 0 (examine); U8P_FIREFELD::anim = Event 2 (tick/animation); U8P_FIREFELD::gotHit = Event 6 (incoming hit).",
-    "On specific animation frames U8P_FIREFELD::anim checks Kernel::getNumProcesses(..., PENT::1179) and spawns PENT::1179 when none exists (visual/particle helper).",
-    "U8P_FIREFELD::anim creates a temporary list of overlapped NPC ids, iterates it to handle special-type items (type 0x60) and to conditionally apply hits; the list is freed before return.",
-    "Both gotHit and anim compute directions (via Item::getDirToCoords / Item::getDirToItem) and call Item::receiveHit to forward damage; they also play SFX and call FREE::1A96 as side effects in particular branches."
+    "U8P_FIREFELD::look is a simple process that immediately barks the text \"fire field\" and suspends (inspect/description path).",
+    "U8P_FIREFELD::anim loops the item's animation frame, performing per-frame logic: at certain frames it spawns a pentagram SFX loop (only if Kernel::getNumProcesses indicates none), collects overlapping NPCs into a local target list, and on impact frames plays SFX and calls Item::receiveHit for each target using a direction computed toward the target and a random damage amount.",
+    "U8P_FIREFELD::gotHit takes a parameter (attacker/handle). If non-zero it stores that handle, checks overlaps and NPC-ness, inspects the target type and current frame, and conditionally plays SFX and calls Item::receiveHit back at the overlapping NPC. Local gate flags are set/cleared to prevent repeated immediate reapplication.",
+    "No global flags are read or written by these scripts — state is managed via local/process variables and spawned processes."
   ],
   "open_questions": [
-    "What concrete gameplay meaning does item type 0x60 represent (it is special-cased but its semantic meaning is inferred)?",
-    "What precisely does FREE::1A96 do (visual effect, timing helper, or state change)?",
-    "Exact numeric frame values and SFX ids used for logic branches are inferred from comparisons but not named; what are the intended visual/audio assets?",
-    "What is the intended behavior of the spawned process PENT::1179 (particle type, lifetime, and interaction with hosts)?"
+    "Exact numeric meanings of type constants (e.g., 0x60) used in type-special-case branches — the script plays a different SFX and clears a gate for that type, but the target identity is inferred only from the numeric constant.",
+    "Precise timing and scheduling of U8P_FIREFELD::anim relative to game ticks (how often damage windows occur and how long the pentagram SFX loop persists) — inferred from frame checks but exact cadence is unknown.",
+    "Whether the local 'menu/list' collected in U8P_FIREFELD::anim (local3) is used elsewhere by other systems or only within the immediate U8P_FIREFELD::anim loop — the script builds the list but higher-level use beyond immediate iteration is not explicit."
   ],
   "main_function": {
     "name": "U8P_FIREFELD::look",
     "execution_form": "process",
-    "purpose": "Handle the player's 'U8P_FIREFELD::look' / examine event for the fire field and present a short descriptive bark ('fire field ').",
+    "purpose": "Provide the short descriptive text when the player examines the fire field (display \"fire field\").",
     "entry_conditions": [
-      "Event 0: invoked when an actor (usually the Avatar) inspects or examines the fire field item."
+      "Triggered by the engine's U8P_FIREFELD::look/inspect event for this item (process type 0x0208).",
+      "Runs when the player inspects or queries the fire field object in the world."
     ],
     "confidence": "high"
   },
@@ -33,215 +31,137 @@
     {
       "name": "U8P_FIREFELD::look",
       "kind": "main",
-      "role": "examine/U8P_FIREFELD::look handler: emits description via Item::bark",
+      "role": "inspect/description handler",
       "confidence": "high"
     },
     {
       "name": "U8P_FIREFELD::gotHit",
       "kind": "helper",
-      "role": "incoming hit handler: inspects overlaps and forwards or suppresses hits to overlapped NPCs; plays SFX for special types",
+      "role": "react-to-hit / retaliate / play SFX and optionally call Item::receiveHit on overlapping attacker/target",
       "confidence": "medium"
     },
     {
       "name": "U8P_FIREFELD::anim",
       "kind": "helper",
-      "role": "animation/tick handler: advances frames, spawns helper process when needed, enumerates overlapped NPCs, applies periodic damage/effects, plays SFX and invokes FREE::1A96",
-      "confidence": "medium"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "engine/item interface to show a short message from the item (used by U8P_FIREFELD::look and sometimes by other flows)",
+      "role": "recurring animation/process: advance frames, spawn persistent SFX loop, detect overlapping NPCs and apply periodic damage on specific frames",
       "confidence": "high"
-    },
-    {
-      "name": "Item::overlaps",
-      "kind": "extern",
-      "role": "test whether a map location/actor id overlaps this item (used to find actors inside the field)",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::isNpc",
-      "kind": "extern",
-      "role": "filter candidate targets to NPCs",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getType",
-      "kind": "extern",
-      "role": "get a target's type to special-case type 0x60",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::receiveHit",
-      "kind": "extern",
-      "role": "apply/forward a hit to a target id (used to damage overlapped NPCs)",
-      "confidence": "high"
-    },
-    {
-      "name": "Kernel::getNumProcesses",
-      "kind": "extern",
-      "role": "query count of helper processes (used to decide spawning PENT::1179)",
-      "confidence": "medium"
-    },
-    {
-      "name": "spawn (PENT::1179)",
-      "kind": "extern",
-      "role": "spawn a helper process (visual/particle) associated with the fire field",
-      "confidence": "medium"
-    },
-    {
-      "name": "FREE::1A96",
-      "kind": "extern",
-      "role": "auxiliary routine invoked alongside SFX/hit forwarding; semantics inferred (likely visual/timing helper)",
-      "confidence": "low"
-    },
-    {
-      "name": "U8P_FIREFELD::playSFX",
-      "kind": "extern",
-      "role": "play sound effects for special interactions and frame events",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getDirToCoords",
-      "kind": "extern",
-      "role": "compute direction from the fire field to given coordinates (used when forwarding hits)",
-      "confidence": "medium"
-    },
-    {
-      "name": "Item::getDirToItem",
-      "kind": "extern",
-      "role": "compute direction from the fire field to another item id",
-      "confidence": "medium"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_FIREFELD::look",
-        "callee": "Item::bark",
-        "purpose": "Display the short text description 'fire field ' to the inspecting process",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FIREFELD::gotHit",
-        "callee": "Item::overlaps",
-        "purpose": "Enumerate/check which actors/items overlap the field when a hit is received",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FIREFELD::gotHit",
-        "callee": "Item::isNpc",
-        "purpose": "Filter overlapped ids to NPCs before applying forwarded hits",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FIREFELD::gotHit",
-        "callee": "Item::getType",
-        "purpose": "Detect special type 0x60 to suppress forwarding and play special SFX",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_FIREFELD::gotHit",
-        "callee": "U8P_FIREFELD::playSFX",
-        "purpose": "Play a special sound when a special type (0x60) is encountered during hit handling",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_FIREFELD::gotHit",
-        "callee": "Item::getY",
-        "purpose": "Obtain the fire field Y coordinate to compute direction toward the hit/target",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_FIREFELD::gotHit",
-        "callee": "Item::getX",
-        "purpose": "Obtain the fire field X coordinate to compute direction toward the hit/target",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_FIREFELD::gotHit",
-        "callee": "Item::getDirToCoords",
-        "purpose": "Compute direction byte used when forwarding a hit via Item::receiveHit",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_FIREFELD::gotHit",
-        "callee": "Item::receiveHit",
-        "purpose": "Forward the incoming hit (direction, damage/type, source id) to overlapping NPCs",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FIREFELD::gotHit",
-        "callee": "FREE::1A96",
-        "purpose": "Invoke an auxiliary visual/timing helper alongside certain hit-forwarding branches",
-        "confidence": "low"
-      },
-      {
         "caller": "U8P_FIREFELD::anim",
-        "callee": "Item::getFrame",
-        "purpose": "Read current animation frame to drive per-frame behavior",
+        "callee": "Item::getFrame / Item::setFrame",
+        "purpose": "Read and advance/wrap the fire field's animation frame to drive per-frame effects and looping.",
         "confidence": "high"
       },
       {
         "caller": "U8P_FIREFELD::anim",
         "callee": "Kernel::getNumProcesses",
-        "purpose": "Check whether helper PENT::1179 processes already exist before spawning",
-        "confidence": "medium"
+        "purpose": "Check whether a pentagram SFX/process is already running for this item to avoid spawning duplicates.",
+        "confidence": "high"
       },
       {
         "caller": "U8P_FIREFELD::anim",
-        "callee": "spawn (PENT::1179)",
-        "purpose": "Create a visual/particle helper process on specified frames if none exists",
-        "confidence": "medium"
+        "callee": "spawn",
+        "purpose": "Spawn the PENT::pentagramSFXLoop process attached to the item when appropriate frames occur and no duplicate exists.",
+        "confidence": "high"
       },
       {
         "caller": "U8P_FIREFELD::anim",
-        "callee": "Item::setFrame",
-        "purpose": "Advance or reset the fire field's animation frame index",
+        "callee": "PENT::pentagramSFXLoop",
+        "purpose": "Persistent pentagram sound/visual effect associated with the fire field.",
         "confidence": "high"
       },
       {
         "caller": "U8P_FIREFELD::anim",
         "callee": "Item::overlaps",
-        "purpose": "Scan the field area to collect overlapped ids into a temporary list",
+        "purpose": "Detect entities overlapping the fire field so they can be targeted for SFX/damage.",
         "confidence": "high"
       },
       {
         "caller": "U8P_FIREFELD::anim",
         "callee": "Item::isNpc",
-        "purpose": "Filter collected overlaps to NPCs during the scanning pass",
+        "purpose": "Filter overlapping entities to NPCs before adding them to the local target list and applying damage.",
         "confidence": "high"
       },
       {
         "caller": "U8P_FIREFELD::anim",
-        "callee": "Item::getType",
-        "purpose": "Detect special type 0x60 among overlapped NPCs to trigger alternate SFX/behavior",
-        "confidence": "medium"
+        "callee": "MenuAdd",
+        "purpose": "Collect overlapping NPCs into a local list/menu (local3) for subsequent per-target processing within the U8P_FIREFELD::anim loop.",
+        "confidence": "high"
       },
       {
         "caller": "U8P_FIREFELD::anim",
-        "callee": "U8P_FIREFELD::playSFX",
-        "purpose": "Play SFX either per-item for special types or once after scanning if no special type found",
-        "confidence": "medium"
+        "callee": "playSFX",
+        "purpose": "Play impact or special-case sound effects on specific frames or when hitting certain types.",
+        "confidence": "high"
       },
       {
         "caller": "U8P_FIREFELD::anim",
-        "callee": "FREE::1A96",
-        "purpose": "Invoke an auxiliary helper before forwarding damage in the periodic tick",
-        "confidence": "low"
+        "callee": "FREE::randomInRange",
+        "purpose": "Generate a random damage amount used when calling Item::receiveHit.",
+        "confidence": "high"
       },
       {
         "caller": "U8P_FIREFELD::anim",
-        "callee": "Item::getDirToItem",
-        "purpose": "Compute direction from the field to each overlapped NPC before calling receiveHit",
-        "confidence": "medium"
+        "callee": "Item::getDirToItem / Item::getDirToCoords",
+        "purpose": "Compute direction from the fire field to the target for Item::receiveHit's direction parameter.",
+        "confidence": "high"
       },
       {
         "caller": "U8P_FIREFELD::anim",
         "callee": "Item::receiveHit",
-        "purpose": "Apply periodic damage/effects to overlapped NPCs collected during the animation tick",
+        "purpose": "Apply damage to overlapping NPCs with computed damage and direction.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIREFELD::gotHit",
+        "callee": "Item::overlaps",
+        "purpose": "Confirm the incoming parameter (attacker/handle) overlaps the fire field before retaliating or playing SFX.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIREFELD::gotHit",
+        "callee": "Item::isNpc",
+        "purpose": "Ensure the overlapping handle refers to an NPC before applying type-specific logic or damage.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIREFELD::gotHit",
+        "callee": "uword Item::getType",
+        "purpose": "Check the target's type to apply special-case behavior (e.g., type == 0x60 triggers a specific SFX and gating).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FIREFELD::gotHit",
+        "callee": "Item::getFrame",
+        "purpose": "Read this item's frame to restrict retaliatory damage/SFX to early frames (frame <= 0x09 inferred).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIREFELD::gotHit",
+        "callee": "playSFX",
+        "purpose": "Play a hit/impact sound effect when conditions are met.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIREFELD::gotHit",
+        "callee": "FREE::randomInRange",
+        "purpose": "Choose randomized damage amount when calling Item::receiveHit back at the attacker/overlapping NPC.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIREFELD::gotHit",
+        "callee": "Item::getDirToCoords / Item::getY / Item::getX",
+        "purpose": "Compute direction toward the overlapping attacker to pass into Item::receiveHit.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIREFELD::gotHit",
+        "callee": "Item::receiveHit",
+        "purpose": "Apply retaliatory damage to the overlapping attacker/target.",
         "confidence": "high"
       }
     ]
@@ -258,8 +178,8 @@
   ],
   "quick_facts": {
     "main_function": "U8P_FIREFELD::look",
-    "behavior_summary_one_liner": "Provides behavior for a persistent 'fire field' item: a short U8P_FIREFELD::look/description, periodic animation/tick processing that can damage/affect overlapping NPCs, and a hit handler that forwards or reflects incoming hits into actors inside the field.",
-    "external_call_count": 21,
+    "behavior_summary_one_liner": "A stationary 'fire field' item that: (a) shows the short description \"fire field\" when the player inspects it (U8P_FIREFELD::look), (b) runs a recurring animation/process that advances frames, spawns a persistent pentagram SFX loop if needed, detects overlapping NPCs and may damage them on specific frames (U8P_FIREFELD::anim), and (c) reacts to incoming hits/interactions by identifying a source/overlapping entity and potentially playing SFX and applying damage back to that entity (U8P_FIREFELD::gotHit).",
+    "external_call_count": 19,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

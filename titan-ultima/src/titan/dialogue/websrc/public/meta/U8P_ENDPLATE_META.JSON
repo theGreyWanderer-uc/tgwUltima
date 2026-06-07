@@ -3,121 +3,121 @@
   "source_of_truth": "dialogue/json/U8P_ENDPLATE.json",
   "file": "U8P_ENDPLATE",
   "behavior_summary": [
-    "U8P_ENDPLATE::gotHit reacts when an ENDPLATE pedestal is struck: it validates the incoming hit (quality and type), maps the pedestal's animation frame to one of five elemental 'stone' globals (ether/earth/water/air/fire) and sets that flag.",
-    "On a valid hit it spawns short-lived visual/audio effects by creating temporary items (Item::create / Item::pop), playing SFX, and launching helper processes (U8P_ENDPLATE::03E1, U8P_ENDPLATE::0453 and several frame-range animators) to animate the pedestal and effects asynchronously.",
-    "It sums the five elemental flags and, when all five are set, triggers a larger multi-stage reaction: closes UI (closeAllGumps), spawns a LightningBolt process, runs repeated effect/pop/animation sequences, may put the avatar in stasis, and orders NPC pathfinding — all orchestrated mainly by spawning helper processes.",
-    "U8P_ENDPLATE::release scans related pedestals to clear the corresponding elemental global when a pedestal is released (Event 9), reversing the state set by U8P_ENDPLATE::gotHit."
+    "Implements an 'end-plate' hit-to-collect mechanic: when the item is struck (U8P_ENDPLATE::gotHit) with a nonzero selector it reads this item's quality/frame to compute an index (quality-1), validates the targeted object's type/frame, and if matched sets one of five elemental collection flags (etherstone, earthstone, waterstone, airstone, firestone).",
+    "For a single successful hit the script spawns small ephemeral visual items, plays SFX and runs short FX helpers to animate the response. It sums the five elemental flags and, when all five are set, triggers a larger activation: closes UI/pauses avatar input, spawns a LightningBolt process and a larger FX item, runs a brief multi-frame animation loop on that FX, plays final SFX, then cleans up spawned items.",
+    "A companion U8P_ENDPLATE::release() process clears the corresponding elemental flag when the item is removed/released (undoing collected-state for the computed index).",
+    "Several helper functions (U8P_ENDPLATE::func03E1, U8P_ENDPLATE::func0453, U8P_ENDPLATE::func05B9, U8P_ENDPLATE::func0617, U8P_ENDPLATE::func0675, U8P_ENDPLATE::func06D3) provide small variant animations: they set item frames (Item::setFrame), playSFX, spawn short-lived FREE helper processes and suspend to time effects. U8P_ENDPLATE::func0453 selects among variants randomly and avoids immediate repeats."
   ],
   "notable_control_flow": [
-    "Early guard checks: the function returns quickly when the hit's 'quality' is zero or when the hit item type is not the expected pedestal type (compares Item::getType to a constant).",
-    "Frame-dispatch: Item::getFrame is used to determine which elemental flag to set; a switch-like mapping directs to five distinct globals.",
-    "Asynchronous sequencing: most animation and cleanup work is delegated to spawned helper processes (U8P_ENDPLATE::03E1, ::0453, ::05B9, ::0617, ::0675, ::06D3) so U8P_ENDPLATE::gotHit composes effects rather than performing long blocking work.",
-    "Completion branch: when the sum of stone globals equals five, the function performs a different, larger branch that closes gumps, spawns a LightningBolt process, repeatedly pops effect items and animates frames, and performs gameplay side effects (avatar stasis / NPC pathfinding).",
-    "Loop/frame progression inside U8P_ENDPLATE::release; treated as control-flow, not explicit internal call."
+    "U8P_ENDPLATE::gotHit execution is gated by param1 != 0 (param1 acts as the hit selector/target reference).",
+    "Main stone-selection index is computed from this item's quality: index = Item::getQuality(this) - 1 and only proceeds if quality-derived index and target frame/type match expected values (Item::getType == 0x0319 and Item::getFrame(target) == index).",
+    "On a matching index U8P_ENDPLATE::gotHit sets a single elemental flag (one of etherstone..firestone), creates/pops a small FX item, suspends while a FREE helper runs, then destroys the FX item.",
+    "After setting a flag U8P_ENDPLATE::gotHit sums etherstone..firestone; if sum == 5 it runs the final activation sequence (avatar stasis, spawn LightningBolt, create big FX, animate frames 0..4 and clean up).",
+    "U8P_ENDPLATE::func0453 uses urandom to pick a variant (1..4), compares against a stored previous choice to prevent repeats, plays variant-specific SFX, then calls one of the frame-setting helpers. Many helpers follow a pattern: setFrame -> spawn FREE::func1C19 -> suspend -> increment frame/index."
   ],
   "open_questions": [
-    "Exact mapping of pedestal frame indices to element names (ether/earth/water/air/fire) is inferred from behavior but exact numeric frame->element mapping is not explicit here.",
-    "Concrete SFX ids, LightningBolt parameters, and the duration/value used by setAvatarInStasis are not shown and remain unknown.",
-    "Whether the second parameter (BP+0Ah) is always an equipment index/slot or sometimes a different data (it appears to be an index/slot in common cases but this is inferred).",
-    "The intended gameplay consequence after the full five-stone reaction (beyond spawned effects and NPC pathfinding) is not fully specified by the script alone."
+    "Exact numeric mapping of quality values to stone identities and whether quality is consumed permanently or only used to index behavior (inferred but not explicit).",
+    "Precise semantics and side-effects of the spawned FREE::func1C19 helper (spawn arguments and its visual or timing responsibilities are inferred).",
+    "Whether the global flags (etherstone..firestone) persist across saves/rooms or are transient per-object — persistence and broader quest interactions are not explicit in the disassembly.",
+    "Exact user-visible consequences of the final LightningBolt activation (reward, door open, progression) beyond the visual/SFX sequence inferred here."
   ],
   "main_function": {
     "name": "U8P_ENDPLATE::gotHit",
     "execution_form": "process",
-    "purpose": "Respond to an 'item got hit' event on an ENDPLATE pedestal: validate the hit, set the corresponding elemental stone global, spawn visual/audio effects and helper processes, and, when all five elemental stones are active, trigger a larger scene reaction (lightning, stasis, NPC movement).",
+    "purpose": "Respond to an item being hit: compute a stone index from this item's quality, validate the target, mark the corresponding elemental stone flag, run small FX/animation and, when all five stones are collected, trigger a larger combined activation (LightningBolt + large FX + stasis).",
     "entry_conditions": [
-      "Triggered on Event 6 ('U8P_ENDPLATE::gotHit') for the ENDPLATE script.",
-      "Called with parameters: (item handle/pointer at BP+06h, index/slot or secondary parameter at BP+0Ah).",
-      "Only proceeds if Item::getQuality on the hit is nonzero and Item::getType equals the expected pedestal type (constant, inferred 0x0319)."
+      "Invoked as U8P_ENDPLATE::gotHit(uword, word) when the item is struck.",
+      "Runs primary logic only if the first parameter (param1) is nonzero (acts as selector/target).",
+      "Proceeds only when Item::getQuality(this) > 0 and when Item::getType(target) == 0x0319 and Item::getFrame(target) equals computed index."
     ],
-    "confidence": "high"
+    "confidence": "medium"
   },
   "function_map": [
     {
       "name": "U8P_ENDPLATE::gotHit",
       "kind": "main",
-      "role": "Main event handler for pedestal being struck; sets elemental flags, spawns effects, handles full-reaction logic.",
-      "confidence": "high"
+      "role": "Hit handler: computes stone index, sets elemental flag, spawns single-hit FX, and triggers final activation when all five flags are set.",
+      "confidence": "medium"
     },
     {
       "name": "U8P_ENDPLATE::release",
       "kind": "helper",
-      "role": "Handle release (Event 9): scan pedestals and clear elemental globals when matching frames/items are found.",
+      "role": "Cleanup/U8P_ENDPLATE::release handler: computes index from this item's quality and clears the corresponding elemental flag (undo collected-state) if appropriate.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_ENDPLATE::func03E1",
+      "kind": "helper",
+      "role": "Small FX/audio helper: play SFX pair, set an item's frame via Item::setFrame, spawn FREE::func1C19 and coordinate timing via suspend.",
       "confidence": "high"
     },
     {
-      "name": "U8P_ENDPLATE::03E1",
+      "name": "U8P_ENDPLATE::func0453",
       "kind": "helper",
-      "role": "Short-lived visual/audio effect: play SFXs and advance item frame from 0 up to a limit while setting frames and occasional special SFX.",
+      "role": "Randomized variant dispatcher: choose a random visual/SFX variant (avoiding immediate repeats), play variant SFX and call one of the frame-setting helpers.",
       "confidence": "high"
     },
     {
-      "name": "U8P_ENDPLATE::0453",
+      "name": "U8P_ENDPLATE::func05B9",
       "kind": "helper",
-      "role": "Randomized dispatcher: use urandom and the global 'yojustchill' to pick among several visual/audio behaviors and spawn other helper animators.",
-      "confidence": "high"
+      "role": "Frame-setting/animation variant #1: call Item::setFrame for a sequence slot, spawn FX helper and suspend, increment internal index.",
+      "confidence": "medium"
     },
     {
-      "name": "U8P_ENDPLATE::05B9",
+      "name": "U8P_ENDPLATE::func0617",
       "kind": "helper",
-      "role": "Animate frame-range 0x17..0x1E on an item, spawning small effects between frame advances (gated by 'yojustchill').",
-      "confidence": "high"
+      "role": "Frame-setting/animation variant #2: same pattern as U8P_ENDPLATE::func05B9 with different index bounds/slot.",
+      "confidence": "medium"
     },
     {
-      "name": "U8P_ENDPLATE::0617",
+      "name": "U8P_ENDPLATE::func0675",
       "kind": "helper",
-      "role": "Animate frame-range 0x1F..0x27 on an item with similar behavior to ::05B9.",
-      "confidence": "high"
+      "role": "Frame-setting/animation variant #3: same pattern as U8P_ENDPLATE::func05B9 with different index bounds/slot.",
+      "confidence": "medium"
     },
     {
-      "name": "U8P_ENDPLATE::0675",
+      "name": "U8P_ENDPLATE::func06D3",
       "kind": "helper",
-      "role": "Animate frame-range 0x28..0x2E on an item with similar behavior to other range-animators.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_ENDPLATE::06D3",
-      "kind": "helper",
-      "role": "Animate frame-range 0x2F..0x31 on an item with similar behavior to other range-animators.",
-      "confidence": "high"
+      "role": "Frame-setting/animation variant #4: same pattern as U8P_ENDPLATE::func05B9 with different index bounds/slot.",
+      "confidence": "medium"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
         "caller": "U8P_ENDPLATE::gotHit",
-        "callee": "U8P_ENDPLATE::03E1",
-        "purpose": "Spawn a short-lived audio/visual helper to animate frames and play SFX for the pedestal/effect item.",
+        "callee": "U8P_ENDPLATE::func03E1",
+        "purpose": "Play small FX/SFX and update frames as part of per-hit visual response.",
         "confidence": "high"
       },
       {
         "caller": "U8P_ENDPLATE::gotHit",
-        "callee": "U8P_ENDPLATE::0453",
-        "purpose": "Spawn a randomized dispatcher helper that will spawn further animators or play varied SFX sequences to enrich the reaction.",
+        "callee": "U8P_ENDPLATE::func0453",
+        "purpose": "Run a randomized multi-frame FX/animation variant sequence (used during larger activation or multi-step visual response).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_ENDPLATE::0453",
-        "callee": "U8P_ENDPLATE::05B9",
-        "purpose": "Dispatch to a frame-range animator (one of several) based on random choice.",
+        "caller": "U8P_ENDPLATE::func0453",
+        "callee": "U8P_ENDPLATE::func05B9",
+        "purpose": "One randomized visual variant chosen by U8P_ENDPLATE::func0453 to set frames and spawn FX.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_ENDPLATE::0453",
-        "callee": "U8P_ENDPLATE::0617",
-        "purpose": "Dispatch to a frame-range animator (one of several) based on random choice.",
+        "caller": "U8P_ENDPLATE::func0453",
+        "callee": "U8P_ENDPLATE::func0617",
+        "purpose": "One randomized visual variant chosen by U8P_ENDPLATE::func0453 to set frames and spawn FX.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_ENDPLATE::0453",
-        "callee": "U8P_ENDPLATE::0675",
-        "purpose": "Dispatch to a frame-range animator (one of several) based on random choice.",
+        "caller": "U8P_ENDPLATE::func0453",
+        "callee": "U8P_ENDPLATE::func0675",
+        "purpose": "One randomized visual variant chosen by U8P_ENDPLATE::func0453 to set frames and spawn FX.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_ENDPLATE::0453",
-        "callee": "U8P_ENDPLATE::06D3",
-        "purpose": "Dispatch to a frame-range animator (one of several) based on random choice.",
+        "caller": "U8P_ENDPLATE::func0453",
+        "callee": "U8P_ENDPLATE::func06D3",
+        "purpose": "One randomized visual variant chosen by U8P_ENDPLATE::func0453 to set frames and spawn FX (branch may repeat steps with suspends).",
         "confidence": "high"
       }
     ],
@@ -125,109 +125,115 @@
       {
         "caller": "U8P_ENDPLATE::gotHit",
         "callee": "Item::getQuality",
-        "purpose": "Read the hit item's quality to guard behavior and to index into the element/frame mapping.",
+        "purpose": "Read this item's quality/frame to compute stone index (index = quality - 1).",
         "confidence": "high"
       },
       {
         "caller": "U8P_ENDPLATE::gotHit",
         "callee": "Item::getType",
-        "purpose": "Verify the hit target is the expected pedestal type before proceeding (type compared to a constant).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_ENDPLATE::gotHit",
-        "callee": "Kernel::resetRef",
-        "purpose": "Reset kernel/process references for the item before manipulating it (safety/preparation step).",
+        "purpose": "Validate the targeted object's type (ensure target is expected type 0x0319 before setting a flag).",
         "confidence": "high"
       },
       {
         "caller": "U8P_ENDPLATE::gotHit",
         "callee": "Item::getFrame",
-        "purpose": "Obtain pedestal frame to decide which elemental global to set and which animation branch to take.",
+        "purpose": "Compare target's frame with computed index to confirm which elemental flag to set.",
         "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDPLATE::gotHit",
+        "callee": "Kernel::resetRef",
+        "purpose": "Reset internal reference slot (0x06) to the target before creating ephemeral items (cleanup/prep).",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_ENDPLATE::gotHit",
         "callee": "Item::create",
-        "purpose": "Allocate temporary effect items to be popped into the world for visual effects.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_ENDPLATE::gotHit",
-        "callee": "Item::getX",
-        "purpose": "Get X coordinate of the pedestal so created/pop'd effects are placed relative to it.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_ENDPLATE::gotHit",
-        "callee": "Item::getY",
-        "purpose": "Get Y coordinate of the pedestal for effect placement.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_ENDPLATE::gotHit",
-        "callee": "Item::getZ",
-        "purpose": "Get Z coordinate of the pedestal for effect placement.",
+        "purpose": "Create ephemeral visual/effect items for single-hit pop and final activation FX.",
         "confidence": "high"
       },
       {
         "caller": "U8P_ENDPLATE::gotHit",
         "callee": "Item::pop",
-        "purpose": "Place the created effect item into the world with the appropriate frame/flags to show an effect.",
+        "purpose": "Place created ephemeral items into the world near the target for visible FX.",
         "confidence": "high"
       },
       {
         "caller": "U8P_ENDPLATE::gotHit",
-        "callee": "spawn",
-        "purpose": "Launch helper processes (effect animators, FREE spawns, LightningBolt) to run asynchronously.",
+        "callee": "spawn ->FREE::func1C19",
+        "purpose": "Spawn a short-lived helper process to time/drive ephemeral FX sequences (suspended on until effect completes).",
         "confidence": "high"
       },
       {
         "caller": "U8P_ENDPLATE::gotHit",
-        "callee": "U8P_ENDPLATE::playSFX",
-        "purpose": "Play sound effects during hits and during the multistage reaction.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_ENDPLATE::gotHit",
-        "callee": "U8P_ENDPLATE::process LightningBolt",
-        "purpose": "Create a global lightning effect when all five stones are activated.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_ENDPLATE::gotHit",
-        "callee": "Item::destroy",
-        "purpose": "Clean up temporary effect item handles after their short lifetime.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_ENDPLATE::gotHit",
-        "callee": "U8P_ENDPLATE::setAvatarInStasis",
-        "purpose": "Temporarily halt the avatar (likely to control player movement during the big reaction).",
+        "callee": "process LightningBolt",
+        "purpose": "Trigger a global/special LightningBolt effect/process when all five elemental flags are collected.",
         "confidence": "medium"
       },
       {
         "caller": "U8P_ENDPLATE::gotHit",
-        "callee": "Npc::pathfind",
-        "purpose": "Order NPC movement as part of the reaction sequence (likely to reposition NPCs during the event).",
-        "confidence": "medium"
+        "callee": "playSFX",
+        "purpose": "Play audio feedback for hits, variants, and final activation.",
+        "confidence": "high"
       },
       {
         "caller": "U8P_ENDPLATE::gotHit",
-        "callee": "U8P_ENDPLATE::closeAllGumps",
-        "purpose": "Close UI windows before playing the major visual reaction to avoid UI occlusion.",
+        "callee": "setAvatarInStasis",
+        "purpose": "Temporarily freeze/unfreeze avatar input during the final activation sequence.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ENDPLATE::func03E1",
+        "callee": "playSFX",
+        "purpose": "Play paired SFX to accompany the small frame/FX sequence.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_ENDPLATE::0453",
-        "callee": "urandom",
-        "purpose": "Obtain a small random value to vary which helper behaviors or SFX are selected.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_ENDPLATE::*",
+        "caller": "U8P_ENDPLATE::func03E1",
         "callee": "Item::setFrame",
-        "purpose": "Animate pedestal/effect item visuals by directly setting item frames in helper loops.",
+        "purpose": "Update an item's animation/frame as part of the small FX sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDPLATE::func03E1",
+        "callee": "spawn ->FREE::func1C19",
+        "purpose": "Spawn an external helper and suspend to coordinate timing for the small FX.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDPLATE::func05B9",
+        "callee": "Item::setFrame",
+        "purpose": "Set frame for a specific animation slot as part of the variant sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDPLATE::func05B9",
+        "callee": "spawn ->FREE::func1C19",
+        "purpose": "Spawn short-lived helper for ephemeral visual effect and suspend while it runs.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDPLATE::release",
+        "callee": "Item::getQuality",
+        "purpose": "Compute index to decide which elemental flag to clear when releasing the item.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ENDPLATE::release",
+        "callee": "Item::getType",
+        "purpose": "Validate target type before deciding whether to prevent clearing a flag (if frames match).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ENDPLATE::release",
+        "callee": "Item::getFrame",
+        "purpose": "Compare target frame to computed index to determine whether a flag should be cleared.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ENDPLATE::func0453",
+        "callee": "urandom",
+        "purpose": "Choose a random variant index and to parameterize spawned FREE helpers for visual variety.",
         "confidence": "high"
       }
     ]
@@ -235,36 +241,61 @@
   "global_flags": {
     "reads": [
       {
+        "name": "etherstone",
+        "likely_effect": "Used when summing collected progress toward the five-stone activation; read to compute total collected count.",
+        "confidence": "medium"
+      },
+      {
+        "name": "earthstone",
+        "likely_effect": "Used when summing collected progress toward the five-stone activation.",
+        "confidence": "medium"
+      },
+      {
+        "name": "waterstone",
+        "likely_effect": "Used when summing collected progress toward the five-stone activation.",
+        "confidence": "medium"
+      },
+      {
+        "name": "airstone",
+        "likely_effect": "Used when summing collected progress toward the five-stone activation.",
+        "confidence": "medium"
+      },
+      {
+        "name": "firestone",
+        "likely_effect": "Used when summing collected progress toward the five-stone activation.",
+        "confidence": "medium"
+      },
+      {
         "name": "yojustchill",
-        "likely_effect": "Acts as a global toggle to suppress or early-exit animation/spawn-heavy helper behaviors; when nonzero many helpers skip spawning or terminate early.",
+        "likely_effect": "Read by U8P_ENDPLATE::func0453 as a gate; if yojustchill == 0 the randomized sequence runs.",
         "confidence": "high"
       }
     ],
     "writes": [
       {
         "name": "etherstone",
-        "likely_effect": "Set to 1 when the corresponding pedestal/frame (ether) is hit; used in the five-stone completion check. Cleared by U8P_ENDPLATE::release.",
-        "confidence": "high"
-      },
-      {
-        "name": "firestone",
-        "likely_effect": "Set to 1 when the corresponding pedestal/frame (fire) is hit; used in the five-stone completion check. Cleared by U8P_ENDPLATE::release.",
-        "confidence": "high"
-      },
-      {
-        "name": "waterstone",
-        "likely_effect": "Set to 1 when the corresponding pedestal/frame (water) is hit; used in the five-stone completion check. Cleared by U8P_ENDPLATE::release.",
-        "confidence": "high"
-      },
-      {
-        "name": "airstone",
-        "likely_effect": "Set to 1 when the corresponding pedestal/frame (air) is hit; used in the five-stone completion check. Cleared by U8P_ENDPLATE::release.",
-        "confidence": "high"
+        "likely_effect": "Set to 1 when index 0 (ether) is obtained by a matching hit; cleared by U8P_ENDPLATE::release when appropriate.",
+        "confidence": "medium"
       },
       {
         "name": "earthstone",
-        "likely_effect": "Set to 1 when the corresponding pedestal/frame (earth) is hit; used in the five-stone completion check. Cleared by U8P_ENDPLATE::release.",
-        "confidence": "high"
+        "likely_effect": "Set to 1 when index 1 (earth) is obtained; cleared by U8P_ENDPLATE::release when appropriate.",
+        "confidence": "medium"
+      },
+      {
+        "name": "waterstone",
+        "likely_effect": "Set to 1 when index 2 (water) is obtained; cleared by U8P_ENDPLATE::release when appropriate.",
+        "confidence": "medium"
+      },
+      {
+        "name": "airstone",
+        "likely_effect": "Set to 1 when index 3 (air) is obtained; cleared by U8P_ENDPLATE::release when appropriate.",
+        "confidence": "medium"
+      },
+      {
+        "name": "firestone",
+        "likely_effect": "Set to 1 when index 4 (fire) is obtained; cleared by U8P_ENDPLATE::release when appropriate.",
+        "confidence": "medium"
       }
     ]
   },
@@ -276,9 +307,9 @@
   ],
   "quick_facts": {
     "main_function": "U8P_ENDPLATE::gotHit",
-    "behavior_summary_one_liner": "U8P_ENDPLATE::gotHit reacts when an ENDPLATE pedestal is struck: it validates the incoming hit (quality and type), maps the pedestal's animation frame to one of five elemental 'stone' globals (ether/earth/water/air/fire) and sets that flag.",
-    "external_call_count": 18,
-    "flag_read_count": 1,
+    "behavior_summary_one_liner": "Implements an 'end-plate' hit-to-collect mechanic: when the item is struck (U8P_ENDPLATE::gotHit) with a nonzero selector it reads this item's quality/frame to compute an index (quality-1), validates the targeted object's type/frame, and if matched sets one of five elemental collection flags (etherstone, earthstone, waterstone, airstone, firestone).",
+    "external_call_count": 19,
+    "flag_read_count": 6,
     "flag_write_count": 5
   },
   "hypotheses": {

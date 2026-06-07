@@ -3,180 +3,162 @@
   "source_of_truth": "dialogue/json/U8P_BOTTLE.json",
   "file": "U8P_BOTTLE",
   "behavior_summary": [
-    "Provides the examine ('look') and use ('drink') behavior for bottle items. The look handler reports a short name based on the bottle's frame; the use handler applies a feed/healing effect to the avatar, marks the bottle as used, plays short barks (e.g. 'Burp...'), and coordinates a longer timed drunken sequence.",
-    "Drinking logic inspects the item's frame to choose effect strength and text, reads/writes an item quantity/state (Q) to ensure one-time use behaviors, and calls FeedAvatar() to apply immediate benefit.",
-    "A spawned helper coroutine implements time-sequenced drunken behavior: it sets/advances a global gettingDrunk flag, plays intermittent barks/messages and animations/effects (via multiple spawned METHODS and FREE helpers), manipulates avatar stasis and references (resetRef, setAvatarInStasis), and clears state when finished.",
-    "Randomization (urandom) and actor state queries (Npc::isBusy, Npc::getLastAnimSet, Npc::getDir) are used to vary which animations/effects and messages occur during the drunken sequence and to avoid interrupting conversations (somebodyTalking)."
+    "U8P_BOTTLE::look: When the player examines the bottle item, the script reads the item's frame (Item::getFrame(this)) and displays a short human-readable label for that drink. Known frames map to specific drink names (Blackwine, Hurricane, Breath o' Spirit, Cloven Hoof, Tenebraen Ale); other frames display a generic 'bottle'.",
+    "U8P_BOTTLE::use: Handles drinking the bottle. It checks the bottle quantity (Item::getQ(this)), marks the bottle consumed (Item::setQ), applies a FeedAvatar effect whose magnitude/type depends on the bottle frame, and advances a global intoxication state 'gettingDrunk'. If intoxication reaches its final stage, the function triggers an extended drunken sequence that spawns visual/animation processes, temporarily puts the avatar in stasis, emits a long bark ('Zzzzz...') and then resets 'gettingDrunk'. If the bottle is empty the player is shown 'It's empty...'.",
+    "U8P_BOTTLE::func0562: Initializes and runs the early drunkenness routine. It sets gettingDrunk to the initial state, spawns helper visual/process effects, conditionally emits a drunken bark ('hic...') when nobody else is talking, and manages internal counters and spawn bookkeeping used by the longer drunken sequence."
   ],
   "notable_control_flow": [
-    "BOTTLE::look branches on Item::getFrame() (frames 5..9 have specific names; otherwise fallback to generic 'bottle').",
-    "BOTTLE::use checks Item::getQ(); if Q==0 it sets Q to 1 and proceeds with drinking side effects; otherwise it still barks and may still grant effects depending on frame (inferred).",
-    "Use updates or reads the global gettingDrunk flag to decide whether to spawn a new U8P_BOTTLE::BOTTLE::0562 coroutine or to advance an existing drunken-state value (values 0..3 are used to represent stages).",
-    "The drunken coroutine loops with a small local counter and randomized offsets; it conditionally spawns animation/effect routines and schedules delayed frees to sequence timed messages and cleanup."
+    "Examine flow is simple: read item frame -> select bark -> suspend (end).",
+    "Use/drink flow branches on Item::getQ(this) (empty vs drinkable). For a drinkable bottle it: setQ(0x01), FeedAvatar(...) with frame-dependent values, then either start drunkenness (call U8P_BOTTLE::func0562) if gettingDrunk==0 or increment gettingDrunk through states 1→2→3. When gettingDrunk reaches the terminal state a multi-step sequence runs involving resetRef, setAvatarInStasis(1), many spawn/suspend calls, and finally resetting gettingDrunk to 0.",
+    "Drunkenness initializer (U8P_BOTTLE::func0562) contains a loop/counter that increments local counters, uses urandom/Npc::getDir to pick directions for spawned effects, and rolls the gettingDrunk state over time; reaching thresholds triggers state transitions and end-of-sequence actions (including 'Burp...' barks and ref resets)."
   ],
   "open_questions": [
-    "Precise semantic meaning and possible ranges of the item 'Q' field (Item::getQ / Item::setQ) beyond the observed used==0 check — is it a usage counter, boolean or quantity?",
-    "Exact gameplay effects of each spawned METHOD (METHOD::15E7, METHOD::091C, METHOD::087D) — these appear to be animations/effects but their concrete visual or mechanical effects are not decoded here.",
-    "Detailed mapping of bottle frame values to in-game potion types, exact feed amounts per frame, and any side effects beyond FeedAvatar() (the general mapping is inferred from branches but exact numerics are not all listed).",
-    "Interaction semantics with conversation guard somebodyTalking: how aggressively the drunken coroutine defers or suppresses messages when someone is talking is only inferred from reads of that flag.",
-    "Whether repeated use of the same bottle after Q is set produces reduced or no effect in all cases (some branches suggest one-time marking, but full behavior across frames is not fully enumerated)."
+    "Exact numeric FeedAvatar effects per bottle frame: Scout data gives differing numeric args but the precise in-game effect (HP, stamina, temporary buff) is inferred, not canonical.",
+    "Which engine reference slots (ref_0x020A, ref_0x0200) correspond to which subsystems (visuals, audio, or process bookkeeping) — their numeric ids and purpose are inferred from usage.",
+    "Precise visual/audio content of the spawned FREE::func1C19 / FREE::func29D8 and addressof(...)->METHOD::func15E7 processes — code shows spawns but not the spawned function bodies here."
   ],
   "main_function": {
-    "name": "U8P_BOTTLE::look (Event 0)",
+    "name": "U8P_BOTTLE::look",
     "execution_form": "process",
-    "purpose": "Handle examine/look events for a bottle item: read the bottle frame and emit a short identifying bark (name) appropriate to that frame.",
+    "purpose": "Provide the short description shown when the player examines the bottle; map item frame to a drink name or a generic label.",
     "entry_conditions": [
-      "Triggered when a player/actor inspects/looks at the bottle (look event).",
-      "Runs in the item's process context and uses the passed-in viewer/process id (pid) and item/process pointer."
+      "Triggered by an examine/U8P_BOTTLE::look action on the bottle item (U8P_BOTTLE::look process type 0x0208).",
+      "Reads the implicit item instance 'this' via Item::getFrame(this) to determine which label to display."
     ],
     "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_BOTTLE::look (Event 0)",
+      "name": "U8P_BOTTLE::look",
       "kind": "main",
-      "role": "Examine/description handler that chooses a short name string by frame and calls Item::bark.",
+      "role": "examine handler that maps Item::getFrame(this) to a short label",
       "confidence": "high"
     },
     {
-      "name": "U8P_BOTTLE::use (Event 1)",
+      "name": "U8P_BOTTLE::use",
       "kind": "helper",
-      "role": "Handle using/drinking the bottle: update item Q, bark, call FeedAvatar, and coordinate spawning of the timed drunken coroutine and animation/effect spawns.",
+      "role": "U8P_BOTTLE::use/drink handler that consumes quantity, applies FeedAvatar effects, and advances/controls the global intoxication state",
       "confidence": "high"
     },
     {
-      "name": "U8P_BOTTLE::0562",
+      "name": "U8P_BOTTLE::func0562",
       "kind": "helper",
-      "role": "Spawned coroutine that implements the multi-step timed drunken behavior (barks, animations, stasis and cleanup).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getFrame",
-      "kind": "extern",
-      "role": "Return the item's frame/type used to select names/effects.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Emit a short text message from the item/process to a target pid.",
-      "confidence": "high"
-    },
-    {
-      "name": "FeedAvatar",
-      "kind": "extern",
-      "role": "Apply immediate benefit/effect to avatar (feeding/healing) invoked on drink use.",
-      "confidence": "high"
+      "role": "drunkenness initializer and ongoing drunkenness routine that spawns effects, manages counters, and sets gettingDrunk",
+      "confidence": "medium"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
-        "caller": "U8P_BOTTLE::use (Event 1)",
-        "callee": "U8P_BOTTLE::0562",
-        "purpose": "Spawned to run the long-running drunken sequence after drinking (coroutine).",
+        "caller": "U8P_BOTTLE::use",
+        "callee": "U8P_BOTTLE::func0562",
+        "purpose": "Start the drunkenness routine when gettingDrunk is not already set (initialize/gettingDrunk=1).",
         "confidence": "high"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_BOTTLE::look (Event 0)",
+        "caller": "U8P_BOTTLE::look",
         "callee": "Item::getFrame",
-        "purpose": "Read bottle type/frame so the handler can pick the correct short name to display.",
+        "purpose": "Read the bottle's frame/type to choose a human-readable label.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_BOTTLE::look (Event 0)",
-        "callee": "Item::bark",
-        "purpose": "Display the chosen bottle name/description to the viewer pid.",
+        "caller": "U8P_BOTTLE::use",
+        "callee": "Item::getFrame",
+        "purpose": "Determine which FeedAvatar argument/value to apply based on bottle type.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_BOTTLE::use (Event 1)",
+        "caller": "U8P_BOTTLE::use",
         "callee": "Item::getQ",
-        "purpose": "Check whether the bottle is already used/empty (guard Q==0 vs Q>0).",
+        "purpose": "Check whether the bottle has quantity (is drinkable) or is empty.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_BOTTLE::use (Event 1)",
+        "caller": "U8P_BOTTLE::use",
         "callee": "Item::setQ",
-        "purpose": "Mark the bottle's Q field (e.g., mark as used) when consumed.",
+        "purpose": "Mark the bottle as consumed/adjust its quantity after drinking.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_BOTTLE::use (Event 1)",
+        "caller": "U8P_BOTTLE::use",
         "callee": "FeedAvatar",
-        "purpose": "Apply immediate feed/healing effect to the avatar; amount varies by bottle frame.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_BOTTLE::use (Event 1)",
-        "callee": "spawn",
-        "purpose": "Schedule the drunken coroutine and various animation/effect helper routines and delayed frees.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_BOTTLE::0562",
-        "callee": "U8P_BOTTLE::resetRef",
-        "purpose": "Reset world/reference entries during cleanup of the drunken sequence.",
+        "purpose": "Apply immediate benefits/effects (nutrition/HP/stamina-like) to the avatar; numeric arg depends on frame.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_BOTTLE::0562",
-        "callee": "U8P_BOTTLE::setAvatarInStasis",
-        "purpose": "Temporarily freeze/unfreeze the avatar during portions of the drunken animation/sequence.",
-        "confidence": "high"
+        "caller": "U8P_BOTTLE::use",
+        "callee": "resetRef",
+        "purpose": "Set/clear engine reference slots (e.g., ref_0x020A, ref_0x0200) during the final drunken sequence for bookkeeping/cleanup.",
+        "confidence": "medium"
       },
       {
-        "caller": "U8P_BOTTLE::0562",
+        "caller": "U8P_BOTTLE::use",
+        "callee": "setAvatarInStasis",
+        "purpose": "Temporarily disable avatar control during the extended drunken sequence.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BOTTLE::use",
+        "callee": "spawn ->FREE::func1C19",
+        "purpose": "Spawn helper/visual processes used in the drunken animation sequence (timed effects).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BOTTLE::func0562",
         "callee": "urandom",
-        "purpose": "Randomize timings and choices (hiccups, which animations to spawn).",
-        "confidence": "high"
+        "purpose": "Randomly decide whether to emit a drunken bark ('hic...') and to vary spawned effect parameters.",
+        "confidence": "medium"
       },
       {
-        "caller": "U8P_BOTTLE::0562",
+        "caller": "U8P_BOTTLE::func0562",
         "callee": "Npc::getDir",
-        "purpose": "Query actor facing direction to spawn direction-aware animations/effects.",
+        "purpose": "Obtain an NPC/avatar facing to compute directions for spawned animations/effects.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_BOTTLE::0562",
-        "callee": "METHOD::15E7",
-        "purpose": "Spawn an animation/effect for the drunk actor (exact effect inferred).",
+        "caller": "U8P_BOTTLE::func0562",
+        "callee": "addressof(...)->METHOD::func15E7",
+        "purpose": "Spawn/trigger directional animation/effect calls on NPCs/objects using computed directions.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_BOTTLE::use (Event 1)",
-        "callee": "FREE::1C19",
-        "purpose": "Schedule a delayed free/cleanup or timed message as part of the drinking sequence.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_BOTTLE::use (Event 1)",
-        "callee": "FREE::29D8",
-        "purpose": "Schedule another delayed helper/free used during the drunken sequence.",
-        "confidence": "medium"
+        "caller": "U8P_BOTTLE::func0562",
+        "callee": "Npc::getLastAnimSet / Npc::isBusy",
+        "purpose": "Branch spawned effects/animations based on NPC animation state and busy status.",
+        "confidence": "low"
       }
     ]
   },
   "global_flags": {
     "reads": [
       {
-        "name": "somebodyTalking (global [000F 01])",
-        "likely_effect": "Used as a guard so the drunken coroutine avoids interrupting ongoing dialog or conversation; checks before playing barks/lines.",
-        "confidence": "medium"
+        "name": "somebodyTalking",
+        "likely_effect": "Suppress barks/effects when another conversation is active to avoid overlapping speech.",
+        "confidence": "high"
       },
       {
-        "name": "gettingDrunk (global [0024 03])",
-        "likely_effect": "Read to determine whether a drunken sequence is already active and to decide whether to spawn or advance state of the drunk coroutine.",
+        "name": "gettingDrunk",
+        "likely_effect": "Read to determine current intoxication progression and whether to start/advance the drunkenness routine.",
         "confidence": "high"
       }
     ],
     "writes": [
       {
-        "name": "gettingDrunk (global [0024 03])",
-        "likely_effect": "Set/advance drunken-state values (0..3) to start the sequence, progress stages, or clear it at the end of the coroutine.",
+        "name": "gettingDrunk",
+        "likely_effect": "Tracks intoxication state: initialized to 1 by U8P_BOTTLE::func0562, incremented by U8P_BOTTLE::use, and reset to 0 when the extended drunken sequence completes.",
         "confidence": "high"
+      },
+      {
+        "name": "ref_0x020A",
+        "likely_effect": "Engine reference cleared/updated as part of the drunken sequence cleanup/initialization (inferred bookkeeping slot).",
+        "confidence": "medium"
+      },
+      {
+        "name": "ref_0x0200",
+        "likely_effect": "Engine reference set during the drunken sequence (inferred as another bookkeeping/visual slot).",
+        "confidence": "medium"
       }
     ]
   },
@@ -187,11 +169,11 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_BOTTLE::BOTTLE::look (Event 0)",
-    "behavior_summary_one_liner": "Provides the examine ('look') and use ('drink') behavior for bottle items. The look handler reports a short name based on the bottle's frame; the use handler applies a feed/healing effect to the avatar, marks the bottle as used, plays short barks (e.g. 'Burp...'), and coordinates a longer timed drunken sequence.",
-    "external_call_count": 13,
+    "main_function": "U8P_BOTTLE::look",
+    "behavior_summary_one_liner": "U8P_BOTTLE::look: When the player examines the bottle item, the script reads the item's frame (Item::getFrame(this)) and displays a short human-readable label for that drink. Known frames map to specific drink names (Blackwine, Hurricane, Breath o' Spirit, Cloven Hoof, Tenebraen Ale); other frames display a generic 'bottle'.",
+    "external_call_count": 12,
     "flag_read_count": 2,
-    "flag_write_count": 1
+    "flag_write_count": 3
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

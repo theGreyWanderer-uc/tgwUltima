@@ -3,25 +3,27 @@
   "source_of_truth": "dialogue/json/U8P_LOOM.json",
   "file": "U8P_LOOM",
   "behavior_summary": [
-    "This script implements the in-game behavior for a loom item. It provides an examine ('U8P_LOOM::look') handler that makes the item emit/display its name and a use handler that animates/toggles the loom's visual frame while playing a sound and spawning short-lived helper tasks between steps.",
-    "LOOM::look causes the loom item to 'bark' the literal string \"loom \" to the requesting process/player so the item presents its name/description when inspected.",
-    "LOOM::use plays a sound effect, reads the current frame, and then either steps frames upward from 0 to 7 or downward from the current frame to 0. After each frame change it spawns a helper (FREE::1C19) and suspends, producing a paced animation sequence."
+    "Provides the in-game responses for the loom object: a short examine/U8P_LOOM::look description and a U8P_LOOM::use interaction that animates the loom visually and plays a sound.",
+    "U8P_LOOM::look displays a single bark text \"loom\" when the player inspects the loom.",
+    "U8P_LOOM::use plays a sound effect, reads the item's current frame, sets the frame to a working index, spawns a short auxiliary process/effect, suspends to allow the engine to progress the animation, and adjusts the working frame index (increments if starting from 0, otherwise decrements)."
   ],
   "notable_control_flow": [
-    "LOOM::look: On Event 0 (U8P_LOOM::look), the routine sets process info/exclude bits, pushes the pid and item pointer, calls Item::bark with the fixed string \"loom \", handles the call return, then suspends/returns.",
-    "LOOM::use: On use it first plays a sound (playSFX), then gets the item's frame (Item::getFrame). If the frame is zero it initializes an ascending loop from 0 to 7; otherwise it initializes a descending loop from current frame down to 0. Each loop iteration sets the frame (Item::setFrame), spawns FREE::1C19 with (pid, 0x05, 0), and suspends between iterations until the sequence completes."
+    "U8P_LOOM::use branches on Item::getFrame(this) == 0: one path treats the frame as 0 and advances a working index; the other loads the current frame and then decrements it after the spawn/suspend step.",
+    "Both branches call Item::setFrame(local1, this), spawn a small process (spawn -> FREE::func1C19(0x00000000)), then suspend — indicating a timed/stepped visual update sequence.",
+    "U8P_LOOM::look is a simple, single-step process: bark then suspend/terminate."
   ],
   "open_questions": [
-    "What precise visual or gameplay effect FREE::1C19 implements (appears to be a short delay/animation step helper but not directly observed).",
-    "What the third parameter passed to playSFX controls (inferred volume/priority but not named concretely here).",
-    "Whether any additional state or external systems observe the frame changes beyond the item instance itself (no globals are read/written in this excerpt)."
+    "What visual effect or timed behavior FREE::func1C19 implements when spawned (the spawn target and its effect are unknown from the disassembly).",
+    "Whether the frame index changes persist across game saves or are purely ephemeral visual frames (exact persistence is not shown).",
+    "Exact numeric bounds/sequence of frame indices (how many frames, and when animation stops or loops) are not available from the excerpt.",
+    "The role of 'pid' and 'temp' values around the spawn (likely process id or spawn return) is ambiguous."
   ],
   "main_function": {
     "name": "U8P_LOOM::look",
     "execution_form": "process",
-    "purpose": "Respond to the player/actor inspecting the loom by causing the loom item to emit/display its name/description string.",
+    "purpose": "Handle the player examining/looking at the loom and show the short object description.",
     "entry_conditions": [
-      "Event 0: player or actor looks at / inspects the loom (enterFastArea-style U8P_LOOM::look interaction)"
+      "Triggered when the player uses the U8P_LOOM::look/examine action on the loom object (object 'U8P_LOOM::look' interaction)."
     ],
     "confidence": "high"
   },
@@ -29,78 +31,55 @@
     {
       "name": "U8P_LOOM::look",
       "kind": "main",
-      "role": "Examine/inspect handler: invoke Item::bark to present \"loom \" to the viewer.",
+      "role": "Present the short description/bark when the player inspects the loom.",
       "confidence": "high"
     },
     {
       "name": "U8P_LOOM::use",
       "kind": "helper",
-      "role": "Use/activate handler: play a sound and animate the loom by stepping frames up or down, spawning short-lived helper tasks between steps.",
+      "role": "Handle the 'U8P_LOOM::use' interaction on the loom: play sound, update item frame, spawn an auxiliary timed process, and step the animation index.",
       "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine used to emit/display a short text message from an item/process to a player/process.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_LOOM::playSFX",
-      "kind": "extern",
-      "role": "Play a sound effect when the item is used (called at start of LOOM::use).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getFrame",
-      "kind": "extern",
-      "role": "Return the item's current animation/frame index (used to decide animation direction).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::setFrame",
-      "kind": "extern",
-      "role": "Set the item's animation/frame index during the animation sequence.",
-      "confidence": "high"
-    },
-    {
-      "name": "spawn FREE::1C19",
-      "kind": "extern",
-      "role": "Spawn a short-lived helper/task after each frame change (appears to implement a per-step delay/visual helper).",
-      "confidence": "medium"
     }
   ],
   "call_analysis": {
-    "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_LOOM::look",
-        "callee": "Item::bark",
-        "purpose": "Make the loom present the string \"loom \" to the viewing process/player (examine feedback).",
-        "confidence": "high"
-      },
+    "internal_calls": [
       {
         "caller": "U8P_LOOM::use",
-        "callee": "U8P_LOOM::playSFX",
-        "purpose": "Play a sound effect when the loom is used to provide auditory feedback at animation start.",
+        "callee": "U8P_LOOM::look",
+        "purpose": "No evidence of direct internal calls; listed for completeness only.",
+        "confidence": "low"
+      }
+    ],
+    "external_calls": [
+      {
+        "caller": "U8P_LOOM::use",
+        "callee": "playSFX",
+        "purpose": "Play a sound effect when the loom is used (arguments observed: this, 0x64, 0x38).",
         "confidence": "high"
       },
       {
         "caller": "U8P_LOOM::use",
         "callee": "Item::getFrame",
-        "purpose": "Query the loom's current frame to decide whether to animate upward from 0->7 or downward to 0.",
+        "purpose": "Read the loom item's current animation/frame index to decide which animation branch to take.",
         "confidence": "high"
       },
       {
         "caller": "U8P_LOOM::use",
         "callee": "Item::setFrame",
-        "purpose": "Apply each sequential frame value to the loom during the animation/toggle sequence.",
+        "purpose": "Set the loom item's displayed frame to the computed working index (local1) as part of the animation step.",
         "confidence": "high"
       },
       {
         "caller": "U8P_LOOM::use",
-        "callee": "spawn FREE::1C19",
-        "purpose": "Spawn a helper process/task after each frame change; likely provides a short delay or visual/animation helper between steps.",
+        "callee": "spawn -> FREE::func1C19",
+        "purpose": "Start a short auxiliary process or timed effect used with suspend to progress the animation; exact effect unknown.",
         "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LOOM::use",
+        "callee": "suspend",
+        "purpose": "Yield execution so the spawned process and engine can advance the visual/state change; used to time the animation step.",
+        "confidence": "high"
       }
     ]
   },
@@ -115,8 +94,8 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "LOOM::look",
-    "behavior_summary_one_liner": "This script implements the in-game behavior for a loom item. It provides an examine ('U8P_LOOM::look') handler that makes the item emit/display its name and a use handler that animates/toggles the loom's visual frame while playing a sound and spawning short-lived helper tasks between steps.",
+    "main_function": "U8P_LOOM::look",
+    "behavior_summary_one_liner": "Provides the in-game responses for the loom object: a short examine/U8P_LOOM::look description and a U8P_LOOM::use interaction that animates the loom visually and plays a sound.",
     "external_call_count": 5,
     "flag_read_count": 0,
     "flag_write_count": 0

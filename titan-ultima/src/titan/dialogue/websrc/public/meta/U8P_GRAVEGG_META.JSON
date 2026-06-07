@@ -3,33 +3,31 @@
   "source_of_truth": "dialogue/json/U8P_GRAVEGG.json",
   "file": "U8P_GRAVEGG",
   "behavior_summary": [
-    "U8P_GRAVEGG::hatch orchestrates an egg-hatching sequence: it freezes the player/avatar, fades the screen to black, moves/teleports the avatar to the egg location, replaces/destroys egg items and creates temporary/new items representing the hatchling, plays sound and visual frame changes, spawns a short-lived effect, fades the screen back, and then returns control to the player.",
-    "The script performs two main phases: a pre-fade/post-teleport replacement loop that removes original egg instances and creates intermediate items while setting a transient global flag, and a post-fade animation/finalization loop that finishes item replacement, runs frame-based visual updates, plays SFX, spawns a short-lived process, clears the transient flag, and completes cleanup.",
-    "Multiple external engine services are used and awaited (fade processes, teleport, spawn), and the script uses a global flag (magicWallDone) as a transient synchronization/guard during replacement and animation."
+    "U8P_GRAVEGG::hatch runs as a suspended process that orchestrates an egg-hatching sequence: it freezes the avatar (stasis), fades the screen, teleports the avatar/camera to the egg, removes/creates item representations (egg/creature), fades back in, optionally plays a U8P_GRAVEGG::hatch SFX, runs a short per-frame item animation, flips a completion flag, and restores avatar control.",
+    "Two creation branches exist: one creates an item with id 0x02D8 (simple pop) and sets magicWallDone = 1; the other creates id 0x0236 (create-type 0x0E), plays SFX, pops it, runs an animation loop that steps frames via Item::setFrame, and later clears magicWallDone. The branching condition is not explicit in the decompiled nodes.",
+    "The process uses multiple external processes/functions (FadeToBlack, teleportToEgg, FadeFromBlack, and a short delay func from spawn->FREE) and multiple suspend points so the sequence occurs across frames rather than instantly."
   ],
   "notable_control_flow": [
-    "Start: call setAvatarInStasis(1) to freeze the avatar (prevent player control).",
-    "Suspend and wait on a FadeToBlack process, then call a teleport/position helper (teleportToEgg) to place the avatar at the egg.",
-    "Iterate over nearby/related items (loop using a local iterator) to destroy egg items and create/pop temporary replacement items; during this loop the script sets global magicWallDone = 1.",
-    "Suspend and wait on a FadeFromBlack process after creating initial replacements and before final animation.",
-    "Run a second loop that destroys temporary replacements and creates final hatched items, plays SFX (playSFX), updates item frames (Item::setFrame) driven by a small loop counter, and spawns a short-lived effect (spawn FREE::1C19) — waiting for the spawn return as part of the sequence.",
-    "Clear magicWallDone (set to 0), increment/compare a local frame/counter ([BP-04h]) against a threshold (0x0E) to drive Item::setFrame calls, then call setAvatarInStasis(0) to unfreeze the avatar.",
-    "Suspension points (implied/suspend) are used after each external process call so the visual/audio/teleport steps complete before proceeding."
+    "U8P_GRAVEGG::hatch: setAvatarInStasis(0x01) to freeze avatar input/animation.",
+    "U8P_GRAVEGG::hatch: call process FadeToBlack and suspend until completion.",
+    "U8P_GRAVEGG::hatch: call process teleportToEgg(0x00, 0x0B, 0x06) and suspend.",
+    "U8P_GRAVEGG::hatch: conditional branch A — destroy prior item handle (local1), Item::create(type=0x00, id=0x02D8, out=local1) and Item::pop(..., local1); set magicWallDone = 0x01.",
+    "U8P_GRAVEGG::hatch: conditional branch B — destroy prior item, Item::create(type=0x0E, id=0x0236, out=local1); playSFX(local1, 0x64, 0x31); Item::pop(..., local1); initialize local2 = 0 and run an animation loop that calls Item::setFrame(frame = 0x0E - local2, local1) and yields via spawn->FREE::func1C19 until local2 > 0x0E; later set magicWallDone = 0x00.",
+    "U8P_GRAVEGG::hatch: call process FadeFromBlack and suspend; setAvatarInStasis(0x00) to restore control; end process."
   ],
   "open_questions": [
-    "What exact item type IDs and subtype parameters correspond to the created/hatched items (the constants observed such as 02D8h, 0236h, 0Eh were noted but their gameplay meanings are not fully resolved).",
-    "What precise selection criteria determine which world items are targeted by the iterator (shape, distance, ownership, or a specific relation to the egg)?",
-    "Is magicWallDone used elsewhere in game logic (global restart guard or broader synchronization), or is its use limited to this hatching transition?",
-    "Can multiple eggs U8P_GRAVEGG::hatch in a multi-step or parallel fashion, and how does this script behave if invoked concurrently (reentrancy and interaction with magicWallDone)?",
-    "What exact visual effect/process is spawned by FREE::1C19 and how long does it last (cosmetic flash, particles, gameplay effect)?"
+    "What specific runtime condition selects the two Item::create branches (egg type, player state, or global flag)? The condition in the dump is a raw constant and not explicit.",
+    "What gameplay meaning does the global flag magicWallDone encode? It is toggled during the sequence but its higher-level purpose is unclear.",
+    "Are the numeric item ids (0x02D8 and 0x0236) specific creature/egg types and which in-game assets do they map to?",
+    "Is local2 represented in game data as a genuine local counter (as inferred) or was it treated as a flag in the decompiled output?"
   ],
   "main_function": {
     "name": "U8P_GRAVEGG::hatch",
     "execution_form": "process",
-    "purpose": "Handle the egg-hatching event by freezing the avatar, performing a fade/teleport to the egg, replacing/destroying egg items and creating hatched item(s) with visual/sound feedback, spawning a short-lived effect, and restoring avatar control.",
+    "purpose": "Run a multi-frame egg-hatching visual/sound sequence: freeze player, transition view, replace or spawn the egg/creature item, animate emergence, update progress flag, and restore player control.",
     "entry_conditions": [
-      "Event 7 (U8P_GRAVEGG::hatch) from the usecode/event system.",
-      "Inferred: invoked when an actor/avatar triggers or interacts with the egg (fast-area entry / use activation)."
+      "Invoked as a process (processType 0x0210) — likely started when an egg should U8P_GRAVEGG::hatch or when an item-specific 'U8P_GRAVEGG::hatch' event triggers.",
+      "Contains suspend points and process calls (FadeToBlack, teleportToEgg, FadeFromBlack), so it is intended to run over multiple frames rather than inline."
     ],
     "confidence": "high"
   },
@@ -37,68 +35,68 @@
     {
       "name": "U8P_GRAVEGG::hatch",
       "kind": "main",
-      "role": "Event handler implementing the egg-hatching cinematic and item-replacement sequence.",
+      "role": "orchestrates egg-U8P_GRAVEGG::hatch sequence (visuals, item create/destroy, SFX, animation, flags)",
       "confidence": "high"
     },
     {
-      "name": "U8P_GRAVEGG::setAvatarInStasis",
+      "name": "setAvatarInStasis",
       "kind": "extern",
-      "role": "Engine helper to freeze/unfreeze the avatar during the sequence (called with 1 then 0).",
+      "role": "engine call to freeze/unfreeze avatar input/animation",
       "confidence": "high"
     },
     {
-      "name": "U8P_GRAVEGG::FadeToBlack",
+      "name": "process FadeToBlack",
       "kind": "extern",
-      "role": "Process invoked to fade the screen to black before teleporting/altering items.",
+      "role": "visual fade-out transition (suspended until completion)",
       "confidence": "high"
     },
     {
-      "name": "U8P_GRAVEGG::teleportToEgg",
+      "name": "process teleportToEgg",
       "kind": "extern",
-      "role": "Process/helper that moves or teleports the avatar to the egg location after fade-out.",
-      "confidence": "medium"
+      "role": "teleport camera/avatar to egg location",
+      "confidence": "high"
     },
     {
-      "name": "Item::destroy",
+      "name": "process FadeFromBlack",
       "kind": "extern",
-      "role": "Engine routine to remove item instances (used to delete eggs and temporary items).",
+      "role": "visual fade-in transition after teleport/item changes",
       "confidence": "high"
     },
     {
       "name": "Item::create",
       "kind": "extern",
-      "role": "Engine routine to create item instances used for hatched results or temporary replacements.",
+      "role": "create an item instance (two observed id/type variants used as different branches)",
       "confidence": "high"
     },
     {
       "name": "Item::pop",
       "kind": "extern",
-      "role": "Finalize/populate newly created items (place in world / set extra properties).",
+      "role": "spawn/drop the created item into the world using given parameters",
       "confidence": "high"
     },
     {
-      "name": "U8P_GRAVEGG::playSFX",
+      "name": "Item::destroy",
       "kind": "extern",
-      "role": "Play U8P_GRAVEGG::hatch sound effect during finalization.",
+      "role": "destroy an existing item handle (cleanup before creation)",
+      "confidence": "high"
+    },
+    {
+      "name": "playSFX",
+      "kind": "extern",
+      "role": "play U8P_GRAVEGG::hatch/emergence sound effect for the created item",
       "confidence": "high"
     },
     {
       "name": "Item::setFrame",
       "kind": "extern",
-      "role": "Change an item's visual frame to animate U8P_GRAVEGG::hatch progression.",
+      "role": "set displayed animation frame on item during per-frame animation loop",
       "confidence": "high"
     },
     {
-      "name": "spawn FREE::1C19",
+      "name": "spawn->FREE::func1C19",
       "kind": "extern",
-      "role": "Spawn a short-lived free process/effect during the U8P_GRAVEGG::hatch animation.",
+      "role": "short per-iteration delay/yield used to pace animation loop",
       "confidence": "medium"
-    },
-    {
-      "name": "U8P_GRAVEGG::FadeFromBlack",
-      "kind": "extern",
-      "role": "Process to fade the screen back from black after changes are applied.",
-      "confidence": "high"
     }
   ],
   "call_analysis": {
@@ -106,62 +104,62 @@
     "external_calls": [
       {
         "caller": "U8P_GRAVEGG::hatch",
-        "callee": "U8P_GRAVEGG::setAvatarInStasis",
-        "purpose": "Freeze avatar at sequence start and unfreeze at end (1 then 0).",
+        "callee": "setAvatarInStasis",
+        "purpose": "freeze (arg 0x01) and later unfreeze (arg 0x00) the avatar during the U8P_GRAVEGG::hatch sequence",
         "confidence": "high"
       },
       {
         "caller": "U8P_GRAVEGG::hatch",
-        "callee": "U8P_GRAVEGG::FadeToBlack",
-        "purpose": "Hide teleport and item replacement by fading screen to black; script waits for completion.",
+        "callee": "process FadeToBlack",
+        "purpose": "fade to black before teleport/scene change; U8P_GRAVEGG::hatch process suspends until it completes",
         "confidence": "high"
       },
       {
         "caller": "U8P_GRAVEGG::hatch",
-        "callee": "U8P_GRAVEGG::teleportToEgg",
-        "purpose": "Place avatar/camera at egg location prior to U8P_GRAVEGG::hatch animation (three stack args observed).",
-        "confidence": "medium"
+        "callee": "process teleportToEgg",
+        "purpose": "move avatar/camera to egg location as part of the transition (observed args 0x00,0x0B,0x06); suspended until complete",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GRAVEGG::hatch",
+        "callee": "process FadeFromBlack",
+        "purpose": "fade back in after item changes; U8P_GRAVEGG::hatch process suspends until complete",
+        "confidence": "high"
       },
       {
         "caller": "U8P_GRAVEGG::hatch",
         "callee": "Item::destroy",
-        "purpose": "Remove original egg item instances and later remove temporary replacement items.",
+        "purpose": "remove a prior temporary item referenced by local1 before creating the new representation",
         "confidence": "high"
       },
       {
         "caller": "U8P_GRAVEGG::hatch",
         "callee": "Item::create",
-        "purpose": "Create temporary and final hatched items with specific type/subtype constants.",
+        "purpose": "create either an egg or creature item (two observed variants: create-type 0x00 id 0x02D8, or create-type 0x0E id 0x0236); out handle stored to local1",
         "confidence": "high"
       },
       {
         "caller": "U8P_GRAVEGG::hatch",
         "callee": "Item::pop",
-        "purpose": "Finalize and place created items into the world (called after Item::create).",
+        "purpose": "spawn the created item into the world using constants (0x08, 0x4BFF, 0x1E5F) and local1",
         "confidence": "high"
       },
       {
         "caller": "U8P_GRAVEGG::hatch",
-        "callee": "U8P_GRAVEGG::FadeFromBlack",
-        "purpose": "Reveal the scene after teleport and initial item modifications; script waits for completion.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GRAVEGG::hatch",
-        "callee": "U8P_GRAVEGG::playSFX",
-        "purpose": "Play a U8P_GRAVEGG::hatch sound when final items are created/animated.",
+        "callee": "playSFX",
+        "purpose": "play a U8P_GRAVEGG::hatch/emergence sound for the created item (observed args local1, 0x64, 0x31)",
         "confidence": "high"
       },
       {
         "caller": "U8P_GRAVEGG::hatch",
         "callee": "Item::setFrame",
-        "purpose": "Animate visual frames of the hatched item(s) using a counter-driven frame value.",
+        "purpose": "drive per-frame animation during emergence loop using frame = (0x0E - local2) and local1",
         "confidence": "high"
       },
       {
         "caller": "U8P_GRAVEGG::hatch",
-        "callee": "spawn FREE::1C19",
-        "purpose": "Create a short-lived visual/effect process as part of the U8P_GRAVEGG::hatch animation and wait for its completion/return.",
+        "callee": "spawn->FREE::func1C19",
+        "purpose": "short delay/yield used between animation frames to pace the loop (U8P_GRAVEGG::hatch suspends after calling it)",
         "confidence": "medium"
       }
     ]
@@ -171,7 +169,7 @@
     "writes": [
       {
         "name": "magicWallDone",
-        "likely_effect": "Used as a transient synchronization/guard during the hatching transition: set to 1 while initial replacements are created and cleared (set to 0) during/after final animation. Appears to prevent other interactions or indicate transition-in-progress.",
+        "likely_effect": "toggled during the U8P_GRAVEGG::hatch sequence (set to 0x01 in one branch and 0x00 in the other) to mark step/progress/state related to the U8P_GRAVEGG::hatch or an associated puzzle/constraint",
         "confidence": "medium"
       }
     ]
@@ -184,7 +182,7 @@
   ],
   "quick_facts": {
     "main_function": "U8P_GRAVEGG::hatch",
-    "behavior_summary_one_liner": "U8P_GRAVEGG::hatch orchestrates an egg-hatching sequence: it freezes the player/avatar, fades the screen to black, moves/teleports the avatar to the egg location, replaces/destroys egg items and creates temporary/new items representing the hatchling, plays sound and visual frame changes, spawns a short-lived effect, fades the screen back, and then returns control to the player.",
+    "behavior_summary_one_liner": "U8P_GRAVEGG::hatch runs as a suspended process that orchestrates an egg-hatching sequence: it freezes the avatar (stasis), fades the screen, teleports the avatar/camera to the egg, removes/creates item representations (egg/creature), fades back in, optionally plays a U8P_GRAVEGG::hatch SFX, runs a short per-frame item animation, flips a completion flag, and restores avatar control.",
     "external_call_count": 10,
     "flag_read_count": 0,
     "flag_write_count": 1

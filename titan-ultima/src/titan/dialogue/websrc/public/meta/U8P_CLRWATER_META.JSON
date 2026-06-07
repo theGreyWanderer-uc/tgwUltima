@@ -3,38 +3,41 @@
   "source_of_truth": "dialogue/json/U8P_CLRWATER.json",
   "file": "U8P_CLRWATER",
   "behavior_summary": [
-    "Responds to a hit (U8P_CLRWATER::gotHit event) by spawning a WATER behavior/process (WATER::0080) to react to the impact — likely to clear or update water at or near the hit location.",
-    "Before spawning it configures spawn context via engine ops 'set info' and 'process exclude' which affect the spawned process's metadata and concurrency/exclusion rules.",
-    "Passes several arguments to the spawned WATER::0080 process (including values derived from BP+06h, BP+0Ah, BP+0Ch, pid and a constant 0x020C).",
-    "Inspects the spawn return value, applies a logical 'implies' operation (with literal operands 1,1), stores that result into a temp local, then suspends/returns; the implication result likely serves as a boolean/flow indicator but its exact use is not visible in this snippet."
+    "U8P_CLRWATER::gotHit is a small process invoked when an actor is struck; it immediately delegates handling to a WATER subsystem routine and then yields/suspends.",
+    "The routine appears to trigger a water-related response to the hit (e.g., clear water state, produce a splash or visual/physical reaction) but performs no local state changes or global flag updates.",
+    "The process accepts two parameters (uword, word) which are present but not manipulated locally in this snippet; they are likely passed to or used by the WATER routine."
   ],
   "notable_control_flow": [
-    "Entry on Event 6 (U8P_CLRWATER::gotHit) for U8P_CLRWATER::gotHit.",
-    "Call sequence: set info -> process exclude -> spawn WATER::0080 with prepared arguments.",
-    "Immediately after spawn, the returned value is pushed/consumed by an 'implies' operation (operands include the retval and literals 1,1), result stored to a temp local.",
-    "Function then suspends/returns; no observed global flags are modified in this fragment."
+    "Entry: process runs on a 'got hit' event for the actor.",
+    "Single-step flow: U8P_CLRWATER::gotHit -> call WATER::func0080 -> suspend/yield.",
+    "No branching, no reads/writes of global flags, and no internal computation observed in the snippet."
   ],
   "open_questions": [
-    "What exact semantics and parameter meanings does WATER::0080 implement (clear water, play splash animation, update water tiles, etc.)?",
-    "What are the precise meanings of the pushed arguments (especially BP+06h passed twice and the indirect 2-byte value) in relation to water-clearing behavior?",
-    "Which info key/value is being set by 'set info' and how does it influence the spawned WATER process?",
-    "How is the boolean-like result of the 'implies' operation used by the larger game system (the temp is stored but not used in this excerpt)?"
+    "What is the exact behavior of WATER::func0080 (e.g., clear water, spawn splash animation, modify physics)?",
+    "What do the two parameters (param1: uword, param2: word) represent (attacker id, damage amount, hit flags, or coordinates)?",
+    "Is U8P_CLRWATER::gotHit invoked for all actors of this type or only for specific actor classes (player vs NPC)?"
   ],
   "main_function": {
     "name": "U8P_CLRWATER::gotHit",
     "execution_form": "process",
-    "purpose": "Handle a hit event by configuring spawn context and spawning the WATER::0080 process to perform a water-related reaction near the impacted object/location; then interpret the spawn's return value to a boolean-like temp and suspend.",
+    "purpose": "Handle a 'got hit' event by delegating water-related response work to the WATER subsystem and then suspending the process.",
     "entry_conditions": [
-      "Event 6 (U8P_CLRWATER::gotHit) — invoked when this object is struck/hit"
+      "Invoked when the actor receives a hit/damage event (process type 0x020C)."
     ],
-    "confidence": "high"
+    "confidence": "medium"
   },
   "function_map": [
     {
       "name": "U8P_CLRWATER::gotHit",
       "kind": "main",
-      "role": "Respond to hit events by spawning WATER::0080 with contextual parameters, using set info/process exclude to prepare spawn context, and post-processing the spawn retval.",
+      "role": "process handling 'got hit' events; delegates to water subsystem then suspends",
       "confidence": "high"
+    },
+    {
+      "name": "WATER::func0080",
+      "kind": "extern",
+      "role": "water-subsystem routine called to respond to the hit (effect inferred)",
+      "confidence": "medium"
     }
   ],
   "call_analysis": {
@@ -42,26 +45,8 @@
     "external_calls": [
       {
         "caller": "U8P_CLRWATER::gotHit",
-        "callee": "U8P_CLRWATER::set info",
-        "purpose": "Configure metadata/state that will apply to or parameterize the subsequent spawn (affects how the spawned process sees the target or its behavior).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_CLRWATER::gotHit",
-        "callee": "U8P_CLRWATER::process exclude",
-        "purpose": "Set exclusion rules or concurrency constraints influencing the upcoming spawn or related processes (prevents conflicting processes or marks the target excluded).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_CLRWATER::gotHit",
-        "callee": "WATER::0080 (spawn)",
-        "purpose": "Spawn a WATER-handling process to react to the hit — inferred to clear or otherwise update water at/near the impact using passed parameters (0x020C, BP+06h, an indirect 2-byte value, pid, BP+0Ch, BP+0Ah).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_CLRWATER::gotHit",
-        "callee": "U8P_CLRWATER::implies",
-        "purpose": "Apply a logical implication operation to the spawn return value (with literal operands 1,1) to produce a boolean-like result stored in a temp local for later use or signaling.",
+        "callee": "WATER::func0080",
+        "purpose": "Perform the water-related response to a hit (inferred: clear water state, produce splash/visual effect, or update water physics/state).",
         "confidence": "medium"
       }
     ]
@@ -77,9 +62,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "CLRWATER::gotHit",
-    "behavior_summary_one_liner": "Responds to a hit (U8P_CLRWATER::gotHit event) by spawning a WATER behavior/process (WATER::0080) to react to the impact — likely to clear or update water at or near the hit location.",
-    "external_call_count": 4,
+    "main_function": "U8P_CLRWATER::gotHit",
+    "behavior_summary_one_liner": "U8P_CLRWATER::gotHit is a small process invoked when an actor is struck; it immediately delegates handling to a WATER subsystem routine and then yields/suspends.",
+    "external_call_count": 1,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

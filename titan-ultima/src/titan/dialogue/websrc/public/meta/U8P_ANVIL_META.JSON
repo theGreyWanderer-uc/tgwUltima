@@ -3,27 +3,24 @@
   "source_of_truth": "dialogue/json/U8P_ANVIL.json",
   "file": "U8P_ANVIL",
   "behavior_summary": [
-    "Handles the 'U8P_ANVIL::look' (examine) event for the anvil object. When an actor inspects the anvil, the script prepares item state, composes the short literal text \"anvil \", and asks the engine to emit that text to the inspecting process.",
-    "Before emitting text it runs engine primitives inferred as 'set info' (opcode 77) and 'process exclude' (opcode 78) to prepare or hide/exclude processes or change item info/state for the operation.",
-    "The script calls Item::bark to deliver the literal string to the caller/process and captures that routine's return value, which it propagates back to the engine (likely as a boolean-like 'handled' flag).",
-    "Transient resources (the temporary string) are allocated and freed around the bark call; the routine then uses an 'implies' sequence and suspends/returns, indicating the event was handled and control is returned to the engine."
+    "U8P_ANVIL::look is a minimal 'U8P_ANVIL::look' (examine) handler for the ANVIL object that displays a single short identification bark 'anvil ' to the player.",
+    "After emitting the bark the process yields/suspends, so the U8P_ANVIL::look interaction does not perform further logic, branching, or state changes.",
+    "No global flags, parameters, local state, menus, or external calls are used by this script — it is purely descriptive."
   ],
   "notable_control_flow": [
-    "Entry: event 'U8P_ANVIL::look' for the anvil triggers execution.",
-    "Sequence: perform set-info primitive -> perform process-exclude primitive -> allocate/obtain pointer to literal \"anvil \" -> call Item::bark(target_process, \"anvil \", pid) -> free transient string -> push bark return value -> use 'implies' op sequence -> suspend/return.",
-    "Return semantics: the Item::bark return value is captured and used to signal handling/success back to the engine (boolean-like behavior inferred)."
+    "Entry via the engine's U8P_ANVIL::look/examine process (processType 0x0208) triggers U8P_ANVIL::look.",
+    "The function emits one player-facing bark line, then executes an explicit suspend which pauses/ends the U8P_ANVIL::look process."
   ],
   "open_questions": [
-    "Exact semantic effects and arguments of the 'set info' (opcode 77) and 'process exclude' (opcode 78) primitives in this context — what info id and object are being set/excluded is inferred but not explicit.",
-    "Precise identity and role of the third parameter pushed to Item::bark (pid): is this the anvil's own PID, the caller's PID, or a routing/ownership token?",
-    "Whether the implies/suspend sequence encodes additional branching or is simply the engine-convention to return a handled/not-handled signal."
+    "The bark text contains a trailing space ('anvil '). Is that intentional for concatenation with other text elsewhere, or simply an artifact of extraction?",
+    "Two 'Unknown' nodes appear in the original disassembly; their presence does not change behavior here but could indicate structural/no-op remnants from the compiler or decompiler."
   ],
   "main_function": {
     "name": "U8P_ANVIL::look",
     "execution_form": "process",
-    "purpose": "Respond to an actor's 'U8P_ANVIL::look' (examine) event on the anvil by preparing item state, presenting the short description \"anvil \" to the inspecting process via Item::bark, and returning an engine-handled result.",
+    "purpose": "Provide the short description shown when the player examines the ANVIL object; display the bark 'anvil ' and then suspend the process.",
     "entry_conditions": [
-      "Triggered when a player or actor inspects/looks at the anvil object (event 0 / U8P_ANVIL::look)."
+      "Triggered when the player or relevant actor performs a 'U8P_ANVIL::look' (examine) action on the ANVIL object (engine U8P_ANVIL::look processType 0x0208)."
     ],
     "confidence": "high"
   },
@@ -31,47 +28,25 @@
     {
       "name": "U8P_ANVIL::look",
       "kind": "main",
-      "role": "Handle the 'U8P_ANVIL::look' event for the anvil; prepare item state and call Item::bark with the literal description.",
+      "role": "U8P_ANVIL::look/examine handler that emits a single bark and suspends",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_ANVIL::look",
-        "callee": "U8P_ANVIL::set info (opcode 77)",
-        "purpose": "Prepare or set item information/flags prior to messaging/interaction (exact flag/id inferred).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_ANVIL::look",
-        "callee": "U8P_ANVIL::process exclude (opcode 78)",
-        "purpose": "Exclude certain processes from receiving subsequent operations/messages as part of preparation for the bark; exact targets are inferred.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_ANVIL::look",
-        "callee": "Item::bark",
-        "purpose": "Emit/display the short descriptive string \"anvil \" to the target process/actor; returns a value used to indicate handling/success.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
     "writes": []
   },
   "ui_tags": [
-    "trigger",
-    "cleanup",
-    "animation",
-    "guard"
+    "trigger"
   ],
   "quick_facts": {
-    "main_function": "ANVIL::look",
-    "behavior_summary_one_liner": "Handles the 'U8P_ANVIL::look' (examine) event for the anvil object. When an actor inspects the anvil, the script prepares item state, composes the short literal text \"anvil \", and asks the engine to emit that text to the inspecting process.",
-    "external_call_count": 3,
+    "main_function": "U8P_ANVIL::look",
+    "behavior_summary_one_liner": "U8P_ANVIL::look is a minimal 'U8P_ANVIL::look' (examine) handler for the ANVIL object that displays a single short identification bark 'anvil ' to the player.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

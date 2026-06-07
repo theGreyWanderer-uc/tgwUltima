@@ -3,55 +3,58 @@
   "source_of_truth": "dialogue/json/U8P_LEAPFAIT.json",
   "file": "U8P_LEAPFAIT",
   "behavior_summary": [
-    "Handles a U8P_LEAPFAIT::hatch/fast-area event for an egg/item: reads the egg id and, depending on that id and two global flags, enables an NPC 'air-walk' mode and sometimes updates the item's quality.",
-    "If Egg::getEggId(item) == 0: if global 'stratosMet' is true, enable air-walk using one parameter variant (01,00) on the actor and set the item's quality to 2; otherwise consult 'permissionToAirWalk' and, if that global is zero, enable air-walk with a different parameter variant (01,01).",
-    "If Egg::getEggId(item) == 1: perform an inline looped/script sequence of checks on the item (exact checks inferred from loops) and, if those checks pass, enable air-walk with the (01,00) variant.",
-    "The function only reads global flags (no globals are written) and returns after taking the appropriate branch(s)."
+    "U8P_LEAPFAIT::hatch is an egg-hatching process that reads the egg's type/id and performs per-type actions: primarily toggling an NPC's ability to 'air-walk' and, in one branch, setting the item's quality.",
+    "The routine queries the egg id (Egg::getEggId) into a temporary local (local1) and branches on that id (observed comparisons for id == 0x00 and id == 0x01).",
+    "For id == 0x00 the routine checks global condition(s): if a 'stratosMet'-like flag is true it disables air-walk and sets the item's quality to 0x02; otherwise, if a 'permissionToAirWalk'-like flag is present, it enables air-walk instead.",
+    "For id == 0x01 the routine performs an internal numeric/flow sequence (including no-print jumps in the disassembly) and ends by disabling air-walk for the target actor.",
+    "Several low-confidence/no-print jump nodes appear in the disassembly; they are treated as control-flow artifacts and do not change the overall gameplay-level description."
   ],
   "notable_control_flow": [
-    "Entry: Event 7 / U8P_LEAPFAIT::hatch (fast-area trigger) — U8P_LEAPFAIT::hatch is invoked with an item/egg parameter.",
-    "Primary dispatch based on eggId (local eggId at [BP-02h]): branch when eggId == 0, branch when eggId == 1, otherwise no special action.",
-    "eggId == 0 branch: nested check of global 'stratosMet' first (true -> air-walk variant (01,00) + Item::setQuality(item,2)); if false, check global 'permissionToAirWalk' and call air-walk variant (01,01) only if permissionToAirWalk == 0.",
-    "eggId == 1 branch: run looped/inline script checks (loop/loopscr) using temporary locals; only if those checks succeed call Npc::setAirWalkEnabled(actor, 01,00)."
+    "Branches on a local egg id value (local1) yielded by Egg::getEggId(this): at least two distinct branches detected (id == 0x00 and id == 0x01).",
+    "Within id == 0x00: a conditional read of a global flag labeled in the decompilation as stratosMet; true => disable air-walk + set item quality, else check a secondary flag (permissionToAirWalk) to possibly enable air-walk.",
+    "id == 0x01 contains additional numeric operations and internal jumps that ultimately lead to disabling air-walk — exact arithmetic and flow intent are unclear from the disassembly.",
+    "Calls to Npc::setAirWalkEnabled use an actor pointer supplied on the stack (addressof([SP+02h]) in the raw), indicating the routine targets a specific actor passed implicitly by the process environment."
   ],
   "open_questions": [
-    "What exactly do the numeric byte parameters to Npc::setAirWalkEnabled (e.g., (01,00) vs (01,01)) represent in gameplay terms (mode, duration, permission flag)?",
-    "What are the precise conditions evaluated by the loop/loopscr sequence in the eggId == 1 branch (the disassembly shows looped checks but not their semantic intent)?",
-    "What is the exact identity and type of the actor pointer pushed from [SP+02h] (inferred to be the NPC/actor to enable air-walk on) and whether it is always safe to call Npc::setAirWalkEnabled on it?"
+    "What precise game-state or narrative meaning do the flags named in the decompilation represent? (flag names like 'stratosMet' and 'permissionToAirWalk' are inferred from low-level output).",
+    "What is the intended effect of the numeric/math steps and jmp_NOPRINT nodes in the id == 0x01 branch — are they sequencing animation, choosing a different actor, or doing bookkeeping?",
+    "What concrete in-game actor corresponds to the stack pointer addressof([SP+02h]) used when toggling air-walk? Is it the Avatar, a mount, or another NPC?",
+    "Why is item quality set to 0x02 in the id == 0x00 + stratosMet branch — what gameplay meaning does quality 0x02 convey (rarity, hatched state, or something else)?"
   ],
   "main_function": {
     "name": "U8P_LEAPFAIT::hatch",
     "execution_form": "process",
-    "purpose": "Respond to a U8P_LEAPFAIT::hatch/fast-area trigger by checking the egg/item id and conditionally enabling an NPC's air-walk ability and adjusting the item's quality based on egg type and global state.",
+    "purpose": "Handle an egg's U8P_LEAPFAIT::hatch lifecycle: determine egg type and perform type-specific outcomes such as toggling a target actor's air-walk ability and setting the egg/item quality.",
     "entry_conditions": [
-      "Event 7 / U8P_LEAPFAIT::hatch (fast-area trigger — invoked when the avatar or relevant actor enters the U8P_LEAPFAIT::hatch/trigger region)"
+      "Invoked as a process (processType 0x0210) for an item/egg instance — inferred to run when the egg's 'U8P_LEAPFAIT::hatch' routine executes.",
+      "Implicit context provides 'this' (the egg/item instance) and a target actor pointer on the stack (addressof([SP+02h]))."
     ],
-    "confidence": "high"
+    "confidence": "medium"
   },
   "function_map": [
     {
       "name": "U8P_LEAPFAIT::hatch",
       "kind": "main",
-      "role": "Main handler for U8P_LEAPFAIT::hatch/fast-area event that enables air-walk and adjusts item quality based on egg id and globals.",
-      "confidence": "high"
+      "role": "egg U8P_LEAPFAIT::hatch handler: reads egg id, branches on type, toggles NPC air-walk and sometimes sets item quality",
+      "confidence": "medium"
     },
     {
       "name": "Egg::getEggId",
       "kind": "extern",
-      "role": "Return an identifier for the passed egg/item; drives branching logic in the main handler.",
+      "role": "return the egg's type/identifier (used to select U8P_LEAPFAIT::hatch behavior)",
       "confidence": "high"
     },
     {
       "name": "Npc::setAirWalkEnabled",
       "kind": "extern",
-      "role": "Enable/configure an NPC's air-walk ability; called with an actor pointer and byte flags (variants used to represent different modes/permissions).",
+      "role": "enable or disable an actor's air-walk ability (called with mode 0x00 or 0x01 and a pointer to the target actor)",
       "confidence": "high"
     },
     {
       "name": "Item::setQuality",
       "kind": "extern",
-      "role": "Set the quality field on the item instance (used to set quality to 2 in one branch).",
-      "confidence": "high"
+      "role": "set the quality/property of the current item instance (called with 0x02 in one branch)",
+      "confidence": "medium"
     }
   ],
   "call_analysis": {
@@ -60,20 +63,20 @@
       {
         "caller": "U8P_LEAPFAIT::hatch",
         "callee": "Egg::getEggId",
-        "purpose": "Obtain egg/item id for branching decisions (eggId compared to 0 and 1).",
+        "purpose": "Obtain the egg's type/identifier to decide U8P_LEAPFAIT::hatch behavior (result stored in local1).",
         "confidence": "high"
       },
       {
         "caller": "U8P_LEAPFAIT::hatch",
         "callee": "Npc::setAirWalkEnabled",
-        "purpose": "Enable or configure air-walk on the relevant actor; called with different byte-parameter variants depending on eggId and globals.",
+        "purpose": "Toggle a target actor's air-walk ability (mode 0x00 disables, 0x01 enables) using an actor pointer provided by the process context (addressof([SP+02h]) in the raw).",
         "confidence": "high"
       },
       {
         "caller": "U8P_LEAPFAIT::hatch",
         "callee": "Item::setQuality",
-        "purpose": "Set the passed item's quality to 2 in the branch where 'stratosMet' is true and eggId == 0.",
-        "confidence": "high"
+        "purpose": "Set the current item/egg's quality to a specific value (0x02) in one branch of the U8P_LEAPFAIT::hatch logic.",
+        "confidence": "medium"
       }
     ]
   },
@@ -81,13 +84,13 @@
     "reads": [
       {
         "name": "stratosMet",
-        "likely_effect": "If nonzero, causes the handler to enable air-walk with the (01,00) variant and set the item's quality to 2 when eggId == 0.",
-        "confidence": "high"
+        "likely_effect": "Gating condition read when egg id == 0x00 to decide whether to disable air-walk and set item quality (inferred from an IfStatement).",
+        "confidence": "medium"
       },
       {
         "name": "permissionToAirWalk",
-        "likely_effect": "When eggId == 0 and stratosMet == 0, if permissionToAirWalk == 0 the handler enables air-walk with the (01,01) variant; if nonzero it skips this call.",
-        "confidence": "high"
+        "likely_effect": "Alternate gating condition read when egg id == 0x00 to decide whether air-walk may be enabled for the target actor (inferred).",
+        "confidence": "medium"
       }
     ],
     "writes": []
@@ -100,7 +103,7 @@
   ],
   "quick_facts": {
     "main_function": "U8P_LEAPFAIT::hatch",
-    "behavior_summary_one_liner": "Handles a U8P_LEAPFAIT::hatch/fast-area event for an egg/item: reads the egg id and, depending on that id and two global flags, enables an NPC 'air-walk' mode and sometimes updates the item's quality.",
+    "behavior_summary_one_liner": "U8P_LEAPFAIT::hatch is an egg-hatching process that reads the egg's type/id and performs per-type actions: primarily toggling an NPC's ability to 'air-walk' and, in one branch, setting the item's quality.",
     "external_call_count": 3,
     "flag_read_count": 2,
     "flag_write_count": 0

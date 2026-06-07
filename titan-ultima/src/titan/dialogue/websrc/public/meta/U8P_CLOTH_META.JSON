@@ -3,25 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_CLOTH.json",
   "file": "U8P_CLOTH",
   "behavior_summary": [
-    "Provides the 'U8P_CLOTH::look' (examine) handler for the cloth item. When a player/actor examines the cloth, the script prepares the item, emits a short descriptive message ('cloth ') to the viewer using Item::bark, and then returns.",
-    "Before emitting the message the routine sets item-level info/processing-exclude opcodes to prevent further processing or recursion while the bark is produced.",
-    "A temporary string containing the literal \"cloth \" is allocated/pushed, passed to Item::bark with the item/viewer PID, then freed after the call. The bark return value is briefly inspected and the process suspends/returns."
+    "This script implements the object's 'U8P_CLOTH::look' (examine) handler. When the player examines the object, the game displays a single short text/bark \"cloth\" and then the process suspends/ends.",
+    "There are no menus, branches, global flags, or external function calls referenced; the behavior is purely descriptive (display text) and terminates immediately after.",
+    "The routine is registered as a process (processType 0x0208) and therefore is executed by the engine when the object is inspected."
   ],
   "notable_control_flow": [
-    "Entry on a U8P_CLOTH::look/examine trigger → set item info/process-exclude flags → allocate/push literal string \"cloth \" → push item/viewer PID ([BP+06h]) → call external Item::bark → free temporary string → pop/inspect bark return value → suspend/return.",
-    "All state changes appear local to the item (no global flags are read or written by this snippet)."
+    "U8P_CLOTH::look starts as a process triggered by a U8P_CLOTH::look/examine action.",
+    "The process emits a Bark node with the string \"cloth\".",
+    "Immediately after the bark the process issues a suspend (process termination/pause)."
   ],
   "open_questions": [
-    "Is [BP+06h] strictly the item instance PID or sometimes the viewer/process PID in this engine call convention? (appears to be the item 'this' passed to Item::bark; inferred).",
-    "What exact info id(s) and semantics are being set by the 'set info' / 'process exclude' opcodes and whether they persist beyond this call (likely they mark the object to avoid reentrancy).",
-    "Does Item::bark return any meaningfully used value in this context, or is its return only inspected for control-flow artifact (inferred as not used further)?"
+    "Is this item referenced by other scripts or game logic for contextual descriptions or inventory (no evidence in this file) — low confidence.",
+    "Does the engine treat the trailing 'suspend' as a hard termination of the U8P_CLOTH::look process or as a yield that can be resumed by other systems? (inferred as termination; medium confidence)."
   ],
   "main_function": {
     "name": "U8P_CLOTH::look",
     "execution_form": "process",
-    "purpose": "Handle the cloth item's examine/U8P_CLOTH::look event: mark the item to avoid further processing, and make the item produce a short descriptive message 'cloth ' to the viewer using Item::bark.",
+    "purpose": "Provide the short description text when the player examines the cloth object.",
     "entry_conditions": [
-      "Event 0 (U8P_CLOTH::look/examine) — triggered when an actor examines/looks at the cloth item."
+      "Invoked by the engine when the player performs the 'U8P_CLOTH::look' / examine action on the object.",
+      "Registered as processType 0x0208 (object U8P_CLOTH::look/inspect handler)."
     ],
     "confidence": "high"
   },
@@ -29,26 +30,13 @@
     {
       "name": "U8P_CLOTH::look",
       "kind": "main",
-      "role": "Main handler for the cloth item's 'U8P_CLOTH::look' (examine) event; prepares item state and delegates to Item::bark to display the description.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine used to emit a short text message (a 'bark') from the item/process to a target viewer/process.",
+      "role": "Play a single descriptive bark ('cloth') when the object is examined; then suspend/end the process.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_CLOTH::look",
-        "callee": "Item::bark",
-        "purpose": "Display the short description string 'cloth ' to the viewer/process; called with the item/viewer PID and the temporary string pointer.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -56,13 +44,12 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "guard"
+    "dialogue"
   ],
   "quick_facts": {
-    "main_function": "CLOTH::look",
-    "behavior_summary_one_liner": "Provides the 'U8P_CLOTH::look' (examine) handler for the cloth item. When a player/actor examines the cloth, the script prepares the item, emits a short descriptive message ('cloth ') to the viewer using Item::bark, and then returns.",
-    "external_call_count": 1,
+    "main_function": "U8P_CLOTH::look",
+    "behavior_summary_one_liner": "This script implements the object's 'U8P_CLOTH::look' (examine) handler. When the player examines the object, the game displays a single short text/bark \"cloth\" and then the process suspends/ends.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

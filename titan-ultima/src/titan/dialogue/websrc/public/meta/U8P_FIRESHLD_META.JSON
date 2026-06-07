@@ -3,31 +3,29 @@
   "source_of_truth": "dialogue/json/U8P_FIRESHLD.json",
   "file": "U8P_FIRESHLD",
   "behavior_summary": [
-    "U8P_FIRESHLD implements behavior for a Fire Shield item. Its primary visible behavior is to present the text 'fire shield ' when inspected (U8P_FIRESHLD::look event).",
-    "When the item is damaged (gotHit event) it ignores null attackers, determines attacker direction (uses NPC facing for NPC attackers or computes direction-to-attacker otherwise), maps that direction into two small byte parameters, plays a fixed impact sound, and—if the item's type/flags match expected values—allocates/prepares a resource and launches a hurl/throw process (Item::hurl) to fling either the item or a spawned object toward the attacker.",
-    "The gotHit handler contains a retry/cleanup loop that waits until a related process type (Kernel::getNumProcesses(0x0203, attackerId)) appears; if no process exists it calls a cleanup/free (FREE::2A56) and retries before finally starting Item::hurl."
+    "This script implements the inspect ('U8P_FIRESHLD::look') description and a hit reaction for the Fire Shield item.",
+    "U8P_FIRESHLD::look is a simple process that presents the short label 'fire shield' when the player examines the item.",
+    "U8P_FIRESHLD::gotHit is a process invoked when the shield is struck: it identifies the source (NPC vs non‑NPC), computes the direction from shield to source, maps that direction to two numeric parameters (likely velocity/flag values), plays an impact sound, may apply a small randomized 'receive hit' effect, optionally resets a related process reference for the source, then launches (hurls) the source away using Item::hurl."
   ],
   "notable_control_flow": [
-    "U8P_FIRESHLD::look (Event 0): set process info/exclusion state for the item, call Item::bark(self, \"fire shield \") to show the label, free the string resources, then imply/suspend/return.",
-    "U8P_FIRESHLD::gotHit (Event 6): immediate return if attackerId == 0.",
-    "Direction resolution: if Item::isNpc(attackerId) is true then call Npc::getDir(attackerRef) else call Item::getDirToItem(self, attackerId). Store resolved direction (BP-02) and map via a branch table into two byte parameters (BP-04, BP-06) that drive the hurl.",
-    "Play SFX (playSFX(0x0064, 0x24)) unconditionally on hit before spawn checks.",
-    "Type/flag gating: call Item::getType(self) and test against constant/mask (observed constants 0x0105 and mask 0x60). Only when those checks pass does the script perform allocation (FREE::1A96) and proceed to spawn/hurl logic.",
-    "Spawn preparation includes METHOD::0080 and a loop that calls Kernel::getNumProcesses(0x0203, attackerId); if the count is zero it calls FREE::2A56 and retries until a process exists, then starts process Item::hurl with computed parameters and attackerId, then imply/suspend/return."
+    "U8P_FIRESHLD::gotHit branches on whether param1 refers to an NPC (Item::isNpc). NPCs use Npc::getDir to obtain direction; non‑NPCs use Item::getDirToItem.",
+    "The computed direction (local1) is compared against constants 0..7 and mapped to a pair of numeric values (local2, local3) which are passed to Item::hurl to control knockback/hurl behavior.",
+    "An impact sound is played unconditionally when a nonzero attacker/source is present (playSFX).",
+    "For most source item types the code calls METHOD::receiveHitWrapper with a small randomized magnitude (FREE::randomInRange) before hurling; some item types (checked via Item::getType against constants like 0x0105 and 0x0060) are exempted.",
+    "Before hurling the source, Kernel::getNumProcesses is consulted for a process type tied to the source; if present, FREE::resetRef is called to clear that reference, then Item::hurl is invoked and the process suspends/waits for the hurl to complete."
   ],
   "open_questions": [
-    "Exact semantics of BP-04 and BP-06: they are mapped from direction and are likely velocity/trajectory or sprite/animation parameters for the hurl, but their precise meaning is inferred.",
-    "Precise role of FREE::1A96 and METHOD::0080: they appear to allocate/configure a spawnable resource or object but implementation details are not present.",
-    "Meaning of the Item::getType tests (constants 0x0105 and mask 0x60): what exact item flags/types are being tested and which item variants are allowed to spawn/hurl.",
-    "What specific object is created/launched by the allocation/Item::hurl sequence (the item itself, a missile, an effect?) is inferred but not confirmed.",
-    "Why Kernel::getNumProcesses is used as a gate (what process type 0x0203 represents) and whether the wait loop has side effects on gameplay timing."
+    "Exact encoding/meaning of the numeric hurl parameters (local2 and local3) passed to Item::hurl and how each literal value affects motion/flags.",
+    "Concrete semantics and use cases for the second parameter of U8P_FIRESHLD::gotHit (param2) — the provided excerpt does not use it.",
+    "Precise item types represented by the numeric constants (e.g., 0x0105, 0x0060) and why those types are excluded from receiveHitWrapper.",
+    "Whether U8P_FIRESHLD::gotHit is invoked directly by the engine on collision events or by another external process (call site not present in this fragment)."
   ],
   "main_function": {
     "name": "U8P_FIRESHLD::look",
     "execution_form": "process",
-    "purpose": "Handle the item's 'U8P_FIRESHLD::look' (examine) event: set processing state and emit the human-facing label 'fire shield ' via Item::bark, then suspend/return.",
+    "purpose": "Present the item's short description when the player inspects the Fire Shield.",
     "entry_conditions": [
-      "Event 0 (player/actor inspects or 'looks' at the Fire Shield item or enters its U8P_FIRESHLD::look trigger region)."
+      "Invoked by the engine when the player 'looks at' or examines the Fire Shield (object U8P_FIRESHLD::look/examine action)."
     ],
     "confidence": "high"
   },
@@ -35,149 +33,137 @@
     {
       "name": "U8P_FIRESHLD::look",
       "kind": "main",
-      "role": "Examine/description handler that displays the item's label and sets item/process info state.",
+      "role": "Provide short description/inspect handler for the Fire Shield",
       "confidence": "high"
     },
     {
       "name": "U8P_FIRESHLD::gotHit",
       "kind": "helper",
-      "role": "Damage-response handler: compute attacker direction, play SFX, conditionally allocate/configure and start an Item::hurl process to throw/spawn toward attacker.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Emit/display an item-centered text string to a viewer (used by U8P_FIRESHLD::look).",
+      "role": "Handle collision/hit events: determine source direction, apply optional hit effect, and hurl the source away",
       "confidence": "high"
     },
     {
       "name": "Item::isNpc",
       "kind": "extern",
-      "role": "Test whether an item id refers to an NPC (used to choose direction resolution).",
+      "role": "Query whether a selector/id refers to an NPC (used to choose direction lookup)",
       "confidence": "high"
     },
     {
       "name": "Npc::getDir",
       "kind": "extern",
-      "role": "Return an NPC's facing direction (used as direction if attacker is an NPC).",
+      "role": "Return NPC facing/direction (used to compute relative hit direction)",
       "confidence": "high"
     },
     {
       "name": "Item::getDirToItem",
       "kind": "extern",
-      "role": "Compute direction from this item to a target item/actor id (used if attacker is not an NPC and later in spawn setup).",
+      "role": "Compute direction from the shield to another item (used for non‑NPC sources and for receiveHitWrapper)",
       "confidence": "high"
     },
     {
       "name": "Item::getType",
       "kind": "extern",
-      "role": "Return item type/flags for gating spawn/hurl behavior.",
-      "confidence": "high"
-    },
-    {
-      "name": "process Item::hurl",
-      "kind": "extern",
-      "role": "Process invoked to hurl/throw an item/spawned object using computed direction/params.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_FIRESHLD::playSFX",
-      "kind": "extern",
-      "role": "Play a sound effect for hit/impact feedback.",
-      "confidence": "high"
-    },
-    {
-      "name": "FREE::1A96",
-      "kind": "extern",
-      "role": "Inferred allocator/creator used to allocate or prepare a resource/object for hurling.",
+      "role": "Return source item type (used to skip receiveHitWrapper for certain types)",
       "confidence": "medium"
     },
     {
-      "name": "METHOD::0080",
+      "name": "METHOD::receiveHitWrapper",
       "kind": "extern",
-      "role": "Inferred helper to finalize spawn/configuration after allocation and direction determination.",
+      "role": "Apply a hit/damage effect with a magnitude and direction (invoked conditionally before hurl)",
       "confidence": "medium"
+    },
+    {
+      "name": "FREE::randomInRange",
+      "kind": "extern",
+      "role": "Produce a small random magnitude used with receiveHitWrapper",
+      "confidence": "high"
     },
     {
       "name": "Kernel::getNumProcesses",
       "kind": "extern",
-      "role": "Query process counts (used as a gate to ensure a process of type 0x0203 for the attacker exists before launching hurl).",
+      "role": "Check for an existing process tied to the source (used to decide whether to reset a ref)",
+      "confidence": "medium"
+    },
+    {
+      "name": "FREE::resetRef",
+      "kind": "extern",
+      "role": "Reset/clear a process reference for the source when needed",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::hurl",
+      "kind": "extern",
+      "role": "Launch/hurl the source away from the shield using computed parameters",
       "confidence": "high"
     },
     {
-      "name": "FREE::2A56",
+      "name": "playSFX",
       "kind": "extern",
-      "role": "Inferred cleanup/free routine called when Kernel::getNumProcesses returns zero during retries.",
-      "confidence": "medium"
+      "role": "Play impact sound when the shield is hit",
+      "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_FIRESHLD::look",
-        "callee": "Item::bark",
-        "purpose": "Display the item label 'fire shield ' when the player inspects the item.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_FIRESHLD::gotHit",
         "callee": "Item::isNpc",
-        "purpose": "Decide whether to use NPC facing or compute direction-to-item.",
+        "purpose": "Decide whether param1 refers to an NPC so the script uses Npc::getDir vs Item::getDirToItem",
         "confidence": "high"
       },
       {
         "caller": "U8P_FIRESHLD::gotHit",
         "callee": "Npc::getDir",
-        "purpose": "If attacker is an NPC, obtain that NPC's facing direction to determine throw direction.",
+        "purpose": "Get NPC facing/direction (when source is an NPC) to compute knockback direction",
         "confidence": "high"
       },
       {
         "caller": "U8P_FIRESHLD::gotHit",
         "callee": "Item::getDirToItem",
-        "purpose": "If attacker is not an NPC (or for later spawn setup), compute direction from this item to attackerId.",
+        "purpose": "Compute direction from the shield to a non‑NPC source; used for direction mapping and passed into receiveHitWrapper",
         "confidence": "high"
       },
       {
         "caller": "U8P_FIRESHLD::gotHit",
-        "callee": "U8P_FIRESHLD::playSFX",
-        "purpose": "Play a hit/impact sound effect (observed args 0x0064, 0x24) when the item is hit.",
+        "callee": "playSFX",
+        "purpose": "Play an impact sound effect for the hit",
         "confidence": "high"
       },
       {
         "caller": "U8P_FIRESHLD::gotHit",
         "callee": "Item::getType",
-        "purpose": "Read item type/flags to decide whether to spawn/launch an object on hit (gating condition).",
+        "purpose": "Check source type and skip receiveHitWrapper for specific types",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FIRESHLD::gotHit",
+        "callee": "METHOD::receiveHitWrapper",
+        "purpose": "Apply a small randomized hit effect to target(s) before hurling",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FIRESHLD::gotHit",
+        "callee": "FREE::randomInRange",
+        "purpose": "Generate the random magnitude passed to receiveHitWrapper",
         "confidence": "high"
-      },
-      {
-        "caller": "U8P_FIRESHLD::gotHit",
-        "callee": "FREE::1A96",
-        "purpose": "Allocate or create a resource/object used for the subsequent hurl/spawn operation.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_FIRESHLD::gotHit",
-        "callee": "METHOD::0080",
-        "purpose": "Finalize configuration/position relative to direction/self for the spawned object (inferred).",
-        "confidence": "medium"
       },
       {
         "caller": "U8P_FIRESHLD::gotHit",
         "callee": "Kernel::getNumProcesses",
-        "purpose": "Wait/check for presence of processes of type 0x0203 owned by attackerId before proceeding; used as a gate/coordination point.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FIRESHLD::gotHit",
-        "callee": "FREE::2A56",
-        "purpose": "Cleanup/free called when Kernel::getNumProcesses indicates no required process exists (part of retry loop).",
+        "purpose": "Check for a related process for the source so the script can reset references if necessary",
         "confidence": "medium"
       },
       {
         "caller": "U8P_FIRESHLD::gotHit",
-        "callee": "process Item::hurl",
-        "purpose": "Start the hurl process with parameters derived from direction mapping and attackerId to throw/spawn toward the attacker.",
+        "callee": "FREE::resetRef",
+        "purpose": "Clear a stored process reference for the source before hurling it",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FIRESHLD::gotHit",
+        "callee": "Item::hurl",
+        "purpose": "Launch/hurl the source away using computed numeric parameters (local3, local2) and then suspend while the hurl/process runs",
         "confidence": "high"
       }
     ]
@@ -194,8 +180,8 @@
   ],
   "quick_facts": {
     "main_function": "U8P_FIRESHLD::look",
-    "behavior_summary_one_liner": "U8P_FIRESHLD implements behavior for a Fire Shield item. Its primary visible behavior is to present the text 'fire shield ' when inspected (U8P_FIRESHLD::look event).",
-    "external_call_count": 11,
+    "behavior_summary_one_liner": "This script implements the inspect ('U8P_FIRESHLD::look') description and a hit reaction for the Fire Shield item.",
+    "external_call_count": 10,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

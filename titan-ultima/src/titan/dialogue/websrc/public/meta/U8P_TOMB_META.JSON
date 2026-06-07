@@ -3,29 +3,31 @@
   "source_of_truth": "dialogue/json/U8P_TOMB.json",
   "file": "U8P_TOMB",
   "behavior_summary": [
-    "Implements a one-time 'tomb ambush' triggered when the player enters the tomb's fast-area: it marks the tomb as encountered (sets global flag metKhumash), freezes the avatar, issues a tomb-guardian announcement, recenters the camera, spawns hostile NPC(s) at/around the tomb, forces them into combat and targets the avatar, then unfreezes the avatar.",
-    "Designed to run only once for the Khumash tomb: subsequent entries are ignored via the metKhumash guard.",
-    "Uses temporary locals to reference the triggering item/region (to read X/Y/Z and to bark) and to hold created NPC handles while initializing their hostility and combat targeting."
+    "U8P_TOMB::hatch is a process that runs when the tomb/U8P_TOMB::hatch trigger is activated and handles a first-time scripted encounter where disturbing the tomb spawns a hostile guardian.",
+    "The routine gates the sequence by a persistent flag (metKhumash) so the cinematic/ambush only occurs the first time.",
+    "During the sequence the avatar is suspended (frozen), the camera is moved to focus on the U8P_TOMB::hatch, a warning bark is played, then an NPC (tomb guardian) is created, placed at/near the U8P_TOMB::hatch, marked hostile, forced into combat, and assigned the avatar as its target.",
+    "After setup the avatar is unfrozen and camera re-centering is restored; the metKhumash flag is set to prevent repetition."
   ],
   "notable_control_flow": [
-    "Entry guard: checks global flag metKhumash; if nonzero the handler returns immediately (prevents re-triggering).",
-    "Frozen window: setAvatarInStasis(1) is called to suspend player control while announcement/spawn sequence runs, and setAvatarInStasis(0) unfreezes afterwards.",
-    "Sequenced actions: read tomb item coordinates (Item::getX/Y/Z), spawn auxiliary processes/effects, call Item::bark to display the warning, Camera::setCenterOn to recenter view, then loop to create/pop/initialize NPC(s).",
-    "Per-NPC initialization: Npc::create -> Item::pop (place in world) -> Npc::setEnemyAlignment -> Npc::setInCombat -> Npc::setTarget (avatar)."
+    "Entry is a trigger-based process (process type 0x0210) — likely invoked on fast-area/trigger entry for the U8P_TOMB::hatch region.",
+    "Early conditional: proceed only when metKhumash == 0 (first disturbance).",
+    "Set metKhumash = 1 before spawning to mark the encounter as seen.",
+    "Sequence uses suspend/spawn/pid timing helpers to orchestrate a short camera/cinematic and delay the spawn until after the bark/animation.",
+    "Spawn/create NPC and immediately configure it (alignment, in-combat state, target) so the ambush begins as control is returned to the player."
   ],
   "open_questions": [
-    "Exact NPC type id(s) and how many NPCs are spawned each time (script loops but counts/types are inferred).",
-    "Precise spawn offsets/placement logic relative to the tomb item coordinates (exact displacement vectors are not explicit).",
-    "The exact text content of the bark and whether multiple different barks or timing variations are used by the spawned FREE::* processes.",
-    "Whether additional side-effects (loot, quest state beyond metKhumash) occur from spawned NPCs or other engine signals not visible in the disassembly."
+    "Exact trigger event name: the code implies a fast-area/trigger entry (enterFastArea) but that is inferred rather than explicit.",
+    "What precisely FREE::func1C8B does (timing helper, animation, or other) — its role is uncertain and likely related to camera/timing.",
+    "Precise numeric meaning of the spawn/pop offset (the code uses an X+0x00C8 offset) and why that offset is chosen.",
+    "Whether any additional logic (e.g., respawn conditions or persistence beyond metKhumash) exists elsewhere in game scripts affecting this encounter."
   ],
   "main_function": {
     "name": "U8P_TOMB::hatch",
     "execution_form": "process",
-    "purpose": "One-time tomb-guardian ambush triggered on fast-area entry: freeze player, announce guardian, spawn hostile NPC(s) at the tomb, force combat targeting the avatar, and record that the tomb was encountered to prevent repetition.",
+    "purpose": "Handle the first-time disturbance of the Khumash-Gor tomb: play a short cinematic (freeze avatar, focus camera, bark), mark the tomb as encountered, spawn a hostile tomb guardian at the U8P_TOMB::hatch, force it into combat and target the avatar, then restore normal control.",
     "entry_conditions": [
-      "enterFastArea event for the tomb trigger region (fast-area event)",
-      "global flag metKhumash == 0 (only proceed if the event has not already occurred)"
+      "Invoked by the U8P_TOMB::hatch/tomb process trigger (process type 0x0210) — likely a fast-area/trigger region activation.",
+      "Only executes the ambush branch when global flag metKhumash == 0 (first time the player disturbs the tomb)."
     ],
     "confidence": "high"
   },
@@ -33,79 +35,79 @@
     {
       "name": "U8P_TOMB::hatch",
       "kind": "main",
-      "role": "Enter-fast-area handler that runs the tomb ambush sequence and sets metKhumash to prevent repeats.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_TOMB::setAvatarInStasis",
-      "kind": "extern",
-      "role": "Freeze/unfreeze avatar during the announcement/spawn sequence.",
+      "role": "first-time tomb encounter handler (camera sequence, bark, spawn hostile NPC, set target)",
       "confidence": "high"
     },
     {
       "name": "Item::getX",
       "kind": "extern",
-      "role": "Read X coordinate of the tomb item/trigger to position spawned NPC(s).",
+      "role": "engine API used to read an item's X coordinate for camera/spawn placement",
       "confidence": "high"
     },
     {
       "name": "Item::getY",
       "kind": "extern",
-      "role": "Read Y coordinate of the tomb item/trigger to position spawned NPC(s).",
+      "role": "engine API used to read an item's Y coordinate for camera/spawn placement",
       "confidence": "high"
     },
     {
       "name": "Item::getZ",
       "kind": "extern",
-      "role": "Read Z layer of the tomb item/trigger to position spawned NPC(s).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Display the tomb guardian announcement/warning message during the ambush.",
-      "confidence": "high"
-    },
-    {
-      "name": "Camera::setCenterOn",
-      "kind": "extern",
-      "role": "Recenters the camera (e.g., on the avatar) during the announcement/spawn sequence.",
+      "role": "engine API used to read an item's Z coordinate for camera/spawn placement",
       "confidence": "high"
     },
     {
       "name": "Npc::create",
       "kind": "extern",
-      "role": "Create NPC instance(s) prior to placement in the world.",
-      "confidence": "high"
+      "role": "engine API to instantiate/create an NPC of a given type (returns reference into a local)",
+      "confidence": "medium"
     },
     {
       "name": "Item::pop",
       "kind": "extern",
-      "role": "Place/pop the created NPC into the world at computed coordinates.",
-      "confidence": "high"
+      "role": "engine API to spawn/pop the prepared NPC entity into the world at computed coordinates",
+      "confidence": "medium"
     },
     {
       "name": "Npc::setEnemyAlignment",
       "kind": "extern",
-      "role": "Make spawned NPC hostile to the avatar.",
-      "confidence": "high"
+      "role": "set NPC attitude/alignment to hostile so it will engage the player",
+      "confidence": "medium"
     },
     {
       "name": "Npc::setInCombat",
       "kind": "extern",
-      "role": "Activate combat behavior for spawned NPCs immediately.",
-      "confidence": "high"
+      "role": "put NPC into combat state immediately",
+      "confidence": "medium"
     },
     {
       "name": "Npc::setTarget",
       "kind": "extern",
-      "role": "Assign the avatar as the combat target for spawned NPCs.",
+      "role": "assign the avatar as the NPC's target so it attacks the player",
+      "confidence": "medium"
+    },
+    {
+      "name": "setAvatarInStasis",
+      "kind": "extern",
+      "role": "engine call to freeze/unfreeze player input during scripted sequences",
       "confidence": "high"
     },
     {
-      "name": "spawn (FREE::1C6D / FREE::1C8B)",
+      "name": "FREE::cameraFollowAvatar (spawned)",
       "kind": "extern",
-      "role": "Spawn auxiliary processes/effects used around the bark/animation sequence (likely visual/timing helpers).",
+      "role": "spawned helper used to move/aim camera to the U8P_TOMB::hatch coordinates for the cinematic",
+      "confidence": "medium"
+    },
+    {
+      "name": "FREE::func1C8B (spawned)",
+      "kind": "extern",
+      "role": "auxiliary spawned helper (likely timing/animation-related); exact purpose uncertain",
+      "confidence": "low"
+    },
+    {
+      "name": "Camera::setCenterOn",
+      "kind": "extern",
+      "role": "restore camera centering (likely back to avatar) after the cinematic",
       "confidence": "medium"
     }
   ],
@@ -114,81 +116,75 @@
     "external_calls": [
       {
         "caller": "U8P_TOMB::hatch",
-        "callee": "U8P_TOMB::setAvatarInStasis",
-        "purpose": "Freeze the avatar at start (arg=1) and unfreeze at end (arg=0) to control player input during the sequence.",
+        "callee": "setAvatarInStasis",
+        "purpose": "Freeze the avatar at the start of the cinematic (param 0x01) and unfreeze at the end (param 0x00).",
         "confidence": "high"
       },
       {
         "caller": "U8P_TOMB::hatch",
         "callee": "Item::getX",
-        "purpose": "Read the tomb item's X coordinate to determine NPC spawn placement.",
+        "purpose": "Read U8P_TOMB::hatch X coordinate to position camera and compute NPC spawn X (+ offset).",
         "confidence": "high"
       },
       {
         "caller": "U8P_TOMB::hatch",
         "callee": "Item::getY",
-        "purpose": "Read the tomb item's Y coordinate to determine NPC spawn placement.",
+        "purpose": "Read U8P_TOMB::hatch Y coordinate for camera/spawn placement.",
         "confidence": "high"
       },
       {
         "caller": "U8P_TOMB::hatch",
         "callee": "Item::getZ",
-        "purpose": "Read the tomb item's Z layer to determine spawn layer for NPCs/effects.",
+        "purpose": "Read U8P_TOMB::hatch Z coordinate for spawn placement.",
         "confidence": "high"
       },
       {
         "caller": "U8P_TOMB::hatch",
-        "callee": "spawn (FREE::1C6D)",
-        "purpose": "Start an auxiliary process/effect used during the bark/announcement or to provide timing.",
+        "callee": "spawn ->FREE::cameraFollowAvatar",
+        "purpose": "Start a spawned routine to focus/move the camera to the U8P_TOMB::hatch for the short cinematic.",
         "confidence": "medium"
       },
       {
         "caller": "U8P_TOMB::hatch",
-        "callee": "spawn (FREE::1C8B)",
-        "purpose": "Start another auxiliary process/effect used during the bark/announcement or to provide timing.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_TOMB::hatch",
-        "callee": "Item::bark",
-        "purpose": "Cause the tomb item to emit a guardian/warning message to the player as part of the ambush announcement.",
-        "confidence": "high"
+        "callee": "spawn ->FREE::func1C8B",
+        "purpose": "Spawned auxiliary function used during the sequence, likely for timing/delay; exact effect uncertain.",
+        "confidence": "low"
       },
       {
         "caller": "U8P_TOMB::hatch",
         "callee": "Camera::setCenterOn",
-        "purpose": "Recenter the game camera (likely on the avatar) during or immediately after the announcement.",
-        "confidence": "high"
+        "purpose": "Recenter camera (argument 0x01 likely means center on avatar) after cinematic completes.",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_TOMB::hatch",
         "callee": "Npc::create",
-        "purpose": "Instantiate NPC object(s) that function as tomb guardians.",
-        "confidence": "high"
+        "purpose": "Create an instance of the tomb-guardian NPC (type id 0x019B) and store its reference into local2.",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_TOMB::hatch",
         "callee": "Item::pop",
-        "purpose": "Place the newly created NPC instance(s) into the world at the computed tomb-adjacent coordinates.",
-        "confidence": "high"
+        "purpose": "Place/pop the created NPC into the world at coordinates derived from the U8P_TOMB::hatch (Z,Y,X+offset).",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_TOMB::hatch",
         "callee": "Npc::setEnemyAlignment",
-        "purpose": "Set spawned NPC(s) to hostile alignment so they attack the avatar.",
-        "confidence": "high"
+        "purpose": "Mark the spawned NPC as hostile (alignment 0x20) so it treats the player as an enemy.",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_TOMB::hatch",
         "callee": "Npc::setInCombat",
-        "purpose": "Flag spawned NPC(s) as in combat to activate combat AI immediately.",
-        "confidence": "high"
+        "purpose": "Put the spawned NPC into active combat state immediately after spawning.",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_TOMB::hatch",
         "callee": "Npc::setTarget",
-        "purpose": "Set the avatar as the combat target for spawned NPC(s).",
-        "confidence": "high"
+        "purpose": "Assign the avatar (target id 0x01) as the NPC's combat target so it will attack the player.",
+        "confidence": "medium"
       }
     ]
   },
@@ -196,14 +192,14 @@
     "reads": [
       {
         "name": "metKhumash",
-        "likely_effect": "Acts as a one-time-run guard: the script checks this flag and skips the U8P_TOMB::hatch sequence if it is nonzero.",
+        "likely_effect": "Read to check whether the player has already disturbed Khumash-Gor; proceeds only if 0 (not met).",
         "confidence": "high"
       }
     ],
     "writes": [
       {
         "name": "metKhumash",
-        "likely_effect": "Set to 1 to record that the tomb ambush has occurred and to prevent future triggers.",
+        "likely_effect": "Set to 1 to record that the player has encountered the tomb so the cinematic/ambush does not repeat.",
         "confidence": "high"
       }
     ]
@@ -215,9 +211,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "TOMB::hatch",
-    "behavior_summary_one_liner": "Implements a one-time 'tomb ambush' triggered when the player enters the tomb's fast-area: it marks the tomb as encountered (sets global flag metKhumash), freezes the avatar, issues a tomb-guardian announcement, recenters the camera, spawns hostile NPC(s) at/around the tomb, forces them into combat and targets the avatar, then unfreezes the avatar.",
-    "external_call_count": 13,
+    "main_function": "U8P_TOMB::hatch",
+    "behavior_summary_one_liner": "U8P_TOMB::hatch is a process that runs when the tomb/U8P_TOMB::hatch trigger is activated and handles a first-time scripted encounter where disturbing the tomb spawns a hostile guardian.",
+    "external_call_count": 12,
     "flag_read_count": 1,
     "flag_write_count": 1
   },

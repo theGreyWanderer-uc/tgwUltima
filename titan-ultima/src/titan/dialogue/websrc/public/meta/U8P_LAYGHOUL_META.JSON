@@ -3,25 +3,23 @@
   "source_of_truth": "dialogue/json/U8P_LAYGHOUL.json",
   "file": "U8P_LAYGHOUL",
   "behavior_summary": [
-    "U8P_LAYGHOUL::look runs when an actor (typically the player) 'looks at' or examines a ghoul. The script causes the ghoul to emit a short bark containing the literal text \"ghoul \".",
-    "At runtime the handler allocates/creates the literal string, sets per-process/process-info state (inferred from opcodes like 'set info' and 'process exclude'), pushes the viewer/process id and the string, invokes Item::bark on the ghoul object (the BP+06h parameter is used as the call receiver), frees the string, processes the bark return value with an 'implies' operation, then returns/suspends."
+    "When the player inspects/looks at this NPC (the 'U8P_LAYGHOUL::look' process), the NPC emits a single short bark: \"ghoul\" and then the process suspends/ends. This is a minimal, purely descriptive response with no branching or state changes.",
+    "No global flags are read or written, and there are no menu interactions, conditionals, or external calls in the canonical process."
   ],
   "notable_control_flow": [
-    "Entry on a 'U8P_LAYGHOUL::look' trigger → prepare string literal \"ghoul \" → set process/info-related flags (inferred) → push pid and string → call external Item::bark on the ghoul instance → free allocated string → push/consume return value with an 'implies' opcode → pop temporary and suspend/return.",
-    "There is no modification of global flags observed in this script fragment.",
-    "Several engine-level opcodes (set info, process exclude, implies) are present; their exact game-state semantics are inferred from pattern and are not fully canonical."
+    "Single linear path: entry -> emit Bark(\"ghoul\") -> suspend/terminate the process.",
+    "There are two low-confidence Unknown nodes in the raw which do not appear to affect gameplay logic; they likely correspond to decompiler remnants (opening block and suspend marker)."
   ],
   "open_questions": [
-    "Precise semantics of the 'set info' and 'process exclude' opcodes in this context — what exact per-object/process state is being modified and why?",
-    "Who exactly receives the bark? The pid pushed before the string suggests a target process/viewer, but the exact delivery rules of Item::bark (viewer-only vs. broadcast) are not shown here.",
-    "Meaning and effect of the 'implies' opcode on the return value from Item::bark — is this controlling conditional flow, event cancellation, or merely bookkeeping?"
+    "Are the Unknown nodes carrying any hidden side effects or context-specific behavior (inferred low confidence)?",
+    "Is this U8P_LAYGHOUL::look handler attached to a specific actor subtype or shared by multiple similar NPCs (inferred low confidence)?"
   ],
   "main_function": {
     "name": "U8P_LAYGHOUL::look",
     "execution_form": "process",
-    "purpose": "Respond to the 'U8P_LAYGHOUL::look' event on a ghoul by making that ghoul produce the text utterance \"ghoul \".",
+    "purpose": "Provide a short descriptive response when the player examines or 'looks' at the NPC; specifically emit the bark \"ghoul\" and then suspend/end the U8P_LAYGHOUL::look process.",
     "entry_conditions": [
-      "Event 0 (U8P_LAYGHOUL::look) — invoked when the Avatar or another relevant actor looks at / examines the ghoul (enters the item's interaction region)."
+      "Triggered by the engine when the player performs a 'U8P_LAYGHOUL::look' or inspect action on the NPC (process type 0x0208, classification 'U8P_LAYGHOUL::look')."
     ],
     "confidence": "high"
   },
@@ -29,20 +27,13 @@
     {
       "name": "U8P_LAYGHOUL::look",
       "kind": "main",
-      "role": "Handle the 'U8P_LAYGHOUL::look' (examine) event for a ghoul object; cause it to emit a brief descriptive utterance.",
+      "role": "Handle U8P_LAYGHOUL::look/examine events: emit a single bark ('ghoul') and suspend the U8P_LAYGHOUL::look process.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_LAYGHOUL::look",
-        "callee": "Item::bark",
-        "purpose": "Ask the ghoul item/process to display/emit the provided text (\"ghoul \") to the pushed target process/viewer; this implements the visible/audio feedback for examining the ghoul.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -50,14 +41,13 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "animation",
-    "guard"
+    "description",
+    "suspend"
   ],
   "quick_facts": {
     "main_function": "U8P_LAYGHOUL::look",
-    "behavior_summary_one_liner": "U8P_LAYGHOUL::look runs when an actor (typically the player) 'looks at' or examines a ghoul. The script causes the ghoul to emit a short bark containing the literal text \"ghoul \".",
-    "external_call_count": 1,
+    "behavior_summary_one_liner": "When the player inspects/looks at this NPC (the 'U8P_LAYGHOUL::look' process), the NPC emits a single short bark: \"ghoul\" and then the process suspends/ends. This is a minimal, purely descriptive response with no branching or state changes.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

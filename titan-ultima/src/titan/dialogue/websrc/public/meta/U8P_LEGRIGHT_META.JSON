@@ -3,27 +3,27 @@
   "source_of_truth": "dialogue/json/U8P_LEGRIGHT.json",
   "file": "U8P_LEGRIGHT",
   "behavior_summary": [
-    "This script implements game logic for the right-leg body-part item/process. It supports being 'used' (attached/added) and responding to being 'hit' (removed/converted to a replacement visual/process).",
-    "U8P_LEGRIGHT::use marks the target object with an info key (0x0207), excludes it from some processing list, and spawns a BODYPART process (ID 0x0270) attached to that object — effectively adding/attaching the right-leg part.",
-    "U8P_LEGRIGHT::hit marks the object with a different info key (0x020B), excludes it, invokes a cleanup/free routine (FREE::2A56 with info id 0x0202), then queries how many processes of type 0x020A remain on the object. If none remain, it spawns a different BODYPART (ID 0x0431) — likely a detached or replacement visual."
+    "U8P_LEGRIGHT defines two process handlers for an NPC-like entity: U8P_LEGRIGHT::use (main) and U8P_LEGRIGHT::hit (helper).",
+    "U8P_LEGRIGHT::use is invoked when the entity is 'used' and unconditionally spawns a BODYPART helper process (BODYPART::func0270), capturing the spawn handle into a local (temp). This likely starts a visual or behavior sub-process tied to the entity.",
+    "U8P_LEGRIGHT::hit runs when the entity is U8P_LEGRIGHT::hit: it calls FREE::resetRef(0x0202, this) to clear an internal reference, then queries Kernel::getNumProcesses(0x020A, this). If no processes of that type exist, it spawns a BODYPART helper (BODYPART::func0431). This prevents duplicate U8P_LEGRIGHT::hit-reaction helpers from being created."
   ],
   "notable_control_flow": [
-    "U8P_LEGRIGHT::use: set-info(0x0207) -> process-exclude -> spawn(BODYPART::0270, target, 0) -> store spawn retval -> return (confidence: high).",
-    "U8P_LEGRIGHT::hit: set-info(0x020B) -> process-exclude -> push info 0x0202 + call FREE::2A56(target) -> Kernel::getNumProcesses(target, ProcessType=0x020A) -> if retval == 0 then spawn(BODYPART::0431, target, 0) -> store spawn retval -> return (confidence: high).",
-    "Decisions in hit() are driven by Kernel::getNumProcesses result; spawning of 0x0431 only happens when the checked process-type count is zero (confidence: high)."
+    "U8P_LEGRIGHT::use: unconditional execution path — spawn BODYPART::func0270 and store handle in local 'temp'.",
+    "U8P_LEGRIGHT::hit: linear sequence — FREE::resetRef(0x0202, this) -> check Kernel::getNumProcesses(0x020A, this) -> if zero then spawn BODYPART::func0431; otherwise skip spawn."
   ],
   "open_questions": [
-    "Exact semantic meaning of info IDs 0x0207, 0x020B and 0x0202 (they are inferred metadata/state keys but their gameplay semantics are unknown).",
-    "Precise effect and rules of 'process exclude' in this engine variant (what behaviors/processing are prevented).",
-    "What entity/process type is represented by process type 0x020A (which Kernel::getNumProcesses queries) and how it relates to body-part lifecycle.",
-    "Exact behavior of FREE::2A56 — inferred as cleanup/freeing but its side effects and whether it modifies other global state are uncertain."
+    "Exact runtime effects and visuals produced by BODYPART::func0270 and BODYPART::func0431 are not present in the excerpt — what animations/effects do these helper processes perform?",
+    "What semantic role does reference slot 0x0202 represent (what state is being reset by FREE::resetRef)?",
+    "Why Kernel::getNumProcesses checks for process type 0x020A specifically (what class of helper/process is 0x020A)?",
+    "Are the U8P_LEGRIGHT::hit parameters (uword, word) used elsewhere in a broader script context (they are present in the signature but not used in the shown nodes)?"
   ],
   "main_function": {
     "name": "U8P_LEGRIGHT::use",
     "execution_form": "process",
-    "purpose": "Handle the 'U8P_LEGRIGHT::use' activation of the right-leg item: set item/process state and attach the right-leg body-part process (BODYPART::0270) to the target object.",
+    "purpose": "Start a BODYPART helper process when the entity is activated (likely to trigger a visual/behavior effect tied to 'U8P_LEGRIGHT::use').",
     "entry_conditions": [
-      "Event 1 (U8P_LEGRIGHT::use) invoked when the LEGRIGHT object is used/activated by an actor or script."
+      "Invoked by the engine when the NPC/entity is 'used' or activated (process type 0x0207).",
+      "No in-function conditional gating — spawn happens unconditionally on entry."
     ],
     "confidence": "high"
   },
@@ -31,49 +31,13 @@
     {
       "name": "U8P_LEGRIGHT::use",
       "kind": "main",
-      "role": "Attach right-leg body-part to a target object (set info, exclude, spawn BODYPART::0270).",
+      "role": "Activation handler — spawn a BODYPART helper process to produce a U8P_LEGRIGHT::use-linked behavior/effect.",
       "confidence": "high"
     },
     {
       "name": "U8P_LEGRIGHT::hit",
       "kind": "helper",
-      "role": "Respond to hits on the right-leg: mark/exclude, perform cleanup, check remaining related processes, and spawn replacement/detached body-part (BODYPART::0431) if appropriate.",
-      "confidence": "high"
-    },
-    {
-      "name": "spawn (BODYPART::0270)",
-      "kind": "extern",
-      "role": "Engine call to create/attach BODYPART process ID 0x0270 to the target (used by U8P_LEGRIGHT::use()).",
-      "confidence": "high"
-    },
-    {
-      "name": "spawn (BODYPART::0431)",
-      "kind": "extern",
-      "role": "Engine call to create/attach BODYPART process ID 0x0431 to the target (used by hit() when no other processes remain).",
-      "confidence": "high"
-    },
-    {
-      "name": "FREE::2A56",
-      "kind": "extern",
-      "role": "Cleanup/free routine invoked during hit(); appears to perform deallocation or state cleanup for the object/process (inferred).",
-      "confidence": "medium"
-    },
-    {
-      "name": "Kernel::getNumProcesses",
-      "kind": "extern",
-      "role": "Query the number of active processes of a given ProcessType on the target object; used to decide whether to spawn 0x0431 in hit().",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_LEGRIGHT::set info",
-      "kind": "extern",
-      "role": "Engine instruction to set metadata/state info on the target object (IDs 0x0207 in U8P_LEGRIGHT::use(), 0x020B and 0x0202 in hit()).",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_LEGRIGHT::process exclude",
-      "kind": "extern",
-      "role": "Engine instruction to exclude/mark the process or object from further normal processing; used in both U8P_LEGRIGHT::use() and hit().",
+      "role": "Hit reaction handler — reset an internal reference and conditionally spawn a BODYPART U8P_LEGRIGHT::hit helper to avoid duplicates.",
       "confidence": "high"
     }
   ],
@@ -82,50 +46,26 @@
     "external_calls": [
       {
         "caller": "U8P_LEGRIGHT::use",
-        "callee": "U8P_LEGRIGHT::set info",
-        "purpose": "Set info id 0x0207 on the target object before attaching the body part (marking state).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LEGRIGHT::use",
-        "callee": "U8P_LEGRIGHT::process exclude",
-        "purpose": "Exclude the process/object from some processing list after setting info (likely to prevent duplicate handling).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LEGRIGHT::use",
-        "callee": "spawn (BODYPART::0270)",
-        "purpose": "Attach/create the right-leg body-part process (ID 0x0270) on the target object; spawn return value stored locally.",
+        "callee": "spawn ->BODYPART::func0270",
+        "purpose": "Launch a BODYPART helper/process when the entity is used; return value stored in local 'temp' (likely a handle).",
         "confidence": "high"
       },
       {
         "caller": "U8P_LEGRIGHT::hit",
-        "callee": "U8P_LEGRIGHT::set info",
-        "purpose": "Set info id 0x020B on the target object to record being hit/changed before cleanup.",
+        "callee": "FREE::resetRef",
+        "purpose": "Clear/reset an internal reference slot (id 0x0202) for this entity before handling U8P_LEGRIGHT::hit logic.",
         "confidence": "high"
-      },
-      {
-        "caller": "U8P_LEGRIGHT::hit",
-        "callee": "U8P_LEGRIGHT::process exclude",
-        "purpose": "Exclude the process/object after being hit to prevent further processing.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LEGRIGHT::hit",
-        "callee": "FREE::2A56",
-        "purpose": "Perform cleanup/freeing related to the object/process (passed info id 0x0202 and target) — inferred behavior.",
-        "confidence": "medium"
       },
       {
         "caller": "U8P_LEGRIGHT::hit",
         "callee": "Kernel::getNumProcesses",
-        "purpose": "Check how many processes of type 0x020A remain on the target to decide whether to spawn replacement/detached part.",
+        "purpose": "Query how many processes of type 0x020A are running for this entity; used as a guard to avoid spawning duplicate U8P_LEGRIGHT::hit helper processes.",
         "confidence": "high"
       },
       {
         "caller": "U8P_LEGRIGHT::hit",
-        "callee": "spawn (BODYPART::0431)",
-        "purpose": "If Kernel::getNumProcesses returns 0 for type 0x020A, spawn BODYPART::0431 (likely a detached visual or replacement).",
+        "callee": "spawn ->BODYPART::func0431",
+        "purpose": "Conditionally spawn a BODYPART helper/process to perform a U8P_LEGRIGHT::hit reaction/effect when no existing 0x020A processes are present.",
         "confidence": "high"
       }
     ]
@@ -137,13 +77,13 @@
   "ui_tags": [
     "trigger",
     "cleanup",
-    "visual",
-    "spawn"
+    "animation",
+    "guard"
   ],
   "quick_facts": {
     "main_function": "U8P_LEGRIGHT::use",
-    "behavior_summary_one_liner": "This script implements game logic for the right-leg body-part item/process. It supports being 'used' (attached/added) and responding to being 'hit' (removed/converted to a replacement visual/process).",
-    "external_call_count": 8,
+    "behavior_summary_one_liner": "U8P_LEGRIGHT defines two process handlers for an NPC-like entity: U8P_LEGRIGHT::use (main) and U8P_LEGRIGHT::hit (helper).",
+    "external_call_count": 4,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

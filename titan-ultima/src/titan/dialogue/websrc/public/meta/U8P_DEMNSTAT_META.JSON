@@ -3,27 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_DEMNSTAT.json",
   "file": "U8P_DEMNSTAT",
   "behavior_summary": [
-    "Handles the 'U8P_DEMNSTAT::look' (examine) event for the demon statue. When the player/actor looks at the statue the script marks the object with an item/info state (0x0208), applies a process-exclude operation to alter processing for that object/process, and asks the item/process to emit the short text \"demon statue \" (via Item::bark) so the description is presented to the player.",
-    "The routine uses the object pointer passed in (BP+06h) as the target of the set-info and the bark call, pushes the current pid as the context for the bark, frees the temporary string, and then completes by performing a small implies/pop sequence before suspending/returning."
+    "U8P_DEMNSTAT::look is a simple U8P_DEMNSTAT::look/inspect handler that displays a short descriptive text identifying the object as a 'demon statue'.",
+    "After emitting the single bark/text the process suspends, ending the U8P_DEMNSTAT::look interaction without modifying game state or calling external systems.",
+    "No menus, branching, flags, or external calls are present; the routine only provides a player-facing description when examined."
   ],
   "notable_control_flow": [
-    "Entry on Event 0 (U8P_DEMNSTAT::look) -> push info id 0x0208 and target object -> set info on object",
-    "Immediately follow with process-exclude opcode to change processing/delivery for the object/process",
-    "Allocate/push literal string \"demon statue \", push object pointer (BP+06h) and current pid, call Item::bark to present the string",
-    "Free temporary string, perform implies/pop on retval and then suspend/return"
+    "U8P_DEMNSTAT::look: emit bark 'demon statue ' -> suspend (end of process).",
+    "Execution is linear and unbranched; there are two unknown/decompiler remnants but they do not affect observable behavior."
   ],
   "open_questions": [
-    "Exact semantics and game meaning of item/info 0x0208 (appears to mark the object as examined or alter an inspect-related state) — confidence: medium",
-    "Precise effect scope of 'process exclude' here (appears to prevent further processing or re-triggering for this object/process) — confidence: medium",
-    "Whether Item::bark always displays text to the player or can also route text to other systems (inferred to be display/speak) — confidence: medium",
-    "Whether BP+06h is strictly the object PID for the statue in all call contexts or sometimes a different context pointer (inferred to be the statue PID) — confidence: high"
+    "Is the trailing space in the text 'demon statue ' intentional (formatting concatenation elsewhere) or an artifact?",
+    "Might there be other processes or handlers for this object (use/activate) defined in other files that extend behavior?",
+    "Are the two Unknown nodes in the function purely decompiler remnants or do they indicate a wrapper/block structure used by the engine?"
   ],
   "main_function": {
     "name": "U8P_DEMNSTAT::look",
     "execution_form": "process",
-    "purpose": "Respond to the player/actor looking at the demon statue: mark the object with an info/state flag, change its processing state, and emit a short description string to the viewer via Item::bark.",
+    "purpose": "Provide the short description shown to the player when the object is examined; then suspend/terminate the U8P_DEMNSTAT::look process.",
     "entry_conditions": [
-      "Event 0 (U8P_DEMNSTAT::look) — invoked when an actor looks at or examines the demon statue"
+      "Triggered by a player 'U8P_DEMNSTAT::look' or inspect action on the object (inferred from function classification 'U8P_DEMNSTAT::look').",
+      "May also run when the player or actor enters a U8P_DEMNSTAT::look-type fast-area trigger for this object (inferred)."
     ],
     "confidence": "high"
   },
@@ -31,48 +30,30 @@
     {
       "name": "U8P_DEMNSTAT::look",
       "kind": "main",
-      "role": "Handle the 'U8P_DEMNSTAT::look' event for the demon statue (set info, process-exclude, and call Item::bark to show description).",
+      "role": "Responds to U8P_DEMNSTAT::look/inspect events by showing a single descriptive bark ('demon statue ') and suspending.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_DEMNSTAT::look",
-        "callee": "Item::bark",
-        "purpose": "Request the item/process to emit/display the short text \"demon statue \" to the player/process context. Called with the literal string, the object pointer (BP+06h), and the current pid pushed as context.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
-    "writes": [
-      {
-        "name": "item/info 0x0208",
-        "likely_effect": "Marks the target object with a specific info/state bit (appears to record 'examined' or otherwise change object state relevant to future processing).",
-        "confidence": "medium"
-      },
-      {
-        "name": "process exclude (opcode)",
-        "likely_effect": "Excludes the calling object/process from normal processing or further event delivery (prevents repeated handling or further automatic processing).",
-        "confidence": "medium"
-      }
-    ]
+    "writes": []
   },
   "ui_tags": [
     "trigger",
-    "ui_message",
-    "process_control",
-    "cleanup"
+    "cleanup",
+    "animation",
+    "guard"
   ],
   "quick_facts": {
-    "main_function": "DEMNSTAT::look",
-    "behavior_summary_one_liner": "Handles the 'U8P_DEMNSTAT::look' (examine) event for the demon statue. When the player/actor looks at the statue the script marks the object with an item/info state (0x0208), applies a process-exclude operation to alter processing for that object/process, and asks the item/process to emit the short text \"demon statue \" (via Item::bark) so the description is presented to the player.",
-    "external_call_count": 1,
+    "main_function": "U8P_DEMNSTAT::look",
+    "behavior_summary_one_liner": "U8P_DEMNSTAT::look is a simple U8P_DEMNSTAT::look/inspect handler that displays a short descriptive text identifying the object as a 'demon statue'.",
+    "external_call_count": 0,
     "flag_read_count": 0,
-    "flag_write_count": 2
+    "flag_write_count": 0
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

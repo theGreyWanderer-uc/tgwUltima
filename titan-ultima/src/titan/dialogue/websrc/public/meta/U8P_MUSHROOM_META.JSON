@@ -3,25 +3,24 @@
   "source_of_truth": "dialogue/json/U8P_MUSHROOM.json",
   "file": "U8P_MUSHROOM",
   "behavior_summary": [
-    "Handles the 'U8P_MUSHROOM::look' (examine) event for a mushroom item: when a player/actor looks at the mushroom, the script prepares item state (set info / process exclude), issues a short descriptive message ('mushroom  ') directed at the caller, and sets the event's response/return state to indicate the bark was produced.",
-    "The handler forwards the caller/process id (pid) to Item::bark along with the literal string, captures Item::bark's return, uses an 'implies' operation to set the event response, then suspends/returns. No global flags are read or written in this snippet."
+    "U8P_MUSHROOM::look is a minimal U8P_MUSHROOM::look/examine handler for the mushroom object. When the player inspects the mushroom the script emits a single bark text \"mushroom\" and then suspends/ends the U8P_MUSHROOM::look process.",
+    "There is no branching, menu interaction, global flag read/write, or external function calls; the routine simply presents a short description and terminates."
   ],
   "notable_control_flow": [
-    "Entry via the 'U8P_MUSHROOM::look' event: script runs once per U8P_MUSHROOM::look trigger and performs setup (init/set info) and a process-exclude operation to avoid duplicate processing.",
-    "Calls external Item::bark and captures its return value; that return is then applied to the event state via an 'implies' operation (inferred to mark the event handled or to propagate a truthy result).",
-    "After the implies/pop sequence the handler suspends/returns; there is no further branching or global state mutation in the observed code."
+    "Entry: invoked as the object's U8P_MUSHROOM::look/examine process (process type 0x0208).",
+    "Action: perform a single Bark/DialogueLine output with the text \"mushroom\".",
+    "Termination: suspend/terminate the U8P_MUSHROOM::look process immediately after the bark; no further steps or conditions."
   ],
   "open_questions": [
-    "Exact semantics of the 'implies' opcode: whether it sets the event return value, toggles an internal flag, or affects caller flow (inferred but not proven).",
-    "Precise meaning of the 'set info' + 'process exclude' pair: which info id is set and what exact processing is being excluded by the engine in this context.",
-    "Whether the trailing spaces in the string literal \"mushroom  \" are meaningful for formatting or are an artifact of how item names are stored."
+    "Is the displayed bark text localized or meant to include the trailing spaces shown in the raw sample (\"mushroom  \")?",
+    "Is this object ever extended with additional behaviors (use, pick up) elsewhere or is it purely descriptive?"
   ],
   "main_function": {
     "name": "U8P_MUSHROOM::look",
     "execution_form": "process",
-    "purpose": "Respond to the player/actor inspecting the mushroom by emitting a short descriptive message and marking the event as handled for the engine.",
+    "purpose": "Provide the short descriptive text when the player looks at or examines the mushroom object.",
     "entry_conditions": [
-      "Event 0 (U8P_MUSHROOM::look) — triggered when an actor looks at or inspects the mushroom (area/inspect trigger)."
+      "Triggered by the engine's U8P_MUSHROOM::look/examine action for the mushroom object (inferred from classification 'U8P_MUSHROOM::look' and process type 0x0208)."
     ],
     "confidence": "high"
   },
@@ -29,26 +28,13 @@
     {
       "name": "U8P_MUSHROOM::look",
       "kind": "main",
-      "role": "Item event handler that responds to the 'U8P_MUSHROOM::look' event for the mushroom by producing a bark/description and setting event response state.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine invoked to display/emit a short text message (the item's description) to a target process/player.",
+      "role": "object U8P_MUSHROOM::look handler (shows a short bark/description and ends)",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_MUSHROOM::look",
-        "callee": "Item::bark",
-        "purpose": "Deliver a short, visible descriptive message for the mushroom ('mushroom  ') to the calling process/player (pid).",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -56,12 +42,14 @@
   },
   "ui_tags": [
     "trigger",
-    "description"
+    "cleanup",
+    "animation",
+    "guard"
   ],
   "quick_facts": {
     "main_function": "U8P_MUSHROOM::look",
-    "behavior_summary_one_liner": "Handles the 'U8P_MUSHROOM::look' (examine) event for a mushroom item: when a player/actor looks at the mushroom, the script prepares item state (set info / process exclude), issues a short descriptive message ('mushroom  ') directed at the caller, and sets the event's response/return state to indicate the bark was produced.",
-    "external_call_count": 1,
+    "behavior_summary_one_liner": "U8P_MUSHROOM::look is a minimal U8P_MUSHROOM::look/examine handler for the mushroom object. When the player inspects the mushroom the script emits a single bark text \"mushroom\" and then suspends/ends the U8P_MUSHROOM::look process.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

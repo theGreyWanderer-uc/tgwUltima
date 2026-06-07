@@ -3,28 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_GHOST.json",
   "file": "U8P_GHOST",
   "behavior_summary": [
-    "GHOST::look runs when an actor 'looks' at a ghost. It marks the target with info and process-exclude flags and causes the relevant process to emit the short label \"ghost \".",
-    "The routine uses the triggering process id (inferred from BP+06h) as the context for Item::bark, allocates a temporary string \"ghost \", calls Item::bark(pid, \"ghost \"), frees the temporary string, inspects the bark return value, then suspends/returns.",
-    "Overall effect at gameplay level: provide the player (or other inspecting process) with the visible/audible description of a ghost and mark the ghost object so it won't be reprocessed or will show info-state."
+    "Handles the 'U8P_GHOST::look' (inspect) interaction for the GHOST entity: when the player examines the ghost this script emits a single short bark reading \"ghost \" and then suspends the process.",
+    "There is no branching, menu interaction, flag reads/writes, or external calls recorded; the behavior is a simple descriptive response to an inspect action."
   ],
   "notable_control_flow": [
-    "Entry on Event 0 / U8P_GHOST::look (treated as an area-entry style trigger).",
-    "Set object info and process-exclude flags immediately on entry (guarding further processing).",
-    "Allocate/push a short literal string \"ghost \", convert to pointer and call external Item::bark in the inspector's process context.",
-    "After Item::bark returns, free the temporary string, push the return value, perform an implies/pop style check and then suspend/return — the bark return value is inspected to influence flow (exact effect inferred)."
+    "U8P_GHOST::look is executed as a process (process type 0x0208) tied to the engine's 'U8P_GHOST::look' event for this actor.",
+    "After emitting the Bark text \"ghost \", the process issues a suspend which pauses/ends the U8P_GHOST::look handler (inferred from 'suspend' node).",
+    "No conditional logic or alternate execution paths are present in the function's node list."
   ],
   "open_questions": [
-    "Exact encoding and semantics of the 'info' write performed by the handler (which info id/value is set is not explicit).",
-    "Precise identity and semantics of BP+06h (inferred as the triggering process/pid) — this is very likely but not byte-level proven here.",
-    "What the implies/pop sequence does with the Item::bark return value (control-flow or interrupt handling) and whether any side effects depend on that value."
+    "Why the bark text contains a trailing space (\"ghost \") — likely harmless formatting or artifact; does it map to an in-game localized string entry?",
+    "Is the suspend intended to permanently pause the actor's U8P_GHOST::look process or simply yield briefly to engine scheduling? The script contains only 'suspend' so the exact lifecycle impact is inferred.",
+    "There are two low-confidence 'Unknown' nodes in the raw; their content does not appear to change behavior but could contain legacy/decompiler remnants."
   ],
   "main_function": {
     "name": "U8P_GHOST::look",
     "execution_form": "process",
-    "purpose": "Respond to the 'U8P_GHOST::look' (examine) event for a ghost: mark the ghost with info/exclusion state and make the inspecting process emit/display the label \"ghost \".",
+    "purpose": "Provide the short descriptive response when the player inspects/looks at the GHOST NPC: display a single bark 'ghost ' and then suspend the U8P_GHOST::look process.",
     "entry_conditions": [
-      "Event 0 (U8P_GHOST::look) triggered when an actor inspects the ghost",
-      "Fast-area/trigger region entry semantics apply (function runs on U8P_GHOST::look/area-enter)"
+      "Triggered by the engine's 'U8P_GHOST::look' (inspect) action on the GHOST actor (process type 0x0208).",
+      "Also conceptually triggered when the player enters the actor's fast-area U8P_GHOST::look trigger (enterFastArea semantics inferred from classification)."
     ],
     "confidence": "high"
   },
@@ -32,47 +30,30 @@
     {
       "name": "U8P_GHOST::look",
       "kind": "main",
-      "role": "Event handler for the 'U8P_GHOST::look' action on a ghost; coordinates state writes and a descriptive bark to the inspecting process.",
+      "role": "U8P_GHOST::look handler that emits a short descriptive bark when the player examines the ghost",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_GHOST::look",
-        "callee": "Item::bark",
-        "purpose": "Cause the inspecting process (pid inferred from BP+06h) to emit/display the short description string \"ghost \".",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
-    "writes": [
-      {
-        "name": "info",
-        "likely_effect": "Set a display/inspection info-state on the ghost object so that it records being looked-at or changes how it is presented.",
-        "confidence": "medium"
-      },
-      {
-        "name": "process exclude",
-        "likely_effect": "Mark the object as excluded from normal processing (prevents further AI/processing until cleared or permanently), likely to avoid repeated handling immediately after U8P_GHOST::look.",
-        "confidence": "medium"
-      }
-    ]
+    "writes": []
   },
   "ui_tags": [
     "trigger",
     "cleanup",
+    "animation",
     "guard"
   ],
   "quick_facts": {
-    "main_function": "GHOST::look",
-    "behavior_summary_one_liner": "GHOST::look runs when an actor 'looks' at a ghost. It marks the target with info and process-exclude flags and causes the relevant process to emit the short label \"ghost \".",
-    "external_call_count": 1,
+    "main_function": "U8P_GHOST::look",
+    "behavior_summary_one_liner": "Handles the 'U8P_GHOST::look' (inspect) interaction for the GHOST entity: when the player examines the ghost this script emits a single short bark reading \"ghost \" and then suspends the process.",
+    "external_call_count": 0,
     "flag_read_count": 0,
-    "flag_write_count": 2
+    "flag_write_count": 0
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

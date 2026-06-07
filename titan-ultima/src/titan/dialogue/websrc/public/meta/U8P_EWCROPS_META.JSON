@@ -3,28 +3,27 @@
   "source_of_truth": "dialogue/json/U8P_EWCROPS.json",
   "file": "U8P_EWCROPS",
   "behavior_summary": [
-    "EWCROPS::look: When a player (or relevant actor) 'looks' at the crop item this handler prepares the item/process state and emits a short descriptive text ('crops ') via Item::bark so the player sees the item name/description.",
-    "EWCROPS::use: When the crop item is 'used' the handler reads the crop's frame (growth stage), adds randomness, computes a numeric parameter (interpreted as a yield/amount), and then attempts up to 10 placements/spawns of new items around the crop using a factory/placement routine (FREE::24A7). For each successful placement it marks the spawned item with status bit 0x0080 and calls Item::fall() so the spawned object appears/drops into the world."
+    "U8P_EWCROPS::look is a simple inspect handler that shows the short bark text \"crops \" when the player examines the crop item.",
+    "U8P_EWCROPS::use handles harvesting/using the crop: it reads the item's frame (growth stage) and uses urandom-based formulas to compute a quantity of produce, enforces a local creation limit, spawns that many item instances at the crop's X/Y location, marks the created items with a status bit, and triggers them to fall into the world."
   ],
   "notable_control_flow": [
-    "EWCROPS::look runs as a short process triggered by the U8P_EWCROPS::look/examine event: it sets item/process info/exclusion, calls Item::bark with the literal string 'crops ', then suspends/returns (simple linear flow).",
-    "EWCROPS::use begins by calling Item::getFrame and urandom to compute an integer (stored in local [BP-06h]) used as a placement/quantity parameter.",
-    "EWCROPS::use then enters a bounded loop (local [BP-08h]) that attempts up to 10 placement attempts. Each iteration calls FREE::24A7 with origin coordinates (Item::getX/Y/Z) and the computed parameter. On a successful return it retrieves the new item id, calls Item::orStatus to set mask 0x0080 on the spawned object, and invokes Item::fall() on it; failed attempts are skipped and the loop continues until the attempt count reaches the limit."
+    "U8P_EWCROPS::look: straight-line process that emits a bark and then suspends/ends.",
+    "U8P_EWCROPS::use: branches on Item::getFrame(this) to select different quantity formulas (examples inferred: frame 0 => urandom(2)+5; frame 1 => mixed branch with urandom resulting in 4 or 7; frame 2 => urandom(3)+8).",
+    "U8P_EWCROPS::use enforces a local gate (local4 initialized to 0 and tested < 10) before invoking creation; local4 sometimes increments (limits repeated creation).",
+    "After computing local3 (quantity), the code calls FREE::createItemsAtLocation to spawn items at coordinates from Item::getX/Item::getY, then calls Item::orStatus to set bit 0x0080 and Item::fall to drop the items."
   ],
   "open_questions": [
-    "What exact object/template/type FREE::24A7 spawns (the template id/shape passed is inferred but not explicit).",
-    "Precise semantics of the numeric parameter passed to FREE::24A7 (is it 'count', 'seed quality', shape variation, or something else?).",
-    "Meaning and game-level effect of status bit 0x0080 set via Item::orStatus on spawned items (inferred to mark 'spawned/placed' but not canonical).",
-    "Whether using the crop consumes or alters the original crop item (no explicit destruction is observed).",
-    "Exact mapping from Item::getFrame() values to yield/behavior (the disassembly shows branching but the frame->yield mapping is inferred).",
-    "Return codes and failure modes from FREE::24A7 (what conditions cause spawn failure vs. success)."
+    "Exact semantics and meaning of several low-confidence lines (e.g., '0x05h * 0x20h') — their gameplay effect is unclear (low confidence).",
+    "Precise mapping of the item prototype id used in FREE::createItemsAtLocation (0x021Ah inferred) to an in-game item type is not known from this snippet.",
+    "The full intent and update policy of local4 (creation limiter) is partly inferred; whether it persists across calls or is purely per-U8P_EWCROPS::use is unclear.",
+    "Whether U8P_EWCROPS::use is invoked by a direct player action, an engine U8P_EWCROPS::use event, or another script hook is inferred but not explicitly shown in this excerpt."
   ],
   "main_function": {
     "name": "U8P_EWCROPS::look",
     "execution_form": "process",
-    "purpose": "Provide a short examine/U8P_EWCROPS::look response for crop items by emitting the string 'crops ' via Item::bark and setting item/process info to prepare/exclude the item from other processing while the bark runs.",
+    "purpose": "Provide the short inspect description when the player examines the crop item (emit a single bark).",
     "entry_conditions": [
-      "Event 0 (U8P_EWCROPS::look/examine) — the player or actor inspects the crop item, invoking this handler with the item as the implicit parameter."
+      "Triggered when the player inspects/looks at the crop item (engine 'U8P_EWCROPS::look' / examine event for the item)."
     ],
     "confidence": "high"
   },
@@ -32,152 +31,85 @@
     {
       "name": "U8P_EWCROPS::look",
       "kind": "main",
-      "role": "Examine/U8P_EWCROPS::look event handler that barks the item description 'crops '.",
+      "role": "Inspect/U8P_EWCROPS::look handler that displays short description to the player.",
       "confidence": "high"
     },
     {
       "name": "U8P_EWCROPS::use",
       "kind": "helper",
-      "role": "Use event handler that computes a yield/parameter from the crop's frame and randomness, then repeatedly attempts to spawn/place new items around the crop and finalize them (status+fall).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Display/emit a short text message associated with an item/process (used by U8P_EWCROPS::look to show 'crops ').",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getFrame",
-      "kind": "extern",
-      "role": "Return the item's frame/index used to determine growth stage/variant and yield behavior.",
-      "confidence": "high"
-    },
-    {
-      "name": "urandom",
-      "kind": "extern",
-      "role": "Provide small random numbers used by use() to vary the computed yield.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getX",
-      "kind": "extern",
-      "role": "Return item X coordinate used as origin for placement attempts.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getY",
-      "kind": "extern",
-      "role": "Return item Y coordinate used as origin for placement attempts.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getZ",
-      "kind": "extern",
-      "role": "Return item Z/elevation (byte) used for placement attempts.",
-      "confidence": "high"
-    },
-    {
-      "name": "FREE::24A7",
-      "kind": "extern",
-      "role": "Factory/placement routine invoked to attempt creation/placement of new item(s) near the crop; returns success/failure and provides spawned item id/address on success.",
+      "role": "Harvest/U8P_EWCROPS::use handler: compute produce quantity, create item instances at crop location, mark and drop them.",
       "confidence": "medium"
-    },
-    {
-      "name": "Item::orStatus",
-      "kind": "extern",
-      "role": "Bitwise-or a status flag into an item instance; used to set mask 0x0080 on newly spawned items.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::fall",
-      "kind": "extern",
-      "role": "Cause the item to fall/drop into the world, finalizing placement so it behaves as a world object.",
-      "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_EWCROPS::look",
-        "callee": "Item::bark",
-        "purpose": "Emit the short examine string 'crops ' to the observing process/player.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_EWCROPS::use",
         "callee": "Item::getFrame",
-        "purpose": "Read the crop's growth-stage/frame to decide yield/behavior.",
+        "purpose": "Read the crop item's frame/growth stage to decide which quantity/randomness formula to apply.",
         "confidence": "high"
       },
       {
         "caller": "U8P_EWCROPS::use",
         "callee": "urandom",
-        "purpose": "Add randomness to the computed yield/placement parameter.",
+        "purpose": "Produce random values used to vary the number of items generated per frame branch.",
         "confidence": "high"
       },
       {
         "caller": "U8P_EWCROPS::use",
         "callee": "Item::getX",
-        "purpose": "Get item X coordinate used as origin for spawn/placement attempts.",
+        "purpose": "Obtain the crop item's X coordinate to U8P_EWCROPS::use as spawn X for created items.",
         "confidence": "high"
       },
       {
         "caller": "U8P_EWCROPS::use",
         "callee": "Item::getY",
-        "purpose": "Get item Y coordinate used as origin for spawn/placement attempts.",
+        "purpose": "Obtain the crop item's Y coordinate to U8P_EWCROPS::use as spawn Y for created items.",
         "confidence": "high"
       },
       {
         "caller": "U8P_EWCROPS::use",
         "callee": "Item::getZ",
-        "purpose": "Get item Z/elevation used as origin/placement parameter (byte).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_EWCROPS::use",
-        "callee": "FREE::24A7",
-        "purpose": "Attempt to create/place a spawned item near the crop using origin coords and computed parameter; success returns spawned item id.",
+        "purpose": "Read the crop item's Z/stack value; appears to be used as a local state or counter in the creation logic.",
         "confidence": "medium"
       },
       {
         "caller": "U8P_EWCROPS::use",
+        "callee": "FREE::createItemsAtLocation",
+        "purpose": "Create one or more item instances at the computed location with the computed quantity; returns a handle to the created items.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_EWCROPS::use",
         "callee": "Item::orStatus",
-        "purpose": "Set status bit mask 0x0080 on spawned item to mark it (likely as newly placed/spawned).",
+        "purpose": "Set a status bit (observed 0x0080) on the created item(s) to mark them (e.g., freshly created/harvested).",
         "confidence": "high"
       },
       {
         "caller": "U8P_EWCROPS::use",
         "callee": "Item::fall",
-        "purpose": "Finalize the spawned item's placement so it drops into the world and behaves as a world object.",
+        "purpose": "Trigger the created item(s) to fall/drop into the game world so they settle at the spawn location.",
         "confidence": "high"
       }
     ]
   },
   "global_flags": {
     "reads": [],
-    "writes": [
-      {
-        "name": "item status bit 0x0080",
-        "likely_effect": "Marks newly spawned/placed items (inferred as a 'spawned' or 'placed' flag).",
-        "confidence": "high"
-      }
-    ]
+    "writes": []
   },
   "ui_tags": [
     "trigger",
-    "spawn",
-    "random",
-    "placement",
-    "status"
+    "cleanup",
+    "animation",
+    "guard"
   ],
   "quick_facts": {
-    "main_function": "EWCROPS::look",
-    "behavior_summary_one_liner": "EWCROPS::look: When a player (or relevant actor) 'looks' at the crop item this handler prepares the item/process state and emits a short descriptive text ('crops ') via Item::bark so the player sees the item name/description.",
-    "external_call_count": 9,
+    "main_function": "U8P_EWCROPS::look",
+    "behavior_summary_one_liner": "U8P_EWCROPS::look is a simple inspect handler that shows the short bark text \"crops \" when the player examines the crop item.",
+    "external_call_count": 8,
     "flag_read_count": 0,
-    "flag_write_count": 1
+    "flag_write_count": 0
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

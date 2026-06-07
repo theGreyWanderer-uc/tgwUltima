@@ -3,64 +3,38 @@
   "source_of_truth": "dialogue/json/U8P_GUARDMEG.json",
   "file": "U8P_GUARDMEG",
   "behavior_summary": [
-    "When an actor (typically the player) enters the item's fast trigger area, the script reads the triggering item and determines an egg type id via Egg::getEggId.",
-    "The routine branches based on the global flag 'hasHeart'. If hasHeart is set (non-zero) it attempts to match the egg id against a configured list, and on match creates an NPC and an associated item, places them at the egg's coordinates, marks their status bits, and launches an asynchronous script (spawn METHOD::15E7) to drive follow-up behavior.",
-    "If hasHeart is clear (zero) it performs a different table lookup and a probabilistic check (urandom compared against a threshold) and may spawn a hostile NPC, place it at the egg's coordinates, set its target/alignment to the player, and immediately put it into combat.",
-    "Positioning of spawned entities is done using Item::getX/Y/Z and Item::pop variants; created handles are status-marked with Item::orStatus to make them persistent/active.",
-    "The handler does not modify the hasHeart flag itself and returns after performing spawning/initialization work."
+    "U8P_GUARDMEG::enterFastArea is a process triggered when an actor enters a fast-area trigger. It spawns NPCs and an item at this object's coordinates under two different conditions: a guarded friendly/egg-based spawn (gated by a 'hasHeart' check and a per-instance repeat guard) and a later probabilistic hostile spawn.",
+    "On the friendly branch it queries an egg/template id (Egg::getEggId), creates an NPC (Npc::create with template 0x023E), marks status bits (Item::orStatus), places the NPC at this object's Z/Y/X (Item::pop with Item::getZ/ getY/ getX), calls an init method on the spawned instance (METHOD::func15E7) and suspends, then creates and places an item (Item::create/Item::orStatus/Item::pop) into or near the NPC and sets a per-instance flag to prevent repetition.",
+    "Separately (later or in an else/time-slice), if the repeat guard isn't set the script uses urandom(100) > 70 to sometimes spawn a hostile NPC (Npc::create template 0x008E), pop it at this location, set its target to the player (Npc::setTarget), mark it hostile (Npc::setAlignment) and force combat (Npc::setInCombat)."
   ],
   "notable_control_flow": [
-    "Single entry on U8P_GUARDMEG::enterFastArea; early read of Egg::getEggId(item) to determine eggId-driven behavior.",
-    "Top-level conditional on global flag hasHeart selects between two distinct behaviors (create+spawn+item branch vs. probabilistic hostile spawn branch).",
-    "Each branch consults a data table (loop/table lookup) to determine whether the eggId qualifies for spawning; the found_flag boolean gates the subsequent creation.",
-    "Hostile-spawn branch includes a random gate (urandom range vs. constant threshold) to make spawning probabilistic.",
-    "spawn(METHOD::15E7) is invoked only in the hasHeart branch to start asynchronous scripted behavior using (pid, eggId, flag=0x02)."
+    "Entry is event-driven: process U8P_GUARDMEG::enterFastArea runs when something enters the fast-area trigger.",
+    "Initial friendly spawn branch is gated by a 'not hasHeart' style check (inferred) and a per-instance repeat guard (local2) to avoid duplicate spawns.",
+    "The friendly spawn sequence suspends after calling the spawned instance's initializer (METHOD::func15E7), indicating a wait for setup before creating/giving the item.",
+    "A separate probabilistic branch runs when the repeat guard is not set: urandom(100) > 0x46 (~29% chance) controls whether a hostile NPC is spawned and immediately put into combat and targeted at the player."
   ],
   "open_questions": [
-    "Exact contents and semantics of the script data tables consulted during the eggId lookups (which egg ids map to which NPC/item types).",
-    "Precise meaning of the global flag 'hasHeart' in gameplay terms (affects which spawn behavior runs—healing/ally vs. hostile?) is inferred but not proven.",
-    "Exact NPC type ids and item type ids created by Npc::create and Item::create (addresses like 023Eh and 008Eh were referenced in disassembly but not mapped to names).",
-    "Whether other global state or player-specific conditions (beyond pid and hasHeart) influence which table entries are matched or how spawn METHOD::15E7 behaves."
+    "Exact meaning and storage (global vs instance) of the 'hasHeart' check referenced in the code — inferred from context but not explicit.",
+    "Precise semantics of the numeric constants (e.g., template ids 0x023E, 0x008E, item 0x00AE) and status bits passed to Item::orStatus.",
+    "Whether the per-instance repeat guard (local2) is persisted on the object or only exists for the life of the process; implementation detail is unclear.",
+    "Why the code runs the second probabilistic branch separately: is it a different time-slice of the same process, or a separate conditional path executed on the same entry?"
   ],
   "main_function": {
     "name": "U8P_GUARDMEG::enterFastArea",
     "execution_form": "process",
-    "purpose": "Handle an item (egg)-triggered U8P_GUARDMEG::enterFastArea: determine egg type and conditionally spawn NPC(s)/item(s) and initialize follow-up scripted behavior or spawn hostile creatures depending on 'hasHeart' and table matches.",
+    "purpose": "Handle fast-area entry by spawning a friendly/egg-initialized NPC plus item under gated conditions, and optionally spawn a hostile NPC with a chance; place spawns at this object's coordinates and set hostile behavior when applicable.",
     "entry_conditions": [
-      "Called when an actor enters the item's fast trigger area (U8P_GUARDMEG::enterFastArea event).",
-      "Requires a triggering item pointer (passed at BP+06h) and uses the invoking actor's pid implicitly."
+      "Actor (usually the Avatar) enters this object's fast-area trigger",
+      "A 'not hasHeart' style condition gates the friendly/egg-based spawn (inferred)",
+      "Per-instance repeat guard (local2) prevents re-running spawn sequences"
     ],
-    "confidence": "high"
+    "confidence": "medium"
   },
   "function_map": [
     {
       "name": "U8P_GUARDMEG::enterFastArea",
       "kind": "main",
-      "role": "Primary event handler for the egg item's U8P_GUARDMEG::enterFastArea; inspects egg id and spawns/initializes NPCs and/or items accordingly.",
-      "confidence": "high"
-    },
-    {
-      "name": "Egg::getEggId",
-      "kind": "extern",
-      "role": "Return egg type/id for the triggering item (used to index into spawn tables).",
-      "confidence": "high"
-    },
-    {
-      "name": "Npc::create",
-      "kind": "extern",
-      "role": "Create an NPC instance of a chosen type; used in both behavior branches to produce creatures to place into the world.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::create",
-      "kind": "extern",
-      "role": "Create an item instance associated with the NPC in the hasHeart branch.",
-      "confidence": "high"
-    },
-    {
-      "name": "spawn",
-      "kind": "extern",
-      "role": "Start an asynchronous scripted method (METHOD::15E7) for follow-up behavior; passed pid, eggId and a flag in the hasHeart branch.",
+      "role": "fast-area entry behavior handler (spawns friendly item/NPC and probabilistic hostile spawn)",
       "confidence": "high"
     }
   ],
@@ -70,113 +44,104 @@
       {
         "caller": "U8P_GUARDMEG::enterFastArea",
         "callee": "Egg::getEggId",
-        "purpose": "Obtain the egg type/id from the triggering item to drive table lookups and subsequent spawn decisions.",
+        "purpose": "Obtain an egg/template id to initialize a spawned NPC instance (result stored to local3).",
         "confidence": "high"
       },
       {
         "caller": "U8P_GUARDMEG::enterFastArea",
         "callee": "Npc::create",
-        "purpose": "Instantiate NPC(s) of the appropriate type for either the hasHeart branch (ally/related NPC) or the hostile branch (enemy NPC).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GUARDMEG::enterFastArea",
-        "callee": "Item::create",
-        "purpose": "Create an item associated with the newly created NPC in the hasHeart branch (likely a reward/linked object).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GUARDMEG::enterFastArea",
-        "callee": "Item::getX",
-        "purpose": "Read the triggering egg's X coordinate for placement of created entities.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GUARDMEG::enterFastArea",
-        "callee": "Item::getY",
-        "purpose": "Read the triggering egg's Y coordinate for placement of created entities.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GUARDMEG::enterFastArea",
-        "callee": "Item::getZ",
-        "purpose": "Read the triggering egg's Z coordinate (byte) for placement/population via Item::pop.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GUARDMEG::enterFastArea",
-        "callee": "Item::pop (uword,uword,ubyte)",
-        "purpose": "Finalize and place a created NPC/item at the specified coordinates (x,y,z).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GUARDMEG::enterFastArea",
-        "callee": "Item::pop (uword)",
-        "purpose": "Link/populate a created item handle after Item::create in the hasHeart branch.",
+        "purpose": "Create NPC instances: used for a friendly/egg-based template (0x023E) and for a possible hostile template (0x008E).",
         "confidence": "high"
       },
       {
         "caller": "U8P_GUARDMEG::enterFastArea",
         "callee": "Item::orStatus",
-        "purpose": "Apply status bits (e.g., persistent/active mask) to newly created NPCs/items.",
+        "purpose": "Set status bits on created NPCs/items (e.g., temporary/special markers) after creation.",
         "confidence": "high"
       },
       {
         "caller": "U8P_GUARDMEG::enterFastArea",
-        "callee": "spawn (METHOD::15E7)",
-        "purpose": "Launch asynchronous behavior for the created NPC (hasHeart branch) passing pid, eggId, and a byte flag (0x02).",
+        "callee": "Item::pop",
+        "purpose": "Place/pop created NPCs or items into the world at this object's coordinates or into a container (spawn placement).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARDMEG::enterFastArea",
+        "callee": "METHOD::func15E7",
+        "purpose": "Initialize the spawned NPC instance using the egg id and flags (called on the new instance before suspend).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GUARDMEG::enterFastArea",
+        "callee": "suspend",
+        "purpose": "Yield the process to allow the spawned instance/world to settle after initialization before continuing (used between NPC spawn and item create/pop).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARDMEG::enterFastArea",
+        "callee": "Item::create",
+        "purpose": "Create an item (template 0x00AE) that is given/placed into the spawned NPC.",
         "confidence": "high"
       },
       {
         "caller": "U8P_GUARDMEG::enterFastArea",
         "callee": "urandom",
-        "purpose": "Provide a random value used as a probabilistic gate in the hostile-spawn branch.",
+        "purpose": "Generate a random value to decide probabilistic hostile spawn (urandom(100) > 0x46).",
         "confidence": "high"
       },
       {
         "caller": "U8P_GUARDMEG::enterFastArea",
         "callee": "Npc::setTarget",
-        "purpose": "Point the spawned hostile NPC at the player/actor so it will engage them.",
+        "purpose": "Assign the spawned hostile NPC's target (0x01 indicates the player) to direct its aggression.",
         "confidence": "high"
       },
       {
         "caller": "U8P_GUARDMEG::enterFastArea",
         "callee": "Npc::setAlignment",
-        "purpose": "Set spawned NPC alignment (used in hostile branch to make it hostile).",
+        "purpose": "Set alignment/faction bits on the spawned hostile NPC so it behaves as an enemy.",
         "confidence": "high"
       },
       {
         "caller": "U8P_GUARDMEG::enterFastArea",
         "callee": "Npc::setInCombat",
-        "purpose": "Force the spawned NPC into combat immediately after creation (hostile branch).",
+        "purpose": "Force the spawned hostile NPC into combat immediately after spawning.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARDMEG::enterFastArea",
+        "callee": "Item::getZ",
+        "purpose": "Read this object's Z coordinate to position spawned entities.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARDMEG::enterFastArea",
+        "callee": "Item::getY",
+        "purpose": "Read this object's Y coordinate to position spawned entities.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GUARDMEG::enterFastArea",
+        "callee": "Item::getX",
+        "purpose": "Read this object's X coordinate to position spawned entities.",
         "confidence": "high"
       }
     ]
   },
   "global_flags": {
-    "reads": [
-      {
-        "name": "hasHeart",
-        "likely_effect": "Selects which spawn branch runs: non-zero activates the create+spawn+item branch; zero activates the probabilistic hostile spawn branch.",
-        "confidence": "high"
-      }
-    ],
+    "reads": [],
     "writes": []
   },
   "ui_tags": [
     "trigger",
-    "spawn",
-    "npc",
-    "item",
-    "probabilistic",
-    "combat",
+    "cleanup",
+    "animation",
     "guard"
   ],
   "quick_facts": {
     "main_function": "U8P_GUARDMEG::enterFastArea",
-    "behavior_summary_one_liner": "When an actor (typically the player) enters the item's fast trigger area, the script reads the triggering item and determines an egg type id via Egg::getEggId.",
+    "behavior_summary_one_liner": "U8P_GUARDMEG::enterFastArea is a process triggered when an actor enters a fast-area trigger. It spawns NPCs and an item at this object's coordinates under two different conditions: a guarded friendly/egg-based spawn (gated by a 'hasHeart' check and a per-instance repeat guard) and a later probabilistic hostile spawn.",
     "external_call_count": 14,
-    "flag_read_count": 1,
+    "flag_read_count": 0,
     "flag_write_count": 0
   },
   "hypotheses": {

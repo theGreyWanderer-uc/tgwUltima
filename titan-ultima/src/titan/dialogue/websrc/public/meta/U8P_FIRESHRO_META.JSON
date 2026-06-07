@@ -3,27 +3,31 @@
   "source_of_truth": "dialogue/json/U8P_FIRESHRO.json",
   "file": "U8P_FIRESHRO",
   "behavior_summary": [
-    "FIRESHRO::look: When a player/actor 'looks at' (examines) the fire shroom item it sets item info/exclude state (engine housekeeping) and causes the item to 'bark' the label \"fire shroom \", i.e., present its name/description to the viewer.",
-    "FIRESHRO::gotHit and FIRESHRO::hit: On damage/hit events these handlers guard on an item-local quantity/flag (Item::getQ). If allowed they set that flag to 1 (Item::setQ(1)), inspect the source/attacker to ensure it is not an excluded actor (via Item::isNpc and Npc::isDead checks), and — if checks permit — spawn METHOD::0676 with a byte flag=1 and the item pointer, which appears to activate the fire-shroom effect (explosion/damage/activation)."
+    "U8P_FIRESHRO implements a simple inspect/U8P_FIRESHRO::look handler and two U8P_FIRESHRO::hit-handling routines for a \"fire shroom\" item.",
+    "U8P_FIRESHRO::look emits a short bark/description \"fire shroom\" when the player examines the object (process-type U8P_FIRESHRO::look).",
+    "Both U8P_FIRESHRO::gotHit and U8P_FIRESHRO::hit implement U8P_FIRESHRO::hit/impact handling: they check an item-level Q flag (via Item::getQ) and set it on first U8P_FIRESHRO::hit (Item::setQ(0x01)).",
+    "When a U8P_FIRESHRO::hit source parameter is provided (param1), those routines copy it into temporaries (local1/local2), test whether it refers to an NPC (Item::isNpc) and whether that NPC is dead (Npc::isDead), and then delegate to a shared handler METHOD::func0676 to continue processing/effects.",
+    "The Q flag acts as a guard to ensure first-U8P_FIRESHRO::hit activation logic runs only once (prevents repeated activation)."
   ],
   "notable_control_flow": [
-    "Look path: immediate info/exclude housekeeping then a single external call Item::bark(\"fire shroom \") and return.",
-    "Hit/gotHit path: early gate read from Item::getQ; if the gate fails the handler returns early. When progressing, Item::setQ(1) is called to record/lock the state so subsequent hits act differently.",
-    "After setting the Q flag, the handlers validate the incoming source/attacker argument by calling Item::isNpc(source) and, if true, Npc::isDead(source); the alive/dead and NPC checks form a conditional that can prevent spawning.",
-    "If the conditional passes, the script spawns METHOD::0676 with parameters (byte=1, this_item) to trigger the shroom's active effect. A small temp local is used to pop/discard the spawn return value."
+    "U8P_FIRESHRO::look: single linear flow — bark \"fire shroom\" then suspend/return.",
+    "U8P_FIRESHRO::gotHit and U8P_FIRESHRO::hit: conditional gate on Item::getQ(this). If Q is not set, call Item::setQ(0x01,this) to mark activation.",
+    "Both U8P_FIRESHRO::hit routines conditionally run additional logic only when a U8P_FIRESHRO::hit-source parameter is present: copy parameter to locals, branch on Item::isNpc(local1), then (if NPC) call Npc::isDead(local2) to decide behavior before invoking METHOD::func0676.",
+    "Shared continuation is performed by an external routine METHOD::func0676 rather than inline — U8P_FIRESHRO::hit routines largely prepare state and delegate."
   ],
   "open_questions": [
-    "What is the exact gameplay effect of METHOD::0676 (spawned by hit/gotHit)? It is inferred to be the fire-shroom activation (explosion, AoE damage, ignite) but the method body is not present.",
-    "What precise semantics/value domain does Item::getQ represent for this item (a cooldown flag, armed state, or stack count)? The handlers treat it like a boolean/guard.",
-    "Are there any additional callers or external systems that clear the Item::getQ flag so the shroom can be re-activated? That lifecycle is not visible here.",
-    "Which game events map to 'hit' vs 'gotHit' for this item (player attack vs environmental damage) and are there timing differences between them?"
+    "What exact gameplay effect METHOD::func0676 applies after the U8P_FIRESHRO::hit preparation (damage, status, item transformation, or audio/visual effect)? (inferred: applies effect; confidence: low)",
+    "Does the Item-level Q flag represent a one-time activation, a visual-state toggle, or a persistent quest/consumption marker beyond this item instance? (confidence: medium)",
+    "Are there any differences in usage or timing between U8P_FIRESHRO::gotHit and U8P_FIRESHRO::hit beyond naming (they appear to perform the same logic in the excerpt)? (confidence: low)",
+    "What is the intended behavior when Npc::isDead(local2) returns true — do the U8P_FIRESHRO::hit routines abort, skip effects, or merely note the state? (confidence: low)"
   ],
   "main_function": {
     "name": "U8P_FIRESHRO::look",
     "execution_form": "process",
-    "purpose": "Provide the item’s examination behavior: perform standard item info/exclude housekeeping and display/speak the item's label \"fire shroom \" to the inspecting process/player.",
+    "purpose": "Provide the short inspect/examine description for the fire shroom item (player-facing bark).",
     "entry_conditions": [
-      "Event 0 — triggered when an actor inspects/looks at the fire shroom item (examine/U8P_FIRESHRO::look event)"
+      "Invoked by the engine when the player examines/looks at the item (process-type 0x0208).",
+      "May also be called when the engine needs a short object label/description."
     ],
     "confidence": "high"
   },
@@ -31,55 +35,19 @@
     {
       "name": "U8P_FIRESHRO::look",
       "kind": "main",
-      "role": "Examine/inspect handler for the fire shroom item; produces a visible/audible label and performs item housekeeping.",
+      "role": "Provide short examine/U8P_FIRESHRO::look description for the item (bark: \"fire shroom\").",
       "confidence": "high"
     },
     {
       "name": "U8P_FIRESHRO::gotHit",
       "kind": "helper",
-      "role": "Handler for gotHit/damage events; gates on item Q flag, sets Q to 1, validates attacker (NPC/alive checks), and conditionally spawns METHOD::0676 to activate the shroom.",
+      "role": "Handle an incoming U8P_FIRESHRO::hit/impact: ensure item Q flag set, inspect U8P_FIRESHRO::hit-source param, check NPC/death, delegate to METHOD::func0676.",
       "confidence": "medium"
     },
     {
       "name": "U8P_FIRESHRO::hit",
       "kind": "helper",
-      "role": "Handler for hit events; effectively duplicates gotHit behavior (same gating, attacker checks, and spawn).",
-      "confidence": "medium"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "External API to display/speak a short text string from an item/process (used by U8P_FIRESHRO::look).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getQ",
-      "kind": "extern",
-      "role": "External API returning an item-local quantity/flag used as a gate by hit/gotHit.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::setQ",
-      "kind": "extern",
-      "role": "External API to set the item-local quantity/flag (used to set the value to 1 after processing a hit).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::isNpc",
-      "kind": "extern",
-      "role": "External predicate to test whether a pointer/argument refers to an NPC (used to decide whether to call Npc::isDead).",
-      "confidence": "high"
-    },
-    {
-      "name": "Npc::isDead",
-      "kind": "extern",
-      "role": "External predicate to test whether an NPC is dead; used to exclude dead NPC attackers from spawning the effect.",
-      "confidence": "high"
-    },
-    {
-      "name": "spawn METHOD::0676",
-      "kind": "extern",
-      "role": "Spawn/activate an external method (inferred to be the fire-shroom's active effect) with a flag and the item pointer.",
+      "role": "Handle explicit U8P_FIRESHRO::hit event similar to U8P_FIRESHRO::gotHit: set Q flag if needed, prepare/inspect source param, and call METHOD::func0676.",
       "confidence": "medium"
     }
   ],
@@ -87,76 +55,82 @@
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_FIRESHRO::look",
-        "callee": "Item::bark",
-        "purpose": "Present the item's descriptive label/string \"fire shroom \" to the inspecting process/player.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_FIRESHRO::gotHit",
         "callee": "Item::getQ",
-        "purpose": "Read a guard/quantity flag to decide whether to process the hit and potentially activate the shroom.",
+        "purpose": "Query the item-level Q flag to determine if first-U8P_FIRESHRO::hit activation is needed.",
         "confidence": "high"
       },
       {
         "caller": "U8P_FIRESHRO::gotHit",
         "callee": "Item::setQ",
-        "purpose": "Set the item's Q flag to 1 to record that the hit-processing/activation path has been taken.",
+        "purpose": "Set the item-level Q flag (0x01) to mark the item as activated/processed on first U8P_FIRESHRO::hit.",
         "confidence": "high"
       },
       {
         "caller": "U8P_FIRESHRO::gotHit",
         "callee": "Item::isNpc",
-        "purpose": "Determine whether the source/attacker is an NPC so the script can apply additional dead/alive checks.",
+        "purpose": "Test whether the provided U8P_FIRESHRO::hit-source parameter refers to an NPC before running NPC-specific checks.",
         "confidence": "high"
       },
       {
         "caller": "U8P_FIRESHRO::gotHit",
         "callee": "Npc::isDead",
-        "purpose": "If the source is an NPC, check whether it is dead; used to prevent spawning for dead NPC attackers.",
-        "confidence": "high"
+        "purpose": "Check whether the referenced NPC (U8P_FIRESHRO::hit source) is dead; used to influence subsequent handling.",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_FIRESHRO::gotHit",
-        "callee": "spawn METHOD::0676",
-        "purpose": "Trigger the fire-shroom's active effect (inferred) with parameters (byte=1, this_item) when gating/attacker checks pass.",
-        "confidence": "medium"
+        "callee": "METHOD::func0676",
+        "purpose": "Delegate to shared U8P_FIRESHRO::hit-processing routine to apply effects/damage/continuation logic after initial checks.",
+        "confidence": "low"
       },
       {
         "caller": "U8P_FIRESHRO::hit",
         "callee": "Item::getQ",
-        "purpose": "Same gating read as gotHit; decide whether to proceed with activation.",
+        "purpose": "Query the item-level Q flag to determine if first-U8P_FIRESHRO::hit activation is needed.",
         "confidence": "high"
       },
       {
         "caller": "U8P_FIRESHRO::hit",
         "callee": "Item::setQ",
-        "purpose": "Same effect as gotHit: set the Q flag to 1 after processing.",
+        "purpose": "Set the item-level Q flag (0x01) to mark the item as activated/processed on first U8P_FIRESHRO::hit.",
         "confidence": "high"
       },
       {
         "caller": "U8P_FIRESHRO::hit",
         "callee": "Item::isNpc",
-        "purpose": "Same attacker-type check as gotHit.",
+        "purpose": "Test whether the provided U8P_FIRESHRO::hit-source parameter refers to an NPC before running NPC-specific checks.",
         "confidence": "high"
       },
       {
         "caller": "U8P_FIRESHRO::hit",
         "callee": "Npc::isDead",
-        "purpose": "Same dead/alive check as gotHit.",
-        "confidence": "high"
+        "purpose": "Check whether the referenced NPC (U8P_FIRESHRO::hit source) is dead; used to influence subsequent handling.",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_FIRESHRO::hit",
-        "callee": "spawn METHOD::0676",
-        "purpose": "Same spawn activation as gotHit when checks pass.",
-        "confidence": "medium"
+        "callee": "METHOD::func0676",
+        "purpose": "Delegate to shared U8P_FIRESHRO::hit-processing routine to apply effects/damage/continuation logic after initial checks.",
+        "confidence": "low"
       }
     ]
   },
   "global_flags": {
-    "reads": [],
-    "writes": []
+    "reads": [
+      {
+        "name": "Item.Q",
+        "likely_effect": "Used as a per-item guard to detect whether first-U8P_FIRESHRO::hit activation/processing has already occurred (read by Item::getQ).",
+        "confidence": "high"
+      }
+    ],
+    "writes": [
+      {
+        "name": "Item.Q",
+        "likely_effect": "Set to 0x01 on first U8P_FIRESHRO::hit via Item::setQ to mark the item as activated/processed and prevent re-running initial U8P_FIRESHRO::hit logic.",
+        "confidence": "high"
+      }
+    ]
   },
   "ui_tags": [
     "trigger",
@@ -165,11 +139,11 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "FIRESHRO::look",
-    "behavior_summary_one_liner": "FIRESHRO::look: When a player/actor 'looks at' (examines) the fire shroom item it sets item info/exclude state (engine housekeeping) and causes the item to 'bark' the label \"fire shroom \", i.e., present its name/description to the viewer.",
-    "external_call_count": 11,
-    "flag_read_count": 0,
-    "flag_write_count": 0
+    "main_function": "U8P_FIRESHRO::look",
+    "behavior_summary_one_liner": "U8P_FIRESHRO implements a simple inspect/U8P_FIRESHRO::look handler and two U8P_FIRESHRO::hit-handling routines for a \"fire shroom\" item.",
+    "external_call_count": 10,
+    "flag_read_count": 1,
+    "flag_write_count": 1
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

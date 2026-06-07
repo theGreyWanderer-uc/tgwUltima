@@ -3,24 +3,24 @@
   "source_of_truth": "dialogue/json/U8P_CANOPYTP.json",
   "file": "U8P_CANOPYTP",
   "behavior_summary": [
-    "Handles the player's 'U8P_CANOPYTP::look' (examine) action for the canopy object. When invoked it prepares local item state (init / set info / process-exclude semantics inferred), then asks the item to 'bark' the short descriptive string \"canopy \".",
-    "The return value from Item::bark is captured and propagated via an 'implies' operation, which the script uses to set or influence the resulting script outcome, then the process suspends/returns.",
-    "No global game flags are read or written by this script; behavior is local to the canopy instance and the immediate bark/display interaction."
+    "This script implements the 'U8P_CANOPYTP::look' (examine) handler for the CANOPYTP object. When the player examines the object, the script displays a single short description/bark reading \"canopy \".",
+    "After emitting the bark the process suspends/ends; there are no conditionals, menus, flag reads/writes, or external calls in this snippet.",
+    "Behavior is minimal and purely presentational — it provides the in-world short description for the canopy trigger."
   ],
   "notable_control_flow": [
-    "Entry on the 'U8P_CANOPYTP::look' trigger -> local init/state setting (inferred 'set info' / 'process exclude') -> push receiver and string -> call Item::bark(\"canopy \") -> capture return (retval) -> apply 'implies' to propagate/convert retval into a result/flag -> pop temporary -> suspend/return."
+    "Entry into U8P_CANOPYTP::look triggers an immediate Bark node with the text \"canopy \".",
+    "Following the Bark the process executes a suspend/end node. There is no branching or additional logic."
   ],
   "open_questions": [
-    "Precise semantics of the 'implies' opcode in this engine: does it convert a bark return into a boolean success, set a script-level result, or influence event propagation?",
-    "Exact meaning and target of the inferred 'set info' / 'process exclude' operations performed at function start: which info id is used and what object is excluded?",
-    "Whether the BP+06h parameter is the item instance (receiver) or the viewer/player PID in this engine's calling convention (inference favors receiver but uncertainty remains)."
+    "Is the trailing space in the bark text \"canopy \" intentional (formatting artifact) or meaningful in the game UI?",
+    "Is U8P_CANOPYTP::look ever extended by other scripts or runtime hooks (none referenced here)?"
   ],
   "main_function": {
     "name": "U8P_CANOPYTP::look",
     "execution_form": "process",
-    "purpose": "Respond to the 'U8P_CANOPYTP::look' event for a canopy object by producing its short descriptive text via Item::bark and propagating the bark result to the script's outcome.",
+    "purpose": "Provide the short examine/description text for the CANOPYTP object when the player uses the U8P_CANOPYTP::look/examine action.",
     "entry_conditions": [
-      "Event 0 — the player/actor performs a 'U8P_CANOPYTP::look' (examine) action on the canopy object (entering its interaction/trigger area)."
+      "Invoked when the player performs the 'U8P_CANOPYTP::look' (examine) action on the CANOPYTP object (inferred from process classification 0x0208 and function name)."
     ],
     "confidence": "high"
   },
@@ -28,20 +28,13 @@
     {
       "name": "U8P_CANOPYTP::look",
       "kind": "main",
-      "role": "Main event handler for the canopy object's 'U8P_CANOPYTP::look' action; orchestrates local state and calls Item::bark to emit the description.",
+      "role": "Handles the object's U8P_CANOPYTP::look/examine event and shows a single descriptive bark.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_CANOPYTP::look",
-        "callee": "Item::bark",
-        "purpose": "Cause the canopy item to emit/display the short descriptive string \"canopy \". The returned value is captured and used (via an 'implies' operation) to set/propagate the script's result or control flow.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -50,12 +43,12 @@
   "ui_tags": [
     "trigger",
     "description",
-    "communication"
+    "suspend"
   ],
   "quick_facts": {
-    "main_function": "U8P_CANOPYTP::CANOPYTP::look",
-    "behavior_summary_one_liner": "Handles the player's 'U8P_CANOPYTP::look' (examine) action for the canopy object. When invoked it prepares local item state (init / set info / process-exclude semantics inferred), then asks the item to 'bark' the short descriptive string \"canopy \".",
-    "external_call_count": 1,
+    "main_function": "U8P_CANOPYTP::look",
+    "behavior_summary_one_liner": "This script implements the 'U8P_CANOPYTP::look' (examine) handler for the CANOPYTP object. When the player examines the object, the script displays a single short description/bark reading \"canopy \".",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

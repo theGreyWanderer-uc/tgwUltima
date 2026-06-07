@@ -3,103 +3,95 @@
   "source_of_truth": "dialogue/json/U8P_TRAP.json",
   "file": "U8P_TRAP",
   "behavior_summary": [
-    "Handles a trap/item 'U8P_TRAP::use' or trigger event: mark the object to avoid immediate reprocessing, inspect the item's quality, and if allowed spawn a fire-spell effect and emit a damage bark.",
-    "Activation is gated by the high byte of Item::getQuality() being zero (quality / 0x100 == 0).",
-    "When gated pass, it reads a 2-byte field from the item (offset +2) and uses that value as a parameter when spawning a FIRESPEL effect tied to the triggering PID and the trap object.",
-    "After spawning the effect (the spawn is wrapped in an implies/suspend sequence suggesting sequencing/waiting), the trap item calls Item::bark to present the string 'Ouch! -That- must have hurt, Avatar!' to the player/process."
+    "U8P_TRAP::use is a U8P_TRAP::use-handler process invoked when the item is used. It reads the item's quality word, computes a high-byte value (quality / 0x0100) and only proceeds when that value equals 0.",
+    "When the condition is met the process records an internal numeric flag (writes 0x029A), spawns a FIRESPEL effect targeting the item/actor, suspends the U8P_TRAP::use process to let the spawned effect run, and issues a player-facing bark: \"Ouch! -That- must have hurt, Avatar!\"",
+    "Overall behavior appears to implement a trap-like item that triggers a fire effect and plays a hurt sound/text when used if a specific quality/flag byte is unset."
   ],
   "notable_control_flow": [
-    "U8P_TRAP::TRAP::use immediately runs 'set info' and 'process exclude' on the passed object to prevent repeat processing during this handler.",
-    "It calls Item::getQuality and computes (quality / 0x100) into a local; only if that high byte equals zero does the handler continue to trigger effects.",
-    "When condition satisfied, it reads a 2-byte word from the item (offset +2), then calls spawn (FIRESPEL::233D) with arguments (pid, 1, offset+2 value, item pointer, 0).",
-    "The spawn call is wrapped with an implies/suspend sequence (engine-level flow control), then Item::bark is invoked to show the damage message."
+    "Entry: process type 0x0207 (U8P_TRAP::use) — U8P_TRAP::use is executed when the item is used.",
+    "Conditional guard: local1 = Item::getQuality(this) / 0x0100; only if local1 == 0 does the trap sequence run.",
+    "Sequence (when guard passes): SetFlag(local3, 0x029A) -> spawn FIRESPEL::func233D(this, 0x00000000) -> suspend current process -> Bark (hurt text)."
   ],
   "open_questions": [
-    "What is the game-level meaning of the high byte of Item::getQuality()—is it a 'disabled' flag, a trap-armed state, or a subtype indicator?",
-    "What exactly does the 2-byte word at item offset +2 represent (tile index, damage type, target id, trap subtype)?",
-    "What does constant 0x029A represent when passed to Item::bark (a message target PID, string table id, or UI context)?",
-    "Does the implies/suspend around spawn wait for the spawned effect to complete, or merely sequence engine processing for concurrency reasons?"
+    "What exact semantic is tested by Item::getQuality(this) / 0x0100 == 0 (which quality byte or flag does this represent)?",
+    "What is the intended meaning or game-state role of the numeric flag 0x029A that the script writes (local bookkeeping, cooldown, consumed state, etc.)?",
+    "Is the spawned FIRESPEL targeted at the item instance or the Avatar (the raw spawn uses 'this' and context is ambiguous)?",
+    "What is the purpose of the extra numeric spawn argument 0x00000000 passed to FIRESPEL::func233D?",
+    "Is the spawn pid stored/used later by other code paths (pid appears captured but no further U8P_TRAP::use in this excerpt)?"
   ],
   "main_function": {
     "name": "U8P_TRAP::use",
     "execution_form": "process",
-    "purpose": "Respond to the trap/item being used or triggered: prevent reprocessing, check an enable/quality byte, spawn a fire-spell effect if enabled, and display a damage bark from the item.",
+    "purpose": "Handle the item being used; conditionally trigger a trap-like fire effect, mark state, suspend to allow the effect to run, and present a hurt bark to the player.",
     "entry_conditions": [
-      "Invoked on trap/item 'U8P_TRAP::use' or when an actor enters the trap's trigger region (fast-area/enter event).",
-      "Proceeds only if (Item::getQuality() / 0x100) == 0 (high byte equals zero)."
+      "Invoked by the engine when the item is used (process type 0x0207).",
+      "Only executes the trap effect when computed local1 == 0 (local1 := Item::getQuality(this) / 0x0100)."
     ],
-    "confidence": "high"
+    "confidence": "medium"
   },
   "function_map": [
     {
       "name": "U8P_TRAP::use",
       "kind": "main",
-      "role": "Trap U8P_TRAP::use/trigger handler that gates activation by item quality, spawns effect, and emits a bark message.",
-      "confidence": "high"
+      "role": "item U8P_TRAP::use handler / trap trigger",
+      "confidence": "medium"
     },
     {
       "name": "Item::getQuality",
       "kind": "extern",
-      "role": "Return integer quality of the item; caller inspects the high byte to determine activation eligibility.",
+      "role": "reads the item's quality/metadata word used for gating",
       "confidence": "high"
     },
     {
-      "name": "spawn (FIRESPEL::233D)",
+      "name": "FIRESPEL::func233D",
       "kind": "extern",
-      "role": "Create/launch a fire-spell effect associated with the trap; called with pid, flags, a 2-byte item field, the item pointer, and 0.",
+      "role": "spawned fire-spell effect/process (applies trap damage/effect)",
       "confidence": "medium"
     },
     {
-      "name": "Item::bark",
+      "name": "spawn",
       "kind": "extern",
-      "role": "Emit a short message from the item to the player/process (used to show the 'Ouch!' damage text).",
+      "role": "process spawn primitive (used to launch FIRESPEL::func233D)",
       "confidence": "high"
     },
     {
-      "name": "U8P_TRAP::set info / process exclude",
-      "kind": "helper",
-      "role": "Engine operations invoked by the handler to mark the object and exclude it from further immediate processing.",
-      "confidence": "medium"
+      "name": "suspend",
+      "kind": "extern",
+      "role": "process-control primitive to yield the current process",
+      "confidence": "high"
     }
   ],
   "call_analysis": {
-    "internal_calls": [
-      {
-        "caller": "U8P_TRAP::use",
-        "callee": "U8P_TRAP::set info",
-        "purpose": "Mark the passed object with processing/info state to avoid duplicate handling during this event.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_TRAP::use",
-        "callee": "U8P_TRAP::process exclude",
-        "purpose": "Exclude the object from normal processing while this handler runs to prevent reentrancy.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_TRAP::use",
-        "callee": "U8P_TRAP::implies / suspend sequence",
-        "purpose": "Sequence or yield around the spawn call — likely to suspend the handler until spawn-related processing allows continuation or to ensure single-step ordering.",
-        "confidence": "medium"
-      }
-    ],
+    "internal_calls": [],
     "external_calls": [
       {
         "caller": "U8P_TRAP::use",
         "callee": "Item::getQuality",
-        "purpose": "Retrieve the item's quality value; the handler computes (quality / 0x100) and uses the high byte to decide whether to activate the trap.",
+        "purpose": "Read the item's quality/metadata word to compute a byte/field used as a guard condition.",
         "confidence": "high"
       },
       {
         "caller": "U8P_TRAP::use",
-        "callee": "spawn (FIRESPEL::233D)",
-        "purpose": "Spawn the fire-spell effect tied to the trap using parameters (pid, 1, 2-byte item field, item pointer, 0).",
+        "callee": "spawn (FIRESPEL::func233D)",
+        "purpose": "Launch/spawn a FIRESPEL process targeting the item/actor to apply the trap's fire effect.",
         "confidence": "medium"
       },
       {
         "caller": "U8P_TRAP::use",
-        "callee": "Item::bark",
-        "purpose": "Have the trap/item present the damage text 'Ouch! -That- must have hurt, Avatar!' to the triggering player/process.",
+        "callee": "suspend",
+        "purpose": "Yield/suspend the U8P_TRAP::use process after spawning the effect so the spawned process can run.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TRAP::use",
+        "callee": "SetFlag",
+        "purpose": "Write an internal/state numeric value (0x029A) — likely bookkeeping or a one-time-trigger marker.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_TRAP::use",
+        "callee": "Bark",
+        "purpose": "Play/display the hurt text 'Ouch! -That- must have hurt, Avatar!' to the player when the trap triggers.",
         "confidence": "high"
       }
     ]
@@ -115,9 +107,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_TRAP::TRAP::use",
-    "behavior_summary_one_liner": "Handles a trap/item 'U8P_TRAP::use' or trigger event: mark the object to avoid immediate reprocessing, inspect the item's quality, and if allowed spawn a fire-spell effect and emit a damage bark.",
-    "external_call_count": 3,
+    "main_function": "U8P_TRAP::use",
+    "behavior_summary_one_liner": "U8P_TRAP::use is a U8P_TRAP::use-handler process invoked when the item is used. It reads the item's quality word, computes a high-byte value (quality / 0x0100) and only proceeds when that value equals 0.",
+    "external_call_count": 5,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

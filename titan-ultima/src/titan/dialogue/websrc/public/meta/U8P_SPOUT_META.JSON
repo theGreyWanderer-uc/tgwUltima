@@ -3,26 +3,23 @@
   "source_of_truth": "dialogue/json/U8P_SPOUT.json",
   "file": "U8P_SPOUT",
   "behavior_summary": [
-    "SPOUT::look is an examine/\"U8P_SPOUT::look\" handler that causes the spout item/process to produce the short text \"spout \" via Item::bark and then suspends.",
-    "Before invoking the bark, the script sets a per-process info flag (0x208) and applies a process-exclude operation — likely to alter presentation or prevent re-entrancy while the bark runs.",
-    "The bark call is given the viewer/process id and the literal string; the string memory is freed afterwards. The bark return value is tested in an implication-like operation and the script then suspends/returns."
+    "U8P_SPOUT::look is a short 'U8P_SPOUT::look' (examine) handler for the SPOUT entity. When the player examines SPOUT it plays a single short bark text \"spout \" and then the process suspends.",
+    "There is no branching, menu interaction, external calls, or flag manipulation — the routine is purely informational and ends by pausing the U8P_SPOUT::look process."
   ],
   "notable_control_flow": [
-    "On entry (Event 0 / U8P_SPOUT::look) the handler sets info 0x208 on the target process and issues a process-exclude operation.",
-    "It then pushes the viewer/process id and the literal string \"spout \", calls Item::bark on the target process, frees the string, evaluates the bark return via an 'imply' pattern, and suspends.",
-    "There are no observable writes to global game flags in this handler; effects appear localized to the target process/item."
+    "Single linear sequence: bark (player-facing text) -> suspend/wait. No conditional branches or menus."
   ],
   "open_questions": [
-    "What exact semantics does info 0x208 represent (visual state, temporary mute, or concurrency/exclusion guard)?",
-    "What is the precise meaning of the bark return value and how the subsequent imply operation affects game state or control flow?",
-    "Which process id is passed as the first pid parameter (the viewer/player or another controller) and how is it used by Item::bark in this context?"
+    "Does the engine resume the suspended process automatically after the bark, or is the suspend intended to keep the U8P_SPOUT::look process alive until an external resume?",
+    "Is the trailing space in the bark text \"spout \" intentional or an artifact of extraction?",
+    "Are there any game-state effects elsewhere tied to examining SPOUT that are not visible in this short handler?"
   ],
   "main_function": {
     "name": "U8P_SPOUT::look",
     "execution_form": "process",
-    "purpose": "Handle the player's or actor's 'U8P_SPOUT::look' (examine) event for the spout: temporarily set a per-process info/exclude state, make the spout emit the text \"spout \" via Item::bark, then evaluate the bark result and suspend.",
+    "purpose": "Provide the short examination response when the player uses the 'U8P_SPOUT::look' action on the SPOUT entity: emit the bark text \"spout \" then suspend the process.",
     "entry_conditions": [
-      "Event 0 (U8P_SPOUT::look) — triggered when an actor/avatar looks at or examines the spout object."
+      "Player triggers the 'U8P_SPOUT::look' (examine) action on the SPOUT NPC/object (U8P_SPOUT::look process entry)."
     ],
     "confidence": "high"
   },
@@ -30,53 +27,25 @@
     {
       "name": "U8P_SPOUT::look",
       "kind": "main",
-      "role": "Examine/\"U8P_SPOUT::look\" event handler for the spout item/process that emits a short descriptive string.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine-provided routine used to display/emit a short text message from an item/process to a target process/player.",
+      "role": "U8P_SPOUT::look/examine handler that emits a short bark and suspends",
       "confidence": "high"
     }
   ],
   "call_analysis": {
-    "internal_calls": [
-      {
-        "caller": "U8P_SPOUT::look",
-        "callee": "U8P_SPOUT::set info (0x208)",
-        "purpose": "Set a per-process/info flag (0x208) on the target; likely controls presentation or state while barking.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_SPOUT::look",
-        "callee": "U8P_SPOUT::process exclude",
-        "purpose": "Exclude the target process from normal processing (temporary guard) during the bark/display sequence.",
-        "confidence": "medium"
-      }
-    ],
-    "external_calls": [
-      {
-        "caller": "U8P_SPOUT::look",
-        "callee": "Item::bark",
-        "purpose": "Instruct the spout item/process to display/emit the literal string \"spout \" to the provided target process id/viewer.",
-        "confidence": "high"
-      }
-    ]
+    "internal_calls": [],
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
     "writes": []
   },
   "ui_tags": [
-    "trigger",
-    "cleanup",
-    "guard"
+    "trigger"
   ],
   "quick_facts": {
-    "main_function": "SPOUT::look",
-    "behavior_summary_one_liner": "SPOUT::look is an examine/\"U8P_SPOUT::look\" handler that causes the spout item/process to produce the short text \"spout \" via Item::bark and then suspends.",
-    "external_call_count": 1,
+    "main_function": "U8P_SPOUT::look",
+    "behavior_summary_one_liner": "U8P_SPOUT::look is a short 'U8P_SPOUT::look' (examine) handler for the SPOUT entity. When the player examines SPOUT it plays a single short bark text \"spout \" and then the process suspends.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

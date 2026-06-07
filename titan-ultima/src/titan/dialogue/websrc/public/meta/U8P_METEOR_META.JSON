@@ -3,30 +3,27 @@
   "source_of_truth": "dialogue/json/U8P_METEOR.json",
   "file": "U8P_METEOR",
   "behavior_summary": [
-    "When the meteor is struck (U8P_METEOR::hit event), the script always plays a meteor impact sound and then destroys the meteor object.",
-    "If the U8P_METEOR::hit parameter falls in the range 2..255 (checked as >1 and <0x0100), the script saves that value to a local, generates two small random values, and invokes an effect/notification routine (METHOD::0080) with the randoms and the stored U8P_METEOR::hit value before destruction.",
-    "Sound playback is routed/positioned using info derived from the meteor object and specific sound parameter bytes (0x64, 0x1F).",
-    "Destruction (Item::destroy) is unconditional and is performed at the end of the handler to remove the meteor from the world."
+    "U8P_METEOR::hit is a process that runs when the meteor is struck: it plays a U8P_METEOR::hit sound, optionally forwards a randomized U8P_METEOR::hit to a target/selector passed in via its first parameter, and then destroys the meteor object.",
+    "If the first parameter (param1) is a valid selector value (inferred check: > 1 and < 256), the function copies that value to a local (local1) and calls a receive-U8P_METEOR::hit helper to apply randomized damage/effect to that selector.",
+    "Randomization is applied to the forwarded U8P_METEOR::hit using two urandom calls (one added to a base 0x0A yielding an inferred primary damage ~10–29, and a smaller secondary random 0–7), then Item::destroy(this) removes the meteor instance."
   ],
   "notable_control_flow": [
-    "Entry: Event 5 (U8P_METEOR::hit) handler executes on meteor impact.",
-    "Unconditional step: run playSFX with sfx id 0x020B and meteor-associated info.",
-    "Conditional branch: if [BP+0Ah] > 1 AND [BP+0Ah] < 0x0100 then -> store U8P_METEOR::hit to [BP-02h], call urandom twice to form two parameters, call METHOD::0080 with (first_random+10, second_random, 0x00, stored_hit).",
-    "Cleanup: always call Item::destroy([BP+06h]) and return."
+    "Always: playSFX(0x64, 0x1F) is invoked at function start to produce immediate audio feedback.",
+    "Conditional branch: if param1 is in the valid selector range (inferred >1 and <256) then prepare local1 and call METHOD::receiveHitWrapper with randomized parameters.",
+    "Termination/cleanup: Item::destroy(this) is called unconditionally (or after the conditional) to remove the meteor object."
   ],
   "open_questions": [
-    "What exact semantics/payload of METHOD::0080 are (damage application, timed effect, or notification) — only call-site shape is visible, not its implementation.",
-    "Whether the stored U8P_METEOR::hit parameter passed to METHOD::0080 is passed by-value or by-address (the disassembly stores it to [BP-02h] and passes that address/value; exact callee expectation is inferred).",
-    "Precise meaning of the two immediate sound bytes (0x64, 0x1F) used by playSFX (volume, attenuation, flags) — engine-specific interpretation unknown.",
-    "Which in-game actor or system receives METHOD::0080 (target inferred from context but not explicitly resolved here)."
+    "What is the intended semantic meaning of the second parameter (param2)? It is present in the signature but unused in the excerpt.",
+    "Exact meanings of METHOD::receiveHitWrapper's arguments (especially the small secondary random value and the 0x00 flag) are inferred but not explicit.",
+    "Whether the selector/target is always an entity id when param1 is in range, or whether other selector encodings are supported by the engine."
   ],
   "main_function": {
     "name": "U8P_METEOR::hit",
     "execution_form": "process",
-    "purpose": "Handle a meteor being struck: play impact audio, optionally trigger an effect based on the U8P_METEOR::hit parameter and random jitter, then remove the meteor object from the world.",
+    "purpose": "Handle the meteor being U8P_METEOR::hit: play a U8P_METEOR::hit sound, optionally forward a randomized U8P_METEOR::hit to a target/selector passed in, then destroy the meteor object.",
     "entry_conditions": [
-      "Invoked as Event 5 (U8P_METEOR::hit) for a meteor object when it is struck.",
-      "Parameters: [BP+06h] = meteor item/object reference; [BP+0Ah] = U8P_METEOR::hit value or U8P_METEOR::hit-source identifier."
+      "Invoked as the meteor's 'U8P_METEOR::hit' process (process type 0x020B) — triggered when the meteor receives a U8P_METEOR::hit event.",
+      "Behavior branches depending on the numeric value of the first parameter (param1)."
     ],
     "confidence": "high"
   },
@@ -34,31 +31,31 @@
     {
       "name": "U8P_METEOR::hit",
       "kind": "main",
-      "role": "Process-level handler for meteor impact (plays SFX, conditionally applies effect, destroys item).",
+      "role": "meteor U8P_METEOR::hit handler (plays SFX, forwards U8P_METEOR::hit, cleans up meteor)",
       "confidence": "high"
     },
     {
-      "name": "U8P_METEOR::playSFX",
+      "name": "playSFX",
       "kind": "extern",
-      "role": "Play the meteor impact sound (sfx id 0x020B) using meteor-derived info and sound parameters.",
+      "role": "play an immediate sound effect for the U8P_METEOR::hit",
       "confidence": "high"
     },
     {
       "name": "urandom",
       "kind": "extern",
-      "role": "Provide pseudorandom integers used to parameterize METHOD::0080 (two small jitter values).",
-      "confidence": "high"
+      "role": "produce small random integers used to vary forwarded U8P_METEOR::hit parameters",
+      "confidence": "medium"
     },
     {
-      "name": "METHOD::0080",
+      "name": "METHOD::receiveHitWrapper",
       "kind": "extern",
-      "role": "Apply or schedule an effect/notification related to the U8P_METEOR::hit using randoms and the stored U8P_METEOR::hit value (inferred).",
+      "role": "apply/forward a U8P_METEOR::hit (damage/effect) to the target/selector",
       "confidence": "medium"
     },
     {
       "name": "Item::destroy",
       "kind": "extern",
-      "role": "Remove/destroy the meteor object instance from the world.",
+      "role": "destroy/remove the meteor item instance",
       "confidence": "high"
     }
   ],
@@ -67,26 +64,26 @@
     "external_calls": [
       {
         "caller": "U8P_METEOR::hit",
-        "callee": "U8P_METEOR::playSFX",
-        "purpose": "Play meteor impact sound (sfx id 0x020B) with parameters and object-associated routing/positioning info.",
+        "callee": "playSFX",
+        "purpose": "Provide immediate audio feedback for the meteor being struck (constants 0x64, 0x1F).",
         "confidence": "high"
       },
       {
         "caller": "U8P_METEOR::hit",
         "callee": "urandom",
-        "purpose": "Generate two small random values used to create jitter/duration/magnitude parameters for METHOD::0080 (first called with 0x14, second with 0x08).",
-        "confidence": "high"
+        "purpose": "Generate randomized values for the forwarded U8P_METEOR::hit: one urandom(0x14) used as primary damage offset, another urandom(0x08) used as a small secondary parameter.",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_METEOR::hit",
-        "callee": "METHOD::0080",
-        "purpose": "Invoke an effect application or notification using (first_random+10, second_random, 0x00, stored_hit). Exact effect semantics are inferred (likely damage/effect scheduling or callback).",
+        "callee": "METHOD::receiveHitWrapper",
+        "purpose": "Forward/apply a U8P_METEOR::hit to the selector/target using randomized parameters and a pointer to local1 (copy of param1). Exact semantics of the parameters are inferred.",
         "confidence": "medium"
       },
       {
         "caller": "U8P_METEOR::hit",
         "callee": "Item::destroy",
-        "purpose": "Destroy the meteor item/object passed in [BP+06h] to remove it from the game.",
+        "purpose": "Destroy the meteor object instance to clean up after the U8P_METEOR::hit is processed.",
         "confidence": "high"
       }
     ]
@@ -97,13 +94,13 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "animation",
-    "guard"
+    "audio",
+    "randomized",
+    "cleanup"
   ],
   "quick_facts": {
-    "main_function": "U8P_METEOR::METEOR::hit",
-    "behavior_summary_one_liner": "When the meteor is struck (U8P_METEOR::hit event), the script always plays a meteor impact sound and then destroys the meteor object.",
+    "main_function": "U8P_METEOR::hit",
+    "behavior_summary_one_liner": "U8P_METEOR::hit is a process that runs when the meteor is struck: it plays a U8P_METEOR::hit sound, optionally forwards a randomized U8P_METEOR::hit to a target/selector passed in via its first parameter, and then destroys the meteor object.",
     "external_call_count": 4,
     "flag_read_count": 0,
     "flag_write_count": 0

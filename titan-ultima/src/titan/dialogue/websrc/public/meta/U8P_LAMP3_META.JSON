@@ -3,26 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_LAMP3.json",
   "file": "U8P_LAMP3",
   "behavior_summary": [
-    "LAMP3::look: When a player/actor examines the wall lamp, the script composes the literal string 'wall lamp ' and invokes the item's bark/display routine so the description is shown to the viewer.",
-    "LAMP3::use: When the lamp is used, the script reads the lamp's frame/state and spawns/activates a nearby effect via FREE::2411. The effect id and which coordinate is offset by +0x20 depend on the lamp's frame (frame==0 uses effect id 0x013A and offsets X; otherwise uses effect id 0x013D and offsets Y)."
+    "Provides a short examine description for a wall-mounted lamp via U8P_LAMP3::look (shows the text 'wall lamp').",
+    "Handles a U8P_LAMP3::use/activate action via U8P_LAMP3::use that inspects the lamp item's current frame and replaces the item with one of two alternate item types by calling FREE::changeItemType. This effectively toggles or swaps the lamp's placed variant (likely different orientation or on/off states).",
+    "Coordinate arithmetic (using Item::getX and Item::getY with +0x20 in one branch) is used to compute the placement coordinates for the replacement, while Item::getZ supplies the level."
   ],
   "notable_control_flow": [
-    "LAMP3::look allocates a temporary string, converts it to a pointer, pushes the viewer/item arguments and calls Item::bark, then frees the temporary string before returning.",
-    "LAMP3::use queries Item::getFrame and branches: one branch for frame == 0, the other for frame != 0; both branches fetch Z, Y, X via Item::getZ/getY/getX, add 0x20 to a different coordinate depending on the branch, then call FREE::2411 with the computed coordinates, a zero byte flag, a frame-dependent effect id, and the item reference.",
-    "No global flags are observed to be read or written by these handlers; behavior is local to the item and effect spawn routine."
+    "U8P_LAMP3::look: linear flow — emit a single bark/string 'wall lamp' and suspend/end.",
+    "U8P_LAMP3::use: conditional branch on Item::getFrame(this) == 0x00; two distinct FREE::changeItemType calls are made depending on the frame value (different target coordinates and typeId)."
   ],
   "open_questions": [
-    "What exactly does FREE::2411 implement? It appears to spawn or toggle a visual/lighting effect (inferred from arguments and differing effect ids), but the precise effect semantics are unknown.",
-    "What do the two effect ids (0x013A and 0x013D) represent relative to lamp frames (e.g., light on vs. light off, or two orientation-specific visuals)?",
-    "Why is a +0x20 offset applied to X in one branch and to Y in the other? This likely aligns the spawned effect to a lamp sprite orientation, but exact anchor semantics are not confirmed.",
-    "Are there other events (e.g., enterFastArea/leaveFastArea) implemented elsewhere for this lamp that change frame or global state?"
+    "What semantic meaning does the byteFlag (0x00) argument to FREE::changeItemType have in this context?",
+    "Are the two typeIds (0x013A and 0x013D) representing 'on/off' states, orientation variants, or distinct decorative lamp models? This is inferred but not proven from the script alone.",
+    "Does the coordinate offset (+0x20 on X vs +0x20 on Y) correspond to rotation/placement rules in the engine or to two different attached tiles? (Likely, but uncertain.)"
   ],
   "main_function": {
     "name": "U8P_LAMP3::look",
     "execution_form": "process",
-    "purpose": "Display a short descriptive text for the wall lamp to the viewer by calling the item's bark/display routine with the literal string 'wall lamp '.",
+    "purpose": "Provide the short description shown when the player examines the wall lamp item.",
     "entry_conditions": [
-      "Event 0: invoked when the Avatar (or relevant actor) 'looks at' or examines this lamp (examination/inspect trigger)."
+      "Invoked when the player performs a 'U8P_LAMP3::look' / 'examine' action on the lamp item (object inspection)."
     ],
     "confidence": "high"
   },
@@ -30,90 +29,91 @@
     {
       "name": "U8P_LAMP3::look",
       "kind": "main",
-      "role": "Handle the 'U8P_LAMP3::look' (examine) event; compose and pass the description string to Item::bark.",
+      "role": "Examine handler that displays the short description 'wall lamp'.",
       "confidence": "high"
     },
     {
       "name": "U8P_LAMP3::use",
       "kind": "helper",
-      "role": "Handle the 'use' event: read lamp frame/state, compute an offset coordinate and call FREE::2411 to spawn/trigger a frame-dependent effect near the lamp.",
-      "confidence": "medium"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine invoked to display a short text or message for an item to a player/process.",
+      "role": "Utility/U8P_LAMP3::use handler that swaps the placed lamp item to one of two type variants based on the item's current frame.",
       "confidence": "high"
     },
     {
       "name": "Item::getFrame",
       "kind": "extern",
-      "role": "Return the item's current frame/state; drives branch in LAMP3::use.",
+      "role": "Query current item frame/state index used to choose replacement path.",
       "confidence": "high"
     },
     {
       "name": "Item::getX",
       "kind": "extern",
-      "role": "Return item X coordinate (used by LAMP3::use and subject to an offset in one branch).",
+      "role": "Return item X coordinate used to compute replacement X (one branch uses X + 0x20).",
       "confidence": "high"
     },
     {
       "name": "Item::getY",
       "kind": "extern",
-      "role": "Return item Y coordinate (used by LAMP3::use and subject to an offset in the alternate branch).",
+      "role": "Return item Y coordinate used to compute replacement Y (one branch uses Y + 0x20).",
       "confidence": "high"
     },
     {
       "name": "Item::getZ",
       "kind": "extern",
-      "role": "Return item Z/level coordinate (passed unchanged to FREE::2411).",
+      "role": "Return item Z/level coordinate passed to changeItemType.",
       "confidence": "high"
     },
     {
-      "name": "FREE::2411",
+      "name": "FREE::changeItemType",
       "kind": "extern",
-      "role": "Engine/system routine called to spawn/trigger an effect at computed coordinates with an effect id; exact behavior inferred (likely visual/lighting effect).",
-      "confidence": "medium"
+      "role": "Replace or change an item at given coordinates to a specified item type id (applied here to swap lamp variants).",
+      "confidence": "high"
     }
   ],
   "call_analysis": {
-    "internal_calls": [],
-    "external_calls": [
+    "internal_calls": [
       {
         "caller": "U8P_LAMP3::look",
-        "callee": "Item::bark",
-        "purpose": "Display the composed description string 'wall lamp ' to the viewer/process.",
+        "callee": "suspend (engine)",
+        "purpose": "Terminate/suspend the U8P_LAMP3::look process after producing the description.",
         "confidence": "high"
       },
+      {
+        "caller": "U8P_LAMP3::use",
+        "callee": "U8P_LAMP3::use (self branch logic)",
+        "purpose": "Select replacement path based on item frame (internal conditional control; represented here as internal branching rather than an external call).",
+        "confidence": "high"
+      }
+    ],
+    "external_calls": [
       {
         "caller": "U8P_LAMP3::use",
         "callee": "Item::getFrame",
-        "purpose": "Obtain the lamp's frame/state to decide which effect id to use and which coordinate to offset.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LAMP3::use",
-        "callee": "Item::getZ",
-        "purpose": "Fetch item's Z coordinate to pass to the effect spawn routine.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LAMP3::use",
-        "callee": "Item::getY",
-        "purpose": "Fetch item's Y coordinate; in the branch frame != 0 this Y value is incremented by 0x20 before calling FREE::2411.",
+        "purpose": "Read the lamp item's frame/state to decide which replacement variant to apply.",
         "confidence": "high"
       },
       {
         "caller": "U8P_LAMP3::use",
         "callee": "Item::getX",
-        "purpose": "Fetch item's X coordinate; in the branch frame == 0 this X value is incremented by 0x20 before calling FREE::2411.",
+        "purpose": "Obtain the item's X coordinate; used to compute X + 0x20 for one changeItemType call.",
         "confidence": "high"
       },
       {
         "caller": "U8P_LAMP3::use",
-        "callee": "FREE::2411",
-        "purpose": "Spawn or trigger a frame-dependent effect at computed coordinates, passing a zero byte flag, a chosen effect id (0x013A or 0x013D), and the item reference.",
-        "confidence": "medium"
+        "callee": "Item::getY",
+        "purpose": "Obtain the item's Y coordinate; used to compute Y + 0x20 for the alternate changeItemType call.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LAMP3::use",
+        "callee": "Item::getZ",
+        "purpose": "Provide Z/level coordinate to FREE::changeItemType for replacement placement.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LAMP3::use",
+        "callee": "FREE::changeItemType",
+        "purpose": "Replace the current lamp item with a specified typeId at computed coordinates, implementing the visual/functional swap.",
+        "confidence": "high"
       }
     ]
   },
@@ -123,13 +123,14 @@
   },
   "ui_tags": [
     "trigger",
+    "cleanup",
     "animation",
-    "description"
+    "guard"
   ],
   "quick_facts": {
-    "main_function": "LAMP3::look",
-    "behavior_summary_one_liner": "LAMP3::look: When a player/actor examines the wall lamp, the script composes the literal string 'wall lamp ' and invokes the item's bark/display routine so the description is shown to the viewer.",
-    "external_call_count": 6,
+    "main_function": "U8P_LAMP3::look",
+    "behavior_summary_one_liner": "Provides a short examine description for a wall-mounted lamp via U8P_LAMP3::look (shows the text 'wall lamp').",
+    "external_call_count": 5,
     "flag_read_count": 0,
     "flag_write_count": 0
   },
