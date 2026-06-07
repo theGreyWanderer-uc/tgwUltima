@@ -3,26 +3,28 @@
   "source_of_truth": "dialogue/json/U8P_WARDNS.json",
   "file": "U8P_WARDNS",
   "behavior_summary": [
-    "Provides gameplay handlers for a wardrobe item: a 'U8P_WARDNS::look' handler that composes and emits the short label \"wardrobe \" to the examining actor, and a 'use' handler that toggles the wardrobe's UI gump based on a status bit.",
-    "WARDNS::look prepares item/process state, builds the display string, calls Item::bark to present the text to the viewer, then suspends the script.",
-    "WARDNS::use reads the item's status flags via Item::getStatus(), tests bit 0x0100, and either calls Item::openGump(this, 0x0D) when the bit is set or Item::closeGump(this) when the bit is clear."
+    "U8P_WARDNS::look: When the player examines the object, the script emits a short descriptive bark \"wardrobe\" and then suspends/ends the U8P_WARDNS::look process.",
+    "U8P_WARDNS::use: When the player uses/activates the object, the script reads the item's status word, tests bit 0x0100, and toggles the item's UI/gump: if the bit is set it calls Item::closeGump(this), otherwise it calls Item::openGump(0x0D, this).",
+    "Overall: The item provides a short examine description and a simple toggle for an associated UI window based on an item status flag."
   ],
   "notable_control_flow": [
-    "WARDNS::look is an event-driven entry (Event 0) that performs a single UI/message emission and then suspends; it does not change global state.",
-    "WARDNS::use branches on a single status bit (0x0100) read from the item and dispatches to one of two gump-related external calls (openGump vs closeGump).",
-    "No global flags are read or written by this script; behavior is localized to the item instance referred to by the incoming parameter."
+    "U8P_WARDNS::look executes as a process-type 'U8P_WARDNS::look' handler: it performs a single Bark (\"wardrobe\") and then suspends/terminates — no branching or external calls.",
+    "U8P_WARDNS::use executes as a utility/U8P_WARDNS::use handler: it performs local1 = Item::getStatus(this); evaluates (local1 & 0x0100); if true calls Item::closeGump(this); else calls Item::openGump(0x0D, this).",
+    "No global flags are read or written by these routines; no menus or player-choice branching is present."
   ],
   "open_questions": [
-    "What exact semantic meaning does status bit 0x0100 encode for this wardrobe (locked/opened/alternate UI state)?",
-    "Is the pushed byte 0x0D to Item::openGump a gump template id or an argument encoding a view/mode? The disassembly shows 0x0D but its semantic mapping is inferred.",
-    "Are there other event handlers (e.g., enterFastArea/leaveFastArea) for this item not present in this fragment that affect wardrobe state?"
+    "What exact player action triggers U8P_WARDNS::use (double-click, context-U8P_WARDNS::use, or an engine \"U8P_WARDNS::use\" event)? This is not encoded in the extracted script.",
+    "What semantics does the status bit 0x0100 represent on this item (\"gump open\" flag inferred but not authoritative)?",
+    "What is the content/behavior of gump id 0x0D (UI layout/function) opened by Item::openGump(0x0D, this)?",
+    "local1 is inferred to be a status/word holder — its precise type and additional status bits are unknown."
   ],
   "main_function": {
     "name": "U8P_WARDNS::look",
     "execution_form": "process",
-    "purpose": "Handle the player 'U8P_WARDNS::look' (examine) action on the wardrobe: set up item info/process-exclude, compose the label \"wardrobe \", call Item::bark to present that label to the examining process, then suspend.",
+    "purpose": "Provide the short examine/description when the player inspects the object (emit the bark \"wardrobe\").",
     "entry_conditions": [
-      "Event 0 'U8P_WARDNS::look' — invoked when the avatar or an actor examines/looks at the wardrobe object"
+      "Invoked by the engine as the object's 'U8P_WARDNS::look' (examine) handler (process type 0x0208).",
+      "Likely triggered when the player targets the object with a 'U8P_WARDNS::look' or examine interaction (or enters a U8P_WARDNS::look-type fast area)."
     ],
     "confidence": "high"
   },
@@ -30,37 +32,31 @@
     {
       "name": "U8P_WARDNS::look",
       "kind": "main",
-      "role": "Examine/U8P_WARDNS::look event handler that emits the item label via Item::bark.",
+      "role": "examine/description handler (emits a single bark)",
       "confidence": "high"
     },
     {
       "name": "U8P_WARDNS::use",
       "kind": "helper",
-      "role": "Use event handler that toggles the wardrobe's UI gump by reading the item's status and calling openGump/closeGump accordingly.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine used to display or log a short text (the item's 'bark').",
-      "confidence": "high"
+      "role": "U8P_WARDNS::use/activate handler (toggle the item's UI/gump based on a status bit)",
+      "confidence": "medium"
     },
     {
       "name": "Item::getStatus",
       "kind": "extern",
-      "role": "Engine/item routine returning the item's status/flags word used to decide behavior.",
+      "role": "external API to read an item's status/flags",
       "confidence": "high"
     },
     {
       "name": "Item::closeGump",
       "kind": "extern",
-      "role": "Engine/item routine to close/hide the item's UI gump.",
+      "role": "external API to close an item's UI/gump",
       "confidence": "high"
     },
     {
       "name": "Item::openGump",
       "kind": "extern",
-      "role": "Engine/item routine to open/show the item's UI gump with a parameter (0x0D used here).",
+      "role": "external API to open a specific UI/gump for the item",
       "confidence": "high"
     }
   ],
@@ -68,28 +64,22 @@
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_WARDNS::look",
-        "callee": "Item::bark",
-        "purpose": "Emit/display the short label string \"wardrobe \" to the examining process/actor; used as the item's U8P_WARDNS::look/description feedback.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_WARDNS::use",
         "callee": "Item::getStatus",
-        "purpose": "Read the item's status/flags word to inspect bit 0x0100 which determines the next action.",
+        "purpose": "Read the item's status/flags into a local word for testing.",
         "confidence": "high"
       },
       {
         "caller": "U8P_WARDNS::use",
         "callee": "Item::closeGump",
-        "purpose": "Close or hide the wardrobe's UI when the inspected status bit (0x0100) is clear.",
-        "confidence": "high"
+        "purpose": "Close the item's UI/gump when the status bit 0x0100 indicates the UI is currently open (inferred).",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_WARDNS::use",
         "callee": "Item::openGump",
-        "purpose": "Open/show the wardrobe's UI with parameter 0x0D when the inspected status bit (0x0100) is set.",
-        "confidence": "high"
+        "purpose": "Open gump id 0x0D for the item when the status bit 0x0100 is not set (inferred).",
+        "confidence": "medium"
       }
     ]
   },
@@ -104,9 +94,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "WARDNS::look",
-    "behavior_summary_one_liner": "Provides gameplay handlers for a wardrobe item: a 'U8P_WARDNS::look' handler that composes and emits the short label \"wardrobe \" to the examining actor, and a 'use' handler that toggles the wardrobe's UI gump based on a status bit.",
-    "external_call_count": 4,
+    "main_function": "U8P_WARDNS::look",
+    "behavior_summary_one_liner": "U8P_WARDNS::look: When the player examines the object, the script emits a short descriptive bark \"wardrobe\" and then suspends/ends the U8P_WARDNS::look process.",
+    "external_call_count": 3,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

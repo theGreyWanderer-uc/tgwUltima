@@ -3,27 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_NSSPAINT.json",
   "file": "U8P_NSSPAINT",
   "behavior_summary": [
-    "Handles the object's 'U8P_NSSPAINT::look' (examine) event: tags the object with an info code (0x0208), makes the object emit a short description text 'painting ' via Item::bark, marks the U8P_NSSPAINT::look event as handled (via an 'implies' usage of the bark return), then suspends the script thread.",
-    "The routine treats the incoming parameter (the item/process id) as the target for set-info and for calling Item::bark so the displayed text is associated with that object/process.",
-    "No global flags are read or written in the extracted fragment; this is a localized presentation/description handler."
+    "U8P_NSSPAINT::look is a U8P_NSSPAINT::look/inspect handler for a painting object. When the player examines the object it emits a single player-facing line 'painting ' and then executes a suspend.",
+    "The suspend likely yields or ends the U8P_NSSPAINT::look process so the engine can resume normal flow; there are no menus, branches, external calls, or global-flag interactions in the extracted nodes.",
+    "Two low-confidence/Unknown nodes surround the visible actions (an opening block and the suspend), so minor surrounding control-flow details may be missing from the extract."
   ],
   "notable_control_flow": [
-    "On entry (Event 0 / U8P_NSSPAINT::look) the script performs a set-info operation with code 0x0208 on the target PID.",
-    "Calls external Item::bark with parameters (pid, \"painting \") to display the short description.",
-    "Pushes Item::bark return value into an implication/opcode to indicate the U8P_NSSPAINT::look event was handled/consumed.",
-    "Suspends the calling script/thread and returns control to the engine."
+    "Entry -> emit a single Bark 'painting ' -> suspend the process.",
+    "No conditional branches, menu interactions, or external API calls are present in the visible nodes.",
+    "Unknown nodes at start and around the suspend suggest there may be simple engine housekeeping or block-scoping not captured in the excerpt."
   ],
   "open_questions": [
-    "What exact semantic is encoded by info id 0x0208 (e.g., visual state, examined flag, or process routing)?",
-    "What is the engine-level effect of the 'implies' operation on the bark return value (does it always consume the U8P_NSSPAINT::look event, conditionally block other handlers, or influence UI focus)?",
-    "Are there any additional side-effects outside the disassembled fragment (e.g., logging, analytics, or broader state changes) when the object is looked at?"
+    "What exact engine behavior does the 'suspend' invoke here (process termination, yielding, or waiting for an engine tick/event)?",
+    "Do the Unknown nodes hide any brief side effects (logging, metric, or implicit 'this' resolution) performed at entry or at suspend?",
+    "Is there an implicit 'this' (item instance) passed to the process at runtime, and does any external system observe this U8P_NSSPAINT::look event (none shown in the extracted nodes)?"
   ],
   "main_function": {
     "name": "U8P_NSSPAINT::look",
     "execution_form": "process",
-    "purpose": "Respond to the 'U8P_NSSPAINT::look' event by marking the object and presenting a short descriptive text ('painting ') to the viewer, then suspend the script.",
+    "purpose": "Provide the short descriptive text when the player examines the painting and then pause/terminate the U8P_NSSPAINT::look handler.",
     "entry_conditions": [
-      "Event 0 (U8P_NSSPAINT::look) — invoked when the Avatar or another actor examines/looks at the painting object"
+      "Invoked by the engine when the player uses the 'U8P_NSSPAINT::look' / inspect action on the painting (processType 0x0208)."
     ],
     "confidence": "high"
   },
@@ -31,34 +30,25 @@
     {
       "name": "U8P_NSSPAINT::look",
       "kind": "main",
-      "role": "Examination/description handler for the painting object",
+      "role": "object U8P_NSSPAINT::look/inspect handler that displays a short description ('painting ') and then suspends the U8P_NSSPAINT::look process",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_NSSPAINT::look",
-        "callee": "Item::bark",
-        "purpose": "Request the item/process to emit/display a short text string to the viewer; here the literal 'painting ' is presented to describe the object.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
     "writes": []
   },
   "ui_tags": [
-    "trigger",
-    "description",
-    "suspend"
+    "trigger"
   ],
   "quick_facts": {
-    "main_function": "NSSPAINT::look",
-    "behavior_summary_one_liner": "Handles the object's 'U8P_NSSPAINT::look' (examine) event: tags the object with an info code (0x0208), makes the object emit a short description text 'painting ' via Item::bark, marks the U8P_NSSPAINT::look event as handled (via an 'implies' usage of the bark return), then suspends the script thread.",
-    "external_call_count": 1,
+    "main_function": "U8P_NSSPAINT::look",
+    "behavior_summary_one_liner": "U8P_NSSPAINT::look is a U8P_NSSPAINT::look/inspect handler for a painting object. When the player examines the object it emits a single player-facing line 'painting ' and then executes a suspend.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

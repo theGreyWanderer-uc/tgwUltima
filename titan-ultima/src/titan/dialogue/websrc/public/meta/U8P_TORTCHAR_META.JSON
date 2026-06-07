@@ -3,26 +3,27 @@
   "source_of_truth": "dialogue/json/U8P_TORTCHAR.json",
   "file": "U8P_TORTCHAR",
   "behavior_summary": [
-    "Handles the object's 'U8P_TORTCHAR::look' (examine) event: configures per-process/info state, emits a short description string, frees temporary resources, and suspends the script.",
-    "Specifically, when the torture chair is looked at, the handler calls Item::bark with the literal string \"torture chair \" and a process/object pointer so the description is attributed to that object.",
-    "Before barking it appears to push an info id (0x0208) and apply a 'process exclude' which likely controls presentation or which processes receive the info. After bark the allocated string is freed and the process is suspended."
+    "When the player examines or 'looks at' this object, the script displays a short descriptive line: \"torture chair\".",
+    "After showing the line it suspends/ends the U8P_TORTCHAR::look process with no further interaction, branching, or state changes.",
+    "This is a single-purpose U8P_TORTCHAR::look/description handler (process type 0x0208) intended purely to provide a short in-world label or description."
   ],
   "notable_control_flow": [
-    "Entry on Event 0 (U8P_TORTCHAR::look) -> set info (push 0x0208) and process-exclude -> allocate/prepare string 'torture chair ' -> call Item::bark -> free string -> apply an 'implies' result/pop to a temp -> suspend and return.",
-    "No observable reads or writes to global flags in this handler; behavior is localized to the object/process and the bark call."
+    "U8P_TORTCHAR::look: present a single Bark node containing the text \"torture chair\".",
+    "Immediately after the Bark the process issues a suspend/terminate action (inferred from an Unknown/suspend node), so execution ends with no branching.",
+    "There are no menu presents, conditionals, calls to other scripts, or global flag reads/writes in this routine."
   ],
   "open_questions": [
-    "What is the exact meaning of the info id 0x0208 that is pushed before barking (presentation, visibility, or routing control)?",
-    "What engine routine is used to free the allocated string (disassembly shows a free but the specific function name is not explicit)?",
-    "What does the 'implies' and subsequent pop into temp represent semantically in engine terms (a control/interruption flag, return-code processing, or debug artifact)?",
-    "Is the BP+06 parameter the viewer's pid or the object's own process/pid (evidence strongly suggests it is the object/process context for the bark but caller semantics are inferred)?"
+    "Is this U8P_TORTCHAR::look handler only invoked by an explicit player 'U8P_TORTCHAR::look/examine' command, or also by entering a proximity/fast-area trigger? (inferred from processType 0x0208 but not explicit).",
+    "Does the suspend node simply end the U8P_TORTCHAR::look process or hand control back for other engine post-processing (exact suspend semantics are engine-defined and not present in the script)?",
+    "Are there any animation/sound ties to this object elsewhere in the game data that accompany the textual bark? (no references in this script)"
   ],
   "main_function": {
     "name": "U8P_TORTCHAR::look",
     "execution_form": "process",
-    "purpose": "Respond to the object's Look event by preparing presentation state and emitting the short description 'torture chair ' via Item::bark, then clean up and suspend the process.",
+    "purpose": "Provide the short descriptive text shown to the player when they examine or 'U8P_TORTCHAR::look at' the object (display \"torture chair\"), then end/suspend the U8P_TORTCHAR::look process.",
     "entry_conditions": [
-      "Event 0 (U8P_TORTCHAR::look) — triggered when the player or actor examines/looks at the torture chair object."
+      "Invoked by a U8P_TORTCHAR::look/examine action (engine U8P_TORTCHAR::look-type process, processType 0x0208).",
+      "Likely triggered when the player inspects the object or enters the object's U8P_TORTCHAR::look-trigger region (inferred from classification)."
     ],
     "confidence": "high"
   },
@@ -30,32 +31,13 @@
     {
       "name": "U8P_TORTCHAR::look",
       "kind": "main",
-      "role": "Handler for the torture chair object's Look event; prepares info/exclusion and calls Item::bark to show the short description.",
+      "role": "Show short descriptive text for the object and then suspend/end the process.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_TORTCHAR::look",
-        "callee": "Item::bark",
-        "purpose": "Have the item/process produce/display the short description string 'torture chair ' attributed to the provided process/object pointer (pid).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_TORTCHAR::look",
-        "callee": "suspend",
-        "purpose": "Suspend the current process after producing the bark and cleaning up (yield/stop further immediate processing).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_TORTCHAR::look",
-        "callee": "U8P_TORTCHAR::free (memory)",
-        "purpose": "Free the allocated description string after Item::bark returns (exact free routine is not explicitly named in the extracted snippet).",
-        "confidence": "low"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -63,14 +45,12 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "animation",
-    "guard"
+    "description"
   ],
   "quick_facts": {
-    "main_function": "TORTCHAR::look",
-    "behavior_summary_one_liner": "Handles the object's 'U8P_TORTCHAR::look' (examine) event: configures per-process/info state, emits a short description string, frees temporary resources, and suspends the script.",
-    "external_call_count": 3,
+    "main_function": "U8P_TORTCHAR::look",
+    "behavior_summary_one_liner": "When the player examines or 'looks at' this object, the script displays a short descriptive line: \"torture chair\".",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

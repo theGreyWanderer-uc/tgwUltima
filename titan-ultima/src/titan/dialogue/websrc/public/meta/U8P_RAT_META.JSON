@@ -3,25 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_RAT.json",
   "file": "U8P_RAT",
   "behavior_summary": [
-    "RAT::look: When the player 'looks at' (inspects) the rat NPC, the rat emits a short textual/audible bark containing the literal string \"skellot \". This is purely a descriptive/UX response to inspection.",
-    "RAT::gotHit: When the rat receives a hit (damage) the handler first checks internal flags and whether the NPC is dead. If alive and conditions pass, it iterates over associated items (likely inventory/contained items) and for qualifying items (weight > 3 or a per-item flag) plays a specific SFX and forwards a small hit/effect to each item via Item::receiveHit. The routine propagates part of the hit effect to carried/contained objects and emits feedback."
+    "Provides a short examine/U8P_RAT::look response for the Rat: when the engine triggers the U8P_RAT::look process, the Rat emits a single bark \"skellot\" and then the process yields/suspends.",
+    "Handles incoming hits via U8P_RAT::gotHit(uword, word): the routine inspects its parameters, ensures the NPC is not dead, and under certain numeric/weight conditions plays a hit sound and forwards a hit to an item (calls Item::receiveHit).",
+    "The hit handler appears to treat the first parameter as an item or hit-source reference (used for weight queries and being targeted for Item::receiveHit) and uses the NPC reference (this) to check death state and a numeric threshold before applying item damage."
   ],
   "notable_control_flow": [
-    "RAT::look is an Event 0 handler that performs a single, deterministic action (Item::bark) then returns — no branching based on game state observed.",
-    "RAT::gotHit is guarded: it returns early if a specific rat/object flag test fails or if Npc::isDead() is true; only otherwise does it enter a loop over items to apply further effects and sounds.",
-    "The gotHit loop applies per-item guard checks (weight and/or a flag) before invoking playSFX and Item::receiveHit, so item propagation is selective, not universal."
+    "U8P_RAT::look: single linear flow — emit Bark(\"skellot\") then suspend/yield; no flags or external calls.",
+    "U8P_RAT::gotHit: conditional flow — store param1 into local1 and this into local2, test a numeric threshold and call Npc::isDead(addressof(local2)). If the NPC is alive and other checks pass, query Item::getWeightIncludingContents(addressof(local1)) and/or compare local1 == 1; if weight>3 or local1==1 then call playSFX(0x55) and Item::receiveHit(...) to damage/affect the item."
   ],
   "open_questions": [
-    "What exact flag (the checked rat/object field compared with 0x0100) represents (defensive stance, immunity, or a scripted state)?",
-    "What is the full meaning of the per-item flag tested in the loop (what attribute causes an item to be skipped besides weight)?",
-    "Which game events or AI states invoke RAT::gotHit (exact event index inferred as 6 but game mapping to engine events is not present here)?"
+    "Precise meanings of the numeric constants and comparisons in U8P_RAT::gotHit (e.g., the threshold tested against 'this' and the literal values) — inferred but not certain.",
+    "Exact semantic role of the second parameter (word) to U8P_RAT::gotHit: whether it is direct damage, attacker id, or another flag is unclear.",
+    "Whether local1 always references an Item instance, an equipment slot id, or sometimes a sentinel value (0xFFFFFFFF) in other contexts — inferred from usage but not guaranteed."
   ],
   "main_function": {
     "name": "U8P_RAT::look",
     "execution_form": "process",
-    "purpose": "Provide the player-facing inspection response for the rat NPC by emitting a short descriptive/audible string when looked at.",
+    "purpose": "Provide the short examine/U8P_RAT::look response for the Rat by emitting a single bark and suspending the U8P_RAT::look process.",
     "entry_conditions": [
-      "Event 0 — invoked when the Avatar/player 'looks at' or inspects this rat NPC"
+      "Triggered by the engine when the player examines/looks at the Rat (process type 0x0208 / 'U8P_RAT::look' event)."
     ],
     "confidence": "high"
   },
@@ -29,78 +29,42 @@
     {
       "name": "U8P_RAT::look",
       "kind": "main",
-      "role": "Inspection/description handler — barks a literal string to the viewer",
+      "role": "Examine/U8P_RAT::look handler that emits a short bark and ends the process.",
       "confidence": "high"
     },
     {
       "name": "U8P_RAT::gotHit",
       "kind": "helper",
-      "role": "Damage/hit handler — guards against dead state, iterates associated items and forwards hit/effects to qualifying items and plays SFX",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Emit a short UI/audible message or description from an item/NPC",
-      "confidence": "high"
-    },
-    {
-      "name": "Npc::isDead",
-      "kind": "extern",
-      "role": "Query whether an NPC is dead — used as an early exit guard in gotHit",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getWeightIncludingContents",
-      "kind": "extern",
-      "role": "Return the weight of an item including contents — used to decide propagation of hit",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_RAT::playSFX",
-      "kind": "extern",
-      "role": "Play a sound effect (used for feedback during hit propagation)",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::receiveHit",
-      "kind": "extern",
-      "role": "Apply a hit/effect to an item instance — used to forward damage/effects to carried/contained objects",
-      "confidence": "high"
+      "role": "Incoming-hit handler that inspects hit parameters, guards on NPC death/state, may play a sound, and forwards damage to an item via Item::receiveHit.",
+      "confidence": "medium"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_RAT::look",
-        "callee": "Item::bark",
-        "purpose": "Show/emit the literal inspection string \"skellot \" to the player/viewer",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_RAT::gotHit",
         "callee": "Npc::isDead",
-        "purpose": "Check if the rat is already dead and abort further processing if so",
+        "purpose": "Check whether the Rat (local2 / this) is dead; used to skip further hit handling if dead.",
         "confidence": "high"
       },
       {
         "caller": "U8P_RAT::gotHit",
         "callee": "Item::getWeightIncludingContents",
-        "purpose": "Obtain each associated item's weight (including contents) to decide whether to apply propagated hit/effects",
-        "confidence": "high"
+        "purpose": "Query the weight of the item referenced by local1 to decide whether to play a sound and apply Item::receiveHit.",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_RAT::gotHit",
-        "callee": "U8P_RAT::playSFX",
-        "purpose": "Emit an audible cue (SFX id 0x55) when an item qualifies for hit propagation",
+        "callee": "playSFX",
+        "purpose": "Play a hit-related sound effect (id 0x55) when item-damage conditions are met.",
         "confidence": "high"
       },
       {
         "caller": "U8P_RAT::gotHit",
         "callee": "Item::receiveHit",
-        "purpose": "Forward/apply a small hit/effect to qualifying carried/contained items (propagation of the rat's hit to its items)",
-        "confidence": "high"
+        "purpose": "Apply damage/effect to the referenced item (passes several constant args and this) as a result of the hit forwarding.",
+        "confidence": "medium"
       }
     ]
   },
@@ -110,14 +74,14 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "animation",
+    "sound",
+    "item-damage",
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_RAT::RAT::look",
-    "behavior_summary_one_liner": "RAT::look: When the player 'looks at' (inspects) the rat NPC, the rat emits a short textual/audible bark containing the literal string \"skellot \". This is purely a descriptive/UX response to inspection.",
-    "external_call_count": 5,
+    "main_function": "U8P_RAT::look",
+    "behavior_summary_one_liner": "Provides a short examine/U8P_RAT::look response for the Rat: when the engine triggers the U8P_RAT::look process, the Rat emits a single bark \"skellot\" and then the process yields/suspends.",
+    "external_call_count": 4,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

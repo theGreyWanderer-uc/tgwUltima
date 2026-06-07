@@ -3,26 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_SALKLOG.json",
   "file": "U8P_SALKLOG",
   "behavior_summary": [
-    "Provides two gameplay behaviors for a journal item: a short 'U8P_SALKLOG::look' response that labels the object as a journal, and a 'use' behavior that assembles and opens a long multi-entry journal text for reading.",
-    "SALKLOG::look sets item info/processing-exclude flags for the object and invokes a short Item::bark with the literal prefix \"journal \", so the player sees the item's label when examining it.",
-    "SALKLOG::use builds a concatenated journal string, conditionally appends an extra 'Bentic' entry if the global flag benticCacked is set, then calls Book::read to present the assembled text to the player; temporary buffers are freed afterward."
+    "Provides a short inspect response for the object when examined (U8P_SALKLOG::look) and a full readable logbook when used.",
+    "U8P_SALKLOG::look emits a single bark text 'journal ' as the object's short description and then yields/suspends.",
+    "U8P_SALKLOG::use constructs a long string titled 'THE OFFICIAL LOGBOOK OF CRIMES AND PUNISHMENTS', conditionally appends an extra 'Bentic' entry if the global flag benticCacked is set, then opens the Book reader (Book::read) to present the assembled text to the player and cleans up the temporary string afterwards."
   ],
   "notable_control_flow": [
-    "SALKLOG::look (Event 0): set info/process-exclude -> prepare short string -> call Item::bark(pid, \"journal \") -> cleanup temporary -> suspend/return.",
-    "SALKLOG::use (Event 1): allocate/construct long journal string into [BP-04h] -> store/read local context in [BP-02h] -> if global benticCacked then append an extra Bentic entry -> call Book::read(pid, [BP-04h], [BP-02h]) -> free string(s) -> suspend/return."
+    "U8P_SALKLOG::look is a simple process that barks a short label then suspends (no branching).",
+    "U8P_SALKLOG::use builds a temporary string, checks a global flag (benticCacked) to decide whether to append extra text, calls Book::read and suspends while the book UI runs, then nulls/frees the temporary string on return."
   ],
   "open_questions": [
-    "Exact semantic meaning and numeric id of the info/process-exclude flags being set by both handlers (the disassembly shows the operations but not the high-level label).",
-    "Precise interpretation of the local word [BP-02h] passed into Book::read — inferred as a reader context or callback/return address but not confirmed.",
-    "Full contents and formatting rules of the concatenated journal text (the extraction shows multiple entries; the exact order and full text of the optional Bentic entry are inferred).",
-    "Whether SALKLOG::use is directly invokable only by player 'use' or also by other engine events (fast-area enter/leave semantics are described in metadata but not explicitly used in the logic shown)."
+    "Exact contents and formatting of the assembled logbook text beyond the inferred title: the JSON shows the title but lower-confidence fragments remain.",
+    "Semantic meaning of the global flag 'benticCacked' (why it gates the extra entry) — its gameplay source and broader U8P_SALKLOG::use are inferred but not present here.",
+    "Whether U8P_SALKLOG::use is triggered by an explicit player 'U8P_SALKLOG::use' action, an inventory-read action, or another engine event (process type implies a U8P_SALKLOG::use process but the calling context is external)."
   ],
   "main_function": {
     "name": "U8P_SALKLOG::look",
     "execution_form": "process",
-    "purpose": "Handle the player 'U8P_SALKLOG::look' (examine) action on the SALKLOG journal item: set object info/exclude state and produce a short visible/announced label by calling Item::bark with \"journal \".",
+    "purpose": "Provide the object's short inspect/description text when the player 'looks at' or examines it.",
     "entry_conditions": [
-      "Event 0 (U8P_SALKLOG::look) — triggered when a player or actor performs the LOOK action on the object."
+      "Invoked by the engine's 'U8P_SALKLOG::look' / examine action for this object (processType 0x0208).",
+      "Triggers when the player inspects the item in the world or inventory (standard U8P_SALKLOG::look handler)."
     ],
     "confidence": "high"
   },
@@ -30,25 +30,19 @@
     {
       "name": "U8P_SALKLOG::look",
       "kind": "main",
-      "role": "Examines the journal item and emits a short label via Item::bark; sets item info and process-exclude state prior to returning.",
+      "role": "short inspect/description handler (emits a single bark and suspends).",
       "confidence": "high"
     },
     {
       "name": "U8P_SALKLOG::use",
       "kind": "helper",
-      "role": "Constructs and presents the journal text using Book::read; conditionally appends an extra entry if a global flag is set.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine routine used to make an item/process emit a short text message to a process/player (used for the 'U8P_SALKLOG::look' label).",
-      "confidence": "high"
+      "role": "assemble and present the long 'Official Logbook' text via Book::read; conditionally append extra entry based on a global flag; manage temporary storage lifecycle.",
+      "confidence": "medium"
     },
     {
       "name": "Book::read",
       "kind": "extern",
-      "role": "Engine routine used to open/present long text (book/journal) content to the player; invoked with pid, pointer to assembled text, and a local context/address.",
+      "role": "engine-provided text/book viewer used to display multi-page strings to the player.",
       "confidence": "high"
     }
   ],
@@ -56,15 +50,9 @@
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_SALKLOG::look",
-        "callee": "Item::bark",
-        "purpose": "Emit/display the short label string \"journal \" to the invoking process/player.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_SALKLOG::use",
         "callee": "Book::read",
-        "purpose": "Open/present the assembled journal text to the invoking process/player using a local context/address passed as the third argument.",
+        "purpose": "Open the assembled logbook text in the book/reader UI. Passed the pointer to the prepared string and a reference/address identifying the object/actor ('this').",
         "confidence": "high"
       }
     ]
@@ -73,7 +61,7 @@
     "reads": [
       {
         "name": "benticCacked",
-        "likely_effect": "Controls whether an extra 'Bentic' entry is appended to the journal text before calling Book::read.",
+        "likely_effect": "Controls whether an additional 'Bentic' entry is appended to the logbook text presented by U8P_SALKLOG::use.",
         "confidence": "medium"
       }
     ],
@@ -81,14 +69,14 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "animation",
-    "guard"
+    "readable",
+    "suspend",
+    "presentation"
   ],
   "quick_facts": {
-    "main_function": "SALKLOG::look",
-    "behavior_summary_one_liner": "Provides two gameplay behaviors for a journal item: a short 'U8P_SALKLOG::look' response that labels the object as a journal, and a 'use' behavior that assembles and opens a long multi-entry journal text for reading.",
-    "external_call_count": 2,
+    "main_function": "U8P_SALKLOG::look",
+    "behavior_summary_one_liner": "Provides a short inspect response for the object when examined (U8P_SALKLOG::look) and a full readable logbook when used.",
+    "external_call_count": 1,
     "flag_read_count": 1,
     "flag_write_count": 0
   },

@@ -3,79 +3,36 @@
   "source_of_truth": "dialogue/json/U8P_HYDHAT.json",
   "file": "U8P_HYDHAT",
   "behavior_summary": [
-    "HYDHAT::hatch is a fast-area (Event 7) trigger handler that attempts to spawn a world item and a small free script near that item to drive post-spawn behavior, then activates the item.",
-    "On entry the function checks a global guard hydrosFree and immediately returns if hydrosFree == 2, preventing any U8P_HYDHAT::hatch activity when that global is set.",
-    "If allowed, the function creates an item instance (Item::create with params 0x00,0x50), finalizes/populates it (Item::pop), queries its world coordinates (Item::getZ, Item::getY, Item::getX), offsets Z and X by 0x32, spawns a free/standalone script (FREE::1C6D) at (Z+0x32, Y, X+0x32, 0), waits/suspends, then calls Item::use on the created item to trigger its behavior."
+    "U8P_HYDHAT::hatch is a process that, when allowed by a global guard, creates a new item instance, places (spawns/pops) it into the world, recenters the camera near that spawned item, yields briefly (suspend) to let the sequence play, then invokes the spawned item's use behavior (the 'U8P_HYDHAT::hatch' activation).",
+    "The process uses a temporary local (local1) as the item handle passed by address to Item::create, Item::pop, and Item::use, and reads the created item's coordinates to compute a camera target.",
+    "Execution is gated by the global flag hydrosFree: if hydrosFree == 0x02 the U8P_HYDHAT::hatch routine is skipped; otherwise the create/spawn/camera/suspend/use sequence runs."
   ],
   "notable_control_flow": [
-    "Early-exit guard: read global hydrosFree and return immediately if value == 2.",
-    "Linear sequence when guard allows: create -> pop -> query coordinates -> spawn free script -> suspend/wait -> call Item::use on created item.",
-    "Spawned free script is placed at computed offsets relative to the created item's coordinates, suggesting synchronized visual/behavioral accompaniment."
+    "Initial guard: read global flag hydrosFree and skip the U8P_HYDHAT::hatch sequence when its value equals 0x02 (early exit).",
+    "If guarded, perform: Item::create(addressof(local1)) -> Item::pop(addressof(local1)) -> read Item::getZ/getY/getX(addressof(local1)) -> spawn ->FREE::cameraFollowAvatar(targetY, targetX+0x32, 0) -> suspend -> Item::use(addressof(local1)).",
+    "The process captures at least one intermediate value (temp) for camera offset computations and captures the process result of Item::use for internal use (inferred)."
   ],
   "open_questions": [
-    "What exact gameplay meaning and domain of hydrosFree is (why value 2 disables hatching) — only its read semantics are observed.",
-    "What behavior FREE::1C6D implements for the spawned script (animation/effect or logic tied to the hatched item) — only spawn parameters and identity are known.",
-    "The precise meaning of the numeric parameters passed to Item::pop (0x60, 0x3609, 0x4D4B) is not explicit (template id, graphics, flags are inferred but not confirmed).",
-    "Exact parameter order/meaning for Item::getZ when called with pid and 0x14 context is inferred but not fully confirmed."
+    "What specific item/type is being created? Numeric constants passed to Item::create/Item::pop (0x00, 0x50, 0x60, 0x3609, 0x4D4B, 'pid', 0x14) are not fully resolved.",
+    "Does Item::use perform the visual \"U8P_HYDHAT::hatch\" animation and further spawning, or does it trigger additional state changes elsewhere? The effect is inferred but not proven by the snippet.",
+    "Is hydrosFree used elsewhere as a more general world-state guard (e.g., preventing multiple concurrent hatches) or is it specific to this content? The flag name suggests broader meaning but the scope is unclear."
   ],
   "main_function": {
     "name": "U8P_HYDHAT::hatch",
     "execution_form": "process",
-    "purpose": "Handle a U8P_HYDHAT::hatch-area trigger by creating and placing a new item in the world, spawning a short-lived free script near it (offset in X/Z), then activating the item (Item::use). Acts as the in-game mechanic that performs 'hatching' visuals/activation unless disabled by a global guard.",
+    "purpose": "Conditionally spawn/create an item instance, focus the camera on it, pause to allow presentation, then trigger the item's use behavior (inferred to perform the U8P_HYDHAT::hatch effect).",
     "entry_conditions": [
-      "Invoked as Event 7 (fast-area entry / U8P_HYDHAT::hatch trigger).",
-      "Proceeds only if global hydrosFree != 2 (function returns immediately when hydrosFree == 2)."
+      "Invoked as a utility/process (process type 0x0210).",
+      "Runs only when the global flag hydrosFree does not equal 0x02 (hydrosFree == 0x02 short-circuits the routine)."
     ],
-    "confidence": "high"
+    "confidence": "medium"
   },
   "function_map": [
     {
       "name": "U8P_HYDHAT::hatch",
       "kind": "main",
-      "role": "Area-trigger handler that implements U8P_HYDHAT::hatch spawn-and-activate sequence",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::create",
-      "kind": "extern",
-      "role": "Allocate/create an item instance (called with 0x00,0x50); returned handle used for subsequent operations",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::pop",
-      "kind": "extern",
-      "role": "Finalize/populate the created item into world/engine with template/flags (0x60,0x3609,0x4D4B used)",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getZ",
-      "kind": "extern",
-      "role": "Query item's Z coordinate (called with pid and context 0x14 in this script)",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getY",
-      "kind": "extern",
-      "role": "Query item's Y coordinate",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getX",
-      "kind": "extern",
-      "role": "Query item's X coordinate",
-      "confidence": "high"
-    },
-    {
-      "name": "FREE::1C6D",
-      "kind": "extern",
-      "role": "Free/standalone script spawned to accompany the hatched item (spawned at computed coordinates)",
+      "role": "Main process that creates, spawns, recenters camera on, and activates an item instance (U8P_HYDHAT::hatch sequence).",
       "confidence": "medium"
-    },
-    {
-      "name": "Item::use",
-      "kind": "extern",
-      "role": "Activate/process the created item after spawn/wait, likely to trigger the item's gameplay effect",
-      "confidence": "high"
     }
   ],
   "call_analysis": {
@@ -84,50 +41,50 @@
       {
         "caller": "U8P_HYDHAT::hatch",
         "callee": "Item::create",
-        "purpose": "Allocate a new item instance of subtype/type 0x50 for the U8P_HYDHAT::hatch result",
+        "purpose": "Allocate/initialize a new item into local storage (addressof(local1)); determines the item instance to be spawned.",
         "confidence": "high"
       },
       {
         "caller": "U8P_HYDHAT::hatch",
         "callee": "Item::pop",
-        "purpose": "Populate/configure the newly created item with the provided template/flags (params 0x60,0x3609,0x4D4B); prepare it to exist in the world",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_HYDHAT::hatch",
-        "callee": "Item::getZ",
-        "purpose": "Obtain item's Z coordinate; result is incremented by 0x32 and used as spawn Z for the free script",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_HYDHAT::hatch",
-        "callee": "Item::getY",
-        "purpose": "Obtain item's Y coordinate for spawn location of the free script",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_HYDHAT::hatch",
-        "callee": "Item::getX",
-        "purpose": "Obtain item's X coordinate; result is incremented by 0x32 and used as spawn X for the free script",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_HYDHAT::hatch",
-        "callee": "FREE::1C6D",
-        "purpose": "Spawn a free/standalone script at (Z+0x32, Y, X+0x32, 0) to manage visual/temporal behavior tied to the U8P_HYDHAT::hatch",
+        "purpose": "Spawn/place the created item into the world/map using several numeric parameters and the item handle (addressof(local1)).",
         "confidence": "medium"
       },
       {
         "caller": "U8P_HYDHAT::hatch",
-        "callee": "U8P_HYDHAT::suspend/wait",
-        "purpose": "Pause/synchronize so the spawned free script or item placement can proceed before activating the item",
+        "callee": "Item::getZ",
+        "purpose": "Read the spawned item's Z coordinate to compute camera target/offset.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_HYDHAT::hatch",
+        "callee": "Item::getY",
+        "purpose": "Read the spawned item's Y coordinate for camera target.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_HYDHAT::hatch",
+        "callee": "Item::getX",
+        "purpose": "Read the spawned item's X coordinate for camera target (used with +0x32 offset).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_HYDHAT::hatch",
+        "callee": "spawn ->FREE::cameraFollowAvatar",
+        "purpose": "Command the camera to focus/follow a position near the spawned item (uses computed Y and X+0x32).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_HYDHAT::hatch",
+        "callee": "suspend",
+        "purpose": "Pause the current process to allow camera movement/visuals/spawn effects to occur before continuing.",
         "confidence": "medium"
       },
       {
         "caller": "U8P_HYDHAT::hatch",
         "callee": "Item::use",
-        "purpose": "Activate/use the created item after spawn/wait; likely triggers the final gameplay effect of hatching",
-        "confidence": "high"
+        "purpose": "Invoke the created item's use behavior (likely triggers the U8P_HYDHAT::hatch animation/effects or subsequent item behavior). The call's result is captured as a process result.",
+        "confidence": "medium"
       }
     ]
   },
@@ -135,8 +92,8 @@
     "reads": [
       {
         "name": "hydrosFree",
-        "likely_effect": "Acts as a guard that disables U8P_HYDHAT::hatch behavior when equal to 2; read at function start to early-exit if set",
-        "confidence": "high"
+        "likely_effect": "Guard that prevents the U8P_HYDHAT::hatch sequence when hydrosFree == 0x02 (skip/early-exit).",
+        "confidence": "medium"
       }
     ],
     "writes": []
@@ -148,8 +105,8 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "HYDHAT::hatch",
-    "behavior_summary_one_liner": "HYDHAT::hatch is a fast-area (Event 7) trigger handler that attempts to spawn a world item and a small free script near that item to drive post-spawn behavior, then activates the item.",
+    "main_function": "U8P_HYDHAT::hatch",
+    "behavior_summary_one_liner": "U8P_HYDHAT::hatch is a process that, when allowed by a global guard, creates a new item instance, places (spawns/pops) it into the world, recenters the camera near that spawned item, yields briefly (suspend) to let the sequence play, then invokes the spawned item's use behavior (the 'U8P_HYDHAT::hatch' activation).",
     "external_call_count": 8,
     "flag_read_count": 1,
     "flag_write_count": 0

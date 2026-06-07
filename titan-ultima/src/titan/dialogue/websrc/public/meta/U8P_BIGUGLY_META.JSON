@@ -3,28 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_BIGUGLY.json",
   "file": "U8P_BIGUGLY",
   "behavior_summary": [
-    "This script implements the object's 'U8P_BIGUGLY::look' (examine) handler. When the relevant actor inspects the object, the handler configures per-process display/state flags, invokes the item's bark routine with the literal string \"tree \", and then suspends.",
-    "Before calling bark the code writes a per-object/info key and applies a 'process exclude' mark (inferred to alter how the object is reported or excluded from some processing lists).",
-    "The bark call returns a value which the routine captures into a local temporary, but that return value is not used for further logic in this snippet.",
-    "A short ephemeral string \"tree \" is allocated/passed to Item::bark and then freed by the handler."
+    "This script implements a minimal 'U8P_BIGUGLY::look' (inspect) handler for an NPC/object. When the player performs the U8P_BIGUGLY::look/inspect action, the entity emits a single short bark reading \"tree \".",
+    "After emitting the bark the U8P_BIGUGLY::look process suspends/ends immediately. There is no branching, no menu, no state changes, and no external calls.",
+    "Overall the routine appears purely descriptive/emote output intended to provide a short inspect text rather than participate in conversation or game state changes."
   ],
   "notable_control_flow": [
-    "Entry as a process-style handler (suspendable): perform two engine ops to set info and mark process-exclude, build literal string, push parameters, call Item::bark, free the string, capture return into a temp, then suspend/return.",
-    "No branching or loops are present in the observed snippet — single linear flow for the 'U8P_BIGUGLY::look' event.",
-    "Side-effect ordering: info/process-exclude writes happen before the Item::bark call (implying they influence how the bark/display is treated)."
+    "U8P_BIGUGLY::look: linear sequence — emit Bark(\"tree \") then suspend/end the U8P_BIGUGLY::look process.",
+    "No conditional branches, loops, menu interactions, or flag reads/writes are present in the canonical flow."
   ],
   "open_questions": [
-    "What is the concrete meaning and numeric key of the 'info' opcode used (what display/metadata field is being set)? (inferred, not explicit)",
-    "Exactly what effect 'process exclude' has on engine processing and which subsystems consult it (rendering, AI, listing, save state)?",
-    "Who is the intended recipient of Item::bark here — the item process itself presenting text, or the inspecting player's process (PID) — the disassembly suggests the object calls its bark but the target semantics are inferred.",
-    "Are there any other side effects (events triggered elsewhere) when setting the info/process-exclude flags that are not visible in this snippet?"
+    "Is the trailing space in the bark text \"tree \" intentional (formatting) or an artifact of extraction?",
+    "Does the suspend node function as an immediate process termination in this engine context, or could it represent a short wait before resumption? (Inferred as termination/end with medium confidence.)",
+    "Are there any external systems (e.g., U8P_BIGUGLY::look-list UI) that additionally record or display this text beyond the bark output? (No evidence in script.)"
   ],
   "main_function": {
     "name": "U8P_BIGUGLY::look",
     "execution_form": "process",
-    "purpose": "Handle the object's examine/U8P_BIGUGLY::look event by preparing object state and emitting a short descriptive message ('tree ').",
+    "purpose": "Handle the player's U8P_BIGUGLY::look/inspect action for this NPC/object by presenting a short descriptive/emote bark ('tree ') and then ending the U8P_BIGUGLY::look process.",
     "entry_conditions": [
-      "Event 0 / 'U8P_BIGUGLY::look' — triggered when the Avatar or another actor inspects or looks at the object (area-entry/interaction event)."
+      "Invoked by the engine when the player uses the 'U8P_BIGUGLY::look' (inspect) action on the NPC/object (processType 0x0208)."
     ],
     "confidence": "high"
   },
@@ -32,46 +29,27 @@
     {
       "name": "U8P_BIGUGLY::look",
       "kind": "main",
-      "role": "Process-style event handler for the object's U8P_BIGUGLY::look/examine action; sets per-object info/process-exclude and calls Item::bark with the literal \"tree \".",
+      "role": "inspect/U8P_BIGUGLY::look handler that emits a single bark and suspends the process",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_BIGUGLY::look",
-        "callee": "Item::bark",
-        "purpose": "Cause the item/process to emit or display a short one-line description; here invoked with the literal string \"tree \".",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
-    "writes": [
-      {
-        "name": "info (per-object/info key)",
-        "likely_effect": "Write a metadata/display/info field on the object to alter how it is reported or processed (exact key/value inferred).",
-        "confidence": "medium"
-      },
-      {
-        "name": "process exclude",
-        "likely_effect": "Mark the object excluded from some processing lists or iterations (prevents further default handling by subsystems).",
-        "confidence": "medium"
-      }
-    ]
+    "writes": []
   },
   "ui_tags": [
-    "trigger",
-    "cleanup"
+    "trigger"
   ],
   "quick_facts": {
     "main_function": "U8P_BIGUGLY::look",
-    "behavior_summary_one_liner": "This script implements the object's 'U8P_BIGUGLY::look' (examine) handler. When the relevant actor inspects the object, the handler configures per-process display/state flags, invokes the item's bark routine with the literal string \"tree \", and then suspends.",
-    "external_call_count": 1,
+    "behavior_summary_one_liner": "This script implements a minimal 'U8P_BIGUGLY::look' (inspect) handler for an NPC/object. When the player performs the U8P_BIGUGLY::look/inspect action, the entity emits a single short bark reading \"tree \".",
+    "external_call_count": 0,
     "flag_read_count": 0,
-    "flag_write_count": 2
+    "flag_write_count": 0
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

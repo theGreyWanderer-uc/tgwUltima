@@ -3,31 +3,27 @@
   "source_of_truth": "dialogue/json/U8P_NSBPAINT.json",
   "file": "U8P_NSBPAINT",
   "behavior_summary": [
-    "U8P_NSBPAINT::look responds to the player/actor 'U8P_NSBPAINT::look' (examine) event for a painting item by preparing and emitting a short one-line description (a 'bark').",
-    "Before barking, the routine sets per-item info/state (pushes a constant 0x0208) and runs a 'process exclude' operation — likely to mark or protect the item from other processing while the bark is emitted.",
-    "The handler constructs a temporary string beginning with the literal \"painting \" (then appends item-specific data, inferred), passes that string and the painting item reference to Item::bark so the item presents the message, then frees the temporary string.",
-    "The return value from Item::bark is inspected (used with an 'implies' opcode), popped into a small temporary local, and the routine suspends/returns."
+    "U8P_NSBPAINT::look is a simple U8P_NSBPAINT::look/examine handler that emits a single short bark string 'painting ' and then immediately suspends/ends.",
+    "There are no conditionals, menus, external calls, or global flag reads/writes; the behavior is fixed and constant.",
+    "This routine is intended to provide the player's short description when they inspect the associated object (inferred to be a painting or painted object)."
   ],
   "notable_control_flow": [
-    "Entry on Event 0 (U8P_NSBPAINT::look/examine) for the painting actor.",
-    "Push pid/item and constant 0x0208 -> set info / process exclude (marks item state before message).",
-    "Construct ephemeral message string starting with \"painting \".",
-    "Call external Item::bark with (item, constructed string).",
-    "Free the constructed string after the call.",
-    "Apply an 'implies' check to the bark return value, pop into a temp, then suspend/return."
+    "Single linear flow: display bark text then suspend/terminate the process.",
+    "No branching, loops, or state mutations are present.",
+    "Appears to be triggered by the engine's U8P_NSBPAINT::look/examine process (process type 0x0208) or an associated fast-area entry."
   ],
   "open_questions": [
-    "What exact suffix or item-specific data is concatenated to the literal \"painting \" (the disassembly shows a constructed string but not the precise content)?",
-    "What is the precise game-engine meaning of the set-info id 0x0208 and of the 'process exclude' opcode in this context?",
-    "What semantic effect does the return value from Item::bark have when used with the 'implies' opcode (control flow or player-facing consequence)?",
-    "Is there any additional side-effect on global state or quest flags that is not visible in the extracted snippet?"
+    "Why does the bark text include a trailing space ('painting ')? (formatting artifact vs. concatenation placeholder) — confidence: low",
+    "Is this handler invoked only by explicit player 'U8P_NSBPAINT::look' actions or also by an area-enter fast-area trigger (enterFastArea)? — confidence: medium",
+    "Is the object purely descriptive (label) or intended to be a hook for additional interactions added elsewhere? — confidence: low"
   ],
   "main_function": {
     "name": "U8P_NSBPAINT::look",
     "execution_form": "process",
-    "purpose": "Handle the actor/item 'U8P_NSBPAINT::look' (examine) event for a painting: mark the item state, build and present a short descriptive bark that begins with \"painting \", then clean up and return.",
+    "purpose": "Provide the short descriptive text when the player examines or looks at the object; then end the U8P_NSBPAINT::look process.",
     "entry_conditions": [
-      "Event 0: triggered when the player/actor examines or looks at the painting (entering the item's U8P_NSBPAINT::look/observe area)."
+      "Player performs a U8P_NSBPAINT::look/examine action on the object",
+      "Possibly invoked when an actor enters the object's U8P_NSBPAINT::look/fast-area trigger (inferred from process classification)"
     ],
     "confidence": "high"
   },
@@ -35,41 +31,25 @@
     {
       "name": "U8P_NSBPAINT::look",
       "kind": "main",
-      "role": "Event handler for the painting 'U8P_NSBPAINT::look' (examine) event; prepares state and invokes an item bark to show a one-line description.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine used to emit a short text message (bark) to the player/process; invoked with the painting item and constructed message.",
+      "role": "Emit a single descriptive bark ('painting ') on examine and suspend the process",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_NSBPAINT::look",
-        "callee": "Item::bark",
-        "purpose": "Display a short descriptive message for the painting (one-line 'bark') using the constructed string that starts with 'painting '.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
     "writes": []
   },
   "ui_tags": [
-    "trigger",
-    "cleanup",
-    "animation",
-    "guard"
+    "trigger"
   ],
   "quick_facts": {
     "main_function": "U8P_NSBPAINT::look",
-    "behavior_summary_one_liner": "U8P_NSBPAINT::look responds to the player/actor 'U8P_NSBPAINT::look' (examine) event for a painting item by preparing and emitting a short one-line description (a 'bark').",
-    "external_call_count": 1,
+    "behavior_summary_one_liner": "U8P_NSBPAINT::look is a simple U8P_NSBPAINT::look/examine handler that emits a single short bark string 'painting ' and then immediately suspends/ends.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

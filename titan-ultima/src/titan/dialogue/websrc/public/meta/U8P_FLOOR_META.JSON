@@ -3,65 +3,41 @@
   "source_of_truth": "dialogue/json/U8P_FLOOR.json",
   "file": "U8P_FLOOR",
   "behavior_summary": [
-    "FLOOR::gotHit is the U8P_FLOOR::gotHit event handler for a floor object. When invoked it records or updates an information entry (info code 0x20C) on the floor object using the first argument, then calls a 'process exclude' operation to prevent further/reentrant handling related to that info change.",
-    "The routine also copies the second argument into a short local ([BP-02h]) and compares it to 1; in the provided excerpt that comparison does not alter control flow (both outcomes return), so its observable effect is unclear from this snippet.",
-    "Overall the handler appears to log a hit-related value on the floor and mark the object/process as excluded from further immediate processing."
+    "U8P_FLOOR::gotHit is a process handler invoked when the object/entity is struck or otherwise receives a 'hit' event. It copies the first parameter into a temporary local (local1) and tests whether that value equals 1.",
+    "The snippet contains no visible side effects (no calls, flag changes, or output) inside the conditional, so the actual response to the specific hit value is absent or omitted from the provided excerpt.",
+    "Overall intent (inferred): detect a particular hit type or source (param1 == 1) and branch to specialized handling; the handling code is not included in this extract."
   ],
   "notable_control_flow": [
-    "Linear sequence: set info (0x20C) -> process exclude -> store second parameter to local -> compare local to 1 -> return.",
-    "The comparison of [BP-02h] against 1 is present but does not change return behavior in the provided excerpt, so it currently appears to be a non-branching conditional or a vestigial check."
+    "Process entry: U8P_FLOOR::gotHit(uword, word) — executed as a U8P_FLOOR::gotHit process (process type 0x020C).",
+    "Immediate copy of parameter param1 into local1, then an equality test local1 == 1 directs control flow.",
+    "Conditional body for the equality test is not present in the excerpt, so no downstream actions are visible."
   ],
   "open_questions": [
-    "What semantic meaning does info code 0x20C have (e.g., last hitter id, hit type, timestamp)?",
-    "What side-effects or broader engine behavior does 'process exclude' trigger for the floor object (temporary ignore, permanent disable, AI exclusion)?",
-    "What is the intended effect of the [BP-02h] == 1 comparison in contexts not present in the excerpt — does other code rely on this local being set or checked differently?",
-    "Are there additional handlers or scripts that respond to info 0x20C being set on the floor object?"
+    "What side effects or actions occur when param1 == 1 (the then-branch is missing or elided)?",
+    "What hit sources or damage types are encoded by param1 values (beyond the check for value 1)?",
+    "Are there additional global flags, external calls, or other functions in the full script that implement the actual reaction to the hit?"
   ],
   "main_function": {
     "name": "U8P_FLOOR::gotHit",
     "execution_form": "process",
-    "purpose": "Handle a hit event on a floor object by storing hit-related data (info id 0x20C) associated with the floor and excluding the process/object from further immediate handling; also copy a small parameter into a local and compare it to 1 (effect unclear).",
+    "purpose": "Handle a U8P_FLOOR::gotHit event for this object/entity: inspect the incoming hit code/value and branch if it equals a particular value (1).",
     "entry_conditions": [
-      "Invoked on Event 6 (U8P_FLOOR::gotHit) for the floor object — triggered when the object receives a hit event from an actor or effect."
+      "Invoked by the engine as a U8P_FLOOR::gotHit process (process type 0x020C) when the entity is hit or damaged.",
+      "Immediately runs an equality test on its first parameter (param1) to detect a specific hit type (value 1)."
     ],
-    "confidence": "high"
+    "confidence": "medium"
   },
   "function_map": [
     {
       "name": "U8P_FLOOR::gotHit",
       "kind": "main",
-      "role": "Event handler for U8P_FLOOR::gotHit on the floor object; records info and excludes the process.",
+      "role": "process handler for hit/damage events; tests hit code and (in full implementation) would dispatch response behavior",
       "confidence": "high"
-    },
-    {
-      "name": "U8P_FLOOR::set info",
-      "kind": "extern",
-      "role": "Engine call to store/update an info key (used here with id 0x20C) on a target object.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_FLOOR::process exclude",
-      "kind": "extern",
-      "role": "Engine call that marks the referenced process/object to be excluded from further processing (prevents reentrant or duplicate handling).",
-      "confidence": "medium"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_FLOOR::gotHit",
-        "callee": "U8P_FLOOR::set info",
-        "purpose": "Record/update the info entry id 0x20C on the floor object using the first argument as the stored value or identifier.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FLOOR::gotHit",
-        "callee": "U8P_FLOOR::process exclude",
-        "purpose": "Exclude or mark the process/object to avoid further immediate processing after the info key is set (likely a guard against reentrancy/duplicate effects).",
-        "confidence": "medium"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -69,13 +45,12 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
     "guard"
   ],
   "quick_facts": {
-    "main_function": "FLOOR::gotHit",
-    "behavior_summary_one_liner": "FLOOR::gotHit is the U8P_FLOOR::gotHit event handler for a floor object. When invoked it records or updates an information entry (info code 0x20C) on the floor object using the first argument, then calls a 'process exclude' operation to prevent further/reentrant handling related to that info change.",
-    "external_call_count": 2,
+    "main_function": "U8P_FLOOR::gotHit",
+    "behavior_summary_one_liner": "U8P_FLOOR::gotHit is a process handler invoked when the object/entity is struck or otherwise receives a 'hit' event. It copies the first parameter into a temporary local (local1) and tests whether that value equals 1.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

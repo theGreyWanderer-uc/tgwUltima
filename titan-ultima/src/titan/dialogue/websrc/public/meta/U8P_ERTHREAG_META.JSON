@@ -3,27 +3,28 @@
   "source_of_truth": "dialogue/json/U8P_ERTHREAG.json",
   "file": "U8P_ERTHREAG",
   "behavior_summary": [
-    "U8P_ERTHREAG::look handles the 'U8P_ERTHREAG::look' (examine) event for ERTHREAG items: it builds a human-readable description string based on the item's frame/type and quantity, then emits that string via Item::bark so the player/process sees the description.",
-    "The routine queries the item for a frame/type code and a stack quantity, converts the numeric quantity to text, appends an appropriate noun/phrase selected by the frame (with singular/plural handling), frees temporary strings, and calls Item::bark(pid, description, item).",
-    "Different frame codes map to different noun phrases (e.g., vial(s) of blood, piles of bone shards/wood/dirt, executioner's hood variants, 'of blackmoor', 'deadman's elbow'), and the code branches on quantity to choose singular vs plural forms."
+    "When the player 'looks at' (examines) this item, the script builds a short human-readable description and shows it as a single bark/description line.",
+    "The routine reads the item instance's frame/type (to select a noun phrase) and the stack quantity (to prefix a number and choose singular vs plural wording), concatenates those pieces into a string, and displays that string to the player.",
+    "Different ranges of frame codes map to different item-type names (e.g., vial(s) of blood, pile(s) of bone shards, pile(s) of wood, executioner's hood(s), etc.); the code then applies quantity-based pluralization.",
+    "The final constructed string is presented via a Bark node (short UI text) and the U8P_ERTHREAG::look process then suspends/ends."
   ],
   "notable_control_flow": [
-    "Entry on Event 0 (U8P_ERTHREAG::look) triggers the sequence: Item::getFrame -> Item::getQuantity -> numToStr -> string concatenations -> Item::bark.",
-    "A switch/branch on the frame/type value (local BP-02h) selects which suffix strings to append to the numeric base string.",
-    "Quantity (local BP-04h) is tested for singular vs plural to decide between singular noun forms and pluralized suffixes (often adding 's' or choosing an alternate suffix).",
-    "Temporary strings created during concatenation are freed before the final bark call to avoid leaks."
+    "U8P_ERTHREAG::look begins by obtaining the implicit item context (this) then calls Item::getFrame and Item::getQuantity to populate locals used for branching.",
+    "A sequence of IfStatement branches tests the frame code value to select one of several noun phrases; within those branches the code also branches on quantity to apply singular vs plural suffixes.",
+    "The description string is built incrementally (numToStr(quantity) as prefix, then noun phrase and optional pluralization) and only one Bark node is emitted with the composed text.",
+    "No global flags are read or written by this U8P_ERTHREAG::look process; control flow is local to the function and driven by the frame/quantity values."
   ],
   "open_questions": [
-    "Exact English mapping for every frame code: mappings are inferred from suffix literals in the disassembly but some frame-to-description mappings (edge cases, multi-byte frames) could be incomplete.",
-    "Precise semantics of the parameters passed to Item::bark (ordering and meaning of the pid vs item arguments) are inferred from calling patterns but not explicitly documented here.",
-    "Whether any additional side effects occur (e.g., setting item info flags) outside of string construction and barking; none observed in disassembly but could be implicit in opcodes not represented in the extraction."
+    "Exact numeric ranges for some frame-code to name mappings are inferred from strings in the dump; can the original mapping table be confirmed to ensure no off-by-one ranges?",
+    "The extracted bark sample shows duplicated or concatenated fragments (likely decompiler noise). Is the intended phrasing for each branch available from original resources to verify spacing/punctuation?",
+    "Are there any additional edge cases (zero quantity, extremely large stacks, or special frame codes) that should be handled but are not visible in this excerpt?"
   ],
   "main_function": {
     "name": "U8P_ERTHREAG::look",
     "execution_form": "process",
-    "purpose": "When an actor/player examines an ERTHREAG item, produce a human-readable description describing the item's quantity and subtype (based on frame) and display it via Item::bark.",
+    "purpose": "Produce and display a short item description when the player examines the object: prefix the quantity, append an item-type noun determined by the item's frame, and apply singular/plural wording as appropriate.",
     "entry_conditions": [
-      "Event 0 (U8P_ERTHREAG::look) — triggered when the avatar/actor examines the item (explicit event handled by the script)."
+      "Invoked by the engine when the player uses the U8P_ERTHREAG::look/examine action on the item (the object's U8P_ERTHREAG::look handler is executed)."
     ],
     "confidence": "high"
   },
@@ -31,43 +32,25 @@
     {
       "name": "U8P_ERTHREAG::look",
       "kind": "main",
-      "role": "Builds and emits the item's description when looked at (combines quantity and frame/type-driven noun selection).",
+      "role": "Builds a quantity-prefixed, frame-code-dependent short description and displays it to the player (Bark).",
       "confidence": "high"
     },
     {
       "name": "Item::getFrame",
       "kind": "extern",
-      "role": "Return the item's frame/type code used to choose a descriptive suffix.",
+      "role": "Read the item's frame/type code to select the appropriate noun/phrase.",
       "confidence": "high"
     },
     {
       "name": "Item::getQuantity",
       "kind": "extern",
-      "role": "Return the item's stack quantity used for numeric display and pluralization.",
+      "role": "Return the item's stack quantity used for numeric prefixing and pluralization decisions.",
       "confidence": "high"
     },
     {
-      "name": "U8P_ERTHREAG::numToStr",
+      "name": "numToStr",
       "kind": "extern",
-      "role": "Convert a numeric quantity to its string representation as the base of the description.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_ERTHREAG::string concat (runtime opcode)",
-      "kind": "extern",
-      "role": "Concatenate strings to assemble the final description.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_ERTHREAG::string free (runtime opcode)",
-      "kind": "extern",
-      "role": "Free temporary strings created during concatenation.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Emit/display the final description string to the requesting process/player (bark from the item).",
+      "role": "Convert a numeric quantity to a string for concatenation in the description.",
       "confidence": "high"
     }
   ],
@@ -77,37 +60,19 @@
       {
         "caller": "U8P_ERTHREAG::look",
         "callee": "Item::getFrame",
-        "purpose": "Obtain the item's frame/type code to determine which descriptive noun/phrase to append.",
+        "purpose": "Obtain the item's frame/type code used to select the noun phrase describing the item.",
         "confidence": "high"
       },
       {
         "caller": "U8P_ERTHREAG::look",
         "callee": "Item::getQuantity",
-        "purpose": "Obtain the item's quantity for numeric display and to decide singular vs plural wording.",
+        "purpose": "Obtain the item stack quantity to prefix the description and choose singular vs plural wording.",
         "confidence": "high"
       },
       {
         "caller": "U8P_ERTHREAG::look",
-        "callee": "U8P_ERTHREAG::numToStr",
-        "purpose": "Convert the numeric quantity into a string used as the base of the description.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_ERTHREAG::look",
-        "callee": "U8P_ERTHREAG::string concat (runtime opcode)",
-        "purpose": "Append suffix strings (nouns, plural markers, 'of X') to the numeric base string to form the final message.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_ERTHREAG::look",
-        "callee": "U8P_ERTHREAG::string free (runtime opcode)",
-        "purpose": "Free temporary/previous string buffers after concatenation to manage memory.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_ERTHREAG::look",
-        "callee": "Item::bark",
-        "purpose": "Display the completed description to the player/process that initiated the U8P_ERTHREAG::look.",
+        "callee": "numToStr",
+        "purpose": "Convert the numeric quantity into text before concatenating with the noun phrase.",
         "confidence": "high"
       }
     ]
@@ -118,12 +83,14 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup"
+    "description",
+    "pluralization",
+    "display"
   ],
   "quick_facts": {
     "main_function": "U8P_ERTHREAG::look",
-    "behavior_summary_one_liner": "U8P_ERTHREAG::look handles the 'U8P_ERTHREAG::look' (examine) event for ERTHREAG items: it builds a human-readable description string based on the item's frame/type and quantity, then emits that string via Item::bark so the player/process sees the description.",
-    "external_call_count": 6,
+    "behavior_summary_one_liner": "When the player 'looks at' (examines) this item, the script builds a short human-readable description and shows it as a single bark/description line.",
+    "external_call_count": 3,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

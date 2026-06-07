@@ -3,28 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_TORSO.json",
   "file": "U8P_TORSO",
   "behavior_summary": [
-    "Handles the 'U8P_TORSO::hit' event (Event 5) for the TORSO object: when the torso is U8P_TORSO::hit it sets up process/type filters and queries how many matching processes exist for the target entity.",
-    "If the query returns zero the handler does nothing further; if the query returns non-zero it spawns a BODYPART process (BODYPART::0431) for that same entity, likely to trigger a body-part-specific reaction or animation.",
-    "The second parameter passed into the event (likely U8P_TORSO::hit/damage info) is present but not used in the control flow observed; the decision is driven solely by whether matching processes exist."
+    "U8P_TORSO::hit is a process handler invoked when this body-part instance is struck. It prevents spawning duplicate reaction processes and, if none are active, starts a BODYPART reaction process to handle the U8P_TORSO::hit (likely damage reaction/animation).",
+    "The function queries the kernel for existing processes of type 0x020A bound to this instance and only spawns BODYPART::func0431(0) when that count is zero, storing the spawn return in a local (temp).",
+    "Parameters (uword, word) are accepted by the process but are not inspected in the decompiled excerpt — the reaction behavior is driven solely by per-instance process existence and spawn semantics."
   ],
   "notable_control_flow": [
-    "U8P_TORSO::hit executes in response to a U8P_TORSO::hit trigger (Event 5).",
-    "It configures process/ info filters (observed pushed constants 0x20B and 0x20A and 'process exclude' semantics) for the subject entity before the query.",
-    "Calls Kernel::getNumProcesses(entity, ProcessType/filter) and inspects the integer return (stored in local 'retval').",
-    "If retval == 0 the function returns immediately; otherwise it calls spawn to start BODYPART::0431 for that entity (spawn arg dword 0)."
+    "Guard: call Kernel::getNumProcesses(0x020A, this) and branch on result == 0 to decide whether to spawn.",
+    "Spawn: when no active 0x020A process exists for this instance, spawn ->BODYPART::func0431 with argument 0 and store the returned handle in local 'temp'."
   ],
   "open_questions": [
-    "What exact process types or semantics do the filter constants 0x20B and 0x20A represent (they determine which processes cause the spawn)?",
-    "What is the gameplay effect of BODYPART::0431 (animation, damage propagation, detachment, sound)?",
-    "Is the second parameter (the word passed into the handler) ever used by other code paths or future revisions of this handler?",
-    "Does 'process exclude' imply a temporary gating/lock on the entity, or is it merely configuration for Kernel::getNumProcesses' filter?"
+    "What specific animation/effect BODYPART::func0431 implements when spawned — damage reaction, visual effect, or other behavior?",
+    "Are the uword and word parameters ever used in other builds/variants of this function, or in surrounding code paths not present in the excerpt?",
+    "What exact semantic meaning does process type 0x020A have in the engine's process taxonomy (e.g., 'bodypart reaction' group) and are there other callers that rely on this guard?"
   ],
   "main_function": {
     "name": "U8P_TORSO::hit",
     "execution_form": "process",
-    "purpose": "React to a U8P_TORSO::hit on the torso by conditionally spawning a body-part-specific process when other related processes are present on the same entity.",
+    "purpose": "Handle an incoming U8P_TORSO::hit on this body-part instance by ensuring a single reaction process is active; if none exists spawn BODYPART::func0431(0) to perform the reaction/animation.",
     "entry_conditions": [
-      "Event 5 (U8P_TORSO::hit) received by the TORSO object / process"
+      "Invoked as a U8P_TORSO::hit/process handler (process type 0x020B) for the body-part instance.",
+      "No additional local preconditions in the excerpt; behavior is conditional on whether existing 0x020A-type processes are present for this instance."
     ],
     "confidence": "high"
   },
@@ -32,19 +30,19 @@
     {
       "name": "U8P_TORSO::hit",
       "kind": "main",
-      "role": "Event handler for 'U8P_TORSO::hit' that conditionally spawns a bodypart reaction process when other matching processes exist for the entity.",
+      "role": "Process handler for U8P_TORSO::hit events that guards and spawns a body-part reaction process.",
       "confidence": "high"
     },
     {
       "name": "Kernel::getNumProcesses",
       "kind": "extern",
-      "role": "Query the number of running processes matching the configured ProcessType/filter for a given entity; return used as a boolean-ish count.",
+      "role": "Engine query used to check the number of running processes of a given type bound to an instance (used here as a guard).",
       "confidence": "high"
     },
     {
-      "name": "spawn (BODYPART::0431)",
+      "name": "->BODYPART::func0431",
       "kind": "extern",
-      "role": "Spawn/Create the BODYPART::0431 process for an entity to effect a body-part-specific reaction/animation.",
+      "role": "Spawned reaction/handler process for the body-part (called with argument 0); inferred to run the damage/animation response.",
       "confidence": "medium"
     }
   ],
@@ -54,13 +52,13 @@
       {
         "caller": "U8P_TORSO::hit",
         "callee": "Kernel::getNumProcesses",
-        "purpose": "Return the number of processes matching the previously configured ProcessType/filter for the supplied entity; its integer return determines whether to spawn the bodypart process.",
+        "purpose": "Check if any processes of type 0x020A currently exist for this instance; used to avoid spawning duplicate handlers.",
         "confidence": "high"
       },
       {
         "caller": "U8P_TORSO::hit",
-        "callee": "spawn (BODYPART::0431)",
-        "purpose": "Create/start the bodypart reaction/process for the target entity when matching process count is non-zero; spawn receives the entity pointer/id and a dword 0 argument.",
+        "callee": "spawn ->BODYPART::func0431",
+        "purpose": "Start the body-part reaction/animation process with argument 0 when no 0x020A process is active for this instance; return handle stored in 'temp'.",
         "confidence": "medium"
       }
     ]
@@ -71,13 +69,13 @@
   },
   "ui_tags": [
     "trigger",
+    "cleanup",
     "animation",
-    "guard",
-    "spawn"
+    "guard"
   ],
   "quick_facts": {
-    "main_function": "TORSO::hit",
-    "behavior_summary_one_liner": "Handles the 'U8P_TORSO::hit' event (Event 5) for the TORSO object: when the torso is U8P_TORSO::hit it sets up process/type filters and queries how many matching processes exist for the target entity.",
+    "main_function": "U8P_TORSO::hit",
+    "behavior_summary_one_liner": "U8P_TORSO::hit is a process handler invoked when this body-part instance is struck. It prevents spawning duplicate reaction processes and, if none are active, starts a BODYPART reaction process to handle the U8P_TORSO::hit (likely damage reaction/animation).",
     "external_call_count": 2,
     "flag_read_count": 0,
     "flag_write_count": 0

@@ -3,25 +3,30 @@
   "source_of_truth": "dialogue/json/U8P_EBROCK.json",
   "file": "U8P_EBROCK",
   "behavior_summary": [
-    "EBROCK::look is the item 'U8P_EBROCK::look' (examine) handler. When a player inspects the EBROCK item, the script reads the item's frame/index and emits a short descriptive text directed to that player. The frame encodes five variants: 0..4 map to five fixed strings describing different 'glowing' shards/tips (Obelisk tip, Heart of Earth, Tear of the Seas, Breath of Wind, Tongue of Flame).",
-    "EBROCK::use (Event 1) appears in this excerpt as a no-op from a player-visible standpoint: it only performs engine bookkeeping (set info / process exclude) and returns."
+    "U8P_EBROCK::look is the object's U8P_EBROCK::look/examine handler. When the player inspects the object it reads the item's frame index (via Item::getFrame(this)) and displays a short descriptive bark corresponding to that frame.",
+    "Frame values 0–4 map to five distinct barks: 'glowing obelisk tip', 'glowing Heart of Earth', 'glowing Tear of the Seas', 'glowing Breath of Wind', and 'glowing Tongue of Flame'.",
+    "After emitting the appropriate bark the process suspends to allow the message to be presented to the player.",
+    "U8P_EBROCK::use exists as a process stub/utility with no observable behavior in the provided excerpt."
   ],
   "notable_control_flow": [
-    "Entry bookkeeping: both U8P_EBROCK::look and use begin by invoking engine-level set info and process exclude operations (item state / processing flags updated).",
-    "Dispatch by frame: EBROCK::look calls Item::getFrame() and stores the integer in a local 'frame'; the code compares that value against constants 0,1,2,3,4 and for each match calls Item::bark() with the corresponding literal string.",
-    "After the bark call, standard engine memory/control bookkeeping is executed (convert literal to pointer, free temp string, implies/pop/suspend sequence) and the handler returns."
+    "U8P_EBROCK::look reads an item frame/index into a local (local1) and uses that value to branch to one of five message outputs.",
+    "Each branch issues a single short Bark and then performs suspend (ends/yields the U8P_EBROCK::look process).",
+    "No global flags are read or written by either function in the decompiled excerpt.",
+    "U8P_EBROCK::use contains no calls or side effects in the excerpt and does not affect control flow elsewhere."
   ],
   "open_questions": [
-    "Exact semantics and numeric id of the 'info' written by set info are not present in the excerpt; what specific info bits are set is unknown.",
-    "What higher-level game events map to Event 1 (use) for EBROCK in gameplay context — does use ever have expanded behavior elsewhere?",
-    "Whether other frame values outside 0..4 are possible and, if so, what the fallback behavior is (no bark observed in this excerpt)."
+    "What happens for frame values outside 0–4 (is there a fallback/default bark or no output)?",
+    "Is U8P_EBROCK::use intended to be implemented elsewhere or by game data (it is a stub in this excerpt)?",
+    "Are the bark strings shared resources referenced elsewhere or unique to this object instance?",
+    "Is local1 the canonical name in the original source or a decompiler temporary (the role is clear but the original identifier is unknown)?"
   ],
   "main_function": {
     "name": "U8P_EBROCK::look",
     "execution_form": "process",
-    "purpose": "Handle the player's 'U8P_EBROCK::look' (examine) action for the EBROCK item: determine the item variant via its frame/index and present a short descriptive string appropriate to that variant to the inspecting player.",
+    "purpose": "Provide a short descriptive message when the player examines this item, selecting text based on the item's current frame/index.",
     "entry_conditions": [
-      "Event 0 (U8P_EBROCK::look) triggered by an actor/player inspecting the item (engine invokes this script on U8P_EBROCK::look)."
+      "Invoked by a player U8P_EBROCK::look/examine action (process type 0x0208).",
+      "Runs when the engine requests the object's U8P_EBROCK::look handler; it reads the instance frame to choose output."
     ],
     "confidence": "high"
   },
@@ -29,37 +34,13 @@
     {
       "name": "U8P_EBROCK::look",
       "kind": "main",
-      "role": "Handle the 'U8P_EBROCK::look' event; read Item::getFrame and call Item::bark with one of five literal descriptions.",
+      "role": "Look/examine handler that maps item frame values to short descriptive barks.",
       "confidence": "high"
     },
     {
       "name": "U8P_EBROCK::use",
       "kind": "helper",
-      "role": "Event 1 (use) handler seen here only performing engine bookkeeping (set info / process exclude) and returning; no visible player action in this snippet.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getFrame",
-      "kind": "extern",
-      "role": "Return an integer frame/index for the item used to select which description to display.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Emit/display a short text message (bark) from the item toward a target player/process.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_EBROCK::set info",
-      "kind": "extern",
-      "role": "Engine operation that sets item-related info/flags prior to processing.",
-      "confidence": "medium"
-    },
-    {
-      "name": "U8P_EBROCK::process exclude",
-      "kind": "extern",
-      "role": "Engine operation that marks the process/item excluded from some processing queue or modifies processing state.",
+      "role": "Utility/U8P_EBROCK::use process present as a stub in the excerpt; no observable behavior.",
       "confidence": "medium"
     }
   ],
@@ -68,68 +49,28 @@
     "external_calls": [
       {
         "caller": "U8P_EBROCK::look",
-        "callee": "U8P_EBROCK::set info",
-        "purpose": "Engine-level setup: set item info/state before handling the U8P_EBROCK::look event (pre-processing bookkeeping).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_EBROCK::look",
-        "callee": "U8P_EBROCK::process exclude",
-        "purpose": "Engine-level bookkeeping: mark the process/item excluded from further processing during this event handler.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_EBROCK::look",
         "callee": "Item::getFrame",
-        "purpose": "Obtain the variant/frame integer for the EBROCK item to select which descriptive string to present.",
+        "purpose": "Obtain the item's current frame/index (uword) to determine which descriptive bark to show.",
         "confidence": "high"
-      },
-      {
-        "caller": "U8P_EBROCK::look",
-        "callee": "Item::bark",
-        "purpose": "Present a short literal description string to the inspecting player (pid) corresponding to the item's frame.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_EBROCK::use",
-        "callee": "U8P_EBROCK::set info",
-        "purpose": "Perform item bookkeeping when the use event runs (set info/state).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_EBROCK::use",
-        "callee": "U8P_EBROCK::process exclude",
-        "purpose": "Perform item/process exclusion bookkeeping for the use event.",
-        "confidence": "medium"
       }
     ]
   },
   "global_flags": {
     "reads": [],
-    "writes": [
-      {
-        "name": "item info",
-        "likely_effect": "Set or modify item-specific info/state bits used by the engine to mark processing/visibility status for the item.",
-        "confidence": "medium"
-      },
-      {
-        "name": "process exclusion state",
-        "likely_effect": "Mark the process/item as excluded from certain engine processing queues or deactivate further processing during this handler.",
-        "confidence": "medium"
-      }
-    ]
+    "writes": []
   },
   "ui_tags": [
     "trigger",
     "cleanup",
+    "animation",
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_EBROCK::EBROCK::look",
-    "behavior_summary_one_liner": "EBROCK::look is the item 'U8P_EBROCK::look' (examine) handler. When a player inspects the EBROCK item, the script reads the item's frame/index and emits a short descriptive text directed to that player. The frame encodes five variants: 0..4 map to five fixed strings describing different 'glowing' shards/tips (Obelisk tip, Heart of Earth, Tear of the Seas, Breath of Wind, Tongue of Flame).",
-    "external_call_count": 6,
+    "main_function": "U8P_EBROCK::look",
+    "behavior_summary_one_liner": "U8P_EBROCK::look is the object's U8P_EBROCK::look/examine handler. When the player inspects the object it reads the item's frame index (via Item::getFrame(this)) and displays a short descriptive bark corresponding to that frame.",
+    "external_call_count": 1,
     "flag_read_count": 0,
-    "flag_write_count": 2
+    "flag_write_count": 0
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

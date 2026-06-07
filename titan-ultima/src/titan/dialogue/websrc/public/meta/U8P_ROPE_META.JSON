@@ -3,27 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_ROPE.json",
   "file": "U8P_ROPE",
   "behavior_summary": [
-    "Handles the 'U8P_ROPE::look' (examine) event for a rope item: when examined, the handler constructs the literal prefix string \"rope \" and asks the item to 'bark' (present a short description) using that string.",
-    "The routine forwards the item/process reference passed into it to Item::bark and returns Item::bark's return value to the caller.",
-    "No global game flags are read or written by this handler; behavior is local to the item process and presentation."
+    "Provides the short description for the rope object when the player inspects it.",
+    "When the U8P_ROPE::look process runs it emits a single bark/text line: \"rope\".",
+    "After displaying the text the process yields/ends (raw node 'suspend' present — inferred termination behavior).",
+    "No state changes, global flags, menus, branching, or external calls are performed."
   ],
   "notable_control_flow": [
-    "Triggered on Event 0 (U8P_ROPE::look/examine).",
-    "Build literal string \"rope \".",
-    "Call Item::bark with the item/process reference parameter and the constructed string.",
-    "Capture and propagate Item::bark's return value as this function's return."
+    "Linear, single-step flow: enter U8P_ROPE::look -> bark \"rope\" -> suspend/terminate the U8P_ROPE::look process.",
+    "No conditional branches or loops are present."
   ],
   "open_questions": [
-    "What, if any, additional metadata or description text Item::bark appends or selects beyond receiving the \"rope \" prefix?",
-    "What is the exact calling convention and meaning of the return value from Item::bark in this engine context (used by the caller of ROPE::look)?",
-    "local0 is initialized to 0 at start but unused in the excerpt; does it have a purpose in other events or extended script paths not present in this snippet?"
+    "Does the raw 'suspend' node correspond to engine-level process termination or just a brief yield that allows other processes to run? (inferred, not explicit)",
+    "Is this object referenced by other scripts (use/interaction) elsewhere in the game, or is it purely decorative/examinable?"
   ],
   "main_function": {
     "name": "U8P_ROPE::look",
     "execution_form": "process",
-    "purpose": "Respond to a player/actor examining a rope: build the literal \"rope \" prefix and invoke the item's display routine to present a short description. Return the display routine's result.",
+    "purpose": "Handle the player's 'U8P_ROPE::look' (examine) action for the rope by showing a short descriptive line.",
     "entry_conditions": [
-      "Event 0 (U8P_ROPE::look/examine)"
+      "Invoked when the player uses the 'U8P_ROPE::look' (examine) action on the rope object.",
+      "Classified as a U8P_ROPE::look-type process (processType 0x0208) — engine triggers on object inspection."
     ],
     "confidence": "high"
   },
@@ -31,26 +30,13 @@
     {
       "name": "U8P_ROPE::look",
       "kind": "main",
-      "role": "Look/examine handler for the rope usecode class; constructs a literal and calls Item::bark to present a description.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine that displays or emits a short text message for an item/process; used by ROPE::look to show the description.",
+      "role": "U8P_ROPE::look handler (gives short description when examined)",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_ROPE::look",
-        "callee": "Item::bark",
-        "purpose": "Produce/display a short description or message for the item; receives the same object_ref passed into ROPE::look and the constructed string \"rope \".",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -63,9 +49,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "ROPE::look",
-    "behavior_summary_one_liner": "Handles the 'U8P_ROPE::look' (examine) event for a rope item: when examined, the handler constructs the literal prefix string \"rope \" and asks the item to 'bark' (present a short description) using that string.",
-    "external_call_count": 1,
+    "main_function": "U8P_ROPE::look",
+    "behavior_summary_one_liner": "Provides the short description for the rope object when the player inspects it.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

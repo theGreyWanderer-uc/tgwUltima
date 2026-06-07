@@ -3,56 +3,40 @@
   "source_of_truth": "dialogue/json/U8P_FLOATORS.json",
   "file": "U8P_FLOATORS",
   "behavior_summary": [
-    "U8P_FLOATORS::use runs on the 'U8P_FLOATORS::use' activation (Event 1).",
-    "It associates a floater/bodypart type with the triggering object/actor by writing an info key (constant 0x0207) to that actor and marking it excluded from normal processing.",
-    "The handler then spawns a new bodypart/floater entity using template/type 0x0207, passing the triggering actor/actor-reference as owner/anchor parameters, and stores the spawn return value into a local (temp).",
-    "Execution ends immediately after capturing the spawned entity reference; the script's primary effect is to link and create a floater entity tied to the activator."
+    "U8P_FLOATORS::use is a small utility process that, when executed, spawns a BODYPART actor by calling BODYPART::func0577(0x00000000) and stores the returned handle in a local variable.",
+    "There are no conditionals, menus, dialogue, or global flag reads/writes in the excerpt; the routine's observable effect is the instantiation of a body-part/visual/actor entity.",
+    "Invocation of the process is likely tied to the object/NPC being 'used' or activated (inferred from process type 0x0207 and the function name)."
   ],
   "notable_control_flow": [
-    "Entry on Event 1 ('U8P_FLOATORS::use')",
-    "1) Push constant 0x0207 and the indirect reference from [BP+06h]; call 'set info' to record the floater/type association on the triggering actor.",
-    "2) Call 'process exclude' on the same referenced actor/object to prevent normal processing.",
-    "3) Call spawn (BODYPART::0577) with parameters (0x0207, indirect [BP+06h], indirect [BP+06h], 0) to instantiate the floater/bodypart.",
-    "4) Store spawn return value in local 'temp' and return."
+    "Single straight-line flow: call to an external spawn routine then store the result; no branching, loops, or early exits are present.",
+    "No flag checks or menu/dialogue flow to gate the spawn call."
   ],
   "open_questions": [
-    "Precise semantics of info id 0x0207 — inferred to identify the floater/bodypart template but exact meaning is not recorded.",
-    "Whether 'process exclude' is intended to protect the newly spawned floater, the original actor, or both from standard update/processing.",
-    "How and where the stored 'temp' (spawned entity reference) is used later — no follow-up code in this script documents its lifecycle or persistence.",
-    "Why the actor reference is passed twice to spawn (two identical indirect args) — whether spawn expects separate owner and location parameters or redundant anchor info is unclear."
+    "What runtime behavior does the spawned BODYPART actor implement (visual effect, attached actor, temporary animation, hitbox, etc.)?",
+    "Is the returned handle (stored in local 'temp') referenced or cleaned up by other processes later, or is its lifecycle managed internally by BODYPART::func0577?",
+    "Is U8P_FLOATORS::use invoked directly by player interaction (U8P_FLOATORS::use/activate) or by another game system event (both are plausible given processType 0x0207)?"
   ],
   "main_function": {
     "name": "U8P_FLOATORS::use",
     "execution_form": "process",
-    "purpose": "On activation ('U8P_FLOATORS::use'), link a floater/bodypart type to the triggering object/actor, mark the target excluded from normal processing, and spawn the associated floater/bodypart entity, storing its reference.",
+    "purpose": "Spawn/instantiate a BODYPART actor and retain a reference to it when this object/NPC is used or activated.",
     "entry_conditions": [
-      "Event 1 (U8P_FLOATORS::use) — invoked when the object is used/activated or an actor enters the associated fast-area trigger."
+      "Executed as a utility process (processType 0x0207).",
+      "Likely triggered by the item/NPC being used or activated (inferred from naming and process type)."
     ],
-    "confidence": "high"
+    "confidence": "medium"
   },
   "function_map": [
     {
       "name": "U8P_FLOATORS::use",
       "kind": "main",
-      "role": "Handle the 'U8P_FLOATORS::use' activation: configure target info, exclude it from processing, spawn floater/bodypart, and store the spawn reference.",
+      "role": "utility process that spawns an external BODYPART actor",
       "confidence": "high"
     },
     {
-      "name": "U8P_FLOATORS::set info",
+      "name": "BODYPART::func0577",
       "kind": "extern",
-      "role": "Write metadata/info keyed by 0x0207 to the referenced actor/object (associates floater/type).",
-      "confidence": "medium"
-    },
-    {
-      "name": "U8P_FLOATORS::process exclude",
-      "kind": "extern",
-      "role": "Mark the referenced actor/object excluded from normal engine processing or update loops.",
-      "confidence": "medium"
-    },
-    {
-      "name": "BODYPART::0577 (spawn)",
-      "kind": "extern",
-      "role": "Instantiate a bodypart/floater entity using template/type 0x0207 and anchor/owner references; returns the spawned entity reference.",
+      "role": "external spawn/instantiation routine called by the main process",
       "confidence": "high"
     }
   ],
@@ -61,20 +45,8 @@
     "external_calls": [
       {
         "caller": "U8P_FLOATORS::use",
-        "callee": "U8P_FLOATORS::set info",
-        "purpose": "Record an association or metadata (info id 0x0207) on the triggering actor/object so the engine knows this actor is linked to the floater type.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_FLOATORS::use",
-        "callee": "U8P_FLOATORS::process exclude",
-        "purpose": "Prevent the referenced actor/object (or the soon-to-be spawned floater) from receiving standard processing/updates—likely to avoid conflicts or double-processing after association.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_FLOATORS::use",
-        "callee": "BODYPART::0577 (spawn)",
-        "purpose": "Create/instantiate a floater/bodypart entity using template/type 0x0207 with the triggering actor as owner/anchor and return its reference which is saved to local 'temp'.",
+        "callee": "BODYPART::func0577",
+        "purpose": "Spawn/instantiate a body-part or related actor/visual effect and return a handle/reference; called with literal parameter 0x00000000.",
         "confidence": "high"
       }
     ]
@@ -85,14 +57,13 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "animation",
-    "guard"
+    "spawn",
+    "visual"
   ],
   "quick_facts": {
     "main_function": "U8P_FLOATORS::use",
-    "behavior_summary_one_liner": "U8P_FLOATORS::use runs on the 'U8P_FLOATORS::use' activation (Event 1).",
-    "external_call_count": 3,
+    "behavior_summary_one_liner": "U8P_FLOATORS::use is a small utility process that, when executed, spawns a BODYPART actor by calling BODYPART::func0577(0x00000000) and stores the returned handle in a local variable.",
+    "external_call_count": 1,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

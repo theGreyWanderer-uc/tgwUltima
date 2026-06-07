@@ -3,125 +3,79 @@
   "source_of_truth": "dialogue/json/U8P_LEGLEFT.json",
   "file": "U8P_LEGLEFT",
   "behavior_summary": [
-    "This script provides logic for a left-leg body-part object. When the object is 'used' (or the Avatar/actor enters its trigger region) it marks the related actor/process with a specific info flag and process-exclude state, then spawns a left-leg body-part process (BODYPART::0270) attached to that actor.",
-    "When the leg is hit, the script marks the actor/process with a different info flag and process-exclude state, invokes a cleanup/free operation (FREE::2A56 with code 0x0202), queries how many processes of a specific type exist (Kernel::getNumProcesses for type 0x020A) and, depending on that query result, may spawn an additional body-part process (BODYPART::0431).",
-    "All spawn return values are captured into a small local (temp) before the handler returns. No global flags are read or written by the documented handlers in this file."
+    "U8P_LEGLEFT::use is a process triggered when the body-part object is used; it spawns the BODYPART::func0270 routine for this instance to run the part's 'U8P_LEGLEFT::use' behavior (animation/effect/process).",
+    "U8P_LEGLEFT::hit(uword, word) handles being struck: it calls FREE::resetRef(0x0202, this) to clear an associated reference, then checks Kernel::getNumProcesses(0x020A, this) and, if zero, spawns BODYPART::func0431 for this instance to run the U8P_LEGLEFT::hit-reaction routine. The getNumProcesses call acts as a guard to avoid duplicate U8P_LEGLEFT::hit processes."
   ],
   "notable_control_flow": [
-    "U8P_LEGLEFT::LEGLEFT::use (Event 1) executes unconditionally when triggered and always performs: set info (0x0207) -> process exclude -> spawn BODYPART::0270 -> store spawn retval -> return.",
-    "U8P_LEGLEFT::LEGLEFT::hit (Event 5) executes on hit: set info (0x020B) -> process exclude -> call FREE::2A56(0x0202, actor) -> call Kernel::getNumProcesses(0x020A) -> test result with a NOT+JNE pattern -> conditionally spawn BODYPART::0431 -> store spawn retval -> return.",
-    "The conditional in hit depends on the numeric result of Kernel::getNumProcesses; the disassembly pattern makes the polarity uncertain (hence the spawn-on-zero vs spawn-on-nonzero ambiguity)."
+    "U8P_LEGLEFT::use: single-step spawn of BODYPART::func0270 for this instance (no branching).",
+    "U8P_LEGLEFT::hit: immediate cleanup/reset via FREE::resetRef, followed by a conditional branch based on Kernel::getNumProcesses(0x020A, this); spawn BODYPART::func0431 only when that count is zero."
   ],
   "open_questions": [
-    "Precise semantics of the numeric info codes used with 'set info' (0x0207 in use and 0x020B in hit): what concrete state or gameplay meaning do these codes represent?",
-    "Exact intended polarity of the Kernel::getNumProcesses check in U8P_LEGLEFT::LEGLEFT::hit (does the handler spawn BODYPART::0431 when zero processes of 0x020A exist, or when any exist?): the disassembly uses a NOT+JNE pattern making polarity ambiguous.",
-    "Meaning and gameplay effect of the process type 0x020A queried by Kernel::getNumProcesses (what class/type of processes are being counted?).",
-    "Precise effect of FREE::2A56 with parameter 0x0202 on the actor: inferred to be detach/cleanup but the exact resource/state changed is not present in this excerpt."
+    "What exact gameplay effects/animations are implemented inside BODYPART::func0270 and BODYPART::func0431 (spawned routines) — current excerpt spawns them but does not reveal their contents.",
+    "What semantic meaning do the U8P_LEGLEFT::hit parameters 'uword' and 'word' carry (damage amount, attacker id, U8P_LEGLEFT::hit type, etc.)?",
+    "What precisely is process type 0x020A (the type counted by Kernel::getNumProcesses) in this game's process taxonomy, and why is it used as the guard for spawning the U8P_LEGLEFT::hit routine?"
   ],
   "main_function": {
-    "name": "U8P_LEGLEFT::use (Event 1)",
+    "name": "U8P_LEGLEFT::use",
     "execution_form": "process",
-    "purpose": "Handle the object's 'use' / trigger-area entry: mark the actor/process (set info 0x0207 + process exclude) and spawn the left-leg body-part process BODYPART::0270 attached to that actor.",
+    "purpose": "When the player uses/activates this body-part object, start the part's 'U8P_LEGLEFT::use' routine by spawning BODYPART::func0270 for this instance.",
     "entry_conditions": [
-      "Called when the object is used or when the Avatar/actor enters the object's trigger region (Event 1).",
-      "No additional runtime gating observed — spawn is unconditional once the event is invoked."
+      "Invoked by the engine as a process of type 0x0207 when the object is 'used' by the player/Avatar."
     ],
     "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_LEGLEFT::use (Event 1)",
+      "name": "U8P_LEGLEFT::use",
       "kind": "main",
-      "role": "Trigger handler that marks the actor/process and spawns the standard left-leg body-part (BODYPART::0270).",
+      "role": "Handle player 'U8P_LEGLEFT::use' interaction by spawning the part's U8P_LEGLEFT::use routine.",
       "confidence": "high"
     },
     {
-      "name": "U8P_LEGLEFT::hit (Event 5)",
+      "name": "U8P_LEGLEFT::hit",
       "kind": "helper",
-      "role": "Hit/damage handler for the leg: marks actor/process, performs a free/cleanup, queries process counts, and conditionally spawns an alternate body-part (BODYPART::0431).",
+      "role": "Handle U8P_LEGLEFT::hit/damage events: reset references and conditionally spawn the U8P_LEGLEFT::hit-reaction routine.",
+      "confidence": "high"
+    },
+    {
+      "name": "BODYPART::func0270",
+      "kind": "extern",
+      "role": "Spawned by U8P_LEGLEFT::use() to perform the 'U8P_LEGLEFT::use' behavior for the body part (animation/effect/process).",
       "confidence": "medium"
     },
     {
-      "name": "U8P_LEGLEFT::set info (engine opcode 0x77)",
+      "name": "BODYPART::func0431",
       "kind": "extern",
-      "role": "Engine opcode used to set an info/state key on the referenced process/object (used with codes 0x0207 and 0x020B).",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_LEGLEFT::process exclude (engine opcode 0x78)",
-      "kind": "extern",
-      "role": "Engine opcode that excludes the marked process from normal processing; used after set info in both handlers.",
-      "confidence": "high"
-    },
-    {
-      "name": "FREE::2A56",
-      "kind": "extern",
-      "role": "External cleanup/free routine invoked from hit with code 0x0202; likely detaches or releases a linked resource related to the leg.",
+      "role": "Spawned by U8P_LEGLEFT::hit() to perform the U8P_LEGLEFT::hit/damage reaction behavior for the body part.",
       "confidence": "medium"
-    },
-    {
-      "name": "Kernel::getNumProcesses",
-      "kind": "extern",
-      "role": "Kernel query used by hit to count processes of a specific type (0x020A) to decide conditional spawning.",
-      "confidence": "high"
-    },
-    {
-      "name": "spawn (BODYPART::0270 / BODYPART::0431)",
-      "kind": "extern",
-      "role": "Engine spawn operation to create/attach body-part processes to the actor; BODYPART::0270 is spawned unconditionally by use, BODYPART::0431 is spawned conditionally by hit.",
-      "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_LEGLEFT::use (Event 1)",
-        "callee": "U8P_LEGLEFT::set info (engine opcode 0x77)",
-        "purpose": "Annotate/mark the actor/process with info code 0x0207 prior to excluding it from processing.",
+        "caller": "U8P_LEGLEFT::use",
+        "callee": "BODYPART::func0270",
+        "purpose": "Start the body-part's 'U8P_LEGLEFT::use' routine for this instance (spawn).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_LEGLEFT::use (Event 1)",
-        "callee": "U8P_LEGLEFT::process exclude (engine opcode 0x78)",
-        "purpose": "Exclude the actor/process from normal processing after marking it (paired with set info).",
+        "caller": "U8P_LEGLEFT::hit",
+        "callee": "FREE::resetRef",
+        "purpose": "Clear/reset a reference/registration id 0x0202 associated with this instance as immediate housekeeping after a U8P_LEGLEFT::hit.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_LEGLEFT::use (Event 1)",
-        "callee": "spawn (BODYPART::0270)",
-        "purpose": "Create the left-leg body-part process instance attached to the actor; return value stored in a local temp.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LEGLEFT::hit (Event 5)",
-        "callee": "U8P_LEGLEFT::set info (engine opcode 0x77)",
-        "purpose": "Annotate/mark the actor/process with info code 0x020B on hit.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LEGLEFT::hit (Event 5)",
-        "callee": "U8P_LEGLEFT::process exclude (engine opcode 0x78)",
-        "purpose": "Exclude the actor/process from further processing after marking on hit.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LEGLEFT::hit (Event 5)",
-        "callee": "FREE::2A56",
-        "purpose": "Perform cleanup/detach action using code 0x0202 against the actor/process (likely freeing associated resources).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_LEGLEFT::hit (Event 5)",
+        "caller": "U8P_LEGLEFT::hit",
         "callee": "Kernel::getNumProcesses",
-        "purpose": "Count processes of type 0x020A to decide whether to spawn BODYPART::0431.",
+        "purpose": "Query number of running processes of type 0x020A on this instance to decide whether to spawn the U8P_LEGLEFT::hit routine (serves as a guard against duplicates).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_LEGLEFT::hit (Event 5)",
-        "callee": "spawn (BODYPART::0431)",
-        "purpose": "Conditionally create an alternate body-part instance depending on Kernel::getNumProcesses' result; spawn retval stored to a local before return.",
-        "confidence": "medium"
+        "caller": "U8P_LEGLEFT::hit",
+        "callee": "BODYPART::func0431",
+        "purpose": "Start the body-part's U8P_LEGLEFT::hit-reaction routine for this instance when no existing 0x020A processes are present (spawn).",
+        "confidence": "high"
       }
     ]
   },
@@ -136,9 +90,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_LEGLEFT::LEGLEFT::use (Event 1)",
-    "behavior_summary_one_liner": "This script provides logic for a left-leg body-part object. When the object is 'used' (or the Avatar/actor enters its trigger region) it marks the related actor/process with a specific info flag and process-exclude state, then spawns a left-leg body-part process (BODYPART::0270) attached to that actor.",
-    "external_call_count": 8,
+    "main_function": "U8P_LEGLEFT::use",
+    "behavior_summary_one_liner": "U8P_LEGLEFT::use is a process triggered when the body-part object is used; it spawns the BODYPART::func0270 routine for this instance to run the part's 'U8P_LEGLEFT::use' behavior (animation/effect/process).",
+    "external_call_count": 4,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

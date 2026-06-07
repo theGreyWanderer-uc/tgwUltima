@@ -3,27 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_TOSSROCK.json",
   "file": "U8P_TOSSROCK",
   "behavior_summary": [
-    "Provides the 'U8P_TOSSROCK::look' (examine) behavior for a tossable rock object: when the rock is examined, the script prepares a short literal string \"rock \" and invokes the item's description/bark routine so the engine displays that text to the player or the requesting process.",
-    "Before the bark call the handler sets object/info-related flags and a process-exclude flag — likely to control who receives the message or to avoid re-entering the caller — then passes a PID/context and the temporary string to Item::bark.",
-    "After the bark call the temporary string is freed, the return value is inspected by an implies/pop sequence (appears to force a truthy/handled return), and the handler suspends/returns."
+    "Handles the player 'Look/Examine' interaction for the TOSSROCK object.",
+    "When examined it displays a single short bark text: \"rock \" (appears to be a minimal or placeholder description).",
+    "Immediately suspends/ends the U8P_TOSSROCK::look process after showing the text; there is no branching, menu, or state modification."
   ],
   "notable_control_flow": [
-    "Entry on the 'U8P_TOSSROCK::look' trigger leads to two engine flag writes (set info and process_exclude) that adjust call context.",
-    "Allocates a short literal string \"rock \", pushes a PID/context and the object pointer, then calls external Item::bark.",
-    "Frees the temporary string after the call, checks the bark return value using an implies/pop idiom, then suspends/returns."
+    "Entry into the U8P_TOSSROCK::look process triggers a single output (Bark) then a suspend/terminate node — linear control flow with no conditions.",
+    "No calls to other game systems, no reads or writes of global flags, and no local state changes are present."
   ],
   "open_questions": [
-    "What exact info key/value is being written by the 'set info' opcode (disassembly shows an info write but the concrete info id is unclear) — this is inferred but not certain.",
-    "Which PID is pushed as the call context (the viewer's process, the rock's process, or another actor) — the code pushes a pid but the precise source is not explicit.",
-    "What precisely does the 'implies 01 01' / pop sequence enforce semantically in the engine (appears to convert/ensure a handled/true return but the exact effect is unclear).",
-    "Why is process_exclude set around this call — to prevent feedback to the caller, to avoid re-entrancy, or for another engine-specific reason?"
+    "Is the trailing space in the bark text \"rock \" an artifact of decompilation/raw text or intentionally present in-game?",
+    "Does the 'suspend' node end the U8P_TOSSROCK::look process completely or yield to other engine processes in some contexts (inferred to terminate/suspend the U8P_TOSSROCK::look handler)?",
+    "Was this minimal description intended as a placeholder for a longer description or is the object intentionally terse?"
   ],
   "main_function": {
     "name": "U8P_TOSSROCK::look",
     "execution_form": "process",
-    "purpose": "Handle the 'U8P_TOSSROCK::look' verb for the tossable rock: set up context flags, produce a short descriptive message \"rock \", invoke the item's bark routine to display that description, clean up temporary resources, and return.",
+    "purpose": "Provide a short description when the player examines the TOSSROCK object and then end/suspend the U8P_TOSSROCK::look process.",
     "entry_conditions": [
-      "Event 0 (U8P_TOSSROCK::look) — triggered when a player/actor examines or 'looks' at the tossable rock object"
+      "Triggered by the engine when the player uses the Look/Examine verb on this object (processType 0x0208)."
     ],
     "confidence": "high"
   },
@@ -31,53 +29,27 @@
     {
       "name": "U8P_TOSSROCK::look",
       "kind": "main",
-      "role": "U8P_TOSSROCK::look handler that emits the rock's short description",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine routine used to present or append a short text message coming from an item/process (used here to show the rock's description)",
+      "role": "Respond to U8P_TOSSROCK::look/examine events for the object by emitting a short descriptive bark and suspending the process.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_TOSSROCK::look",
-        "callee": "Item::bark",
-        "purpose": "Pass a context PID and the literal string \"rock \" so the item/process system will present the rock's short description to the player/process.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
-    "writes": [
-      {
-        "name": "info (object info/state)",
-        "likely_effect": "Sets per-object info/state used to influence the bark/display or object metadata (exact info id/value inferred from opcode usage).",
-        "confidence": "medium"
-      },
-      {
-        "name": "process_exclude",
-        "likely_effect": "Marks a process or context to be excluded from some processing (likely to avoid sending the bark back to the originator or to prevent re-entrancy).",
-        "confidence": "medium"
-      }
-    ]
+    "writes": []
   },
   "ui_tags": [
-    "trigger",
-    "cleanup",
-    "guard"
+    "trigger"
   ],
   "quick_facts": {
-    "main_function": "U8P_TOSSROCK::TOSSROCK::look",
-    "behavior_summary_one_liner": "Provides the 'U8P_TOSSROCK::look' (examine) behavior for a tossable rock object: when the rock is examined, the script prepares a short literal string \"rock \" and invokes the item's description/bark routine so the engine displays that text to the player or the requesting process.",
-    "external_call_count": 1,
+    "main_function": "U8P_TOSSROCK::look",
+    "behavior_summary_one_liner": "Handles the player 'Look/Examine' interaction for the TOSSROCK object.",
+    "external_call_count": 0,
     "flag_read_count": 0,
-    "flag_write_count": 2
+    "flag_write_count": 0
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

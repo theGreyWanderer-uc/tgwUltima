@@ -3,26 +3,24 @@
   "source_of_truth": "dialogue/json/U8P_SHORTMSH.json",
   "file": "U8P_SHORTMSH",
   "behavior_summary": [
-    "Handles the 'U8P_SHORTMSH::look' (examine) event for the short mushroom object. When a process (player/viewer) looks at this object, the handler marks object information/state, adjusts process exclusion/visibility for that process, and causes the object to 'bark' the literal label \"mushroom\" to the viewer.",
-    "The handler allocates or constructs a short literal string \"mushroom\" (then frees it after use), calls Item::bark with the process pointer and that string, performs a short implies/pop sequence that yields a truthy result, suspends, and returns.",
-    "No global flags are read or written by this script (no persistent global state changes inferred)."
+    "This script implements the object's 'U8P_SHORTMSH::look' (examine) handler. When the player examines the SHORTMSH object the process emits a single bark line reading \"mushroom\" and then the process suspends/yields.",
+    "There are no menus, branches, external calls, or global flag changes — the behavior is purely descriptive output for the examine interaction."
   ],
   "notable_control_flow": [
-    "Triggered as an event handler (Event 0 / U8P_SHORTMSH::look).",
-    "Sequence: push info code (0x0208) and process pointer -> call set info; call process exclude with process pointer and an indirect operand; allocate/prepare string -> call Item::bark(process, \"mushroom\"); free string; perform implies/pop to produce handler result; suspend and return.",
-    "The implies/pop sequence indicates the function yields a truthy return value to the caller; exact semantics of the implication are inferred, not explicit."
+    "Linear single-step flow: start, emit bark \"mushroom\", then suspend/terminate the U8P_SHORTMSH::look process.",
+    "Process boundaries appear in the raw as unlabeled/Unknown nodes (an opening marker and a suspend), suggesting the routine runs once per U8P_SHORTMSH::look invocation and then yields."
   ],
   "open_questions": [
-    "What precise gameplay meaning is encoded by info code 0x0208 (what UI or state does setting 0x0208 enable/represent)?",
-    "What is the exact effect of the indirect operand passed to process exclude (which processes or message types are being excluded)?",
-    "Does the function's return value affect any downstream logic, or is it only indicating successful handling (implication sequence is inferred to produce a truthy value)?"
+    "Do engine-level fast-area entry/leave triggers ever invoke this U8P_SHORTMSH::look process beyond a direct player 'examine' action? (None are referenced explicitly in the script.)",
+    "Are there localization or alternate text paths for the bark \"mushroom\" in other language assets? The script stores a single literal line."
   ],
   "main_function": {
     "name": "U8P_SHORTMSH::look",
     "execution_form": "process",
-    "purpose": "Respond to a player/process examining the short mushroom: prepare object state (info/exclusion) and present the object's short textual description by invoking Item::bark with the literal \"mushroom\".",
+    "purpose": "Provide the short description when the player examines the object; show the single bark text \"mushroom\" and then suspend the process.",
     "entry_conditions": [
-      "Event 0 (U8P_SHORTMSH::look) — invoked when an actor looks at or examines the short mushroom object"
+      "Invoked by the engine when the player 'looks at' or examines this object (process type 0x0208).",
+      "Implicit: runs once for the U8P_SHORTMSH::look event and yields (start and suspend markers present)."
     ],
     "confidence": "high"
   },
@@ -30,50 +28,13 @@
     {
       "name": "U8P_SHORTMSH::look",
       "kind": "main",
-      "role": "Event handler for the object's U8P_SHORTMSH::look/examine interaction; orchestrates state setup and message emission.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_SHORTMSH::set info",
-      "kind": "extern",
-      "role": "Engine routine called with an info identifier (0x0208) and a process pointer to set an information/state key on the object/process.",
-      "confidence": "medium"
-    },
-    {
-      "name": "U8P_SHORTMSH::process exclude",
-      "kind": "extern",
-      "role": "Engine routine to adjust exclusion/visibility for a process (used after setting info to change which processes receive further messages or processing).",
-      "confidence": "medium"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Item/process method to emit/display a short text message to the target process (used to show the object's name/description).",
+      "role": "U8P_SHORTMSH::look handler that displays the short description \"mushroom\"",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_SHORTMSH::look",
-        "callee": "U8P_SHORTMSH::set info",
-        "purpose": "Record or enable a specific info/state (0x0208) on the target object/process prior to emitting the description (likely to mark that the object has been examined or to change display behavior).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_SHORTMSH::look",
-        "callee": "U8P_SHORTMSH::process exclude",
-        "purpose": "Adjust exclusion/visibility for the target process (likely prevents the process from receiving some messages or alters event routing while the bark occurs).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_SHORTMSH::look",
-        "callee": "Item::bark",
-        "purpose": "Deliver the visible/audible label to the viewer by making the item/process emit the text string \"mushroom\".",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -81,14 +42,14 @@
   },
   "ui_tags": [
     "trigger",
-    "message",
     "cleanup",
-    "state-change"
+    "animation",
+    "guard"
   ],
   "quick_facts": {
-    "main_function": "SHORTMSH::look",
-    "behavior_summary_one_liner": "Handles the 'U8P_SHORTMSH::look' (examine) event for the short mushroom object. When a process (player/viewer) looks at this object, the handler marks object information/state, adjusts process exclusion/visibility for that process, and causes the object to 'bark' the literal label \"mushroom\" to the viewer.",
-    "external_call_count": 3,
+    "main_function": "U8P_SHORTMSH::look",
+    "behavior_summary_one_liner": "This script implements the object's 'U8P_SHORTMSH::look' (examine) handler. When the player examines the SHORTMSH object the process emits a single bark line reading \"mushroom\" and then the process suspends/yields.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

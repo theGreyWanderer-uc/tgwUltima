@@ -3,30 +3,31 @@
   "source_of_truth": "dialogue/json/U8P_MISTRAPE.json",
   "file": "U8P_MISTRAPE",
   "behavior_summary": [
-    "This script implements a floor/trip trap that, when an actor (typically the Avatar) enters its fast trigger area, marks the trap item state and spawns a persistent trap behavior process that drives animation and firing.",
-    "The spawned trap process (U8P_MISTRAPE::00B2) loops: it suspends, reads and advances an internal frame counter, uses frame thresholds and urandom-based checks to decide firing/timing, and on fire attempts to create a projectile at an offset from the trap (Z, Y-0x20, X+0x40).",
-    "Projectile creation uses Item::legal_create and falls back to Item::create + Item::pop when placement is not legal; created projectiles receive status flags, may be legally moved into place, and are either hurled (Item::hurl) or simply popped into the world. A sound effect is played when the trap fires.",
-    "When an actor leaves the fast trigger area the script sets the trap info/exclusion state and invokes a cleanup helper (FREE::2A56) to stop/teardown the trap."
+    "Implements a trap/ticker item that advances an internal frame index and, on specific frames, plays a SFX and either spawns or hurls an item (ID 0x02B9) into the world.",
+    "U8P_MISTRAPE::enterFastArea is the area-entry trigger: when an actor enters the trap's fast-area it immediately invokes the trap ticker (U8P_MISTRAPE::func00B2) to update animation/state and potentially create or launch a projectile/item.",
+    "U8P_MISTRAPE::func00B2 reads the item's frame, increments or sets frame values, performs frame-specific branches (including suspend/yield behavior), computes spawn coordinates (z, y-0x20, x+0x40), runs legal_create/legal_move checks, and on success places/pops or hurls the created item and sets a status flag on it.",
+    "There is a random-chance branch inside U8P_MISTRAPE::func00B2 that may call FREE::func1C19 instead of the normal create/hurl path (inferred to spawn or start an auxiliary process).",
+    "U8P_MISTRAPE::leaveFastArea clears the trap reference (FREE::resetRef) when the actor leaves the trigger region so the trap stops being tracked."
   ],
   "notable_control_flow": [
-    "Event-driven: U8P_MISTRAPE::enterFastArea runs on area entry, sets item info/exclusion and spawns the active trap process; U8P_MISTRAPE::leaveFastArea runs on area exit and performs cleanup.",
-    "The active trap (U8P_MISTRAPE::00B2) is a suspended looped process that advances an animation/frame variable, branches on particular frame values to trigger possible firing, and uses urandom to add probabilistic timing.",
-    "Creation path: attempt legal_create -> if success use returned item; else create fallback + pop -> set flags (Item::orStatus) -> legal_move optionally -> Item::hurl or Item::pop.",
-    "Spawned helper usage: on some fire events a timed helper (FREE::1C19) is spawned with a delay computed from urandom; leaveFastArea calls FREE::2A56 for cleanup."
+    "Frame-based branching inside U8P_MISTRAPE::func00B2: specific frame values (notably around 0x05 and 0x0A) drive different behaviors (reset/cycle vs spawn/hurl).",
+    "A random roll (urandom) gates an alternate path that invokes FREE::func1C19 rather than the standard spawn/hurl path.",
+    "U8P_MISTRAPE::enterFastArea simply delegates to the utility ticker (U8P_MISTRAPE::func00B2); U8P_MISTRAPE::leaveFastArea performs cleanup via FREE::resetRef.",
+    "Suspends/yields are present around frame transitions and spawn actions (suspend nodes inferred), indicating timed/animated behavior rather than instantaneous state changes."
   ],
   "open_questions": [
-    "What exact info key/id is being set on the trap item (disassembly shows a set-info opcode but the semantic meaning of the constant is not explicit)?",
-    "What specific item type (projectile shape/id) is created by Item::legal_create / Item::create in the fire path?",
-    "What status bits are applied by Item::orStatus (exact mask semantics are inferred but not enumerated)?",
-    "Precise numeric frame thresholds and their mapping to animation vs firing phases are inferred from comparisons (e.g. values like 0,5,10) but exact designer intent is uncertain.",
-    "Exact behavior and lifecycle of FREE::1C19 and FREE::2A56 (named helpers) are inferred as timed effect and cleanup respectively but their side effects and visual/audio behavior are not fully known."
+    "Exact semantic/effect of FREE::func1C19 when called from U8P_MISTRAPE::func00B2 — appears to start or spawn another process, but purpose is inferred.",
+    "Precise meaning of the frame numbers (0x05, 0x0A, and other thresholds) and how they map to animation frames or trap states.",
+    "What concrete game object/item corresponds to ID 0x02B9 and whether special properties (ownership, projectile type) affect later gameplay.",
+    "Whether U8P_MISTRAPE::enterFastArea is intended to repeatedly call U8P_MISTRAPE::func00B2 (ticker loop) or only trigger a single tick/event on entry (scheduling behavior is inferred).",
+    "Any global flags or persistent state outside the item instance that influence repeated firings (none observed in this script)."
   ],
   "main_function": {
     "name": "U8P_MISTRAPE::enterFastArea",
     "execution_form": "process",
-    "purpose": "Respond to an actor entering the trap's fast trigger region by marking the trap's info/process-exclude state and spawning the trap's active behavior process that handles animation and firing.",
+    "purpose": "Area-entry trigger that invokes the trap ticker to advance animation/state and potentially spawn or launch an item when an actor enters the trap's trigger region.",
     "entry_conditions": [
-      "Triggered when an actor (typically the Avatar) enters the trap's fast trigger area (U8P_MISTRAPE::enterFastArea event)."
+      "Fast-area entry event: an actor (typically the Avatar) enters the trap's trigger region."
     ],
     "confidence": "high"
   },
@@ -34,19 +35,37 @@
     {
       "name": "U8P_MISTRAPE::enterFastArea",
       "kind": "main",
-      "role": "Event handler: set trap info/exclusion and spawn the active trap process.",
+      "role": "fast-area entry trigger — delegates to the trap ticker (U8P_MISTRAPE::func00B2)",
       "confidence": "high"
     },
     {
       "name": "U8P_MISTRAPE::leaveFastArea",
       "kind": "helper",
-      "role": "Area-exit handler: re-set trap info/exclusion and call cleanup helper (FREE::2A56) to stop/teardown trap behavior.",
+      "role": "fast-area exit trigger — clears/frees the trap reference (FREE::resetRef)",
       "confidence": "high"
     },
     {
-      "name": "U8P_MISTRAPE::00B2",
+      "name": "U8P_MISTRAPE::func00B2",
       "kind": "helper",
-      "role": "Spawned active trap loop: drive frame/animation, probabilistically spawn timed helpers, create/pop/hurl projectiles and play SFX.",
+      "role": "utility/ticker that advances frames, handles frame-based spawn/hurl logic, plays SFX, and runs legality checks for item placement/movement",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getFrame",
+      "kind": "extern",
+      "role": "read the trap/item's current frame/index",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::setFrame",
+      "kind": "extern",
+      "role": "write back the updated frame/index to the trap/item",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::resetRef",
+      "kind": "extern",
+      "role": "clear/free the script reference to the trap; used on U8P_MISTRAPE::leaveFastArea",
       "confidence": "high"
     }
   ],
@@ -54,101 +73,101 @@
     "internal_calls": [
       {
         "caller": "U8P_MISTRAPE::enterFastArea",
-        "callee": "U8P_MISTRAPE::00B2",
-        "purpose": "Spawn the trap's active behavior/process when an actor enters the fast area.",
+        "callee": "U8P_MISTRAPE::func00B2",
+        "purpose": "Invoke the trap ticker to update animation/state and perform spawn/hurl behavior upon area entry.",
         "confidence": "high"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_MISTRAPE::00B2",
+        "caller": "U8P_MISTRAPE::func00B2",
         "callee": "Item::getFrame",
-        "purpose": "Read the trap item's current animation/frame index to drive timing and firing decisions.",
+        "purpose": "Read the current frame/state index of this trap/item to determine next action.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_MISTRAPE::00B2",
-        "callee": "urandom",
-        "purpose": "Generate randomness (seeded with process id/pid) used to probabilistically determine firing/timing and helper spawn delays.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_MISTRAPE::00B2",
-        "callee": "FREE::1C19",
-        "purpose": "Spawn a timed helper/effect when the trap fires (created with a delay derived from urandom).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_MISTRAPE::00B2",
-        "callee": "Item::legal_create",
-        "purpose": "Attempt to legally create/place the projectile at computed world coordinates (Z, Y-0x20, X+0x40).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_MISTRAPE::00B2",
-        "callee": "Item::create",
-        "purpose": "Fallback unconditional creation of the projectile if legal_create fails.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_MISTRAPE::00B2",
-        "callee": "Item::orStatus",
-        "purpose": "Set status bits/flags on the newly created projectile (marking it for temporary/special behavior).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_MISTRAPE::00B2",
-        "callee": "U8P_MISTRAPE::playSFX",
-        "purpose": "Play a sound effect at the trap's location when it fires or a projectile is spawned.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_MISTRAPE::00B2",
-        "callee": "Item::hurl",
-        "purpose": "Launch the created projectile with a specified velocity/parameters when firing.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_MISTRAPE::00B2",
-        "callee": "Item::pop",
-        "purpose": "Place/pop the created item into the world at specified coordinates when legal_create was not used.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_MISTRAPE::00B2",
-        "callee": "Item::getZ",
-        "purpose": "Read trap Z coordinate to compute spawn Z for projectiles.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_MISTRAPE::00B2",
-        "callee": "Item::getY",
-        "purpose": "Read trap Y coordinate and compute spawn Y (trap Y - 0x20).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_MISTRAPE::00B2",
-        "callee": "Item::getX",
-        "purpose": "Read trap X coordinate and compute spawn X (trap X + 0x40).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_MISTRAPE::00B2",
-        "callee": "Item::legal_move",
-        "purpose": "Attempt to legally move/place the created projectile to the intended world point after creation/pop.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_MISTRAPE::00B2",
+        "caller": "U8P_MISTRAPE::func00B2",
         "callee": "Item::setFrame",
-        "purpose": "Update the trap's animation/frame state after advancing it in the loop.",
+        "purpose": "Write the advanced or adjusted frame back to the trap/item to update its animation/state.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MISTRAPE::func00B2",
+        "callee": "urandom",
+        "purpose": "Generate a random value used to decide between the normal spawn/hurl path and an alternate path (calls FREE::func1C19).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MISTRAPE::func00B2",
+        "callee": "FREE::func1C19",
+        "purpose": "Conditionally invoked on a random roll; appears to spawn or start an auxiliary process instead of creating/hurling the item.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_MISTRAPE::func00B2",
+        "callee": "playSFX",
+        "purpose": "Play a sound effect when the trap fires or creates an item.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MISTRAPE::func00B2",
+        "callee": "Item::legal_create",
+        "purpose": "Check and create item ID 0x02B9 at computed coordinates if legal; returns handle in a local to continue placement/hurl logic.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MISTRAPE::func00B2",
+        "callee": "Item::create",
+        "purpose": "Alternate direct create path for item ID 0x02B9 when legal_create path is not used.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_MISTRAPE::func00B2",
+        "callee": "Item::orStatus",
+        "purpose": "Set a status flag (0x0080) on the newly created item (likely to mark active/owned).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_MISTRAPE::func00B2",
+        "callee": "Item::pop",
+        "purpose": "Place/pop the created item into the world at computed coordinates (z, y-0x20, x).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MISTRAPE::func00B2",
+        "callee": "Item::hurl",
+        "purpose": "Launch/hurl the created item as a projectile from the trap when the hurl path is taken.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MISTRAPE::func00B2",
+        "callee": "Item::legal_move",
+        "purpose": "Check whether a created item can legally move to a computed destination before moving/hurling it.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_MISTRAPE::func00B2",
+        "callee": "Item::getZ",
+        "purpose": "Read trap Z coordinate for spawn/placement computations.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MISTRAPE::func00B2",
+        "callee": "Item::getY",
+        "purpose": "Read trap Y coordinate used to compute spawn Y (y - 0x20).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MISTRAPE::func00B2",
+        "callee": "Item::getX",
+        "purpose": "Read trap X coordinate used to compute spawn X (x + 0x40).",
         "confidence": "high"
       },
       {
         "caller": "U8P_MISTRAPE::leaveFastArea",
-        "callee": "FREE::2A56",
-        "purpose": "Invoke cleanup/stop helper when the actor leaves the fast trigger area (pass byte 0x01 and the trap item).",
-        "confidence": "medium"
+        "callee": "FREE::resetRef",
+        "purpose": "Clear/free the script's reference to the trap item so it stops being tracked when an actor leaves the area.",
+        "confidence": "high"
       }
     ]
   },
@@ -164,7 +183,7 @@
   ],
   "quick_facts": {
     "main_function": "U8P_MISTRAPE::enterFastArea",
-    "behavior_summary_one_liner": "This script implements a floor/trip trap that, when an actor (typically the Avatar) enters its fast trigger area, marks the trap item state and spawns a persistent trap behavior process that drives animation and firing.",
+    "behavior_summary_one_liner": "Implements a trap/ticker item that advances an internal frame index and, on specific frames, plays a SFX and either spawns or hurls an item (ID 0x02B9) into the world.",
     "external_call_count": 15,
     "flag_read_count": 0,
     "flag_write_count": 0

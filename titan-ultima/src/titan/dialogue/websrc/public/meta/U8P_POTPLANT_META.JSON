@@ -3,29 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_POTPLANT.json",
   "file": "U8P_POTPLANT",
   "behavior_summary": [
-    "POTPLANT::look: When an actor examines the potted plant, the item emits a short descriptive text starting with \"potted plant \" to the examining process via Item::bark.",
-    "POTPLANT::use: When a player uses the potted plant and the plant's frame/state == 0, the script spawns up to five item instances (inferred type 0x0178) and places them around the pot with small randomized X/Z offsets; if frame != 0, use does nothing.",
-    "Randomization: urandom(0x28) is sampled and added to the pot's X and Z coordinates so spawned items are scattered slightly rather than stacked."
+    "U8P_POTPLANT::look: When the player examines the potted plant, display a short label 'potted plant' and end the U8P_POTPLANT::look process.",
+    "U8P_POTPLANT::use: When the player 'uses' or activates the potted plant and the plant's frame/state equals 0, run a small item-production routine that uses a temporary item handle and a local counter to create and spawn item id 0x0178 into the world near the plant several times (scattered by small random offsets).",
+    "Item creation/spawning uses the plant's Z/Y/X coordinates plus urandom(0x28) offsets to place spawned items around the plant."
   ],
   "notable_control_flow": [
-    "U8P_POTPLANT::POTPLANT::look executes on the 'U8P_POTPLANT::look'/examine trigger and primarily constructs/pushes a fixed string to Item::bark then returns; no global state changes observed.",
-    "U8P_POTPLANT::POTPLANT::use first queries Item::getFrame; only if the frame equals zero does it enter a creation loop. A local counter (BP-04) caps generation to fewer than 5 iterations.",
-    "Inside the creation loop, the script builds/uses a small local buffer/address (BP-02) as an argument to Item::create(itemType=0x0178, addr=BP-02) and then places the created instance via Item::pop using coordinates: X + random, Y, Z + random.",
-    "After spawning items (or immediately if frame != 0), the use handler returns/suspends without setting persistent global flags."
+    "U8P_POTPLANT::look is a simple process that barks the text 'potted plant' and then suspends/ends.",
+    "U8P_POTPLANT::use begins with a guard: Item::getFrame(this) == 0. If the guard fails, the U8P_POTPLANT::use routine does nothing.",
+    "If the guard passes, local2 (a temporary counter) is initialized/reset. One branch increments local2 and returns; the other branch enters a repetition that creates an item (Item::create) and immediately pops it into the world (Item::pop) while local2 is below an inferred limit (observed compare consistent with '< 5')."
   ],
   "open_questions": [
-    "Exact identity and in-game meaning of the created item type (0x0178) — inferred but not confirmed from available traces.",
-    "Precise layout and contents of the local buffer at BP-02 used for Item::create/Item::pop (loopscr/build script semantics inferred).",
-    "Meaning of non-zero frames on the pot (what in-game states correspond to frame != 0) and whether frame transitions are handled elsewhere.",
-    "Whether the spawned items inherit additional metadata (owner, lifetime, stacking) beyond the placement coordinates — not observable from the disassembly excerpt."
+    "The exact meaning of the inner 'this' condition and the branch that simply increments local2 is unclear from the remnants — why one branch increments and early-exits while the other spawns items is uncertain.",
+    "The magic item id 0x0178 is observed but its in-game identity is not specified here.",
+    "Exact iteration bounds, timing, and whether local2 persists across uses (storage lifetime) are inferred from decompiled patterns and have low confidence."
   ],
   "main_function": {
     "name": "U8P_POTPLANT::look",
     "execution_form": "process",
-    "purpose": "Present a short descriptive text for the potted plant to the examining process so the player sees 'potted plant ...'.",
+    "purpose": "Provide the player's short description when examining the potted plant (display 'potted plant').",
     "entry_conditions": [
-      "Event 0: the actor/process looks at (examines) the potted plant (the viewer/process PID is passed in at BP+06h).",
-      "Implicit: activated by the engine's item-U8P_POTPLANT::look/observe trigger region or examine action."
+      "Triggered by the engine when the player examines/looks at this plant object."
     ],
     "confidence": "high"
   },
@@ -33,113 +30,59 @@
     {
       "name": "U8P_POTPLANT::look",
       "kind": "main",
-      "role": "Handle 'U8P_POTPLANT::look' (examine) event; call Item::bark to show a description to the viewer.",
+      "role": "display short description / examine handler",
       "confidence": "high"
     },
     {
       "name": "U8P_POTPLANT::use",
       "kind": "helper",
-      "role": "Handle 'use' event; if Item::getFrame()==0, spawn up to five items around the pot using Item::create and Item::pop with randomized offsets.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine routine used to display/item-emit a short text string to a process/viewer.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::create",
-      "kind": "extern",
-      "role": "Create a new item instance of a given type (used by use to produce spawn candidates).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::pop",
-      "kind": "extern",
-      "role": "Place the created item into the world at specified coordinates/flags.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getFrame",
-      "kind": "extern",
-      "role": "Return item frame/state; used as a guard for spawning behavior.",
-      "confidence": "high"
-    },
-    {
-      "name": "urandom",
-      "kind": "extern",
-      "role": "Return a random number within a bound; used to compute placement offsets for spawned items.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getX",
-      "kind": "extern",
-      "role": "Get pot's X coordinate (base for spawned-X).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getY",
-      "kind": "extern",
-      "role": "Get pot's Y coordinate (used as Y for spawned items).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getZ",
-      "kind": "extern",
-      "role": "Get pot's Z coordinate (base for spawned-Z).",
-      "confidence": "high"
+      "role": "handle player activation; conditionally create and spawn items near the plant",
+      "confidence": "medium"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_POTPLANT::look",
-        "callee": "Item::bark",
-        "purpose": "Show the string 'potted plant ' (and possibly trailing descriptive text) to the viewing process passed into the U8P_POTPLANT::look event.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_POTPLANT::use",
         "callee": "Item::getFrame",
-        "purpose": "Query the plant's state/frame and only proceed with spawning when frame == 0 (acts as a guard).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_POTPLANT::use",
-        "callee": "urandom",
-        "purpose": "Produce small random offsets (called with 0x28) to vary X/Z placement of spawned items.",
+        "purpose": "Read this item's frame/state to guard whether the U8P_POTPLANT::use routine should execute (compared to 0).",
         "confidence": "high"
       },
       {
         "caller": "U8P_POTPLANT::use",
         "callee": "Item::create",
-        "purpose": "Create an instance of the item to be spawned (inferred type 0x0178) using a locally built argument buffer.",
+        "purpose": "Create an item instance (observed creating item id 0x0178) and return/store a handle into a local (local1) for subsequent spawning.",
         "confidence": "medium"
       },
       {
         "caller": "U8P_POTPLANT::use",
         "callee": "Item::pop",
-        "purpose": "Place the created item in the world at X+rand, Y, Z+rand and possibly with a placement/quantity byte.",
-        "confidence": "high"
+        "purpose": "Spawn/place the created item into the world at coordinates computed from the plant's position (Z, Y + urandom, X + urandom) using the created item handle.",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_POTPLANT::use",
-        "callee": "Item::getX",
-        "purpose": "Read pot's X coordinate to compute spawn X positions.",
+        "callee": "Item::getZ",
+        "purpose": "Retrieve the plant's Z coordinate for Item::pop.",
         "confidence": "high"
       },
       {
         "caller": "U8P_POTPLANT::use",
         "callee": "Item::getY",
-        "purpose": "Read pot's Y coordinate for spawn placement.",
+        "purpose": "Retrieve the plant's Y coordinate (used with urandom offset) for Item::pop.",
         "confidence": "high"
       },
       {
         "caller": "U8P_POTPLANT::use",
-        "callee": "Item::getZ",
-        "purpose": "Read pot's Z coordinate to compute spawn Z positions.",
+        "callee": "Item::getX",
+        "purpose": "Retrieve the plant's X coordinate (used with urandom offset) for Item::pop.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_POTPLANT::use",
+        "callee": "urandom",
+        "purpose": "Generate a small random offset (0..0x27) to scatter spawned items around the plant's X/Y position.",
         "confidence": "high"
       }
     ]
@@ -150,15 +93,13 @@
   },
   "ui_tags": [
     "trigger",
-    "description",
-    "spawn",
-    "randomness",
-    "guard"
+    "guard",
+    "spawn"
   ],
   "quick_facts": {
-    "main_function": "U8P_POTPLANT::POTPLANT::look",
-    "behavior_summary_one_liner": "POTPLANT::look: When an actor examines the potted plant, the item emits a short descriptive text starting with \"potted plant \" to the examining process via Item::bark.",
-    "external_call_count": 8,
+    "main_function": "U8P_POTPLANT::look",
+    "behavior_summary_one_liner": "U8P_POTPLANT::look: When the player examines the potted plant, display a short label 'potted plant' and end the U8P_POTPLANT::look process.",
+    "external_call_count": 7,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

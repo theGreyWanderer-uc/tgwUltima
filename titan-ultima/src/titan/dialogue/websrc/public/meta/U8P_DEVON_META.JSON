@@ -3,249 +3,210 @@
   "source_of_truth": "dialogue/json/U8P_DEVON.json",
   "file": "U8P_DEVON",
   "behavior_summary": [
-    "This script implements the conversation/identification behavior for an NPC referred to as 'Devon'. On initialization or when the player enters the NPC's fast-area trigger the script selects a short identifying label (examples in code: \"Devon\", \"fisherman \", \"man \") and sends it as a message to the player.",
-    "Beyond the initial identification, the module contains a set of helpers that prepare dialog parameters, build a selectable list of player dialog options, present conversation UI, and handle the selected reply with many context-sensitive branches that depend on global game-state flags.",
-    "Periodic/per-event helper logic increments a small local counter and occasionally emits brief sympathetic or alarmed lines; other helpers act as guards that gate callbacks into engine subsystems or relay to utility routines.",
-    "A single global flag (global [00FC 01]) is explicitly written when the NPC reveals its name; many other global flags are read to choose dialogue variants and to gate availability."
+    "This script implements the NPC Devon's interactions and behaviors: a short 'U8P_DEVON::look' description, a large branching conversation ('U8P_DEVON::use'), behavior scheduling, fast-area entry/exit handling, reactions to theft, and reactions to being targeted by spells/effects.",
+    "U8P_DEVON::look: returns a short identifying bark when the player examines Devon. It prefers a personal name ('Devon') if devonName is set, otherwise a job title ('fisherman') if devonJob is set, otherwise a generic 'man'.",
+    "U8P_DEVON::use: the main dialogue process — builds and mutates menu options, inserts the player's name into lines, captures menu choices, sets conversation/quest flags, and branches heavily based on many Devon/plot flags (quest gating and prior interactions).",
+    "U8P_DEVON::schedule: computes Devon's daily U8P_DEVON::schedule/activity parameters from time-of-day and special-state flags (devonInRule, devonJailed) and then calls an engine method to apply the U8P_DEVON::schedule.",
+    "U8P_DEVON::enterFastArea / U8P_DEVON::leaveFastArea: fast-area triggers used to start an immediate NPC activity on area entry (unless blocked by global restart/kill guards) and to clear transient references on exit.",
+    "U8P_DEVON::AvatarStoleSomething: handles theft near Devon — short-circuits on a particular map, clears transient refs, runs the generic reaction helper, barks at the player, and calls a Devon-specific follow-up routine.",
+    "U8P_DEVON::cast: handles being hit/assaulted by special U8P_DEVON::cast types (param1 selector). For the main selector it freezes the Avatar, clears combat, performs timed reaction/animation steps and may notify guards if appropriate.",
+    "U8P_DEVON::func5079: a utility that spawns temporary visual/effect items, plays SFX, animates frames, launches a LightningBolt process and applies an Item::receiveHit-style effect; used by U8P_DEVON::cast to create a positional effect."
   ],
   "notable_control_flow": [
-    "Entry: U8P_DEVON::init_0080 runs on actor init and on fast-area entry; it quickly chooses a short identifying string and sends it to the specified pid then suspends/returns.",
-    "Guard checks: multiple helpers (e.g., U8P_DEVON::init_0261 and U8P_DEVON::init_00FF) include early-exit logic based on combinations of global flags such as [005B 01], [0063 01], preventing dialog from proceeding in certain game states.",
-    "Dialog composition: U8P_DEVON::init_00FF builds numeric dialog parameters (local2/local3/local0) by querying state via 0581:28F9 and then calls the conversation engine 057C:133F to start or step conversation flows.",
-    "Main conversation: U8P_DEVON::init_035B assembles a slist (local14) of reply options based on many flags and helper returns, presents them through 057C:* APIs, and branches on the chosen string (local1) to trigger side effects including world/quest calls (e.g., 0402:5079) and setting global [00FC 01].",
-    "State mutation: only global [00FC 01] is written (set to 1) when the NPC identifies itself; other globals are treated as read-only selectors that shape behavior."
+    "U8P_DEVON::look: simple conditional chain selecting one of three short barks based on devonName/devonJob flags (straight-line control).",
+    "U8P_DEVON::use: large menu-driven conversation with many MenuAdd/MenuRemove/MenuUnion/MenuSet operations, Ask + SuspendAssign to capture choices, strcmp-style branching on the captured menu choice, and many SetFlag writes to record outcomes.",
+    "U8P_DEVON::schedule: guarded by global restart/kill-like flags (toranDead, secondexecution); prioritizes devonInRule and devonJailed branches, otherwise branches on FREE::getTimeOfDayPeriod() to select U8P_DEVON::schedule constants, then calls METHOD::func133F to apply the U8P_DEVON::schedule.",
+    "U8P_DEVON::enterFastArea: checks global blockers, then launches a separate Npc::cSetActivity process (spawned process + suspend) to begin an immediate activity when the player enters the fast-area.",
+    "U8P_DEVON::AvatarStoleSomething / U8P_DEVON::cast: react-to-event sequences that clear transient refs via FREE::resetRef, call a shared reaction helper (METHOD::func091C), emit barks, U8P_DEVON::use suspend/wait helpers (METHOD::func15E7), and optionally call CALGUARD::guardRespondToCrime to summon guards."
   ],
   "open_questions": [
-    "Precise semantics of engine routines (0581:28F9, 057C:091C, 057C:15E7, 057C:133F): their detailed return meanings and how returned bytes map to UI elements are inferred but not certain.",
-    "Exact gameplay meaning of many global flags (for example [0058],[005A],[005C],[005D],[003F],[0100],[0036]): they gate conversation trees but their narrative/quest identities are unknown.",
-    "The runtime interpretation of some helper-returned numeric modes (local0 values like 0x30/0x28/0x27) — what specific conversation nodes those constants correspond to in the high-level dialogue graph is inferred only.",
-    "Whether some external calls (058B:0080, 0402:0261, 0402:5079) perform animation/state changes, quest progress, or both is probable but not conclusively determined from this excerpt."
+    "Exact names and semantics of flags written by the dialogue (U8P_DEVON::use) path are not fully enumerated by the disassembly; which specific plot flags are set and how they gate other NPCs is uncertain.",
+    "U8P_DEVON::func0261 is referenced as a Devon follow-up for theft but its implementation/side effects are not present in this extract — what continuation behavior does it perform?",
+    "Precise numeric meanings of U8P_DEVON::schedule constants assigned in U8P_DEVON::schedule (bitmask/slot semantics) are inferred but not proven by the disassembly.",
+    "Some internal engine helpers (METHOD::func091C, METHOD::func15E7, METHOD::func133F) have inferred roles; their exact side effects (animation vs state change vs timing) are not certain."
   ],
   "main_function": {
-    "name": "U8P_DEVON::init_0080",
+    "name": "U8P_DEVON::look",
     "execution_form": "process",
-    "purpose": "On NPC initialization or when the player enters the NPC's fast-area, choose and send a short identifying string to the player and then suspend. This is the lightweight identification/first-contact behavior for the NPC 'Devon'.",
+    "purpose": "Provide the short description/bark shown when the player 'looks at' Devon. Chooses a terse identifying string based on Devon-specific flags indicating whether Devon's name or job should be shown.",
     "entry_conditions": [
-      "Actor init event (script/process start) or fast-area entry trigger for the NPC",
-      "Script runs only when processing is allowed (respects set info/process-exclude state)",
-      "Choices are conditioned on global flags such as global [00FC 01] and global [00FD 02]"
+      "Triggered by the player 'U8P_DEVON::look' (examine) action on the Devon NPC.",
+      "No parameters; selects output using internal flags devonName and devonJob."
     ],
     "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_DEVON::init_0080",
+      "name": "U8P_DEVON::look",
       "kind": "main",
-      "role": "Initial identification/fast-area entry handler that selects and emits the NPC's short label to the player.",
+      "role": "short examine/description handler producing a context-aware bark ('Devon' / 'fisherman' / 'man')",
       "confidence": "high"
     },
     {
-      "name": "U8P_DEVON::init_00FF",
+      "name": "U8P_DEVON::use",
       "kind": "helper",
-      "role": "Prepare dialog parameters (local0/local2/local3) by querying game state and then call the conversation engine (057C:133F) to start/advance dialog.",
+      "role": "primary dialogue/conversation process: menu construction, player-name insertion, choice capture, branching, and conversation-state flag updates",
       "confidence": "high"
     },
     {
-      "name": "U8P_DEVON::init_0261",
+      "name": "U8P_DEVON::schedule",
       "kind": "helper",
-      "role": "Guard/conditional helper that checks global flags and invokes an engine callback when allowed.",
-      "confidence": "high"
+      "role": "compute and set NPC U8P_DEVON::schedule/activity parameters based on time-of-day and special-state flags, then apply them via an engine method",
+      "confidence": "medium"
     },
     {
-      "name": "U8P_DEVON::init_028F",
+      "name": "U8P_DEVON::enterFastArea",
       "kind": "helper",
-      "role": "Thin relay that calls utility 0581:2A56 and returns; used to reuse external logic.",
-      "confidence": "high"
+      "role": "fast-area entry trigger that launches an immediate NPC activity (Npc::cSetActivity) unless blocked by global restart/kill guards",
+      "confidence": "medium"
     },
     {
-      "name": "U8P_DEVON::init_02AA",
+      "name": "U8P_DEVON::leaveFastArea",
       "kind": "helper",
-      "role": "Handles a contextual event (param1==3 branch): queries conversation state, presents the line 'What are you doing there...?' and invokes world/quest callbacks.",
+      "role": "fast-area exit trigger used for cleanup: clear transient references (FREE::resetRef)",
       "confidence": "medium"
     },
     {
-      "name": "U8P_DEVON::init_035B",
+      "name": "U8P_DEVON::AvatarStoleSomething",
       "kind": "helper",
-      "role": "Main conversation/dialogue handler: builds the options list (local14), presents UI, handles the player's chosen reply and executes side-effects including writing global [00FC 01].",
-      "confidence": "high"
+      "role": "reaction handler for nearby theft: clear refs, call generic reaction helper, bark, and call Devon-specific follow-up",
+      "confidence": "medium"
     },
     {
-      "name": "U8P_DEVON::init_047A",
+      "name": "U8P_DEVON::cast",
       "kind": "helper",
-      "role": "Per-tick/per-event probe that queries 057C:0BCF to update local8 and occasionally emits brief reassuring/alarm lines.",
+      "role": "react to specific U8P_DEVON::cast/selectors applied to Devon (param1): immobilize Avatar for certain selectors, clear combat, run timed reaction steps and possibly summon guards",
       "confidence": "medium"
     },
     {
-      "name": "U8P_DEVON::calli 08h 0049h",
-      "kind": "extern",
-      "role": "Engine text/display call used to present spoken/message strings to a pid in the context of this NPC.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_DEVON::0581:28F9",
-      "kind": "extern",
-      "role": "State/query helper used with byte indices to select dialog variants and routes.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_DEVON::057C:133F",
-      "kind": "extern",
-      "role": "Conversation/dialog engine entry used to start or continue dialog flows with numeric identifiers.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_DEVON::057C:091C",
-      "kind": "extern",
-      "role": "Engine routine that presents or queries a single dialog/state option and returns a byte used for branching.",
-      "confidence": "medium"
-    },
-    {
-      "name": "U8P_DEVON::057C:15E7",
-      "kind": "extern",
-      "role": "Engine routine that records/sets dialog/response identifiers or updates UI elements for the NPC.",
-      "confidence": "medium"
-    },
-    {
-      "name": "U8P_DEVON::0402:0261",
-      "kind": "extern",
-      "role": "World/quest subsystem call used after dialog to advance state or trigger scripted events.",
-      "confidence": "medium"
-    },
-    {
-      "name": "U8P_DEVON::058B:0080",
-      "kind": "extern",
-      "role": "Small engine control/action call that likely affects NPC state or animation after alarm text.",
-      "confidence": "medium"
-    },
-    {
-      "name": "U8P_DEVON::0581:2A56",
-      "kind": "extern",
-      "role": "Utility/lookup helper that returns a value used by higher-level dialog logic.",
-      "confidence": "medium"
-    },
-    {
-      "name": "U8P_DEVON::057C:0BCF",
-      "kind": "extern",
-      "role": "Engine probe/random/state function returning a numeric used to pace periodic messages (local8).",
-      "confidence": "medium"
-    },
-    {
-      "name": "U8P_DEVON::calli 06h 00AEh",
-      "kind": "extern",
-      "role": "Callback invoked by guard helper (init_0261) to perform an engine-level callback and return a result.",
-      "confidence": "medium"
-    },
-    {
-      "name": "U8P_DEVON::0402:5079",
-      "kind": "extern",
-      "role": "World/quest call invoked as a side-effect from a conversation branch in init_035B.",
+      "name": "U8P_DEVON::func5079",
+      "kind": "helper",
+      "role": "utility to spawn positional visual/effect items, play SFX, animate frames and launch LightningBolt/process effects; used during U8P_DEVON::cast reactions",
       "confidence": "medium"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
-        "caller": "U8P_DEVON::init_0080",
-        "callee": "U8P_DEVON::init_00FF",
-        "purpose": "Not direct in canonical flow but related helper: init_00FF prepares dialog params for conversation engine; U8P_DEVON::init_0080 focuses on initial identification and may defer to helpers for richer dialog.",
+        "caller": "U8P_DEVON::AvatarStoleSomething",
+        "callee": "U8P_DEVON::func0261",
+        "purpose": "Continue Devon-specific theft-response sequence after the generic reaction and bark (follow-up behavior).",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_DEVON::init_035B",
-        "callee": "U8P_DEVON::init_00FF",
-        "purpose": "init_035B uses init_00FF to compute dialog indices/numeric codes before calling 057C:133F to present options.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_DEVON::init_0261",
-        "callee": "U8P_DEVON::init_028F",
-        "purpose": "init_0261 can use the relay helper init_028F to access shared utility behavior (0581:2A56) depending on flags.",
+        "caller": "U8P_DEVON::cast",
+        "callee": "U8P_DEVON::func5079",
+        "purpose": "Spawn/compute positional visual/effect and apply an Item::receiveHit-style effect as part of the U8P_DEVON::cast reaction.",
         "confidence": "medium"
-      },
-      {
-        "caller": "U8P_DEVON::init_047A",
-        "callee": "U8P_DEVON::init_035B",
-        "purpose": "Periodic helper may indirectly cause dialog/emote behavior handled by main conversation logic when thresholds are reached (inferred pacing interaction).",
-        "confidence": "low"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_DEVON::init_0080",
-        "callee": "U8P_DEVON::calli 08h 0049h",
-        "purpose": "Send the selected short identifying string (e.g., 'Devon') to the player pid in the context of this NPC.",
+        "caller": "U8P_DEVON::schedule",
+        "callee": "FREE::getTimeOfDayPeriod",
+        "purpose": "Query current time-of-day period to select appropriate U8P_DEVON::schedule/activity constants.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_DEVON::init_00FF",
-        "callee": "U8P_DEVON::0581:28F9",
-        "purpose": "Query game/world/NPC state with small byte indices to decide which dialog index/mode to use (sets local0/local2/local3).",
+        "caller": "U8P_DEVON::schedule",
+        "callee": "METHOD::func133F",
+        "purpose": "Apply/finalize the computed U8P_DEVON::schedule/activity parameters to the NPC (engine method).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DEVON::enterFastArea",
+        "callee": "Npc::cSetActivity",
+        "purpose": "Launch a process to set/start the NPC's immediate activity when the Avatar enters the fast-area.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DEVON::leaveFastArea",
+        "callee": "FREE::resetRef",
+        "purpose": "Clear a transient fast-area reference (cleanup on area exit).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_DEVON::init_00FF",
-        "callee": "U8P_DEVON::057C:133F",
-        "purpose": "Invoke the conversation engine with pid, computed dialog index (local3), and numeric code (local2) to start/advance dialog flows.",
+        "caller": "U8P_DEVON::AvatarStoleSomething",
+        "callee": "Npc::getMap",
+        "purpose": "Short-circuit theft handling on a specific map id (map 0x03).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_DEVON::init_0261",
-        "callee": "U8P_DEVON::calli 06h 00AEh",
-        "purpose": "Invoke an engine callback when guard conditions pass; process returned result and suspend.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_DEVON::init_02AA",
-        "callee": "U8P_DEVON::057C:091C",
-        "purpose": "Query/present a single dialog/state option and branch before showing the reprimand text 'What are you doing there...?'.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_DEVON::init_02AA",
-        "callee": "U8P_DEVON::calli 08h 0049h",
-        "purpose": "Deliver the line 'What are you doing there...?' to pid when caught/suspicious activity branch is triggered.",
+        "caller": "U8P_DEVON::AvatarStoleSomething",
+        "callee": "FREE::resetRef",
+        "purpose": "Clear multiple transient refs (0x0205, 0x0204, 0x0200) as part of theft reaction.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_DEVON::init_035B",
-        "callee": "U8P_DEVON::057C:091C",
-        "purpose": "Use 057C:091C as a pre-check/presentation primitive in building the dialog flow before showing text or options.",
+        "caller": "U8P_DEVON::AvatarStoleSomething",
+        "callee": "METHOD::func091C",
+        "purpose": "Run a generic reaction/animation or conversation helper immediately after refs are cleared.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_DEVON::init_035B",
-        "callee": "U8P_DEVON::057C:15E7",
-        "purpose": "Record or set a dialog/response id in the engine after receiving a retval from checks (used to drive the UI flow).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_DEVON::init_035B",
-        "callee": "U8P_DEVON::0402:0261",
-        "purpose": "Trigger world/quest side-effects from certain conversation branches.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_DEVON::init_035B",
-        "callee": "U8P_DEVON::058B:0080",
-        "purpose": "Invoke a small engine action likely to change NPC state/animation after alarm text is emitted.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_DEVON::init_028F",
-        "callee": "U8P_DEVON::0581:2A56",
-        "purpose": "Relay to a utility/lookup routine and return its numeric result to the caller.",
+        "caller": "U8P_DEVON::cast",
+        "callee": "setAvatarInStasis",
+        "purpose": "Place the Avatar in stasis (immobilize) when handling certain U8P_DEVON::cast selectors (param1 == 1).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_DEVON::init_047A",
-        "callee": "U8P_DEVON::057C:0BCF",
-        "purpose": "Probe engine/random-state to obtain a number used to increment local8 for pacing periodic messages.",
+        "caller": "U8P_DEVON::cast",
+        "callee": "Npc::clrInCombat",
+        "purpose": "Clear Devon's in-combat flag as part of the reaction sequence.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DEVON::cast",
+        "callee": "METHOD::func091C",
+        "purpose": "Trigger a generic reaction/timing/animation helper at the start of the U8P_DEVON::cast reaction sequence.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_DEVON::init_035B",
-        "callee": "U8P_DEVON::0402:5079",
-        "purpose": "Invoke a specific world/quest action as a consequence of a particular dialogue branch.",
+        "caller": "U8P_DEVON::cast",
+        "callee": "METHOD::func15E7",
+        "purpose": "Pacing/timing helper used repeatedly between suspend calls during the U8P_DEVON::cast reaction animations.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DEVON::cast",
+        "callee": "CALGUARD::guardRespondToCrime",
+        "purpose": "Notify/trigger guards when Devon is assaulted and not in a protected 'inRule' state.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DEVON::use",
+        "callee": "METHOD::func091C",
+        "purpose": "Generic reaction/conversation housekeeping helper invoked at certain dialogue branches.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DEVON::func5079",
+        "callee": "spawn -> FREE::func29D8",
+        "purpose": "Spawn helper processes used as part of the visual/effect sequence.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DEVON::func5079",
+        "callee": "process LightningBolt",
+        "purpose": "Launch a LightningBolt effect/process as part of the spawned visual/effect sequence.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DEVON::func5079",
+        "callee": "Item::create / Item::pop / Item::setFrame / Item::destroy / Item::receiveHit",
+        "purpose": "Create temporary visual effect items, position and animate them, apply an Item::receiveHit effect (damage/impact), then destroy them.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DEVON::func5079",
+        "callee": "Npc::getHp / Npc::getDir",
+        "purpose": "Read current HP and facing direction to supply Item::receiveHit with context for the applied hit/effect.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_DEVON::func5079",
+        "callee": "playSFX",
+        "purpose": "Play a sound effect to accompany the spawned visual/effect items.",
         "confidence": "medium"
       }
     ]
@@ -253,86 +214,81 @@
   "global_flags": {
     "reads": [
       {
-        "name": "global [00FC 01]",
-        "likely_effect": "Used to decide whether the NPC has already identified itself and to select greeting/identification path.",
+        "name": "devonName",
+        "likely_effect": "Selects whether Devon's personal name should be used in short barks/descriptions.",
         "confidence": "high"
       },
       {
-        "name": "global [00FD 02]",
-        "likely_effect": "Selects an alternate short label (e.g., 'fisherman ') used by U8P_DEVON::init_0080 when choosing identification text.",
+        "name": "devonJob",
+        "likely_effect": "Selects whether Devon's job ('fisherman') should be used in short barks/descriptions.",
         "confidence": "high"
       },
       {
-        "name": "global [005B 01]",
-        "likely_effect": "Availability/location bit used with [0063] to gate dialog and helper invocation.",
-        "confidence": "high"
-      },
-      {
-        "name": "global [0063 01]",
-        "likely_effect": "Paired with [005B] for early-exit/availability checks; influences whether some helpers run.",
-        "confidence": "high"
-      },
-      {
-        "name": "global [0058 01]",
-        "likely_effect": "Major branch selector in conversation logic routed through init_035B.",
-        "confidence": "high"
-      },
-      {
-        "name": "global [005A 01]",
-        "likely_effect": "Selects specific greeting/content variants in helper logic.",
+        "name": "devonJailed",
+        "likely_effect": "Alters U8P_DEVON::schedule/activity selection and dialogue options when Devon is jailed.",
         "confidence": "medium"
       },
       {
-        "name": "global [005C 01]",
-        "likely_effect": "Used with [005D] to choose alternate reply sets and special-casing in dialog building.",
+        "name": "devonInRule",
+        "likely_effect": "Selects special 'in-rule' behavior/U8P_DEVON::schedule and modifies whether guards are notified in reactions.",
         "confidence": "medium"
       },
       {
-        "name": "global [005D 01]",
-        "likely_effect": "Paired with [005C] to alter dialog option sets.",
+        "name": "toranDead",
+        "likely_effect": "Acts as a global blocker to prevent U8P_DEVON::schedule/activity startup on fast-area entry.",
         "confidence": "medium"
       },
       {
-        "name": "global [003C 01]",
-        "likely_effect": "Influences periodic counter increment behavior in init_047A (visit/alarm gating).",
+        "name": "secondexecution",
+        "likely_effect": "Acts as a global restart/second-execution guard that may prevent certain start-up behaviors.",
         "confidence": "medium"
       },
       {
-        "name": "global [0038 01]",
-        "likely_effect": "Also affects incrementing of local8; related to alarm/visit state.",
+        "name": "hasHeart",
+        "likely_effect": "Read during dialogue to influence initial greeting or early branching (player state-dependent).",
         "confidence": "medium"
       },
       {
-        "name": "global [003F 01]",
-        "likely_effect": "Combined with [0100] to select a large alternate dialog path in init_035B.",
+        "name": "pyrosFree",
+        "likely_effect": "Influences specific dialogue branches referencing other plot state.",
         "confidence": "medium"
       },
       {
-        "name": "global [0100 01]",
-        "likely_effect": "Paired with [003F] to gate an alternate conversation branch.",
+        "name": "devonMet",
+        "likely_effect": "Used to select personalized greetings vs first-time lines in conversation.",
         "confidence": "medium"
       },
       {
-        "name": "global [000B 01]",
-        "likely_effect": "Used to pick a simple greeting variant in some branches.",
-        "confidence": "low"
+        "name": "needTear",
+        "likely_effect": "Gates inclusion of quest-related menu options (Blackrock fragment/tear).",
+        "confidence": "medium"
       },
       {
-        "name": "global [0036 02]",
-        "likely_effect": "Multi-bit index used to route into a different conversation tree; exact semantics unknown.",
-        "confidence": "low"
+        "name": "devonMentionedTear",
+        "likely_effect": "Prevents repeating the same quest topic in conversation (dialogue gating).",
+        "confidence": "medium"
       },
       {
-        "name": "global [0101 01]",
-        "likely_effect": "Used occasionally to select a greeting or dialog path.",
+        "name": "refusedDevon",
+        "likely_effect": "Alters menu text/branches when the player previously refused to help Devon.",
+        "confidence": "medium"
+      },
+      {
+        "name": "hydrosFree",
+        "likely_effect": "Affects dialogue branches referencing the Lurker/hydros freedom.",
+        "confidence": "medium"
+      },
+      {
+        "name": "devonHeardLurker",
+        "likely_effect": "Used to gate Lurker-related dialogue options.",
         "confidence": "low"
       }
     ],
     "writes": [
       {
-        "name": "global [00FC 01]",
-        "likely_effect": "Set to 1 when the NPC reveals its name; marks that the NPC has identified itself so future greetings change accordingly.",
-        "confidence": "high"
+        "name": "various Devon/plot flags (dialogue-driven)",
+        "likely_effect": "Set in U8P_DEVON::use to record conversation outcomes and progress quest/NPC state (24 SetFlag nodes found); exact flag names are not fully enumerated in extract.",
+        "confidence": "medium"
       }
     ]
   },
@@ -343,10 +299,10 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_DEVON::init_0080",
-    "behavior_summary_one_liner": "This script implements the conversation/identification behavior for an NPC referred to as 'Devon'. On initialization or when the player enters the NPC's fast-area trigger the script selects a short identifying label (examples in code: \"Devon\", \"fisherman \", \"man \") and sends it as a message to the player.",
-    "external_call_count": 13,
-    "flag_read_count": 15,
+    "main_function": "U8P_DEVON::look",
+    "behavior_summary_one_liner": "This script implements the NPC Devon's interactions and behaviors: a short 'U8P_DEVON::look' description, a large branching conversation ('U8P_DEVON::use'), behavior scheduling, fast-area entry/exit handling, reactions to theft, and reactions to being targeted by spells/effects.",
+    "external_call_count": 18,
+    "flag_read_count": 14,
     "flag_write_count": 1
   },
   "hypotheses": {

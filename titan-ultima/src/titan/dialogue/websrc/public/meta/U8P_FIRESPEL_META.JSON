@@ -3,205 +3,278 @@
   "source_of_truth": "dialogue/json/U8P_FIRESPEL.json",
   "file": "U8P_FIRESPEL",
   "behavior_summary": [
-    "Coordinates and runs a multi-stage 'fire spell' effect: spawns temporary visual/effect items, orients them toward a target point or entity, runs per-effect behavior scripts (projectiles/motes), plays SFX, applies impact/damage worker calls at legal map points, optionally recenters the camera, teleports/repositions an NPC/subject, and then cleans up temporary items.",
-    "The routine creates short-lived items that expand or move from a source toward target coordinates, repeatedly checks placement legality and distance thresholds, and spawns helper scripts (METHOD::013E and FIRESPEL subroutines) at chosen coordinates to apply the actual impact/effect.",
-    "The overall entry acts as a process: it spawns concurrent pieces (visual timers/free cleaners), may set temporary avatar stasis during key phases, and destroys input temporary items when finished."
+    "Implements the fire-spell and related visual/area-effect sequences: play SFX, create temporary visual items, advance their frames, spawn short-lived helper processes for timing, and destroy temporary items when complete.",
+    "Provides multiple casting/resolution entry points and variants (player-facing and non-player flows) that synchronize effects with spawn/suspend patterns, call shared resolution methods (METHOD::func091C and METHOD::func15E7), and optionally center the camera or put the Avatar into stasis during visible sequences.",
+    "Contains iterators and placement routines that compute offsets from a source item/NPC, test legal placement, push/pop created items into the world, and adjust placements based on distance and legality (ensuring visual effects appear in valid positions).",
+    "Includes a trial/test orchestrator (U8P_FIRESPEL::func233D) that enumerates nearby targets, applies randomized damage via Item::receiveHit, emits bark lines for success/failure, and updates trial state (inferred trial flags/states)."
   ],
   "notable_control_flow": [
-    "Top-level process entry U8P_FIRESPEL::0080: spawns helper processes (visual/cleanup), destroys an input temp item, then returns.",
-    "U8P_FIRESPEL::00A9: calculates direction from a source item to given (x,y), creates and places effect items at computed offsets, optionally centers camera, calls a local initializer METHOD::0113, and spawns visual sub-scripts (U8P_FIRESPEL::1F65) plus FREE timers to manage lifecycle.",
-    "U8P_FIRESPEL::059A: a runtime behavior loop for a spawned element (projectile/mote). It resolves targets, possibly sets avatar stasis, orients movers toward targets via Item::getDirToItem/Coords, checks Item::legal_move and a distance metric (FREE::1CE3), plays sound (playSFX), spawns impact worker METHOD::013E at legal points, and repeats/respawns until completion.",
-    "Many placement/spawn decisions are guarded by legal_move checks and distance comparisons, preventing invalid placements and controlling expansion radius."
+    "Heavy use of spawn + suspend: many functions spawn FREE::func1C19 or other helper processes to implement timed delays and then suspend until the helper completes — spawn/suspend is the primary timing mechanism.",
+    "Player-visible branches (this == 0x01) typically setAvatarInStasis(0x01) at start and clear it on exit to prevent player input during the scripted animation sequence.",
+    "Casting flows capture menu/choice results via suspend into local variables (local1 / param1) and then branch on those values to decide player vs non-player behavior or target selection.",
+    "Multi-step placement/update loops: functions like U8P_FIRESPEL::func26EF and U8P_FIRESPEL::func00A9 sample item coords, spawn/await item-specific METHOD processes, re-check distance/map changes, and either push existing items or recreate them as needed.",
+    "Several small predicate helpers (U8P_FIRESPEL::func2AC7, U8P_FIRESPEL::func2AF5, U8P_FIRESPEL::func2B3E) gate branches that choose explosion/destroy paths or recursive retries based on item type/frame."
   ],
   "open_questions": [
-    "Exact gameplay effect of METHOD::013E (spawned repeatedly at impact points) — likely applies damage/visual hit effects but not conclusively identified.",
-    "Precise semantics of METHOD::0113, METHOD::091C, METHOD::15E7 and other spawned METHODs: their animation/state changes are inferred only.",
-    "When and why the camera is centered (Camera::setCenterOn) — appears optional/conditional and may depend on context (e.g., caster vs. avatar view).",
-    "Full intent and rule-set for avatar stasis: which phases set/getAvatarInStasis and whether it blocks player control only or other processing.",
-    "Teleport/map semantics: whether Npc::teleport always preserves map or can cross-map — observed Npc::getMap used but exact behavior uncertain."
+    "Precise semantics of METHOD::func15E7 and METHOD::func091C: they appear to apply staged resolution/impact or advance effect state, but their exact game-state effects (damage, summon, status) are not visible here (confidence: medium).",
+    "Exact meanings and canonical scope of named flags referenced in analyses (MalchirTest, malchirMad, avatarEndure, avatarArmor): section analysis indicates they are read/written, but aggregate metadata lists no global flags — are these global game flags or local/script-only flags? (confidence: low).",
+    "Numeric tuning: the damage bounds, frame indices used for branching, and the constants added to coordinates (0x40, 0x60, 0x18, etc.) are concrete in code but their gameplay mapping (tile/pixel scale, damage scaling) needs verification against engine docs.",
+    "Some small predicate helpers (U8P_FIRESPEL::func2AC7/U8P_FIRESPEL::func2AF5/U8P_FIRESPEL::func2B3E) have simple checks on Item::getType or Item::getFrame; the intended target categories (e.g., which types correspond to destructible objects vs. immune ones) remain uncertain without the type map."
   ],
   "main_function": {
-    "name": "U8P_FIRESPEL::0080",
+    "name": "U8P_FIRESPEL::func0080",
     "execution_form": "process",
-    "purpose": "Entry/coordination process for the fire-spell effect: spawn and start visual/timed helpers, orchestrate per-instance effect creation and runtime loops, perform final teleport/reposition of affected NPC(s) or targets, and clean up temporary items.",
+    "purpose": "Short-lived lifetime/timer cleanup for a temporary effect item: spawn a tiny free/timer helper (FREE::func1C19), suspend until it completes, then destroy the item (Item::destroy(this)). Acts as an item-self cleanup for ephemeral visuals.",
     "entry_conditions": [
-      "Invoked when the fire-spell is executed (spell cast or area trigger)",
-      "Called with parameters: target_item (Item*), x (uword), y (uword), z (ubyte) indicating the spell's target position/context"
+      "Spawned when a temporary effect/item is created and a self-contained cleanup process is attached.",
+      "Runs autonomously (no explicit player menu/dialog) and waits on a spawned helper to elapse before cleanup."
     ],
     "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_FIRESPEL::0080",
+      "name": "U8P_FIRESPEL::func0080",
       "kind": "main",
-      "role": "Top-level orchestrator process for the fire spell (spawns helpers, handles cleanup and final teleportation/repositioning).",
+      "role": "lifetime/cleanup process for temporary effect items",
       "confidence": "high"
     },
     {
-      "name": "U8P_FIRESPEL::00A9",
+      "name": "U8P_FIRESPEL::func00A9",
       "kind": "helper",
-      "role": "Compute direction to target coords, create and initialize temporary effect items, optionally recenter camera, and spawn visual/timer helpers to start an effect instance.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_FIRESPEL::059A",
-      "kind": "helper",
-      "role": "Runtime loop for a spawned moving/expanding effect element (projectile/mote): target processing, movement/placement validation, SFX, impact spawns, and lifecycle termination/respawn logic.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_FIRESPEL::1F65",
-      "kind": "helper",
-      "role": "Spawned visual/temporal sub-script contributing to the spell's animation lifecycle.",
+      "role": "multi-step placement/animation: create temporary items around a source, spawn per-item METHOD animators, adjust placement via legal_move and FREE::maxDelta3D",
       "confidence": "medium"
     },
     {
-      "name": "U8P_FIRESPEL::2AF5",
+      "name": "U8P_FIRESPEL::func059A",
       "kind": "helper",
-      "role": "Internal helper invoked during runtime loop for specialized impact or movement logic (inferred).",
+      "role": "player/NPC casting orchestrator variant: capture menu choice, set avatar stasis, play SFX, call resolution methods, create visuals as needed",
       "confidence": "medium"
     },
     {
-      "name": "METHOD::0113",
-      "kind": "extern",
-      "role": "Local method used to initialize/configure newly created effect items (orientation/animation parameters).",
+      "name": "U8P_FIRESPEL::func0AF5",
+      "kind": "helper",
+      "role": "alternate casting/orchestration flow similar to U8P_FIRESPEL::func059A; branches on target types and spawns create/destroy paths",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_FIRESPEL::func0E47",
+      "kind": "helper",
+      "role": "parameterized casting flow (param1,param2,param3) with player and non-player branches; spawns placement helpers and coordinates SFX/METHOD calls",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_FIRESPEL::playFireSpellSFX",
+      "kind": "helper",
+      "role": "play the concrete fire-spell audio (wrapper for playSFX with fixed IDs)",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FIRESPEL::func12DF",
+      "kind": "helper",
+      "role": "menu/options builder and timed placement iterator: computes offsets from caster mana, loops candidate positions with canExistAt checks",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_FIRESPEL::func177A",
+      "kind": "helper",
+      "role": "short resolution sequence: create temp item, call U8P_FIRESPEL::func26EF for frame updates, manage avatar stasis and SFX",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_FIRESPEL::func195D",
+      "kind": "helper",
+      "role": "casting sequence that queries caster int (Npc::getInt), spawns FIRESPEL::func21A2, and conditionally plays SFX, then finalizes with METHOD::func15E7",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_FIRESPEL::func1AFE",
+      "kind": "helper",
+      "role": "another casting/resolution orchestrator: compute direction, spawn U8P_FIRESPEL::func1FE4, spawn U8P_FIRESPEL::func233D as background, manage avatar stasis",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_FIRESPEL::func1CEB",
+      "kind": "helper",
+      "role": "variant of resolution sequence (mana-scaled) that creates/positions temp items and calls U8P_FIRESPEL::func26EF",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_FIRESPEL::func1F65",
+      "kind": "helper",
+      "role": "create short-lived visual item (type 0x01E0h), play SFX, optionally advance its frame then destroy it (timed life)",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FIRESPEL::func1FE4",
+      "kind": "helper",
+      "role": "place/create temporary item around 'this' based on param2 selector, spawn METHOD::func013E on it, wait, and return the created item reference",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FIRESPEL::func21A2",
+      "kind": "helper",
+      "role": "attempt to create a persistent visual/effect item, run a short delay, then finalize the item with SFX and spawn follow-up (U8P_FIRESPEL::func229E)",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_FIRESPEL::func229E",
+      "kind": "helper",
+      "role": "countdown and finalization/cleanup helper for created effect items: loop with this_hi countdown or spawn final effect then destroy self",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_FIRESPEL::func233D",
+      "kind": "helper",
+      "role": "trial/test orchestrator: toggle status flag, touch item to enumerate neighbors, add menu options, apply Item::receiveHit and emit trial barks; updates trial state (inferred)",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_FIRESPEL::func26EF",
+      "kind": "helper",
+      "role": "animate/update loop for temporary items: advance frames, detect movement/map changes, recreate or push/pop items until param2 countdown expires",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_FIRESPEL::func2A1B",
+      "kind": "helper",
+      "role": "small countdown/pacer: preserve map across suspend, decrement param3, when zero call METHOD::func08B9 and potentially destroy target",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_FIRESPEL::func2AC7",
+      "kind": "helper",
+      "role": "type-membership predicate: returns 1 for specific item types (0x01C5,0x01C6,0x01C4)",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_FIRESPEL::func2AF5",
+      "kind": "helper",
+      "role": "frame-membership predicate: returns 1 when item frame ∈ {0x00,0x04,0x08,0x0C}",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_FIRESPEL::func2B3E",
+      "kind": "helper",
+      "role": "wrapper predicate inverting U8P_FIRESPEL::func2AF5 result (returns temp flag based on U8P_FIRESPEL::func2AF5 outcome)",
       "confidence": "medium"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
-        "caller": "U8P_FIRESPEL::0080",
-        "callee": "U8P_FIRESPEL::00A9",
-        "purpose": "Create and initialize individual effect instances at computed offsets from source and start their lifecycle.",
+        "caller": "U8P_FIRESPEL::func0080",
+        "callee": "FREE::func1C19",
+        "purpose": "spawn a short free/timer helper and suspend until it completes (timing for lifetime)",
         "confidence": "high"
       },
       {
-        "caller": "U8P_FIRESPEL::0080",
-        "callee": "U8P_FIRESPEL::1F65",
-        "purpose": "Spawn concurrent visual/animation sub-processes that run the spell's visuals independently.",
+        "caller": "U8P_FIRESPEL::func00A9",
+        "callee": "U8P_FIRESPEL::func1F65",
+        "purpose": "spawn visual helper at computed offsets to coordinate placement and animation timing",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_FIRESPEL::00A9",
-        "callee": "U8P_FIRESPEL::1F65",
-        "purpose": "Start the per-instance visual/temporal script after creating the effect item and running initialization.",
+        "caller": "U8P_FIRESPEL::func00A9",
+        "callee": "METHOD::func013E",
+        "purpose": "spawn per-item animator/resolver to run item-specific animation logic after creation/pop",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIRESPEL::func059A",
+        "callee": "U8P_FIRESPEL::playFireSpellSFX",
+        "purpose": "play central fire-spell audio during player cast branches",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIRESPEL::func0E47",
+        "callee": "U8P_FIRESPEL::func00A9",
+        "purpose": "in player branch spawn auxiliary placement/animation routine to build player-visible visuals",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_FIRESPEL::059A",
-        "callee": "U8P_FIRESPEL::2AF5",
-        "purpose": "Call internal routines for impact checks or specialized movement/effect logic during the runtime loop.",
-        "confidence": "medium"
+        "caller": "U8P_FIRESPEL::func1FE4",
+        "callee": "METHOD::func013E",
+        "purpose": "spawn the created item's METHOD::func013E to animate/resolve it and suspend until completion",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIRESPEL::func233D",
+        "callee": "Item::receiveHit",
+        "purpose": "apply damage/hit to nearby targets using a random range computed per-branch",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIRESPEL::func26EF",
+        "callee": "FREE::func1C19",
+        "purpose": "use repeated spawn+suspend to pace frame advancement or placement updates",
+        "confidence": "high"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_FIRESPEL::0080",
+        "caller": "U8P_FIRESPEL::func0080",
         "callee": "Item::destroy",
-        "purpose": "Destroy input temporary item(s) passed into the spell, cleaning up used resources.",
+        "purpose": "destroy the temporary/self item after lifetime expired",
         "confidence": "high"
       },
       {
-        "caller": "U8P_FIRESPEL::00A9",
-        "callee": "Item::getDirToCoords",
-        "purpose": "Compute direction from the source item to target coordinates to orient newly created effect items.",
+        "caller": "U8P_FIRESPEL::playFireSpellSFX",
+        "callee": "playSFX",
+        "purpose": "play concrete SFX IDs for the fire spell (audio feedback)",
         "confidence": "high"
       },
       {
-        "caller": "U8P_FIRESPEL::00A9",
-        "callee": "Item::create",
-        "purpose": "Create temporary effect items used for visuals/projectiles.",
+        "caller": "U8P_FIRESPEL::func059A",
+        "callee": "setAvatarInStasis",
+        "purpose": "freeze the Avatar during casting sequences in player-facing branches",
         "confidence": "high"
       },
       {
-        "caller": "U8P_FIRESPEL::00A9",
-        "callee": "Camera::setCenterOn",
-        "purpose": "Optionally recenter the camera on the source/created effect to focus the player's view during the effect.",
+        "caller": "U8P_FIRESPEL::func059A",
+        "callee": "METHOD::func091C",
+        "purpose": "perform an intermediate resolution/pre-impact action when local1 != 1 (>0) before main resolution",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_FIRESPEL::00A9",
-        "callee": "METHOD::0113",
-        "purpose": "Initialize/configure created effect items (set animation/orientation/parameters).",
+        "caller": "U8P_FIRESPEL::func059A",
+        "callee": "METHOD::func15E7",
+        "purpose": "stage resolution/impact ticks or advance effect state at multiple points of the casting flow",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_FIRESPEL::00A9",
-        "callee": "FREE::1C19",
-        "purpose": "Spawn a short timer/cleanup helper to free resources or act as a delayed placeholder referencing a spawned pid.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_FIRESPEL::059A",
-        "callee": "U8P_FIRESPEL::process target (process target())",
-        "purpose": "Resolve or pick a target entity for homing/orientation during the mover's runtime loop.",
+        "caller": "U8P_FIRESPEL::func00A9",
+        "callee": "Item::create / Item::legal_create / Item::pop / Item::push",
+        "purpose": "create and position temporary visual items to realize the spell's visuals",
         "confidence": "high"
       },
       {
-        "caller": "U8P_FIRESPEL::059A",
-        "callee": "U8P_FIRESPEL::getAvatarInStasis / setAvatarInStasis",
-        "purpose": "Query and temporarily set avatar stasis state while critical portions of effect run (freeze/unfreeze player).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_FIRESPEL::059A",
-        "callee": "Item::getDirToItem",
-        "purpose": "Orient mover/projectile toward a target item/entity.",
+        "caller": "U8P_FIRESPEL::func1F65",
+        "callee": "Item::legal_create / Item::setFrame / Item::destroy",
+        "purpose": "create a short-lived visual item, optionally advance its frame, then destroy it",
         "confidence": "high"
       },
       {
-        "caller": "U8P_FIRESPEL::059A",
-        "callee": "Item::legal_move",
-        "purpose": "Check if a placement/move of an effect item to a worldpoint is legal; used to avoid invalid spawns.",
+        "caller": "U8P_FIRESPEL::func233D",
+        "callee": "FREE::randomInRange",
+        "purpose": "compute randomized damage amounts for Item::receiveHit",
         "confidence": "high"
       },
       {
-        "caller": "U8P_FIRESPEL::059A",
-        "callee": "FREE::1CE3",
-        "purpose": "Compute a distance/metric between points for range checks deciding when to spawn impact effects.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FIRESPEL::059A",
-        "callee": "METHOD::013E",
-        "purpose": "Spawn worker that applies the spell's effect (damage/impact visuals/status) at chosen coordinates.",
+        "caller": "U8P_FIRESPEL::func21A2",
+        "callee": "PENT::pentagramSFXLoop",
+        "purpose": "start a repeating pentagram SFX/visual loop on the created effect item",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_FIRESPEL::059A",
-        "callee": "U8P_FIRESPEL::playSFX",
-        "purpose": "Play sound effects associated with projectile/mote movement or impact.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FIRESPEL::0080",
-        "callee": "Npc::getMap",
-        "purpose": "Query an NPC's current map id before teleporting to ensure teleport uses the correct map context.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_FIRESPEL::0080",
-        "callee": "Npc::teleport",
-        "purpose": "Teleport or reposition an NPC/target to the computed destination coordinates after effect resolves.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_FIRESPEL::059A",
-        "callee": "Item::touch",
-        "purpose": "Trigger item touch behaviour when an effect item contacts an entity or completes to cause interactions.",
+        "caller": "U8P_FIRESPEL::func2A1B",
+        "callee": "METHOD::func08B9",
+        "purpose": "run a per-item animation/preparation before final resolution/destroy; test process_result() to decide follow-up",
         "confidence": "medium"
       }
     ]
   },
   "global_flags": {
-    "reads": [
-      {
-        "name": "inDaemonScene",
-        "likely_effect": "Selects variant orientation/behavior in the runtime loop (affects mover orientation/animation).",
-        "confidence": "high"
-      }
-    ],
+    "reads": [],
     "writes": []
   },
   "ui_tags": [
@@ -211,10 +284,10 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_FIRESPEL::0080",
-    "behavior_summary_one_liner": "Coordinates and runs a multi-stage 'fire spell' effect: spawns temporary visual/effect items, orients them toward a target point or entity, runs per-effect behavior scripts (projectiles/motes), plays SFX, applies impact/damage worker calls at legal map points, optionally recenters the camera, teleports/repositions an NPC/subject, and then cleans up temporary items.",
-    "external_call_count": 16,
-    "flag_read_count": 1,
+    "main_function": "U8P_FIRESPEL::func0080",
+    "behavior_summary_one_liner": "Implements the fire-spell and related visual/area-effect sequences: play SFX, create temporary visual items, advance their frames, spawn short-lived helper processes for timing, and destroy temporary items when complete.",
+    "external_call_count": 10,
+    "flag_read_count": 0,
     "flag_write_count": 0
   },
   "hypotheses": {

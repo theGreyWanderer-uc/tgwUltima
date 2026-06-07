@@ -3,209 +3,138 @@
   "source_of_truth": "dialogue/json/U8P_WATER.json",
   "file": "U8P_WATER",
   "behavior_summary": [
-    "Handles an actor/item entering a water trigger: plays/stops splash SFX, spawns visual splash sprites and short-lived helper processes to animate particles, and applies different outcomes for NPCs vs non-NPC items.",
-    "Performs guard checks (parameters present, Item::isOn, Item::getStatus bit 0x0800) and respects a global neverSinks flag to optionally skip destructive sinking behavior.",
-    "For NPCs: applies avatar-specific stasis or NPC animations, may mark NPC dead, center camera, move/teleport the NPC, and apply lethal damage (or teleport fallback) depending on conditions and special-case flag DevonHitWater.",
-    "For non-NPC items: resets cross-references and destroys item contents and the item itself unless exempted by specific type checks."
+    "Handles game logic when an item or actor contacts water: plays/controls splash SFX, creates splash sprites, and spawns timed splash/particle visuals.",
+    "If the contacting entity is an NPC, runs NPC-specific handling (play water animation, possibly teleport, damage, or mark dead), with special handling when the NPC is the avatar (camera/stasis adjustments).",
+    "Contains a one-time special-case for a named character ('Devon') guarded by the global flag DevonHitWater to play a unique splash/voice and then set that flag so it does not repeat.",
+    "Uses helper routines to spawn multiple transient particle items (U8P_WATER::func03A8) and to create/advance/destroy individual splash particles (U8P_WATER::func0405).",
+    "Respects a global guard neverSinks to skip sinking/particle behavior when set."
   ],
   "notable_control_flow": [
-    "Early exit if both incoming item parameters are zero, if Item::isOn(item,0) returns true, or if Item::getStatus(item) has bit 0x0800 set.",
-    "Sound management: check isSFXPlaying for specific ids (0x63, 0xB1), stopSFX those ids when active, and spawn a short FREE::1C19 helper after stopping to handle cleanup/timing.",
-    "Visual creation: call FREE::2A56 for pre-step, compute item WorldPoint via Item::getPoint, createSprite for an initial ripple/splash, then spawn U8P_WATER::WATER::03A8 to drive repeated particle spawning.",
-    "Branch by Item::isNpc: if true, run NPC-specific logic (stasis for avatar id==1, Npc::doAnim, Npc::getHp + Item::receiveHit to kill, or urandom + Npc::teleport fallback) else run destruction path for items.",
-    "Global flag DevonHitWater can change which SFX/branch is used and is set when a particular special-case splash occurs."
+    "Early-exit when param1 != 0 and param2 == 0: checks Item::isOn(this, param1) and returns if the item is not on the trigger tile.",
+    "Guarded branch around global neverSinks: if neverSinks is true then splash/particle/sinking behavior is bypassed.",
+    "Devon special-case: if local3 equals Devon identity and DevonHitWater is false, play unique SFX/create sprite and then write DevonHitWater = 1 (one-shot behavior).",
+    "NPC branch: when the item is an NPC, branch into avatar-vs-NPC handling (avatar id == 1 triggers stasis/camera changes); run Npc::doAnim and then post-animation life/teleport/damage logic.",
+    "Particle loop: U8P_WATER::func03A8 loops from 1..count calling U8P_WATER::func0405 and spawning a short FREE helper (FREE::func1C19) between iterations to space spawns."
   ],
   "open_questions": [
-    "Exact meanings and ordering of the main function parameters (which push corresponds to 'context' vs 'item' vs aux) — inference based on BP offsets but not explicitly named.",
-    "Precise purpose and side effects of FREE::2A56 called before splash creation (likely positioning/timing) remain unclear.",
-    "Exact conditions that decide teleport fallback vs immediate lethal damage for NPCs (several branches inferred; thresholds and flag checks not fully explicit).",
-    "Which concrete item type ids are exempted from destruction in the non-NPC branch (disassembly shows type checks but specific semantic exceptions are only inferred)."
+    "Exact meanings of param1 and param2 in U8P_WATER::func0080 (inferred as item/NPC id and selector/flag) — confirm with engine signature.",
+    "Precise SFX and sprite resource ids used for the Devon special-case and general splash (IDs are present in binary but not mapped here).",
+    "Whether NPC post-animation handling always kills the NPC, teleports it, or applies damage depending on status bits — the decompilation shows multiple branches but not full resolution.",
+    "The exact numeric identity that maps to 'Devon' (local3 == 0x02 is inferred but not guaranteed).",
+    "How neverSinks is set and whether it protects only visual/sink effects or also prevents damage/removal of NPCs/items."
   ],
   "main_function": {
-    "name": "U8P_WATER::0080",
+    "name": "U8P_WATER::func0080",
     "execution_form": "process",
-    "purpose": "Respond to an item/NPC entering a water area: produce splash audio/visuals, spawn particle helper processes, and apply sinking/teleport/death or destruction effects depending on item type, NPC status, and global flags.",
+    "purpose": "Orchestrate splash visuals/sounds and handle item/NPC interactions with water (spawn particle effects, play/stop SFX, and run NPC-specific animation and life/teleport/damage handling).",
     "entry_conditions": [
-      "Triggered by a water-area event (fast-area entry semantics).",
-      "Requires a non-zero item parameter (guarded by early return if parameters at [BP+0A] and [BP+0C] are both zero).",
-      "Skips processing if Item::isOn(item,0) is true or Item::getStatus(item) has bit 0x0800 set.",
-      "Respects neverSinks global - when set, destructive sinking/death branches are bypassed."
+      "Called when an item/actor contacts or enters a water trigger region (inferred from calls to Item::getPoint and splash/particle creation).",
+      "param1 == 0 vs non-zero and param2 == 0 are used to gate an early 'isOn' check (so caller may pass an item id or 0).",
+      "Executes only when global neverSinks is false for sinking/particle behavior."
     ],
-    "confidence": "medium"
+    "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_WATER::0080",
+      "name": "U8P_WATER::func0080",
       "kind": "main",
-      "role": "Primary water-area event handler performing guards, SFX/sprite creation, spawning helpers, and dispatching NPC vs non-NPC outcomes.",
+      "role": "Entry handler for water-contact events: controls SFX, sprite spawn, particle spawning, and NPC-specific water behavior.",
       "confidence": "high"
     },
     {
-      "name": "U8P_WATER::03A8",
+      "name": "U8P_WATER::func03A8",
       "kind": "helper",
-      "role": "Short-lived helper process that iterates a small counter and spawns per-particle helper U8P_WATER::WATER::0405 to drive ongoing splash/particle effects.",
-      "confidence": "medium"
+      "role": "Spawn loop that repeatedly calls the single-particle creator to generate multiple splash particles with timed spacing.",
+      "confidence": "high"
     },
     {
-      "name": "U8P_WATER::0405",
+      "name": "U8P_WATER::func0405",
       "kind": "helper",
-      "role": "Per-particle manager: legally creates a splash particle (Item::legal_create), advances animation frames (Item::getFrame/Item::setFrame), suspends/resumes until animation completes, then destroys the particle.",
+      "role": "Create and advance/destroy a single transient splash/particle item (Item::legal_create, getFrame, setFrame, destroy).",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::*",
+      "kind": "extern",
+      "role": "Engine item API used for querying position/status and creating/destroying transient particle items.",
+      "confidence": "high"
+    },
+    {
+      "name": "Npc::*",
+      "kind": "extern",
+      "role": "Engine NPC API used for animations, death/immortality flags, teleporting and receiveHit (damage).",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::func1C19",
+      "kind": "extern",
+      "role": "Short helper process spawned to introduce timing/delay between particle spawns or SFX stops (spawn + suspend pattern).",
       "confidence": "medium"
-    },
-    {
-      "name": "Item::isOn",
-      "kind": "extern",
-      "role": "Query whether an item is on/attached to something; used as an early guard.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getStatus",
-      "kind": "extern",
-      "role": "Return item status flags; bit 0x0800 tested to skip water behavior.",
-      "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
-        "caller": "U8P_WATER::0080",
-        "callee": "U8P_WATER::03A8",
-        "purpose": "Spawn a helper process to continue creating/controlling ongoing splash particles after the initial splash.",
+        "caller": "U8P_WATER::func0080",
+        "callee": "U8P_WATER::func03A8",
+        "purpose": "Generate multiple transient splash particles at the impact point (passes Item::getPoint output and a particle count).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_WATER::03A8",
-        "callee": "U8P_WATER::0405",
-        "purpose": "Spawn per-particle managers when counters/timers indicate a new particle should be created.",
-        "confidence": "medium"
+        "caller": "U8P_WATER::func03A8",
+        "callee": "U8P_WATER::func0405",
+        "purpose": "Create a single splash particle each loop iteration as part of the multi-particle spawn.",
+        "confidence": "high"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_WATER::0080",
-        "callee": "Item::isOn",
-        "purpose": "Skip water handling if the item is attached/standing on something.",
+        "caller": "U8P_WATER::func0080",
+        "callee": "Item::getZ / Item::getY / Item::getX / Item::getPoint",
+        "purpose": "Read position of the impacting item/NPC to place splash sprites and pass coordinates to the particle spawner.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_WATER::0080",
-        "callee": "Item::getStatus",
-        "purpose": "Check status flags (test bit 0x0800) to early-exit for special items.",
+        "caller": "U8P_WATER::func0080",
+        "callee": "isSFXPlaying / stopSFX / playSFX",
+        "purpose": "Query and stop previously-playing water-related SFX, then play Devon-specific or generic splash SFX.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_WATER::0080",
-        "callee": "U8P_WATER::isSFXPlaying",
-        "purpose": "Avoid overlapping sound effects by testing SFX ids before stopping or replaying them.",
+        "caller": "U8P_WATER::func0080",
+        "callee": "createSprite",
+        "purpose": "Create splash/impact sprite at computed coordinates for visual feedback.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_WATER::0080",
-        "callee": "U8P_WATER::stopSFX",
-        "purpose": "Stop currently playing SFX (ids like 0x63 and 0xB1) prior to spawning a cleanup helper or replaying a different sound.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_WATER::0080",
-        "callee": "spawn (FREE::1C19)",
-        "purpose": "Spawn a short free/helper process after stopping SFX to handle timing/cleanup related to sounds.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_WATER::0080",
-        "callee": "FREE::2A56",
-        "purpose": "Preparatory call before sprite creation (likely computes offsets or timing); exact purpose inferred.",
-        "confidence": "low"
-      },
-      {
-        "caller": "U8P_WATER::0080",
-        "callee": "U8P_WATER::createSprite",
-        "purpose": "Create initial visual splash/ripple at the item's world coordinates with visual parameters.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_WATER::0080",
-        "callee": "U8P_WATER::playSFX",
-        "purpose": "Play splash/impact sound effects; variant chosen depending on DevonHitWater and context.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_WATER::03A8",
-        "callee": "Item::getPoint",
-        "purpose": "Obtain a WorldPoint for creating subsequent particles at the correct location.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_WATER::0405",
-        "callee": "Item::legal_create",
-        "purpose": "Create a legal particle/splash item at the passed WorldPoint.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_WATER::0080",
-        "callee": "Item::isNpc",
-        "purpose": "Branch behavior: NPC-specific drowning/teleport/death logic vs non-NPC destruction.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_WATER::0080",
-        "callee": "U8P_WATER::setAvatarInStasis",
-        "purpose": "When the avatar enters water (id==1), briefly freeze input/control (stasis) as part of the reaction.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_WATER::0080",
-        "callee": "Kernel::resetRef",
-        "purpose": "Adjust kernel reference bookkeeping before/after moving or destroying items/NPCs to avoid dangling pointers.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_WATER::0080",
-        "callee": "Item::move",
-        "purpose": "Reposition an NPC/item (used when moving/removing an NPC in death/teleport handling).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_WATER::0080",
+        "caller": "U8P_WATER::func0080",
         "callee": "Npc::doAnim",
-        "purpose": "Trigger an NPC death/drown animation and suspend until it finishes.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_WATER::0080",
-        "callee": "Npc::getHp",
-        "purpose": "Obtain NPC HP to compute a lethal Item::receiveHit value (to cause death after drowning).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_WATER::0080",
-        "callee": "Item::receiveHit",
-        "purpose": "Apply damage to an NPC/item (used to inflict fatal damage after drowning).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_WATER::0080",
-        "callee": "urandom",
-        "purpose": "Generate random offsets for teleport fallback locations when NPCs are not killed instantly.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_WATER::0080",
-        "callee": "Npc::teleport",
-        "purpose": "Teleport NPC to a random nearby location as an alternative to immediate death in some branches.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_WATER::0080",
-        "callee": "Item::destroyContents",
-        "purpose": "Remove contents of non-NPC items that sink, prior to destroying the item instance.",
+        "purpose": "Play a water-fall/impact animation for NPCs that fall into water and suspend until it completes.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_WATER::0080",
-        "callee": "Item::destroy",
-        "purpose": "Destroy non-NPC items that sink into the water.",
+        "caller": "U8P_WATER::func0080",
+        "callee": "Npc::teleport / Item::move / Item::destroy / Item::destroyContents / Item::receiveHit",
+        "purpose": "Post-animation handling for NPCs: potentially teleport, move, damage, or remove an NPC and destroy its contents depending on status/branches.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_WATER::func03A8",
+        "callee": "spawn -> FREE::func1C19 / suspend",
+        "purpose": "Spawn a short-lived helper process to create a delay between successive particle creations; caller suspends to wait.",
         "confidence": "high"
+      },
+      {
+        "caller": "U8P_WATER::func0405",
+        "callee": "Item::legal_create / Item::getFrame / Item::setFrame / Item::destroy",
+        "purpose": "Create the transient particle item, allow it to advance a frame or be destroyed when its terminal frame is reached.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_WATER::func0080",
+        "callee": "Camera::setCenterOn / setAvatarInStasis / Kernel::resetRef / FREE::resetRef",
+        "purpose": "Adjust camera/controls and reset system references when the avatar or NPC undergoes the water animation/handling (avoid input or dangling refs).",
+        "confidence": "medium"
       }
     ]
   },
@@ -213,19 +142,19 @@
     "reads": [
       {
         "name": "neverSinks",
-        "likely_effect": "When true, prevents sinking/destructive behavior for items entering water; causes function to skip destroy/drown branches.",
-        "confidence": "high"
+        "likely_effect": "When true, suppress sinking/particle/splash behavior; used as a guard to skip most visual/physics effects.",
+        "confidence": "medium"
       },
       {
         "name": "DevonHitWater",
-        "likely_effect": "Read to select alternate splash SFX/behavior for a specific character; affects which audio/visual branch is taken.",
+        "likely_effect": "Checked to prevent replaying Devon's unique splash/voice; read before triggering the Devon special-case.",
         "confidence": "medium"
       }
     ],
     "writes": [
       {
         "name": "DevonHitWater",
-        "likely_effect": "Set to 1 when a special-case splash for a particular character occurs (used to record that event).",
+        "likely_effect": "Set to 1 when Devon's one-time splash/voice is triggered so it does not repeat later.",
         "confidence": "medium"
       }
     ]
@@ -237,9 +166,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_WATER::WATER::0080",
-    "behavior_summary_one_liner": "Handles an actor/item entering a water trigger: plays/stops splash SFX, spawns visual splash sprites and short-lived helper processes to animate particles, and applies different outcomes for NPCs vs non-NPC items.",
-    "external_call_count": 21,
+    "main_function": "U8P_WATER::func0080",
+    "behavior_summary_one_liner": "Handles game logic when an item or actor contacts water: plays/controls splash SFX, creates splash sprites, and spawns timed splash/particle visuals.",
+    "external_call_count": 8,
     "flag_read_count": 2,
     "flag_write_count": 1
   },

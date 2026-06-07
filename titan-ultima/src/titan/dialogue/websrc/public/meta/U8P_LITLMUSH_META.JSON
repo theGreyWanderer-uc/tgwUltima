@@ -3,29 +3,29 @@
   "source_of_truth": "dialogue/json/U8P_LITLMUSH.json",
   "file": "U8P_LITLMUSH",
   "behavior_summary": [
-    "When a player (or relevant actor) 'looks' at the little mushroom item, the item emits the label 'mushroom' to the viewer via Item::bark.",
-    "When the mushroom is 'used' the item emits a short 'Mmmm... ' bark, applies a small FeedAvatar effect (FeedAvatar(2)), then performs a pseudorandom check (urandom(16)).",
-    "If the random roll is within a small range (observed branch when result <= 3) the script reads NPC/process id 1's HP via Npc::getHp and — depending on the value — calls Npc::setHp with a computed value (decompiled arithmetic suggests subtracting 3 in the modification path, but the intended gameplay effect is uncertain).",
-    "If the global flag shroomPaletteEffectsActive is not set, the script spawns a MOREFOOD::0080 palette/visual effect to indicate eating.",
-    "After use, the mushroom item instance is destroyed via Item::destroy."
+    "U8P_LITLMUSH::look implements the in-game examine/\"U8P_LITLMUSH::look\" behavior for a small mushroom item: it displays the short description text \"mushroom\" when the player inspects the item.",
+    "U8P_LITLMUSH::use implements consuming/using the mushroom: it plays a short eating bark, applies a feed effect to the avatar (FeedAvatar), then performs a probabilistic side-effect driven by urandom(0x10).",
+    "On a successful random roll (~75% chance: urandom(0x10) > 0x03) the side-effect checks the consuming actor's HP (Npc::getHp). If HP > 3 it subtracts 3 HP (Npc::setHp). If HP <= 3 and the global palette-effects flag is not active, it spawns a MOREFOOD effect (spawn ->MOREFOOD::func0080).",
+    "The mushroom item is destroyed after U8P_LITLMUSH::use (Item::destroy)."
   ],
   "notable_control_flow": [
-    "U8P_LITLMUSH::look: straightforward one-shot flow — push the string 'mushroom' and call Item::bark with the viewer process pointer; then suspend/return (confidence: high).",
-    "U8P_LITLMUSH::use: sequence is bark('Mmmm... '), FeedAvatar(2), roll = urandom(16); if roll <= 3 then read HP of process id 1 (Npc::getHp) and possibly call Npc::setHp with (hp - 3) or similar computed value (confidence: medium).",
-    "Palette/visual effect spawn (MOREFOOD::0080) is gated by the global shroomPaletteEffectsActive flag — spawn only if the flag is false/not active (confidence: high).",
-    "Item::destroy is always called at the end of the use sequence to remove the used mushroom (confidence: high)."
+    "Player 'U8P_LITLMUSH::look' action -> U8P_LITLMUSH::look -> display short description 'mushroom' -> suspend/return.",
+    "Player 'U8P_LITLMUSH::use' action -> U8P_LITLMUSH::use -> Bark 'Mmmm...' -> FeedAvatar(0x02) -> random_roll = urandom(0x10).",
+    "If random_roll <= 0x03: no special side-effect; else if random_roll > 0x03: read actor HP; if HP > 3 then set HP = HP - 3; otherwise if shroomPaletteEffectsActive is false then spawn MOREFOOD effect.",
+    "After branching and side-effects, always call Item::destroy(this) to remove the mushroom."
   ],
   "open_questions": [
-    "Does Npc::setHp call in the random branch intend to heal or damage NPC/process id 1? The decompiled arithmetic appears to subtract 3, which would be damage, but the item is food (inference ambiguous). (confidence: medium)",
-    "Which in-game entity corresponds to 'NPC/process id 1' used in the HP read/set calls (player Avatar, a specific NPC, or a global placeholder)? (confidence: low)",
-    "Exact semantics and visual effect details of MOREFOOD::0080 (spawn parameters were a 0 dword) and how shroomPaletteEffectsActive is set elsewhere in the game. (confidence: medium)"
+    "FeedAvatar's concrete effect: inferred to change hunger or play an animation, but exact gameplay impact (stat restored, buff applied, or only animation) is not explicit.",
+    "The exact visual/functional behavior of spawn ->MOREFOOD::func0080 is inferred (likely a palette/visual effect or additional food appearance); details are unknown.",
+    "shroomPaletteEffectsActive is inferred as the global flag name; confidence is not absolute — confirmation from canonical symbol data would be helpful.",
+    "Whether U8P_LITLMUSH::use ever targets an actor other than the player avatar (multiplayer/AI actors) is not explicit."
   ],
   "main_function": {
     "name": "U8P_LITLMUSH::look",
     "execution_form": "process",
-    "purpose": "Handle an actor looking at the little mushroom by producing a descriptive bark so the viewer sees the item name.",
+    "purpose": "Provide the short on-screen description when the player examines the mushroom item.",
     "entry_conditions": [
-      "Event 0 — triggered when an actor/player inspects or looks at the mushroom (enter/observe trigger)."
+      "Triggered by the engine when the player performs the 'U8P_LITLMUSH::look' (examine) action on the mushroom item."
     ],
     "confidence": "high"
   },
@@ -33,55 +33,49 @@
     {
       "name": "U8P_LITLMUSH::look",
       "kind": "main",
-      "role": "Show the item's description/label to a viewer (calls Item::bark with 'mushroom').",
+      "role": "examine/U8P_LITLMUSH::look handler that displays the short description text",
       "confidence": "high"
     },
     {
       "name": "U8P_LITLMUSH::use",
       "kind": "helper",
-      "role": "Handle using/eating the mushroom: bark a tasting message, feed the avatar, sometimes modify an NPC's HP, optionally spawn a palette effect, and destroy the item.",
-      "confidence": "medium"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Emit short text/dialog from an item/process to a target viewer/process (used for 'mushroom' and 'Mmmm... ').",
+      "role": "consume/U8P_LITLMUSH::use handler that applies feed effect, runs a probabilistic side-effect (HP loss or spawn), and destroys the item",
       "confidence": "high"
     },
     {
       "name": "FeedAvatar",
       "kind": "extern",
-      "role": "Apply a feeding effect to the avatar; called with argument 2 during use.",
-      "confidence": "high"
+      "role": "apply feeding effect/animation to avatar (called by U8P_LITLMUSH::use)",
+      "confidence": "medium"
     },
     {
       "name": "urandom",
       "kind": "extern",
-      "role": "Return a pseudorandom number in range [0, arg-1]; used to gate chance-based HP modification.",
+      "role": "generate random value used to decide whether to run the mushroom side-effect",
       "confidence": "high"
     },
     {
       "name": "Npc::getHp",
       "kind": "extern",
-      "role": "Read the HP of a provided NPC/process id (constant 1 observed).",
-      "confidence": "medium"
+      "role": "read actor HP to decide side-effect branch",
+      "confidence": "high"
     },
     {
       "name": "Npc::setHp",
       "kind": "extern",
-      "role": "Set the HP of a provided NPC/process id to a ubyte value (used after computing hp +/- 3).",
-      "confidence": "medium"
+      "role": "write actor HP to subtract HP as a negative side-effect",
+      "confidence": "high"
     },
     {
-      "name": "spawn (MOREFOOD::0080)",
+      "name": "spawn ->MOREFOOD::func0080",
       "kind": "extern",
-      "role": "Spawn a visual/palette effect to represent eating/food if palette effects are not already active.",
-      "confidence": "high"
+      "role": "spawn or trigger a MOREFOOD effect when actor HP is low and palette-effects flag is off",
+      "confidence": "medium"
     },
     {
       "name": "Item::destroy",
       "kind": "extern",
-      "role": "Destroy/remove the item instance after it is used.",
+      "role": "destroy/remove the mushroom item instance after U8P_LITLMUSH::use",
       "confidence": "high"
     }
   ],
@@ -89,51 +83,39 @@
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_LITLMUSH::look",
-        "callee": "Item::bark",
-        "purpose": "Display the item's name/description ('mushroom') to the viewing process passed in ([BP+06h]).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LITLMUSH::use",
-        "callee": "Item::bark",
-        "purpose": "Play tasting/dialog text ('Mmmm... ') from the mushroom on use; a preceding category/flag byte is pushed in this call-site.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_LITLMUSH::use",
         "callee": "FeedAvatar",
-        "purpose": "Apply a feed effect to the avatar/player (called with argument 2).",
-        "confidence": "high"
+        "purpose": "Apply a feeding effect/animation to the consuming avatar (called with parameter 0x02 inferred from decompilation).",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_LITLMUSH::use",
         "callee": "urandom",
-        "purpose": "Make a random determination (urandom(16)) to decide whether the HP-modifying branch runs.",
+        "purpose": "Generate a random number in range 0x10 to decide whether the mushroom side-effect runs (compared to 0x03).",
         "confidence": "high"
       },
       {
         "caller": "U8P_LITLMUSH::use",
         "callee": "Npc::getHp",
-        "purpose": "Read HP of NPC/process id 1 to decide and compute a subsequent setHp value if the random check passes.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_LITLMUSH::use",
-        "callee": "Npc::setHp",
-        "purpose": "Set HP of NPC/process id 1 to a computed ubyte (decompiled flow suggests hp - 3 in the modification path).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_LITLMUSH::use",
-        "callee": "spawn (MOREFOOD::0080)",
-        "purpose": "Spawn a visual/palette effect associated with eating if shroomPaletteEffectsActive is not set.",
+        "purpose": "Read the target actor's HP to decide whether to subtract HP or spawn MOREFOOD.",
         "confidence": "high"
       },
       {
         "caller": "U8P_LITLMUSH::use",
+        "callee": "Npc::setHp",
+        "purpose": "Set the actor's HP to HP - 3 when the side-effect triggers and HP > 3.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LITLMUSH::use",
+        "callee": "spawn ->MOREFOOD::func0080",
+        "purpose": "Spawn a MOREFOOD effect when actor HP is too low to subtract and the palette-effects flag permits it.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LITLMUSH::use",
         "callee": "Item::destroy",
-        "purpose": "Destroy the mushroom item after use to consume it.",
+        "purpose": "Destroy the mushroom item instance (cleanup) after U8P_LITLMUSH::use.",
         "confidence": "high"
       }
     ]
@@ -142,8 +124,8 @@
     "reads": [
       {
         "name": "shroomPaletteEffectsActive",
-        "likely_effect": "Used as a guard to determine whether to spawn the MOREFOOD::0080 visual/palette effect; spawn occurs only when this flag is false/not active.",
-        "confidence": "high"
+        "likely_effect": "Boolean that gates whether the MOREFOOD spawn/palette effect should be suppressed (spawn occurs only if this is false).",
+        "confidence": "medium"
       }
     ],
     "writes": []
@@ -155,9 +137,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "LITLMUSH::look",
-    "behavior_summary_one_liner": "When a player (or relevant actor) 'looks' at the little mushroom item, the item emits the label 'mushroom' to the viewer via Item::bark.",
-    "external_call_count": 8,
+    "main_function": "U8P_LITLMUSH::look",
+    "behavior_summary_one_liner": "U8P_LITLMUSH::look implements the in-game examine/\"U8P_LITLMUSH::look\" behavior for a small mushroom item: it displays the short description text \"mushroom\" when the player inspects the item.",
+    "external_call_count": 6,
     "flag_read_count": 1,
     "flag_write_count": 0
   },

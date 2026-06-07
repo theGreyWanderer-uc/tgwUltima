@@ -285,12 +285,20 @@ def build_scroll_section(json_dir: Path) -> dict[str, Any]:
                 func_text[f"{cls}::{func_name}"] = match.group(1)
 
     items: list[dict[str, Any]] = []
+    text_first_seen: dict[str, str] = {}
     for quality in sorted(dispatch):
         cls, func = dispatch[quality]
         source = f"{cls}::{func}"
         raw = func_text.get(source)
         title = titles.get(quality) or (_title_from_text(raw, "Scroll") if raw else f"Scroll {quality:02X}")
         category = "Magic Scrolls" if quality >= 0x32 or "scroll of" in title.lower() else "Scrolls & Notes"
+        details: dict[str, Any] = {}
+        if raw:
+            first_id = text_first_seen.get(raw)
+            if first_id:
+                details["duplicateTextOf"] = first_id
+            else:
+                text_first_seen[raw] = f"scroll-0x{quality:02X}"
         items.append(
             _common_item(
                 kind="scroll",
@@ -299,6 +307,7 @@ def build_scroll_section(json_dir: Path) -> dict[str, Any]:
                 category=category,
                 text=raw,
                 source=source,
+                details=details or None,
             )
         )
     return _section("scrolls", "Scrolls", "Readable scrolls dispatched by BASESCRL.", "scroll", "BASESCRL", items)

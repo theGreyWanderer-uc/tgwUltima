@@ -3,27 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_NSSHFSID.json",
   "file": "U8P_NSSHFSID",
   "behavior_summary": [
-    "Implements the 'U8P_NSSHFSID::look' (examine) event for the NSSHFSID object class: when an actor examines the object it causes the object to 'bark' a short descriptive string prefixed with \"shelf \".",
-    "Performs small bookkeeping before and after the message: initializes local/process info, marks the object for process-exclusion-like behavior, calls Item::bark with the literal prefix and the object pointer, then consumes the bark return value in a simple implies/pop sequence before suspending/returning.",
-    "No global flags are read or written by this snippet (no persistent game-state modifications observed)."
+    "When the player examines/looks at this object, the script emits a short descriptive bark: \"shelf \".",
+    "Immediately after emitting the bark the process yields/terminates via a suspend — the U8P_NSSHFSID::look handler does not perform further logic, branching, or external calls."
   ],
   "notable_control_flow": [
-    "Entry triggers on the 'U8P_NSSHFSID::look' event (examine); the handler executes as a process.",
-    "Runs setup ops (init / set info / process exclude) on the object before emitting text.",
-    "Calls external Item::bark with parameters: the literal string \"shelf \" and the object pointer (this/pid).",
-    "Pushes the return value from Item::bark, performs an implies/pop sequence (used as a lightweight conditional/flow indicator), then suspends and returns."
+    "Single linear flow: U8P_NSSHFSID::look posts a Bark (text \"shelf \") then reaches a suspend, ending or yielding the U8P_NSSHFSID::look process.",
+    "No conditional branches, menu logic, or calls to external systems are present in the extracted script."
   ],
   "open_questions": [
-    "What precise semantics does the 'set info' / 'process exclude' sequence have here (what exact info id is set and how that affects later processing)?",
-    "What meaning/values can Item::bark return, and how does the implies/pop sequence affect subsequent behavior or scheduler decisions?",
-    "Is [BP+06h] strictly the actor viewing the item or the item/object instance itself in all calling contexts (inference indicates 'item pointer' but actor-vs-item ambiguity remains for some engine routines)?"
+    "Is the trailing space in the bark text \"shelf \" intentional or an artifact of extraction?",
+    "Does the suspend represent an engine-standard end-of-process (common for U8P_NSSHFSID::look handlers) or is it used here to explicitly yield for resume later?",
+    "Is this U8P_NSSHFSID::look handler attached to an item instance or a static object/NPC in the world (the script excerpt does not show ownership/context)?"
   ],
   "main_function": {
     "name": "U8P_NSSHFSID::look",
     "execution_form": "process",
-    "purpose": "Handle the object's 'U8P_NSSHFSID::look' (examine) event by emitting a short description. It constructs/passes the literal prefix \"shelf \" and invokes Item::bark on the object so the object describes itself prefixed as a shelf.",
+    "purpose": "Provide the short display text when the player inspects or 'looks' at the associated object/NPC.",
     "entry_conditions": [
-      "Event 0: 'U8P_NSSHFSID::look' — invoked when a player or actor examines/looks at the object."
+      "Triggered by the engine's U8P_NSSHFSID::look/examine event for the object/NPC (processType 0x0208).",
+      "Invoked when the player uses the 'U8P_NSSHFSID::look' action on the relevant entity or enters a U8P_NSSHFSID::look-trigger region."
     ],
     "confidence": "high"
   },
@@ -31,26 +29,13 @@
     {
       "name": "U8P_NSSHFSID::look",
       "kind": "main",
-      "role": "Event handler for the object's 'U8P_NSSHFSID::look'/examine event; prepares message prefix and invokes Item::bark.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/external routine used to emit or display text for an item/process; called here to produce the descriptive text prefixed by \"shelf \".",
+      "role": "Short descriptive bark/display for the object's U8P_NSSHFSID::look handler",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_NSSHFSID::look",
-        "callee": "Item::bark",
-        "purpose": "Emit/display the item's textual description; invoked with the literal prefix \"shelf \" and the item/object pointer so the final output appears as \"shelf <item-specific text>\".",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -59,12 +44,13 @@
   "ui_tags": [
     "trigger",
     "cleanup",
+    "animation",
     "guard"
   ],
   "quick_facts": {
     "main_function": "U8P_NSSHFSID::look",
-    "behavior_summary_one_liner": "Implements the 'U8P_NSSHFSID::look' (examine) event for the NSSHFSID object class: when an actor examines the object it causes the object to 'bark' a short descriptive string prefixed with \"shelf \".",
-    "external_call_count": 1,
+    "behavior_summary_one_liner": "When the player examines/looks at this object, the script emits a short descriptive bark: \"shelf \".",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

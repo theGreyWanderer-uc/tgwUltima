@@ -3,25 +3,27 @@
   "source_of_truth": "dialogue/json/U8P_STRAW.json",
   "file": "U8P_STRAW",
   "behavior_summary": [
-    "U8P_STRAW::look runs when the straw item is 'looked at' by the player/actor. It prepares per-item context (info/setup and process exclusion), constructs the literal string \"straw \", and asks the item/process to 'bark' that string to the viewer.",
-    "After calling Item::bark with the viewer/process id and the allocated string, the handler frees the allocated string, examines the return value (used in an implies/pop sequence), then suspends/returns.",
-    "No global flags are read or written by this routine in the observed snippet."
+    "U8P_STRAW::look is the object's examine (U8P_STRAW::look) handler. When the player examines the STRAW actor/instance, the process emits a single bark line containing the text \"straw \" and then immediately suspends/returns.",
+    "There is no branching, menu interaction, flag read/write, or external function calls in this snippet; the behavior is a simple player-facing description/bark.",
+    "The function is classified as a U8P_STRAW::look-type process (process_type 0x0208), so it is invoked by the engine's 'U8P_STRAW::look/examine' interaction for that actor or object."
   ],
   "notable_control_flow": [
-    "Entry on Event 0 (U8P_STRAW::look) -> set item/info context and process-exclude state -> allocate/build literal string 'straw ' -> call external Item::bark(pid, ptrToString) -> free the string -> use returned value in an implies/pop sequence -> suspend/return.",
-    "The return value from Item::bark is pushed and fed into an implication operation before being popped into a temp local; this appears to influence immediate control flow or interruption handling prior to suspend."
+    "Entry: invoked as a 'U8P_STRAW::look' process (examine event) on the STRAW actor.",
+    "Execution: play one bark line (text: \"straw \").",
+    "Exit: suspend/terminate the process immediately after the bark; no further logic or state changes."
   ],
   "open_questions": [
-    "Exact meaning of the info id(s) set during the context step (the disassembly shows set-info/process-exclude ops but the semantic id and longer-term effect are not explicit).",
-    "Precise identity/semantics of the [BP+06h] parameter — inferred to be the calling process or viewer PID but not explicitly named in the snippet.",
-    "Whether the implies/pop result affects higher-level game logic beyond the immediate suspend (it is used locally but its downstream consequence is not present here)."
+    "Is the trailing space in the bark text \"straw \" meaningful (concatenation placeholder) or an artifact of extraction?",
+    "Does the U8P_STRAW::look handler ever get called from other engine events (fast-area entry/leave) in other contexts, or strictly from player examine?",
+    "Are there related resources (voice, subtitle flags, or alternate descriptions) linked to this actor elsewhere in the project that would change how the bark is presented?"
   ],
   "main_function": {
     "name": "U8P_STRAW::look",
     "execution_form": "process",
-    "purpose": "Handle the 'U8P_STRAW::look' (examine) event for the straw item by preparing item context and invoking Item::bark to present the string \"straw \" to the viewer/process.",
+    "purpose": "Provide the short description / examination response for the STRAW actor by playing a single bark text and ending the process.",
     "entry_conditions": [
-      "Event 0 (U8P_STRAW::look) — triggered when an actor/player inspects or examines the straw item"
+      "Triggered by a 'U8P_STRAW::look' (examine) event on the STRAW actor (process type 0x0208).",
+      "Likely invoked when the player inspects or targets the straw object/area in the game world."
     ],
     "confidence": "high"
   },
@@ -29,26 +31,13 @@
     {
       "name": "U8P_STRAW::look",
       "kind": "main",
-      "role": "Look-event handler for the straw item: set up context, build message string, call Item::bark, cleanup and suspend.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "External routine used to emit/display a short item-originated text/message to a target process/player.",
+      "role": "Examine/U8P_STRAW::look handler that emits a single bark line and then suspends.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_STRAW::look",
-        "callee": "Item::bark",
-        "purpose": "Tell the item/process to present the literal description string 'straw ' to the provided process/player id; Item::bark returns a value used in a local implies/pop sequence.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -56,13 +45,13 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "guard"
+    "dialogue",
+    "suspend"
   ],
   "quick_facts": {
     "main_function": "U8P_STRAW::look",
-    "behavior_summary_one_liner": "U8P_STRAW::look runs when the straw item is 'looked at' by the player/actor. It prepares per-item context (info/setup and process exclusion), constructs the literal string \"straw \", and asks the item/process to 'bark' that string to the viewer.",
-    "external_call_count": 1,
+    "behavior_summary_one_liner": "U8P_STRAW::look is the object's examine (U8P_STRAW::look) handler. When the player examines the STRAW actor/instance, the process emits a single bark line containing the text \"straw \" and then immediately suspends/returns.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

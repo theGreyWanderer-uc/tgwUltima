@@ -3,26 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_DEADEW.json",
   "file": "U8P_DEADEW",
   "behavior_summary": [
-    "This script implements the inspect ('U8P_DEADEW::look') and use behaviors for a dead-body (corpse) item.",
-    "U8P_DEADEW::DEADEW::look: when a player/actor examines the corpse it produces a short barked description 'dead body ' and then returns/suspends.",
-    "U8P_DEADEW::DEADEW::use: when a player/actor uses/interacts with the corpse it reads the item's status word and tests bit 0x0100. If that bit is clear it closes the item's gump/UI (Item::closeGump) and returns. If the bit is set it makes a random roll (urandom(100)); on a rare roll (> 95) the corpse barks 'A curse upon you, thief!' and the script suspends, otherwise it opens the corpse's gump/UI with parameter 0x0C (Item::openGump)."
+    "The item exposes two processes: a U8P_DEADEW::look handler (U8P_DEADEW::look) that presents a short descriptive bark ('dead body') and then suspends the interaction, and a U8P_DEADEW::use handler (U8P_DEADEW::use) that implements interaction logic for opening or blocking the item's UI.",
+    "U8P_DEADEW::use reads the item's status word (via Item::getStatus(this)) and tests bit 0x0100; if that bit is set the script closes any open UI for the item (Item::closeGump(this)) and returns.",
+    "If the 0x0100 bit is not set, U8P_DEADEW::use performs a low-probability random check (urandom(100) > 95). On that rare outcome it emits a curse bark 'A curse upon you, thief!' and suspends, otherwise it opens the item's gump UI with Item::openGump(0x0C, this)."
   ],
   "notable_control_flow": [
-    "U8P_DEADEW::DEADEW::look: linear behavior — construct/prepare string 'dead body ', call Item::bark(target, string), then suspend/return.",
-    "U8P_DEADEW::DEADEW::use: conditional branch on Item::getStatus(item) & 0x0100. If the mask is clear -> Item::closeGump(item) -> return. If set -> generate urandom(100) and compare: roll > 95 -> Item::bark(item, 'A curse upon you, thief!') -> suspend; else -> Item::openGump(item, 0x0C)."
+    "U8P_DEADEW::look: immediate bark 'dead body' then suspend (terminates U8P_DEADEW::look flow). (confidence: high)",
+    "U8P_DEADEW::use: read status -> if (status & 0x0100) then Item::closeGump(this) and return; else perform urandom(0x64) > 0x5F check -> if true bark 'A curse upon you, thief!' and suspend; else Item::openGump(0x0C, this). (confidence: medium-high)"
   ],
   "open_questions": [
-    "What is the semantic meaning of the status bit 0x0100 (appears to gate open vs close behavior, but exact semantic name/meaning is unknown).",
-    "Does the barked string 'dead body ' get combined with additional dynamic text (e.g., owner name) elsewhere, or is it the full displayed inspect text?",
-    "Which process id (pid) ordering is passed into Item::bark in each call (caller vs target) — parameter roles are inferred from calling convention but not explicitly named in the disassembly.",
-    "Exact gameplay effect and duration of the 'suspend' after the curse bark (whether it prevents subsequent actions or simply halts the script until next event) is inferred but not explicit."
+    "What exact gameplay meaning is encoded by the status bit 0x0100 (e.g., locked, already-opened, protected)? (confidence: medium)",
+    "Is the curse bark intended to represent damage, status effect, or only a message? The script only barks then suspends, so side effects beyond the message are not shown. (confidence: low)",
+    "Are there other processes or global flags in the system that interact with this item's gump state not visible in this extract? (confidence: low)"
   ],
   "main_function": {
     "name": "U8P_DEADEW::look",
     "execution_form": "process",
-    "purpose": "Produce the short inspect/vocalization text when a corpse item is examined ('U8P_DEADEW::look' event).",
+    "purpose": "Provide the short examine/description text to the player when they inspect the item (dead body) and then end the interaction.",
     "entry_conditions": [
-      "Event 0: actor/player examines or 'looks at' the corpse item (inspect trigger)."
+      "Invoked when the player uses the 'U8P_DEADEW::look' / examine action on this item instance."
     ],
     "confidence": "high"
   },
@@ -30,43 +29,43 @@
     {
       "name": "U8P_DEADEW::look",
       "kind": "main",
-      "role": "Emit the corpse's inspect description via Item::bark and then suspend/return.",
+      "role": "examine/description handler (displays short bark and suspends)",
       "confidence": "high"
     },
     {
       "name": "U8P_DEADEW::use",
       "kind": "helper",
-      "role": "Handle 'use' interactions: decide to close or open the corpse's gump, with a small random chance to emit an anti-theft curse instead of opening.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine call to show/emit short text associated with an item/process to a player (used for inspect text and curse message).",
-      "confidence": "high"
+      "role": "interaction handler (checks item status, optionally curses, opens/closes gump)",
+      "confidence": "medium"
     },
     {
       "name": "Item::getStatus",
       "kind": "extern",
-      "role": "Engine call returning the item's status/flags bitfield (used to test the 0x0100 bit).",
+      "role": "external API to read the item's status/flag word",
       "confidence": "high"
     },
     {
       "name": "Item::closeGump",
       "kind": "extern",
-      "role": "Engine call to close the item's UI/gump.",
-      "confidence": "high"
-    },
-    {
-      "name": "urandom",
-      "kind": "extern",
-      "role": "Generate a pseudorandom integer in range 0..(n-1); used for chance to trigger the curse bark.",
+      "role": "external API to close the item's UI/gump",
       "confidence": "high"
     },
     {
       "name": "Item::openGump",
       "kind": "extern",
-      "role": "Open the item's UI/gump with a specified parameter (here 0x0C).",
+      "role": "external API to open a UI/gump for the item (gump id 0x0C used)",
+      "confidence": "high"
+    },
+    {
+      "name": "urandom",
+      "kind": "extern",
+      "role": "random number generator used to decide low-probability branch",
+      "confidence": "high"
+    },
+    {
+      "name": "suspend",
+      "kind": "extern",
+      "role": "engine operation to pause/terminate the current process after barks",
       "confidence": "high"
     }
   ],
@@ -74,39 +73,33 @@
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_DEADEW::look",
-        "callee": "Item::bark",
-        "purpose": "Display the corpse's inspect description string 'dead body ' to the examining process/player.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_DEADEW::use",
         "callee": "Item::getStatus",
-        "purpose": "Read the item's status bitfield to test whether bit 0x0100 is set (decides close vs open behavior).",
+        "purpose": "Read the item's status/flag word to test bit 0x0100 before deciding whether to open or close the gump.",
         "confidence": "high"
       },
       {
         "caller": "U8P_DEADEW::use",
         "callee": "Item::closeGump",
-        "purpose": "Close the corpse's gump/UI when the 0x0100 status bit is clear.",
+        "purpose": "Close any open UI for this item when the status bit 0x0100 indicates the item should not open its gump.",
         "confidence": "high"
       },
       {
         "caller": "U8P_DEADEW::use",
         "callee": "urandom",
-        "purpose": "Produce a random integer (0..99) to determine a rare chance (roll > 95) to trigger the curse message instead of opening the gump.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_DEADEW::use",
-        "callee": "Item::bark",
-        "purpose": "Emit the curse text 'A curse upon you, thief!' on a rare random roll; this branch also suspends further script action.",
+        "purpose": "Produce a 0-99 random value to implement a low-probability curse branch (threshold >95).",
         "confidence": "high"
       },
       {
         "caller": "U8P_DEADEW::use",
         "callee": "Item::openGump",
-        "purpose": "Open the corpse's gump/UI with parameter 0x0C when status bit 0x0100 is set and the random roll does not trigger the curse branch.",
+        "purpose": "Open the item's UI/gump (id 0x0C) when allowed by status and random check.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DEADEW::use",
+        "callee": "suspend",
+        "purpose": "Terminate/pause the process after emitting the curse bark or at the end of U8P_DEADEW::look.",
         "confidence": "high"
       }
     ]
@@ -118,13 +111,12 @@
   "ui_tags": [
     "trigger",
     "cleanup",
-    "animation",
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_DEADEW::DEADEW::look",
-    "behavior_summary_one_liner": "This script implements the inspect ('U8P_DEADEW::look') and use behaviors for a dead-body (corpse) item.",
-    "external_call_count": 6,
+    "main_function": "U8P_DEADEW::look",
+    "behavior_summary_one_liner": "The item exposes two processes: a U8P_DEADEW::look handler (U8P_DEADEW::look) that presents a short descriptive bark ('dead body') and then suspends the interaction, and a U8P_DEADEW::use handler (U8P_DEADEW::use) that implements interaction logic for opening or blocking the item's UI.",
+    "external_call_count": 5,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

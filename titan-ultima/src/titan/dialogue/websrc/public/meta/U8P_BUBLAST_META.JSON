@@ -3,33 +3,33 @@
   "source_of_truth": "dialogue/json/U8P_BUBLAST.json",
   "file": "U8P_BUBLAST",
   "behavior_summary": [
-    "U8P_BUBLAST::anim runs as the per-tick/animation handler for a BUBLAST item: it sets the item's visual frame and records the item's world coordinates (X, Y, Z).",
-    "It immediately spawns/creates helper effects/resources (via FREE::1A96 -> spawn FREE::1C19 and a FIRESPEL::1F65 spawn) to represent the blast effect.",
-    "The routine scans a region around the blast by testing tile positions with Item::overlaps and collects overlapping items into a temporary list.",
-    "It iterates that list looking specifically for items matching a type test (Item::getType == 0x60) and additional shape/index checks; if any such target is found a local flag is cleared/updated and further actions occur.",
-    "When a valid target is detected the function calls FREE::1A96 again, computes a direction from the blast origin to the target with Item::getDirFromCoords and invokes METHOD::0080 (item, target, direction) to orient/dispatch additional behavior toward that target.",
-    "Finally, the temporary list is freed/cleaned up before the function returns."
+    "U8P_BUBLAST::anim is a persistent item process that animates a bubble-blast item and runs a periodic tick loop (suspend/resume).",
+    "Each tick it sets the item's animation frame and samples the item's world coordinates (X, Y, Z).",
+    "On some ticks it uses randomized checks to optionally spawn or trigger a visual/effect helper (inferred from FREE::randomInRange, FREE::func1C19 and FIRESPEL::func1F65).",
+    "It tests for overlapping entities via Item::overlaps; if an overlap is found a local target variable is populated and a small local 'menu/target' flag/list (local3) is used to remember the candidate target.",
+    "Overlapped entities are filtered by type (Item::getType == 0x60 clears the candidate), and when a valid target is present the process computes direction (Item::getDirFromCoords) and calls METHOD::receiveHitWrapper with a random damage roll to apply a hit."
   ],
   "notable_control_flow": [
-    "Start: set visual state (Item::setFrame) then store origin X/Y/Z (Item::getX/Y/Z).",
-    "Spawn sequence: call FREE::1A96, spawn FREE::1C19 with retval, spawn FIRESPEL::1F65 for visual effect.",
-    "Spatial scan: loop over adjacent tiles/positions, call Item::overlaps per tile and push overlapping items into a temp list handle ([BP-06h]).",
-    "Filtering loop: foreach item in temp list, call Item::getType and perform additional comparisons to decide if it is a valid target; maintain a found-flag ([BP-07h]) initialized to 1 and cleared to 0 on match.",
-    "On match: call FREE::1A96 again, compute direction via Item::getDirFromCoords using saved origin coords, then call METHOD::0080(item, targetTile, direction).",
-    "Cleanup: free the temporary list/handle and exit."
+    "Initialization: Item::setFrame is called early to set the item's visual frame.",
+    "Main loop: sample coordinates (Item::getX/getY/getZ) -> suspend (periodic tick) -> on resume continue logic.",
+    "Randomized spawn/effect branch: FREE::randomInRange and FREE::func1C19 are compared to decide whether to invoke FIRESPEL::func1F65 (spawn/effect).",
+    "Target acquisition: Item::overlaps populates local1; successful overlap leads to adding the target to local3 (menu/target list).",
+    "Target filtering: Item::getType is checked and a specific type value (0x60) clears the candidate target.",
+    "Damage application: when local3 indicates a target, compute direction via Item::getDirFromCoords and call METHOD::receiveHitWrapper with a random damage value."
   ],
   "open_questions": [
-    "What exact object/resource FREE::1A96 allocates/configures and what internal state its retval encodes (appears to be a helper/effect handle but exact semantics are unknown).",
-    "What precisely type 0x60 represents (inferred to be the kind of object the blast should target) and the meaning of the additional shape/index comparisons used to accept/reject candidates.",
-    "What side-effects METHOD::0080 performs on the target tile/item (inferred to orient/dispatch the blast but exact game effects are unclear).",
-    "Whether the scan radius/tile iteration pattern has additional constraints (e.g., Z-level matching) beyond the observed overlap checks."
+    "Exact semantics and effects of FREE::func1C19 and FIRESPEL::func1F65 (appear spawn/effect related but exact game effect is inferred).",
+    "Precise numeric thresholds, ranges, and timing used by FREE::randomInRange for spawn frequency and damage rolls.",
+    "Whether type 0x60 represents a specific entity class (friend, projectile, or environment) and the gameplay reason for clearing targets of that type.",
+    "Whether the sampled Z (local4) is used for vertical targeting or only recorded without further effect in the visible nodes."
   ],
   "main_function": {
     "name": "U8P_BUBLAST::anim",
     "execution_form": "process",
-    "purpose": "Perform a single animation/update for a BUBLAST item: set its frame, spawn visual/effect helpers, scan nearby tiles for valid targets, and, if targets are found, create/orient additional blast behavior toward them.",
+    "purpose": "Animate a bubble-blast item and periodically attempt to produce effects and damage nearby overlapped entities by selecting targets, filtering by type, computing hit direction, and invoking a hit wrapper with a randomized damage roll.",
     "entry_conditions": [
-      "Event 2 (U8P_BUBLAST::anim) — invoked by the engine as the item's animation/update tick (runs periodically or when the item is active)."
+      "Runs as a persistent process (processType 0x020A) that suspends and resumes repeatedly (periodic tick behavior).",
+      "Implicit entry on process start or item creation; resumes each tick after suspend."
     ],
     "confidence": "high"
   },
@@ -37,74 +37,74 @@
     {
       "name": "U8P_BUBLAST::anim",
       "kind": "main",
-      "role": "Per-tick/animation handler that implements blast spawn, target scanning, and dispatching orientation/behavior toward found targets.",
-      "confidence": "high"
-    },
-    {
-      "name": "FREE::1A96",
-      "kind": "extern",
-      "role": "Allocates or configures a temporary helper/effect handle used by the blast (retval passed to spawn/other routines).",
-      "confidence": "medium"
-    },
-    {
-      "name": "FREE::1C19",
-      "kind": "extern",
-      "role": "Spawned process/task that materializes a helper/free effect for the blast (spawned with retval from FREE::1A96).",
-      "confidence": "medium"
-    },
-    {
-      "name": "FIRESPEL::1F65",
-      "kind": "extern",
-      "role": "Spawned visual/spell effect (fire/spell) associated with the blast.",
+      "role": "periodic item process that handles animation, spawn/effect decisions, overlap checks, target management, and applying hits",
       "confidence": "high"
     },
     {
       "name": "Item::setFrame",
       "kind": "extern",
-      "role": "Set the BUBLAST item's visual frame at the start of the animation.",
+      "role": "set visual animation frame for the item",
       "confidence": "high"
     },
     {
       "name": "Item::getX",
       "kind": "extern",
-      "role": "Get item's X coordinate for origin storage.",
+      "role": "read item's X coordinate each tick",
       "confidence": "high"
     },
     {
       "name": "Item::getY",
       "kind": "extern",
-      "role": "Get item's Y coordinate for origin storage.",
+      "role": "read item's Y coordinate each tick",
       "confidence": "high"
     },
     {
       "name": "Item::getZ",
       "kind": "extern",
-      "role": "Get item's Z/level for origin storage.",
+      "role": "read item's Z coordinate each tick",
       "confidence": "high"
+    },
+    {
+      "name": "FREE::randomInRange",
+      "kind": "extern",
+      "role": "generate randomized values for spawn decisions and damage rolls (inferred)",
+      "confidence": "medium"
+    },
+    {
+      "name": "FREE::func1C19",
+      "kind": "extern",
+      "role": "spawn/decision helper compared to random output (inferred)",
+      "confidence": "medium"
+    },
+    {
+      "name": "FIRESPEL::func1F65",
+      "kind": "extern",
+      "role": "spawn/effect creation at item coordinates (inferred)",
+      "confidence": "medium"
     },
     {
       "name": "Item::overlaps",
       "kind": "extern",
-      "role": "Test whether blast overlaps a candidate tile/item (used while building the temp list).",
+      "role": "check for overlap and populate a local target reference",
       "confidence": "high"
     },
     {
       "name": "Item::getType",
       "kind": "extern",
-      "role": "Return candidate item's type used to filter targets (compared to 0x60).",
-      "confidence": "high"
+      "role": "return the type code of an overlapped object used for filtering (e.g., type 0x60)",
+      "confidence": "medium"
     },
     {
       "name": "Item::getDirFromCoords",
       "kind": "extern",
-      "role": "Compute direction from blast origin to a target coordinate for orienting subsequent behavior.",
+      "role": "compute direction from blast to target for hit application",
       "confidence": "high"
     },
     {
-      "name": "METHOD::0080",
+      "name": "METHOD::receiveHitWrapper",
       "kind": "extern",
-      "role": "Apply an oriented action/behavior to a target tile/item using the computed direction (likely dispatches or aims the blast).",
-      "confidence": "medium"
+      "role": "apply damage/hit to the target using computed direction and randomized damage",
+      "confidence": "high"
     }
   ],
   "call_analysis": {
@@ -113,68 +113,68 @@
       {
         "caller": "U8P_BUBLAST::anim",
         "callee": "Item::setFrame",
-        "purpose": "Set the BUBLAST item's visual frame at animation start.",
+        "purpose": "Initialize or update the item's animation frame each process cycle or at start",
         "confidence": "high"
       },
       {
         "caller": "U8P_BUBLAST::anim",
         "callee": "Item::getX",
-        "purpose": "Read and store blast origin X coordinate.",
+        "purpose": "Read item X coordinate for spawn/effect placement and direction calculation",
         "confidence": "high"
       },
       {
         "caller": "U8P_BUBLAST::anim",
         "callee": "Item::getY",
-        "purpose": "Read and store blast origin Y coordinate.",
+        "purpose": "Read item Y coordinate for direction calculation",
         "confidence": "high"
       },
       {
         "caller": "U8P_BUBLAST::anim",
         "callee": "Item::getZ",
-        "purpose": "Read and store blast origin Z/level.",
+        "purpose": "Read item Z coordinate (sampled each tick; exact use is unclear)",
         "confidence": "high"
       },
       {
         "caller": "U8P_BUBLAST::anim",
-        "callee": "FREE::1A96",
-        "purpose": "Allocate/configure a helper/effect handle used by subsequent spawn or effect actions (called twice: initial spawn and when target found).",
+        "callee": "FREE::randomInRange",
+        "purpose": "Generate random values for deciding spawn/effects and for damage rolls passed to receiveHitWrapper",
         "confidence": "medium"
       },
       {
         "caller": "U8P_BUBLAST::anim",
-        "callee": "FREE::1C19 (spawn)",
-        "purpose": "Spawn a helper/free process using the handle returned by FREE::1A96.",
+        "callee": "FREE::func1C19",
+        "purpose": "Compare against random output to gate spawn/effect calls (inferred)",
         "confidence": "medium"
       },
       {
         "caller": "U8P_BUBLAST::anim",
-        "callee": "FIRESPEL::1F65 (spawn)",
-        "purpose": "Spawn a fire/spell visual effect associated with the blast.",
-        "confidence": "high"
+        "callee": "FIRESPEL::func1F65",
+        "purpose": "Invoke a spawn/effect at the item's X coordinate (inferred visual/projectile effect)",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_BUBLAST::anim",
         "callee": "Item::overlaps",
-        "purpose": "Test per-tile overlap to collect nearby/overlapping items into a temporary list for target filtering.",
+        "purpose": "Detect overlapping entities and populate local1 as a candidate target",
         "confidence": "high"
       },
       {
         "caller": "U8P_BUBLAST::anim",
         "callee": "Item::getType",
-        "purpose": "Filter collected items by type (compares to 0x60) as part of target selection.",
-        "confidence": "high"
+        "purpose": "Query overlapped entity type to filter or clear the candidate target (type 0x60 clears local3)",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_BUBLAST::anim",
         "callee": "Item::getDirFromCoords",
-        "purpose": "Compute the direction from the stored blast origin (saved X/Y) to a found target for orientation.",
+        "purpose": "Compute attack direction from blast coordinates toward the target for receiveHitWrapper",
         "confidence": "high"
       },
       {
         "caller": "U8P_BUBLAST::anim",
-        "callee": "METHOD::0080",
-        "purpose": "Invoke the engine-level method to apply the computed direction and behavior to a target tile/item (likely orients or dispatches the blast effect).",
-        "confidence": "medium"
+        "callee": "METHOD::receiveHitWrapper",
+        "purpose": "Apply a hit/damage to the found target using a random damage roll and computed direction",
+        "confidence": "high"
       }
     ]
   },
@@ -190,7 +190,7 @@
   ],
   "quick_facts": {
     "main_function": "U8P_BUBLAST::anim",
-    "behavior_summary_one_liner": "U8P_BUBLAST::anim runs as the per-tick/animation handler for a BUBLAST item: it sets the item's visual frame and records the item's world coordinates (X, Y, Z).",
+    "behavior_summary_one_liner": "U8P_BUBLAST::anim is a persistent item process that animates a bubble-blast item and runs a periodic tick loop (suspend/resume).",
     "external_call_count": 11,
     "flag_read_count": 0,
     "flag_write_count": 0

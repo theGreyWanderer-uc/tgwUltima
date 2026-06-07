@@ -3,33 +3,33 @@
   "source_of_truth": "dialogue/json/U8P_MORDEABE.json",
   "file": "U8P_MORDEABE",
   "behavior_summary": [
-    "Provides the gameplay logic for a bed object associated with the NPC Mordea/Tempest: it supplies descriptive text when examined, keeps the bed's visual frame in sync with schedule and NPC state, and runs a multi-step awakening/teleport/effect sequence when the bed is used.",
-    "MORDEABE::look examines the bed's current frame and two global flags (mordeaName, mordeaJob) to choose a short description (bark) appropriate to whether the bed/occupant is named/known as Mordea or Tempest or generic 'sleeping woman'.",
-    "U8P_MORDEABE::enterFastArea updates the bed's display frame based on mordeaSchedule and whether the associated NPC is dead, so the bed visually reflects schedule/state when actors enter its trigger area.",
-    "U8P_MORDEABE::use orchestrates a scripted awakening: it puts the avatar in stasis, spawns visual and sound effects, animates the bed frames, teleports/orients an NPC into the scene, issues dialog barks, and spawns U8P_MORDEABE::04C0 to apply lightning/debris effects and area damage; it also schedules helper METHODS/processes for timed animations and cleanup.",
-    "U8P_MORDEABE::04C0 is a short-lived effect/damage helper: it spawns a LightningBolt process, creates and animates temporary debris items, plays SFX, queries NPC HP, and calls Item::receiveHit to apply area damage."
+    "This script implements the in-world behavior for an object/NPC associated with 'Mordea the Tempest'. It provides a context-sensitive short description when the player examines the entity (U8P_MORDEABE::look), updates the visible sprite/frame when an actor enters the trigger area (U8P_MORDEABE::enterFastArea), runs a staged \"wake/attack\" cutscene when the player uses the object/NPC (U8P_MORDEABE::use), and contains a helper that spawns lightning visuals and applies hit/damage effects (U8P_MORDEABE::func04C0).",
+    "U8P_MORDEABE::look(): Chooses one short description/bark based on the item's displayed frame and persistent name/job flags (shows sleeping text if in the sleeping frame, otherwise composes variants using mordeaName and mordeaJob).",
+    "U8P_MORDEABE::enterFastArea(): When an actor enters the configured fast/trigger region, set the item's frame to an \"awake/active\" frame (0x0A) only if mordeaSchedule==0x01 and the referenced NPC is alive; otherwise set a sleeping/inactive frame (0x0B).",
+    "U8P_MORDEABE::use(): Guarded by Item::getFrame(this)==0x0A. Freezes the avatar briefly, spawns camera-follow and short-lived timing processes to sequence animations, teleports and animates the NPC, emits several barks (dialog lines), animates the item's display frames in a loop, invokes U8P_MORDEABE::func04C0 to produce lightning visuals and apply damage, and then restores/reset the item frame at the end.",
+    "U8P_MORDEABE::func04C0(): Creates temporary effect items, plays a SFX, animates them across several frames with short spawn/wait ticks, spawns/waits on a LightningBolt process and calls Item::receiveHit (using the target and likely the NPC's HP as the magnitude) to deliver damage, then destroys temporary items and returns."
   ],
   "notable_control_flow": [
-    "MORDEABE::look branches first on Item::getFrame; if frame == 0x0B it always barks 'Mordea's bed'. Otherwise it reads globals mordeaName and mordeaJob to select one of several short description strings.",
-    "enterFastArea reads mordeaSchedule and Npc::isDead to choose and set one of two frames (open/closed or variants) using Item::setFrame — this runs on fast-area entry events and is idempotent to keep visuals synchronized.",
-    "use checks the bed frame before running the awakening sequence — if the bed is already awakened (frame indicates opened) it avoids re-running the full sequence.",
-    "use spawns multiple helper processes and METHODs to stagger animations, orientation, and teleport operations; U8P_MORDEABE::04C0 is spawned to perform synchronous-looking visual/damage effects while other spawned METHODS handle NPC orientation and subsequent animations.",
-    "The awakening sequence temporarily suspends player control (setAvatarInStasis) and relies on spawned processes/methods for sequencing and cleanup instead of long blocking waits in the main use routine."
+    "U8P_MORDEABE::look() branches by Item::getFrame(this) == 0x0B first (sleeping bed text); otherwise it checks persistent flags mordeaName and mordeaJob to pick among 'Mordea the Tempest', 'Mordea', 'Tempest', or a generic 'sleeping woman' text.",
+    "U8P_MORDEABE::enterFastArea() does a two-condition guard: mordeaSchedule == 0x01 AND Npc::isDead([SP-00h]) == false -> set frame 0x0A; else set frame 0x0B.",
+    "U8P_MORDEABE::use() is gated by Item::getFrame(this)==0x0A; if false the U8P_MORDEABE::use is ignored. When allowed it runs a sequenced set of spawns + suspend ticks to animate frames down and up using a local iteration counter, with explicit calls to spawn cameraFollowAvatar and many small delay helpers to produce timing.",
+    "U8P_MORDEABE::func04C0() runs two distinct visual/damage phases: (1) spawn and animate a first temporary item (frames 0..4) with SFX, (2) spawn/animate a second temporary item (frames 0..9), call Item::receiveHit on the target, wait for LightningBolt process completion, then clean up."
   ],
   "open_questions": [
-    "Exact text strings used for each bark variant other than the canonical examples ('Mordea's bed', 'Mordea the Tempest', 'Mordea', 'Tempest', 'sleeping woman') — the disassembly shows selection logic but not every literal in full.",
-    "Precise numeric meanings of the item frames (0x0A, 0x0B, others) beyond 'closed/open/awakened' are inferred but not fully enumerated.",
-    "Exact damage values and damage type applied by Item::receiveHit in U8P_MORDEABE::04C0 — the routine references NPC HP when capping damage but exact formula is not explicit.",
-    "Which NPC instance is targeted (by ID or by a link from the bed) and how that association is encoded in the object data — the code teleports/queries an NPC but the exact pointer/association mechanics are inferred.",
-    "Whether any of the mordea* globals are modified elsewhere in game logic that would change long-term bed behavior (they are only read here)."
+    "Exact numeric semantics of mordeaSchedule: inferred to select awake vs sleeping schedule when equal to 0x01, but what real-world schedule or game-time mapping does that flag represent?",
+    "Precise damage semantics: U8P_MORDEABE::func04C0 appears to U8P_MORDEABE::use Npc::getHp() as a value passed to Item::receiveHit — is this intended as an instant-kill/HP-based effect or as a different magnitude transformation?",
+    "Which concrete NPC reference is passed on the stack to U8P_MORDEABE::func04C0 (caller-supplied target slot)? The code expects a target at a caller stack slot but the exact source is not explicit in the snippet.",
+    "Frame index meanings beyond 0x0A and 0x0B: the animation loop uses a range of frames (0..9 etc.) whose visual mapping to spritesheets isn't present here; exact visuals need art/sprite docs to confirm.",
+    "Whether any global flags are toggled by these actions beyond read-only checks (no writes detected here) — could other scripts observe side-effects from teleport/receiveHit that alter global state indirectly?"
   ],
   "main_function": {
     "name": "U8P_MORDEABE::look",
     "execution_form": "process",
-    "purpose": "Produce a short descriptive bark when a player or NPC examines the Mordea bed/item, selecting the text based on the bed's visual frame and two global flags (mordeaName and mordeaJob).",
+    "purpose": "Provide the short description/bark shown to the player when they examine the item/NPC. Chooses wording based on the item's frame (sleeping vs awake) and persistent flags indicating personal name and job/epithet.",
     "entry_conditions": [
-      "Triggered when an actor uses the 'U8P_MORDEABE::look' (examine) verb on the bed item.",
-      "Relies on Item::getFrame and global flags mordeaName and mordeaJob to choose the appropriate description."
+      "Invoked by the engine when the player 'looks at' or examines the object/NPC.",
+      "Checks Item::getFrame(this) to detect the sleeping frame (0x0B) before considering name/job flags.",
+      "Reads persistent flags mordeaName and mordeaJob to decide phrasing."
     ],
     "confidence": "high"
   },
@@ -37,25 +37,25 @@
     {
       "name": "U8P_MORDEABE::look",
       "kind": "main",
-      "role": "Examine/U8P_MORDEABE::look handler that selects and issues short descriptive text (Item::bark) based on item frame and mordeaName/mordeaJob globals.",
+      "role": "Look/description handler that selects a short description/bark based on item frame and mordeaName/mordeaJob flags.",
       "confidence": "high"
     },
     {
       "name": "U8P_MORDEABE::enterFastArea",
       "kind": "helper",
-      "role": "Fast-area trigger handler that updates the bed's Item::setFrame according to mordeaSchedule and the associated NPC's alive/dead state to keep the visual consistent.",
+      "role": "Area-entry behavior: set visible frame (awake vs sleeping) depending on mordeaSchedule and whether the NPC is alive.",
       "confidence": "high"
     },
     {
       "name": "U8P_MORDEABE::use",
       "kind": "helper",
-      "role": "Main awakening/activation routine: freezes avatar, sequences animations/effects, teleports and orients the NPC, spawns effect/damage helper, and schedules cleanup.",
+      "role": "Use interaction: staged cutscene/animation sequence that freezes avatar, focuses camera, animates NPC and item frames, emits barks, teleports NPC, and invokes the lightning/damage helper.",
       "confidence": "high"
     },
     {
-      "name": "U8P_MORDEABE::04C0",
+      "name": "U8P_MORDEABE::func04C0",
       "kind": "helper",
-      "role": "Spawned effect/damage process: creates LightningBolt, spawns and animates temporary debris items, plays SFX, queries NPC HP, and calls Item::receiveHit to apply area damage.",
+      "role": "Utility effect: spawn visual items/processes for a lightning/impact effect, play SFX, animate temporary items, optionally call Item::receiveHit to apply damage, and clean up visuals.",
       "confidence": "high"
     }
   ],
@@ -63,14 +63,8 @@
     "internal_calls": [
       {
         "caller": "U8P_MORDEABE::use",
-        "callee": "U8P_MORDEABE::04C0",
-        "purpose": "Spawned to perform the visual lightning/debris effects and apply area damage as part of the full awakening sequence.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_MORDEABE::enterFastArea",
-        "callee": "U8P_MORDEABE::look",
-        "purpose": "No direct call; both are per-event handlers operating on the same item. (Included to clarify there is no implied synchronous handoff.)",
+        "callee": "U8P_MORDEABE::func04C0",
+        "purpose": "Trigger the lightning visual + damage subroutine as part of the U8P_MORDEABE::use() cutscene.",
         "confidence": "high"
       }
     ],
@@ -78,115 +72,91 @@
       {
         "caller": "U8P_MORDEABE::look",
         "callee": "Item::getFrame",
-        "purpose": "Query the bed's current display frame to decide which descriptive text to bark.",
+        "purpose": "Query the item's current display frame to pick an appropriate short description (sleeping vs other states).",
         "confidence": "high"
       },
       {
         "caller": "U8P_MORDEABE::look",
-        "callee": "Item::bark",
-        "purpose": "Emit the short description string to the examining process (player/NPC).",
+        "callee": "global flags mordeaName / mordeaJob",
+        "purpose": "Read persistent flags to determine whether to include the personal name and/or job title in the U8P_MORDEABE::look description.",
         "confidence": "high"
       },
       {
         "caller": "U8P_MORDEABE::enterFastArea",
         "callee": "Npc::isDead",
-        "purpose": "Check whether the associated NPC is dead to influence which frame the bed should display.",
+        "purpose": "Check the referenced NPC life state before choosing to show the awake frame; avoid showing awake/active state for dead NPCs.",
         "confidence": "high"
       },
       {
         "caller": "U8P_MORDEABE::enterFastArea",
         "callee": "Item::setFrame",
-        "purpose": "Set the bed's visual frame based on schedule and NPC alive/dead state.",
+        "purpose": "Set the visible frame to awake (0x0A) or sleeping (0x0B) depending on schedule and NPC death check.",
         "confidence": "high"
       },
       {
         "caller": "U8P_MORDEABE::use",
-        "callee": "U8P_MORDEABE::setAvatarInStasis",
-        "purpose": "Temporarily freeze player/avatar control during the scripted awakening sequence.",
+        "callee": "Item::getFrame",
+        "purpose": "Guard: ensure the U8P_MORDEABE::use sequence only proceeds when the item is in the awake/usable frame (0x0A).",
         "confidence": "high"
       },
       {
         "caller": "U8P_MORDEABE::use",
-        "callee": "Item::getZ",
-        "purpose": "Get bed Z coordinate to position spawned visual effects relative to the bed.",
+        "callee": "setAvatarInStasis",
+        "purpose": "Temporarily freeze the player's avatar to prevent interruption during the cutscene/sequence.",
         "confidence": "high"
       },
       {
         "caller": "U8P_MORDEABE::use",
-        "callee": "Item::getY",
-        "purpose": "Get bed Y coordinate for teleport/effect placement calculations.",
+        "callee": "cameraFollowAvatar",
+        "purpose": "Spawn a camera-follow process centered near the item/avatar to stage the cutscene focus.",
         "confidence": "high"
       },
       {
         "caller": "U8P_MORDEABE::use",
-        "callee": "Item::getX",
-        "purpose": "Get bed X coordinate for teleport/effect placement calculations.",
-        "confidence": "high"
+        "callee": "METHOD::func091C / METHOD::func15E7",
+        "purpose": "Animate or rotate the NPC/object during the U8P_MORDEABE::use sequence (directional/pose changes spawned as separate processes).",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_MORDEABE::use",
-        "callee": "Item::getDirToItem",
-        "purpose": "Compute direction from an NPC/process to the bed in order to orient spawned METHODS/animations toward it.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_MORDEABE::use",
-        "callee": "Npc::getDir",
-        "purpose": "Query NPC facing to schedule orientation/animation METHOD calls.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_MORDEABE::use",
-        "callee": "spawn (METHOD::091C, METHOD::15E7, FREE::..., etc.)",
-        "purpose": "Start helper processes and METHODS that animate, delay, or sequence NPC orientation and other timed parts of the event.",
+        "callee": "spawn ->FREE::func1C19 / ->FREE::func1C8B / ->FREE::func29D8",
+        "purpose": "Spawn short lived timing/delay helper processes used as small waits between frame updates and animation steps.",
         "confidence": "high"
       },
       {
         "caller": "U8P_MORDEABE::use",
         "callee": "Npc::teleport",
-        "purpose": "Teleport (force-move) the NPC into position at the bed as part of the awakening.",
+        "purpose": "Move the NPC to specific coordinates as part of the staged animation/cutscene.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_MORDEABE::04C0",
-        "callee": "U8P_MORDEABE::spawn (LightningBolt process)",
-        "purpose": "Create a visual lightning effect during the awakening/damage step.",
+        "caller": "U8P_MORDEABE::func04C0",
+        "callee": "Item::create / Item::pop / Item::destroy",
+        "purpose": "Create and place temporary visual items for the lightning/impact effect and clean them up after animation.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_MORDEABE::04C0",
-        "callee": "Item::create",
-        "purpose": "Create temporary debris/effect items to animate around the bed during the lightning/explosion effect.",
+        "caller": "U8P_MORDEABE::func04C0",
+        "callee": "playSFX",
+        "purpose": "Play a specific sound effect (SFX 0x00C8) to accompany the lightning/impact visuals.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_MORDEABE::04C0",
-        "callee": "Item::pop",
-        "purpose": "Place created temporary items into the world at specific coordinates/frames for animation.",
+        "caller": "U8P_MORDEABE::func04C0",
+        "callee": "Item::setFrame",
+        "purpose": "Animate the temporary effect items across several frame indices to produce the visual animation.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_MORDEABE::04C0",
-        "callee": "U8P_MORDEABE::playSFX",
-        "purpose": "Play sound effects associated with the lightning/explosion event.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_MORDEABE::04C0",
-        "callee": "Item::destroy",
-        "purpose": "Remove temporary debris items after their animation is finished.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_MORDEABE::04C0",
-        "callee": "Npc::getHp",
-        "purpose": "Query NPC HP to cap or scale damage applied by the effect.",
+        "caller": "U8P_MORDEABE::func04C0",
+        "callee": "Item::receiveHit",
+        "purpose": "Apply a hit/damage to the target NPC; inferred to U8P_MORDEABE::use Npc::getHp() as the magnitude and damage flags/types provided in the call.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_MORDEABE::04C0",
-        "callee": "Item::receiveHit",
-        "purpose": "Apply damage/hit to targets in the bed's area as the effect consequence.",
+        "caller": "U8P_MORDEABE::func04C0",
+        "callee": "spawn process LightningBolt",
+        "purpose": "Spawn a LightningBolt process used/coordinated with the visual items and damage application; U8P_MORDEABE::func04C0 waits for it to complete.",
         "confidence": "high"
       }
     ]
@@ -195,17 +165,17 @@
     "reads": [
       {
         "name": "mordeaName",
-        "likely_effect": "Selects which name fragment to use in the bed's descriptive bark (influences choice between 'Mordea', 'Tempest', and combined forms).",
+        "likely_effect": "Indicates whether to include the personal name 'Mordea' in the U8P_MORDEABE::look() description; read by U8P_MORDEABE::look().",
         "confidence": "high"
       },
       {
         "name": "mordeaJob",
-        "likely_effect": "Used together with mordeaName to disambiguate which descriptive text to show when the bed is examined.",
+        "likely_effect": "Indicates whether to include the job/epithet 'Tempest' in the U8P_MORDEABE::look() description; read by U8P_MORDEABE::look().",
         "confidence": "high"
       },
       {
         "name": "mordeaSchedule",
-        "likely_effect": "Determines which visual frame the bed should display in enterFastArea (schedule-driven open/closed state).",
+        "likely_effect": "Schedule/state flag used by U8P_MORDEABE::enterFastArea() to choose awake (0x01) vs sleeping frame; read-only here.",
         "confidence": "high"
       }
     ],
@@ -215,12 +185,14 @@
     "trigger",
     "cleanup",
     "animation",
-    "guard"
+    "guard",
+    "cutscene",
+    "sfx"
   ],
   "quick_facts": {
-    "main_function": "MORDEABE::look",
-    "behavior_summary_one_liner": "Provides the gameplay logic for a bed object associated with the NPC Mordea/Tempest: it supplies descriptive text when examined, keeps the bed's visual frame in sync with schedule and NPC state, and runs a multi-step awakening/teleport/effect sequence when the bed is used.",
-    "external_call_count": 19,
+    "main_function": "U8P_MORDEABE::look",
+    "behavior_summary_one_liner": "This script implements the in-world behavior for an object/NPC associated with 'Mordea the Tempest'. It provides a context-sensitive short description when the player examines the entity (U8P_MORDEABE::look), updates the visible sprite/frame when an actor enters the trigger area (U8P_MORDEABE::enterFastArea), runs a staged \"wake/attack\" cutscene when the player uses the object/NPC (U8P_MORDEABE::use), and contains a helper that spawns lightning visuals and applies hit/damage effects (U8P_MORDEABE::func04C0).",
+    "external_call_count": 15,
     "flag_read_count": 3,
     "flag_write_count": 0
   },

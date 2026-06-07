@@ -3,118 +3,264 @@
   "source_of_truth": "dialogue/json/U8P_BOOK1.json",
   "file": "U8P_BOOK1",
   "behavior_summary": [
-    "This script collection implements in-game book/page handlers: each function prepares metadata for a specific book entry, constructs a literal text payload (poem, lore, or spell description), and invokes the engine Book::read routine to display that text to the player.",
-    "After Book::read returns the handler frees the temporary string, propagates the return value, and then suspends/ends the script execution for that read event.",
-    "Handlers are event-driven: they run in response to a player (or actor) activating/reading the associated book object and do not perform world-state logic beyond preparing and displaying text."
+    "This script implements a collection of item/book 'read' handlers and spellbook entry presenters. Most functions launch Book::read with a hard-coded multi-line string (lore, stories, or spell descriptions) and then suspend so the text UI can run.",
+    "Several functions additionally update the visual state of the item (Item::setFrame) and spawn spell-related helper processes (ETHRSPEL::* and ENCHANT::func0080). Those branches appear to be used to prepare/preview spells or to queue an enchant/cast follow-up when the player interacts with a spellbook item.",
+    "One function (U8P_BOOK1::func4DB4) writes multiple global flags marking that a particular lore/fragment text was seen (blackLoreSeen, needBreath, needTear, needHeart), indicating reading that page unlocks or marks quest/lore state."
   ],
   "notable_control_flow": [
-    "U8P_BOOK1::BOOK1::0080 (main) and most helpers follow the sequence: set book metadata -> push pid (player id) -> push literal text -> str-to-ptr -> call Book::read(text, object_handle) -> free temporary string -> push/return Book::read retval -> suspend.",
-    "U8P_BOOK1::BOOK1::029A appears to be an exception: it sets metadata using the object handle and returns immediately (no Book::read call observed).",
-    "No global flags are written/read by the functions in this file (behavior is self-contained display logic)."
+    "Majority of functions: synchronous pattern — spawn Book::read(str_to_ptr(...), this) capturing a pid/handle into local 'temp' then suspend. This yields to the book UI and indicates the function's job is presenting text.",
+    "Spellbook helpers (examples: U8P_BOOK1::func5C2E, U8P_BOOK1::func5E13, U8P_BOOK1::func5FA5, U8P_BOOK1::func6173, U8P_BOOK1::func63B1, U8P_BOOK1::func673D) branch on the item's visual frame (Item::getFrame(this) == 0x0B). If frame==0x0B they spawn ETHRSPEL helpers and call Item::setFrame; otherwise they display Book::read and then spawn ENCHANT::func0080(0) as a follow-up.",
+    "One function (U8P_BOOK1::func673D) contains a small local counter (local3) used to count occurrences and triggers ETHRSPEL::func0821() when it reaches a threshold (appears to be 5) — an internal repetition/threshold guard for repeated activations.",
+    "Global flags are not widely read; only specific write behavior is present (notably in U8P_BOOK1::func4DB4)."
   ],
   "open_questions": [
-    "Is BP+06h always a book object handle or, in some cases, a different calling-context PID? The code consistently forwards it to Book::read but exact type is inferred.",
-    "What exact engine info is set by the 'set metadata' operations (opcode constants are observed but their semantic names are not fully canonicalized here)?",
-    "Are any of these book handlers reachable by automated triggers (timers/area events) or strictly by explicit player activation? The disassembly strongly suggests activation handlers but exact entry mapping is inferred."
+    "Which in-game UI action or object event maps to each function (exact binding of book pages to in-game items) — inferred to be 'read/activate', but the engine-binding entries are not present in this dump.",
+    "What precise in-game effect the ETHRSPEL spawns perform (prepare preview vs actually cast) — their names imply ethereal/spell preparation but the spawned routines are external and not included here.",
+    "Whether Item::setFrame modifications have an immediate visible animation or only change a persistent state used by other systems (appearance vs functional guard)."
   ],
   "main_function": {
-    "name": "U8P_BOOK1::0080",
+    "name": "U8P_BOOK1::func0080",
     "execution_form": "process",
-    "purpose": "Handle the player 'read' activation for a particular book entry: set book metadata, push player id and a long multi-line string (poem/lore), call Book::read to display the text, free the temporary string, return the Book::read result, and suspend.",
+    "purpose": "Handler that launches Book::read with the poem \"WHAT THE FISH TELL ME ...\" to present the book text to the player. Inferred to be invoked when the player reads/activates the corresponding book item.",
     "entry_conditions": [
-      "Invoked when the player (or relevant actor) activates/reads the corresponding book object (inferred from push-of-pid and call to Book::read)."
+      "Inferred: player uses/opens/reads the book item or activates the book UI for this item.",
+      "Inferred: item-activation / 'read' interaction that requests Book::read"
     ],
     "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_BOOK1::0080",
+      "name": "U8P_BOOK1::func0080",
       "kind": "main",
-      "role": "Primary book-entry handler that displays a long poem/lore via Book::read.",
+      "role": "Present book text (poem) to player; primary read/activation handler for this book entry.",
       "confidence": "high"
     },
     {
-      "name": "U8P_BOOK1::029A",
+      "name": "U8P_BOOK1::func029A",
       "kind": "helper",
-      "role": "Metadata-only handler: sets info for the book/object and returns without invoking Book::read (appears to be a minimal entry).",
-      "confidence": "medium"
+      "role": "Unknown/low-confidence placeholder (extracted body not recovered); likely a minor book/text helper.",
+      "confidence": "low"
     },
     {
-      "name": "U8P_BOOK1::02A6",
+      "name": "U8P_BOOK1::func02A6",
       "kind": "helper",
-      "role": "Book-entry handler: sets metadata and displays a short poem about 'Fred the demon' via Book::read.",
+      "role": "Present a short humorous lore snippet via Book::read.",
       "confidence": "high"
     },
     {
-      "name": "U8P_BOOK1::03BA",
+      "name": "U8P_BOOK1::func03BA",
       "kind": "helper",
-      "role": "Book-entry handler: sets metadata and displays a short story/string (cheese story) via Book::read.",
+      "role": "Present a short story (Jely & cheese) via Book::read.",
       "confidence": "high"
     },
     {
-      "name": "U8P_BOOK1::0621",
+      "name": "U8P_BOOK1::func0621",
       "kind": "helper",
-      "role": "Book-entry handler: displays a long lore text about Pagans/Zealans/Titans via Book::read.",
+      "role": "Present long lore on Titans/Pagans via Book::read.",
       "confidence": "high"
     },
     {
-      "name": "U8P_BOOK1::1103",
+      "name": "U8P_BOOK1::func1103",
       "kind": "helper",
-      "role": "Book-entry handler: displays necromancer lore (Galious/Moriens) via Book::read.",
+      "role": "Present Necromancer origin lore via Book::read.",
       "confidence": "high"
     },
     {
-      "name": "U8P_BOOK1::1D4A",
+      "name": "U8P_BOOK1::func1D4A",
       "kind": "helper",
-      "role": "Book-entry handler: displays 'On Sorcerous Ways' lore via Book::read.",
+      "role": "Present Sorcery / Theurgy lore via Book::read.",
       "confidence": "high"
     },
     {
-      "name": "U8P_BOOK1::289F",
+      "name": "U8P_BOOK1::func289F",
       "kind": "helper",
-      "role": "Book-entry handler: displays 'The Art of Flame' sorcery lore via Book::read.",
+      "role": "Present 'The Art of Flame' lore via Book::read.",
       "confidence": "high"
     },
     {
-      "name": "U8P_BOOK1::33C4",
+      "name": "U8P_BOOK1::func33C4",
       "kind": "helper",
-      "role": "Book-entry handler: displays 'The Tongue of Flame' lore via Book::read.",
+      "role": "Present 'The Tongue of Flame' lore via Book::read.",
       "confidence": "high"
     },
     {
-      "name": "U8P_BOOK1::39C9",
+      "name": "U8P_BOOK1::func39C9",
       "kind": "helper",
-      "role": "Book-entry handler: displays a short spell description 'Extinguish' via Book::read.",
+      "role": "Present 'Extinguish' spell description via Book::read.",
       "confidence": "high"
     },
     {
-      "name": "U8P_BOOK1::3B45",
+      "name": "U8P_BOOK1::func3B45",
       "kind": "helper",
-      "role": "Book-entry handler: displays the 'Ignite' spell entry via Book::read.",
+      "role": "Present 'Ignite' spell description via Book::read.",
       "confidence": "high"
     },
     {
-      "name": "U8P_BOOK1::3CDE",
+      "name": "U8P_BOOK1::func3CDE",
       "kind": "helper",
-      "role": "Book-entry handler: displays the 'Endure Heat' spell entry via Book::read.",
+      "role": "Present 'Endure Heat' spell description via Book::read.",
       "confidence": "high"
     },
     {
-      "name": "U8P_BOOK1::3E82",
+      "name": "U8P_BOOK1::func3E82",
       "kind": "helper",
-      "role": "Book-entry handler: displays the 'Flash' spell entry via Book::read.",
+      "role": "Present 'Flash' spell description via Book::read.",
       "confidence": "high"
     },
     {
-      "name": "U8P_BOOK1::3FBD",
+      "name": "U8P_BOOK1::func3FBD",
       "kind": "helper",
-      "role": "Book-entry handler: displays the 'Flame Bolt' spell entry via Book::read.",
+      "role": "Present 'Flame Bolt' spell description via Book::read.",
       "confidence": "high"
     },
     {
-      "name": "U8P_BOOK1::4189",
+      "name": "U8P_BOOK1::func4189",
       "kind": "helper",
-      "role": "Book-entry handler: begins the 'Fire Shield' spell entry (string truncated in disassembly) and displays it via Book::read.",
+      "role": "Present 'Fire Shield' spell description via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::func4355",
+      "kind": "helper",
+      "role": "Present 'Create Fire' spell description via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::func44A2",
+      "kind": "helper",
+      "role": "Present 'Armor of Flames' spell description via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::func4634",
+      "kind": "helper",
+      "role": "Present 'Explosion' spell description via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::func4819",
+      "kind": "helper",
+      "role": "Present 'Summon Daemon' spell description via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::func49FA",
+      "kind": "helper",
+      "role": "Present 'Banish Daemon' spell description via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::func4BBF",
+      "kind": "helper",
+      "role": "Present 'Conflagration' summoning lore via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::func4DB4",
+      "kind": "helper",
+      "role": "Present 'The Destruction of the Temple' lore via Book::read and set global flags indicating lore/fragments seen (blackLoreSeen, needBreath, needTear, needHeart).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::func5C2E",
+      "kind": "helper",
+      "role": "Spellbook helper: conditional visual update (Item::setFrame) and/or present 'Confusion Blast' text; spawn ETHRSPEL and ENCHANT follow-ups.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::func5E13",
+      "kind": "helper",
+      "role": "Spellbook helper: conditional ETHRSPEL spawn + Item::setFrame or present 'Meteor Shower' text and spawn ENCHANT follow-up.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::func5FA5",
+      "kind": "helper",
+      "role": "Spellbook helper: conditional ETHRSPEL spawn + Item::setFrame or present 'Summon Creature' text and spawn ENCHANT follow-up.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::func6173",
+      "kind": "helper",
+      "role": "Spellbook helper: conditional ETHRSPEL spawn + setFrame or present 'Call Destruction' text and spawn ENCHANT follow-up.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::func63B1",
+      "kind": "helper",
+      "role": "Spellbook helper: conditional ETHRSPEL spawn + setFrame or present 'Devastation' text and spawn ENCHANT follow-up.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::func673D",
+      "kind": "helper",
+      "role": "Ethereal Travel helper with a local counter (local3). Conditional ETHRSPEL spawn after threshold; else present 'Ethereal Travel' text and spawn ENCHANT follow-up.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::func6E14",
+      "kind": "helper",
+      "role": "Present 'The Reagents of Thaumaturgy' text via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::func7335",
+      "kind": "helper",
+      "role": "Present 'The Mythology of the Zealan Deities' lore via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::func8213",
+      "kind": "helper",
+      "role": "Present 'The Final Sunlight' lore via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::func8B84",
+      "kind": "helper",
+      "role": "Present 'The Objective History of Pagan' lore via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::funcAA5B",
+      "kind": "helper",
+      "role": "Present 'The Mysteries of Lithos' lore via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::funcB2FD",
+      "kind": "helper",
+      "role": "Present Stratos child-rearing text via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::funcB642",
+      "kind": "helper",
+      "role": "Present Stratos meditation/wise text via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::funcB9A7",
+      "kind": "helper",
+      "role": "Present 'The way of Stratos' lore via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::funcBE4F",
+      "kind": "helper",
+      "role": "Present Stratos-themed story via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::funcC1A5",
+      "kind": "helper",
+      "role": "Present 'Dear New Acolyte' Stratos instruction via Book::read.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BOOK1::funcC6D3",
+      "kind": "helper",
+      "role": "Present short warrior story via Book::read.",
       "confidence": "high"
     }
   ],
@@ -122,94 +268,163 @@
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_BOOK1::0080",
-        "callee": "Book::read(char*)",
-        "purpose": "Render/display the pushed multi-line text to the player and return a result; called with the temporary string pointer and the book/object handle (BP+06h).",
+        "caller": "U8P_BOOK1::func0080",
+        "callee": "Book::read",
+        "purpose": "Present the hard-coded poem/text to the player UI. Called with (char* text, this).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_BOOK1::02A6",
-        "callee": "Book::read(char*)",
-        "purpose": "Display a short poem/string for this book entry and return a result.",
+        "caller": "U8P_BOOK1::func02A6",
+        "callee": "Book::read",
+        "purpose": "Present a short humorous snippet (demon named Fred) to the player.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_BOOK1::03BA",
-        "callee": "Book::read(char*)",
-        "purpose": "Display a story-string (cheese story) to the reader.",
+        "caller": "U8P_BOOK1::func0621",
+        "callee": "Book::read",
+        "purpose": "Present long Titan/Pagan lore entry to the player.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_BOOK1::0621",
-        "callee": "Book::read(char*)",
-        "purpose": "Display a long lore text about Pagans/Zealans/Titans.",
+        "caller": "U8P_BOOK1::func4DB4",
+        "callee": "Book::read",
+        "purpose": "Present 'Destruction of the Temple' lore then set flags indicating fragments/lore seen.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_BOOK1::1103",
-        "callee": "Book::read(char*)",
-        "purpose": "Display necromancer lore (Galious/Moriens).",
+        "caller": "U8P_BOOK1::func5C2E",
+        "callee": "Item::getFrame",
+        "purpose": "Test the item's current visual/frame state to decide whether to spawn ETHRSPEL or display the book text.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_BOOK1::1D4A",
-        "callee": "Book::read(char*)",
-        "purpose": "Display 'On Sorcerous Ways' lore.",
+        "caller": "U8P_BOOK1::func5C2E",
+        "callee": "Item::setFrame",
+        "purpose": "Update the item's visible frame (visual/state update) when preparing ETHRSPEL behavior.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_BOOK1::289F",
-        "callee": "Book::read(char*)",
-        "purpose": "Display 'The Art of Flame' lore.",
+        "caller": "U8P_BOOK1::func5C2E",
+        "callee": "spawn addressof(...)->ETHRSPEL::func0080",
+        "purpose": "Spawn/prepare an ethereal/spell-related helper process (likely preview or internal spell state preparation).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BOOK1::func5C2E",
+        "callee": "spawn ->ENCHANT::func0080",
+        "purpose": "Queue or start an ENCHANT follow-up/enchantment process after the Book::read flow returns.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BOOK1::func5E13",
+        "callee": "Item::getFrame",
+        "purpose": "Guard decision for either ETHRSPEL spawn+setFrame or present Book::read('Meteor Shower').",
         "confidence": "high"
       },
       {
-        "caller": "U8P_BOOK1::33C4",
-        "callee": "Book::read(char*)",
-        "purpose": "Display 'The Tongue of Flame' lore.",
+        "caller": "U8P_BOOK1::func5E13",
+        "callee": "spawn addressof(...)->ETHRSPEL::castEtherealTravel",
+        "purpose": "Spawn ETHRSPEL helper to prepare/preview ethereal travel effect when frame==0x0B.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BOOK1::func5E13",
+        "callee": "spawn ->ENCHANT::func0080",
+        "purpose": "Spawn an ENCHANT follow-up after Book::read returns in the else branch.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BOOK1::func5FA5",
+        "callee": "Item::getFrame",
+        "purpose": "Frame guard for Summon Creature entry (same pattern as other spellbook helpers).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_BOOK1::39C9",
-        "callee": "Book::read(char*)",
-        "purpose": "Display the 'Extinguish' spell description.",
+        "caller": "U8P_BOOK1::func5FA5",
+        "callee": "spawn addressof(...)->ETHRSPEL::func0225",
+        "purpose": "Spawn ETHRSPEL helper when frame==0x0B (prepare/preview behavior).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BOOK1::func5FA5",
+        "callee": "spawn ->ENCHANT::func0080",
+        "purpose": "Spawn ENCHANT follow-up after Book::read in else branch.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BOOK1::func6173",
+        "callee": "spawn addressof([SP-00h])->ETHRSPEL::func078C",
+        "purpose": "Spawn ETHRSPEL helper when item frame indicates a prepared/preview state.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BOOK1::func6173",
+        "callee": "spawn ->ENCHANT::func0080",
+        "purpose": "Spawn ENCHANT follow-up after Book::read in else branch.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BOOK1::func63B1",
+        "callee": "spawn addressof(...)->ETHRSPEL::func09DD",
+        "purpose": "Spawn ETHRSPEL helper when frame==0x0B for the 'Devastation' entry.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BOOK1::func63B1",
+        "callee": "spawn ->ENCHANT::func0080",
+        "purpose": "Spawn ENCHANT follow-up after Book::read in else branch for 'Devastation'.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BOOK1::func673D",
+        "callee": "Item::setFrame",
+        "purpose": "Ensure the item shows frame 0x0B in the 'prepared' branch.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_BOOK1::3B45",
-        "callee": "Book::read(char*)",
-        "purpose": "Display the 'Ignite' spell description.",
-        "confidence": "high"
+        "caller": "U8P_BOOK1::func673D",
+        "callee": "spawn addressof(...)->ETHRSPEL::func0821",
+        "purpose": "Spawn ETHRSPEL helper after a local counter threshold (triggered when local3 reaches 5).",
+        "confidence": "medium"
       },
       {
-        "caller": "U8P_BOOK1::3CDE",
-        "callee": "Book::read(char*)",
-        "purpose": "Display the 'Endure Heat' spell description.",
-        "confidence": "high"
+        "caller": "U8P_BOOK1::func673D",
+        "callee": "spawn ->ENCHANT::func0080",
+        "purpose": "Spawn ENCHANT follow-up after Book::read when not in prepared/frame branch.",
+        "confidence": "medium"
       },
       {
-        "caller": "U8P_BOOK1::3E82",
-        "callee": "Book::read(char*)",
-        "purpose": "Display the 'Flash' spell description.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_BOOK1::3FBD",
-        "callee": "Book::read(char*)",
-        "purpose": "Display the 'Flame Bolt' spell description.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_BOOK1::4189",
-        "callee": "Book::read(char*)",
-        "purpose": "Display the 'Fire Shield' spell entry (string truncated in the disassembly sample).",
-        "confidence": "high"
+        "caller": "U8P_BOOK1::func4DB4",
+        "callee": "Item::setFrame",
+        "purpose": "Not directly invoked in all cases, but Item::setFrame is used across script to adjust visuals; U8P_BOOK1::func4DB4 is primarily noted for Book::read + flag writes.",
+        "confidence": "low"
       }
     ]
   },
   "global_flags": {
     "reads": [],
-    "writes": []
+    "writes": [
+      {
+        "name": "blackLoreSeen",
+        "likely_effect": "Marks that the 'Destruction of the Temple' lore has been viewed; used to gate or record progress/knowledge.",
+        "confidence": "high"
+      },
+      {
+        "name": "needBreath",
+        "likely_effect": "Marks that the 'Breath' fragment/requirement is now relevant/needed (quest/lore progression).",
+        "confidence": "high"
+      },
+      {
+        "name": "needTear",
+        "likely_effect": "Marks that the 'Tear' fragment/requirement is now relevant/needed (quest/lore progression).",
+        "confidence": "high"
+      },
+      {
+        "name": "needHeart",
+        "likely_effect": "Marks that the 'Heart' fragment/requirement is now relevant/needed (quest/lore progression).",
+        "confidence": "high"
+      }
+    ]
   },
   "ui_tags": [
     "trigger",
@@ -218,11 +433,11 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_BOOK1::BOOK1::0080",
-    "behavior_summary_one_liner": "This script collection implements in-game book/page handlers: each function prepares metadata for a specific book entry, constructs a literal text payload (poem, lore, or spell description), and invokes the engine Book::read routine to display that text to the player.",
-    "external_call_count": 14,
+    "main_function": "U8P_BOOK1::func0080",
+    "behavior_summary_one_liner": "This script implements a collection of item/book 'read' handlers and spellbook entry presenters. Most functions launch Book::read with a hard-coded multi-line string (lore, stories, or spell descriptions) and then suspend so the text UI can run.",
+    "external_call_count": 22,
     "flag_read_count": 0,
-    "flag_write_count": 0
+    "flag_write_count": 4
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

@@ -3,26 +3,24 @@
   "source_of_truth": "dialogue/json/U8P_OPNBDROL.json",
   "file": "U8P_OPNBDROL",
   "behavior_summary": [
-    "This script implements the in-game behavior for a bedroll item. When the item is examined ('U8P_OPNBDROL::look' event) it displays the label \"bedroll \".",
-    "When the item is used ('use' event) the script collects the item's world coordinates (X, Y, Z) and delegates to the engine's FREE subsystem (FREE::2411) with those coordinates, the item pointer, and an identifier (0x0216) to initiate the bedroll's runtime action (likely open/activate/sleep).",
-    "No global flags are read or written by these handlers; behavior is localized to displaying text on U8P_OPNBDROL::look and delegating a use-action to the runtime on use."
+    "This item acts as a simple examinable object named 'bedroll'. When the player uses the examine/U8P_OPNBDROL::look action (U8P_OPNBDROL::look) it displays the short label \"bedroll\" and then suspends the U8P_OPNBDROL::look process.",
+    "When the item is used (U8P_OPNBDROL::use), the script issues an engine-level changeItemType call to replace/transform this item into type 0x0216 at the item's coordinates. This implies the bedroll is converted or swapped for another item type when used."
   ],
   "notable_control_flow": [
-    "U8P_OPNBDROL::OPNBDROL::look: simple linear flow — prepare context, call Item::bark with the static string \"bedroll \", free temporary string, then suspend/return.",
-    "U8P_OPNBDROL::OPNBDROL::use: sequentially calls Item::getZ, Item::getY, Item::getX to collect coordinates, then calls FREE::2411 with (X, Y, Z, 0, 0x0216, Item* , extra/process info) to hand control to engine-level behavior.",
-    "The 'U8P_OPNBDROL::look' and 'use' behaviors are separate entry events (Event 0 and Event 1 respectively) rather than one calling the other."
+    "U8P_OPNBDROL::look: on U8P_OPNBDROL::look/examine, emit a single bark/text \"bedroll\" then suspend the process (ends the examine interaction).",
+    "U8P_OPNBDROL::use: perform coordinate queries Item::getZ/Y/X(this) and call FREE::changeItemType(z,y,x,0x00,0x0216,this) to change the item type in-place."
   ],
   "open_questions": [
-    "What exact runtime behavior or script is triggered by FREE::2411 when passed identifier 0x0216 (inferred to be bedroll-use behavior but the concrete effect is not present in this excerpt)?",
-    "What is the meaning and origin of the pushed 'pid' value observed in the script (appears to be process/player context used when setting process info/exclusion) and how it impacts downstream processing?",
-    "Are there any additional side-effects or state changes performed by the FREE::2411 handler (e.g., starting a sleep timer, playing an animation, spawning a UI) that are not visible here?"
+    "What concrete item or gameplay object does type id 0x0216 correspond to (the new type after changeItemType)?",
+    "Does the changeItemType call represent consuming the bedroll, replacing it with a usable item, or spawning an environment object? The intent is inferred but not explicit.",
+    "Are there any conditions, costs, or actor checks (e.g., proximity or actor inventory) gating U8P_OPNBDROL::use that are implemented elsewhere?"
   ],
   "main_function": {
     "name": "U8P_OPNBDROL::look",
     "execution_form": "process",
-    "purpose": "Present the item's textual label/description when the bedroll is examined by a player/process (bark the string \"bedroll \").",
+    "purpose": "Provide the short description shown when the player examines this item (display \"bedroll\"), then suspend/terminate the U8P_OPNBDROL::look process.",
     "entry_conditions": [
-      "Event 0: triggered when the actor looks at/examines the bedroll item (examine/inspect interaction)."
+      "Player triggers the LOOK/examine action on the item (engine starts the U8P_OPNBDROL::look process for this object)."
     ],
     "confidence": "high"
   },
@@ -30,43 +28,13 @@
     {
       "name": "U8P_OPNBDROL::look",
       "kind": "main",
-      "role": "Handle the 'U8P_OPNBDROL::look' (examine) event for the bedroll; display the item's label via Item::bark.",
+      "role": "examine/U8P_OPNBDROL::look handler: show short label and suspend",
       "confidence": "high"
     },
     {
       "name": "U8P_OPNBDROL::use",
       "kind": "helper",
-      "role": "Handle the 'use' event for the bedroll; collect coordinates and invoke FREE subsystem to perform the use action.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item-level call to display/emit a short text message from an item/process to a player or process.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getZ",
-      "kind": "extern",
-      "role": "Return the item's Z coordinate for use by runtime handlers.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getY",
-      "kind": "extern",
-      "role": "Return the item's Y coordinate for use by runtime handlers.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getX",
-      "kind": "extern",
-      "role": "Return the item's X coordinate for use by runtime handlers.",
-      "confidence": "high"
-    },
-    {
-      "name": "FREE::2411",
-      "kind": "extern",
-      "role": "Engine/free subsystem entry invoked to start the bedroll-use behavior at specified coordinates with the given item and identifier (0x0216).",
+      "role": "U8P_OPNBDROL::use handler: transform/replace this item by calling engine changeItemType with target type 0x0216",
       "confidence": "high"
     }
   ],
@@ -74,33 +42,27 @@
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_OPNBDROL::look",
-        "callee": "Item::bark",
-        "purpose": "Display the static label \"bedroll \" to the inspecting process/player.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_OPNBDROL::use",
         "callee": "Item::getZ",
-        "purpose": "Retrieve the bedroll's Z (height/level) coordinate to pass to the FREE handler.",
+        "purpose": "Provide the Z coordinate of this item for the changeItemType call",
         "confidence": "high"
       },
       {
         "caller": "U8P_OPNBDROL::use",
         "callee": "Item::getY",
-        "purpose": "Retrieve the bedroll's Y coordinate to pass to the FREE handler.",
+        "purpose": "Provide the Y coordinate of this item for the changeItemType call",
         "confidence": "high"
       },
       {
         "caller": "U8P_OPNBDROL::use",
         "callee": "Item::getX",
-        "purpose": "Retrieve the bedroll's X coordinate to pass to the FREE handler.",
+        "purpose": "Provide the X coordinate of this item for the changeItemType call",
         "confidence": "high"
       },
       {
         "caller": "U8P_OPNBDROL::use",
-        "callee": "FREE::2411",
-        "purpose": "Delegate the actual 'use' runtime behavior (identified by id 0x0216) to engine-level code, supplying coordinates and the item pointer.",
+        "callee": "FREE::changeItemType",
+        "purpose": "Engine-level replacement/transform of the item at the given coordinates to new type id 0x0216; parameters observed: z,y,x,0x00,0x0216,this",
         "confidence": "high"
       }
     ]
@@ -111,14 +73,14 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "animation",
-    "guard"
+    "transform",
+    "examine",
+    "suspend"
   ],
   "quick_facts": {
-    "main_function": "OPNBDROL::look",
-    "behavior_summary_one_liner": "This script implements the in-game behavior for a bedroll item. When the item is examined ('U8P_OPNBDROL::look' event) it displays the label \"bedroll \".",
-    "external_call_count": 5,
+    "main_function": "U8P_OPNBDROL::look",
+    "behavior_summary_one_liner": "This item acts as a simple examinable object named 'bedroll'. When the player uses the examine/U8P_OPNBDROL::look action (U8P_OPNBDROL::look) it displays the short label \"bedroll\" and then suspends the U8P_OPNBDROL::look process.",
+    "external_call_count": 4,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

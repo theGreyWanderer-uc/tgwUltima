@@ -3,212 +3,193 @@
   "source_of_truth": "dialogue/json/U8P_CLRLAVA.json",
   "file": "U8P_CLRLAVA",
   "behavior_summary": [
-    "CLRLAVA::gotHit reacts to a hit on a lava/clear-lava object by producing splash/steam visual effects, playing a splash SFX, and then applying consequences to the attacker (destroy, damage, move off tile, or put avatar in stasis).",
-    "The handler guards against re-entrancy/duplicate handling using a global flag 'butthead' and can early-abort behavior if a global 'neverSinks' is set.",
-    "Visual/effect placement splits depending on the item's frame value (Item::getFrame compared to 0x20) — two distinct sprite placement/loop patterns are used.",
-    "When the attacker is an avatar/NPC the code either destroys the attacker directly or puts them in stasis, recenters the camera, possibly clears death/immortal flags for NPCs, and applies a receiveHit to deal damage; asynchronous cleanup is scheduled via a spawned FREE routine."
+    "U8P_CLRLAVA::gotHit is a guarded hit-handling process that responds when the object/NPC is struck. It prevents reentrancy (via butthead and neverSinks), inspects the hit source (param1), and branches on both param1 and the item's frame to either play a first-hit SFX/spawn a sprite and apply small randomized damage, destroy the source item, or run a forced-kill animation/sequence on an NPC.",
+    "When forcing an NPC death the process sets avatar stasis, sets the butthead guard, repositions the NPC (Item::move), resets kernel refs (Kernel::resetRef), runs an NPC animation (Npc::doAnim), ensures the NPC is killed by clearing protective flags and calling Item::receiveHit with the NPC's HP, then restores the previous dead/alive marker if needed.",
+    "Visual and audio feedback are coordinated (playSFX, createSprite) and some actions occur only once per-hit via temporary local flags to avoid duplicate effects."
   ],
   "notable_control_flow": [
-    "Early-return if global butthead is set (prevents re-entrancy) or if neverSinks global is set (skips sinking/destruction behavior).",
-    "Effect branch based on Item::getFrame() <= 0x20 vs > 0x20 to choose different sprite spawn loops and offsets.",
-    "Conditional path based on the third parameter (BP+0Ah) determining whether to destroy the attacker immediately or to put the avatar/NPC in stasis and move them.",
-    "NPC-specific path: check/set dead flags, clear immortal/withstand flags, query HP and call Item::receiveHit; camera recenters on affected PID in some branches.",
-    "Spawns an asynchronous helper (FREE::1C19) for delayed/cleanup work; another helper (FREE::1A96) is invoked synchronously in one branch."
+    "Entry guarded by global/local flags: skip if neverSinks present or butthead indicates an ongoing sequence.",
+    "Primary branching on param1 (hit-source/selector) and on Item::getFrame(this) <= 0x20 to choose damage/destroy/forced-kill behavior.",
+    "First-hit sub-branch: playSFX + createSprite at coordinates read from param1 (Item::getX/Y/Z), tracked by a local flag to avoid repeats.",
+    "Damage branch: call Item::receiveHit with a small randomized amount (FREE::randomInRange) and direction computed by Item::getDirToItem.",
+    "Forced-kill branch (NPC): set avatar stasis, set butthead, move and animate the NPC, clear immortal/withstand flags, call Item::receiveHit with full HP to guarantee death, then possibly restore prior dead state."
   ],
   "open_questions": [
-    "Precise semantic meaning of the tile/frame threshold 0x20 — inferred to represent two visual/behavioral tile-states but exact tile types are unknown.",
-    "Exact interpretation of the third parameter (BP+0Ah) in all contexts — it appears to switch between immediate destruction vs. stasis/move, but caller semantics are not fully certain.",
-    "Whether attacked process is always the avatar or may be generic NPCs — code handles both but caller origin is not explicit.",
-    "Detailed behavior and responsibilities of FREE::1A96 and FREE::1C19 (cleanup vs. continuation vs. timing) beyond their call sites.",
-    "Whether Camera::setCenterOn is always invoked when an NPC/avatar is killed or only under specific sub-conditions."
+    "What exact values of param1 correspond to each branch (the metadata treats param1 as a selector/hit-source but its precise semantics are unclear).",
+    "What does Kernel::resetRef operate on (which kernel reference id) and why is it toggled around the move/animation sequence?",
+    "What is the intended purpose of the spawned auxiliary process (spawn -> FREE::func1C19) near the end of the sequence?",
+    "Are there any global flags beyond butthead and neverSinks that influence this behavior in other parts of the code base (not present in this excerpt)?",
+    "Is the frame threshold (<= 0x20) semantically a type/category test (e.g., breakable vs. durable) or an animation-state cutoff?"
   ],
   "main_function": {
     "name": "U8P_CLRLAVA::gotHit",
     "execution_form": "process",
-    "purpose": "Handle an incoming hit on a lava-like tile: spawn splash/steam sprites and SFX, and apply the appropriate consequence to the attacker (destroy, move off tile, place avatar in stasis, trigger NPC death/damage) while using guards to avoid re-entrancy and scheduling cleanup.",
+    "purpose": "Handle a 'got hit' event on this item/NPC: play first-hit effects, apply damage or destroy the hit source, or run a forced-kill/animation sequence on an NPC while preventing reentrancy and preserving prior alive/dead state where possible.",
     "entry_conditions": [
-      "Invoked when the lava object receives a U8P_CLRLAVA::gotHit event.",
-      "Receives parameters: attacker/process id, damage amount, and a third flag/byte that alters the attacker-handling branch.",
-      "Runs only when global guards allow it (butthead not set, and neverSinks not preventing sinking behavior)."
+      "Invoked by the engine as a 'got hit' process for this object/NPC.",
+      "Proceeds only when a reentry guard is not set (butthead not active) and neverSinks is not set.",
+      "Behavior further depends on the value of the first parameter (param1) and the current Item::getFrame(this) value."
     ],
-    "confidence": "high"
+    "confidence": "medium"
   },
   "function_map": [
     {
       "name": "U8P_CLRLAVA::gotHit",
       "kind": "main",
-      "role": "Primary event handler for hits on the lava/clear-lava item; spawns effects and resolves attacker consequences.",
+      "role": "Hit event handler / forced-kill orchestrator",
       "confidence": "high"
-    },
-    {
-      "name": "U8P_CLRLAVA::FREE::1A96",
-      "kind": "helper",
-      "role": "Synchronous helper/cleanup routine called in the receiveHit branch (appears to prepare/cleanup state before applying damage).",
-      "confidence": "medium"
-    },
-    {
-      "name": "U8P_CLRLAVA::FREE::1C19",
-      "kind": "helper",
-      "role": "Asynchronous helper spawned with a timeout (0x1E) for delayed cleanup/continuation after the immediate reaction.",
-      "confidence": "medium"
     }
   ],
   "call_analysis": {
-    "internal_calls": [
-      {
-        "caller": "U8P_CLRLAVA::gotHit",
-        "callee": "U8P_CLRLAVA::FREE::1A96",
-        "purpose": "Synchronous helper invoked during the branch that applies a receiveHit — likely prepares state/cleans up before damage application.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_CLRLAVA::gotHit",
-        "callee": "U8P_CLRLAVA::FREE::1C19",
-        "purpose": "Spawned asynchronously to handle delayed cleanup or follow-up actions after the immediate hit reaction.",
-        "confidence": "medium"
-      }
-    ],
+    "internal_calls": [],
     "external_calls": [
       {
         "caller": "U8P_CLRLAVA::gotHit",
         "callee": "Item::getFrame",
-        "purpose": "Query the lava item's frame/tile to decide which visual/effect branch to execute (frame <= 0x20 vs > 0x20).",
+        "purpose": "Read the item's frame/index to select behavior branch (frame <= 0x20 changes handling).",
         "confidence": "high"
       },
       {
         "caller": "U8P_CLRLAVA::gotHit",
         "callee": "Item::getX",
-        "purpose": "Read the item's X coordinate to position spawned sprites and to compute a target move location for the attacker.",
+        "purpose": "Read X coordinate of the hit source for effect placement / comparisons.",
         "confidence": "high"
       },
       {
         "caller": "U8P_CLRLAVA::gotHit",
         "callee": "Item::getY",
-        "purpose": "Read the item's Y coordinate to position spawned sprites and to compute a target move location for the attacker.",
+        "purpose": "Read Y coordinate of the hit source for effect placement / comparisons.",
         "confidence": "high"
       },
       {
         "caller": "U8P_CLRLAVA::gotHit",
         "callee": "Item::getZ",
-        "purpose": "Read the item's Z/elevation used for sprite placement and branch decisions.",
+        "purpose": "Read Z (level) coordinate of the hit source for effect placement / comparisons.",
         "confidence": "high"
       },
       {
         "caller": "U8P_CLRLAVA::gotHit",
-        "callee": "U8P_CLRLAVA::playSFX",
-        "purpose": "Play a splash/impact sound when the lava tile is hit and sprites are spawned.",
+        "callee": "playSFX",
+        "purpose": "Play a sound effect when a first-hit visual occurs for audio feedback.",
         "confidence": "high"
       },
       {
         "caller": "U8P_CLRLAVA::gotHit",
-        "callee": "U8P_CLRLAVA::createSprite",
-        "purpose": "Spawn multiple splash/steam sprites around the lava tile with offsets computed from item coordinates; two looping patterns are used depending on frame.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_CLRLAVA::gotHit",
-        "callee": "Item::getDirToItem",
-        "purpose": "Compute direction from attacker to the lava item; used as the direction argument to Item::receiveHit.",
+        "callee": "createSprite",
+        "purpose": "Spawn a visual effect sprite (explosion/hit) at computed coordinates to show impact.",
         "confidence": "high"
       },
       {
         "caller": "U8P_CLRLAVA::gotHit",
         "callee": "Item::receiveHit",
-        "purpose": "Apply damage/hit to the attacker or NPC (passes direction, damage amount, and an extra uword).",
+        "purpose": "Apply damage to the item/NPC (used both for small randomized damage and for a full-HP hit to guarantee kill).",
         "confidence": "high"
       },
       {
         "caller": "U8P_CLRLAVA::gotHit",
-        "callee": "Kernel::resetRef",
-        "purpose": "Reset kernel references/refs for attacker or other PIDs when scheduling movement or cleanup; used multiple times to manage process lifetimes.",
+        "callee": "FREE::randomInRange",
+        "purpose": "Generate a small random damage amount used when applying variable damage.",
         "confidence": "high"
+      },
+      {
+        "caller": "U8P_CLRLAVA::gotHit",
+        "callee": "Item::getDirToItem",
+        "purpose": "Compute direction from this object toward the hit source for receiveHit direction parameter.",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_CLRLAVA::gotHit",
         "callee": "Item::destroy",
-        "purpose": "Immediately destroy the attacker/item in branches that indicate direct removal (third param or other branch conditions).",
+        "purpose": "Destroy/remove the hit source item in branches where destruction is required (param1 indicates destruction).",
         "confidence": "high"
       },
       {
         "caller": "U8P_CLRLAVA::gotHit",
-        "callee": "U8P_CLRLAVA::setAvatarInStasis",
-        "purpose": "Put the avatar into stasis (temporary immobilization) instead of destroying them outright in some branches.",
-        "confidence": "high"
+        "callee": "setAvatarInStasis",
+        "purpose": "Temporarily freeze the avatar (likely to preserve camera/animation state) during the forced-kill sequence.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_CLRLAVA::gotHit",
+        "callee": "Kernel::resetRef",
+        "purpose": "Reset kernel references/flags around the move/animation sequence (system bookkeeping), exact ref id uncertain.",
+        "confidence": "low"
       },
       {
         "caller": "U8P_CLRLAVA::gotHit",
         "callee": "Item::move",
-        "purpose": "Move the attacker/avatar to a safe tile computed from the lava tile coordinates to remove them from the lava position.",
+        "purpose": "Reposition the NPC/item for the animation/kill sequence or to remove it by moving to (0,0,0).",
         "confidence": "high"
       },
       {
         "caller": "U8P_CLRLAVA::gotHit",
+        "callee": "spawn -> FREE::func1C19",
+        "purpose": "Spawn/queue an auxiliary process near the end of the sequence; exact effect unclear.",
+        "confidence": "low"
+      },
+      {
+        "caller": "U8P_CLRLAVA::gotHit",
         "callee": "Npc::doAnim",
-        "purpose": "Trigger an NPC animation (impact or death) when an NPC attacker is affected.",
+        "purpose": "Run an NPC animation as part of the forced-kill/impact sequence.",
         "confidence": "high"
       },
       {
         "caller": "U8P_CLRLAVA::gotHit",
         "callee": "Npc::isDead",
-        "purpose": "Check whether the NPC is already dead to decide whether to clear/set dead flags and how to apply receiveHit.",
-        "confidence": "high"
+        "purpose": "Check if NPC was already dead to preserve/restore original state after forced-kill.",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_CLRLAVA::gotHit",
         "callee": "Npc::setDead",
-        "purpose": "Mark an NPC as dead in the branch that kills the NPC as a consequence of the lava hit.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_CLRLAVA::gotHit",
-        "callee": "Camera::setCenterOn",
-        "purpose": "Center camera on the affected attacker/NPC when a kill/major effect is applied to emphasize the event.",
+        "purpose": "Mark NPC dead as part of the forced-kill sequence.",
         "confidence": "medium"
       },
       {
         "caller": "U8P_CLRLAVA::gotHit",
         "callee": "Npc::clrDead",
-        "purpose": "Clear the NPC dead flag when restoring or preparing the NPC for a receiveHit that should affect them normally.",
+        "purpose": "Restore the NPC's dead marker if it was not originally dead before the forced-kill.",
         "confidence": "medium"
       },
       {
         "caller": "U8P_CLRLAVA::gotHit",
         "callee": "Npc::clrImmortal",
-        "purpose": "Clear NPC immortality so that receiveHit can actually kill or damage the NPC.",
+        "purpose": "Clear immortal flag so receiveHit can actually kill the NPC.",
         "confidence": "medium"
       },
       {
         "caller": "U8P_CLRLAVA::gotHit",
         "callee": "Npc::clrWithstandDeath",
-        "purpose": "Clear any 'withstand death' flags so the applied hit is effective.",
+        "purpose": "Clear any 'withstand death' protection so the forced-kill is effective.",
         "confidence": "medium"
       },
       {
         "caller": "U8P_CLRLAVA::gotHit",
         "callee": "Npc::getHp",
-        "purpose": "Query NPC HP to compute a lethal or appropriate damage value passed to Item::receiveHit in some branches.",
+        "purpose": "Obtain NPC current HP so receiveHit can be invoked with a value guaranteeing death.",
         "confidence": "medium"
+      },
+      {
+        "caller": "U8P_CLRLAVA::gotHit",
+        "callee": "Camera::setCenterOn",
+        "purpose": "Adjust camera centering during the forced-kill/animation sequence to focus on the event (inferred).",
+        "confidence": "low"
       }
     ]
   },
   "global_flags": {
     "reads": [
       {
-        "name": "butthead (global 0x022D)",
-        "likely_effect": "Used as an early guard to avoid re-entrancy or overlapping reactions when processing a hit on the lava tile.",
-        "confidence": "high"
-      },
-      {
-        "name": "neverSinks (global 0x000E)",
-        "likely_effect": "If set, skip full sinking/destruction behavior for the lava tile (prevents attacker-killing behavior).",
-        "confidence": "high"
+        "name": "neverSinks",
+        "likely_effect": "Guard: when true, skip U8P_CLRLAVA::gotHit handling (prevents sinking/handling in certain global states).",
+        "confidence": "medium"
       }
     ],
     "writes": [
       {
-        "name": "butthead (global 0x022D)",
-        "likely_effect": "Set to 1 while processing the avatar/NPC reaction (stasis/move) and cleared at the end to re-enable normal handling; acts as a temporary processing guard.",
-        "confidence": "high"
+        "name": "butthead",
+        "likely_effect": "Set to prevent reentrant handling while a forced-kill/animation sequence runs; used as a processing guard.",
+        "confidence": "medium"
       }
     ]
   },
@@ -219,10 +200,10 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "CLRLAVA::gotHit",
-    "behavior_summary_one_liner": "CLRLAVA::gotHit reacts to a hit on a lava/clear-lava object by producing splash/steam visual effects, playing a splash SFX, and then applying consequences to the attacker (destroy, damage, move off tile, or put avatar in stasis).",
-    "external_call_count": 20,
-    "flag_read_count": 2,
+    "main_function": "U8P_CLRLAVA::gotHit",
+    "behavior_summary_one_liner": "U8P_CLRLAVA::gotHit is a guarded hit-handling process that responds when the object/NPC is struck. It prevents reentrancy (via butthead and neverSinks), inspects the hit source (param1), and branches on both param1 and the item's frame to either play a first-hit SFX/spawn a sprite and apply small randomized damage, destroy the source item, or run a forced-kill animation/sequence on an NPC.",
+    "external_call_count": 22,
+    "flag_read_count": 1,
     "flag_write_count": 1
   },
   "hypotheses": {

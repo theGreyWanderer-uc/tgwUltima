@@ -3,28 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_FROCK.json",
   "file": "U8P_FROCK",
   "behavior_summary": [
-    "Handles the 'U8P_FROCK::release' event for a FROCK object: mark/update the passed object with an info/process-exclude operation, check the object's surface weight, and if that weight is zero, award/accumulate 15 dexterity to the avatar.",
-    "The function operates on an object reference provided as the event parameter (BP+06h) and only performs the dexterity accumulation when Item::getSurfaceWeight(obj) returns 0."
+    "U8P_FROCK::release is a small utility process that checks the item's surface weight and, if that weight is zero, awards 0x0F (15) dexterity via AccumulateDexterity.",
+    "The process is intended to run in an item context (implicit 'this'); the check uses Item::getSurfaceWeight(this) as a single boolean-like gate.",
+    "No global flags, menus, or dialogue are touched; the script's effect is a single conditional stat award."
   ],
   "notable_control_flow": [
-    "Entry on Event 9 (U8P_FROCK::release) for the FROCK instance.",
-    "Perform a 'set info' and 'process exclude' operation on the object referenced by the parameter (likely to mark or disable further processing of that object).",
-    "Call external Item::getSurfaceWeight(obj_ref) and store its return in a local (retval).",
-    "If retval == 0 then call AccumulateDexterity(15).",
-    "Return/exit after these steps."
+    "Single conditional branch: if Item::getSurfaceWeight(this) == 0 then call AccumulateDexterity(0x0F).",
+    "No loops, no menu branches, and no reads/writes to global flags."
   ],
   "open_questions": [
-    "What exact engine semantics do the 'set info' + 'process exclude' operations have here (what info id is set and which object is targeted)?",
-    "Does AccumulateDexterity(15) always apply to the player/avatar who released the item, or to a different actor determined by context (inferred to be the avatar but not explicit)?",
-    "Why is surface weight==0 used as the condition for awarding dexterity (game-design reason remains inferred)?",
-    "Are there additional side effects (e.g., visual/animation cues) tied to the set-info/process-exclude sequence that are not visible in the disassembly?"
+    "Which in-game actor receives the dexterity increase when AccumulateDexterity is called (the script does not explicitly pass an actor handle) — likely the avatar/owner but not explicit (confidence: medium).",
+    "What exact semantics does surface weight == 0 represent here (not on any surface vs. weightless) — inferred as 'not on a surface / in inventory' but not certain (confidence: medium).",
+    "Under what concrete player action or engine event is processType 0x020D invoked for this item (inferred to be an item U8P_FROCK::release/drop event but not guaranteed) — confidence: medium."
   ],
   "main_function": {
     "name": "U8P_FROCK::release",
     "execution_form": "process",
-    "purpose": "Respond to a U8P_FROCK::release event on a FROCK object by marking the object (set-info/process-exclude), checking its surface weight, and awarding 15 dexterity if the weight is zero.",
+    "purpose": "When the item is processed for U8P_FROCK::release, check whether its surface weight is zero and, if so, grant a dexterity bonus of 0x0F (15) via AccumulateDexterity.",
     "entry_conditions": [
-      "Event 9 (U8P_FROCK::release) — invoked when the relevant actor/item is released or leaves the trigger region (inferred event semantics)."
+      "Process type is 0x020D (this script is a 'U8P_FROCK::release' process tied to the item instance).",
+      "Runtime condition: Item::getSurfaceWeight(this) == 0 (only then AccumulateDexterity is invoked)."
     ],
     "confidence": "high"
   },
@@ -32,19 +30,19 @@
     {
       "name": "U8P_FROCK::release",
       "kind": "main",
-      "role": "Event handler for the FROCK object's U8P_FROCK::release event",
+      "role": "Utility process that conditionally awards dexterity when the item has zero surface weight.",
       "confidence": "high"
     },
     {
       "name": "Item::getSurfaceWeight",
       "kind": "extern",
-      "role": "Query an item's surface weight used to decide whether to award dexterity",
+      "role": "Query used as the conditional gate to determine whether to award dexterity.",
       "confidence": "high"
     },
     {
-      "name": "U8P_FROCK::AccumulateDexterity",
+      "name": "AccumulateDexterity",
       "kind": "extern",
-      "role": "Apply/accumulate dexterity points (called with 15 when weight==0)",
+      "role": "Engine call used to increase dexterity by a fixed amount (called with 0x0F).",
       "confidence": "high"
     }
   ],
@@ -54,14 +52,14 @@
       {
         "caller": "U8P_FROCK::release",
         "callee": "Item::getSurfaceWeight",
-        "purpose": "Return the surface weight of the object parameter so the script can compare it to zero",
+        "purpose": "Check the item's surface weight (used as the condition to decide whether to award dexterity).",
         "confidence": "high"
       },
       {
         "caller": "U8P_FROCK::release",
-        "callee": "U8P_FROCK::AccumulateDexterity",
-        "purpose": "Award/accumulate 15 dexterity to the relevant actor when the object's surface weight is zero",
-        "confidence": "high"
+        "callee": "AccumulateDexterity",
+        "purpose": "Award dexterity by the constant 0x0F (decimal 15); the exact recipient is not explicit in-script and is inferred by context (likely the player/owner).",
+        "confidence": "medium"
       }
     ]
   },
@@ -72,11 +70,12 @@
   "ui_tags": [
     "trigger",
     "cleanup",
+    "animation",
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_FROCK::FROCK::release",
-    "behavior_summary_one_liner": "Handles the 'U8P_FROCK::release' event for a FROCK object: mark/update the passed object with an info/process-exclude operation, check the object's surface weight, and if that weight is zero, award/accumulate 15 dexterity to the avatar.",
+    "main_function": "U8P_FROCK::release",
+    "behavior_summary_one_liner": "U8P_FROCK::release is a small utility process that checks the item's surface weight and, if that weight is zero, awards 0x0F (15) dexterity via AccumulateDexterity.",
     "external_call_count": 2,
     "flag_read_count": 0,
     "flag_write_count": 0

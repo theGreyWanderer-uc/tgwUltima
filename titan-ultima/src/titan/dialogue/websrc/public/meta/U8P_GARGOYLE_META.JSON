@@ -3,27 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_GARGOYLE.json",
   "file": "U8P_GARGOYLE",
   "behavior_summary": [
-    "Handles the 'U8P_GARGOYLE::look' (examine) event for a gargoyle object. When triggered it associates an info/description entry with the target object and makes the object emit a short label string \"gargoyle \".",
-    "Sequence: set an info id (0x208) on the object, adjust process state (process exclude), construct the literal string \"gargoyle \", call Item::bark(object, \"gargoyle \") to display/emit that label, free the temporary string, propagate the bark return value, then suspend.",
-    "This is a presentation/description routine: it does not change persistent global quest flags and primarily provides UI feedback when the player/actor inspects the gargoyle."
+    "When the gargoyle NPC/object is examined (the U8P_GARGOYLE::look process triggers), the script emits a single short bark: \"gargoyle \".",
+    "After emitting the bark the process performs a suspend/terminate step (inferred), so the U8P_GARGOYLE::look interaction ends or pauses immediately after the message.",
+    "There is no branching, menu interaction, global-flag reading/writing, or external calls—this is a minimal descriptive handler."
   ],
   "notable_control_flow": [
-    "Entry (Event 0 'U8P_GARGOYLE::look') -> push info id 0x208 and object -> set info on object -> process exclude (adjusts call context) -> build literal string \"gargoyle \" -> Item::bark(object, string) -> free string -> return bark retval -> suspend.",
-    "Control flow is linear and short-circuited: no branching or global-state mutation is observed; the routine's visible effect is the bark and the setting of the info id on the object.",
-    "The routine issues a suspend after preparing the return value, indicating it executes in a process context (execution_form: process) and yields control back to the engine afterward."
+    "U8P_GARGOYLE::look is a single linear process: bark then suspend (no conditional branches or calls).",
+    "The process is registered as a U8P_GARGOYLE::look/examine handler (process type 0x0208) and therefore runs in response to player examine/inspect actions."
   ],
   "open_questions": [
-    "Exact semantic meaning of info id 0x208 (what description or state it represents) — inferred to be a U8P_GARGOYLE::look/description id but not proven.",
-    "Precise effect of 'process exclude' in this context (what processing is being excluded and for how long) — inferred to alter process flags before the bark call.",
-    "Who is the effective recipient of Item::bark in multi-process contexts (the object itself acting as a process vs. the player's process) — inferred but not explicit in disassembly.",
-    "Whether the bark return value is used by the caller or solely returned for engine bookkeeping (inferred to be propagated but downstream usage is unknown)."
+    "Does the inferred suspend correspond to the engine's suspend/stop for U8P_GARGOYLE::look processes or is it an explicit yield that allows other processing? (confidence: low)",
+    "Is the trailing space in the bark string \"gargoyle \" significant (placeholder for punctuation or concatenation) or an artifact of extraction? (confidence: low)",
+    "Could this handler also be invoked by fast-area entry for a nearby trigger, or is it strictly the player-initiated U8P_GARGOYLE::look/examine action? (confidence: medium)"
   ],
   "main_function": {
     "name": "U8P_GARGOYLE::look",
     "execution_form": "process",
-    "purpose": "Provide the in-game description/label for a gargoyle when it is examined: mark the object with an info id and emit the short descriptive string \"gargoyle \".",
+    "purpose": "Provide the short description when the player examines or 'looks at' the gargoyle; display a one-line bark and then end/pause the U8P_GARGOYLE::look process.",
     "entry_conditions": [
-      "Event 0 (U8P_GARGOYLE::look) — when the player/avatar looks at or examines the gargoyle (area/interaction 'U8P_GARGOYLE::look' event)."
+      "Triggered by the engine's U8P_GARGOYLE::look/examine event for this NPC/object (processType 0x0208).",
+      "In-game: invoked when a player inspects or targets the gargoyle to 'U8P_GARGOYLE::look' at it."
     ],
     "confidence": "high"
   },
@@ -31,77 +30,25 @@
     {
       "name": "U8P_GARGOYLE::look",
       "kind": "main",
-      "role": "Handles the U8P_GARGOYLE::look/examine event for the gargoyle object and drives description display.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine invoked to display or emit a short text string from an item/process.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_GARGOYLE::set info",
-      "kind": "extern",
-      "role": "Engine operation to associate an info/description id (0x208) with the target object.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_GARGOYLE::process exclude",
-      "kind": "extern",
-      "role": "Engine/process-state opcode that alters process handling for the ensuing operation (inferred).",
-      "confidence": "medium"
-    },
-    {
-      "name": "U8P_GARGOYLE::free string",
-      "kind": "extern",
-      "role": "Deallocate the temporary string buffer used for the bark call.",
+      "role": "examine/description handler (emits a single bark and suspends)",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_GARGOYLE::look",
-        "callee": "U8P_GARGOYLE::set info",
-        "purpose": "Associate info id 0x208 with the target object so that the U8P_GARGOYLE::look event provides that info/description.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GARGOYLE::look",
-        "callee": "U8P_GARGOYLE::process exclude",
-        "purpose": "Adjust process state/flags before calling Item::bark (likely to prevent re-entrancy or additional processing during bark).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_GARGOYLE::look",
-        "callee": "Item::bark",
-        "purpose": "Cause the object to emit/display the literal label \"gargoyle \" to the relevant viewer/process.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GARGOYLE::look",
-        "callee": "U8P_GARGOYLE::free string",
-        "purpose": "Release the temporary string buffer allocated to hold \"gargoyle \".",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
     "writes": []
   },
   "ui_tags": [
-    "trigger",
-    "cleanup",
-    "animation",
-    "guard"
+    "trigger"
   ],
   "quick_facts": {
-    "main_function": "GARGOYLE::look",
-    "behavior_summary_one_liner": "Handles the 'U8P_GARGOYLE::look' (examine) event for a gargoyle object. When triggered it associates an info/description entry with the target object and makes the object emit a short label string \"gargoyle \".",
-    "external_call_count": 4,
+    "main_function": "U8P_GARGOYLE::look",
+    "behavior_summary_one_liner": "When the gargoyle NPC/object is examined (the U8P_GARGOYLE::look process triggers), the script emits a single short bark: \"gargoyle \".",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

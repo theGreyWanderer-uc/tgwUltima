@@ -3,28 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_KORGFANG.json",
   "file": "U8P_KORGFANG",
   "behavior_summary": [
-    "Handles the 'U8P_KORGFANG::look' (examine) event for the Korghin's Fang item by presenting its name to the inspecting process.",
-    "Constructs the literal string \"Korghin's Fang \", sets up engine context (set info / process exclude and push PID) to protect or identify the call context, and invokes the engine/item routine Item::bark to send the string to the viewer.",
-    "Frees the temporary string, checks the return value of Item::bark via an implies/pop pattern, then suspends and returns. No global game-state flags are modified by this script."
+    "U8P_KORGFANG::look is an examine/inspect handler for the object KORGFANG. When triggered it displays a single line of player-facing text: \"Korghin's Fang\".",
+    "After showing the text the process suspends/waits for player acknowledgement (the engine's suspend/await behavior), effectively pausing the U8P_KORGFANG::look interaction until dismissed.",
+    "The routine contains no branching, menus, flag reads/writes, or external API calls; it does not modify game state.",
+    "The file also contains item metadata describing weapon stats (e.g., baseDamage 7, magic/blade, attackDexBonus 4, armourBonus 1), but that metadata is not referenced by the U8P_KORGFANG::look process."
   ],
   "notable_control_flow": [
-    "Entry on Event 0 (U8P_KORGFANG::look) for the item.",
-    "Build a short literal string containing the item's display name.",
-    "Perform engine context operations (set info, process exclude) and push the viewer PID onto the stack.",
-    "Call external routine Item::bark(viewer_pid, \"Korghin's Fang \") to display/announce the name.",
-    "Free the temporary string, examine the return value (retval) through an implies/pop sequence, then suspend and exit."
+    "U8P_KORGFANG::look: emit bark/dialogue line \"Korghin's Fang\" -> suspend/wait. No conditional branches or subsequent actions.",
+    "Entry is event-driven (U8P_KORGFANG::look/examine); flow is linear and ends by pausing the process until player dismisses the text."
   ],
   "open_questions": [
-    "Exact semantics and target of the 'set info' and 'process exclude' operations used before the bark call (which info id/object they affect).",
-    "Whether [BP+06h] is always a viewer/process PID in all contexts or can represent another process reference in some cases (inferred but not explicitly encoded).",
-    "Precise meaning of the implies/pop sequence and how the returned value from Item::bark could affect subsequent scripted flow in other, longer handlers."
+    "Is U8P_KORGFANG::look invoked by an explicit player 'U8P_KORGFANG::look' menu option, by entering a fast-area trigger, or both? (inferred but not explicit)",
+    "Are the item metadata fields used elsewhere (inventory/equipment, combat) even though U8P_KORGFANG::look does not reference them?"
   ],
   "main_function": {
     "name": "U8P_KORGFANG::look",
     "execution_form": "process",
-    "purpose": "When an actor/player examines the Korghin's Fang item, prepare context and instruct the engine to present the item's name to that actor.",
+    "purpose": "Provide the short description shown when the player examines the KORGFANG object; display the item's name and suspend until dismissal.",
     "entry_conditions": [
-      "Event 0 (U8P_KORGFANG::look) — triggered when the Avatar or relevant actor looks at/inspects the item"
+      "Player performs an examine/'U8P_KORGFANG::look' action on the KORGFANG object.",
+      "Engine invokes the object's U8P_KORGFANG::look/inspect process (process type 0x0208), which may be triggered by menu selection or entering the object's fast-area."
     ],
     "confidence": "high"
   },
@@ -32,26 +30,13 @@
     {
       "name": "U8P_KORGFANG::look",
       "kind": "main",
-      "role": "Look event handler for the Korghin's Fang item: prepares context and issues a bark to display the item name.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine that emits/displays a short text message from an item/process to a target process/player.",
+      "role": "examine/inspect handler that displays the item's short name and suspends",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_KORGFANG::look",
-        "callee": "Item::bark",
-        "purpose": "Send/display the text \"Korghin's Fang \" to the viewer/process that inspected the item.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -59,14 +44,12 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "animation",
-    "guard"
+    "informational"
   ],
   "quick_facts": {
-    "main_function": "KORGFANG::look",
-    "behavior_summary_one_liner": "Handles the 'U8P_KORGFANG::look' (examine) event for the Korghin's Fang item by presenting its name to the inspecting process.",
-    "external_call_count": 1,
+    "main_function": "U8P_KORGFANG::look",
+    "behavior_summary_one_liner": "U8P_KORGFANG::look is an examine/inspect handler for the object KORGFANG. When triggered it displays a single line of player-facing text: \"Korghin's Fang\".",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

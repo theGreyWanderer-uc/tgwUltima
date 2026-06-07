@@ -3,25 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_STATUE.json",
   "file": "U8P_STATUE",
   "behavior_summary": [
-    "This script implements the 'U8P_STATUE::look' (examine) handler for a statue object. When a player or actor inspects the statue the handler prepares and displays a short descriptive text and manages related object state around that presentation.",
-    "On entry it sets an info/state code (0x0208) on the statue's process/object and applies a process-exclude operation to that same object (likely to protect or alter processing while the description is presented).",
-    "It constructs a temporary string beginning with the literal \"statue \" (concatenated with a pid/context), calls the statue instance's Item::bark method to present that text to the viewer, frees the temporary string, returns the bark result, and then suspends."
+    "Provides the response when the player uses the 'U8P_STATUE::look' verb on the STATUE object: emits a single short bark reading \"statue \" and then suspends/ends the U8P_STATUE::look interaction.",
+    "No branching, menu presentation, external calls, or global flag reads/writes are present in this script.",
+    "The routine is minimal: one player-facing message followed by process termination/suspend."
   ],
   "notable_control_flow": [
-    "Entry (Event 0 'U8P_STATUE::look') -> set info (0x0208) on target object/process -> process exclude on target object/process -> build temporary string 'statue ' -> call Item::bark with constructed string -> free temporary string -> preserve/return bark retval -> implies/pop sequence -> suspend/return.",
-    "The handler uses an implies/pop sequence after the Item::bark return value; this appears to be a short control/return cleanup before suspending."
+    "Single linear path: enter U8P_STATUE::look -> Bark \"statue \" -> suspend/terminate the process.",
+    "No conditional logic, menus, or helper function calls are used.",
+    "Two Unknown nodes are present in the raw representation (likely structural markers) but do not alter runtime behavior in the canonical summary."
   ],
   "open_questions": [
-    "Exact semantic meaning of info code 0x0208 (inferred to select descriptive metadata or dialog entry but not proven).",
-    "Precise effect and scope of the 'process exclude' opcode in this context (appears to prevent reentrancy or normal processing, but details are engine-specific).",
-    "What exact data is concatenated into the temporary string beyond the literal 'statue ' (a pid or context pointer is pushed; the final human-visible text beyond the literal is inferred but not explicitly documented)."
+    "Does the trailing space in the bark text \"statue \" have any in-game significance (formatting/concatenation) or is it an artifact?",
+    "What do the Unknown nodes in the raw representation correspond to in the original source (block delimiters, suspend marker)? This is low-confidence and does not change observed behavior."
   ],
   "main_function": {
     "name": "U8P_STATUE::look",
     "execution_form": "process",
-    "purpose": "Respond to a player/actor 'U8P_STATUE::look' (examine) action on a statue by setting an info/state on the statue, temporarily modifying its process handling, building a short descriptive string ('statue ...'), invoking the statue's Item::bark to present that text, cleaning up temporary resources, and returning the bark result.",
+    "purpose": "Handle the player's U8P_STATUE::look/examine action for the STATUE by emitting a short description bark and ending the interaction.",
     "entry_conditions": [
-      "Event 0 — the statue is looked at or examined by the avatar/actor (the 'U8P_STATUE::look' action)."
+      "Triggered when the player inspects/uses the 'U8P_STATUE::look' verb on the STATUE (object U8P_STATUE::look/inspect event; process type 0x0208)."
     ],
     "confidence": "high"
   },
@@ -29,62 +29,13 @@
     {
       "name": "U8P_STATUE::look",
       "kind": "main",
-      "role": "Handle the U8P_STATUE::look/examine event for the statue object; prepare and present descriptive text and manage temporary state around that presentation.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item method used to present/display/speak a string from the item/process; called by STATUE::look to show the statue description.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_STATUE::set info (opcode)",
-      "kind": "extern",
-      "role": "Engine opcode used to set an info/state code (0x0208) on a target object/process before presenting the description.",
-      "confidence": "medium"
-    },
-    {
-      "name": "U8P_STATUE::process exclude (opcode)",
-      "kind": "extern",
-      "role": "Engine opcode applied to the target process/object to alter or pause normal processing while the bark occurs (likely a reentrancy or processing guard).",
-      "confidence": "medium"
-    },
-    {
-      "name": "U8P_STATUE::free string (opcode)",
-      "kind": "extern",
-      "role": "Engine opcode used to deallocate the temporary string buffer created for the bark call.",
+      "role": "Provides the short description when the player examines the STATUE (emits a single bark and suspends).",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_STATUE::look",
-        "callee": "U8P_STATUE::set info (opcode)",
-        "purpose": "Set an info/state identifier (0x0208) on the statue object/process to select related metadata or behavior prior to presenting the description.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_STATUE::look",
-        "callee": "U8P_STATUE::process exclude (opcode)",
-        "purpose": "Temporarily exclude or modify processing for the statue process/object to avoid reentrant or undesired processing during the bark/description.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_STATUE::look",
-        "callee": "Item::bark",
-        "purpose": "Present or emit the constructed descriptive string to the viewer (display text or play a voice/bark associated with the item).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_STATUE::look",
-        "callee": "U8P_STATUE::free string (opcode)",
-        "purpose": "Free the temporary string buffer allocated to build the description after Item::bark returns.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -93,13 +44,13 @@
   "ui_tags": [
     "trigger",
     "cleanup",
-    "guard",
-    "dialog"
+    "animation",
+    "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_STATUE::STATUE::look",
-    "behavior_summary_one_liner": "This script implements the 'U8P_STATUE::look' (examine) handler for a statue object. When a player or actor inspects the statue the handler prepares and displays a short descriptive text and manages related object state around that presentation.",
-    "external_call_count": 4,
+    "main_function": "U8P_STATUE::look",
+    "behavior_summary_one_liner": "Provides the response when the player uses the 'U8P_STATUE::look' verb on the STATUE object: emits a single short bark reading \"statue \" and then suspends/ends the U8P_STATUE::look interaction.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

@@ -3,28 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_STATUET.json",
   "file": "U8P_STATUET",
   "behavior_summary": [
-    "Implements the 'U8P_STATUET::look' (examine) behavior for a statuette item. When a player (or process) inspects the statuette the script marks that item as being handled to avoid re-entrancy, constructs/uses the short literal description \"statuette \", and asks the item to 'bark' that description to the requesting process so the player sees the short description.",
-    "Item-local state is changed to indicate processing/exclusion (via a set-info/process-exclude engine operation) so the same item is not reprocessed while the U8P_STATUET::look is handled.",
-    "No global game flags are read or written by this snippet; effects are local to the item/process context."
+    "U8P_STATUET::look is the object's examine/U8P_STATUET::look handler; when the player examines the statuette it displays a single short text/bark 'statuette'.",
+    "After showing the bark the process suspends, ending the U8P_STATUET::look interaction with no further side effects.",
+    "The handler is stateless: it does not read or write global flags, call external systems, or present menus or branching logic."
   ],
   "notable_control_flow": [
-    "Entry: triggered by the 'U8P_STATUET::look' (examine) event on the statuette.",
-    "Guard/mark: perform a set-info and process-exclude to mark the item as being processed (prevents re-entrancy).",
-    "Output: build/obtain the literal string \"statuette \", push the caller pid/context and the item pointer, and call Item::bark to present the description.",
-    "Cleanup: free/adjust the temporary string and propagate the bark call's return value through an implies/pop pattern before suspending/returning."
+    "Single linear flow: show bark 'statuette' then suspend the process.",
+    "No conditional branches, no menu/Ask nodes, and no external or internal calls observed."
   ],
   "open_questions": [
-    "Exact semantics and numeric id of the item-local info set by 'set info' / 'process exclude' (the disassembly shows the operations but not the named info key).",
-    "Whether the bark call concatenates additional context beyond the literal \"statuette \" or formats it differently before presentation (the script passes the literal but bark implementation details are external).",
-    "Whether any other engine-side listeners rely on the item-local info set here (i.e., downstream effects of marking/excluding the item)."
+    "Is the displayed string 'statuette' a final localized text key or a placeholder token used by the disassembler? (confidence: low)",
+    "Could the object be wired to area entry/exit triggers in other code paths (enterFastArea/leaveFastArea) not present here, or is it exclusively examined via the U8P_STATUET::look action? (confidence: low)"
   ],
   "main_function": {
     "name": "U8P_STATUET::look",
     "execution_form": "process",
-    "purpose": "Handle a player's 'U8P_STATUET::look' action on a statuette: mark the statuette as being processed to prevent re-entrancy, present a short description string to the player (via Item::bark), and then clean up and return/suspend.",
+    "purpose": "Provide the short description when the player examines the statuette object: emit the bark 'statuette' and then suspend the U8P_STATUET::look process.",
     "entry_conditions": [
-      "Invoked when the statuette receives the 'U8P_STATUET::look' (examine) event (Event 0 / player inspects the item).",
-      "Assumes [BP+06h] contains the item/process context pointer for the statuette and that a pid/process id is available/passed to Item::bark."
+      "Invoked when the player uses the U8P_STATUET::look/examine action on this statuette object (process type 0x0208).",
+      "Implied end: suspends after emitting the bark to terminate the U8P_STATUET::look interaction."
     ],
     "confidence": "high"
   },
@@ -32,53 +29,25 @@
     {
       "name": "U8P_STATUET::look",
       "kind": "main",
-      "role": "Handles the item's 'U8P_STATUET::look' event: mark item processing and call Item::bark with the literal description.",
+      "role": "U8P_STATUET::look/examine handler (shows short description and suspends)",
       "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine that presents a short text/message originating from an item/process to a target process/player. Used to show the statuette's description.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_STATUET::set info / process exclude",
-      "kind": "extern",
-      "role": "Engine operations used to set an item-local info/state and exclude the item from normal processing while handling the U8P_STATUET::look event (prevents re-entrancy).",
-      "confidence": "medium"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_STATUET::look",
-        "callee": "U8P_STATUET::set info / process exclude",
-        "purpose": "Mark the target item as being processed and exclude it from further processing while the U8P_STATUET::look is handled (item-local guard).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_STATUET::look",
-        "callee": "Item::bark",
-        "purpose": "Ask the item to display/vocalize the short description string (literal \"statuette \") to the requesting process/player (pid).",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
     "writes": []
   },
   "ui_tags": [
-    "trigger",
-    "cleanup",
-    "animation",
-    "guard"
+    "trigger"
   ],
   "quick_facts": {
-    "main_function": "STATUET::look",
-    "behavior_summary_one_liner": "Implements the 'U8P_STATUET::look' (examine) behavior for a statuette item. When a player (or process) inspects the statuette the script marks that item as being handled to avoid re-entrancy, constructs/uses the short literal description \"statuette \", and asks the item to 'bark' that description to the requesting process so the player sees the short description.",
-    "external_call_count": 2,
+    "main_function": "U8P_STATUET::look",
+    "behavior_summary_one_liner": "U8P_STATUET::look is the object's examine/U8P_STATUET::look handler; when the player examines the statuette it displays a single short text/bark 'statuette'.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

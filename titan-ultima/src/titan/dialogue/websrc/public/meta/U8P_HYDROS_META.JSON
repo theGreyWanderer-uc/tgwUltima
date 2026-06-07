@@ -3,140 +3,240 @@
   "source_of_truth": "dialogue/json/U8P_HYDROS.json",
   "file": "U8P_HYDROS",
   "behavior_summary": [
-    "Registers and boots a Hydros (Water Titan) NPC when the entity is created, announcing its short name and then suspending its initializer (U8P_HYDROS::init_00).",
-    "Provides a dialog-driven interaction handler (U8P_HYDROS::init_10) that builds dynamic choice lists, presents lines and multi-choice prompts to the player, reads the player's selection, and branches across many canned responses.",
-    "Records conversation and quest progress in global flags (00E2, 00E3, 00E4, 00E5) to gate later dialog and behavior.",
-    "Can schedule delayed/timed actions and trigger in-world effects (animations, departure, and likely map/object manipulation) via engine calls when the player selects certain dialog options.",
-    "Contains helper utilities: a list/choice iterator (U8P_HYDROS::init_06) used when assembling/reading dialog lists, and a background worker (U8P_HYDROS::init_10_worker) that clears a runtime flag and calls lower-level world-manipulation routines using indices stored in locals."
+    "This script implements the Hydros (Water Titan) NPC: a short U8P_HYDROS::look/inspect handler and a menu-driven interaction that can change Hydros' hostility state, spawn visual/scene objects, and ultimately free Hydros (triggering hostile behavior).",
+    "U8P_HYDROS::look is a simple 'examine' handler that displays the short description \"Water Titan\" and ends.",
+    "U8P_HYDROS::use constructs a dynamic conversation menu (local8), presents options, captures the player's choice (local5), and branches. Branching depends on global flags including hydrosFree, metHydros, hydrosBegged, hydrosPissed and a condition getPowerAO. Options include identify/apologize/beg/refuse/request power/free or leave; choices set/clear flags and may spawn items or sequences.",
+    "Several helper functions (U8P_HYDROS::func0D5F .. U8P_HYDROS::func124F) manage creation and frame-based animation/state for temporary items used in cinematic or visual effects. U8P_HYDROS::func13FB is the canonical 'Hydros freed' sequence: it announces freedom, sets hydrosFree, spawns an external process (likely hostile behavior), calls teardown (U8P_HYDROS::func0F0F), and unfreezes the avatar."
   ],
   "notable_control_flow": [
-    "Initialization (U8P_HYDROS::init_00) runs once on spawn: set NPC info/type/flags, exclude process, register short name \"Water Titan \", then suspend.",
-    "Primary runtime logic is event-driven: U8P_HYDROS::init_10 acts as a conversation state machine invoked on player interaction and repeatedly presents an slist (local8) to the player and branches based on the returned selection (local5).",
-    "Dialog branches set or clear global flags (00E2/00E3/00E4) which change greetings, available options, and whether Hydros will accept help or depart.",
-    "Certain dialog choices schedule delayed callbacks (call 0581:1C8B) or call engine routines (0050:0F0F, 0050:12B0) to animate or remove the NPC; the worker (init_10_worker) performs lower-level map/object changes (call 0050:0D5F) using computed addresses/indices.",
-    "A small background worker toggles/clears global [00E5] to indicate/reset worker activity, preventing duplicate operations while world changes are applied."
+    "Entry to U8P_HYDROS::use first checks hydrosFree; if true it immediately runs the freed sequence (U8P_HYDROS::func13FB) rather than normal dialogue.",
+    "U8P_HYDROS::use dynamically assembles the menu array local8 with MenuSet/MenuAdd/MenuUnion/MenuRemove based on metHydros, hydrosPissed, hydrosBegged, and getPowerAO, then presents it in a conversation loop and routes on strcmp(local5, ...).",
+    "Apology branches clear hydrosPissed (write) and continue dialogue; 'freeing' branches set hydrosFree and spawn external FREE::* processes then run teardown helpers (U8P_HYDROS::func0F0F) to advance/clean item frames and remove temporary objects.",
+    "Visual/animation helpers follow a chain: U8P_HYDROS::func1003 -> U8P_HYDROS::func105F -> U8P_HYDROS::func10EE / U8P_HYDROS::func114F -> U8P_HYDROS::func11AB -> U8P_HYDROS::func124F (and others). These read Item::getFrame, set Item::setFrame, occasionally spawn FREE::* processes, and U8P_HYDROS::use suspend yields to step animation over time."
   ],
   "open_questions": [
-    "Exact meaning and game-visible semantics of global flags 00E2, 00E3, 00E4 beyond inferred conversation/quest state (names and persistent effects are not present in the disassembly).",
-    "Precise engine behavior of external call IDs (0050:0D5F, 0050:0F0F, 0581:1C19, etc.): inferred from usage but exact side effects (which tiles/objects change or what animations play) are not fully determined.",
-    "Whether U8P_HYDROS::init_10_worker is started as its own process/thread or invoked inline by init_10 in particular branches (disassembly shows a worker but not the scheduler details).",
-    "Full contents and triggers of the truncated helper U8P_HYDROS::init_08 (starts at 0x0EA7) — its role is inferred but not confirmed due to truncation."
+    "Exact gameplay consequence of freeing Hydros for the player's long-term progression (beyond immediate spawn of hostile behavior) is not explicit here — e.g., whether rewards or quest state changes occur.",
+    "Precise semantics and allowed values of hydrosFree (0x01 vs 0x02) and whether other systems read the same flag for different semantics (inferred but not fully confirmed).",
+    "The external spawn targets FREE::func1C8B and FREE::func1C19 appear to control hostile or follow-up behavior; their concrete behaviors are external and unknown from this file.",
+    "Meaning and source of getPowerAO condition used to gate the 'power' menu option: whether it's an ability check, a quest flag, or an inventory condition is inferred but not proven."
   ],
   "main_function": {
-    "name": "U8P_HYDROS::init_00",
+    "name": "U8P_HYDROS::look",
     "execution_form": "process",
-    "purpose": "Entity initialization: set NPC object info/flags, exclude a process from normal processing, register the short name 'Water Titan ' for the NPC, then suspend. Acts as bootstrap for the Hydros actor.",
+    "purpose": "Provide the short examine/\"U8P_HYDROS::look at\" description for the Hydros NPC and terminate the U8P_HYDROS::look process.",
     "entry_conditions": [
-      "Script initialization / spawn (runs once when the object/process is created)."
+      "Invoked when the player uses the 'U8P_HYDROS::look' (examine) action on the Hydros NPC (U8P_HYDROS::look event/processType 0x0208)."
     ],
     "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_HYDROS::init_00",
+      "name": "U8P_HYDROS::look",
       "kind": "main",
-      "role": "Entity initializer / NPC registration and bootstrap",
+      "role": "brief description handler for examine/U8P_HYDROS::look",
       "confidence": "high"
     },
     {
-      "name": "U8P_HYDROS::init_10",
-      "kind": "helper",
-      "role": "Primary conversation and interaction state machine (dialog branching, choice building, set/clear global flags, trigger world actions and timers)",
+      "name": "U8P_HYDROS::use",
+      "kind": "main",
+      "role": "conversation/dialogue manager; builds menu, branches on choices, sets/clears conversation flags and triggers sequences including freeing Hydros",
       "confidence": "high"
     },
     {
-      "name": "U8P_HYDROS::init_06",
+      "name": "U8P_HYDROS::func0D5F",
       "kind": "helper",
-      "role": "Iterator/choice-list reader utility used to iterate entries in a list or buffer (helper for slist operations)",
+      "role": "creates/prepares an item (Item::legal_create) and cycles its frame; used by placement/visual helpers",
       "confidence": "medium"
     },
     {
-      "name": "U8P_HYDROS::init_10_worker",
+      "name": "U8P_HYDROS::func0DDB",
       "kind": "helper",
-      "role": "Background worker that polls locals and calls lower-level engine routines to apply map/object changes; clears runtime flag global [00E5]",
+      "role": "manage item placement and initial frame state; computes offsets and calls creation helper",
       "confidence": "medium"
     },
     {
-      "name": "U8P_HYDROS::init_08",
+      "name": "U8P_HYDROS::func0EA7",
       "kind": "helper",
-      "role": "Truncated helper likely related to interaction callbacks/continuation of polling logic",
-      "confidence": "low"
+      "role": "small frame/state transition utility for an item",
+      "confidence": "medium"
     },
     {
-      "name": "U8P_HYDROS::calli_0049",
-      "kind": "extern",
-      "role": "Engine/IOC: present a single text message from NPC to player (used as Item/NPC bark)",
+      "name": "U8P_HYDROS::func0F0F",
+      "kind": "helper",
+      "role": "teardown/transition helper invoked when dialogue ends or Hydros is freed; cleans up spawned items and advances frames",
       "confidence": "high"
     },
     {
-      "name": "U8P_HYDROS::calli_004A",
-      "kind": "extern",
-      "role": "Engine/IOC: present a slist (choice UI) to the player and return their selection",
+      "name": "U8P_HYDROS::func1003",
+      "kind": "helper",
+      "role": "frame progression helper; inspects and increments item frames, delegates to U8P_HYDROS::func105F",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_HYDROS::func105F",
+      "kind": "helper",
+      "role": "animation/state-step helper that may spawn external processes and call U8P_HYDROS::func10EE",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_HYDROS::func10EE",
+      "kind": "helper",
+      "role": "frame transition utility that sets frames based on current value",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_HYDROS::func114F",
+      "kind": "helper",
+      "role": "frame advancement wrapper that delegates to U8P_HYDROS::func11AB when reaching a threshold",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_HYDROS::func11AB",
+      "kind": "helper",
+      "role": "animation-stage helper that may spawn and ultimately call U8P_HYDROS::func124F",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_HYDROS::func124F",
+      "kind": "helper",
+      "role": "final/alternate frame setter used for reset/cleanup of item visuals",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_HYDROS::func12B0",
+      "kind": "helper",
+      "role": "creates and pops one or more items into the world at offsets and spawns per-item helpers (used during certain dialogue outcomes)",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_HYDROS::func13FB",
+      "kind": "helper",
+      "role": "canonical 'Hydros freed' sequence: announces freedom, sets hydrosFree, spawns external hostile behavior, calls teardown, and unfreezes the player",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
-        "caller": "U8P_HYDROS::init_10",
-        "callee": "U8P_HYDROS::init_06",
-        "purpose": "Iterate or read entries from a dialog/choice list while building or processing slist choices presented to the player.",
+        "caller": "U8P_HYDROS::use",
+        "callee": "U8P_HYDROS::func0DDB",
+        "purpose": "Positioning/placement of visual items used during dialogue or responses (menu choices that spawn objects).",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_HYDROS::init_10",
-        "callee": "U8P_HYDROS::init_10_worker",
-        "purpose": "Start or delegate world-modification tasks (map/object changes and worker-managed state resets) after certain dialog choices or when applying Hydros' requested action.",
+        "caller": "U8P_HYDROS::use",
+        "callee": "U8P_HYDROS::func0F0F",
+        "purpose": "Transition/teardown after freeing or ending a dialogue branch; cleanup of visual state and temporary items.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_HYDROS::use",
+        "callee": "U8P_HYDROS::func12B0",
+        "purpose": "Create/pop items into the world as part of specific dialogue outcomes (e.g., 'Too bad.' or other responses).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_HYDROS::use",
+        "callee": "U8P_HYDROS::func13FB",
+        "purpose": "Run the freed sequence when hydrosFree is already set or when the player chooses to free Hydros.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_HYDROS::func0DDB",
+        "callee": "U8P_HYDROS::func0D5F",
+        "purpose": "Delegate to item creation/preparation helper after computing position offsets.",
         "confidence": "medium"
+      },
+      {
+        "caller": "U8P_HYDROS::func0DDB",
+        "callee": "U8P_HYDROS::func0EA7",
+        "purpose": "Invoke a small frame/state transition helper as part of item visual progression.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_HYDROS::func1003",
+        "callee": "U8P_HYDROS::func105F",
+        "purpose": "Delegate next-stage frame handling when a specific frame threshold is reached (0x15 -> 0x16).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_HYDROS::func105F",
+        "callee": "U8P_HYDROS::func10EE",
+        "purpose": "Call frame-setting helper when a small local counter reaches a threshold (final stage of that chain).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_HYDROS::func114F",
+        "callee": "U8P_HYDROS::func11AB",
+        "purpose": "Delegate to the next animation stage when item frame equals a particular value (0x13).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_HYDROS::func11AB",
+        "callee": "U8P_HYDROS::func124F",
+        "purpose": "Finalize or reset item frame/state as part of the animation/cleanup chain.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_HYDROS::func12B0",
+        "callee": "U8P_HYDROS::func0D5F",
+        "purpose": "Post-create setup of created items (called after Item::create/pop).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_HYDROS::func13FB",
+        "callee": "U8P_HYDROS::func0F0F",
+        "purpose": "Invoke teardown/visual cleanup after executing the freed announcement and spawning follow-up processes.",
+        "confidence": "high"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_HYDROS::init_10",
-        "callee": "U8P_HYDROS::calli_0049",
-        "purpose": "Display single lines of dialog from Hydros to the player (NPC bark/text output).",
+        "caller": "U8P_HYDROS::func0D5F",
+        "callee": "Item::legal_create",
+        "purpose": "Create or legally instantiate an item prototype and return a handle for later frame updates.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_HYDROS::init_10",
-        "callee": "U8P_HYDROS::calli_004A",
-        "purpose": "Present assembled slist choices (local8) to the player and capture selection into local5.",
+        "caller": "U8P_HYDROS::*",
+        "callee": "Item::getFrame / Item::setFrame / Item::getX / Item::getY / Item::getZ",
+        "purpose": "Query and manipulate item animation frames and positions for visual/placement logic across many helpers.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_HYDROS::init_10",
-        "callee": "U8P_HYDROS::call 0581:1C8B",
-        "purpose": "Schedule a timed/delayed event or callback (used to defer actions after dialog branches).",
+        "caller": "U8P_HYDROS::func12B0",
+        "callee": "Item::create / Item::pop",
+        "purpose": "Create item entities and place them into the world at coordinates computed from an anchor item.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_HYDROS::*",
+        "callee": "spawn ->FREE::func1C19 / spawn ->FREE::func1C8B",
+        "purpose": "Start external processes (likely hostile or post-release behavior) when animation thresholds or freeing events occur.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_HYDROS::init_10",
-        "callee": "U8P_HYDROS::call 0581:1C19",
-        "purpose": "Open/advance a UI or player prompt following certain dialog branches (inferred from usage context).",
+        "caller": "U8P_HYDROS::func13FB",
+        "callee": "setAvatarInStasis",
+        "purpose": "Unfreeze the player avatar at the end of the freeing sequence (setAvatarInStasis(0x00)).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_HYDROS::use",
+        "callee": "playMusic",
+        "purpose": "Change background music during a cinematic or dramatic sequence (inferred usage around freeing).",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_HYDROS::init_10",
-        "callee": "U8P_HYDROS::call 0050:0F0F",
-        "purpose": "Commit NPC state changes (animations/movement/state update) after modifying object bytes/flags.",
-        "confidence": "medium"
+        "caller": "U8P_HYDROS::*",
+        "callee": "suspend",
+        "purpose": "Yield/tick delays used throughout for timing animation and synchronizing with spawned processes.",
+        "confidence": "high"
       },
       {
-        "caller": "U8P_HYDROS::init_10",
-        "callee": "U8P_HYDROS::call 0050:12B0",
-        "purpose": "Trigger an in-world reaction (sound/animation/visual) when Hydros rejects or departs.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_HYDROS::init_10",
-        "callee": "U8P_HYDROS::call 0050:13FB",
-        "purpose": "Perform a conditional check used to gate dialog paths (returns a boolean/retval used with implies).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_HYDROS::init_10_worker",
-        "callee": "U8P_HYDROS::call 0050:0D5F",
-        "purpose": "Apply lower-level map/object modifications (likely the operation that 'frees' Hydros by altering tiles or objects) using computed addresses/indices from locals.",
+        "caller": "U8P_HYDROS::func12B0",
+        "callee": "METHOD::toggleStatusFlag",
+        "purpose": "Set a status flag on a created item (0x20) to change its behavior or visibility after creation.",
         "confidence": "medium"
       }
     ]
@@ -144,50 +244,50 @@
   "global_flags": {
     "reads": [
       {
-        "name": "global [0036 02]",
-        "likely_effect": "A world or quest flag read to influence an early dialog branch (tested for equality with 1).",
-        "confidence": "medium"
-      },
-      {
-        "name": "global [00E2 01]",
-        "likely_effect": "Read to choose greeting/branch variants; acts as a boolean marker for prior acknowledgement in the Hydros conversation.",
+        "name": "hydrosFree",
+        "likely_effect": "Gate: when true the script runs the freed sequence instead of normal dialogue (Hydros already freed).",
         "confidence": "high"
       },
       {
-        "name": "global [004E 01]",
-        "likely_effect": "Read to determine conversation flow or NPC state/quest progress that affects available dialog lines.",
-        "confidence": "medium"
-      },
-      {
-        "name": "global [00E4 01]",
-        "likely_effect": "Read to gate presentation of some choices and to decide whether to end the conversation.",
+        "name": "metHydros",
+        "likely_effect": "Indicates whether player has identified Hydros; controls different menu options and greeting text.",
         "confidence": "high"
       },
       {
-        "name": "global [00E3 01]",
-        "likely_effect": "Read to branch apology/repentance dialog and determine Hydros' disposition.",
+        "name": "hydrosBegged",
+        "likely_effect": "Tracks whether the player begged Hydros previously and alters available dialogue branches/options.",
         "confidence": "medium"
+      },
+      {
+        "name": "hydrosPissed",
+        "likely_effect": "Marks Hydros' angry state which restricts menu options and changes replies until cleared (apology branch clears it).",
+        "confidence": "high"
+      },
+      {
+        "name": "getPowerAO",
+        "likely_effect": "A gating condition (likely an ability or quest-state check) used to decide whether Hydros offers a 'power' option.",
+        "confidence": "low"
       }
     ],
     "writes": [
       {
-        "name": "global [00E2 01]",
-        "likely_effect": "Set to 1 when the player selects a dialog option that acknowledges Hydros' identity; used to mark that an identity exchange or important dialog node occurred.",
+        "name": "metHydros",
+        "likely_effect": "Set when player identifies Hydros so subsequent interactions U8P_HYDROS::use the 'met' dialog branch.",
         "confidence": "high"
       },
       {
-        "name": "global [00E3 01]",
-        "likely_effect": "Toggled by dialog outcomes to record whether the player apologized or otherwise affected Hydros' disposition.",
+        "name": "hydrosPissed",
+        "likely_effect": "Cleared (set to 0) in apology branch to reduce hostility.",
         "confidence": "medium"
       },
       {
-        "name": "global [00E4 01]",
-        "likely_effect": "Set/cleared during interaction to control subsequent behavior, including farewell/leave branches and choice availability.",
+        "name": "hydrosFree",
+        "likely_effect": "Set to indicate Hydros has been freed (value observed 0x02) so future interactions take the freed path.",
         "confidence": "high"
       },
       {
-        "name": "global [00E5 01]",
-        "likely_effect": "Explicitly set to 0 by the worker helper to indicate/reset worker activity; used as a runtime guard to prevent repeated world modifications.",
+        "name": "local1",
+        "likely_effect": "Transient conversation marker used within U8P_HYDROS::use to promise player aid if Hydros is freed; a temporary/write-only conversational flag.",
         "confidence": "medium"
       }
     ]
@@ -199,8 +299,8 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_HYDROS::init_00",
-    "behavior_summary_one_liner": "Registers and boots a Hydros (Water Titan) NPC when the entity is created, announcing its short name and then suspending its initializer (U8P_HYDROS::init_00).",
+    "main_function": "U8P_HYDROS::look",
+    "behavior_summary_one_liner": "This script implements the Hydros (Water Titan) NPC: a short U8P_HYDROS::look/inspect handler and a menu-driven interaction that can change Hydros' hostility state, spawn visual/scene objects, and ultimately free Hydros (triggering hostile behavior).",
     "external_call_count": 8,
     "flag_read_count": 5,
     "flag_write_count": 4

@@ -3,29 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_DARTBORD.json",
   "file": "U8P_DARTBORD",
   "behavior_summary": [
-    "Implements the 'U8P_DARTBORD::look' (examine) event handler for the dart board item (DARTBORD::look).",
-    "When a player/actor examines the dart board, the script constructs the literal string \"dart board \" and asks the item/process system to 'bark' that text to the examining actor (via Item::bark).",
-    "The routine uses the caller/actor context passed into the handler (inferred from the push from [BP+06h]) as the target for the bark.",
-    "After invoking Item::bark it handles the call's return value (stored briefly in a local named retval), clears temporaries, then suspends/returns, indicating the U8P_DARTBORD::look interaction is complete.",
-    "No global flags are read or written by this handler in the observed excerpt."
+    "U8P_DARTBORD::look is a simple object 'U8P_DARTBORD::look' (examine) handler that displays a single short description to the player: the bark 'dart board'.",
+    "Immediately after showing the description the process issues a suspend, which appears to yield or pause the U8P_DARTBORD::look process (likely to let the message be shown before returning control).",
+    "No global flags, parameters, local variables, helper functions, or external calls are observed in this snippet — behavior is purely descriptive and self-contained."
   ],
   "notable_control_flow": [
-    "Entry on the 'U8P_DARTBORD::look' event (Event 0) for the DARTBORD item invokes U8P_DARTBORD::look.",
-    "U8P_DARTBORD::look pushes the actor/context and the literal string \"dart board \", then calls the external routine Item::bark.",
-    "The return value from Item::bark is captured into a local (retval), processed via an imply/pop sequence, then discarded.",
-    "Function ends by suspending the process and returning control to the engine (no further game-state modifications observed)."
+    "U8P_DARTBORD::look: entry on player 'U8P_DARTBORD::look' action -> emit Bark('dart board') -> suspend (process yields).",
+    "There is no branching, menu interaction, or external invocation present in the available code."
   ],
   "open_questions": [
-    "Is the value passed at [BP+06h] always the player PID, or can other actor/process types trigger the U8P_DARTBORD::look? (inferred as actor/context; confirmation needed)",
-    "Does Item::bark perform any side-effects beyond displaying text (e.g., logging, quest triggers) in other contexts that could affect game state here?",
-    "Are there any unseen preconditions or item info flags set elsewhere that change how this U8P_DARTBORD::look handler behaves under special circumstances?"
+    "What exact runtime effect does the suspend have here (visual pause, message queueing, or process termination)? (confidence: low)",
+    "Is there any broader game logic that listens for the suspend/resume of this process (e.g., to sequence further interactions)? (confidence: low)",
+    "Are there other functions or flags related to this object elsewhere in the game data that augment the simple U8P_DARTBORD::look behavior shown here? (confidence: low)"
   ],
   "main_function": {
     "name": "U8P_DARTBORD::look",
     "execution_form": "process",
-    "purpose": "Handle the examine/U8P_DARTBORD::look event for the dart board by emitting a short descriptive bark ('dart board ') to the examining actor, then suspend/return.",
+    "purpose": "Provide the short descriptive text when the player examines the dart board and then yield the process (suspend) to allow the message to be presented.",
     "entry_conditions": [
-      "Event 0 (U8P_DARTBORD::look) — triggered when a player/actor inspects the dart board item"
+      "Triggered by the player performing the 'U8P_DARTBORD::look' (examine) action on the dart board object"
     ],
     "confidence": "high"
   },
@@ -33,41 +29,25 @@
     {
       "name": "U8P_DARTBORD::look",
       "kind": "main",
-      "role": "Primary event handler for the dart board's 'U8P_DARTBORD::look' event; prepares and routes a short description to the viewer.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item system routine that displays or broadcasts a short text message from an item/process to a target actor/process.",
+      "role": "Provide object description on player examine (emit a single bark and suspend).",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_DARTBORD::look",
-        "callee": "Item::bark",
-        "purpose": "Deliver a short descriptive string ('dart board ') to the examining actor/process so the item can 'speak' its label.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
     "writes": []
   },
   "ui_tags": [
-    "trigger",
-    "cleanup",
-    "animation",
-    "guard"
+    "trigger"
   ],
   "quick_facts": {
-    "main_function": "DARTBORD::look",
-    "behavior_summary_one_liner": "Implements the 'U8P_DARTBORD::look' (examine) event handler for the dart board item (DARTBORD::look).",
-    "external_call_count": 1,
+    "main_function": "U8P_DARTBORD::look",
+    "behavior_summary_one_liner": "U8P_DARTBORD::look is a simple object 'U8P_DARTBORD::look' (examine) handler that displays a single short description to the player: the bark 'dart board'.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

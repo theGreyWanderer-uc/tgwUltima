@@ -3,125 +3,125 @@
   "source_of_truth": "dialogue/json/U8P_SCROLL1.json",
   "file": "U8P_SCROLL1",
   "behavior_summary": [
-    "This file implements a collection of scroll-handler processes. Each named function prepares a fixed, hard-coded text string (a scroll's contents) and hands it to the game's scroll-display routine so the player can read the scroll.",
-    "Each handler pushes the reader context (the invoking actor/process id) and an object pointer, converts a literal into a runtime string pointer, calls the central display routine, frees the temporary string, then suspends/returns.",
-    "Handlers are purely data-driven: they present lore, clues, or mechanical hints (potion effects, reagents, letters, dying notes) and do not modify global game state or flags in these snippets."
+    "This script provides a set of read/inspect handlers for in-game scroll/letter items. Each named function spawns the engine UI process Scroll::read with a fixed string (flavor, clue, or quest text) and then yields (suspend) until the read process completes.",
+    "No functions perform branching, flag reads, or flag writes; their sole runtime effect is to present text to the player and wait for the read UI to finish.",
+    "Strings passed to Scroll::read are hard-coded and differ per handler (shopping list, dying notes, letters, potion descriptions, ritual instructions, etc.)."
   ],
   "notable_control_flow": [
-    "Entry → prepare context (push reader pid, push [BP+06h] object_ptr) → convert literal to runtime string pointer → call external process Scroll::read(char*) → free temporary string → suspend/return.",
-    "All functions follow the same linear sequence and appear to yield/suspend after invoking Scroll::read, implying the UI presentation may be asynchronous or expects to yield control while the player reads.",
-    "There are no conditional branches or global-flag based guards observed in these handlers; they unconditionally present their stored text when invoked."
+    "Each handler calls str_to_ptr(literal) and then spawns Scroll::read(textPtr, this) using the engine spawn idiom (pid <=> process ...).",
+    "The spawned process id is captured into the local 'temp' and the caller immediately issues suspend to yield until the read/display process completes.",
+    "There is no internal branching or interaction between handlers; handlers appear to be independent and likely bound separately to different scroll item IDs or read events."
   ],
   "open_questions": [
-    "What exact in-game event or action maps to invoking these handlers (e.g., 'use item', 'read item' or an 'enter area' trigger)? The disassembly implies 'read/activate scroll' but the exact engine event ID is not present.",
-    "Is process Scroll::read(char*) synchronous (returns after the player finishes reading) or asynchronous (returns immediately and UI driving is separate)? The suspend after call suggests asynchronous behavior but this is inferred.",
-    "Are any of the duplicate texts (for example the Sysaphus letter duplicates) intentionally duplicated for different scroll items, or is this a disassembly artifact?",
-    "Are there other side-effectful operations performed by related scroll scripts elsewhere (e.g., granting quest state) that are not visible in this file?"
+    "Which game item IDs or editor bindings call each handler (for example which item uses U8P_SCROLL1::func0080 vs U8P_SCROLL1::func027F)? (inferred but not present in this file)",
+    "Why are there near-duplicate handlers (e.g., U8P_SCROLL1::func0872 and U8P_SCROLL1::func0AB8) — are these separate item variants, localization differences, or duplicate entries? (uncertain)",
+    "The canonical process_type is 0x0001 for these functions; are these executed as engine processes or direct function handlers in the run-time wiring? (inferred as read handlers; confidence medium)"
   ],
   "main_function": {
-    "name": "U8P_SCROLL1::0080",
+    "name": "U8P_SCROLL1::func0080",
     "execution_form": "process",
-    "purpose": "Present a fixed 'Shopping list' scroll text to the UI when the scroll is read/activated by a player/actor.",
+    "purpose": "Present a short shopping-list-style scroll text to the player by spawning Scroll::read with the literal string and yielding until the read completes.",
     "entry_conditions": [
-      "Invoked when the corresponding scroll item is read/activated by a player or actor (inferred from the calling pattern and the call to process Scroll::read)."
+      "Player reads/uses or examines the associated scroll item in the game (handler invoked by engine/item binding).",
+      "Engine spawns this handler when the read action is requested for the item tied to this function."
     ],
     "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_SCROLL1::0080",
+      "name": "U8P_SCROLL1::func0080",
       "kind": "main",
-      "role": "Primary scroll handler that presents the 'Shopping list' text to a reader.",
+      "role": "read/display handler for a shopping-list scroll; spawns Scroll::read and suspends.",
       "confidence": "high"
     },
     {
-      "name": "U8P_SCROLL1::00EE",
+      "name": "U8P_SCROLL1::func00EE",
       "kind": "helper",
-      "role": "Scroll handler: displays a note about magical walls and mushrooms.",
+      "role": "read/display handler (note about magical walls and mushrooms); spawns Scroll::read and suspends.",
       "confidence": "high"
     },
     {
-      "name": "U8P_SCROLL1::027F",
+      "name": "U8P_SCROLL1::func027F",
       "kind": "helper",
-      "role": "Scroll handler: dying-note asking finder to tell the twin brother (signed Bryan).",
+      "role": "read/display handler (dying note signed 'Bryan'); spawns Scroll::read and suspends.",
       "confidence": "high"
     },
     {
-      "name": "U8P_SCROLL1::0414",
+      "name": "U8P_SCROLL1::func0414",
       "kind": "helper",
-      "role": "Scroll handler: dying-note similar to 027F but signed Bruce.",
+      "role": "read/display handler (dying note signed 'Bruce'); spawns Scroll::read and suspends.",
       "confidence": "high"
     },
     {
-      "name": "U8P_SCROLL1::059D",
+      "name": "U8P_SCROLL1::func059D",
       "kind": "helper",
-      "role": "Scroll handler: short poem/verse about trust and 'cross the impossible'.",
+      "role": "read/display handler (poem/instructional verse); spawns Scroll::read and suspends.",
       "confidence": "high"
     },
     {
-      "name": "U8P_SCROLL1::06A3",
+      "name": "U8P_SCROLL1::func06A3",
       "kind": "helper",
-      "role": "Scroll handler: humorous ownership/registration note about a 'torax' named George.",
+      "role": "read/display handler (humorous/ownership scroll about 'George' the torax); spawns Scroll::read and suspends.",
       "confidence": "high"
     },
     {
-      "name": "U8P_SCROLL1::0872",
+      "name": "U8P_SCROLL1::func0872",
       "kind": "helper",
-      "role": "Scroll handler: complaint letter from 'Sysaphus' about dangerous floors.",
+      "role": "read/display handler (complaint letter by 'Sysaphus'); spawns Scroll::read and suspends.",
       "confidence": "high"
     },
     {
-      "name": "U8P_SCROLL1::0AB8",
+      "name": "U8P_SCROLL1::func0AB8",
       "kind": "helper",
-      "role": "Scroll handler: duplicate Sysaphus complaint letter instance (same content).",
-      "confidence": "high"
+      "role": "read/display handler (duplicate/variant of Sysaphus letter); spawns Scroll::read and suspends.",
+      "confidence": "medium"
     },
     {
-      "name": "U8P_SCROLL1::0CFE",
+      "name": "U8P_SCROLL1::func0CFE",
       "kind": "helper",
-      "role": "Scroll handler: mental-note checklist for maintenance tasks.",
+      "role": "read/display handler ('Mental note' checklist); spawns Scroll::read and suspends.",
       "confidence": "high"
     },
     {
-      "name": "U8P_SCROLL1::0DF8",
+      "name": "U8P_SCROLL1::func0DF8",
       "kind": "helper",
-      "role": "Scroll handler: potion-effect descriptions (colors→effects) — in-game mechanical hints.",
+      "role": "read/display handler (potion effect descriptions); spawns Scroll::read and suspends.",
       "confidence": "high"
     },
     {
-      "name": "U8P_SCROLL1::0FC9",
+      "name": "U8P_SCROLL1::func0FC9",
       "kind": "helper",
-      "role": "Scroll handler: letter to Lady Mordea about the missing Skull of Quakes (Lieutenant Vittek).",
+      "role": "read/display handler (letter to Lady Mordea re: Skull of Quakes); spawns Scroll::read and suspends.",
       "confidence": "high"
     },
     {
-      "name": "U8P_SCROLL1::11C3",
+      "name": "U8P_SCROLL1::func11C3",
       "kind": "helper",
-      "role": "Scroll handler: Mordea's reply instructing a meeting at the docks.",
+      "role": "read/display handler (short Mordea->Vittek message); spawns Scroll::read and suspends.",
       "confidence": "high"
     },
     {
-      "name": "U8P_SCROLL1::1271",
+      "name": "U8P_SCROLL1::func1271",
       "kind": "helper",
-      "role": "Scroll handler: dying lament about failing to capture magical armor (Graner the Warrior).",
+      "role": "read/display handler (Graner the Warrior dying/treasure warning); spawns Scroll::read and suspends.",
       "confidence": "high"
     },
     {
-      "name": "U8P_SCROLL1::156D",
+      "name": "U8P_SCROLL1::func156D",
       "kind": "helper",
-      "role": "Scroll handler: necromancer's note describing reagents/invocation for 'Quakes'.",
+      "role": "read/display handler (necromancer Lothian's ritual note describing how to call 'Quakes'); spawns Scroll::read and suspends.",
       "confidence": "high"
     },
     {
-      "name": "U8P_SCROLL1::1916",
+      "name": "U8P_SCROLL1::func1916",
       "kind": "helper",
-      "role": "Scroll handler: mission-style letter referencing shrines, obsidian payment, and warnings (signed Drokar).",
+      "role": "read/display handler (Drokar letter about shrines and obsidian funding); spawns Scroll::read and suspends.",
       "confidence": "high"
     },
     {
-      "name": "process Scroll::read(char*)",
+      "name": "Scroll::read",
       "kind": "extern",
-      "role": "Engine/UI routine that receives a text pointer and context to present a scroll's contents to the player/reader.",
+      "role": "Engine-provided UI process that displays scroll/letter text to the player.",
       "confidence": "high"
     }
   ],
@@ -129,93 +129,111 @@
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_SCROLL1::0080",
-        "callee": "process Scroll::read(char*)",
-        "purpose": "Deliver the prepared scroll text and context to the engine UI so the player can read the scroll.",
+        "caller": "U8P_SCROLL1::func0080",
+        "callee": "Scroll::read",
+        "purpose": "Display the shopping-list scroll text to the player in a read UI; called with a pointer to the literal string and the invoking context ('this').",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SCROLL1::00EE",
-        "callee": "process Scroll::read(char*)",
-        "purpose": "Deliver the hard-coded note about magical walls/mushrooms to the UI.",
+        "caller": "U8P_SCROLL1::func00EE",
+        "callee": "Scroll::read",
+        "purpose": "Display the magical-walls/mushroom note via the read UI.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SCROLL1::027F",
-        "callee": "process Scroll::read(char*)",
-        "purpose": "Deliver the dying-note (Bryan) text to the UI.",
+        "caller": "U8P_SCROLL1::func027F",
+        "callee": "Scroll::read",
+        "purpose": "Display the dying-note (Bryan) via the read UI.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SCROLL1::0414",
-        "callee": "process Scroll::read(char*)",
-        "purpose": "Deliver the dying-note (Bruce) text to the UI.",
+        "caller": "U8P_SCROLL1::func0414",
+        "callee": "Scroll::read",
+        "purpose": "Display the dying-note (Bruce) via the read UI.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SCROLL1::059D",
-        "callee": "process Scroll::read(char*)",
-        "purpose": "Deliver the short poem/verse to the UI.",
+        "caller": "U8P_SCROLL1::func059D",
+        "callee": "Scroll::read",
+        "purpose": "Display the poem/verse via the read UI.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SCROLL1::06A3",
-        "callee": "process Scroll::read(char*)",
-        "purpose": "Deliver the humorous ownership/registration scroll to the UI.",
+        "caller": "U8P_SCROLL1::func06A3",
+        "callee": "Scroll::read",
+        "purpose": "Display the humorous/legalistic torax ownership text via the read UI.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SCROLL1::0872",
-        "callee": "process Scroll::read(char*)",
-        "purpose": "Deliver the Sysaphus complaint letter to the UI.",
+        "caller": "U8P_SCROLL1::func0872",
+        "callee": "Scroll::read",
+        "purpose": "Display the Sysaphus complaint letter via the read UI.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SCROLL1::0AB8",
-        "callee": "process Scroll::read(char*)",
-        "purpose": "Deliver duplicated Sysaphus complaint letter to the UI.",
+        "caller": "U8P_SCROLL1::func0AB8",
+        "callee": "Scroll::read",
+        "purpose": "Display the Sysaphus complaint letter (variant/duplicate) via the read UI.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_SCROLL1::func0CFE",
+        "callee": "Scroll::read",
+        "purpose": "Display the 'Mental note' checklist via the read UI.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SCROLL1::0CFE",
-        "callee": "process Scroll::read(char*)",
-        "purpose": "Deliver mental-note checklist text to the UI.",
+        "caller": "U8P_SCROLL1::func0DF8",
+        "callee": "Scroll::read",
+        "purpose": "Display potion color-to-effect descriptions via the read UI.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SCROLL1::0DF8",
-        "callee": "process Scroll::read(char*)",
-        "purpose": "Deliver potion-effect descriptions to the UI (provides gameplay hints).",
+        "caller": "U8P_SCROLL1::func0FC9",
+        "callee": "Scroll::read",
+        "purpose": "Display the Lady Mordea letter re: Skull of Quakes via the read UI.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SCROLL1::0FC9",
-        "callee": "process Scroll::read(char*)",
-        "purpose": "Deliver Lieutenant Vittek's letter to Mordea to the UI.",
+        "caller": "U8P_SCROLL1::func11C3",
+        "callee": "Scroll::read",
+        "purpose": "Display Mordea->Vittek short message via the read UI.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SCROLL1::11C3",
-        "callee": "process Scroll::read(char*)",
-        "purpose": "Deliver Mordea's reply to the UI.",
+        "caller": "U8P_SCROLL1::func1271",
+        "callee": "Scroll::read",
+        "purpose": "Display Graner the Warrior's dying/treasure note via the read UI.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SCROLL1::1271",
-        "callee": "process Scroll::read(char*)",
-        "purpose": "Deliver Graner the Warrior's dying lament to the UI.",
+        "caller": "U8P_SCROLL1::func156D",
+        "callee": "Scroll::read",
+        "purpose": "Display Lothian's necromancer ritual note via the read UI.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SCROLL1::156D",
-        "callee": "process Scroll::read(char*)",
-        "purpose": "Deliver necromancer's reagents/invocation note for 'Quakes' to the UI.",
+        "caller": "U8P_SCROLL1::func1916",
+        "callee": "Scroll::read",
+        "purpose": "Display Drokar's letter about shrines and funding via the read UI.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SCROLL1::1916",
-        "callee": "process Scroll::read(char*)",
-        "purpose": "Deliver Drokar's mission-style letter to the UI.",
+        "caller": "any function in U8P_SCROLL1",
+        "callee": "process (spawn)",
+        "purpose": "Spawn the Scroll::read process and return a pid which is captured into 'temp' (pid <=> process ... idiom).",
+        "confidence": "high"
+      },
+      {
+        "caller": "any function in U8P_SCROLL1",
+        "callee": "suspend",
+        "purpose": "Yield the caller until the spawned Scroll::read process completes (wait for player to finish reading).",
+        "confidence": "high"
+      },
+      {
+        "caller": "any function in U8P_SCROLL1",
+        "callee": "str_to_ptr",
+        "purpose": "Convert the literal string into a pointer argument passed to Scroll::read.",
         "confidence": "high"
       }
     ]
@@ -226,14 +244,14 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "animation",
-    "guard"
+    "display",
+    "suspend",
+    "flavor-text"
   ],
   "quick_facts": {
-    "main_function": "U8P_SCROLL1::SCROLL1::0080",
-    "behavior_summary_one_liner": "This file implements a collection of scroll-handler processes. Each named function prepares a fixed, hard-coded text string (a scroll's contents) and hands it to the game's scroll-display routine so the player can read the scroll.",
-    "external_call_count": 15,
+    "main_function": "U8P_SCROLL1::func0080",
+    "behavior_summary_one_liner": "This script provides a set of read/inspect handlers for in-game scroll/letter items. Each named function spawns the engine UI process Scroll::read with a fixed string (flavor, clue, or quest text) and then yields (suspend) until the read process completes.",
+    "external_call_count": 18,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

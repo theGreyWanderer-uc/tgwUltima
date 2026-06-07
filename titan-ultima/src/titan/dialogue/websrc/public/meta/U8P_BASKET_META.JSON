@@ -3,26 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_BASKET.json",
   "file": "U8P_BASKET",
   "behavior_summary": [
-    "Provides simple interaction handlers for a Basket item: when examined it announces itself, and when used it toggles or opens/closes a UI 'gump' depending on an internal status bit.",
-    "BASKET::look produces a short, visible text ('basket ') by invoking the engine's Item::bark routine using the item instance as the source/actor.",
-    "BASKET::use queries the item's status via Item::getStatus(), tests bit 0x0100 of the returned status word, and either calls Item::openGump(this, 0x0E) when the bit is set or Item::closeGump(this) when the bit is clear."
+    "U8P_BASKET::look is the object's U8P_BASKET::look handler: when the player examines the basket it displays the short description text 'basket' and then suspends/ends the U8P_BASKET::look process.",
+    "U8P_BASKET::use handles player U8P_BASKET::use of the basket: it reads the item's status word via Item::getStatus(this) into a temporary, tests bit 0x0100, and uses that bit as a toggle for the basket's UI (gump). If bit 0x0100 is set it calls Item::closeGump(this); otherwise it calls Item::openGump(0x0E, this)."
   ],
   "notable_control_flow": [
-    "Event-driven: handlers are run in response to discrete events — Event 0 (U8P_BASKET::look) calls Item::bark; Event 1 (use) reads status and branches to open or close a gump.",
-    "Lightweight call sequence in U8P_BASKET::look: prepare context, construct literal 'basket ', call Item::bark, free the temporary string, then perform a suspend/implies sequence before returning (inferred engine housekeeping).",
-    "Guard-like test in use: a single status word ([BP-02h]) is read and masked against 0x0100 to decide which UI call to invoke (openGump vs closeGump)."
+    "U8P_BASKET::look: single linear flow — show short description 'basket' then suspend/terminate the process.",
+    "U8P_BASKET::use: read status -> branch on (status & 0x0100): true -> Item::closeGump(this); false -> Item::openGump(0x0E, this). The 0x0100 bit is inferred to indicate whether the item's gump is open."
   ],
   "open_questions": [
-    "What semantic meaning does status bit 0x0100 encode for basket items (e.g., 'has gump open', 'wants open', 'special mode')? The script treats it as a toggle condition but the precise game-state meaning is inferred.",
-    "What exact side-effects do the implied/suspend instructions after Item::bark produce in the engine (are they purely scheduling/cleanup or do they alter process state)?",
-    "Are there any other events or hidden handlers related to this basket item (e.g., drag/drop, pickup) elsewhere in the package that modify the 0x0100 bit?"
+    "The meaning of status bit 0x0100 is inferred to be the gump-open flag based on toggle behavior; this is likely but not explicitly documented in the script (confidence: medium).",
+    "The script uses a 'suspend' after U8P_BASKET::look; whether this yields to engine UI timing or just ends the process is implementation-specific (confidence: low).",
+    "local1 is annotated as a temporary holding the result of Item::getStatus(this); its exact width/type and other flag bits are not documented (confidence: low).",
+    "The contents or layout of gump id 0x0E opened by Item::openGump are not present in this script and are external data (confidence: high that it opens a basket UI, low about specific contents)."
   ],
   "main_function": {
     "name": "U8P_BASKET::look",
     "execution_form": "process",
-    "purpose": "Handle the player/actor 'U8P_BASKET::look' (examine) action for a Basket item by announcing/displaying the short item text 'basket '.",
+    "purpose": "Provide the short description when the player examines the basket (display 'basket').",
     "entry_conditions": [
-      "Event 0 (U8P_BASKET::look) — triggered when the Avatar or relevant actor examines/looks at the basket item."
+      "Triggered by the player performing a 'U8P_BASKET::look' / examine action on the basket (U8P_BASKET::look event).",
+      "Operates as a fast-area/U8P_BASKET::look-type process invoked by the engine for object inspection."
     ],
     "confidence": "high"
   },
@@ -30,37 +30,31 @@
     {
       "name": "U8P_BASKET::look",
       "kind": "main",
-      "role": "Event handler for 'U8P_BASKET::look' that prepares context and invokes Item::bark to display 'basket '.",
+      "role": "show short description for examine/U8P_BASKET::look",
       "confidence": "high"
     },
     {
       "name": "U8P_BASKET::use",
       "kind": "helper",
-      "role": "Event handler for 'use' that reads item status and opens or closes the item's gump (UI) based on bit 0x0100.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine routine to emit/display a short text message coming from an item/process.",
+      "role": "toggle/open/close the basket gump when the player uses the item",
       "confidence": "high"
     },
     {
       "name": "Item::getStatus",
       "kind": "extern",
-      "role": "Engine routine returning item status/flags (word) used to drive UI/logic decisions.",
+      "role": "read item status/flags word for this item instance",
       "confidence": "high"
     },
     {
       "name": "Item::closeGump",
       "kind": "extern",
-      "role": "Engine routine to close an item's UI/gump.",
+      "role": "close the item's UI/gump",
       "confidence": "high"
     },
     {
       "name": "Item::openGump",
       "kind": "extern",
-      "role": "Engine routine to open an item's UI/gump; called here with gump id 0x0E (14).",
+      "role": "open a UI/gump for the item (here gump id 0x0E)",
       "confidence": "high"
     }
   ],
@@ -68,27 +62,21 @@
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_BASKET::look",
-        "callee": "Item::bark",
-        "purpose": "Cause the basket item to emit the short descriptive text 'basket ' to the inspecting process/player.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_BASKET::use",
         "callee": "Item::getStatus",
-        "purpose": "Retrieve the item's status flags (word) to decide whether to open or close the UI/gump.",
+        "purpose": "Read the item's status/flags word into a temporary so the script can test bit 0x0100.",
         "confidence": "high"
       },
       {
         "caller": "U8P_BASKET::use",
         "callee": "Item::closeGump",
-        "purpose": "Close the basket's UI/gump when the tested status bit (0x0100) is clear.",
+        "purpose": "Close the basket's UI when the status bit indicates the gump is currently open.",
         "confidence": "high"
       },
       {
         "caller": "U8P_BASKET::use",
         "callee": "Item::openGump",
-        "purpose": "Open the basket's UI/gump with id 0x0E when the tested status bit (0x0100) is set.",
+        "purpose": "Open the basket's UI (gump id 0x0E) when the status bit indicates no gump is open.",
         "confidence": "high"
       }
     ]
@@ -99,13 +87,14 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
+    "ui-toggle",
+    "description",
     "guard"
   ],
   "quick_facts": {
-    "main_function": "BASKET::look",
-    "behavior_summary_one_liner": "Provides simple interaction handlers for a Basket item: when examined it announces itself, and when used it toggles or opens/closes a UI 'gump' depending on an internal status bit.",
-    "external_call_count": 4,
+    "main_function": "U8P_BASKET::look",
+    "behavior_summary_one_liner": "U8P_BASKET::look is the object's U8P_BASKET::look handler: when the player examines the basket it displays the short description text 'basket' and then suspends/ends the U8P_BASKET::look process.",
+    "external_call_count": 3,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

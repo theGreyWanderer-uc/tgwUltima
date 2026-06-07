@@ -3,29 +3,31 @@
   "source_of_truth": "dialogue/json/U8P_FIREMISS.json",
   "file": "U8P_FIREMISS",
   "behavior_summary": [
-    "U8P_FIREMISS::hit implements the behavior when a FIREMISS projectile/item is U8P_FIREMISS::hit: it optionally forwards a randomized 'receiveHit' call to the item, always plays a U8P_FIREMISS::hit sound effect, spawns a visual U8P_FIREMISS::hit/explosion sprite at the item's location (offset by +0x20 on X and Y), and then destroys the projectile.",
-    "U8P_FIREMISS::gotHit is a lightweight entry helper that sets process info/exclusion flags on the item and spawns U8P_FIREMISS::hit as a separate process, forwarding the original parameters.",
-    "The decision to call Item::receiveHit is gated by the incoming numeric parameter (param2): if param2 is strictly between 0 and 255 the receiveHit path is skipped; otherwise two urandom(8) values are combined/adjusted to build a small byte which is passed to Item::receiveHit along with forwarded attacker/id and a local uword."
+    "This script implements U8P_FIREMISS::hit-handling for a transient item (likely a projectile/missile).",
+    "U8P_FIREMISS::hit is a process invoked when the item is struck or impacts (process type 0x020B). It performs cleanup, optionally forwards a U8P_FIREMISS::hit to a target/owner, plays a sound, spawns an impact sprite, and then destroys the item.",
+    "When the first parameter (param1) is in the range 1..0xFF, the code copies it to a local (local1) and calls Item::receiveHit with a fixed category, randomized damage values, the item pointer, and the address of that local — indicating param1 is used as a selector/identifier passed by reference.",
+    "U8P_FIREMISS::gotHit calls an internal follow-up handler (U8P_FIREMISS::func0080) and then suspends, implying asynchronous/secondary U8P_FIREMISS::hit behavior or cleanup."
   ],
   "notable_control_flow": [
-    "U8P_FIREMISS::gotHit sets per-process info/exclusion flags and then spawn()s U8P_FIREMISS::hit so that U8P_FIREMISS::hit handling runs as a separate process.",
-    "U8P_FIREMISS::hit calls FREE::2A56 early (likely a bookkeeping/owner check) before any other logic.",
-    "A conditional branch in U8P_FIREMISS::hit: if param2 is in (0, 255] the randomized Item::receiveHit is skipped; otherwise the code computes a randomized byte (two urandom(8) results plus adjustments) and calls Item::receiveHit(attacker/id, smallByte, param2, local_uword).",
-    "After optional receiveHit, the function unconditionally calls playSFX, then creates a sprite at (X+0x20, Y+0x20, Z) with fixed parameters, and finally calls Item::destroy to remove the projectile."
+    "U8P_FIREMISS::hit begins by calling FREE::resetRef(0x0203h, this) for resource/reference cleanup.",
+    "If param1 > 0 && param1 < 0x0100 then local1 = param1 and Item::receiveHit(0x08, urandom(8)+4, urandom(8), this, addressof(local1)) is invoked (conditional forwarding of a U8P_FIREMISS::hit).",
+    "Regardless of the condition, playSFX(param1, 0x64h, 0x1Fh) is called and a visual impact sprite is created at this object's position offset by +0x20 in X and Y.",
+    "Finally Item::destroy(this) is called unconditionally, removing the object from the world.",
+    "U8P_FIREMISS::gotHit delegates to U8P_FIREMISS::func0080 and then suspends, signaling a two-stage handling where secondary effects run separately."
   ],
   "open_questions": [
-    "What exactly FREE::2A56 does (ownership, freeing, or state validation) and whether its result influences subsequent logic beyond being called.",
-    "Precise semantic meaning of param1 and param2 (explicitly: whether param1 is attacker id/pid and whether param2 encodes damage type, source, or special flags).",
-    "The game-meaning of the constructed random byte passed to Item::receiveHit (damage, knockback, stagger magnitude, or flavor value).",
-    "Whether the process info value set by gotHit / U8P_FIREMISS::hit maps to a documented engine flag (the numeric info id was inferred but not concretely identified)."
+    "What exactly does U8P_FIREMISS::func0080 do (called from U8P_FIREMISS::gotHit)? Its effect is not present in this excerpt.",
+    "What is the semantic meaning of param1 outside the 1..0xFF range (0 or >= 0x0100)? The code treats those cases differently but the intent is unclear.",
+    "What role, if any, param2 plays across these routines (param2 is present in signatures but unused in the visible logic).",
+    "What does the resource id 0x0203 represent in FREE::resetRef(0x0203h, this) and what side effects resetting it has on other systems?"
   ],
   "main_function": {
     "name": "U8P_FIREMISS::hit",
     "execution_form": "process",
-    "purpose": "Handle a projectile/item being struck: optionally apply a randomized receiveHit to the item, play a U8P_FIREMISS::hit sound, spawn a visual U8P_FIREMISS::hit sprite at the item's position (offset), and destroy the projectile to clean it up.",
+    "purpose": "Handle this item being U8P_FIREMISS::hit/impacting: perform resource cleanup, optionally forward a U8P_FIREMISS::hit to another handler/owner, play a sound, spawn an impact sprite, and destroy the item.",
     "entry_conditions": [
-      "Invoked via Event 5 (U8P_FIREMISS::hit) semantics or spawned from U8P_FIREMISS::gotHit when the projectile receives a U8P_FIREMISS::hit.",
-      "Receives context/parameters via the process frame: item pointer (this), param1 (uword), param2 (word)."
+      "Invoked by the engine when this item receives a U8P_FIREMISS::hit or otherwise triggers the U8P_FIREMISS::hit process (process type 0x020B).",
+      "Contains an internal conditional: if param1 is nonzero and less than 0x0100 then forward/apply an Item::receiveHit using param1 copied into local1."
     ],
     "confidence": "high"
   },
@@ -33,138 +35,67 @@
     {
       "name": "U8P_FIREMISS::hit",
       "kind": "main",
-      "role": "Process that performs the projectile-U8P_FIREMISS::hit sequence: optional damage/effect application, sound, visual spawn, cleanup/destroy.",
+      "role": "primary U8P_FIREMISS::hit/impact handler for the item (cleanup, sound, visual, destroy)",
       "confidence": "high"
     },
     {
       "name": "U8P_FIREMISS::gotHit",
       "kind": "helper",
-      "role": "Entry handler for the got-U8P_FIREMISS::hit event: set process info/exclude, spawn U8P_FIREMISS::hit to handle the event asynchronously, then suspend/return.",
-      "confidence": "high"
-    },
-    {
-      "name": "FREE::2A56",
-      "kind": "extern",
-      "role": "External helper called early during U8P_FIREMISS::hit handling — likely performs ownership/state bookkeeping or validation related to the item.",
+      "role": "secondary/follow-up U8P_FIREMISS::hit handler that delegates to an internal function then suspends",
       "confidence": "medium"
-    },
-    {
-      "name": "Item::receiveHit",
-      "kind": "extern",
-      "role": "Engine/item API to apply a U8P_FIREMISS::hit/effect to an item instance (damage/effect resolver).",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_FIREMISS::playSFX",
-      "kind": "extern",
-      "role": "Play a sound effect associated with the U8P_FIREMISS::hit.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_FIREMISS::createSprite",
-      "kind": "extern",
-      "role": "Spawn a visual sprite/effect for the U8P_FIREMISS::hit/explosion at specified coordinates and parameters.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::destroy",
-      "kind": "extern",
-      "role": "Destroy/remove the projectile/item from the world as cleanup after U8P_FIREMISS::hit handling.",
-      "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
         "caller": "U8P_FIREMISS::gotHit",
-        "callee": "U8P_FIREMISS::hit",
-        "purpose": "Spawn the U8P_FIREMISS::hit handler as a separate process to perform the actual U8P_FIREMISS::hit logic asynchronously.",
-        "confidence": "high"
+        "callee": "U8P_FIREMISS::func0080",
+        "purpose": "Perform additional internal U8P_FIREMISS::hit-related behavior or effects as a follow-up to U8P_FIREMISS::gotHit",
+        "confidence": "medium"
       }
     ],
     "external_calls": [
       {
         "caller": "U8P_FIREMISS::hit",
-        "callee": "FREE::2A56",
-        "purpose": "Perform early ownership/state bookkeeping or validation for the item before applying U8P_FIREMISS::hit logic.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_FIREMISS::hit",
-        "callee": "urandom",
-        "purpose": "Generate small random values (range 0..7) twice; used to construct a randomized byte argument for Item::receiveHit when the conditional allows it.",
+        "callee": "FREE::resetRef",
+        "purpose": "Reset/clear a reference or resource counter tied to resource id 0x0203 for this object (pre-cleanup)",
         "confidence": "high"
       },
       {
         "caller": "U8P_FIREMISS::hit",
         "callee": "Item::receiveHit",
-        "purpose": "Apply the computed U8P_FIREMISS::hit/damage/effect to the item using attacker/id, a small randomized byte, original param2, and a local uword address/value.",
+        "purpose": "Forward/apply a U8P_FIREMISS::hit to the item/owner when param1 is a small nonzero selector; uses fixed U8P_FIREMISS::hit category and randomized damage values, passing the address of a local copy of param1",
         "confidence": "high"
       },
       {
         "caller": "U8P_FIREMISS::hit",
-        "callee": "U8P_FIREMISS::playSFX",
-        "purpose": "Play the U8P_FIREMISS::hit sound effect (sfx id 0x64, variation 0x1F) unconditionally as part of the U8P_FIREMISS::hit response.",
+        "callee": "playSFX",
+        "purpose": "Play an impact/U8P_FIREMISS::hit sound using param1 as identifier/channel and fixed extra args",
         "confidence": "high"
       },
       {
         "caller": "U8P_FIREMISS::hit",
-        "callee": "Item::getZ",
-        "purpose": "Query item Z coordinate for sprite placement.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FIREMISS::hit",
-        "callee": "Item::getY",
-        "purpose": "Query item Y coordinate, add +0x20 to compute sprite Y position.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FIREMISS::hit",
-        "callee": "Item::getX",
-        "purpose": "Query item X coordinate, add +0x20 to compute sprite X position.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FIREMISS::hit",
-        "callee": "U8P_FIREMISS::createSprite",
-        "purpose": "Spawn a visual effect at (X+0x20, Y+0x20, Z) with fixed parameters (frames/lifetime/flags) to represent the U8P_FIREMISS::hit/explosion.",
+        "callee": "createSprite",
+        "purpose": "Spawn a visual impact/effect sprite at the item's position with fixed offsets and sprite parameters for visual feedback",
         "confidence": "high"
       },
       {
         "caller": "U8P_FIREMISS::hit",
         "callee": "Item::destroy",
-        "purpose": "Remove/destroy the projectile after finishing the U8P_FIREMISS::hit sequence.",
+        "purpose": "Remove/destroy the item instance from the world after processing the U8P_FIREMISS::hit",
         "confidence": "high"
       },
       {
-        "caller": "U8P_FIREMISS::gotHit",
-        "callee": "spawn",
-        "purpose": "Invoke engine spawn to create a new process for U8P_FIREMISS::hit (returned value is evaluated with an 'implies' op).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FIREMISS::gotHit",
-        "callee": "suspend",
-        "purpose": "Suspend/return after spawning; normal got-U8P_FIREMISS::hit handler flow.",
+        "caller": "U8P_FIREMISS::hit",
+        "callee": "urandom",
+        "purpose": "Generate small random values to vary damage and variation arguments passed to Item::receiveHit",
         "confidence": "high"
       }
     ]
   },
   "global_flags": {
     "reads": [],
-    "writes": [
-      {
-        "name": "process info / set info",
-        "likely_effect": "Writes a per-process info flag on the projectile to alter its processing/state while handling the U8P_FIREMISS::hit (prevents concurrent interactions).",
-        "confidence": "medium"
-      },
-      {
-        "name": "process exclude",
-        "likely_effect": "Marks the process/item as excluded from normal processing/scheduling while the U8P_FIREMISS::hit handler runs.",
-        "confidence": "medium"
-      }
-    ]
+    "writes": []
   },
   "ui_tags": [
     "trigger",
@@ -174,10 +105,10 @@
   ],
   "quick_facts": {
     "main_function": "U8P_FIREMISS::hit",
-    "behavior_summary_one_liner": "U8P_FIREMISS::hit implements the behavior when a FIREMISS projectile/item is U8P_FIREMISS::hit: it optionally forwards a randomized 'receiveHit' call to the item, always plays a U8P_FIREMISS::hit sound effect, spawns a visual U8P_FIREMISS::hit/explosion sprite at the item's location (offset by +0x20 on X and Y), and then destroys the projectile.",
-    "external_call_count": 11,
+    "behavior_summary_one_liner": "This script implements U8P_FIREMISS::hit-handling for a transient item (likely a projectile/missile).",
+    "external_call_count": 6,
     "flag_read_count": 0,
-    "flag_write_count": 2
+    "flag_write_count": 0
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

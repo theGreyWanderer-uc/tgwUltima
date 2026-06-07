@@ -3,73 +3,40 @@
   "source_of_truth": "dialogue/json/U8P_MORDHAT.json",
   "file": "U8P_MORDHAT",
   "behavior_summary": [
-    "MORDHAT::hatch scans a supplied area/item list for items that match several filters (including Z coordinate and other item attributes).",
-    "For each matching item the routine: puts the avatar into stasis, resets a script/reference (0x00F0) to synchronize state, queries an NPC's facing, plays an NPC animation oriented by that facing, waits/suspends while the animation/processing occurs, and then invokes the matched item's use handler (Item::use) to perform the actual U8P_MORDHAT::hatch/activation.",
-    "The routine processes all qualifying items in sequence, yielding around the animation to allow the animation/use processing to complete before continuing to the next item."
+    "U8P_MORDHAT::hatch is a process that runs a short 'U8P_MORDHAT::hatch' or use sequence for an item when that item is at a specific Z level.",
+    "The routine first checks the item's Z coordinate (Item::getZ) and proceeds only when it equals 0x30 — this is the primary guard that gates the sequence.",
+    "If an inner condition ('this' in the raw) is true, the routine: puts the avatar into stasis (setAvatarInStasis(0x01)), performs housekeeping/reset (resetRef(0x00F0, 0x01)), starts an NPC animation (Npc::doAnim using Npc::getDir for direction), suspends to wait for that animation/process to finish, and then invokes Item::use (passing a temporary/local reference).",
+    "Net effect in gameplay: when the guarded conditions are met the player is frozen while a hatching/use animation runs, then the item's use behavior executes (likely spawning/consuming the item or completing the U8P_MORDHAT::hatch)."
   ],
   "notable_control_flow": [
-    "Iterative scanning loop over an area/item list (pointer passed in at [BP+06]) with multiple filters applied per-item.",
-    "Per-item critical section: set avatar stasis -> resetRef(0x00F0,1) -> get NPC direction -> do anim -> suspend/wait -> Item::use.",
-    "Execution suspends while the NPC animation is played and resumes after the animation completes to call the item's use handler."
+    "Primary gate: call to Item::getZ(&[SP-00h]) must equal 0x30 for any further actions.",
+    "Secondary gate: an inner conditional check ('this') must be true to perform the stasis/animation/use sequence.",
+    "Sequence when gates pass: setAvatarInStasis(0x01) -> resetRef(0x00F0,0x01) -> launch Npc::doAnim(..., Npc::getDir(...), ...) and capture its process id -> suspend (yield until animation/process finishes) -> call Item::use(&local1)."
   ],
   "open_questions": [
-    "Exact semantics and thresholds of the item filters (what values 0x30, 0x237, and the other numeric constants represent).",
-    "Precise meaning and broader usage of the reference id 0x00F0 that is reset (why value 1 is written and how other systems observe it).",
-    "Identity and ownership expectations of the 'pid' used for Npc::getDir / Npc::doAnim (which NPC/process this pid refers to in all contexts).",
-    "Whether the area/list pointer at [BP+06] is always an area collection or sometimes a single-item pointer in other call sites."
+    "What exactly does the numeric expression '0x14h * 0x20h' in the raw refer to and how does it affect state or timing? (confidence: low)",
+    "What is the precise semantics and target of resetRef(0x00F0, 0x01)? Is it clearing a specific engine reference, timer, or UI state? (confidence: low)",
+    "What does the raw 'this' condition refer to in-game (the current item instance, an owning actor, or a truthy state)? (confidence: low)",
+    "What data does local1 actually contain when passed to Item::use (an item handle, pointer to this, or a constructed param)? (confidence: low)",
+    "Under which exact event or player action is this process started in gameplay beyond being a process type 0x0210 (inferred to be item-use/U8P_MORDHAT::hatch related)? (confidence: medium)"
   ],
   "main_function": {
     "name": "U8P_MORDHAT::hatch",
     "execution_form": "process",
-    "purpose": "When the U8P_MORDHAT::hatch event triggers, find items in a provided area or item list that meet several positional and attribute filters; for each such item, lock the avatar, synchronize state, play a direction-aware NPC animation, wait for it to finish, then call the item's use handler to complete the U8P_MORDHAT::hatch/activation.",
+    "purpose": "Guarded hatching/use sequence that freezes the player, runs an NPC animation, waits, and then executes the item's use effect when the item is at a specific Z level.",
     "entry_conditions": [
-      "Event 7 (U8P_MORDHAT::hatch) — invoked when the U8P_MORDHAT::hatch event fires for this object/class.",
-      "Function is passed an area-or-item-list pointer (at [BP+06]) and uses a pid for NPC animation decisions."
+      "Process-type handler (processType 0x0210) — started by engine as an item/process event.",
+      "Item::getZ(&[SP-00h]) == 0x30 (primary spatial guard).",
+      "An inner truthy condition referenced as 'this' in the raw must be true before performing the sequence."
     ],
-    "confidence": "high"
+    "confidence": "medium"
   },
   "function_map": [
     {
       "name": "U8P_MORDHAT::hatch",
       "kind": "main",
-      "role": "Scan an area/list, for each qualifying item run a synchronized animation sequence and invoke Item::use to U8P_MORDHAT::hatch/activate the item.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getZ",
-      "kind": "extern",
-      "role": "Filter helper: returns an item's Z coordinate used to exclude items by vertical position.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_MORDHAT::setAvatarInStasis",
-      "kind": "extern",
-      "role": "Engine call to lock the avatar (put into stasis) during the U8P_MORDHAT::hatch/animation sequence.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_MORDHAT::resetRef",
-      "kind": "extern",
-      "role": "Reset a script/global reference (used here as resetRef(0x00F0,1)) to synchronize U8P_MORDHAT::hatch state between systems.",
+      "role": "Process handler that implements the guarded U8P_MORDHAT::hatch/use sequence for an item instance.",
       "confidence": "medium"
-    },
-    {
-      "name": "Npc::getDir",
-      "kind": "extern",
-      "role": "Query NPC facing/direction to orient the animation.",
-      "confidence": "high"
-    },
-    {
-      "name": "Npc::doAnim",
-      "kind": "extern",
-      "role": "Trigger an NPC animation using an AnimSet and parameters (direction is included); execution suspends while animation runs.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::use",
-      "kind": "extern",
-      "role": "Invoke the item's use handler — in context, performs the U8P_MORDHAT::hatch/activation for the item processed.",
-      "confidence": "high"
     }
   ],
   "call_analysis": {
@@ -78,55 +45,50 @@
       {
         "caller": "U8P_MORDHAT::hatch",
         "callee": "Item::getZ",
-        "purpose": "Read item Z coordinate to filter items by vertical position.",
+        "purpose": "Read the item's Z coordinate to decide whether to run the U8P_MORDHAT::hatch sequence (primary guard).",
         "confidence": "high"
       },
       {
         "caller": "U8P_MORDHAT::hatch",
-        "callee": "U8P_MORDHAT::setAvatarInStasis",
-        "purpose": "Lock the avatar (stasis=1) so the player cannot move or act during the U8P_MORDHAT::hatch animation/process.",
+        "callee": "setAvatarInStasis",
+        "purpose": "Disable player avatar actions/movement during the U8P_MORDHAT::hatch/animation sequence (visual/state lock).",
         "confidence": "high"
       },
       {
         "caller": "U8P_MORDHAT::hatch",
-        "callee": "U8P_MORDHAT::resetRef",
-        "purpose": "Set/reset a script/global reference (0x00F0 -> 1) to synchronize or flag U8P_MORDHAT::hatch-related state for other systems.",
+        "callee": "resetRef",
+        "purpose": "Housekeeping or reference reset before starting the animation/sequence (exact target and semantics uncertain).",
+        "confidence": "low"
+      },
+      {
+        "caller": "U8P_MORDHAT::hatch",
+        "callee": "Npc::doAnim",
+        "purpose": "Start an NPC animation (uses Npc::getDir for direction) and return a process id/handle the routine uses before suspending.",
         "confidence": "medium"
       },
       {
         "caller": "U8P_MORDHAT::hatch",
         "callee": "Npc::getDir",
-        "purpose": "Obtain the NPC's facing so the subsequent animation is oriented correctly.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_MORDHAT::hatch",
-        "callee": "Npc::doAnim",
-        "purpose": "Play an animation (AnimSet 0x2710 with parameters) for the NPC; the script suspends/waits while this animation runs.",
-        "confidence": "high"
+        "purpose": "Provide direction argument for Npc::doAnim based on the item/actor context.",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_MORDHAT::hatch",
         "callee": "Item::use",
-        "purpose": "Invoke the item's use action to complete hatching/activation after animation and stasis are handled.",
+        "purpose": "Execute the item's use effect after the animation/wait completes (likely performs the actual U8P_MORDHAT::hatch/spawn/consume behavior).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_MORDHAT::hatch",
+        "callee": "suspend",
+        "purpose": "Yield the current process until the started animation/process finishes or the scheduler resumes the process.",
         "confidence": "high"
       }
     ]
   },
   "global_flags": {
     "reads": [],
-    "writes": [
-      {
-        "name": "0x00F0 (script/reference)",
-        "likely_effect": "A reference/state slot is set to 1 (resetRef(0x00F0,1)) to coordinate or mark U8P_MORDHAT::hatch progress; other scripts likely observe this value.",
-        "confidence": "medium"
-      },
-      {
-        "name": "avatar stasis state",
-        "likely_effect": "Avatar is put into stasis (setAvatarInStasis(1)), preventing player actions during the animation/U8P_MORDHAT::hatch handling.",
-        "confidence": "high"
-      }
-    ]
+    "writes": []
   },
   "ui_tags": [
     "trigger",
@@ -135,11 +97,11 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "MORDHAT::hatch",
-    "behavior_summary_one_liner": "MORDHAT::hatch scans a supplied area/item list for items that match several filters (including Z coordinate and other item attributes).",
-    "external_call_count": 6,
+    "main_function": "U8P_MORDHAT::hatch",
+    "behavior_summary_one_liner": "U8P_MORDHAT::hatch is a process that runs a short 'U8P_MORDHAT::hatch' or use sequence for an item when that item is at a specific Z level.",
+    "external_call_count": 7,
     "flag_read_count": 0,
-    "flag_write_count": 2
+    "flag_write_count": 0
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

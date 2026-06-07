@@ -3,126 +3,108 @@
   "source_of_truth": "dialogue/json/U8P_SORCHAT.json",
   "file": "U8P_SORCHAT",
   "behavior_summary": [
-    "SORCHAT::0080 parses a script/token stream attached to an item and, for tokens that indicate spell firing or item creation, spawns fire-spell effects (projectiles/visuals) at positions computed from the item's world coordinates plus token-specific offsets, then performs cleanup and destroys temporary objects and the item when appropriate.",
-    "SORCHAT::hatch (Event 7) gates whether the main parser (SORCHAT::0080) is allowed to run or whether the item provokes NPC retaliation: it tests the item's coordinates against hardcoded region/mask checks and either spawns U8P_SORCHAT::SORCHAT::0080 or locates an NPC to bark, set target to the player, spawn NPC methods, and destroy/free the item.",
-    "Spawned spells are registered/cleaned with FREE::* calls and created via FIRESPEL::1F65; some token branches validate possible targets with FIRESPEL::2B3E before spawning. A local flag records whether any spell was successfully fired."
+    "This script manages an item/activation that can 'U8P_SORCHAT::hatch' and produce spell effects and FREE-managed spawns, then cleans up the originating item.",
+    "U8P_SORCHAT::hatch is a process that inspects the item's world coordinates and performs special-case behavior: it can provoke/target a nearby NPC, begin a short conversation (dialogue line \"You will not steal my spell! I will kill you first!\"), destroy the item, spawn the main utility, or record a temporary spawn reference for later cleanup.",
+    "U8P_SORCHAT::func0080 (the main utility) computes spawn coordinates from the item's Item::getX/Y/Z, may call FIRESPEL::func1F65 to produce a fire-spell effect at an offset position, uses FREE::func1C19 (including a randomized parameter from FREE::randomInRange) to launch one or more FREE-managed spawns, captures spawn references, suspends/waits for spawned processes, and finally destroys the original item."
   ],
   "notable_control_flow": [
-    "SORCHAT::0080 loops over item-associated tokens (examples include '$', '=', '@', '%', '&', '*', 'B') and branches per-token to validate targets, compute offsets, spawn fire-spells, register/free spawned pids, and optionally destroy referenced item instances.",
-    "After spawning a spell object, the routine yields/suspends around spawn and free calls (spawn -> FREE::1C19/FREE::1A96 sequencing) and uses return/temp values to decide further cleanup.",
-    "U8P_SORCHAT::SORCHAT::hatch performs sequential coordinate/mask checks to decide branch: allow parsing (spawn main process) vs provoke NPCs (bark, set target, spawn methods, destroy item)."
+    "U8P_SORCHAT::hatch inspects item coordinates and branches on specific map positions; one branch targets an NPC (checks Npc::isDead) and either starts a short conversation or forces the NPC to attack (Npc::setTarget) before destroying the item.",
+    "U8P_SORCHAT::hatch can spawn U8P_SORCHAT::func0080 (spawn ->SORCHAT::func0080) to perform the visual/spawn effects asynchronously; U8P_SORCHAT::hatch may store the returned FREE reference and later call FREE::resetRef to release it.",
+    "U8P_SORCHAT::func0080 conditionally calls FIRESPEL::func2B3E as a predicate to choose fire-spell behavior, computes X/Y/Z spawn coordinates by reading Item::getX/Y/Z and applying offsets, invokes FIRESPEL::func1F65 for an effect, then uses FREE::func1C19 (once with a fixed param and once with FREE::randomInRange) to create variable spawns, suspends to wait for those spawns, and finally calls Item::destroy to remove the item."
   ],
   "open_questions": [
-    "Exact token grammar and the meaning of every token handled by SORCHAT::0080 (only a subset and behavior patterns are inferred).",
-    "Precise semantics and parameters of FIRESPEL::1F65 and FIRESPEL::2B3E beyond 'spawn' and 'validate'—what payload/template IDs or flags are passed from the script tokens?",
-    "Meaning and mapping of the hardcoded region/mask constants tested in hatch(): which map areas or gameplay rules do they correspond to?",
-    "Whether any global state is set by these routines beyond the observed spawn/free/destroy behavior (no global flags were definitively written in this disassembly)."
+    "What concrete FREE-managed object/type ID is being spawned by FREE::func1C19 (the script passes numeric parameters but the exact object/type is unknown).",
+    "Exact coordinate cases/thresholds used by U8P_SORCHAT::hatch for the special NPC/conversation branch (the metadata shows location comparisons but not human-readable map coordinates).",
+    "Whether FIRESPEL::func2B3E is simply a type-check predicate or also mutates state (inferred as a predicate with medium confidence).",
+    "Precise semantics of the random range arguments passed to FREE::randomInRange (the raw literals are present but mapping to gameplay variation is inferred)."
   ],
   "main_function": {
-    "name": "U8P_SORCHAT::0080",
+    "name": "U8P_SORCHAT::func0080",
     "execution_form": "process",
-    "purpose": "Parse an item's attached script/token stream and produce corresponding spell/projectile/item spawns at positions derived from that item's coordinates; clean up spawned objects and destroy the item when appropriate.",
+    "purpose": "Perform the item's activation/spawn effects: compute spawn coordinates from the item, create a fire-spell visual/effect when appropriate, spawn one or more FREE-managed objects (including a randomized variant), wait for those spawned processes to run, and then destroy the originating item to clean it up.",
     "entry_conditions": [
-      "Spawned when the item's hatch handler (U8P_SORCHAT::SORCHAT::hatch) allows normal processing.",
-      "Invoked when an item/script produces tokens that represent spell firing or item creation (called from item processing/spawn path)."
+      "Invoked when the item/activation occurs (inferred 'this' is true / activation/enterFastArea).",
+      "Can also be spawned by U8P_SORCHAT::hatch (spawn ->SORCHAT::func0080) to run asynchronously."
     ],
     "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_SORCHAT::0080",
+      "name": "U8P_SORCHAT::func0080",
       "kind": "main",
-      "role": "Parse item script tokens and spawn/cleanup fire-spell effects and temporary objects.",
+      "role": "Utility that performs spawn/effect creation and item cleanup; spawnable by U8P_SORCHAT::hatch and waits for spawned processes.",
       "confidence": "high"
     },
     {
       "name": "U8P_SORCHAT::hatch",
       "kind": "helper",
-      "role": "Event 7 handler that decides whether to run SORCHAT::0080 or provoke NPC retaliation based on item coordinate/mask checks.",
+      "role": "Process that detects map/location special-cases for the item: may trigger NPC dialogue/aggro, destroy the item immediately, spawn the main utility, and manage/reset a stored FREE reference.",
       "confidence": "high"
     },
     {
-      "name": "FIRESPEL::2B3E",
+      "name": "FIRESPEL::func2B3E",
       "kind": "extern",
-      "role": "Validate/qualify a token/list element as a valid spell target before spawning.",
+      "role": "Predicate/check related to whether the item/spawn should use fire-spell behavior (external library/actor).",
       "confidence": "medium"
     },
     {
-      "name": "FIRESPEL::1F65",
+      "name": "FIRESPEL::func1F65",
       "kind": "extern",
-      "role": "Instantiate/spawn a fire-spell effect at given coordinates/parameters.",
+      "role": "Create/play a fire-spell effect at computed X/Y/Z coordinates.",
       "confidence": "high"
-    },
-    {
-      "name": "FREE::1C19",
-      "kind": "extern",
-      "role": "Register or free the spawned object/pid after spawn (cleanup/registration).",
-      "confidence": "medium"
-    },
-    {
-      "name": "FREE::1A96",
-      "kind": "extern",
-      "role": "Additional free/cleanup/messaging call used after destroy/handling.",
-      "confidence": "medium"
-    },
-    {
-      "name": "FREE::2A56",
-      "kind": "extern",
-      "role": "Free/messaging call used by hatch() to release references indexed from the item.",
-      "confidence": "medium"
     },
     {
       "name": "Item::getX",
       "kind": "extern",
-      "role": "Return the item's X coordinate for spawn position computation.",
+      "role": "Read item X world coordinate (used to compute spawn X).",
       "confidence": "high"
     },
     {
       "name": "Item::getY",
       "kind": "extern",
-      "role": "Return the item's Y coordinate for spawn position computation.",
+      "role": "Read item Y world coordinate (used to compute spawn Y).",
       "confidence": "high"
     },
     {
       "name": "Item::getZ",
       "kind": "extern",
-      "role": "Return the item's Z/frame value for vertical offset/frame tests.",
+      "role": "Read item Z (height) coordinate (used to compute spawn Z/offset).",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::func1C19",
+      "kind": "extern",
+      "role": "Spawn or allocate a FREE-managed object/process; used with fixed and randomized parameters.",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::randomInRange",
+      "kind": "extern",
+      "role": "Return a random value in a range to vary FREE spawn parameters.",
       "confidence": "high"
     },
     {
       "name": "Item::destroy",
       "kind": "extern",
-      "role": "Destroy/remove the item from the world.",
+      "role": "Destroy/remove the originating item instance from the world (cleanup).",
       "confidence": "high"
     },
     {
       "name": "Npc::isDead",
       "kind": "extern",
-      "role": "Check if an NPC referenced by the item is dead (used by hatch() to gate retaliation).",
-      "confidence": "high"
-    },
-    {
-      "name": "METHOD::0BCF",
-      "kind": "extern",
-      "role": "Spawn a scripted method/behavior on an NPC (used by hatch() to start reaction).",
-      "confidence": "medium"
-    },
-    {
-      "name": "METHOD::1090",
-      "kind": "extern",
-      "role": "Spawn a follow-up method/behavior on an NPC after the bark.",
-      "confidence": "medium"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Make an NPC/item emit dialogue; used by hatch() to warn or taunt the player.",
+      "role": "Check NPC life-state before initiating conversation in U8P_SORCHAT::hatch.",
       "confidence": "high"
     },
     {
       "name": "Npc::setTarget",
       "kind": "extern",
-      "role": "Set NPC's combat/AI target to the player (provocation).",
+      "role": "Set NPC combat/AI target to force an attack (used in U8P_SORCHAT::hatch special-case).",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::resetRef",
+      "kind": "extern",
+      "role": "Release/reset a FREE-managed reference stored by U8P_SORCHAT::hatch (cleanup).",
       "confidence": "high"
     }
   ],
@@ -130,88 +112,76 @@
     "internal_calls": [
       {
         "caller": "U8P_SORCHAT::hatch",
-        "callee": "U8P_SORCHAT::0080",
-        "purpose": "Spawn the main parser/process to handle the item's script when region/mask checks permit.",
+        "callee": "U8P_SORCHAT::func0080",
+        "purpose": "Spawn the main utility to perform visual/spawn effects at/near the item's location (asynchronous handling of effect creation/cleanup).",
         "confidence": "high"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_SORCHAT::0080",
-        "callee": "FIRESPEL::2B3E",
-        "purpose": "Validate a looped token/element as a valid spell target before spawning a fire-spell.",
+        "caller": "U8P_SORCHAT::func0080",
+        "callee": "FIRESPEL::func2B3E",
+        "purpose": "Predicate: determine whether the item activation should use fire-spell behavior (sets a local flag that gates effect creation).",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_SORCHAT::0080",
-        "callee": "FIRESPEL::1F65",
-        "purpose": "Spawn/instantiate a fire-spell effect at computed coordinates (item X/Y/Z plus offsets).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SORCHAT::0080",
-        "callee": "FREE::1C19",
-        "purpose": "Register or free the spawned fire-spell pid as part of cleanup after spawning.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_SORCHAT::0080",
-        "callee": "FREE::1A96",
-        "purpose": "Additional cleanup/registration call used after spawn or item destroy.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_SORCHAT::0080",
+        "caller": "U8P_SORCHAT::func0080",
         "callee": "Item::getX",
-        "purpose": "Read item's X coordinate for spawn placement.",
+        "purpose": "Read item X coordinate to compute spawn X offset.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SORCHAT::0080",
+        "caller": "U8P_SORCHAT::func0080",
         "callee": "Item::getY",
-        "purpose": "Read item's Y coordinate for spawn placement.",
+        "purpose": "Read item Y coordinate to compute spawn Y offset.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SORCHAT::0080",
+        "caller": "U8P_SORCHAT::func0080",
         "callee": "Item::getZ",
-        "purpose": "Read item's Z/frame for vertical offset/frame logic.",
+        "purpose": "Read item Z coordinate to compute spawn Z/height used for effect placement.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SORCHAT::func0080",
+        "callee": "FIRESPEL::func1F65",
+        "purpose": "Spawn/create a fire-spell visual/effect at computed coordinates when predicate allows.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SORCHAT::func0080",
+        "callee": "FREE::func1C19",
+        "purpose": "Spawn FREE-managed objects/processes: one with a fixed parameter and another with a parameter varied by FREE::randomInRange.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SORCHAT::func0080",
+        "callee": "FREE::randomInRange",
+        "purpose": "Get a randomized spawn parameter to vary one FREE::func1C19 call.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SORCHAT::func0080",
+        "callee": "Item::destroy",
+        "purpose": "Destroy the original item instance after spawning effects and FREE objects.",
         "confidence": "high"
       },
       {
         "caller": "U8P_SORCHAT::hatch",
         "callee": "Npc::isDead",
-        "purpose": "Check candidate NPC referenced by the item to decide whether to provoke it.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SORCHAT::hatch",
-        "callee": "METHOD::0BCF",
-        "purpose": "Spawn an NPC method/behavior as part of retaliation sequence.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_SORCHAT::hatch",
-        "callee": "Item::bark",
-        "purpose": "Make the NPC bark a theft/retaliation message to the player.",
+        "purpose": "Check whether a referenced NPC is alive before starting a conversation branch.",
         "confidence": "high"
       },
       {
         "caller": "U8P_SORCHAT::hatch",
         "callee": "Npc::setTarget",
-        "purpose": "Set the NPC's target to the player to provoke combat/AI response.",
+        "purpose": "Force the NPC to attack/target a handle as part of special-case behavior when conversation branch is not taken.",
         "confidence": "high"
       },
       {
         "caller": "U8P_SORCHAT::hatch",
-        "callee": "FREE::2A56",
-        "purpose": "Free/messaging call to release references when aborting/provoking.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_SORCHAT::hatch",
-        "callee": "Item::destroy",
-        "purpose": "Destroy the item after provoking NPC or after special processing decisions.",
+        "callee": "FREE::resetRef",
+        "purpose": "Release/cleanup a stored FREE-managed reference created earlier by U8P_SORCHAT::hatch or the main utility.",
         "confidence": "high"
       }
     ]
@@ -227,9 +197,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_SORCHAT::SORCHAT::0080",
-    "behavior_summary_one_liner": "SORCHAT::0080 parses a script/token stream attached to an item and, for tokens that indicate spell firing or item creation, spawns fire-spell effects (projectiles/visuals) at positions computed from the item's world coordinates plus token-specific offsets, then performs cleanup and destroys temporary objects and the item when appropriate.",
-    "external_call_count": 13,
+    "main_function": "U8P_SORCHAT::func0080",
+    "behavior_summary_one_liner": "This script manages an item/activation that can 'U8P_SORCHAT::hatch' and produce spell effects and FREE-managed spawns, then cleans up the originating item.",
+    "external_call_count": 11,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

@@ -3,26 +3,27 @@
   "source_of_truth": "dialogue/json/U8P_MACE2.json",
   "file": "U8P_MACE2",
   "behavior_summary": [
-    "Handles the item's 'U8P_MACE2::look' (examine) event: when an actor inspects the mace, the script prepares item/info and process-exclude state, then directs the item to 'bark' a short description string \"mace \" to the requesting process/actor.",
-    "The routine invokes Item::bark targeted at the passed-in process/actor, captures the bark return value, suspends/waits on the bark result, and returns that value to the caller.",
-    "No global flags are read or written by this script excerpt (no persistent world-state changes observed)."
+    "U8P_MACE2::look is an inspect/U8P_MACE2::look handler that, when the player examines the object, emits a single short bark/text identifying the item as \"mace \" and then the process suspends/ends.",
+    "There is no conditional logic, no menu interaction, and no calls to other scripts or engine routines from this process.",
+    "Item metadata associated with this object (not used by the U8P_MACE2::look process itself) indicates this entry represents a mace-type weapon (example properties: baseDamage 4, damageModifier 11, damageType blunt, treasureChance 9)."
   ],
   "notable_control_flow": [
-    "Entry on a trigger-style event (Event 0: U8P_MACE2::look) that runs in the item's process context.",
-    "A short call sequence that builds/pushes a literal string, calls Item::bark, frees the temporary string, performs an implies/pop style control operation, and issues a suspend/wait before returning the bark result.",
-    "The function's return value is the direct return from Item::bark (propagated back to the caller)."
+    "Single-entry straight-line flow: trigger -> bark \"mace \" -> suspend/terminate.",
+    "No branching or loops present.",
+    "Process runs under the engine's U8P_MACE2::look/inspect execution form (processType 0x0208)."
   ],
   "open_questions": [
-    "Exact semantic meaning of the 'set info' and 'process exclude' opcodes here — which object receives the info and whether the calling process or the item is excluded (inferred but not explicit).",
-    "Purpose of the zero-initialized local (init_flag) at start — appears to be a placeholder or boolean but its concrete use is not present in the excerpt.",
-    "Whether any side-effects beyond the bark (e.g., visual/audio cues or logging) occur as a result of Item::bark in the full engine implementation."
+    "Is the trailing space in the bark text \"mace \" intentional or an artifact of extraction?",
+    "Are the listed item properties (damage, modifier, type, treasure chance) consumed elsewhere in gameplay systems even though this script does not reference them?",
+    "Was this object intended to have more complex inspect text/behavior that was removed or simplified?"
   ],
   "main_function": {
     "name": "U8P_MACE2::look",
     "execution_form": "process",
-    "purpose": "Respond to an actor's 'U8P_MACE2::look' action on the mace by preparing item/info state and emitting a short description ('mace ') via Item::bark to the requesting process, then returning the bark result.",
+    "purpose": "Provide the short in-world label when the player inspects/examines the mace object; display a single bark/text and then end/suspend the U8P_MACE2::look process.",
     "entry_conditions": [
-      "Event 0 (U8P_MACE2::look) — triggered when an actor inspects or 'looks' at the mace item"
+      "Triggered by the player's U8P_MACE2::look/inspect action on the object (engine U8P_MACE2::look process, processType 0x0208).",
+      "Inferred: activated when the player targets or examines the item in-game."
     ],
     "confidence": "high"
   },
@@ -30,20 +31,13 @@
     {
       "name": "U8P_MACE2::look",
       "kind": "main",
-      "role": "Handle the mace item's 'U8P_MACE2::look' event and produce a short descriptive bark to the requesting process.",
+      "role": "Short-label/inspect handler that displays a single bark identifying the object as a mace.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_MACE2::look",
-        "callee": "Item::bark",
-        "purpose": "Request that the item/process emit/display the short description string \"mace \" to the given target process/actor; return value is captured and returned by MACE2::look.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -56,9 +50,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "MACE2::look",
-    "behavior_summary_one_liner": "Handles the item's 'U8P_MACE2::look' (examine) event: when an actor inspects the mace, the script prepares item/info and process-exclude state, then directs the item to 'bark' a short description string \"mace \" to the requesting process/actor.",
-    "external_call_count": 1,
+    "main_function": "U8P_MACE2::look",
+    "behavior_summary_one_liner": "U8P_MACE2::look is an inspect/U8P_MACE2::look handler that, when the player examines the object, emits a single short bark/text identifying the item as \"mace \" and then the process suspends/ends.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

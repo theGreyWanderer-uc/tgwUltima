@@ -3,30 +3,27 @@
   "source_of_truth": "dialogue/json/U8P_FIREPLNS.json",
   "file": "U8P_FIREPLNS",
   "behavior_summary": [
-    "Provides examination (U8P_FIREPLNS::look) behavior and ambient-sound handling for a fireplace world object.",
-    "U8P_FIREPLNS::look runs when an actor examines the fireplace: it sets object info/process-exclude flags and calls Item::bark to emit the short label \"fireplace \".",
-    "U8P_FIREPLNS::enterFastArea runs when an actor enters the fireplace's fast-area: it sets the same info/process-exclude flags and starts an ambient fireplace sound (playAmbientSFX) using an inferred sound id 0x0086 and an inferred volume/type 0x32.",
-    "U8P_FIREPLNS::leaveFastArea runs when an actor leaves that area: it sets the flags and stops the same ambient sound (stopSFX) using the same inferred sound id.",
-    "Most parameter roles (caller PID/object pointer, area identifier, sound id, volume) are inferred from push/call sequences; the script's gameplay effect is to label the object when looked at and to start/stop an ambient crackle sound as the actor moves into/out of the fireplace area."
+    "U8P_FIREPLNS implements a simple fireplace object: when the player 'looks' at it the object displays the short description 'fireplace' and then suspends the U8P_FIREPLNS::look process.",
+    "The object exposes fast-area entry/exit handlers: U8P_FIREPLNS::enterFastArea starts an ambient fireplace sound, and U8P_FIREPLNS::leaveFastArea stops that sound.",
+    "No global flags, menus, or branching logic are used; behavior is purely presentation and ambient SFX control tied to spatial triggers and the U8P_FIREPLNS::look action."
   ],
   "notable_control_flow": [
-    "Event-driven: three distinct handlers mapped to game events — U8P_FIREPLNS::look (examine), enterFastArea (area entry), leaveFastArea (area exit).",
-    "Each handler writes the same 'info' and 'process exclude' flags before performing its main action (bark/startSFX/stopSFX).",
-    "FIREPLNS::look calls Item::bark and then uses the bark return value (retval) in an implies/pop sequence before suspending/returning; the bark return is observed to influence a short control sequence.",
-    "enterFastArea starts an ambient SFX and leaveFastArea stops it, using a consistent sound identifier so the start/stop pair correspond to the same effect."
+    "U8P_FIREPLNS::look: emit a single bark ('fireplace') then call suspend to pause the process (no branching).",
+    "U8P_FIREPLNS::enterFastArea: immediately calls playAmbientSFX to begin the object's ambient sound (no branching).",
+    "U8P_FIREPLNS::leaveFastArea: immediately calls stopSFX to end the ambient sound (no branching).",
+    "Behavior is event-driven: engine invokes U8P_FIREPLNS::look on inspect, and invokes U8P_FIREPLNS::enterFastArea/U8P_FIREPLNS::leaveFastArea on fast-area entry/exit."
   ],
   "open_questions": [
-    "Exact meaning and bit semantics of the 'info' and 'process exclude' writes: what info id is set and which object (caller vs. fireplace instance) is targeted?",
-    "Precise parameter ordering and types for playAmbientSFX and stopSFX calls are inferred from pushes; the exact ABI in this engine context is not fully proven.",
-    "Whether sound id 0x0086 and uword 0x32 are the canonical sound identifier and volume/type respectively (these constants are inferred from pushes and not named).",
-    "Whether the PID pushed to Item::bark is the player's process id or the fireplace object process id (inferred as a process/object pointer but not explicitly typed)."
+    "What exact sound resources do numeric IDs 0x32 and 0x0086 reference (sound bank vs. effect id)?",
+    "Does playAmbientSFX produce a looping ambient sound that persists until stopSFX is called, or is the lifecycle different in-engine?",
+    "Does suspend in U8P_FIREPLNS::look wait for a specific resume event (e.g., player input or time) or merely yields until the engine reenters the process?"
   ],
   "main_function": {
     "name": "U8P_FIREPLNS::look",
     "execution_form": "process",
-    "purpose": "Handle the player's 'U8P_FIREPLNS::look' (examine) action on the fireplace: set contextual info/exclusion and display the short object label via Item::bark.",
+    "purpose": "Provide the short description when the player examines/inspects the fireplace object and then pause the U8P_FIREPLNS::look process.",
     "entry_conditions": [
-      "Event 0 (examine/U8P_FIREPLNS::look) — invoked when an actor looks at or inspects the fireplace object."
+      "Player performs a 'U8P_FIREPLNS::look' (inspect) action on the fireplace object."
     ],
     "confidence": "high"
   },
@@ -34,77 +31,66 @@
     {
       "name": "U8P_FIREPLNS::look",
       "kind": "main",
-      "role": "Examine/U8P_FIREPLNS::look event handler that displays the fireplace label and sets object processing flags.",
+      "role": "Display object short description ('fireplace') and suspend the U8P_FIREPLNS::look process.",
       "confidence": "high"
     },
     {
       "name": "U8P_FIREPLNS::enterFastArea",
       "kind": "helper",
-      "role": "Area-entry handler: set info/process-exclude and start the fireplace ambient SFX (playAmbientSFX).",
+      "role": "Engine-invoked fast-area entry handler; starts ambient fireplace sound via playAmbientSFX.",
       "confidence": "high"
     },
     {
       "name": "U8P_FIREPLNS::leaveFastArea",
       "kind": "helper",
-      "role": "Area-exit handler: set info/process-exclude and stop the fireplace ambient SFX (stopSFX).",
+      "role": "Engine-invoked fast-area exit handler; stops ambient fireplace sound via stopSFX.",
       "confidence": "high"
     },
     {
-      "name": "Item::bark",
+      "name": "playAmbientSFX",
       "kind": "extern",
-      "role": "Engine-provided routine used to emit/display a short text string associated with an item/object.",
+      "role": "Start or play an ambient sound effect for an object (external engine/audio API).",
       "confidence": "high"
     },
     {
-      "name": "U8P_FIREPLNS::playAmbientSFX",
+      "name": "stopSFX",
       "kind": "extern",
-      "role": "Engine-provided routine to start an ambient sound effect tied to an area/object.",
-      "confidence": "medium"
+      "role": "Stop a sound effect previously started for an object (external engine/audio API).",
+      "confidence": "high"
     },
     {
-      "name": "U8P_FIREPLNS::stopSFX",
+      "name": "suspend",
       "kind": "extern",
-      "role": "Engine-provided routine to stop an ambient sound effect previously started.",
-      "confidence": "medium"
+      "role": "Engine-level suspend/yield called at the end of U8P_FIREPLNS::look to pause the process.",
+      "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_FIREPLNS::look",
-        "callee": "Item::bark",
-        "purpose": "Display the short label/description \"fireplace \" to the examining process/player.",
+        "caller": "U8P_FIREPLNS::enterFastArea",
+        "callee": "playAmbientSFX",
+        "purpose": "Begin the object's ambient fireplace sound (called with this, 0x32, 0x0086).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_FIREPLNS::enterFastArea",
-        "callee": "U8P_FIREPLNS::playAmbientSFX",
-        "purpose": "Begin an ambient fireplace sound when an actor enters the fireplace area (inferred sound id 0x0086, inferred volume/type 0x32).",
-        "confidence": "medium"
+        "caller": "U8P_FIREPLNS::leaveFastArea",
+        "callee": "stopSFX",
+        "purpose": "Stop the fireplace ambient sound previously started (called with this, 0x0086).",
+        "confidence": "high"
       },
       {
-        "caller": "U8P_FIREPLNS::leaveFastArea",
-        "callee": "U8P_FIREPLNS::stopSFX",
-        "purpose": "Stop the ambient fireplace sound when the actor leaves the area (matches the inferred sound id used on enter).",
-        "confidence": "medium"
+        "caller": "U8P_FIREPLNS::look",
+        "callee": "suspend",
+        "purpose": "Yield/pause the U8P_FIREPLNS::look process after showing the bark so the engine can resume or handle other events.",
+        "confidence": "high"
       }
     ]
   },
   "global_flags": {
     "reads": [],
-    "writes": [
-      {
-        "name": "info",
-        "likely_effect": "Marks the object/interaction with a contextual info flag (used before barking or SFX operations).",
-        "confidence": "high"
-      },
-      {
-        "name": "process exclude",
-        "likely_effect": "Exclude the object or process from normal processing (prevents reentrance or duplicate handling while the action runs).",
-        "confidence": "high"
-      }
-    ]
+    "writes": []
   },
   "ui_tags": [
     "trigger",
@@ -114,10 +100,10 @@
   ],
   "quick_facts": {
     "main_function": "U8P_FIREPLNS::look",
-    "behavior_summary_one_liner": "Provides examination (U8P_FIREPLNS::look) behavior and ambient-sound handling for a fireplace world object.",
+    "behavior_summary_one_liner": "U8P_FIREPLNS implements a simple fireplace object: when the player 'looks' at it the object displays the short description 'fireplace' and then suspends the U8P_FIREPLNS::look process.",
     "external_call_count": 3,
     "flag_read_count": 0,
-    "flag_write_count": 2
+    "flag_write_count": 0
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

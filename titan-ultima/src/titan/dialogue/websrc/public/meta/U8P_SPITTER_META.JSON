@@ -3,30 +3,27 @@
   "source_of_truth": "dialogue/json/U8P_SPITTER.json",
   "file": "U8P_SPITTER",
   "behavior_summary": [
-    "Implements a stationary 'spitter' entity that reacts to being looked at with a short bark/description and, when a valid actor enters its fast-area trigger, repeatedly spawns and fires small projectile 'spit' entities toward that actor until the actor leaves the area.",
-    "U8P_SPITTER::enterFastArea marks per-item info/state and spawns a repeating spitting process (U8P_SPITTER::00DE) tied to the activator/owner.",
-    "U8P_SPITTER::leaveFastArea clears the info/state and calls FREE::2A56 to free/stop the spawned spitting process, cleaning up behavior when the actor leaves.",
-    "U8P_SPITTER::00DE is a looping process that waits a randomized delay (urandom), optionally spawns a short-timer/free helper (FREE::1C19) to implement the wait, then triggers U8P_SPITTER::011C to create and hurl a spit projectile; this repeats while the process is active.",
-    "U8P_SPITTER::011C computes direction to the target (Item::getDirToItem), maps the direction into X/Y velocity components (with randomization via urandom), creates the projectile item (Item::create), tags it (Item::orStatus), plays a SFX (playSFX), places it in the world (Item::pop) and applies velocity (Item::hurl)."
+    "This script implements a simple spitting enemy/NPC. When inspected (U8P_SPITTER::look), it emits a short bark 'spitter '.",
+    "When an actor enters the NPC's fast-area trigger (U8P_SPITTER::enterFastArea) the NPC starts a timed/spawned routine that periodically creates and hurls a projectile (spit) toward the target.",
+    "When the actor leaves the fast-area (U8P_SPITTER::leaveFastArea) the script clears the spawned/timed process reference so the periodic spitting stops.",
+    "The spit action (U8P_SPITTER::func011C) computes the cardinal direction to the target, maps that direction into numeric multipliers and randomness, creates an item (projectile), sets status bits, plays a spit SFX, places the projectile at an offset from the NPC, and calls Item::hurl to launch it with randomized speed/distance."
   ],
   "notable_control_flow": [
-    "Look handler (U8P_SPITTER::look) is an event-driven short handler: set per-item info/process-exclude, call Item::bark(\"spitter \") and suspend/return.",
-    "Fast-area entry (U8P_SPITTER::enterFastArea) spawns a persistent repeating process (U8P_SPITTER::00DE) associated with the spitter/activator so spitting only occurs while an actor is in range.",
-    "Fast-area leave (U8P_SPITTER::leaveFastArea) invokes FREE::2A56 with the stored process/info reference to stop and clean up the repeating spitting process.",
-    "The spitting loop (U8P_SPITTER::00DE) uses urandom to vary timing, spawns a short-timer helper (FREE::1C19) to implement delays, then spawns the concrete firing routine U8P_SPITTER::011C in a repeating cycle."
+    "U8P_SPITTER::enterFastArea => calls U8P_SPITTER::func00DE to start a spawn/suspend loop that drives repeated spitting.",
+    "U8P_SPITTER::func00DE computes a randomized delay (uses urandom), spawns a free-running process (FREE::func1C19) to implement timing, then suspends; after the suspend it invokes U8P_SPITTER::func011C to perform the spit action (spawn/wait/trigger loop).",
+    "U8P_SPITTER::leaveFastArea calls FREE::resetRef(0x0205h, this) to clear the stored process reference and stop the repeated spitting behavior."
   ],
   "open_questions": [
-    "Exact semantics of the various per-item info keys (constants 0x0205, 0x0208, 0x021B, 0x021C) — they appear to mark process ownership/exclusion but precise engine semantics are inferred.",
-    "Precise behavior and side-effects of FREE::1C19 (spawned from the delay computation) — it appears to implement a timed wait or auxiliary visual/logic effect but its exact role is uncertain.",
-    "Range interpretation and unit meaning of velocity and timing constants (e.g., urandom ranges 0xC8, 0x14, 0x1E, 0x0F; spawn offsets like +0x18 / -0x0B) — numeric effects on gameplay (speed/distance/time) are inferred from usage.",
-    "Whether the spawned spitting process (U8P_SPITTER::00DE) targets only the first entering actor or updates target if another actor enters while already active (target management is inferred from stored/indirect arguments but not explicit)."
+    "Exact semantics and lifecycle of the spawned FREE::func1C19 process (arguments observed but exact behavior is external) — inferred to be a timing worker; confidence: medium.",
+    "Precise numeric meanings for constants (e.g., 0x00C8 spawn base delay, 0x1E base hurl speed, multipliers used for direction/distance) and how they map to in-game timing/velocity — confidence: low for exact values, high for functional role.",
+    "Purpose of local2 (set to 1 early in U8P_SPITTER::func011C) — appears to be an internal guard/flag but its further effect is not visible in the excerpt — confidence: low."
   ],
   "main_function": {
     "name": "U8P_SPITTER::look",
     "execution_form": "process",
-    "purpose": "Provide immediate feedback when an actor looks at the spitter by emitting a short descriptive bark and setting per-item info/process-exclude markers during the handler.",
+    "purpose": "Provide the player-facing inspect/description response for the NPC; emits a short bark 'spitter ' and then suspends/waits.",
     "entry_conditions": [
-      "Event 0 (U8P_SPITTER::look) — invoked when the Avatar or another actor examines/looks at the spitter item."
+      "Triggered by the game's 'U8P_SPITTER::look' or inspect action on the NPC (player examines the NPC)."
     ],
     "confidence": "high"
   },
@@ -34,37 +31,31 @@
     {
       "name": "U8P_SPITTER::look",
       "kind": "main",
-      "role": "Short event handler for 'U8P_SPITTER::look' that barks a description and sets per-item info/process-exclude.",
+      "role": "Player inspection handler; emits a short bark.",
       "confidence": "high"
     },
     {
       "name": "U8P_SPITTER::enterFastArea",
       "kind": "helper",
-      "role": "Fast-area entry trigger: marks item info/process-exclude and spawns the repeating spitting process (U8P_SPITTER::00DE).",
+      "role": "Area-entry trigger that starts periodic spitting by calling U8P_SPITTER::func00DE.",
       "confidence": "high"
     },
     {
       "name": "U8P_SPITTER::leaveFastArea",
       "kind": "helper",
-      "role": "Fast-area exit trigger: clears marks and calls FREE::2A56 to stop/free the spawned spitting process.",
+      "role": "Area-exit trigger that stops periodic spitting by calling FREE::resetRef to clear the spawned process reference.",
       "confidence": "high"
     },
     {
-      "name": "U8P_SPITTER::00DE",
+      "name": "U8P_SPITTER::func00DE",
       "kind": "helper",
-      "role": "Persistent loop/process that waits randomized intervals and repeatedly triggers projectile creation (U8P_SPITTER::011C) while active.",
+      "role": "Scheduler/spawner utility: compute randomized delay, spawn a free-running timer worker (FREE::func1C19), suspend/wait, then call U8P_SPITTER::func011C to perform spit — drives repetition.",
       "confidence": "high"
     },
     {
-      "name": "U8P_SPITTER::011C",
+      "name": "U8P_SPITTER::func011C",
       "kind": "helper",
-      "role": "Instantiates, positions, and hurls a spit projectile toward the target; includes direction lookup and randomized velocity mapping.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine-provided function used by U8P_SPITTER::look handler to display/emote the spitter's short description string to the activator/viewer.",
+      "role": "Create-and-hurl routine: compute direction to target, create projectile (Item::create type 0x0324), set status, play SFX, place projectile, and call Item::hurl to launch it with randomized speed/distance.",
       "confidence": "high"
     }
   ],
@@ -72,113 +63,83 @@
     "internal_calls": [
       {
         "caller": "U8P_SPITTER::enterFastArea",
-        "callee": "U8P_SPITTER::00DE",
-        "purpose": "Spawn the repeating spitting process bound to the activator/spitter so it starts firing projectiles while an actor is in the fast-area.",
+        "callee": "U8P_SPITTER::func00DE",
+        "purpose": "Start the timed/spawned routine that schedules periodic spit actions.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SPITTER::00DE",
-        "callee": "U8P_SPITTER::011C",
-        "purpose": "Trigger a single firing action (create + hurl projectile) as part of the spitting loop.",
+        "caller": "U8P_SPITTER::func00DE",
+        "callee": "U8P_SPITTER::func011C",
+        "purpose": "Invoke the concrete spit action after the spawn/suspend timing period completes.",
         "confidence": "high"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_SPITTER::look",
-        "callee": "Item::bark",
-        "purpose": "Emit the literal description 'spitter ' to the activator/viewer as response to U8P_SPITTER::look.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SPITTER::enterFastArea",
-        "callee": "FREE::2A56",
-        "purpose": "Called on leave to free/stop the spawned spitting process or clear stored process info (cleanup).",
+        "caller": "U8P_SPITTER::func00DE",
+        "callee": "FREE::func1C19",
+        "purpose": "Spawn/start a free-running/timed process used as the timing worker for repeated spit events (spawn observed with arg 0x00000000h).",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_SPITTER::00DE",
-        "callee": "urandom",
-        "purpose": "Compute randomized wait/delay values between spits to vary firing cadence.",
+        "caller": "U8P_SPITTER::leaveFastArea",
+        "callee": "FREE::resetRef",
+        "purpose": "Clear/terminate the stored process reference of type 0x0205 associated with this NPC to stop periodic spitting.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SPITTER::00DE",
-        "callee": "FREE::1C19",
-        "purpose": "Spawned with a computed small delay/value; likely used to implement a timed wait or timeout during the spitting loop.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_SPITTER::011C",
+        "caller": "U8P_SPITTER::func011C",
         "callee": "Item::getDirToItem",
-        "purpose": "Determine discrete direction (0..7) from spitter to target to orient projectile velocity.",
+        "purpose": "Compute cardinal direction from the NPC to the target (used to choose direction/distance multipliers for the projectile).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SPITTER::011C",
-        "callee": "urandom",
-        "purpose": "Randomize projectile speed components and minor timing/offset variations for less deterministic projectiles.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SPITTER::011C",
+        "caller": "U8P_SPITTER::func011C",
         "callee": "Item::create",
-        "purpose": "Create the projectile item instance (type 0x0324) and return its pointer into a local out-parameter.",
+        "purpose": "Create the projectile item (observed type/id 0x0324) and receive its structure/address (stored in local5).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SPITTER::011C",
+        "caller": "U8P_SPITTER::func011C",
         "callee": "Item::orStatus",
-        "purpose": "Set status bits (mask 0x02) on the created projectile to mark ownership/state before spawning.",
+        "purpose": "Set status bits (mask observed 0x02) on the created projectile (e.g., to mark it movable/projectile).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SPITTER::011C",
-        "callee": "U8P_SPITTER::playSFX",
-        "purpose": "Play projectile firing sound (sfx id 0x64) when spitter emits a spit.",
+        "caller": "U8P_SPITTER::func011C",
+        "callee": "playSFX",
+        "purpose": "Play the spit sound effect at the NPC when the projectile is created/launched.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SPITTER::011C",
-        "callee": "Item::getZ",
-        "purpose": "Read spitter Z to compute projectile spawn height (Z + 0x18 offset observed).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SPITTER::011C",
-        "callee": "Item::getY",
-        "purpose": "Read spitter Y to compute projectile spawn Y (Y - 0x0B offset observed).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SPITTER::011C",
-        "callee": "Item::getX",
-        "purpose": "Read spitter X to compute projectile spawn X (X - 0x0B offset observed).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SPITTER::011C",
+        "caller": "U8P_SPITTER::func011C",
         "callee": "Item::pop",
-        "purpose": "Place the created projectile item into the world at computed X,Y,Z coordinates.",
+        "purpose": "Place the created projectile into the world at coordinates offset from the NPC prior to launching (z+0x18, y-0x0B, x-0x0B observed).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SPITTER::011C",
+        "caller": "U8P_SPITTER::func011C",
         "callee": "Item::hurl",
-        "purpose": "Apply computed X/Y velocity components (with randomized magnitude) to the projectile so it moves toward the target.",
+        "purpose": "Launch the created projectile as a hurl/throw with arguments for target/type, speed (base + urandom variance), direction, distance/variance, and the item address.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SPITTER::func00DE",
+        "callee": "urandom",
+        "purpose": "Generate randomized delay for spawn timing (temp = 0x00C8 + urandom(0x00C8)).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SPITTER::func011C",
+        "callee": "urandom",
+        "purpose": "Add randomized variance to projectile speed and distance (e.g., speed = 0x1E + urandom(0x0F), distance uses urandom with multiplier mapping).",
         "confidence": "high"
       }
     ]
   },
   "global_flags": {
     "reads": [],
-    "writes": [
-      {
-        "name": "per-item info keys (e.g., 0x0205, 0x0208, 0x021B, 0x021C)",
-        "likely_effect": "Set on the spitter/activator to record process ownership, exclusion from normal processing, and to associate spawned processes; used to start/stop the repeating spitting behavior.",
-        "confidence": "high"
-      }
-    ]
+    "writes": []
   },
   "ui_tags": [
     "trigger",
@@ -188,10 +149,10 @@
   ],
   "quick_facts": {
     "main_function": "U8P_SPITTER::look",
-    "behavior_summary_one_liner": "Implements a stationary 'spitter' entity that reacts to being looked at with a short bark/description and, when a valid actor enters its fast-area trigger, repeatedly spawns and fires small projectile 'spit' entities toward that actor until the actor leaves the area.",
-    "external_call_count": 14,
+    "behavior_summary_one_liner": "This script implements a simple spitting enemy/NPC. When inspected (U8P_SPITTER::look), it emits a short bark 'spitter '.",
+    "external_call_count": 10,
     "flag_read_count": 0,
-    "flag_write_count": 1
+    "flag_write_count": 0
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

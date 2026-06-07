@@ -3,27 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_LOTHALT.json",
   "file": "U8P_LOTHALT",
   "behavior_summary": [
-    "This script implements the object's Event 0 ('U8P_LOTHALT::look') handler. When an actor inspects the object, the associated process is prepared (per-process info bits and a process-exclude flag are set), the literal string \"Lothian\" is constructed and passed to Item::bark for the target process to emit, the temporary string memory is freed, and the handler returns the bark call's result.",
-    "No global game-state flags are read or written by this snippet; behavior is localized to the target process and temporary resources.",
-    "The handler appears designed to announce the name \"Lothian\" when looked at, while using process state adjustments to suppress or alter other processing while the bark occurs."
+    "The script implements a U8P_LOTHALT::look/examine handler for an NPC: when the player 'looks at' this NPC the process plays a single bark containing the text 'Lothian'.",
+    "Immediately after emitting the bark the process calls suspend, which likely pauses the U8P_LOTHALT::look handling until the engine resumes it (common pattern for short one-shot barks).",
+    "There are no menus, conditionals, global-flag reads/writes, or external function calls in this snippet; the behavior is a single reactive bark on the examine event."
   ],
   "notable_control_flow": [
-    "Event-driven: entry is the 'U8P_LOTHALT::look' event (Event 0) on the object; execution runs in the context of a process.",
-    "Before the bark call the code sets per-process info and a process-exclude flag — likely to change actor state or prevent re-entrancy/other reactions during the bark.",
-    "Construct-use-cleanup sequence: allocate/prepare literal string \"Lothian\", call Item::bark(process, string), then free the temporary string.",
-    "The return value from Item::bark is captured and propagated as the handler's return; an intermediate temporary is used in an implies/pop sequence before suspend/return (semantics inferred)."
+    "Entry: triggered by the engine's 'U8P_LOTHALT::look' / examine event (process type 0x0208) for this NPC.",
+    "Action: play a bark/dialogue line 'Lothian'.",
+    "Termination/hold: the process issues suspend immediately after the bark; no branching occurs."
   ],
   "open_questions": [
-    "What exact semantics and ID are associated with the per-process info and 'process exclude' opcodes (what behavior they enable/disable)?",
-    "What precise meaning and consumers exist for the handler's return value from Item::bark (is it used by the engine for dialog flow or ignored)?",
-    "What does the intermediate 'implies' / pop temporary control (is it a guard for suspending the process, or an engine-specific bookkeeping value)?"
+    "Is the bark text 'Lothian' intended as the NPC's spoken line or is it a label/name used for lookup? (inferred as spoken text with medium confidence)",
+    "Is the suspend used to wait for audio/dialogue playback to finish, or simply to yield the U8P_LOTHALT::look process to the engine? (likely for playback synchronization; medium confidence)",
+    "Are there any surrounding engine-level behaviors (e.g., camera or UI effects) triggered by the U8P_LOTHALT::look process elsewhere that this snippet relies on? (unknown; low confidence)"
   ],
   "main_function": {
     "name": "U8P_LOTHALT::look",
     "execution_form": "process",
-    "purpose": "Handle the item's 'U8P_LOTHALT::look' event by causing the associated process to emit the text \"Lothian\". The handler sets per-process info/exclusion state, constructs and passes a temporary string to Item::bark, frees the temporary, and returns the bark result.",
+    "purpose": "Respond to the player's examine/U8P_LOTHALT::look event by producing a single bark 'Lothian' and then suspending the process.",
     "entry_conditions": [
-      "Triggered by Event 0 (the 'U8P_LOTHALT::look' or examine action) for the object."
+      "Invoked by the engine when the player examines or 'looks at' the NPC (process type 0x0208)."
     ],
     "confidence": "high"
   },
@@ -31,26 +30,13 @@
     {
       "name": "U8P_LOTHALT::look",
       "kind": "main",
-      "role": "Event handler for the object's 'U8P_LOTHALT::look' action; drives local process state changes and invokes Item::bark to emit a name string.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine to make the target process/object emit or display a short text string (used here to speak 'Lothian').",
+      "role": "Handle the NPC's U8P_LOTHALT::look/examine event by emitting a bark and suspending the process.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_LOTHALT::look",
-        "callee": "Item::bark",
-        "purpose": "Ask the target process/object to emit/display the literal string \"Lothian\" to the game UI or listeners.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -58,14 +44,14 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "animation",
-    "guard"
+    "suspend",
+    "speech",
+    "examine"
   ],
   "quick_facts": {
     "main_function": "U8P_LOTHALT::look",
-    "behavior_summary_one_liner": "This script implements the object's Event 0 ('U8P_LOTHALT::look') handler. When an actor inspects the object, the associated process is prepared (per-process info bits and a process-exclude flag are set), the literal string \"Lothian\" is constructed and passed to Item::bark for the target process to emit, the temporary string memory is freed, and the handler returns the bark call's result.",
-    "external_call_count": 1,
+    "behavior_summary_one_liner": "The script implements a U8P_LOTHALT::look/examine handler for an NPC: when the player 'looks at' this NPC the process plays a single bark containing the text 'Lothian'.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

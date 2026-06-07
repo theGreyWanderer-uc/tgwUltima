@@ -3,30 +3,30 @@
   "source_of_truth": "dialogue/json/U8P_DRIPS.json",
   "file": "U8P_DRIPS",
   "behavior_summary": [
-    "U8P_DRIPS::anim advances the animation frame for a 'drips' item on each animation tick: it reads the current frame, increments it, wraps the value back to 0 if it exceeds 14 (0x0E), triggers a sound effect when the new frame equals 10 (0x0A), and writes the updated frame back to the item.",
-    "The sound is played at a specific animation frame using a word taken from the item plus two constant parameters (0x64 and 0x00A3). This appears intended to synchronize an audio cue with a visual frame.",
-    "No global flags are read or written by this script; its effects are localized to the item instance passed in."
+    "U8P_DRIPS::anim is a small item process that advances the item's animation frame each time it runs. It reads the current frame, increments it by one, wraps to 0 if the result exceeds 0x0E (14), and writes the new frame back to the item.",
+    "When the incremented frame equals 0x0A (10) the process triggers a specific sound effect via playSFX(this, 0x64, 0x00A3).",
+    "The routine is implemented as a process (processType 0x020A) and therefore is inferred to execute periodically under the item's process scheduler."
   ],
   "notable_control_flow": [
-    "Called as a periodic animation/tick handler (Event 2) for the item instance.",
-    "1) Call Item::getFrame(this) to read current frame.",
-    "2) Compute new_frame = current_frame + 1.",
-    "3) If new_frame > 0x0E (14) then new_frame = 0 (wraparound).",
-    "4) If new_frame == 0x0A (10) then call playSFX(item_field, 0x64, 0x00A3) to play a synchronized sound effect.",
-    "5) Call Item::setFrame(this, new_frame) to store the updated frame back to the item."
+    "Read current frame: Item::getFrame(this).",
+    "Compute local1 = currentFrame + 1.",
+    "If local1 > 0x0E then local1 = 0 (wrap-around).",
+    "If local1 == 0x0A then call playSFX(this, 0x64, 0x00A3).",
+    "Persist new frame: Item::setFrame(local1, this)."
   ],
   "open_questions": [
-    "Which exact item field is pushed as the first argument to playSFX (a word read via indirect access)?",
-    "What do the numeric constants passed to playSFX represent (0x64, 0x00A3) in engine terms — volume, priority, or sound id mapping?",
-    "Are the frame thresholds (wrap at 0x0E, trigger at 0x0A) chosen to match specific sprite frames or timing in the visual animation?",
-    "How often Event 2 (the U8P_DRIPS::anim tick) is invoked for this item instance in game-time units?"
+    "Exact scheduling semantics: how often/process tick frequency is U8P_DRIPS::anim invoked by the engine (processType 0x020A implies periodic but period is not present).",
+    "Meaning of the sound parameters (0x64 and 0x00A3): what SFX this maps to in-game and whether 0x64 is a volume/channel or category.",
+    "Why the SFX is tied specifically to frame 0x0A: is that a keyframe with visible effect or gameplay significance in the animation sequence?",
+    "Is the frame range always 0..0x0E for this item class or can it be configured elsewhere?"
   ],
   "main_function": {
     "name": "U8P_DRIPS::anim",
     "execution_form": "process",
-    "purpose": "Advance and wrap the item's animation frame on each animation tick and play a sound effect at a designated frame.",
+    "purpose": "Advance and wrap the item's animation frame on each process tick; play a sound effect when a specific frame is reached; persist updated frame to the item.",
     "entry_conditions": [
-      "Invoked as the item's animation/tick handler (Event 2) — called periodically by the engine to update the item's animation."
+      "Registered as processType 0x020A — invoked by the item's process scheduler (periodic animation/update tick).",
+      "Implicit 'this' item context is required (function operates on the current item instance)."
     ],
     "confidence": "high"
   },
@@ -34,25 +34,7 @@
     {
       "name": "U8P_DRIPS::anim",
       "kind": "main",
-      "role": "animation/tick handler for a drips item; reads and writes the item's frame and triggers frame-tied SFX",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getFrame",
-      "kind": "extern",
-      "role": "read current animation frame/index from the item instance",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_DRIPS::playSFX",
-      "kind": "extern",
-      "role": "play a sound effect (called when new_frame == 0x0A); first arg is a word taken from the item, followed by constants 0x64 and 0x00A3",
-      "confidence": "medium"
-    },
-    {
-      "name": "Item::setFrame",
-      "kind": "extern",
-      "role": "write the computed new animation frame back into the item instance",
+      "role": "animation-frame updater (process)",
       "confidence": "high"
     }
   ],
@@ -62,19 +44,19 @@
       {
         "caller": "U8P_DRIPS::anim",
         "callee": "Item::getFrame",
-        "purpose": "Retrieve the item's current animation frame before incrementing.",
+        "purpose": "Read the current animation/frame index for the implicit this item.",
         "confidence": "high"
       },
       {
         "caller": "U8P_DRIPS::anim",
-        "callee": "U8P_DRIPS::playSFX",
-        "purpose": "Play a synchronized sound effect when the animation reaches frame 0x0A; first argument appears to be a word read from the item, the other args are constants (0x64, 0x00A3).",
-        "confidence": "medium"
+        "callee": "playSFX",
+        "purpose": "Play a specific sound effect when the new frame equals 0x0A; parameters observed are (this, 0x64, 0x00A3).",
+        "confidence": "high"
       },
       {
         "caller": "U8P_DRIPS::anim",
         "callee": "Item::setFrame",
-        "purpose": "Store the new/wrapped animation frame back on the item instance.",
+        "purpose": "Persist the computed/wrapped animation frame back to the item instance (setFrame(newFrame, this)).",
         "confidence": "high"
       }
     ]
@@ -84,14 +66,14 @@
     "writes": []
   },
   "ui_tags": [
-    "trigger",
-    "cleanup",
+    "process",
     "animation",
-    "guard"
+    "sfx",
+    "wrap"
   ],
   "quick_facts": {
     "main_function": "U8P_DRIPS::anim",
-    "behavior_summary_one_liner": "U8P_DRIPS::anim advances the animation frame for a 'drips' item on each animation tick: it reads the current frame, increments it, wraps the value back to 0 if it exceeds 14 (0x0E), triggers a sound effect when the new frame equals 10 (0x0A), and writes the updated frame back to the item.",
+    "behavior_summary_one_liner": "U8P_DRIPS::anim is a small item process that advances the item's animation frame each time it runs. It reads the current frame, increments it by one, wraps to 0 if the result exceeds 0x0E (14), and writes the new frame back to the item.",
     "external_call_count": 3,
     "flag_read_count": 0,
     "flag_write_count": 0

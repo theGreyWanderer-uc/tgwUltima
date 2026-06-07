@@ -3,34 +3,34 @@
   "source_of_truth": "dialogue/json/U8P_TORWIN.json",
   "file": "U8P_TORWIN",
   "behavior_summary": [
-    "Implements the NPC Torwin's interactive and autonomous behaviors: descriptive 'U8P_TORWIN::look' output, schedule-based autonomous actions, proximity (fast-area) entry/exit handling, theft reaction, and responses to spell casts.",
-    "TORWIN::look composes and emits a short identification string when a player inspects Torwin; if Torwin is dead it uses a corpse-style label.",
-    "A schedule system (U8P_TORWIN::schedule and spawned helpers) selects, records (torwinSchedule), and spawns behavior routines to drive periodic movement, approach, or talk actions.",
-    "Fast-area entry (U8P_TORWIN::enterFastArea) either teleports Torwin to random coordinates or dispatches schedule-specific behaviors depending on torwinSchedule, and clears per-slot refs.",
-    "AvatarStoleSomething detects theft, resets related references, and — unless a particular schedule is active — makes Torwin approach the thief, bark an admonishment, set activity/animation, and trigger timers/effects.",
-    "cast handles spells targeting Torwin or nearby actors; it contains logic that can remove immortal status and set Torwin dead, spawn timed effects, play animations/sounds, and teleport Torwin away for dramatic death reactions."
+    "This script implements the NPC Torwin's U8P_TORWIN::look/description, U8P_TORWIN::schedule-driven world behavior, area-entry/exit housekeeping, reaction to theft and attacks, and a full player conversation handler with dynamic menu options and item/FX utilities.",
+    "U8P_TORWIN::look() returns a single short descriptive line for the player (dead vs alive and name/title variants) using torwinName and torwinJob flags.",
+    "U8P_TORWIN::schedule() computes a runtime U8P_TORWIN::schedule id (torwinSchedule) from time-of-day and a forced flag (torwinGottaJump) and calls engine AI helpers to apply the selected U8P_TORWIN::schedule.",
+    "U8P_TORWIN::enterFastArea()/U8P_TORWIN::leaveFastArea() clear transient references, handle teleport-on-death, and dispatch the NPC into the branch appropriate for torwinSchedule (U8P_TORWIN::func0C23, U8P_TORWIN::func0531, or METHOD::func15E7).",
+    "U8P_TORWIN::use() is the comprehensive conversation entry: it builds a dynamic menu (local1), captures the player's choice (local2), branches dialog, and calls utility routines that spawn items/effects and orchestrate auxiliary processes.",
+    "U8P_TORWIN::AvatarStoleSomething(uword) triggers a theft-reaction sequence only when torwinSchedule indicates the confrontation U8P_TORWIN::schedule; it clears refs, prepares/faces the player, barks, spawns effects and continues via an internal follow-up.",
+    "U8P_TORWIN::cast(uword) handles being targeted/attacked: a non-fatal branch spawns limited reaction effects, while param==1 triggers an immortal-clear and death sequence (effects, clear immortal, set dead, teleport)."
   ],
   "notable_control_flow": [
-    "Event-driven: individual named handlers run in response to game events (U8P_TORWIN::look, enterFastArea, leaveFastArea, cast, AvatarStoleSomething, and spawned schedule helpers).",
-    "Look handler short-circuits if Npc::isDead -> corpse label; otherwise uses two global flags (torwinName, torwinJob) to choose a string variant and calls Item::bark.",
-    "Schedule selection routine (U8P_TORWIN::schedule) queries FREE::* checks and torwinGottaJump to pick a schedule id, spawns METHOD::143A to start it, and writes torwinSchedule on success.",
-    "enterFastArea uses urandom to generate coordinates and may teleport Torwin randomly, or branch into schedule-specific spawn logic based on torwinSchedule values (0,1,2...).",
-    "AvatarStoleSomething loops through stored refs/slots to find a matching thief/owner; on match it computes direction (Item::getDirToItem) and spawns a movement METHOD to approach, guarded by a torwinSchedule==1 early exit.",
-    "Spawned helpers (U8P_TORWIN::0531, U8P_TORWIN::0623) perform probabilistic checks and pathfinding, and are guarded by somebodyTalking to avoid interrupting other dialog."
+    "U8P_TORWIN::look(): if Npc::isDead(this) -> return 'Torwin the ex-monk'; else U8P_TORWIN::use torwinName/torwinJob boolean flags in priority to pick one of four short barks.",
+    "U8P_TORWIN::schedule(): skip if dead; choose local constants based on FREE::getTimeOfDayPeriod or torwinGottaJump; call METHOD::func143A; on process_result() commit local4 -> torwinSchedule and call METHOD::func133F.",
+    "U8P_TORWIN::enterFastArea(): clear refs; if dead call Npc::teleport(random offsets); switch on torwinSchedule: 0x01 -> U8P_TORWIN::func0C23, 0x02 -> U8P_TORWIN::func0531, default -> METHOD::func15E7 + suspend.",
+    "U8P_TORWIN::use(): if torwinGottaJump take special fast branch (clear refs, set stasis, pathfind/teleport); otherwise begin conversation (beginConversationNoMap or BeginConversation depending on last anim set), build menu (local1) by union/removing entries depending on flags, Ask -> suspendAssign(local2) -> dispatch chosen dialog/actions.",
+    "U8P_TORWIN::func0531/U8P_TORWIN::func0C23/U8P_TORWIN::func0623/U8P_TORWIN::func0E31 form U8P_TORWIN::schedule-specific behavior chains: pathfind->on success call monologue heads (U8P_TORWIN::func0623/U8P_TORWIN::func0E31) when nobodyTalking, otherwise fallback to METHOD::func15E7. Random selectors (urandom) pick barks. Spawns (FREE::func1C19/func29D8) used for timed effects between steps."
   ],
   "open_questions": [
-    "Exact textual variants used by TORWIN::look (full strings and their localization) are inferred but not exhaustively listed here.",
-    "Precise semantics and numeric meanings of schedule ids stored in torwinSchedule (what each id maps to in game behavior) are only inferred from branching and spawns.",
-    "Exact meanings and side-effects of the various FREE::* calls (e.g., FREE::2A56, FREE::28F9, FREE::1C19) are library-level and partially inferred (timers/effects/ref clearing); their full behavior is unknown.",
-    "Contents and structure of the reference slots scanned by AvatarStoleSomething and helpers (what each slot represents) are inferred but not concretely identified.",
-    "Whether teleport coordinates computed from urandom are absolute map coords or offsets/tiles requires engine context not present in the disassembly."
+    "Exact mapping of torwinSchedule numeric values (0x00,0x01,0x02) to named behaviors — inferred but not definitively labeled.",
+    "Identity and implementation of U8P_TORWIN::func022D (called by U8P_TORWIN::AvatarStoleSomething) is not present in the extracted function list — its exact role is unknown.",
+    "Precise semantics of some METHOD::* engine helpers (func15E7, func143A, func133F, func091C) are inferred (face player / idle / commit U8P_TORWIN::schedule) but not certain.",
+    "Which global variable(s) constitute 'somebodyTalking' and exact scopes/ownership of transient reference IDs (0x0205,0x0204,0x00F0,0x0200) beyond their bookkeeping role."
   ],
   "main_function": {
     "name": "U8P_TORWIN::look",
     "execution_form": "process",
-    "purpose": "Respond to a player 'U8P_TORWIN::look' (examine) action on Torwin. If Torwin is dead, emit a corpse-style label; otherwise, compose a concise identification string based on global flags (torwinName, torwinJob) and make Torwin 'bark' it to the viewer.",
+    "purpose": "Provide a short descriptive line for the player when examining Torwin; differentiates a dead/ex-monk label from alive variants and chooses between personal name and job/title based on persistent flags.",
     "entry_conditions": [
-      "Triggered by the 'U8P_TORWIN::look' event when a player or actor inspects the Torwin NPC."
+      "Player performs 'U8P_TORWIN::look' / examine action on the NPC",
+      "Immediate check for Npc::isDead(this) to return the dead description"
     ],
     "confidence": "high"
   },
@@ -38,76 +38,136 @@
     {
       "name": "U8P_TORWIN::look",
       "kind": "main",
-      "role": "Handle player's 'U8P_TORWIN::look' inspect event for Torwin, produce appropriate identification string or corpse label and call Item::bark.",
+      "role": "short description / UI 'U8P_TORWIN::look' handler",
       "confidence": "high"
     },
     {
       "name": "U8P_TORWIN::schedule",
       "kind": "helper",
-      "role": "Choose and start an autonomous behavior schedule for Torwin, write torwinSchedule, and spawn schedule execution methods (METHOD::143A / METHOD::133F).",
+      "role": "periodic U8P_TORWIN::schedule computation and assignment to torwinSchedule",
       "confidence": "high"
     },
     {
       "name": "U8P_TORWIN::enterFastArea",
       "kind": "helper",
-      "role": "Fast-area entry handler: teleport Torwin randomly or dispatch schedule-specific spawned behaviors; clear/reset per-slot refs via FREE::2A56.",
+      "role": "area-entry trigger: cleanup, teleport-on-death, dispatch to U8P_TORWIN::schedule behavior",
       "confidence": "high"
     },
     {
       "name": "U8P_TORWIN::leaveFastArea",
       "kind": "helper",
-      "role": "Fast-area exit handler: clear/reset references and per-area state to clean up when avatar leaves proximity.",
+      "role": "area-exit trigger: clear transient references",
       "confidence": "high"
     },
     {
       "name": "U8P_TORWIN::AvatarStoleSomething",
       "kind": "helper",
-      "role": "React to theft when Torwin is aware: reset refs, find thief by scanning slots, approach thief (spawn movement method), bark admonishment, set activity/timers; gated by torwinSchedule.",
-      "confidence": "high"
+      "role": "theft reaction sequence (monologue) triggered with a uword param",
+      "confidence": "medium"
     },
     {
       "name": "U8P_TORWIN::cast",
       "kind": "helper",
-      "role": "Handle spell-cast events involving Torwin or nearby targets; can perform non-lethal reactions or trigger a scripted death (clrImmortal, setDead, spawn effects, teleport).",
+      "role": "handle spell/attack U8P_TORWIN::cast at NPC; non-fatal reaction and fatal (param==1) death/immortal-clear path",
       "confidence": "high"
     },
     {
-      "name": "U8P_TORWIN::0531",
+      "name": "U8P_TORWIN::func0531",
       "kind": "helper",
-      "role": "Spawned schedule behavior: iterate reference slots, attempt pathfind/approach, and perform speech/animation if target found and nobody else is talking.",
+      "role": "pathfinding/behavior loop used by one U8P_TORWIN::schedule branch; on success calls U8P_TORWIN::func0623",
       "confidence": "medium"
     },
     {
-      "name": "U8P_TORWIN::0623",
+      "name": "U8P_TORWIN::func0623",
       "kind": "helper",
-      "role": "Spawned helper used by schedules to perform conditional/randomized approaches and speech/timers; supports probabilistic/reactive behavior.",
+      "role": "monologue/idle routine with proximity/random barks",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_TORWIN::func0C23",
+      "kind": "helper",
+      "role": "meditation behavior for a U8P_TORWIN::schedule branch; may call U8P_TORWIN::func0E31",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_TORWIN::func0E31",
+      "kind": "helper",
+      "role": "alternate monologue/idle routine for another U8P_TORWIN::schedule",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_TORWIN::use",
+      "kind": "helper",
+      "role": "full player conversation handler: build menu, capture choice, run dialog and utility side-effects",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_TORWIN::func3725",
+      "kind": "helper",
+      "role": "item creation/placement utility used by dialog/behavior",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_TORWIN::func383B",
+      "kind": "helper",
+      "role": "short reset / SFX helper sequence for conversation/reactions",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_TORWIN::func38B8",
+      "kind": "helper",
+      "role": "spawned helpers / timer orchestration utility",
       "confidence": "medium"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
-        "caller": "U8P_TORWIN::schedule",
-        "callee": "U8P_TORWIN::0531",
-        "purpose": "May spawn or route to schedule-specific spawned behaviors (one of multiple schedule execution paths).",
-        "confidence": "medium"
+        "caller": "U8P_TORWIN::enterFastArea",
+        "callee": "U8P_TORWIN::func0C23",
+        "purpose": "Dispatch U8P_TORWIN::schedule branch when torwinSchedule == 0x01 (meditative behavior)",
+        "confidence": "high"
       },
       {
         "caller": "U8P_TORWIN::enterFastArea",
-        "callee": "U8P_TORWIN::schedule",
-        "purpose": "enterFastArea uses schedule state and may invoke schedule-related routines to execute schedule-specific logic rather than teleporting.",
+        "callee": "U8P_TORWIN::func0531",
+        "purpose": "Dispatch U8P_TORWIN::schedule branch when torwinSchedule == 0x02 (movement/pathfind branch)",
         "confidence": "high"
       },
       {
         "caller": "U8P_TORWIN::AvatarStoleSomething",
-        "callee": "U8P_TORWIN::enterFastArea",
-        "purpose": "After initiating theft reaction (speech/animation), flow re-enters/uses enterFastArea logic to proceed with proximity-driven behavior.",
+        "callee": "U8P_TORWIN::func022D",
+        "purpose": "Continue theft reaction via an internal follow-up routine (inferred continuation)",
+        "confidence": "low"
+      },
+      {
+        "caller": "U8P_TORWIN::func0531",
+        "callee": "U8P_TORWIN::func0623",
+        "purpose": "After successful pathfind and if nobodyTalking, hand off to monologue routine",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TORWIN::func0C23",
+        "callee": "U8P_TORWIN::func0E31",
+        "purpose": "On some random branch and if nobodyTalking, continue into a longer monologue routine",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_TORWIN::0531",
-        "callee": "U8P_TORWIN::0623",
-        "purpose": "Spawned behavior may call helper 0623 to perform probabilistic checks, approach decisions, or follow-up speech/timer sequences.",
+        "caller": "U8P_TORWIN::use",
+        "callee": "U8P_TORWIN::func3725",
+        "purpose": "Spawn/give items or otherwise perform item side-effect during conversation",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_TORWIN::use",
+        "callee": "U8P_TORWIN::func383B",
+        "purpose": "Reset refs and play SFX as a dialog side-effect",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_TORWIN::use",
+        "callee": "U8P_TORWIN::func38B8",
+        "purpose": "Start a timed helper/effect sequence from within conversation",
         "confidence": "medium"
       }
     ],
@@ -115,79 +175,85 @@
       {
         "caller": "U8P_TORWIN::look",
         "callee": "Npc::isDead",
-        "purpose": "Check whether Torwin is dead to choose corpse label vs alive identification behavior.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_TORWIN::look",
-        "callee": "Item::bark",
-        "purpose": "Display/speak the composed identification string to the viewer/player.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_TORWIN::enterFastArea",
-        "callee": "urandom",
-        "purpose": "Generate random X/Y values used for teleport coordinates when performing random teleport behavior.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_TORWIN::enterFastArea",
-        "callee": "Npc::teleport",
-        "purpose": "Teleport Torwin to computed/random coordinates on area entry or after certain cast/death reactions.",
+        "purpose": "Check whether Torwin is dead to choose the appropriate 'U8P_TORWIN::look' description",
         "confidence": "high"
       },
       {
         "caller": "U8P_TORWIN::schedule",
-        "callee": "FREE::28F9",
-        "purpose": "Query internal/free-data flags or state to decide schedule parameters (used when choosing schedule behavior).",
+        "callee": "FREE::getTimeOfDayPeriod",
+        "purpose": "Get current time-of-day period to pick U8P_TORWIN::schedule branch constants",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TORWIN::schedule",
+        "callee": "METHOD::func143A",
+        "purpose": "Invoke engine/AI step to apply or test chosen U8P_TORWIN::schedule parameters (suspend and check process_result())",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_TORWIN::schedule",
+        "callee": "METHOD::func133F",
+        "purpose": "Finalize/persist newly selected torwinSchedule after process_result()",
         "confidence": "medium"
       },
       {
         "caller": "U8P_TORWIN::enterFastArea",
-        "callee": "FREE::2A56",
-        "purpose": "Clear or check reference slots/state associated with area triggers; used for cleanup and gating behaviors.",
+        "callee": "Npc::teleport",
+        "purpose": "Reposition Torwin (used when NPC is dead or during some fast-branch transitions)",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TORWIN::func0531",
+        "callee": "Npc::pathfind",
+        "purpose": "Spawn a pathfinding process to move Torwin to a waypoint; success drives behavior handoff",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TORWIN::func0623",
+        "callee": "FREE::getDistanceBetween",
+        "purpose": "Measure proximity to decide close-range vs fallback barks and behavior",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TORWIN::use",
+        "callee": "METHOD::beginConversationNoMap",
+        "purpose": "Begin conversation UI (variant chosen based on Npc::getLastAnimSet)",
         "confidence": "high"
       },
       {
         "caller": "U8P_TORWIN::AvatarStoleSomething",
-        "callee": "U8P_TORWIN::resetRef",
-        "purpose": "Clear references for stolen items/slots before processing theft reaction.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_TORWIN::AvatarStoleSomething",
-        "callee": "Item::getDirToItem",
-        "purpose": "Compute direction from Torwin to the stolen item/thief to spawn an approach movement METHOD.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_TORWIN::AvatarStoleSomething",
-        "callee": "METHOD::091C",
-        "purpose": "Spawn movement/approach behavior toward the thief/item (engine navigation method).",
-        "confidence": "high"
+        "callee": "Npc::cSetActivity",
+        "purpose": "Set an active confrontational activity/process when theft id matches (change NPC activity)",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_TORWIN::cast",
         "callee": "Npc::clrImmortal",
-        "purpose": "Clear immortality flag prior to setting Torwin dead in scripted death reaction.",
+        "purpose": "Clear immortal flag so NPC can be killed (fatal branch)",
         "confidence": "high"
       },
       {
         "caller": "U8P_TORWIN::cast",
         "callee": "Npc::setDead",
-        "purpose": "Set Torwin's dead state as part of a scripted spell-related death reaction.",
+        "purpose": "Mark the NPC dead as part of the fatal/param==1 sequence",
         "confidence": "high"
       },
       {
-        "caller": "U8P_TORWIN::cast",
-        "callee": "FREE::1C19",
-        "purpose": "Spawn a timed effect or timer after a death reaction or other cast-related actions.",
+        "caller": "U8P_TORWIN::Various",
+        "callee": "FREE::func1C19 / FREE::func29D8",
+        "purpose": "Spawn short-lived effect/timer helper processes used throughout the script for delays and FX",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_TORWIN::Various",
+        "callee": "METHOD::func091C / METHOD::func15E7",
+        "purpose": "Engine helpers used before barks (face-player/prep) and as short idle/wait actions between dialog lines",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_TORWIN::0531",
-        "callee": "Npc::pathfind",
-        "purpose": "Attempt pathfinding toward a selected coordinate/target before performing speech/animation sequences.",
+        "caller": "U8P_TORWIN::func3725",
+        "callee": "Item::create / Item::pop / Item::getZ / Item::getX / Item::getY / Item::getType / Item::isNpc / Item::push",
+        "purpose": "Create/place and validate items produced by the item-creation utility",
         "confidence": "medium"
       }
     ]
@@ -196,34 +262,54 @@
     "reads": [
       {
         "name": "torwinName",
-        "likely_effect": "Selects which name fragment Torwin uses in the U8P_TORWIN::look/identify output (influences long vs short form).",
+        "likely_effect": "Controls whether Torwin's personal name is shown in U8P_TORWIN::look() and influences menu options in U8P_TORWIN::use()",
         "confidence": "high"
       },
       {
         "name": "torwinJob",
-        "likely_effect": "Controls whether Torwin's job/title (e.g., 'monk') is included in the U8P_TORWIN::look identification string.",
+        "likely_effect": "Controls whether Torwin's job/title ('monk') is shown in U8P_TORWIN::look() and influences conversation options",
+        "confidence": "high"
+      },
+      {
+        "name": "torwinSchedule",
+        "likely_effect": "Read by U8P_TORWIN::enterFastArea and behavior functions to choose which behavior branch runs",
         "confidence": "high"
       },
       {
         "name": "torwinGottaJump",
-        "likely_effect": "When set, causes U8P_TORWIN::schedule to pick an alternate schedule (inferred 'jump' or special action).",
-        "confidence": "medium"
-      },
-      {
-        "name": "torwinSchedule",
-        "likely_effect": "Read as a gate to decide which schedule-specific behavior to execute on area entry or theft; also used to early-exit theft response when equal to specific values.",
+        "likely_effect": "Forces special fast/escape U8P_TORWIN::schedule branch and alters U8P_TORWIN::use()/U8P_TORWIN::schedule() behavior when set",
         "confidence": "high"
       },
       {
-        "name": "somebodyTalking",
-        "likely_effect": "Guard to avoid starting Torwin speech/interaction when another entity is currently talking.",
+        "name": "torwinMet",
+        "likely_effect": "Gates first-meet dialog variants and menu options; set on first conversation",
+        "confidence": "high"
+      },
+      {
+        "name": "torwinPissed",
+        "likely_effect": "When set modifies greeting/bark choices during U8P_TORWIN::use() (annoyed/hostile variants)",
         "confidence": "medium"
+      },
+      {
+        "name": "passedTests",
+        "likely_effect": "Used to add a menu option when the player completed certain tests",
+        "confidence": "medium"
+      },
+      {
+        "name": "somebodyTalking",
+        "likely_effect": "Global guard preventing monologue routines from interrupting active conversations",
+        "confidence": "high"
       }
     ],
     "writes": [
       {
         "name": "torwinSchedule",
-        "likely_effect": "Set by U8P_TORWIN::schedule to record the chosen behavior schedule id so subsequent handlers use that schedule's behavior.",
+        "likely_effect": "Assigned by U8P_TORWIN::schedule() to commit the chosen runtime behavior branch",
+        "confidence": "high"
+      },
+      {
+        "name": "torwinMet",
+        "likely_effect": "Set to true the first time the player converses with Torwin (marks 'met' state)",
         "confidence": "high"
       }
     ]
@@ -232,17 +318,14 @@
     "trigger",
     "cleanup",
     "animation",
-    "guard",
-    "speech",
-    "teleport",
-    "timer"
+    "guard"
   ],
   "quick_facts": {
-    "main_function": "TORWIN::look",
-    "behavior_summary_one_liner": "Implements the NPC Torwin's interactive and autonomous behaviors: descriptive 'U8P_TORWIN::look' output, schedule-based autonomous actions, proximity (fast-area) entry/exit handling, theft reaction, and responses to spell casts.",
-    "external_call_count": 13,
-    "flag_read_count": 5,
-    "flag_write_count": 1
+    "main_function": "U8P_TORWIN::look",
+    "behavior_summary_one_liner": "This script implements the NPC Torwin's U8P_TORWIN::look/description, U8P_TORWIN::schedule-driven world behavior, area-entry/exit housekeeping, reaction to theft and attacks, and a full player conversation handler with dynamic menu options and item/FX utilities.",
+    "external_call_count": 14,
+    "flag_read_count": 8,
+    "flag_write_count": 2
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

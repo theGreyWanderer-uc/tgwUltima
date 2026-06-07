@@ -3,29 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_TROLL.json",
   "file": "U8P_TROLL",
   "behavior_summary": [
-    "On the 'U8P_TROLL::look' event, the troll presents a short descriptive label to the viewer: it constructs the string \"troll \", calls the engine/item routine to emit that text to the target process, frees the temporary string, evaluates the bark return value via a small implies/pop check, and then suspends the script.",
-    "Before calling the bark routine the handler sets an object info/process-exclude state (inferred) to control context or prevent recursive handling; this state is not persisted to any global flags in this script.",
-    "The primary visible effect in gameplay is that when a player/actor examines the troll, they see the label 'troll ' originating from the object."
+    "Provides the NPC/object 'U8P_TROLL::look' (examine) handler for the Troll entity. When the player inspects or 'looks at' the Troll, the handler emits a short bark (spoken text) containing the token \"troll \" and then suspends/ends the U8P_TROLL::look process.",
+    "There is no branching, no menu, no state reads or writes, and no external function calls; the behavior is purely a short vocal response to an examine event.",
+    "Unnamed raw/decompiler nodes appear around the bark and suspend steps but do not change the observable gameplay effect: a one-line bark on U8P_TROLL::look."
   ],
   "notable_control_flow": [
-    "Prepare temporary string 'troll ' and convert/obtain pointer for calling Item::bark.",
-    "Set object info and apply a process-exclude operation immediately prior to the bark call (appears to change processing/context for the call).",
-    "Invoke external call Item::bark(target_pid, 'troll ').",
-    "Free the ephemeral string after the bark call to avoid leaking the temporary.",
-    "Push bark return, evaluate via an implies (01 01) then pop into a temp slot — an implied conditional/guard pattern with unclear side effects.",
-    "Suspend the script (execution_form = process) after completing the above steps."
+    "U8P_TROLL::look executes as a process and immediately issues a single Bark line ('troll ') and then suspends; there are no conditional branches or loops.",
+    "Execution is short-lived: bark -> suspend (end of U8P_TROLL::look process)."
   ],
   "open_questions": [
-    "What exact engine semantics does the 'set info + process exclude' pair implement here (what info id 0x210 does, and whether it prevents only reentrancy or also changes visibility of subsequent operations)?",
-    "What does the return value of Item::bark represent in practice (success, continuation, message suppressed), and how should the implies/pop pattern influence higher-level logic elsewhere?",
-    "Is BP+06h always a player process id (PID) in all contexts where this item is used, or can it sometimes be a different engine process type (inferred as viewer PID but not 100% explicit)?"
+    "Is the bark text intentionally the single token 'troll ' including a trailing space, or is that a formatting artifact from extraction?",
+    "Does the process receive an implicit actor/context parameter (the examining player or NPC) from the engine even though no explicit parameters are declared? (This is typical for U8P_TROLL::look handlers but not visible in the extracted nodes.)"
   ],
   "main_function": {
     "name": "U8P_TROLL::look",
     "execution_form": "process",
-    "purpose": "Handle examine/U8P_TROLL::look interactions for the troll by presenting a short textual label to the inspecting process and then suspending execution.",
+    "purpose": "Handle the player's 'U8P_TROLL::look' or examine action on the Troll by producing a short bark/description and ending the U8P_TROLL::look process.",
     "entry_conditions": [
-      "Event 0 — 'U8P_TROLL::look' (triggered when an actor/player inspects or 'looks at' the troll)"
+      "Triggered when the player/avatar examines or 'looks at' the Troll NPC/object (inferred from function classification 'U8P_TROLL::look' and process type 0x0208).",
+      "Invoked by the engine's U8P_TROLL::look/examine event for this entity."
     ],
     "confidence": "high"
   },
@@ -33,20 +29,13 @@
     {
       "name": "U8P_TROLL::look",
       "kind": "main",
-      "role": "Event handler for the troll's 'U8P_TROLL::look' (examine) event; coordinates text emission and local cleanup.",
+      "role": "Respond to examine/U8P_TROLL::look events by emitting a single bark ('troll ') and suspending the process.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_TROLL::look",
-        "callee": "Item::bark",
-        "purpose": "Request that the item/process emit/display the short label string to the provided target process/pid (used to show the troll's description 'troll ').",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -54,13 +43,13 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "guard"
+    "suspend",
+    "dialogue-bark"
   ],
   "quick_facts": {
-    "main_function": "TROLL::look",
-    "behavior_summary_one_liner": "On the 'U8P_TROLL::look' event, the troll presents a short descriptive label to the viewer: it constructs the string \"troll \", calls the engine/item routine to emit that text to the target process, frees the temporary string, evaluates the bark return value via a small implies/pop check, and then suspends the script.",
-    "external_call_count": 1,
+    "main_function": "U8P_TROLL::look",
+    "behavior_summary_one_liner": "Provides the NPC/object 'U8P_TROLL::look' (examine) handler for the Troll entity. When the player inspects or 'looks at' the Troll, the handler emits a short bark (spoken text) containing the token \"troll \" and then suspends/ends the U8P_TROLL::look process.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

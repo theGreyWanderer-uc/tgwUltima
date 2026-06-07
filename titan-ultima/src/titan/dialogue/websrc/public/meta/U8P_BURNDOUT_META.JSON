@@ -3,29 +3,27 @@
   "source_of_truth": "dialogue/json/U8P_BURNDOUT.json",
   "file": "U8P_BURNDOUT",
   "behavior_summary": [
-    "Serves the 'U8P_BURNDOUT::look' (examine) event for a burned-out fire object: when a player examines the object the script updates the object's state, prevents further processing, and makes the object emit a short description text.",
-    "Specifically, it sets an info/state key (immediate 0x208) on the target process/item, issues a process-exclude action (removing or pausing further processing for that object), then builds the literal string \"burned out fire \" and calls Item::bark so the owning process/item displays that text to the viewer.",
-    "The constructed string is freed after the bark call and the routine completes by performing the usual return/suspend sequence."
+    "U8P_BURNDOUT::look is a simple process that runs when the player 'looks at' or examines the BURNDOUT entity.",
+    "When invoked it emits a single short bark: \"burned out fire \".",
+    "After the bark the process suspends/terminates (inferred from a trailing suspend node), so no further actions, branching, or state changes occur.",
+    "No global flags are read or written and there are no external calls in the snippet; behavior is linear and deterministic."
   ],
   "notable_control_flow": [
-    "Entry via Event 0 (U8P_BURNDOUT::look) — triggered when the player/actor inspects the burned-out fire.",
-    "Set-info step: push info id 0x208 and the target process (BP+06h) then execute 'set info'.",
-    "Process exclusion: immediately after set-info the script executes a 'process exclude' opcode to change the object's processing state.",
-    "User feedback: construct literal \"burned out fire \", call Item::bark with the target process so the object emits the message, then free the string.",
-    "Return/suspend behavior uses an implies/pop on the bark return value before suspending — inferred as standard script return cleanup."
+    "Linear: immediate bark followed by suspend — no conditional branches, menus, or loops present.",
+    "Entry is event-driven: the process executes on the U8P_BURNDOUT::look/examine event for the object/NPC (process type 0x0208)."
   ],
   "open_questions": [
-    "Exact semantic meaning of info id 0x208 (what in-game state or info key it represents).",
-    "Precise effect of 'process exclude' here: does it permanently disable AI/processing for the object or temporarily exclude it from some systems?",
-    "Type and semantics of the BP+06h parameter: inferred as the target process/item PID, but is it a process pointer, item instance, or both?",
-    "What the return value from Item::bark encodes and whether the implies/pop result influences external behavior (appears unused except for cleanup)."
+    "Is the trailing space in the bark text \"burned out fire \" intentional for concatenation elsewhere, or an artifact?",
+    "Does the engine attach any implicit U8P_BURNDOUT::look-response bookkeeping when a U8P_BURNDOUT::look process suspends (e.g., incrementing inspection counters) that this snippet relies on?",
+    "Are there any game-wide conventions tied to process type 0x0208 that would alter lifecycle beyond the visible suspend?"
   ],
   "main_function": {
     "name": "U8P_BURNDOUT::look",
     "execution_form": "process",
-    "purpose": "Handle the 'U8P_BURNDOUT::look' (examine) event for a burned-out fire: set an info/state key on the object, exclude its process from further processing, and make the object display the text \"burned out fire \".",
+    "purpose": "Provide the short descriptive response when the player examines the BURNDOUT entity by playing a single bark and then ending the U8P_BURNDOUT::look process.",
     "entry_conditions": [
-      "Event 0 (U8P_BURNDOUT::look) — called when a player or relevant actor inspects the burned-out fire object."
+      "Invoked by the engine when the player performs a 'U8P_BURNDOUT::look' or inspect action against this object/NPC.",
+      "Classified as a U8P_BURNDOUT::look-type process (process type 0x0208)."
     ],
     "confidence": "high"
   },
@@ -33,26 +31,13 @@
     {
       "name": "U8P_BURNDOUT::look",
       "kind": "main",
-      "role": "Event handler for the burned-out fire's U8P_BURNDOUT::look/examine event.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine invoked to make a process/item produce/display a short text message.",
+      "role": "Handles the player 'U8P_BURNDOUT::look' (examine) action for the BURNDOUT entity; plays a single bark then suspends.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_BURNDOUT::look",
-        "callee": "Item::bark",
-        "purpose": "Cause the target process/item (passed from BP+06h) to emit/display the literal description string \"burned out fire \".",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -61,13 +46,13 @@
   "ui_tags": [
     "trigger",
     "cleanup",
-    "guard",
-    "description"
+    "animation",
+    "guard"
   ],
   "quick_facts": {
-    "main_function": "BURNDOUT::look",
-    "behavior_summary_one_liner": "Serves the 'U8P_BURNDOUT::look' (examine) event for a burned-out fire object: when a player examines the object the script updates the object's state, prevents further processing, and makes the object emit a short description text.",
-    "external_call_count": 1,
+    "main_function": "U8P_BURNDOUT::look",
+    "behavior_summary_one_liner": "U8P_BURNDOUT::look is a simple process that runs when the player 'looks at' or examines the BURNDOUT entity.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

@@ -3,49 +3,49 @@
   "source_of_truth": "dialogue/json/U8P_SHOOTER.json",
   "file": "U8P_SHOOTER",
   "behavior_summary": [
-    "Provides an area-based projectile/shooter system: when an actor enters a trigger region, U8P_SHOOTER::enterFastArea creates one or more projectile items, places them around the source, plays SFX, and spawns a per-projectile process (U8P_SHOOTER::0080) for each projectile.",
-    "Each spawned U8P_SHOOTER::0080 process repeatedly advances its projectile by computing a new target WorldPoint (adding scaled dx/dy steps), testing that point with Item::legal_move, and either spawning a FIRESPEL effect or destroying the projectile when movement is invalid. The process yields/suspends between advancement steps.",
-    "U8P_SHOOTER::leaveFastArea performs cleanup when an actor leaves the trigger region by setting process info/exclude and calling a cleanup helper (FREE::2A56)."
+    "This script implements a simple area-triggered shooter/spawner: when the trigger area is entered (U8P_SHOOTER::enterFastArea) it periodically creates or fires small 'shooter' items/projectiles, and when the area is left (U8P_SHOOTER::leaveFastArea) it unregisters the spawning behavior.",
+    "Each created shooter item is driven by a per-item updater (U8P_SHOOTER::func0080) which advances the projectile (adjusts X/Y each tick based on direction/param), checks movement legality and a Z/state field to detect impact, and on impact either triggers a fire-spell/explosion effect or destroys the projectile (random chance decides).",
+    "Spawn timing and variant selection are influenced by the trigger item's frame and quality plus randomness (FREE::randomInRange0 and Item::getQuality), and a special frame value (frame == 0x08) follows a player-targeting path that aims a different fire-spell toward the player.",
+    "Sound effect(s) and scheduled/delayed helpers (FREE::func1C19 and spawn calls) are used when creating/popping projectiles; created projectiles are popped with offsets derived from frame flags and then have their own spawned updater process."
   ],
   "notable_control_flow": [
-    "U8P_SHOOTER::enterFastArea: reads source item frame and quality to determine how many and which directions of projectiles to create, conditionally gates creation with FREE::* utilities, creates items, pops them into world coordinates derived from source X/Y/Z plus mapped offsets, plays a sound, and spawns U8P_SHOOTER::0080 for each projectile.",
-    "U8P_SHOOTER::0080: on start marks process/info state, samples item X/Y/Z, suspends (yields) to run over time, then on resume computes destination by adding dx*scale and dy*scale, calls Item::legal_move and branches: if legal and state permits it spawns FIRESPEL::233D (and may invoke FREE::1A85 checks) and continues; otherwise it calls Item::destroy and ends.",
-    "U8P_SHOOTER::leaveFastArea: marks info/process exclusion and calls FREE::2A56 to free area-related state."
+    "U8P_SHOOTER::enterFastArea computes a delay (0x012C * Item::getQuality + FREE::randomInRange0) and either immediately spawns/aims a special fire-spell toward the player (frame 0x08 path) or creates an item variant (Item::create), pops it into the world (Item::pop), plays SFX, and spawns U8P_SHOOTER::func0080 for that item.",
+    "U8P_SHOOTER::func0080 reads item X/Y/Z, yields (suspend) to pace behavior, computes candidate X/Y by applying per-tick offsets (this_hi and param1), calls Item::legal_move to detect collisions, and if impact occurs uses FREE::randomInRange0 to decide between spawning FIRESPEL::func233D or destroying the item (Item::destroy).",
+    "U8P_SHOOTER::leaveFastArea performs a single cleanup call (FREE::resetRef) to stop further spawning for that trigger."
   ],
   "open_questions": [
-    "Exact semantics and return values of FREE::1A85, FREE::1C19, FREE::1D62 and how they influence spawn counts and effect gating (these are inferred utility/random/guard routines).",
-    "Precise meaning of the local flag [BP-04h] used in U8P_SHOOTER::0080 and its comparison to constant 0x22 (how it alters firing vs destruction behavior).",
-    "Whether FIRESPEL::1FE4 and FIRESPEL::233D apply damage, only visuals, or both; their exact parameter contract beyond being spawned with a source, direction, and optional flags.",
-    "Any global flags or game-state variables outside the script that this area triggers or depends on (no global read/writes were found in the canonical extraction)."
+    "Exact mapping of 'this_hi' and param1 to in-world direction/velocity units (we infer they scale offsets by 0x18 but the in-engine meaning is not explicit).",
+    "Precise effects and parameters of FIRESPEL::func233D and FIRESPEL::func1FE4 (names indicate explosion/projectile, but exact damage/radius/visuals are external to this script).",
+    "Whether the suspend/spawn scheduling semantics use FREE::func1C19 as a repeating timer or a single delayed call in the engine (scheduling semantics are inferred).",
+    "Which sound ID(s) are played by playSFX on spawn/pop and whether audio cues vary by variant/frame."
   ],
   "main_function": {
-    "name": "U8P_SHOOTER::0080",
+    "name": "U8P_SHOOTER::func0080",
     "execution_form": "process",
-    "purpose": "Per-projectile process that advances a spawned projectile over time: sample item position, yield to advance over multiple frames, compute and test a stepped destination using dx/dy multipliers, and either spawn a fire-spell effect or destroy the projectile based on legality and local state.",
+    "purpose": "Per-projectile update: advance the spawned shooter item by applying X/Y offsets, check for collisions or a special Z-state, and on impact either trigger a fire-spell effect or destroy the projectile. Designed to run as a spawned/ticked helper and yield between steps.",
     "entry_conditions": [
-      "Spawned (via spawn) by U8P_SHOOTER::enterFastArea when projectiles are created",
-      "Resumes repeatedly after suspend/yield to advance the projectile over time",
-      "Runs while its item exists and uses Item::legal_move to determine whether to continue or terminate"
+      "Spawned by U8P_SHOOTER::enterFastArea when a projectile is created (spawn call).",
+      "Runs one tick/step then suspends — intended to be resumed by the engine as the per-entity updater."
     ],
     "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_SHOOTER::0080",
+      "name": "U8P_SHOOTER::func0080",
       "kind": "main",
-      "role": "Per-projectile motion controller; loops with suspend to move a projectile, tests legal movement, spawns FIRESPEL effects or destroys item.",
+      "role": "per-entity updater / projectile tick handler",
       "confidence": "high"
     },
     {
       "name": "U8P_SHOOTER::enterFastArea",
       "kind": "helper",
-      "role": "Trigger handler for entering the area: determines quantity/directions from source frame/quality, creates and places projectile items, plays SFX, and spawns U8P_SHOOTER::0080 processes (also may spawn immediate FIRESPEL effects).",
+      "role": "area trigger that creates/pops shooter projectiles, chooses variants, may target the player, schedules delays, and spawns U8P_SHOOTER::func0080 for each created item",
       "confidence": "high"
     },
     {
       "name": "U8P_SHOOTER::leaveFastArea",
       "kind": "helper",
-      "role": "Trigger handler for leaving the area: marks process info/exclude and calls FREE::2A56 to clean up/free area-related state.",
+      "role": "cleanup/unregister trigger: resets the stored process reference to stop spawning",
       "confidence": "high"
     }
   ],
@@ -53,124 +53,89 @@
     "internal_calls": [
       {
         "caller": "U8P_SHOOTER::enterFastArea",
-        "callee": "U8P_SHOOTER::0080",
-        "purpose": "Spawn a per-projectile process to control each created projectile item.",
+        "callee": "spawn -> U8P_SHOOTER::func0080",
+        "purpose": "Start the per-item updater for each created projectile so it moves and resolves independently",
         "confidence": "high"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_SHOOTER::0080",
+        "caller": "U8P_SHOOTER::func0080",
         "callee": "Item::getX / Item::getY / Item::getZ",
-        "purpose": "Sample the projectile's current world coordinates to compute next movement/pop positions.",
+        "purpose": "Query the projectile's current coordinates and Z/state for movement and impact checks",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SHOOTER::0080",
+        "caller": "U8P_SHOOTER::func0080",
         "callee": "Item::legal_move",
-        "purpose": "Check whether the computed destination WorldPoint is a legal location; return controls spawning FIRESPEL or destroying the projectile.",
+        "purpose": "Test whether the computed new X/Y is legal; used to detect collision/impact",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SHOOTER::0080",
-        "callee": "FIRESPEL::233D",
-        "purpose": "Spawn a fire-spell visual/attack effect when movement is allowed or on trigger conditions.",
+        "caller": "U8P_SHOOTER::func0080",
+        "callee": "FREE::randomInRange0",
+        "purpose": "Random chance to decide between spawning an explosion (FIRESPEL::func233D) or destroying the projectile on impact",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SHOOTER::0080",
+        "caller": "U8P_SHOOTER::func0080",
+        "callee": "FIRESPEL::func233D",
+        "purpose": "Spawn/trigger a fire-spell/explosion effect at impact when the random check selects that outcome",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_SHOOTER::func0080",
         "callee": "Item::destroy",
-        "purpose": "Destroy the projectile when movement is invalid or the projectile's lifecycle ends.",
+        "purpose": "Remove the projectile on non-explosive impact",
         "confidence": "high"
       },
       {
         "caller": "U8P_SHOOTER::enterFastArea",
-        "callee": "Item::getFrame",
-        "purpose": "Read source item frame to map into projectile direction patterns (dx/dy).",
+        "callee": "Item::getFrame / Item::getQuality",
+        "purpose": "Read trigger/item frame to select special behaviors (e.g., frame 0x08) and use quality to scale spawn timing",
         "confidence": "high"
       },
       {
         "caller": "U8P_SHOOTER::enterFastArea",
-        "callee": "Item::getQuality",
-        "purpose": "Read source item quality to scale how many projectiles to attempt to create.",
+        "callee": "FREE::randomInRange0",
+        "purpose": "Add randomness to spawn timing and variant selection",
         "confidence": "high"
       },
       {
         "caller": "U8P_SHOOTER::enterFastArea",
-        "callee": "Item::create",
-        "purpose": "Create new projectile item instances before placing/popping them into the world.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SHOOTER::enterFastArea",
-        "callee": "Item::pop",
-        "purpose": "Place created projectile items at computed X,Y,Z offsets from the source.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SHOOTER::enterFastArea",
-        "callee": "U8P_SHOOTER::playSFX",
-        "purpose": "Play a sound effect when a projectile is popped/created.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SHOOTER::enterFastArea",
-        "callee": "Item::getDirToItem",
-        "purpose": "Compute direction from source to target for aiming FIRESPEL::1FE4 when applicable.",
+        "callee": "FREE::func1C19",
+        "purpose": "Schedule or apply a delay computed from quality/randomness for pacing spawns (inferred scheduler helper)",
         "confidence": "medium"
       },
       {
         "caller": "U8P_SHOOTER::enterFastArea",
-        "callee": "FIRESPEL::1FE4",
-        "purpose": "Optionally spawn an immediate targeted fire-spell effect during area-entry processing.",
+        "callee": "FREE::getDistanceBetween / Item::getDirToItem / FIRESPEL::func1FE4",
+        "purpose": "When the frame indicates a targeting variant (frame 0x08), compute distance/direction to player and aim/spawn a targeted fire-spell",
         "confidence": "medium"
       },
       {
         "caller": "U8P_SHOOTER::enterFastArea",
-        "callee": "FREE::1A85 / FREE::1C19 / FREE::1D62",
-        "purpose": "Utility/random/gating functions used to adjust spawn counts and to decide whether to spawn certain effects or projectiles; semantics are inferred.",
+        "callee": "Item::create / Item::pop",
+        "purpose": "Create and place the projectile item into the world with computed offsets and then hand it off to the per-item updater",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SHOOTER::enterFastArea",
+        "callee": "playSFX",
+        "purpose": "Play a spawn/pop sound effect when a projectile is created/popped",
         "confidence": "medium"
       },
       {
         "caller": "U8P_SHOOTER::leaveFastArea",
-        "callee": "FREE::2A56",
-        "purpose": "Cleanup/free routine for area-related state invoked on leaving the area.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SHOOTER::0080",
-        "callee": "FREE::1A85",
-        "purpose": "Called as part of an effect/spawn gating check inside the projectile process before spawning FIRESPEL::233D (inferred gating/randomization).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_SHOOTER::0080",
-        "callee": "spawn",
-        "purpose": "Spawn FIRESPEL::233D subprocesses and potentially other helper subprocesses during projectile lifecycle.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SHOOTER::0080",
-        "callee": "suspend",
-        "purpose": "Yield the projectile process so motion advances over multiple frames/ticks.",
+        "callee": "FREE::resetRef",
+        "purpose": "Clear the process/reference so the spawn behavior stops when the trigger is left",
         "confidence": "high"
       }
     ]
   },
   "global_flags": {
     "reads": [],
-    "writes": [
-      {
-        "name": "process info (set info)",
-        "likely_effect": "Mark item/process state for the area or projectile so the engine knows it is being processed/managed by this script.",
-        "confidence": "high"
-      },
-      {
-        "name": "process exclude",
-        "likely_effect": "Temporarily exclude the triggering item/process from concurrent handling while enter/leave handlers or projectile processes operate.",
-        "confidence": "high"
-      }
-    ]
+    "writes": []
   },
   "ui_tags": [
     "trigger",
@@ -179,11 +144,11 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_SHOOTER::0080",
-    "behavior_summary_one_liner": "Provides an area-based projectile/shooter system: when an actor enters a trigger region, U8P_SHOOTER::enterFastArea creates one or more projectile items, places them around the source, plays SFX, and spawns a per-projectile process (U8P_SHOOTER::0080) for each projectile.",
-    "external_call_count": 16,
+    "main_function": "U8P_SHOOTER::func0080",
+    "behavior_summary_one_liner": "This script implements a simple area-triggered shooter/spawner: when the trigger area is entered (U8P_SHOOTER::enterFastArea) it periodically creates or fires small 'shooter' items/projectiles, and when the area is left (U8P_SHOOTER::leaveFastArea) it unregisters the spawning behavior.",
+    "external_call_count": 12,
     "flag_read_count": 0,
-    "flag_write_count": 2
+    "flag_write_count": 0
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

@@ -3,27 +3,24 @@
   "source_of_truth": "dialogue/json/U8P_POLE.json",
   "file": "U8P_POLE",
   "behavior_summary": [
-    "U8P_POLE::look runs when the player/actor 'looks' at a pole item. It marks the item with an info/process-exclude state, constructs the literal message \"pole \", asks the item to 'bark' that message (Item::bark) so the message is displayed to the viewer, frees the temporary string, briefly observes the bark return value, then suspends/returns.",
-    "The routine's observable gameplay effect is to present the short description/label \"pole \" to the inspecting actor and ensure the item is set into a state (info + process-exclude) that prevents or alters subsequent processing."
+    "When the player 'looks at' or examines the POLE, the script displays a single short description line ('pole ') as a bark and then suspends the process.",
+    "There are no conditionals, menus, flag reads/writes, or external calls; the behavior is a single-step presentation of text followed by suspend.",
+    "The routine is implemented as a process-style handler (U8P_POLE::look/examine handler) and appears intended only to provide a short in-world label/description for the POLE object."
   ],
   "notable_control_flow": [
-    "Set item info and set process-exclude on the item (engine-level item flags) at start of handler.",
-    "Allocate/prepare a C string containing \"pole \", convert to a pointer, and push it for the bark call.",
-    "Call external Item::bark from U8P_POLE::look to display the string; pass the constructed message and item/player context.",
-    "Free the constructed string after Item::bark returns.",
-    "Push Item::bark return value, use it in an 'implies' pattern and pop a temp, then suspend and return control."
+    "U8P_POLE::look: immediate linear flow — emit one Bark node with text 'pole ' then call suspend/terminate; no branching or loops."
   ],
   "open_questions": [
-    "Exact numeric info id used when setting item info (disassembly shows a constant but precise semantic meaning is not documented here).",
-    "The precise calling order/roles of pushed operands for Item::bark (which pushed value corresponds to 'this' vs 'pid') is inferred from patterns but not explicitly documented.",
-    "Whether marking the item 'process-exclude' is intended as a persistent state change for gameplay (prevents future AI/processing) or merely a short-term guard in this handler."
+    "Whether U8P_POLE::look is ever invoked by entering a fast-area trigger (enterFastArea) for the object in addition to the explicit player 'U8P_POLE::look' action — inferred but not present in extracted nodes (confidence: low).",
+    "The trailing space in the bark text 'pole ' — intentional formatting vs. extraction artifact (confidence: low)."
   ],
   "main_function": {
     "name": "U8P_POLE::look",
     "execution_form": "process",
-    "purpose": "Respond to a 'U8P_POLE::look' interaction on a pole item by setting item state and emitting the short description \"pole \" to the viewer via the item's bark routine.",
+    "purpose": "Provide the short descriptive text shown when the player examines the POLE object and then suspend the process.",
     "entry_conditions": [
-      "Event 0 (U8P_POLE::look) — invoked when an actor/player examines or 'looks at' the pole (inferred from name and disassembly)."
+      "Invoked by the engine when the player uses the 'U8P_POLE::look' (examine) action on the POLE object.",
+      "Possibly invoked by an engine 'U8P_POLE::look' type process or fast-area entry for the object (inferred)."
     ],
     "confidence": "high"
   },
@@ -31,41 +28,25 @@
     {
       "name": "U8P_POLE::look",
       "kind": "main",
-      "role": "Handle the item's U8P_POLE::look/examine event: set item flags, build and deliver the item's short description.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item API called to present a short text message from an item/process to a player/process.",
+      "role": "Examine/description handler that emits a single bark and suspends.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_POLE::look",
-        "callee": "Item::bark",
-        "purpose": "Deliver the literal text \"pole \" as the pole's short description to the viewing player/process.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
     "writes": []
   },
   "ui_tags": [
-    "trigger",
-    "cleanup",
-    "animation",
-    "guard"
+    "trigger"
   ],
   "quick_facts": {
     "main_function": "U8P_POLE::look",
-    "behavior_summary_one_liner": "U8P_POLE::look runs when the player/actor 'looks' at a pole item. It marks the item with an info/process-exclude state, constructs the literal message \"pole \", asks the item to 'bark' that message (Item::bark) so the message is displayed to the viewer, frees the temporary string, briefly observes the bark return value, then suspends/returns.",
-    "external_call_count": 1,
+    "behavior_summary_one_liner": "When the player 'looks at' or examines the POLE, the script displays a single short description line ('pole ') as a bark and then suspends the process.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

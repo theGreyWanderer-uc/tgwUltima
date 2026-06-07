@@ -3,26 +3,27 @@
   "source_of_truth": "dialogue/json/U8P_GHOULEGG.json",
   "file": "U8P_GHOULEGG",
   "behavior_summary": [
-    "Manages egg objects: when an actor leaves the egg's fast-area, the script updates the egg's internal eggId state; a separate hatch routine can convert an eligible egg into a hostile NPC at the egg's position.",
-    "U8P_GHOULEGG::leaveFastArea reads Egg::getEggId and, if the value is below a hatched-threshold, adjusts the eggId (inferred as subtracting 0x64/100) and writes it back with Egg::setEggId; if the egg is already at-or-above the hatched marker (0x64) it returns without change.",
-    "hatch checks the eggId; certain eggId values are blocked from hatching, one value performs a probabilistic gate (urandom(10) <= 8) to sometimes abort, and on success it marks the egg as hatched (Egg::setEggId to 0x64), creates an NPC (Npc::create), removes/pops the egg item at its coordinates (Item::getX/Y/Z then Item::pop), spawns an AI/behavior for the new NPC, sets the NPC to target the avatar, sets a hostile alignment (0x40), and marks the NPC in combat."
+    "U8P_GHOULEGG::leaveFastArea: When the relevant actor/item leaves a fast-area trigger, the script checks the egg's stored ID (Egg::getEggId). If that ID is >= 0x64 the script subtracts 0x64 and writes the new value back with Egg::setEggId — effectively removing an area-applied offset/flag from the egg state.",
+    "U8P_GHOULEGG::hatch: Implements the item's hatching behavior. It first ignores hatching if the egg ID is already >= 0x64. If the egg ID equals 0x01 it performs a U8P_GHOULEGG::hatch sequence: set egg ID to 0x64, create an NPC instance (Npc::create), set a status flag (Item::orStatus), place the NPC at the egg's coordinates (Item::pop using Item::getZ/Y/X), start/spawn the NPC's behavior (spawn -> METHOD::func15E7 with a small urandom-derived argument), then set the NPC's target, alignment, and in-combat state (Npc::setTarget, Npc::setAlignment, Npc::setInCombat). If egg ID != 0x01 there is an alternate probabilistic branch using urandom whose exact action is unclear from remnants."
   ],
   "notable_control_flow": [
-    "U8P_GHOULEGG::leaveFastArea: early-exit guard if Egg::getEggId >= 0x64 (100) — prevents state changes for already-hatched eggs (high confidence).",
-    "hatch: conditional pathing based on eggId values with an additional urandom-based probabilistic abort for one eggId case, which prevents deterministic immediate hatching (medium confidence).",
-    "On successful hatch the routine sequences state update -> NPC creation -> egg removal -> spawn AI method -> NPC configuration (target, alignment, in-combat), ensuring the hatched creature acts immediately (high confidence)."
+    "U8P_GHOULEGG::leaveFastArea: condition Egg::getEggId(this) >= 0x64 gates a single write Egg::setEggId(get - 0x64). This is an area-exit guard that only mutates eggs with the high-bit/offset present.",
+    "U8P_GHOULEGG::hatch: top-level guard Egg::getEggId(this) >= 0x64 short-circuits (no-op) to prevent duplicate hatching or re-hatching altered eggs.",
+    "U8P_GHOULEGG::hatch: branching on Egg::getEggId == 0x01 triggers the full spawn/create sequence; else a probabilistic branch driven by urandom decides an alternate/rare behavior (remnant evidence only)."
   ],
   "open_questions": [
-    "Why does U8P_GHOULEGG::leaveFastArea compute eggId - 0x64 and store it back for values below 0x64? The numeric semantics (staging to a different ID range or wrapping) are inferred and uncertain (low confidence).",
-    "Exact semantic meaning of numeric constants: 0x64 (100) used as 'hatched' marker, '1' used for a special-case eggId, and 0x40 alignment flag assumed to indicate hostility — these are inferred from patterns (medium confidence).",
-    "Whether U8P_GHOULEGG::hatch is invoked automatically by a timed/event mechanism or only through explicit scripted events (Event 7) in the engine — event linkage is inferred but not fully documented (medium confidence)."
+    "What is the semantic meaning of the numeric value 0x64 when stored in the egg ID? (appears to be a marker/offset for a hatched or area-modified state; confidence: medium)",
+    "What exactly happens in the probabilistic branch inside U8P_GHOULEGG::hatch when Egg::getEggId(this) != 0x01? The remnants show an urandom check but the action is not present in the extracted nodes (confidence: low).",
+    "Are the constants passed to Npc::create (0x08h, 0x008Eh) selecting a specific NPC prototype and type? This is inferred from typical usage but not confirmed (confidence: medium).",
+    "Does subtracting 0x64 in U8P_GHOULEGG::leaveFastArea solely 'clear' a fast-area flag, or does it restore a previous ID namespace mapping used elsewhere? (confidence: low)"
   ],
   "main_function": {
     "name": "U8P_GHOULEGG::leaveFastArea",
     "execution_form": "process",
-    "purpose": "Handle the egg item when the avatar (or relevant actor) leaves the egg's fast-area trigger: read the egg's eggId and, unless it already indicates 'hatched', adjust the eggId state (inferred subtraction by 0x64) and write it back.",
+    "purpose": "On leaving the fast-area trigger, detect eggs that carry an area-applied offset/flag (eggId >= 0x64) and remove that offset by subtracting 0x64 from the stored egg ID.",
     "entry_conditions": [
-      "Event 10: invoked when the Avatar (or relevant actor) leaves the egg's fast-area trigger region."
+      "Triggered by the engine when the actor/item leaves the fast-area trigger region (U8P_GHOULEGG::leaveFastArea event).",
+      "Runtime condition: only acts when Egg::getEggId(this) >= 0x64."
     ],
     "confidence": "high"
   },
@@ -30,193 +31,150 @@
     {
       "name": "U8P_GHOULEGG::leaveFastArea",
       "kind": "main",
-      "role": "Fast-area exit trigger handler that inspects and conditionally updates an egg's eggId state to manage off-area behavior.",
+      "role": "area-exit guard that normalizes egg state by removing an area-applied ID offset",
       "confidence": "high"
     },
     {
       "name": "U8P_GHOULEGG::hatch",
       "kind": "helper",
-      "role": "Performs the hatch: verifies eligibility, optionally gates by randomness, marks egg as hatched, creates and configures the NPC, and removes the egg item.",
-      "confidence": "high"
+      "role": "handle egg hatching: create NPCs, set up status/placement, and start NPC behavior; contains probabilistic alternate branch",
+      "confidence": "medium"
     },
     {
       "name": "Egg::getEggId",
       "kind": "extern",
-      "role": "Read the egg object's internal state/id used to decide hatch/update behavior.",
+      "role": "read egg's stored ID/state",
       "confidence": "high"
     },
     {
       "name": "Egg::setEggId",
       "kind": "extern",
-      "role": "Write/update the egg object's internal state/id (used to mark as hatched or adjust state).",
-      "confidence": "high"
-    },
-    {
-      "name": "urandom",
-      "kind": "extern",
-      "role": "Provide random numbers used to probabilistically gate hatching and to compute a spawn argument.",
+      "role": "write egg's stored ID/state",
       "confidence": "high"
     },
     {
       "name": "Npc::create",
       "kind": "extern",
-      "role": "Instantiate the NPC that hatches from the egg and return a handle/id for configuration.",
+      "role": "allocate/create the hatched NPC instance (returns pointer/handle)",
       "confidence": "high"
     },
     {
       "name": "Item::orStatus",
       "kind": "extern",
-      "role": "Set status bits on created NPC/item handles (used immediately after create).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getX",
-      "kind": "extern",
-      "role": "Query egg X coordinate for pop/placement operations.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getY",
-      "kind": "extern",
-      "role": "Query egg Y coordinate for pop/placement operations.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getZ",
-      "kind": "extern",
-      "role": "Query egg Z coordinate for pop/placement operations.",
-      "confidence": "high"
+      "role": "apply status bits to created item/NPC",
+      "confidence": "medium"
     },
     {
       "name": "Item::pop",
       "kind": "extern",
-      "role": "Remove/pop the egg item at specified coordinates as part of the hatch transition.",
+      "role": "place/spawn created NPC at egg coordinates",
       "confidence": "high"
     },
     {
-      "name": "spawn / METHOD::15E7",
+      "name": "spawn -> METHOD::func15E7",
       "kind": "extern",
-      "role": "Spawn/schedule an AI or initialization method for the newly created NPC, passing the npc handle and computed args.",
+      "role": "start a behavior/process on the spawned NPC",
+      "confidence": "medium"
+    },
+    {
+      "name": "urandom",
+      "kind": "extern",
+      "role": "generate small random values used for probabilistic branching and spawn parameters",
       "confidence": "medium"
     },
     {
       "name": "Npc::setTarget",
       "kind": "extern",
-      "role": "Set the NPC's target (likely the player/avatar) so the NPC will engage that target.",
-      "confidence": "high"
+      "role": "set the created NPC's target (e.g., player/avatar)",
+      "confidence": "medium"
     },
     {
       "name": "Npc::setAlignment",
       "kind": "extern",
-      "role": "Set the NPC's alignment/faction bytes (0x40 inferred to mark hostile).",
+      "role": "set the created NPC's alignment/affiliation",
       "confidence": "medium"
     },
     {
       "name": "Npc::setInCombat",
       "kind": "extern",
-      "role": "Mark the NPC as in combat so it will act immediately against its target.",
-      "confidence": "high"
+      "role": "mark the created NPC as 'in combat' to start combat behavior",
+      "confidence": "medium"
     }
   ],
   "call_analysis": {
-    "internal_calls": [
-      {
-        "caller": "U8P_GHOULEGG::leaveFastArea",
-        "callee": "U8P_GHOULEGG::hatch",
-        "purpose": "No direct call observed in this extract; hatch is a script helper (Event 7) invoked independently of U8P_GHOULEGG::leaveFastArea (inferred).",
-        "confidence": "medium"
-      }
-    ],
+    "internal_calls": [],
     "external_calls": [
       {
         "caller": "U8P_GHOULEGG::leaveFastArea",
         "callee": "Egg::getEggId",
-        "purpose": "Read egg's state to decide whether to change eggId or return early (high confidence).",
+        "purpose": "Read the egg's ID/state to determine whether to subtract 0x64.",
         "confidence": "high"
       },
       {
         "caller": "U8P_GHOULEGG::leaveFastArea",
         "callee": "Egg::setEggId",
-        "purpose": "Write adjusted eggId back to the egg when it is below the hatched threshold (high confidence).",
+        "purpose": "Write back eggId - 0x64 to remove the fast-area offset/flag.",
         "confidence": "high"
       },
       {
         "caller": "U8P_GHOULEGG::hatch",
         "callee": "Egg::getEggId",
-        "purpose": "Check eligibility of the egg before attempting to hatch (high confidence).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GHOULEGG::hatch",
-        "callee": "urandom",
-        "purpose": "Provide randomized gating for one eggId case and to generate a spawn argument (high confidence).",
+        "purpose": "Check current egg state for branch selection (>=0x64 guard; ==0x01 U8P_GHOULEGG::hatch trigger).",
         "confidence": "high"
       },
       {
         "caller": "U8P_GHOULEGG::hatch",
         "callee": "Egg::setEggId",
-        "purpose": "Mark the egg as hatched (set to 0x64) to prevent re-hatching (high confidence).",
+        "purpose": "Set egg ID to 0x64 as part of the U8P_GHOULEGG::hatch sequence (marking or preventing re-U8P_GHOULEGG::hatch).",
         "confidence": "high"
       },
       {
         "caller": "U8P_GHOULEGG::hatch",
         "callee": "Npc::create",
-        "purpose": "Create the NPC that hatches from the egg and obtain its handle for configuration (high confidence).",
+        "purpose": "Create the hatched NPC instance used for subsequent placement and behavior startup.",
         "confidence": "high"
       },
       {
         "caller": "U8P_GHOULEGG::hatch",
         "callee": "Item::orStatus",
-        "purpose": "Apply status flags to the created NPC/item handle immediately after creation (high confidence).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GHOULEGG::hatch",
-        "callee": "Item::getX",
-        "purpose": "Retrieve egg X coordinate so the NPC can be placed and the egg popped at the same location (high confidence).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GHOULEGG::hatch",
-        "callee": "Item::getY",
-        "purpose": "Retrieve egg Y coordinate for placement/pop (high confidence).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GHOULEGG::hatch",
-        "callee": "Item::getZ",
-        "purpose": "Retrieve egg Z coordinate for placement/pop (high confidence).",
-        "confidence": "high"
+        "purpose": "Apply a status flag (observed OR with 0x0080) to the created NPC/item after creation.",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_GHOULEGG::hatch",
         "callee": "Item::pop",
-        "purpose": "Remove/pop the egg item at its coordinates during the hatch transition (high confidence).",
+        "purpose": "Place the created NPC at the location of the egg using Item::getZ/Y/X(this).",
         "confidence": "high"
       },
       {
         "caller": "U8P_GHOULEGG::hatch",
-        "callee": "spawn / METHOD::15E7",
-        "purpose": "Schedule/spawn AI or initialization behavior for the new NPC with args including the npc handle and a urandom-derived value (medium confidence).",
+        "callee": "spawn -> METHOD::func15E7",
+        "purpose": "Launch the NPC's AI/behavior process with a randomized parameter derived from urandom.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GHOULEGG::hatch",
+        "callee": "urandom",
+        "purpose": "Generate random values for a probabilistic branch and for the spawned process arguments.",
         "confidence": "medium"
       },
       {
         "caller": "U8P_GHOULEGG::hatch",
         "callee": "Npc::setTarget",
-        "purpose": "Assign the avatar/player as the NPC's target so it will engage immediately (high confidence).",
-        "confidence": "high"
+        "purpose": "Set the created NPC's initial target (argument observed as 0x01, likely the player/avatar).",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_GHOULEGG::hatch",
         "callee": "Npc::setAlignment",
-        "purpose": "Set the NPC's alignment/faction (0x40 inferred to indicate hostile intent) (medium confidence).",
+        "purpose": "Set the created NPC's alignment (observed constant 0x40).",
         "confidence": "medium"
       },
       {
         "caller": "U8P_GHOULEGG::hatch",
         "callee": "Npc::setInCombat",
-        "purpose": "Mark the NPC as in combat so it behaves aggressively immediately (high confidence).",
-        "confidence": "high"
+        "purpose": "Mark the hatched NPC as in-combat so it begins combat behavior immediately.",
+        "confidence": "medium"
       }
     ]
   },
@@ -232,8 +190,8 @@
   ],
   "quick_facts": {
     "main_function": "U8P_GHOULEGG::leaveFastArea",
-    "behavior_summary_one_liner": "Manages egg objects: when an actor leaves the egg's fast-area, the script updates the egg's internal eggId state; a separate hatch routine can convert an eligible egg into a hostile NPC at the egg's position.",
-    "external_call_count": 15,
+    "behavior_summary_one_liner": "U8P_GHOULEGG::leaveFastArea: When the relevant actor/item leaves a fast-area trigger, the script checks the egg's stored ID (Egg::getEggId). If that ID is >= 0x64 the script subtracts 0x64 and writes the new value back with Egg::setEggId — effectively removing an area-applied offset/flag from the egg state.",
+    "external_call_count": 12,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

@@ -3,24 +3,29 @@
   "source_of_truth": "dialogue/json/U8P_HEAD.json",
   "file": "U8P_HEAD",
   "behavior_summary": [
-    "HEAD::use (Event 1) marks the HEAD object with a specific info key, applies a process-exclude to alter/stop normal processing for that object, and spawns a body-part process (BODYPART::0270) owned by the HEAD object. The spawn return value is captured and returned.",
-    "HEAD::hit (Event 5) marks the HEAD object with a different info key, applies process-exclude, invokes a FREE subsystem routine with code 0x0202 (likely a cleanup/state transition), then queries Kernel::getNumProcesses for process type 0x020A for this object. Based on the inverted boolean result of that query it may spawn an alternative body-part process (BODYPART::0431)."
+    "U8P_HEAD implements two small process handlers for a HEAD object: a U8P_HEAD::use() process that spawns a BODYPART process, and a U8P_HEAD::hit(uword, word) process that performs cleanup and conditionally spawns a different BODYPART process when struck.",
+    "U8P_HEAD::use acts as a trigger: when the object is 'used' it unconditionally spawns BODYPART::func0270 and stores the spawn return in a local (temp). This likely initiates a visual/effect or lifecycle behavior related to the object's body-part.",
+    "U8P_HEAD::hit resets a reference via FREE::resetRef(0x0202, this), queries Kernel::getNumProcesses(0x020A, this), and if that count is zero it spawns BODYPART::func0431, storing the spawn return in temp. The declared U8P_HEAD::hit parameters (uword, word) are present but not referenced in the visible code.",
+    "No global flags are read or written by these routines; behavior is local to the object and relies on engine subsystems (FREE, Kernel, spawn)."
   ],
   "notable_control_flow": [
-    "HEAD::use runs deterministically: set-info -> process-exclude -> spawn BODYPART::0270 -> return.",
-    "HEAD::hit contains a conditional branch: after calling FREE::2A56 it calls Kernel::getNumProcesses and applies a logical inversion to the returned count; the inverted test controls whether BODYPART::0431 is spawned. The inversion makes the spawn condition ambiguous from the bytecode (spawn on zero vs non-zero is inferred but uncertain)."
+    "U8P_HEAD::use — simple linear flow: spawn BODYPART::func0270 and save its return (no branching or conditions).",
+    "U8P_HEAD::hit — sequential: call FREE::resetRef(0x0202, this) -> call Kernel::getNumProcesses(0x020A, this) -> if result == 0 then spawn BODYPART::func0431 and save return. This acts as a guard to avoid multiple simultaneous 0x020A-type processes before spawning.",
+    "Declared U8P_HEAD::hit parameters (uword, word) are not used in the visible logic, implying the U8P_HEAD::hit reaction is independent of attacker/id or damage in this snippet."
   ],
   "open_questions": [
-    "What semantic meaning do the numeric info/process codes represent (0x0207, 0x020B, 0x0202, 0x020A)? They appear to be metadata or process-type identifiers but their high-level names are unknown.",
-    "Does the inverted test in HEAD::hit spawn BODYPART::0431 when Kernel::getNumProcesses returns zero or when it returns non-zero? The bytecode shows a NOT applied to the return value before the conditional, making the exact condition unclear.",
-    "What is the in-object 2-byte indirect field (consistently passed to extern calls)? It is used as an identifier/key for the object instance but its exact meaning (instance id, template id, slot index, etc.) is not documented."
+    "What exact gameplay effects do BODYPART::func0270 and BODYPART::func0431 implement (visual fragment spawn, persistent object, timed behavior)?",
+    "What semantic meaning is attached to process type 0x020A (the guard checked by Kernel::getNumProcesses) and why is it used to decide spawning?",
+    "What does FREE::resetRef(0x0202, this) precisely clear or unregister (reference bookkeeping, collision, or ownership)?",
+    "Are the U8P_HEAD::hit(uword, word) parameters used elsewhere or in other build variants (they are unused in the visible fragment)?",
+    "Does the spawn argument 0x00000000 carry special meaning (null/flags) for the BODYPART spawns or is it a placeholder?"
   ],
   "main_function": {
     "name": "U8P_HEAD::use",
     "execution_form": "process",
-    "purpose": "Handle the game's 'U8P_HEAD::use' action for the HEAD object: attach a specific info flag to the object, exclude it from normal processing, and spawn a BODYPART::0270 process linked to that object.",
+    "purpose": "Handle the object 'U8P_HEAD::use' event by spawning a body-part process (BODYPART::func0270) to initiate a body-part related behavior or effect tied to this HEAD instance.",
     "entry_conditions": [
-      "Event 1 (U8P_HEAD::use) — invoked when the HEAD object is used/activated by the player or another actor."
+      "Invoked when the HEAD object/process is used or activated by the engine/player (process type 0x0207)."
     ],
     "confidence": "high"
   },
@@ -28,49 +33,13 @@
     {
       "name": "U8P_HEAD::use",
       "kind": "main",
-      "role": "Primary event handler for the HEAD object's 'U8P_HEAD::use' action; updates object state and spawns an associated body-part process.",
+      "role": "Trigger handler for the object's 'U8P_HEAD::use' action; spawns BODYPART::func0270 to start a body-part behavior/effect.",
       "confidence": "high"
     },
     {
       "name": "U8P_HEAD::hit",
       "kind": "helper",
-      "role": "Event handler for the HEAD object's 'hit' action; updates object state, triggers FREE subsystem behavior, conditionally spawns an alternate body-part process based on existing processes.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_HEAD::set info",
-      "kind": "extern",
-      "role": "Engine primitive to attach/update metadata or state keyed by numeric id on the object.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_HEAD::process exclude",
-      "kind": "extern",
-      "role": "Engine primitive to mark an object/process so it is excluded from or altered in subsequent processing.",
-      "confidence": "high"
-    },
-    {
-      "name": "spawn (BODYPART::0270)",
-      "kind": "extern",
-      "role": "Spawn/start a body-part process (ID 0x0270) owned by the HEAD object; used by HEAD::use.",
-      "confidence": "high"
-    },
-    {
-      "name": "spawn (BODYPART::0431)",
-      "kind": "extern",
-      "role": "Spawn/start a different body-part process (ID 0x0431); conditionally used by HEAD::hit.",
-      "confidence": "high"
-    },
-    {
-      "name": "FREE::2A56",
-      "kind": "extern",
-      "role": "FREE-subsystem routine invoked with code 0x0202; appears to perform cleanup or a state transition for the object before further logic.",
-      "confidence": "medium"
-    },
-    {
-      "name": "Kernel::getNumProcesses",
-      "kind": "extern",
-      "role": "Query number of running processes of a given type for the object; return value is used by HEAD::hit to decide conditional spawning.",
+      "role": "Hit/damage handler: clears a reference (FREE::resetRef), checks running processes of type 0x020A and conditionally spawns BODYPART::func0431 to respond to the U8P_HEAD::hit.",
       "confidence": "high"
     }
   ],
@@ -79,51 +48,27 @@
     "external_calls": [
       {
         "caller": "U8P_HEAD::use",
-        "callee": "U8P_HEAD::set info",
-        "purpose": "Attach info key 0x0207 to the HEAD object to record state/metadata before spawning.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_HEAD::use",
-        "callee": "U8P_HEAD::process exclude",
-        "purpose": "Mark the HEAD object to be excluded or have altered processing immediately after setting info.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_HEAD::use",
-        "callee": "spawn (BODYPART::0270)",
-        "purpose": "Create/start a body-part process associated with the HEAD object; spawn is passed the object's 2-byte indirect field and an explicit 0 argument. The spawn return value is stored into a local temp and returned.",
+        "callee": "spawn ->BODYPART::func0270",
+        "purpose": "Start a body-part process/behavior tied to the HEAD instance; return (process id) saved to local 'temp'.",
         "confidence": "high"
       },
       {
         "caller": "U8P_HEAD::hit",
-        "callee": "U8P_HEAD::set info",
-        "purpose": "Attach info key 0x020B to the HEAD object to record a hit-related state change.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_HEAD::hit",
-        "callee": "U8P_HEAD::process exclude",
-        "purpose": "Mark the HEAD object to be excluded or have altered processing after setting hit info.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_HEAD::hit",
-        "callee": "FREE::2A56",
-        "purpose": "Invoke a FREE subsystem routine with code 0x0202, likely for cleanup or a state transition related to the hit event.",
+        "callee": "FREE::resetRef",
+        "purpose": "Reset/clear a reference or registration on this object (called with code 0x0202 and 'this') as bookkeeping/cleanup before further U8P_HEAD::hit handling.",
         "confidence": "medium"
       },
       {
         "caller": "U8P_HEAD::hit",
         "callee": "Kernel::getNumProcesses",
-        "purpose": "Query how many processes of type 0x020A exist for this object; the numeric return is inverted and tested to decide whether to spawn BODYPART::0431.",
+        "purpose": "Query number of running processes of type 0x020A associated with 'this' to decide whether to spawn an additional body-part process.",
         "confidence": "high"
       },
       {
         "caller": "U8P_HEAD::hit",
-        "callee": "spawn (BODYPART::0431)",
-        "purpose": "Conditionally spawn an alternate body-part process tied to the HEAD object if the post-inversion test on getNumProcesses passes.",
-        "confidence": "medium"
+        "callee": "spawn ->BODYPART::func0431",
+        "purpose": "When no 0x020A processes are present, spawn a U8P_HEAD::hit-specific body-part behavior (likely fragment/effect) and save its return to 'temp'.",
+        "confidence": "high"
       }
     ]
   },
@@ -138,9 +83,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "HEAD::use",
-    "behavior_summary_one_liner": "HEAD::use (Event 1) marks the HEAD object with a specific info key, applies a process-exclude to alter/stop normal processing for that object, and spawns a body-part process (BODYPART::0270) owned by the HEAD object. The spawn return value is captured and returned.",
-    "external_call_count": 8,
+    "main_function": "U8P_HEAD::use",
+    "behavior_summary_one_liner": "U8P_HEAD implements two small process handlers for a HEAD object: a U8P_HEAD::use() process that spawns a BODYPART process, and a U8P_HEAD::hit(uword, word) process that performs cleanup and conditionally spawns a different BODYPART process when struck.",
+    "external_call_count": 4,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

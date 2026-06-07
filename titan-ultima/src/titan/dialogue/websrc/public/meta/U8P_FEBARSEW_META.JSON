@@ -3,74 +3,52 @@
   "source_of_truth": "dialogue/json/U8P_FEBARSEW.json",
   "file": "U8P_FEBARSEW",
   "behavior_summary": [
-    "Handles the 'look' (examine) event for the FEBARSEW item: it configures presentation/state on the item, makes the item emit a short descriptive message 'iron bars ', and processes the bark call's return into a boolean-like result before suspending/returning.",
-    "Sets an info/presentation key (0x0208) and applies a process-exclude state to the object so that the look presentation/processing is configured or limited.",
-    "Allocates/passes the literal string 'iron bars ' to Item::bark using the item pointer as caller/target, frees the temporary string, and normalizes Item::bark's return value into a small local used for the function's final result."
+    "This script implements a single 'U8P_FEBARSEW::look' (examine) handler for the entity: when the player examines the object, the game displays the short text \"iron bars \" and then the process suspends/ends.",
+    "There is no branching, menu interaction, flag reads/writes, or external calls — the behavior is a one-line descriptive bark followed by termination of the U8P_FEBARSEW::look process.",
+    "The presence of two low-confidence 'Unknown' nodes in the decompiled output suggests minor low-level remnants (e.g., delimiters or a suspend op) but they do not change the observable behavior."
   ],
   "notable_control_flow": [
-    "Event-driven: the routine runs as a process handler when Event 0 (look) is triggered for the object.",
-    "Linear sequence: set info (0x0208) -> process exclude -> call Item::bark(this, \"iron bars \") -> free temporary string -> boolean-normalize bark retval -> suspend/return.",
-    "No branching or global flag checks are observed; behavior is deterministic for the look event."
+    "U8P_FEBARSEW::look executes as a process: output a single bark string \"iron bars \", then suspend/terminate the U8P_FEBARSEW::look process.",
+    "No conditional branches, loops, or calls are present in the canonical control flow — it is linear and deterministic."
   ],
   "open_questions": [
-    "What exact engine semantics does info id 0x0208 represent (presentation, UI context, or other metadata)? This is inferred from usage but not canonical.",
-    "What precise meaning does the 'process exclude' opcode have here (temporarily prevent other processing, mark for single-run presentation, or other)?",
-    "What is the semantic interpretation of Item::bark's return value in this script (success/failure, message-queued flag, or other)? The code normalizes it into a boolean-like temp."
+    "The disassembly contains two 'Unknown' node samples ('{' and 'suspend') — are these artifacts of decompilation or should they map to a specific engine internal operation beyond the observable suspend/terminate?",
+    "The bark text includes a trailing space ('iron bars ') — is this intentional for concatenation in other contexts, or simply the stored string?"
   ],
   "main_function": {
-    "name": "U8P_FEBARSEW::look (Func_80, Event 0)",
+    "name": "U8P_FEBARSEW::look",
     "execution_form": "process",
-    "purpose": "Respond to the player's 'look' action on the FEBARSEW item by setting presentation state on the object and emitting the short description 'iron bars ' via Item::bark; then normalize the bark return into a boolean-like result and suspend/return.",
+    "purpose": "Provide the short description shown to the player when they examine this object; displays the text 'iron bars ' and then suspends/ends the process.",
     "entry_conditions": [
-      "Event 0 (look) — invoked when a player or relevant actor examines the FEBARSEW object"
+      "Invoked by the engine when the player performs the 'U8P_FEBARSEW::look' or examine action on this entity (processType 0x0208)."
     ],
     "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_FEBARSEW::look (Func_80, Event 0)",
+      "name": "U8P_FEBARSEW::look",
       "kind": "main",
-      "role": "Event handler for the 'look' verb on the FEBARSEW item; configures info/state and produces the item's short description.",
+      "role": "U8P_FEBARSEW::look/examine handler that emits a single descriptive bark",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_FEBARSEW::look (Func_80, Event 0)",
-        "callee": "Item::bark",
-        "purpose": "Request that the item emit/display/queue the short descriptive string 'iron bars ' to the observing process/player; return value is captured and later normalized.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
-    "writes": [
-      {
-        "name": "info_0x0208",
-        "likely_effect": "Sets a presentation/info key on the object to configure how the look event is presented or processed (engine-level metadata).",
-        "confidence": "medium"
-      },
-      {
-        "name": "process_exclude_state",
-        "likely_effect": "Marks the object with an exclude/process-modifier state after setting info (likely prevents further default processing or limits subsequent handlers during this presentation).",
-        "confidence": "medium"
-      }
-    ]
+    "writes": []
   },
   "ui_tags": [
-    "trigger",
-    "presentation",
-    "cleanup"
+    "trigger"
   ],
   "quick_facts": {
-    "main_function": "FEBARSEW::look (Func_80, Event 0)",
-    "behavior_summary_one_liner": "Handles the 'look' (examine) event for the FEBARSEW item: it configures presentation/state on the item, makes the item emit a short descriptive message 'iron bars ', and processes the bark call's return into a boolean-like result before suspending/returning.",
-    "external_call_count": 1,
+    "main_function": "U8P_FEBARSEW::look",
+    "behavior_summary_one_liner": "This script implements a single 'U8P_FEBARSEW::look' (examine) handler for the entity: when the player examines the object, the game displays the short text \"iron bars \" and then the process suspends/ends.",
+    "external_call_count": 0,
     "flag_read_count": 0,
-    "flag_write_count": 2
+    "flag_write_count": 0
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

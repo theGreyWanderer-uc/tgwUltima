@@ -3,24 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_LCHST_EW.json",
   "file": "U8P_LCHST_EW",
   "behavior_summary": [
-    "Provides the examine ('U8P_LCHST_EW::look') and use interactions for a locked chest item. When looked at, the chest emits a short description string ('locked chest ').",
-    "When used, behavior depends on whether the main game loop is running: if not running it schedules the same U8P_LCHST_EW::look handler (so the chest will emit its description); if running it plays a sound effect and toggles the chest's UI/gump open state based on a status bit (0x0100)."
+    "This script implements a simple locked chest item. When the player 'looks' at the chest it displays the short description \"locked chest\" and then ends the U8P_LCHST_EW::look process.",
+    "When the player 'uses' the chest the script performs a runtime check (isGameRunning). If the game is running it calls an internal handler (U8P_LCHST_EW::func0080) and yields/suspends. After that it plays a U8P_LCHST_EW::use sound (playSFX(0x64,0x58)) and toggles the chest UI gump based on the item's status bit 0x0100: if the bit is set it calls Item::closeGump(this), otherwise it calls Item::openGump(0x07,this)."
   ],
   "notable_control_flow": [
-    "U8P_LCHST_EW::look: sets process info/exclusion, calls Item::bark with the literal string, then suspends/returns.",
-    "U8P_LCHST_EW::use: queries isGameRunning(); if false -> spawn U8P_LCHST_EW::look(item,pid) and return; if true -> playSFX then read Item::getStatus() and branch on status bit 0x0100 to either call Item::closeGump() or Item::openGump(7)."
+    "U8P_LCHST_EW::look: immediately emits a single player-facing bark \"locked chest\" and suspends/terminates the U8P_LCHST_EW::look process.",
+    "U8P_LCHST_EW::use: if isGameRunning() == true then call U8P_LCHST_EW::func0080(this) and suspend; unconditionally play a SFX; read Item::getStatus(this) and test bit 0x0100 to decide between Item::closeGump(this) and Item::openGump(0x07,this)."
   ],
   "open_questions": [
-    "The exact semantic meaning of the status bit 0x0100 is inferred as 'gump open state' but not explicitly documented — is the bit set when the gump is open or closed?",
-    "The precise role of the 'info' constants 0x0208/0x0207 pushed at handler start is inferred (process/context setup); what exact engine state they configure is unknown.",
-    "The numeric parameter 7 passed to Item::openGump is unexplained — it likely selects a specific UI page or mode but its semantics are not present in the snippet."
+    "What exactly does U8P_LCHST_EW::func0080 perform when invoked while the game is running (server-side handling, permission checks, RPC, etc.)? This is called before the subsequent UI logic but its behavior is not present in the excerpt (confidence: low).",
+    "Is the 0x0100 status bit a canonical 'gump-open' flag for this item class, or does it represent a different UI/state that is being reused here (confidence: medium)?",
+    "Are there any additional conditions (ownership, lock state, key requirements) enforced by func0080 or elsewhere that would affect whether the chest actually opens for the player (confidence: low)?"
   ],
   "main_function": {
     "name": "U8P_LCHST_EW::look",
     "execution_form": "process",
-    "purpose": "Respond to a player's 'U8P_LCHST_EW::look' (examine) action by preparing process context and causing the chest item to emit its short description ('locked chest ').",
+    "purpose": "Provide the short description shown when the player examines the chest; inform the player the chest is locked and end the U8P_LCHST_EW::look process.",
     "entry_conditions": [
-      "Event 0: the player (or relevant actor) performs a 'U8P_LCHST_EW::look' on the locked chest item."
+      "Player performs an examine/U8P_LCHST_EW::look action on the chest (engine invokes the U8P_LCHST_EW::look process, processType 0x0208).",
+      "Inferred: player targets the chest in the world and requests a description."
     ],
     "confidence": "high"
   },
@@ -28,66 +29,60 @@
     {
       "name": "U8P_LCHST_EW::look",
       "kind": "main",
-      "role": "Examine/description handler that calls Item::bark to show 'locked chest ' to the viewer.",
+      "role": "Produce short description for player examination ('locked chest').",
       "confidence": "high"
     },
     {
       "name": "U8P_LCHST_EW::use",
       "kind": "helper",
-      "role": "Use/activate handler that either spawns the U8P_LCHST_EW::look handler in non-running mode or plays SFX and toggles the chest's gump when the game is running.",
-      "confidence": "high"
+      "role": "Handle player U8P_LCHST_EW::use interaction: call internal handler when game running, play SFX, and open/close the chest UI gump based on item status.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_LCHST_EW::func0080",
+      "kind": "helper",
+      "role": "Internal handler invoked by U8P_LCHST_EW::use() when the game is running; exact purpose not present in excerpt (likely server-side/U8P_LCHST_EW::use validation or core U8P_LCHST_EW::use logic).",
+      "confidence": "low"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
         "caller": "U8P_LCHST_EW::use",
-        "callee": "U8P_LCHST_EW::look",
-        "purpose": "Spawn the U8P_LCHST_EW::look handler so the item will emit its description when the game is not running (non-interactive context).",
-        "confidence": "high"
+        "callee": "U8P_LCHST_EW::func0080",
+        "purpose": "Invoke script-local U8P_LCHST_EW::use handler when the runtime is active; likely performs core U8P_LCHST_EW::use-side logic, validation, or RPC-style handling before continuing UI operations.",
+        "confidence": "low"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_LCHST_EW::look",
-        "callee": "Item::bark",
-        "purpose": "Display/broadcast the literal string 'locked chest ' from the item to the requesting player/process.",
+        "caller": "U8P_LCHST_EW::use",
+        "callee": "isGameRunning",
+        "purpose": "Guard: determines whether to call the internal handler and suspend early (runtime vs. non-runtime behavior).",
         "confidence": "high"
       },
       {
         "caller": "U8P_LCHST_EW::use",
-        "callee": "U8P_LCHST_EW::isGameRunning",
-        "purpose": "Decide whether to spawn the U8P_LCHST_EW::look handler (non-running) or perform interactive behavior (running).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LCHST_EW::use",
-        "callee": "spawn",
-        "purpose": "Schedule/launch U8P_LCHST_EW::LCHST_EW::look(item,pid) when the game loop is not active.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LCHST_EW::use",
-        "callee": "U8P_LCHST_EW::playSFX",
-        "purpose": "Play a sound effect before toggling the UI when the chest is used interactively (bytes pushed: 0x64, 0x58).",
+        "callee": "playSFX",
+        "purpose": "Play an auditory feedback/sound effect when the chest is used (called with 0x64,0x58).",
         "confidence": "high"
       },
       {
         "caller": "U8P_LCHST_EW::use",
         "callee": "Item::getStatus",
-        "purpose": "Read the chest's status bitfield to test bit 0x0100 to determine UI/gump state.",
-        "confidence": "high"
+        "purpose": "Read the item's status flags/word to inspect bit 0x0100 for current UI/open state.",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_LCHST_EW::use",
         "callee": "Item::closeGump",
-        "purpose": "Close the item's UI/gump when the tested status bit indicates it should be closed.",
+        "purpose": "Close the chest's UI gump when the 0x0100 status bit indicates the gump is currently open.",
         "confidence": "medium"
       },
       {
         "caller": "U8P_LCHST_EW::use",
         "callee": "Item::openGump",
-        "purpose": "Open the item's UI/gump with parameter 7 when the tested status bit indicates the gump is not open.",
+        "purpose": "Open the chest UI gump (gump id 0x07) when the 0x0100 status bit is not set.",
         "confidence": "medium"
       }
     ]
@@ -103,9 +98,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "LCHST_EW::look",
-    "behavior_summary_one_liner": "Provides the examine ('U8P_LCHST_EW::look') and use interactions for a locked chest item. When looked at, the chest emits a short description string ('locked chest ').",
-    "external_call_count": 7,
+    "main_function": "U8P_LCHST_EW::look",
+    "behavior_summary_one_liner": "This script implements a simple locked chest item. When the player 'looks' at the chest it displays the short description \"locked chest\" and then ends the U8P_LCHST_EW::look process.",
+    "external_call_count": 5,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

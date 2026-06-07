@@ -3,27 +3,27 @@
   "source_of_truth": "dialogue/json/U8P_FIRESWMP.json",
   "file": "U8P_FIRESWMP",
   "behavior_summary": [
-    "U8P_FIRESWMP::FIRESWMP::look: When the player (or relevant actor) examines the fire-swamp object, the script prepares context and displays a short description text \"A strange hole.\" via Item::bark. This is purely a descriptive 'U8P_FIRESWMP::look' handler with no world-state changes.",
-    "U8P_FIRESWMP::FIRESWMP::gotHit: When the object is hit (Event 6), the handler enumerates a nearby collection of items/actors, filters candidates (calls Item::isNpc), and for the first matching candidate it computes an offset position (candidate X+0x10, Y+0x10, Z) and spawns a fire-spell effect (spawn FIRESPEL::1F65) at that location. It then invokes METHOD::0080 on the context/target (likely to apply an effect) and schedules a cleanup timer (spawn FREE::1C19 with delay 0x64). The routine loops through candidates and suspends/returns after applying the effect."
+    "U8P_FIRESWMP::look is a simple U8P_FIRESWMP::look/inspect handler that displays the short description text \"A strange hole.\" when the player examines the object.",
+    "U8P_FIRESWMP::gotHit is a hit-reception process invoked when this object is struck. If the attacker parameter appears to be an NPC, the routine computes coordinates, spawns a fire-spell/visual effect at or near those coordinates, and dispatches a standard hit using a receiveHitWrapper call (hit type 0x05, amount 0x08).",
+    "U8P_FIRESWMP::gotHit includes an additional numeric comparison involving spawn->FREE::func1C19(0) vs 0x64 that appears to act as a chance/threshold gate for some conditional behavior; exact effect is uncertain."
   ],
   "notable_control_flow": [
-    "U8P_FIRESWMP::FIRESWMP::look: single-entry, immediate call to Item::bark to show a description, then cleanup/return.",
-    "U8P_FIRESWMP::FIRESWMP::gotHit: loop over a collection of nearby items/actors using iterator locals ([BP-09h] etc.), check Item::isNpc on each candidate ([BP-07h]), and on match compute coordinates and spawn a FIRESPEL effect followed by a METHOD::0080 call and a delayed FREE spawn. The handler returns/suspends after applying on a candidate.",
-    "Effect application path is guarded by the Item::isNpc check and candidate iteration; only matching candidates receive the spawn+METHOD flow."
+    "U8P_FIRESWMP::look: immediate bark of text 'A strange hole.' then suspend/exit (no flags or branching).",
+    "U8P_FIRESWMP::gotHit: copies parameter (param1) into a local (local3), checks Item::isNpc(local3). If true, it queries position fields (Item::getX/getY/getZ) of an item/address (decompilation shows use of local4), adds offsets (+0x10 to X and Y), and uses the computed X (local2) to call FIRESPEL::func1F65(local2, 0) to spawn an effect.",
+    "After spawning the effect, U8P_FIRESWMP::gotHit calls METHOD::receiveHitWrapper with arguments consistent with a hit dispatch (0x05, 0x08, this, &attacker). A separate comparison of spawn->FREE::func1C19(0) against 0x64 is present and likely gates some optional behavior (chance-related)."
   ],
   "open_questions": [
-    "What exact collection is iterated by U8P_FIRESWMP::FIRESWMP::gotHit (nearby actors, inventory, or a global actor list)?",
-    "What are the precise semantics of METHOD::0080 (the two byte arguments 0x05 and 0x08 and how they alter the target)?",
-    "What do the numeric offsets (+0x10 for X and Y) represent in gameplay terms (visual offset, spawn grid offset, or alignment)?",
-    "Are the U8P_FIRESWMP::FIRESWMP::gotHit parameters (uword, word) the attacker id and damage/type, and are they used outside the shown excerpt?",
-    "Does the spawned FREE::1C19 free the spawned FIRESPEL entity or perform other cleanup tied to the pid/context?"
+    "What exactly is local4 and how it maps to the attacker or world object used for coordinate queries (decompilation is ambiguous).",
+    "Is spawn->FREE::func1C19(0) a random roll, resource check, or something else? The intent (chance vs resource) is inferred but not certain.",
+    "Are there other callers of U8P_FIRESWMP::gotHit in game code (engine hit dispatcher) and are there attacker-types besides NPC that should trigger different behavior?",
+    "Precise coordinate math (why +0x10 offsets) — inferred as an offset to center the effect but not certain."
   ],
   "main_function": {
     "name": "U8P_FIRESWMP::look",
     "execution_form": "process",
-    "purpose": "Provide the textual description when the player examines the fire-swamp object; set up local item info/context and call Item::bark to present the string \"A strange hole.\" to the viewer.",
+    "purpose": "Provide the object's short description when examined by the player.",
     "entry_conditions": [
-      "Event 0 - invoked when an actor looks at / examines the object (player 'U8P_FIRESWMP::look' event)"
+      "Triggered by the engine's 'U8P_FIRESWMP::look' (inspect/examine) action on this object."
     ],
     "confidence": "high"
   },
@@ -31,114 +31,102 @@
     {
       "name": "U8P_FIRESWMP::look",
       "kind": "main",
-      "role": "Examine/U8P_FIRESWMP::look handler that displays a short description string via Item::bark.",
+      "role": "inspect/U8P_FIRESWMP::look handler that barks a short description",
       "confidence": "high"
     },
     {
       "name": "U8P_FIRESWMP::gotHit",
       "kind": "helper",
-      "role": "Hit/event handler (Event 6) that searches candidates, filters NPCs, spawns a fire-spell effect at an offset of a matched candidate's position, applies an effect via METHOD::0080, and schedules cleanup.",
+      "role": "hit handler that spawns a fire effect and dispatches a hit when attacked (NPC-attacker path)",
       "confidence": "medium"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine routine used to display a short message/string from an item to a PID/process.",
-      "confidence": "high"
     },
     {
       "name": "Item::isNpc",
       "kind": "extern",
-      "role": "Query whether a candidate item is an NPC (used to filter valid targets).",
+      "role": "query to determine whether a given item/address represents an NPC",
       "confidence": "high"
     },
     {
       "name": "Item::getX",
       "kind": "extern",
-      "role": "Return an item's X coordinate for spawn-position computation.",
+      "role": "read X coordinate of an item/address",
       "confidence": "high"
     },
     {
       "name": "Item::getY",
       "kind": "extern",
-      "role": "Return an item's Y coordinate for spawn-position computation.",
+      "role": "read Y coordinate of an item/address",
       "confidence": "high"
     },
     {
       "name": "Item::getZ",
       "kind": "extern",
-      "role": "Return an item's Z/level coordinate for spawn-position computation.",
+      "role": "read Z coordinate (height/level) of an item/address",
       "confidence": "high"
     },
     {
-      "name": "spawn FIRESPEL::1F65",
+      "name": "FIRESPEL::func1F65",
       "kind": "extern",
-      "role": "Spawn a fire-spell/effect entity at computed coordinates (visual/attack effect).",
+      "role": "spawn/create a fire-spell/visual effect at supplied coordinates (inferred)",
       "confidence": "medium"
     },
     {
-      "name": "METHOD::0080",
+      "name": "METHOD::receiveHitWrapper",
       "kind": "extern",
-      "role": "Apply a method/engine operation (likely effect/application) with small-byte args to the target/context after spawning the effect.",
+      "role": "apply/dispatch the received hit to the object (wrapper around hit logic)",
+      "confidence": "medium"
+    },
+    {
+      "name": "spawn->FREE::func1C19",
+      "kind": "extern",
+      "role": "function whose return is compared to 0x64 — likely a random/threshold check (inferred)",
       "confidence": "low"
-    },
-    {
-      "name": "spawn FREE::1C19",
-      "kind": "extern",
-      "role": "Schedule a delayed cleanup/free action (passed pid and a delay of 0x64).",
-      "confidence": "medium"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_FIRESWMP::look",
-        "callee": "Item::bark",
-        "purpose": "Deliver the descriptive string \"A strange hole.\" to the viewing process/pid so the player sees the item's short description.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_FIRESWMP::gotHit",
         "callee": "Item::isNpc",
-        "purpose": "Filter iteration candidates to NPCs before applying the fire effect.",
+        "purpose": "Test whether the attacker/parameter refers to an NPC to decide whether to run NPC-specific effect/hit logic.",
         "confidence": "high"
       },
       {
         "caller": "U8P_FIRESWMP::gotHit",
         "callee": "Item::getX",
-        "purpose": "Read candidate X coordinate to compute spawn X = candidate X + 0x10.",
-        "confidence": "high"
+        "purpose": "Obtain X coordinate of an item/address (used to compute effect spawn X with an added offset).",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_FIRESWMP::gotHit",
         "callee": "Item::getY",
-        "purpose": "Read candidate Y coordinate to compute spawn Y = candidate Y + 0x10.",
-        "confidence": "high"
+        "purpose": "Obtain Y coordinate of an item/address (used to compute effect spawn Y with an added offset).",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_FIRESWMP::gotHit",
         "callee": "Item::getZ",
-        "purpose": "Read candidate Z coordinate to use as spawn Z.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FIRESWMP::gotHit",
-        "callee": "spawn FIRESPEL::1F65",
-        "purpose": "Create/play a fire-spell effect at the computed coordinates to represent the hit/attack consequence.",
+        "purpose": "Obtain Z coordinate (height/level) of an item/address for effect placement/context.",
         "confidence": "medium"
       },
       {
         "caller": "U8P_FIRESWMP::gotHit",
-        "callee": "METHOD::0080",
-        "purpose": "Invoke an effect/application API on the context and target, likely to apply damage/status/flag related to the spawned fire effect.",
+        "callee": "FIRESPEL::func1F65",
+        "purpose": "Spawn a fire-spell/visual effect at the computed X coordinate (argument pattern shows local2 and 0).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FIRESWMP::gotHit",
+        "callee": "METHOD::receiveHitWrapper",
+        "purpose": "Dispatch the actual hit to the object (arguments match hit type 0x05, amount 0x08, this, attacker).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FIRESWMP::gotHit",
+        "callee": "spawn->FREE::func1C19",
+        "purpose": "Compute/return a value that is compared to 0x64 (likely a chance or threshold check gating behavior).",
         "confidence": "low"
-      },
-      {
-        "caller": "U8P_FIRESWMP::gotHit",
-        "callee": "spawn FREE::1C19",
-        "purpose": "Schedule a delayed cleanup/free operation associated with the spawned effect/context (delay 0x64).",
-        "confidence": "medium"
       }
     ]
   },
@@ -148,14 +136,14 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "animation",
+    "visual_effect",
+    "combat",
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_FIRESWMP::FIRESWMP::look",
-    "behavior_summary_one_liner": "U8P_FIRESWMP::FIRESWMP::look: When the player (or relevant actor) examines the fire-swamp object, the script prepares context and displays a short description text \"A strange hole.\" via Item::bark. This is purely a descriptive 'U8P_FIRESWMP::look' handler with no world-state changes.",
-    "external_call_count": 8,
+    "main_function": "U8P_FIRESWMP::look",
+    "behavior_summary_one_liner": "U8P_FIRESWMP::look is a simple U8P_FIRESWMP::look/inspect handler that displays the short description text \"A strange hole.\" when the player examines the object.",
+    "external_call_count": 7,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

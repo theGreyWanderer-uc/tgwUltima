@@ -3,31 +3,31 @@
   "source_of_truth": "dialogue/json/U8P_PENT.json",
   "file": "U8P_PENT",
   "behavior_summary": [
-    "Implements pentagram-related gameplay: cleaning up improper/extra items when someone enters the pentagram trigger area (U8P_PENT::enterFastArea), reacting to physical hits on the pentagram to start ritual effects (gotHit), and handling player 'use' attempts to activate the pentagram ritual (use).",
-    "U8P_PENT::enterFastArea: when the fast-area trigger is entered and the global flag acolyteKilled is set and the triggering item's map/frame match expected values, the handler enumerates nearby items and destroys those that match specific frame/shape masks and positional constraints — effectively pruning or enforcing the pentagram's center contents.",
-    "gotHit: validates hit parameters and global state (tonguing, pyrosFree, etc.), selects a valid focus/candle item, sets a 'tonguing' ritual flag, may put the avatar into stasis, spawns multiple asynchronous visual/effect processes (FREE::* and METHOD::*), and manipulates or destroys involved items to start the ritual sequence.",
-    "use: validates party/quest prerequisites (vardionJoined, baneJoined, acolyteKilled), checks for a single valid focus at the pentagram center and an appropriate set of lit candles, barks feedback to the player when requirements fail, and when validated spawns the ritual/effect processes and calls internal helpers to build/validate item lists and orchestrate the activation."
+    "This script implements the pentagram item's gameplay logic: area-entry cleanup, player 'U8P_PENT::use' interactions (menus, validation, placement/removal of sorcerous components), and reactions to hits near the pentagram (cinematic/tongue reaction, possible item destruction).",
+    "U8P_PENT::enterFastArea (main) runs when an actor enters the pentagram trigger and performs spatial/frame/map gated cleanup of nearby items (destroying or removing items that violate positional or frame rules).",
+    "Multiple helper routines build and manage UI menus, classify pentagram components by type/frame/slot, validate candle/focus placement, and orchestrate spawn/suspend cinematics and SFX loops.",
+    "The script relies heavily on spatial tests (Item::getX/Y/Z, FREE::isWithinRange, FREE::getDistanceBetween), frame/type checks for slot validation, and spawned FREE::* helper processes to present prompts, delays, and camera/animation sequences."
   ],
   "notable_control_flow": [
-    "Fast-area entry path is gated by the global flag acolyteKilled and by the triggering item's map/frame bits; if either fails, U8P_PENT::enterFastArea exits without altering the world.",
-    "Item enumeration loops test item frames/types and spatial X/Y ranges relative to the trigger; matching items are destroyed via Item::destroy.",
-    "gotHit uses multiple guards (tonguing flag, pyrosFree, hit parameters, item frame/type) to prevent duplicate or invalid activations; when conditions pass it sets tongue-related state and spawns multiple asynchronous routines.",
-    "use performs layered validation: quest/party flags first (vardionJoined, baneJoined, sponsorTest affects messaging), then presence and uniqueness of a center focus, then count/state of candles; failure at any step produces a player-facing bark and aborts activation."
+    "Area-triggered cleanup is gated by global state and map/frame checks (acolyteKilled, Npc::getMap == 0x0C, Item::getFrame == 0x04) before iterating nearby items and possibly calling Item::destroy.",
+    "Many user-facing flows are menu-driven: large menu-builder functions (U8P_PENT::func4206, U8P_PENT::func215E, U8P_PENT::func180C, U8P_PENT::func3347) create MenuAdd/MenuRemove sets and then SuspendAssign/strcmp read the user's choice to continue.",
+    "Hit reaction (U8P_PENT::gotHit) mixes immediate destroy-paths (driven by process_result() of spawned confirm prompts) and cinematic non-destroy branches that set global 'tonguing', spawn camera/SFX processes, set avatar stasis, and later clear it.",
+    "Spawn + suspend loops are used pervasively to sequence audiovisual effects (FREE::*), SFX loops (U8P_PENT::pentagramSFXLoop), and confirmation prompts (FREE::askYesNo, FREE::func121C)."
   ],
   "open_questions": [
-    "Exact numeric frame/shape mask values and which concrete in-game item types (e.g., 'focus' vs 'candle') correspond to each frame test — inference is based on frame/shape checks but not explicit names.",
-    "Precise side effects and durations of the spawned FREE::* and METHOD::* processes (visuals, damage, NPC behavior) — disassembly shows spawns but not the high-level gameplay effects.",
-    "Where and when the 'tonguing' flag is cleared after gotHit sets it — clearing sequences are inferred but not present in this snippet.",
-    "Exact player-facing strings used by PENT::use failure branches (bark text is invoked but literal strings are not fully recovered here)."
+    "Exact polarity and full gating intent of the acolyteKilled test in U8P_PENT::enterFastArea: decompilation shows the flag tested but polarity/context is slightly ambiguous.",
+    "Precise mapping from item frame values to semantic 'slot' identities — frame ranges are used heavily (U8P_PENT::isPentagramPieceForSlot, U8P_PENT::func138D, U8P_PENT::func180C) but the canonical slot->frame table is inferred rather than explicit.",
+    "Full semantics of the 'tonguing' and 'pyrosFree' globals (their lifecycle and broader game impact) are inferred from usage in U8P_PENT::gotHit but not fully defined here.",
+    "Some control-flow uses low-confidence decompiler artifacts (jmp_NOPRINT) that may hide edge-case branches or additional flag writes; those branches are not represented in full detail."
   ],
   "main_function": {
     "name": "U8P_PENT::enterFastArea",
     "execution_form": "process",
-    "purpose": "On fast-area (trigger) entry, ensure the pentagram center contains only allowed items by inspecting the triggering actor/item and removing nearby items that do not match the pentagram's expected frame/shape and spatial constraints. Acts as cleanup/enforcement when the acolyte-related state applies.",
+    "purpose": "On area entry, conditionally enforce pentagram integrity and clean up misplaced or invalid items around the pentagram (item destruction/removal when map/frame/spatial conditions indicate an invalid placement).",
     "entry_conditions": [
-      "Called on U8P_PENT::enterFastArea (fast-area trigger entry).",
-      "Proceeds only if global flag 'acolyteKilled' is non-zero.",
-      "Proceeds only when the triggering item's map and frame bits match expected values (ensures correct pentagram variant/state)."
+      "Called by the engine when an actor enters the pentagram trigger region (U8P_PENT::enterFastArea).",
+      "Gated by a global state read (acolyteKilled) before performing cleanup.",
+      "Additional local checks of Npc::getMap(...) == 0x0C and Item::getFrame(this) == 0x04 determine whether the full cleanup sequence runs."
     ],
     "confidence": "high"
   },
@@ -35,139 +35,241 @@
     {
       "name": "U8P_PENT::enterFastArea",
       "kind": "main",
-      "role": "Trigger-area handler that prunes incorrect or unwanted items within the pentagram center when conditions (acolyteKilled and trigger-item frame/map) are met.",
+      "role": "Area-entry behavior: pentagram cleanup and spatial enforcement.",
       "confidence": "high"
     },
     {
       "name": "U8P_PENT::gotHit",
       "kind": "helper",
-      "role": "Handles Event 6 (pentagram being struck): validates hit and global state, may set ritual state (tonguing), spawn visual/effect processes, set avatar stasis, and manipulate/destroy selected items to begin a ritual sequence.",
+      "role": "Handle hits near pentagram: gate on globals, spatial containment checks, set 'tonguing' state, spawn cinematic/UI helpers, possibly destroy or move offending items.",
       "confidence": "high"
     },
     {
       "name": "U8P_PENT::use",
       "kind": "helper",
-      "role": "Handles 'use' (player activation): verifies party/quest preconditions, checks for a single valid focus and proper candles/lights, barks player messages on failure, and on success orchestrates the ritual by spawning effects and calling internal list/validation helpers.",
+      "role": "Player 'U8P_PENT::use' interaction: validate focus/candle placement, provide guidance barks, build menus and launch placement/removal flows.",
       "confidence": "high"
     },
     {
-      "name": "U8P_PENT::5336",
+      "name": "U8P_PENT::func0BCF",
       "kind": "helper",
-      "role": "Internal validation helper (inferred): used by use/gotHit to validate item lists or ritual preconditions.",
+      "role": "Menu preparation / candidate collection and cinematic spawn sequence (includes an aggressive bark).",
       "confidence": "medium"
     },
     {
-      "name": "U8P_PENT::3940",
+      "name": "U8P_PENT::isPentagramPieceForSlot",
       "kind": "helper",
-      "role": "Internal helper (inferred): possibly performs a different validation pass or state check for activation sequences.",
-      "confidence": "low"
+      "role": "Validate whether an item frame/type matches a given pentagram slot index.",
+      "confidence": "high"
     },
     {
-      "name": "U8P_PENT::39E7",
+      "name": "U8P_PENT::func1066",
       "kind": "helper",
-      "role": "Internal helper (inferred): builds/filters nearby item lists (foci/candles) for ritual operations.",
+      "role": "Compute offsets from an item and spawn a FIRESPEL visual effect at that location.",
       "confidence": "medium"
     },
     {
-      "name": "U8P_PENT::3B43",
+      "name": "U8P_PENT::func10C3",
       "kind": "helper",
-      "role": "Internal helper (inferred): further list manipulation or ritual orchestration utility used during use/gotHit.",
-      "confidence": "low"
+      "role": "Destroy an item and attempt a legal_create replacement, play SFX and spawn follow-up helpers.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_PENT::func1151",
+      "kind": "helper",
+      "role": "Short spawn-and-cleanup helper: spawn FREE helper, suspend, then destroy item.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_PENT::pentagramSFXLoop",
+      "kind": "helper",
+      "role": "Continuously play pentagram SFX by looping playSFX and suspending on spawned timing helpers.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_PENT::func11BF",
+      "kind": "helper",
+      "role": "Create temporary items at offsets and ask the player yes/no per-item to decide subsequent destruction (preview/confirm helper).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_PENT::func138D",
+      "kind": "helper",
+      "role": "Selector utility: scan candidate(s) and return the first item whose frame matches selector-specific allowed frames.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_PENT::func180C",
+      "kind": "helper",
+      "role": "Assign items into slot-tracker locals and set item frames to reflect placement — menu/frame update helper.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_PENT::func215E",
+      "kind": "helper",
+      "role": "Large menu/slot manager: validate candidates, remove from source lists, add to per-slot option containers, and set per-slot flags.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_PENT::func3347",
+      "kind": "helper",
+      "role": "Build removal/clear menus for items on the pentagram, ensure NPC can receive items, and delegate selection handling to U8P_PENT::func3757.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_PENT::func3757",
+      "kind": "helper",
+      "role": "Drive the post-menu selection flow: spawn camera/animation helpers, suspend for player choice, and execute transfer/removal cinematics and state updates.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_PENT::func3940",
+      "kind": "helper",
+      "role": "Spatial evaluator: compare candidate coordinates to this item to choose a candidate based on quadrant + distance threshold.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_PENT::func39E7",
+      "kind": "helper",
+      "role": "Small menu-builder: test candidate against several offset ranges and accumulate passing items into an options list.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_PENT::func39E7",
+      "kind": "helper",
+      "role": "Small menu-builder: test candidate against several offset ranges and accumulate passing items into an options list.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_PENT::func3B43",
+      "kind": "helper",
+      "role": "Prune menu options by spatial region and candidate frame, removing inappropriate entries from a presented menu.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_PENT::func4206",
+      "kind": "helper",
+      "role": "Very large UI/menu builder: assign strings, build many option lists, filter by slot/type/proximity and produce player-facing menu text.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_PENT::func5336",
+      "kind": "helper",
+      "role": "Proximity test: determines if a stack item lies within a rectangular region relative to this item (used to detect 'standing too close').",
+      "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
         "caller": "U8P_PENT::use",
-        "callee": "U8P_PENT::5336",
-        "purpose": "Validate ritual prerequisites or an item list prior to activation.",
+        "callee": "U8P_PENT::func3940",
+        "purpose": "Compute a focus/candle positional state or candidate count used to validate missing/multiple foci before opening placement menus.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PENT::use",
+        "callee": "U8P_PENT::func39E7",
+        "purpose": "Build a menu/options list of nearby candidate items by spatial sectors used in the placement/removal flow.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PENT::use",
+        "callee": "U8P_PENT::func3B43",
+        "purpose": "Prune the menu/options list according to candidate position and frame before presenting choices to the player.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PENT::gotHit",
+        "callee": "U8P_PENT::func1066",
+        "purpose": "Spawn fire/spell visual effects in cinematic reaction branches (positioned by U8P_PENT::func1066 offsets).",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_PENT::use",
-        "callee": "U8P_PENT::3940",
-        "purpose": "Additional validation or alternate path checks during use; exact role inferred from invocation context.",
-        "confidence": "low"
+        "caller": "U8P_PENT::func0BCF",
+        "callee": "U8P_PENT::isPentagramPieceForSlot",
+        "purpose": "Check whether a nearby item fits a given slot to decide candidate menu addition and whether to run a cinematic/attack sequence.",
+        "confidence": "high"
       },
       {
-        "caller": "U8P_PENT::use",
-        "callee": "U8P_PENT::39E7",
-        "purpose": "Build or filter a nearby-item list (candles/foci) used to decide whether activation can proceed.",
-        "confidence": "medium"
+        "caller": "U8P_PENT::func3347",
+        "callee": "U8P_PENT::func3757",
+        "purpose": "Delegate post-menu selection handling and the final transfer/removal cinematic to U8P_PENT::func3757 which waits for user choice.",
+        "confidence": "high"
       },
       {
-        "caller": "U8P_PENT::use",
-        "callee": "U8P_PENT::3B43",
-        "purpose": "Post-validation list handling or item-movement helper invoked as part of orchestration.",
-        "confidence": "low"
+        "caller": "U8P_PENT::func3757",
+        "callee": "U8P_PENT::func138D",
+        "purpose": "Compute candidate selection from prebuilt menu/frame state before presenting the final UI prompt.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PENT::func3757",
+        "callee": "U8P_PENT::func180C",
+        "purpose": "Build/update slot/frame data used by U8P_PENT::func215E to construct the user menu.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PENT::func3757",
+        "callee": "U8P_PENT::func215E",
+        "purpose": "Perform large-scale menu assembly and flag writes; result used to present the selection UI (FREE::func121C) and complete action.",
+        "confidence": "high"
       }
     ],
     "external_calls": [
       {
         "caller": "U8P_PENT::enterFastArea",
-        "callee": "Item::getMap",
-        "purpose": "Check the triggering item's map/region to gate fast-area behavior to the correct map.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_PENT::enterFastArea",
-        "callee": "Item::getFrame",
-        "purpose": "Inspect triggering-item frame bits to determine variant/type and whether cleanup should run.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_PENT::enterFastArea",
-        "callee": "Item::getX",
-        "purpose": "Obtain item X coordinate for spatial inclusion/exclusion tests when enumerating nearby items.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_PENT::enterFastArea",
-        "callee": "Item::getY",
-        "purpose": "Obtain item Y coordinate for spatial inclusion/exclusion tests.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_PENT::enterFastArea",
         "callee": "Item::destroy",
-        "purpose": "Remove items that do not comply with pentagram layout or that must be pruned when the avatar enters the center.",
+        "purpose": "Remove misplaced or invalid items during area-entry cleanup.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PENT::*",
+        "callee": "Item::getX / Item::getY / Item::getZ / Item::getFrame / Item::getType",
+        "purpose": "Query item coordinates, frame and type to drive spatial, frame-range and type-based classification and validation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PENT::*",
+        "callee": "FREE::isWithinRange / FREE::getDistanceBetween",
+        "purpose": "Spatial tests used to decide menu categorization, candidate selection, and distance gating (e.g., U8P_PENT::func3940, U8P_PENT::func39E7, U8P_PENT::func4206).",
         "confidence": "high"
       },
       {
         "caller": "U8P_PENT::gotHit",
-        "callee": "spawn",
-        "purpose": "Start asynchronous visual/effect processes (addresses in FREE::* or METHOD::*) to present ritual visuals or run concurrent logic.",
+        "callee": "spawn -> FREE::func148D / FREE::func1C19 / FREE::askYesNo / addressof(...)->METHOD::*",
+        "purpose": "Spawn UI prompts, delays, and camera/animation helpers; used with suspend/process_result() to decide destroy vs cinematic flows.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_PENT::gotHit",
-        "callee": "Item::getFrame",
-        "purpose": "Check the struck item's frame/type to decide if it is a valid focus/candle for initiating the tonguing ritual.",
+        "caller": "U8P_PENT::*",
+        "callee": "playSFX",
+        "purpose": "Play sound effects for item destruction and pentagram ambient loops.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_PENT::gotHit",
-        "callee": "U8P_PENT::getAvatarInStasis",
-        "purpose": "Query whether the avatar is already in stasis before setting it for the ritual sequence.",
+        "caller": "U8P_PENT::func1066",
+        "callee": "FIRESPEL::func1F65",
+        "purpose": "Spawn fire/spell visual effects at computed coordinates (positional VFX helper).",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_PENT::gotHit",
-        "callee": "U8P_PENT::setAvatarInStasis",
-        "purpose": "Set avatar stasis to prevent player movement/actions during ritual visual sequences.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_PENT::use",
-        "callee": "Item::bark",
-        "purpose": "Provide player-facing messages when ritual prerequisites fail or to narrate stages of activation.",
+        "caller": "U8P_PENT::func10C3",
+        "callee": "Item::legal_create",
+        "purpose": "Attempt to create a replacement item after destroying one, gating follow-up SFX/behavior on legal_create success.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_PENT::use",
-        "callee": "Npc::isBusy",
-        "purpose": "Check NPC busy state before spawning additional processes that act on or near NPCs.",
-        "confidence": "medium"
+        "caller": "U8P_PENT::func3347",
+        "callee": "Npc::getEquip / Npc::setEquip / Item::create / Item::popToEnd",
+        "purpose": "Ensure NPC equipment placeholder and test whether NPC can legally receive items popped from the pentagram during removal flows.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PENT::gotHit",
+        "callee": "getAvatarInStasis / setAvatarInStasis",
+        "purpose": "Freeze/unfreeze player control during cinematic sequences triggered by hit reactions.",
+        "confidence": "high"
       }
     ]
   },
@@ -175,40 +277,30 @@
     "reads": [
       {
         "name": "acolyteKilled",
-        "likely_effect": "Gates pentagram behavior variant; when set allows U8P_PENT::enterFastArea pruning and choice of activation branches in use/gotHit.",
-        "confidence": "high"
+        "likely_effect": "Gate: used to decide whether U8P_PENT::enterFastArea cleanup should run or to choose U8P_PENT::use() bark branches; its value influences whether the pentagram enforcements are active.",
+        "confidence": "medium"
       },
       {
         "name": "tonguing",
-        "likely_effect": "Indicates whether a 'tonguing' ritual sequence is already active; read to prevent redundant activations in gotHit.",
+        "likely_effect": "Guard: read in U8P_PENT::gotHit to suppress duplicate tongue/cinematic reactions when already active.",
         "confidence": "high"
       },
       {
         "name": "pyrosFree",
-        "likely_effect": "Used to gate whether certain pyrotechnic/free effects may be spawned during gotHit.",
+        "likely_effect": "Guard: read in U8P_PENT::gotHit as an additional gating condition to skip hit reactions when set.",
         "confidence": "medium"
       },
       {
-        "name": "vardionJoined",
-        "likely_effect": "Used during use to require specific party membership before allowing ritual activation or to choose an alternative message.",
+        "name": "vardionJoined / baneJoined / sponsorTest",
+        "likely_effect": "Read by U8P_PENT::use() to select alternate explanatory barks or cinematic entry branches depending on party/sponsor state.",
         "confidence": "medium"
-      },
-      {
-        "name": "baneJoined",
-        "likely_effect": "Also used in use to check party composition prerequisites for activation.",
-        "confidence": "medium"
-      },
-      {
-        "name": "sponsorTest",
-        "likely_effect": "A boolean that changes validation/messaging behavior in use (affects which bark or path is chosen).",
-        "confidence": "low"
       }
     ],
     "writes": [
       {
         "name": "tonguing",
-        "likely_effect": "Set to 1 when gotHit successfully chooses a valid focus and begins the tonguing ritual; prevents reentry until cleared elsewhere.",
-        "confidence": "high"
+        "likely_effect": "Set by U8P_PENT::gotHit when a hit triggers a tongue/pull cinematic; indicates a global interaction state to prevent reentrancy.",
+        "confidence": "medium"
       }
     ]
   },
@@ -220,9 +312,9 @@
   ],
   "quick_facts": {
     "main_function": "U8P_PENT::enterFastArea",
-    "behavior_summary_one_liner": "Implements pentagram-related gameplay: cleaning up improper/extra items when someone enters the pentagram trigger area (U8P_PENT::enterFastArea), reacting to physical hits on the pentagram to start ritual effects (gotHit), and handling player 'use' attempts to activate the pentagram ritual (use).",
-    "external_call_count": 11,
-    "flag_read_count": 6,
+    "behavior_summary_one_liner": "This script implements the pentagram item's gameplay logic: area-entry cleanup, player 'U8P_PENT::use' interactions (menus, validation, placement/removal of sorcerous components), and reactions to hits near the pentagram (cinematic/tongue reaction, possible item destruction).",
+    "external_call_count": 9,
+    "flag_read_count": 4,
     "flag_write_count": 1
   },
   "hypotheses": {

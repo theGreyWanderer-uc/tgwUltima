@@ -3,176 +3,117 @@
   "source_of_truth": "dialogue/json/U8P_PESANTSI.json",
   "file": "U8P_PESANTSI",
   "behavior_summary": [
-    "When an actor enters the object's fast-area trigger, the handler inspects the item that triggered the area (appears to be an egg or stackable item) and decides whether to convert that item into a live NPC, replace it with a different item proto, or simply remove it and spawn follow-up processing.",
-    "The handler queries an egg-specific identifier via Egg::getEggId and runs a short inspection loop that sets a small byte flag; those two values (egg id and flag) drive branching decisions about conversion vs replacement and which follow-up mode to spawn.",
-    "If conditions permit, the script creates an NPC (Npc::create), marks it with a status mask (Item::orStatus with 0x0080), removes the original item at the same X/Y/Z (Item::getX/Y/Z + Item::pop), and then spawns a helper process to continue behavior.",
-    "In other branches the script creates a replacement item (observed proto 0x00AE via Item::create + Item::pop), adjusts counts, or simply spawns the helper without NPC creation; the helper is always spawned with a small mode byte (00 or 06) and a fixed byte 02 to continue processing asynchronously."
+    "U8P_PESANTSI::enterFastArea runs when the related object is entered (area trigger). It reads an egg/type id from the current instance, and — if a local/temporary guard allows — creates an NPC/object, marks it, places it at the egg's coordinates, optionally creates/attaches an item when the egg id meets a threshold, then spawns a behaviour method on the created NPC and waits for that spawned process to run.",
+    "The routine implements an egg-hatching / spawn-on-enter mechanic: egg id (Egg::getEggId -> local3) drives whether an extra item (type 0x00AE) is created and which parameter variant is used when spawning the created NPC's METHOD::func15E7.",
+    "A local variable (local2) appears reused as both a spawn-guard and as a container for an Item reference when Item::create is called; local4 holds the created NPC/object reference."
   ],
   "notable_control_flow": [
-    "Decision begins by reading Egg::getEggId() into local BP-07h and running an inspection loop that sets BP-05h (byte flag). BP-05h selects whether NPC-creation path is allowed.",
-    "If BP-05h == 0 the NPC-creation path is taken; after creating the NPC the original item is popped from map coordinates and follow-up spawn uses one mode byte depending on BP-07h comparisons (for example BP-07h > 5 leads to replacement path).",
-    "If BP-05h != 0 NPC-creation is skipped and the code either spawns the helper directly or replaces the item depending on BP-07h (notably a special-case when BP-07h == 1).",
-    "All final branches spawn U8P_PESANTSI::METHOD::15E7 with parameters (invoking pid, mode byte 00 or 06, 02, created-object-address) and then yield/suspend so follow-up runs asynchronously."
+    "On enter: call Egg::getEggId(this) -> local3 (egg id) to decide behavior.",
+    "Guard check (inferred use of local2) prevents repeated spawns; only when not already set does creation occur.",
+    "Create NPC/object via Npc::create and immediately set a status/flag on it via Item::orStatus.",
+    "Place the created NPC/object at the current object's world coordinates using Item::getZ/Y/X and Item::pop.",
+    "If egg id > 5: call Item::create(0x00AE) to make an item, then pop/attach that item into the created NPC/object.",
+    "Select spawn parameter variant for spawn addressof(local4)->METHOD::func15E7 based on egg id special-cases (egg id == 1 and another arithmetic case are distinguished); spawn the method and suspend (wait).",
+    "Default/fallback branch spawns func15E7 with a default parameter set if no special-case applies."
   ],
   "open_questions": [
-    "What exactly does BP-05h represent (a proximity/sample count, a quality flag, or internal state)? It is inferred from a small inspection loop but its game semantics are unclear.",
-    "What is the gameplay meaning of the mode byte passed to METHOD::15E7 (00 vs 06)? The bytes likely select submodes for the helper process but the semantics are not explicit.",
-    "What concrete item/proto does 0x00AE represent and why is it chosen as a replacement in some branches?",
-    "Does the status mask 0x0080 set by Item::orStatus represent 'no-pickup', an NPC initialization flag, or another engine-specific state?"
+    "What exact game meanings do the numeric constants (e.g., 0x0343, 0x0080, 0x00AE, spawn parameter values) represent?",
+    "What is the precise semantics of the status flag set by Item::orStatus(0x0080, local4) and how does it affect the spawned NPC?",
+    "Is local2 a persistent guard stored on the egg instance or purely a temporary in-process guard? (metadata suggests it is reused locally but mechanism is unclear.)",
+    "What does the spawned METHOD::func15E7 perform on the created NPC (animation, AI init, immediate interaction?), and why does the code wait (suspend) after spawning it?"
   ],
   "main_function": {
     "name": "U8P_PESANTSI::enterFastArea",
     "execution_form": "process",
-    "purpose": "Handle area-entry triggers for this object by inspecting the triggered item (likely an egg/stack), deciding to convert it to an NPC, replace it with a new item, or remove it, and then spawn an asynchronous helper (METHOD::15E7) to continue post-creation processing.",
+    "purpose": "Handle area-entry for an egg-like object: read egg id, possibly spawn an NPC/object at the egg's location, optionally create/attach an item depending on egg id, then trigger the spawned object's follow-up method and wait for it.",
     "entry_conditions": [
-      "Called when an actor enters the object's fast-area trigger (trigger supplies pid and the item reference at BP+06h).",
-      "Requires a valid item reference in the trigger parameter to operate; behavior depends on values returned by Egg::getEggId(item) and a small local inspection loop."
+      "Area entry trigger (U8P_PESANTSI::enterFastArea) invoked when the actor/object is entered by the Avatar or other actor.",
+      "Implicit: only proceed if a local spawn-guard is not already set (inferred from checks on local2)."
     ],
-    "confidence": "high"
+    "confidence": "medium"
   },
   "function_map": [
     {
       "name": "U8P_PESANTSI::enterFastArea",
       "kind": "main",
-      "role": "Fast-area trigger handler that inspects a triggered item and either converts it, replaces it, or removes it then spawns follow-up processing.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_PESANTSI::METHOD::15E7",
-      "kind": "helper",
-      "role": "Spawned helper/process that performs asynchronous follow-up behavior on the created NPC or replacement item; receives mode and object pointer.",
-      "confidence": "high"
+      "role": "area-entry spawn/hatch behavior",
+      "confidence": "medium"
     },
     {
       "name": "Egg::getEggId",
       "kind": "extern",
-      "role": "Return an egg-specific identifier, id or count used for branching (value stored in BP-07h).",
+      "role": "read egg/type id used for branching",
       "confidence": "high"
     },
     {
       "name": "Npc::create",
       "kind": "extern",
-      "role": "Create an NPC instance of a given proto/type; result stored in a local (BP-09h) for further initialization and passed to spawn.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::orStatus",
-      "kind": "extern",
-      "role": "Apply status bitmask (observed 0x0080) to newly created NPC/item to mark an engine/gameplay state.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getX",
-      "kind": "extern",
-      "role": "Read item's X coordinate to use when popping/removing original item from the map.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getY",
-      "kind": "extern",
-      "role": "Read item's Y coordinate for Item::pop.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getZ",
-      "kind": "extern",
-      "role": "Read item's Z (height/level) coordinate for Item::pop.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::pop (coords)",
-      "kind": "extern",
-      "role": "Remove the original item at specified X/Y/Z (used to clear the egg/item after creating NPC or replacement).",
+      "role": "instantiate the NPC/object that represents the hatched/spawned entity",
       "confidence": "high"
     },
     {
       "name": "Item::create",
       "kind": "extern",
-      "role": "Create a replacement item proto (observed proto 0x00AE) when replacement branch is taken; the created object is moved into a local via Item::pop into local.",
+      "role": "create an item (0x00AE) to attach to the spawned NPC when conditions met",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::pop",
+      "kind": "extern",
+      "role": "place/pop an item or object at coordinates or into a target object",
       "confidence": "high"
     },
     {
-      "name": "Item::pop (into local)",
+      "name": "Item::orStatus",
       "kind": "extern",
-      "role": "Pop/move a created item reference into a local variable for later use/passing to the helper.",
-      "confidence": "high"
-    },
-    {
-      "name": "spawn",
-      "kind": "extern",
-      "role": "Engine primitive used to start METHOD::15E7 asynchronously with parameters (pid, mode byte, 02, object pointer).",
-      "confidence": "high"
+      "role": "set status/flags on created object",
+      "confidence": "medium"
     }
   ],
   "call_analysis": {
-    "internal_calls": [
-      {
-        "caller": "U8P_PESANTSI::enterFastArea",
-        "callee": "U8P_PESANTSI::METHOD::15E7",
-        "purpose": "Hand off created object to an asynchronous helper process with a mode byte (00 or 06) and constant 02 so that further behavior occurs outside the trigger handler.",
-        "confidence": "high"
-      }
-    ],
+    "internal_calls": [],
     "external_calls": [
       {
         "caller": "U8P_PESANTSI::enterFastArea",
         "callee": "Egg::getEggId",
-        "purpose": "Read an egg-specific identifier or count from the trigger item; stored in local BP-07h and used to choose branches (e.g., >5, ==1).",
+        "purpose": "Read the egg/type id from the current instance to decide spawn/item variants (stores result to local3).",
         "confidence": "high"
       },
       {
         "caller": "U8P_PESANTSI::enterFastArea",
         "callee": "Npc::create",
-        "purpose": "Create an NPC instance when conversion branch is chosen; result pointer stored and immediately OR'd with status mask 0x0080.",
+        "purpose": "Instantiate the NPC/object used as the hatch/spawn target; result stored in local4.",
         "confidence": "high"
       },
       {
         "caller": "U8P_PESANTSI::enterFastArea",
         "callee": "Item::orStatus",
-        "purpose": "Set status bitmask (0x0080) on the newly created NPC/item to mark initialization/game state.",
+        "purpose": "Apply a status flag (0x0080) to the newly created NPC/object, likely to mark it as spawned or to initialize state.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_PESANTSI::enterFastArea",
+        "callee": "Item::getZ / Item::getY / Item::getX",
+        "purpose": "Query the current object's world coordinates so the created NPC/object can be placed at the egg's location.",
         "confidence": "high"
       },
       {
         "caller": "U8P_PESANTSI::enterFastArea",
-        "callee": "Item::getX",
-        "purpose": "Obtain X coordinate of original item to pop/remove it from the map after creation/transfer.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_PESANTSI::enterFastArea",
-        "callee": "Item::getY",
-        "purpose": "Obtain Y coordinate of original item for Item::pop.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_PESANTSI::enterFastArea",
-        "callee": "Item::getZ",
-        "purpose": "Obtain Z coordinate of original item for Item::pop (or pass as quantity/flag parameter).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_PESANTSI::enterFastArea",
-        "callee": "Item::pop (coords)",
-        "purpose": "Remove the original item instance from the map at the given coordinates after conversion or when replacing it.",
+        "callee": "Item::pop",
+        "purpose": "Place the created NPC/object at the computed coordinates and to pop/attach an optionally-created item into that NPC.",
         "confidence": "high"
       },
       {
         "caller": "U8P_PESANTSI::enterFastArea",
         "callee": "Item::create",
-        "purpose": "Create a replacement item proto (observed 0x00AE) in branches where the egg is replaced rather than converted to an NPC.",
-        "confidence": "high"
+        "purpose": "Create an auxiliary item (type 0x00AE) when egg id conditions (egg id > 5) are met; result stored in local2 and then attached to the NPC via Item::pop.",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_PESANTSI::enterFastArea",
-        "callee": "Item::pop (into local)",
-        "purpose": "Move the created replacement item reference into a local variable for later passing to the spawned helper.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_PESANTSI::enterFastArea",
-        "callee": "spawn",
-        "purpose": "Spawn the helper METHOD::15E7 with parameters (pid, mode byte 00/06, 02, object pointer) and then yield/suspend the trigger handler.",
-        "confidence": "high"
+        "callee": "spawn addressof(local4)->METHOD::func15E7",
+        "purpose": "Spawn/execute a method on the created NPC/object with parameter variants chosen by egg id (special-cases for id==1 and another arithmetic case); the caller then suspends/waits for the spawned process.",
+        "confidence": "medium"
       }
     ]
   },
@@ -188,8 +129,8 @@
   ],
   "quick_facts": {
     "main_function": "U8P_PESANTSI::enterFastArea",
-    "behavior_summary_one_liner": "When an actor enters the object's fast-area trigger, the handler inspects the item that triggered the area (appears to be an egg or stackable item) and decides whether to convert that item into a live NPC, replace it with a different item proto, or simply remove it and spawn follow-up processing.",
-    "external_call_count": 10,
+    "behavior_summary_one_liner": "U8P_PESANTSI::enterFastArea runs when the related object is entered (area trigger). It reads an egg/type id from the current instance, and — if a local/temporary guard allows — creates an NPC/object, marks it, places it at the egg's coordinates, optionally creates/attaches an item when the egg id meets a threshold, then spawns a behaviour method on the created NPC and waits for that spawned process to run.",
+    "external_call_count": 7,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

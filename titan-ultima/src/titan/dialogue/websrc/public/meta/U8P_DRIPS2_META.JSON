@@ -3,27 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_DRIPS2.json",
   "file": "U8P_DRIPS2",
   "behavior_summary": [
-    "DRIPS2::anim is a periodic animation handler for a dripping-related item: each tick it reads the item's current frame, increments it, and writes the new frame back.",
-    "If the incremented frame exceeds 0x12 (18 decimal) the frame is wrapped to 0, producing a looping animation cycle.",
-    "When the incremented frame equals 0x0B (11 decimal) the routine plays a drip sound (playSFX with literal 0x64) at/for the item's context.",
-    "The routine uses Item::getFrame to read and Item::setFrame to write the frame value, and stores the incremented value temporarily in a local (BP-02h)."
+    "U8P_DRIPS2::anim is an item-attached animation-tick process that advances the item's animation frame each invocation: it reads the current frame, increments it by one, wraps to 0 when the incremented value exceeds 0x12, writes the new frame back, and plays a sound effect when the new frame equals 0x0B."
   ],
   "notable_control_flow": [
-    "Entry is a simple periodic/process handler (Event 2 / U8P_DRIPS2::anim).",
-    "Sequential steps: get frame -> frame_tmp = frame + 1 -> if frame_tmp > 0x12 then frame_tmp = 0 -> if frame_tmp == 0x0B then playSFX -> setFrame(frame_tmp).",
-    "Two conditional branches affect side-effects: one wraps the animation counter (pure animation state) and the other triggers an audio side-effect at a specific frame."
+    "Read current frame via Item::getFrame(this).",
+    "Compute local1 = currentFrame + 1.",
+    "If local1 > 0x12 then set local1 = 0 (wrap-around).",
+    "If local1 == 0x0B then call playSFX(this, 0x64, 0x00A3).",
+    "Write new frame with Item::setFrame(local1, this)."
   ],
   "open_questions": [
-    "Is the first parameter passed to playSFX the item's instance/pid, a separate location token, or some positional identifier derived from the item (inferred but not explicit)?",
-    "What exact sound does literal 0x64 represent (sound id/type/volume) in-game?",
-    "Are there other events or engine conditions that stop or suspend this U8P_DRIPS2::anim handler outside the simple periodic invocation observed?"
+    "What is the exact meaning of the middle playSFX parameter 0x64 (volume/channel/priority)? (confidence: low)",
+    "Why is frame 0x0B chosen to trigger the sound effect (gameplay significance or animation event)? (confidence: low)",
+    "How frequently the process U8P_DRIPS2::anim is scheduled by the engine (tick rate) and whether it runs only while the item is active/visible. (confidence: low)"
   ],
   "main_function": {
     "name": "U8P_DRIPS2::anim",
     "execution_form": "process",
-    "purpose": "Advance the item's animation frame each animation tick, wrap the frame to 0 after frame 18, and play a drip sound at a specific animation frame before storing the new frame.",
+    "purpose": "Advance the item's animation frame on each animation tick: increment frame, wrap at maximum (0x12), play a sound when a special frame (0x0B) is reached, and store the frame back to the item instance.",
     "entry_conditions": [
-      "Event 2 (U8P_DRIPS2::anim) — periodic tick/animation update invoked by the engine for the item."
+      "Runs as a process (processType 0x020A) — inferred to be invoked periodically by the engine as an animation tick for the item instance (this)."
     ],
     "confidence": "high"
   },
@@ -31,7 +30,25 @@
     {
       "name": "U8P_DRIPS2::anim",
       "kind": "main",
-      "role": "Periodic animation/tick handler for a dripping object; updates frame counter and triggers a sound at a designated frame.",
+      "role": "animation tick handler for the item instance",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getFrame",
+      "kind": "extern",
+      "role": "read current animation frame index from item instance",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::setFrame",
+      "kind": "extern",
+      "role": "write animation frame index back to item instance",
+      "confidence": "high"
+    },
+    {
+      "name": "playSFX",
+      "kind": "extern",
+      "role": "play a sound effect associated with the item/animation",
       "confidence": "high"
     }
   ],
@@ -41,19 +58,19 @@
       {
         "caller": "U8P_DRIPS2::anim",
         "callee": "Item::getFrame",
-        "purpose": "Read the current animation frame/index of the item instance (used as the base for incrementing).",
+        "purpose": "Obtain the current animation frame index for the item instance (this).",
         "confidence": "high"
       },
       {
         "caller": "U8P_DRIPS2::anim",
-        "callee": "U8P_DRIPS2::playSFX",
-        "purpose": "Play a sound effect when the animation reaches frame 0x0B; the call passes 0x64 as a literal sound id/parameter and an item-derived context as the first arg (first-arg derivation is inferred).",
-        "confidence": "medium"
+        "callee": "playSFX",
+        "purpose": "Play a sound effect when the newly computed frame equals 0x0B (parameters: this, 0x64, 0x00A3).",
+        "confidence": "high"
       },
       {
         "caller": "U8P_DRIPS2::anim",
         "callee": "Item::setFrame",
-        "purpose": "Write the updated (and possibly wrapped) animation frame back to the item instance.",
+        "purpose": "Store the incremented/wrapped frame index back on the item instance.",
         "confidence": "high"
       }
     ]
@@ -69,8 +86,8 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "DRIPS2::anim",
-    "behavior_summary_one_liner": "DRIPS2::anim is a periodic animation handler for a dripping-related item: each tick it reads the item's current frame, increments it, and writes the new frame back.",
+    "main_function": "U8P_DRIPS2::anim",
+    "behavior_summary_one_liner": "U8P_DRIPS2::anim is an item-attached animation-tick process that advances the item's animation frame each invocation: it reads the current frame, increments it by one, wraps to 0 when the incremented value exceeds 0x12, writes the new frame back, and plays a sound effect when the new frame equals 0x0B.",
     "external_call_count": 3,
     "flag_read_count": 0,
     "flag_write_count": 0

@@ -3,27 +3,29 @@
   "source_of_truth": "dialogue/json/U8P_BACKPACK.json",
   "file": "U8P_BACKPACK",
   "behavior_summary": [
-    "BACKPACK::look displays the item label \"backpack \" to the viewer when the player examines the backpack (Event 0). It prepares per-process context then calls the item's bark routine and suspends.",
-    "BACKPACK::use toggles the backpack UI: if the item's status word has bit 0x0100 set it opens the backpack gump with parameter 0x02; if that bit is clear it closes the gump and runs a cleanup routine to remove certain contained items.",
-    "BACKPACK::00AC scans the backpack's contents with nested iterators, tests contained-item status bits and shape/family values, and frees/destroys matching items via FREE::2767. This is invoked on gump-close to clean up special contained objects."
+    "Provides the in-game behavior for a backpack item: a U8P_BACKPACK::look/inspect handler that displays a short description, and a U8P_BACKPACK::use handler that toggles the backpack UI (gump).",
+    "U8P_BACKPACK::look is a U8P_BACKPACK::look-process that emits the short bark 'backpack ' then suspends; it is purely descriptive.",
+    "U8P_BACKPACK::use reads the item's status (Item::getStatus) and tests bit 0x0100. If that bit is set it closes the gump (Item::closeGump) and invokes U8P_BACKPACK::func00AC for cleanup; otherwise it opens the backpack gump via Item::openGump(0x02, this).",
+    "U8P_BACKPACK::func00AC is a helper run on the close/cleanup path that performs additional conditional checks and may call FREE::func2767 to free or clean associated resources; its internal details are low-confidence/inferred."
   ],
   "notable_control_flow": [
-    "U8P_BACKPACK::BACKPACK::look: linear flow — set per-process info, call Item::bark with literal \"backpack \", then suspend; no persistent state changes observed (confidence: high).",
-    "U8P_BACKPACK::BACKPACK::use: conditional branch based on Item::getStatus() & 0x0100. True -> Item::openGump(param=0x02). False -> Item::closeGump and call U8P_BACKPACK::BACKPACK::00AC for cleanup (confidence: high).",
-    "U8P_BACKPACK::BACKPACK::00AC: nested iteration over container contents; calls Item::getStatus for candidates, compares status bits and a shape/family constant (inferred 0x008F), and calls FREE::2767 to remove matches (confidence: medium)."
+    "Look path: entry into U8P_BACKPACK::look -> emit bark 'backpack ' -> suspend/return (simple, deterministic).",
+    "Use path: entry into U8P_BACKPACK::use -> obtain status word via Item::getStatus(this) -> test status & 0x0100 (guard) -> if set: Item::closeGump(this) then U8P_BACKPACK::func00AC() (cleanup path); else: Item::openGump(0x02, this) (open path).",
+    "Cleanup helper U8P_BACKPACK::func00AC contains further conditional checks on temporary locals and may call FREE::func2767(local3) to release resources — details and exact conditions are inferred with low confidence."
   ],
   "open_questions": [
-    "What is the exact semantic meaning of the status bit 0x0100 (appears to act as an 'open' or 'active' flag for the backpack gump, but this is inferred).",
-    "Which concrete item family/shape corresponds to constant 0x008F used in the cleanup comparison (the analysis infers an item type such as 'obsidian coin' in related scripts but this is not proven here).",
-    "Are there edge cases where BACKPACK::00AC removes items that should persist (timing/ownership rules) — the precise cleanup policy and why those shapes/statuses are chosen is unclear.",
-    "What process/pid is used when Item::bark is invoked from BACKPACK::look (pid is pushed implicitly; the exact caller-target mapping is inferred)."
+    "What exactly does status bit 0x0100 represent across the engine (appears to mean 'gump open' for this item but not proven)?",
+    "What are the precise semantics and side effects inside U8P_BACKPACK::func00AC (which locals are children/resources and what conditions trigger FREE::func2767)?",
+    "Are there any global flags or external state modified elsewhere when opening/closing the backpack gump that this script relies on but does not itself write?",
+    "Does U8P_BACKPACK::use have any permission/owner checks (stack/context) not present in the decompiled remnants?"
   ],
   "main_function": {
     "name": "U8P_BACKPACK::look",
     "execution_form": "process",
-    "purpose": "Handle the 'U8P_BACKPACK::look' (examine) action for a backpack item: prepare per-process context and ask the item to 'bark' the label \"backpack \", then suspend.",
+    "purpose": "Handle player 'Look' (examine) action for the backpack by showing a short description and then suspending.",
     "entry_conditions": [
-      "Event 0 — triggered when the player/actor examines or looks at the backpack (area/inspect trigger)."
+      "Triggered when the player inspects/looks at the backpack (engine U8P_BACKPACK::look process).",
+      "Identified as process type 0x0208 (U8P_BACKPACK::look/inspection handler)."
     ],
     "confidence": "high"
   },
@@ -31,67 +33,55 @@
     {
       "name": "U8P_BACKPACK::look",
       "kind": "main",
-      "role": "Display the item's label/description on examine (calls Item::bark).",
+      "role": "inspection/description handler (shows short bark and suspends)",
       "confidence": "high"
     },
     {
       "name": "U8P_BACKPACK::use",
       "kind": "helper",
-      "role": "Handle use action: check item status bit 0x0100, open or close the backpack UI accordingly and run cleanup on close.",
-      "confidence": "high"
+      "role": "activation handler that toggles the backpack UI (open/close) based on item status bits",
+      "confidence": "medium"
     },
     {
-      "name": "U8P_BACKPACK::00AC",
+      "name": "U8P_BACKPACK::func00AC",
       "kind": "helper",
-      "role": "Iterate backpack contents and free/destroy contained items that match specific status/shape criteria (cleanup routine invoked on close).",
-      "confidence": "medium"
+      "role": "cleanup/close helper invoked when closing the backpack gump; performs conditional cleanup and may free resources",
+      "confidence": "low"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
         "caller": "U8P_BACKPACK::use",
-        "callee": "U8P_BACKPACK::00AC",
-        "purpose": "Invoke cleanup routine to scan and free certain contained items when the backpack is closed.",
-        "confidence": "high"
+        "callee": "U8P_BACKPACK::func00AC",
+        "purpose": "Run additional cleanup when closing the backpack gump (invoked on the path where the status bit indicates the gump is open).",
+        "confidence": "medium"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_BACKPACK::look",
-        "callee": "Item::bark",
-        "purpose": "Display the static string \"backpack \" to the viewing process/player; used to label the item on examine.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_BACKPACK::use",
         "callee": "Item::getStatus",
-        "purpose": "Read the backpack's status word to decide whether to open or close the gump (test bit 0x0100).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_BACKPACK::use",
-        "callee": "Item::openGump",
-        "purpose": "Open the backpack UI with parameter 0x02 when status bit 0x0100 is set (interpreted as 'open' guard).",
+        "purpose": "Read a status bitfield for the item to decide whether the backpack gump is currently open (status stored in local1).",
         "confidence": "high"
       },
       {
         "caller": "U8P_BACKPACK::use",
         "callee": "Item::closeGump",
-        "purpose": "Close the backpack UI when the tested status bit is clear before performing cleanup.",
+        "purpose": "Close the item's UI/gump when the status guard indicates the gump is open.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_BACKPACK::00AC",
-        "callee": "Item::getStatus",
-        "purpose": "Query status bits on contained items to decide which ones are candidates for further inspection or removal.",
-        "confidence": "medium"
+        "caller": "U8P_BACKPACK::use",
+        "callee": "Item::openGump",
+        "purpose": "Open the backpack UI/gump with gump id 0x02 when the status guard indicates the gump is closed.",
+        "confidence": "high"
       },
       {
-        "caller": "U8P_BACKPACK::00AC",
-        "callee": "FREE::2767",
-        "purpose": "Free/destroy contained items that match the inferred cleanup criteria (shape/family and status tests).",
-        "confidence": "medium"
+        "caller": "U8P_BACKPACK::func00AC",
+        "callee": "FREE::func2767",
+        "purpose": "Free or clean associated resources/children during the close/cleanup path (inferred from name and placement).",
+        "confidence": "low"
       }
     ]
   },
@@ -106,9 +96,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_BACKPACK::BACKPACK::look",
-    "behavior_summary_one_liner": "BACKPACK::look displays the item label \"backpack \" to the viewer when the player examines the backpack (Event 0). It prepares per-process context then calls the item's bark routine and suspends.",
-    "external_call_count": 6,
+    "main_function": "U8P_BACKPACK::look",
+    "behavior_summary_one_liner": "Provides the in-game behavior for a backpack item: a U8P_BACKPACK::look/inspect handler that displays a short description, and a U8P_BACKPACK::use handler that toggles the backpack UI (gump).",
+    "external_call_count": 4,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

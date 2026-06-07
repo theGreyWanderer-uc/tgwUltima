@@ -3,30 +3,33 @@
   "source_of_truth": "dialogue/json/U8P_MALCHIR.json",
   "file": "U8P_MALCHIR",
   "behavior_summary": [
-    "This script implements the NPC Malchir's interaction, test/ceremony sequence, and escalation to hostility. It responds to look, use, area enter/leave, scheduled ticks, and spell-U8P_MALCHIR::cast events aimed at Malchir.",
-    "MALCHIR::cast (Event 11) inspects the global progress flag MalchirTest: before the final phase it searches the caster/context for matching items and destroys them (spawning a followup handler for each); when MalchirTest >= 6 it immediately escalates (sets malchirMad and spawns a combat/spell-combo handler).",
-    "MALCHIR::use handles player interaction: toggles Malchir's gump, records first meeting (malchirMet), may spawn the test-start sequence (MALCHIR::03F2) or the anger/attack routine (MALCHIR::090D), and avoids behavior if Malchir is dead or already in a daemon scene.",
-    "The test-start routine MALCHIR::03F2 plays music, barks instructions, sets MalchirTest to begin the multi-step acolyte test, and spawns FIRESPEL effects; MALCHIR::09F2 later initiates a daemon-summoning cinematic (putting the avatar in stasis and spawning effects), guarded by inDaemonScene.",
-    "malchirMad is an escalation counter used to track warning/anger state; inDaemonScene prevents reentrance to the staged ceremony; malchirMet records that the player has met Malchir to avoid repeat introductory speech."
+    "This script implements Malchir, an NPC who runs a scripted Acolyte three‑spell test (Flame Bolt → Explosion → Summon Daemon → Banish) and who can transition to hostile behavior if the player fails or repeats actions incorrectly.",
+    "U8P_MALCHIR::cast handles incoming spell targeting on Malchir: if the global test state (MalchirTest) indicates terminal/hostile state (>=6) it routes to an internal handler; otherwise it forces an anger escalation and defers to the spell/combat engine (SPELCMBT::combatSpellLoop).",
+    "U8P_MALCHIR::use implements player interaction: toggles Malchir's UI gump, begins conversation, sets malchirMet on first meeting and invokes U8P_MALCHIR::func03F2 to start or continue the test, or routes into an angry monologue (U8P_MALCHIR::func090D) when MalchirTest >= 6.",
+    "U8P_MALCHIR::func03F2 is the central monologue that explains the test, sets MalchirTest = 1 on start, calls FIRESPEL support and helper routines (U8P_MALCHIR::func0BE7) to stage spell phases and increments malchirMad to escalate warnings. It can ultimately call Npc::setTarget to make Malchir hostile.",
+    "U8P_MALCHIR::func09F2 and U8P_MALCHIR::func0BE7 coordinate ceremony/scene steps (closing UI, putting the avatar in stasis, teleporting/positioning, spawning spell effects) and set inDaemonScene to suppress duplicate scene starts.",
+    "Scheduling and fast-area handlers (U8P_MALCHIR::schedule, U8P_MALCHIR::enterFastArea, U8P_MALCHIR::leaveFastArea) control NPC positioning, start the ceremony when the avatar enters, and clear references when leaving; they avoid acting while Malchir is dead or if the daemon scene is already active."
   ],
   "notable_control_flow": [
-    "Event-driven: distinct handlers for look, use, schedule, enterFastArea, leaveFastArea, and U8P_MALCHIR::cast drive discrete behaviors.",
-    "State-guarded flows: many handlers first check Npc::isDead and relevant global flags (MalchirTest, inDaemonScene, malchirMet, malchirMad) to decide between dialog, starting the test, staging a ceremony, or becoming hostile.",
-    "MALCHIR::cast branches sharply on MalchirTest: if MalchirTest < 6 it performs an inventory/world-item iteration + destruction loop; if >= 6 it sets malchirMad and delegates to SPELCMBT::084D (spell-combat handler).",
-    "Cinematic/spawn orchestration: MALCHIR::03F2 and MALCHIR::09F2 spawn FIRESPEL and METHOD processes, use playMusic and setAvatarInStasis, and set inDaemonScene to serialize the scene and prevent re-entry."
+    "U8P_MALCHIR::cast: reads MalchirTest and branches — MalchirTest >= 6 → internal ceremony/cleanup handler (U8P_MALCHIR::func034B) and item cleanup; MalchirTest < 6 → set malchirMad = 3 and call SPELCMBT::combatSpellLoop (enter hostile combat flow).",
+    "U8P_MALCHIR::use → BeginConversation → call U8P_MALCHIR::func03F2; if malchirMet is false U8P_MALCHIR::func03F2 plays music, sets MalchirTest=1 and calls FIRESPEL::func1CEB and U8P_MALCHIR::func0BE7 to start the first phase. If MalchirTest >= 6 U8P_MALCHIR::use routes to U8P_MALCHIR::func090D (hostile branch).",
+    "U8P_MALCHIR::func03F2 uses malchirMad as an escalation counter: repeated noncompliance increments malchirMad, producing progressively sterner barks and ultimately calling Npc::setTarget to initiate hostility.",
+    "U8P_MALCHIR::func09F2 is a cinematic/scene sequence: sets inDaemonScene, closes gumps, sets avatar stasis, teleports/positions actors and spawns FIRESPEL effects, with suspend points to wait for spawned pids.",
+    "U8P_MALCHIR::schedule sets temporary local flags and calls METHOD::func143A; if process_result() is true it calls METHOD::func133F — i.e., scheduling yields then continues based on returned result."
   ],
   "open_questions": [
-    "Exact matching criteria used by MALCHIR::cast when scanning and destroying items (which item fields/shapes/frames are matched) — disassembly shows checks but exact constants/shape IDs are not fully named.",
-    "Precise behaviors of spawned METHOD routines (METHOD::143A, 133F, 15E7, 0BCF, 1090, 034B) beyond 'animation/timed behavior' — their full effects are engine-level and inferred from usage.",
-    "Whether MALCHIR::034B is a separate, persistent handler with additional logic (it is spawned after item destruction) — its content wasn't fully enumerated in the extracted summary."
+    "What exactly does U8P_MALCHIR::func034B implement (it is called from U8P_MALCHIR::cast when MalchirTest >= 6 but is not present in the decompiled list)?",
+    "Precise semantics and side effects of METHOD::func091C and METHOD::func15E7: they are central to ceremony staging but their internal effects are only inferred from usage.",
+    "Exact data encoded in the U8P_MALCHIR::cast() uword parameter (param1) — whether it is an identifier of the caster, spell id, or U8P_MALCHIR::cast metadata is not explicit in the script.",
+    "Whether Malchir's hostile transition uses any additional global state beyond malchirMad/MalchirTest (e.g., persistent hostility timers) is not visible from this script alone."
   ],
   "main_function": {
     "name": "U8P_MALCHIR::cast",
     "execution_form": "process",
-    "purpose": "Handle spells U8P_MALCHIR::cast at Malchir, route behavior based on the player's test progress (MalchirTest). Before the final test phase it consumes matching items from the caster/context and spawns followups; at/after the final phase it escalates to hostility and defers to a spell-combat handler.",
+    "purpose": "Handle spells U8P_MALCHIR::cast at Malchir: gate spell resolution through ceremony/test state (MalchirTest) and either route to internal ceremony/cleanup handling or escalate to combat/spell resolution (SPELCMBT::combatSpellLoop).",
     "entry_conditions": [
-      "Event 11 (U8P_MALCHIR::cast) targeted at the Malchir NPC/object",
-      "Triggered when an external U8P_MALCHIR::cast/spell event supplies a pid/context (caller) and target context (BP+06h)"
+      "Invoked when Malchir is targeted by a spell (inferred from process name 'U8P_MALCHIR::cast' and call to SPELCMBT::combatSpellLoop).",
+      "Behavior depends on global flag MalchirTest (read) and an incoming uword parameter (param1)."
     ],
     "confidence": "high"
   },
@@ -34,61 +37,61 @@
     {
       "name": "U8P_MALCHIR::cast",
       "kind": "main",
-      "role": "Main U8P_MALCHIR::cast event handler: routes U8P_MALCHIR::cast events based on MalchirTest, item iteration and destruction, and escalation to combat handlers.",
+      "role": "Entry for spells targeting Malchir; gates between ceremony/hostile behavior and spell-combat engine.",
       "confidence": "high"
     },
     {
       "name": "U8P_MALCHIR::look",
       "kind": "helper",
-      "role": "Produce descriptive text when a player looks at Malchir; chooses strings based on malchirName, malchirJob, and death state.",
+      "role": "Respond to player 'U8P_MALCHIR::look' by emitting a short description that adapts to malchirName/malchirJob and dead state.",
       "confidence": "high"
     },
     {
       "name": "U8P_MALCHIR::schedule",
       "kind": "helper",
-      "role": "Periodic scheduler that spawns METHOD tasks for repeating behavior if Malchir is alive and not in the daemon scene.",
+      "role": "Periodic AI scheduling that places or moves Malchir when alive and not in the daemon scene.",
       "confidence": "high"
     },
     {
       "name": "U8P_MALCHIR::enterFastArea",
       "kind": "helper",
-      "role": "Fast-area entry trigger: sets targets for avatarMasterSorcerer or spawns a quick reaction METHOD when someone enters Malchir's fast area.",
+      "role": "Trigger when an actor enters Malchir's trigger area; may start the ceremony (METHOD::func15E7) or set target when avatarMasterSorcerer is true.",
       "confidence": "high"
     },
     {
       "name": "U8P_MALCHIR::leaveFastArea",
       "kind": "helper",
-      "role": "Fast-area exit cleanup: frees/cleans resources/processes created on entry.",
+      "role": "Cleanup on actor exit: clear references (FREE::resetRef).",
       "confidence": "high"
     },
     {
       "name": "U8P_MALCHIR::use",
       "kind": "helper",
-      "role": "Handle user 'use' (open/interact): toggles UI gump, records first meeting (malchirMet), may start the test (spawn MALCHIR::03F2) or escalate to anger (MALCHIR::090D).",
+      "role": "Handle player interaction: open/close gump, start conversation and the Acolyte test via U8P_MALCHIR::func03F2, set malchirMet on first meet, or route to hostile monologue.",
       "confidence": "high"
     },
     {
-      "name": "U8P_MALCHIR::03F2",
+      "name": "U8P_MALCHIR::func03F2",
       "kind": "helper",
-      "role": "Start the acolyte test: play music, deliver dialog, set MalchirTest = 1, spawn FIRESPEL effects and helper processes to orchestrate the multi-step test.",
+      "role": "Primary monologue and test driver: explain test steps, initialize MalchirTest, call spell prep and ceremony helpers, increment malchirMad on noncompliance and potentially trigger hostility.",
       "confidence": "high"
     },
     {
-      "name": "U8P_MALCHIR::090D",
+      "name": "U8P_MALCHIR::func090D",
       "kind": "helper",
-      "role": "Anger/escalation: remove certain nearby items, bark insults, set malchirMad to maximum hostile value, and set Malchir's target to the player (begin attack behavior).",
+      "role": "Angry/hostile monologue and transition to combat: destroy test artifacts, set malchirMad and set combat target (Npc::setTarget).",
       "confidence": "high"
     },
     {
-      "name": "U8P_MALCHIR::09F2",
+      "name": "U8P_MALCHIR::func09F2",
       "kind": "helper",
-      "role": "Initiate the daemon-summoning ceremony: put avatar into stasis, set inDaemonScene, and spawn FIRESPEL and METHOD effects arranged around Malchir.",
+      "role": "Ceremony/cinematic sequence: close UI, set avatar stasis, teleport/position actors, spawn effects and set inDaemonScene.",
       "confidence": "high"
     },
     {
-      "name": "U8P_MALCHIR::034B",
+      "name": "U8P_MALCHIR::func0BE7",
       "kind": "helper",
-      "role": "Followup handler spawned by MALCHIR::cast for each destroyed matching item (appears to process consequences of destruction).",
+      "role": "Mid-test utility: conditionally call METHOD::func091C to advance the ceremony or call U8P_MALCHIR::func09F2 when MalchirTest indicates a terminal state.",
       "confidence": "medium"
     }
   ],
@@ -96,198 +99,225 @@
     "internal_calls": [
       {
         "caller": "U8P_MALCHIR::cast",
-        "callee": "U8P_MALCHIR::034B",
-        "purpose": "Spawned for each destroyed item as a followup handler to process consequences of item removal during pre-final-test casts.",
+        "callee": "U8P_MALCHIR::func034B",
+        "purpose": "Handle U8P_MALCHIR::cast event when MalchirTest >= 6 (internal ceremony/cleanup path).",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_MALCHIR::use",
-        "callee": "U8P_MALCHIR::03F2",
-        "purpose": "Spawn the test-start orchestration on first/appropriate use interactions to begin the acolyte test.",
+        "caller": "U8P_MALCHIR::cast",
+        "callee": "SPELCMBT::combatSpellLoop",
+        "purpose": "Route the U8P_MALCHIR::cast into the spell/combat engine when the test is not in a terminal state (MalchirTest < 6).",
         "confidence": "high"
       },
       {
         "caller": "U8P_MALCHIR::use",
-        "callee": "U8P_MALCHIR::090D",
-        "purpose": "Spawn the anger/escalation routine when conditions indicate hostility (e.g., MalchirTest >= 6 or repeated provocations).",
+        "callee": "U8P_MALCHIR::func03F2",
+        "purpose": "Begin or continue the Acolyte test monologue and sequencing on player interaction.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_MALCHIR::03F2",
-        "callee": "U8P_MALCHIR::09F2",
-        "purpose": "Sequence/coordinate: the test orchestration spawns or transitions to the daemon-scene starter when the test advances to its cinematic phase (inDaemonScene set).",
+        "caller": "U8P_MALCHIR::func03F2",
+        "callee": "U8P_MALCHIR::func0BE7",
+        "purpose": "Advance ceremony steps after initializing a test phase.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MALCHIR::func0BE7",
+        "callee": "U8P_MALCHIR::func09F2",
+        "purpose": "Call terminal ceremony/scene handler when MalchirTest >= 6 to perform staging/cleanup/hostile transition.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_MALCHIR::enterFastArea",
-        "callee": "U8P_MALCHIR::15E7",
-        "purpose": "Spawn a quick reaction METHOD when non-avatar actors enter the fast area (method id inferred from usage).",
-        "confidence": "medium"
+        "caller": "U8P_MALCHIR::func09F2",
+        "callee": "U8P_MALCHIR::func0BE7",
+        "purpose": "Seen in the broader flow as part of multi-step ceremony sequencing (mutual U8P_MALCHIR::use across steps).",
+        "confidence": "low"
       }
     ],
     "external_calls": [
       {
         "caller": "U8P_MALCHIR::cast",
-        "callee": "Item::destroy",
-        "purpose": "Remove matching items found in the caster/context during pre-final-test U8P_MALCHIR::cast handling.",
+        "callee": "SPELCMBT::combatSpellLoop",
+        "purpose": "Execute spell combat resolution when Malchir is attacked during non-terminal test state.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_MALCHIR::cast",
-        "callee": "SPELCMBT::084D",
-        "purpose": "Delegate combined spell-combat handling when MalchirTest >= 6 (final/hostile phase).",
+        "caller": "U8P_MALCHIR::func03F2",
+        "callee": "FIRESPEL::func1CEB",
+        "purpose": "Prepare/trigger the Flame Bolt phase when starting the test.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_MALCHIR::look",
-        "callee": "Item::bark",
-        "purpose": "Emit descriptive text to the viewer when the player looks at Malchir.",
+        "caller": "U8P_MALCHIR::schedule",
+        "callee": "METHOD::func143A",
+        "purpose": "Primary movement/AI placement call during scheduling.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_MALCHIR::03F2",
-        "callee": "playMusic",
-        "purpose": "Play a mood-setting music track when the acolyte test begins.",
-        "confidence": "high"
+        "caller": "U8P_MALCHIR::schedule",
+        "callee": "METHOD::func133F",
+        "purpose": "Follow-up movement/AI action invoked when process_result() returns true after suspension.",
+        "confidence": "medium"
       },
       {
-        "caller": "U8P_MALCHIR::09F2",
-        "callee": "U8P_MALCHIR::setAvatarInStasis",
-        "purpose": "Freeze the player avatar to stage the daemon-summoning cinematic.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_MALCHIR::03F2",
-        "callee": "FIRESPEL::1CEB",
-        "purpose": "Spawn fire-spell effects/projectiles used as part of the test or ceremony.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_MALCHIR::09F2",
-        "callee": "Npc::setTarget",
-        "purpose": "Assign Malchir's combat/AI target (usually the avatar) when escalating to hostility or focusing actions.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_MALCHIR::use",
-        "callee": "Item::getStatus",
-        "purpose": "Decide whether to open or close Malchir's UI gump on player use.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_MALCHIR::use",
-        "callee": "Item::openGump",
-        "purpose": "Open the NPC's interaction gump when appropriate.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_MALCHIR::use",
-        "callee": "Item::closeGump",
-        "purpose": "Close the NPC's interaction gump when toggling off.",
+        "caller": "U8P_MALCHIR::enterFastArea",
+        "callee": "METHOD::func15E7",
+        "purpose": "Start or advance the daemon/ceremony scene when an actor enters Malchir's area and not already in the daemon scene.",
         "confidence": "high"
       },
       {
         "caller": "U8P_MALCHIR::enterFastArea",
         "callee": "Npc::setTarget",
-        "purpose": "Set Malchir's target to the avatar when avatarMasterSorcerer is true and entry occurs.",
+        "purpose": "Assign Malchir a combat target when avatarMasterSorcerer is true (special-case behavior).",
         "confidence": "high"
       },
       {
         "caller": "U8P_MALCHIR::leaveFastArea",
-        "callee": "FREE::2A56",
-        "purpose": "Free/cleanup resources created on fast-area entry when an actor leaves.",
+        "callee": "FREE::resetRef",
+        "purpose": "Clear references to Malchir when an actor leaves the fast area (cleanup).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_MALCHIR::schedule",
-        "callee": "METHOD::143A",
-        "purpose": "Spawn scheduled/timed behavior tasks to animate or update the NPC periodically.",
+        "caller": "U8P_MALCHIR::use",
+        "callee": "Item::getStatus",
+        "purpose": "Determine whether Malchir's gump is open to decide between closing or opening it.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_MALCHIR::090D",
-        "callee": "Item::bark",
-        "purpose": "Deliver hostile dialog/insults during escalation to anger.",
+        "caller": "U8P_MALCHIR::use",
+        "callee": "Item::closeGump",
+        "purpose": "Close Malchir's UI gump if it is open.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_MALCHIR::09F2",
-        "callee": "Item::getX",
-        "purpose": "Compute positions for spawning FIRESPEL effects around Malchir during the ceremony.",
+        "caller": "U8P_MALCHIR::use",
+        "callee": "Item::openGump",
+        "purpose": "Open Malchir's UI gump (gump id 0x0C) for interaction.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_MALCHIR::09F2",
-        "callee": "Item::getY",
-        "purpose": "Compute positions for spawning FIRESPEL effects around Malchir during the ceremony.",
+        "caller": "U8P_MALCHIR::func03F2",
+        "callee": "playMusic",
+        "purpose": "Play background/test music at the start of the Acolyte test (playMusic(0x7A)).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_MALCHIR::09F2",
-        "callee": "Item::getZ",
-        "purpose": "Compute vertical offsets for spawning FIRESPEL effects around Malchir during the ceremony.",
+        "caller": "U8P_MALCHIR::func09F2",
+        "callee": "FREE::closeAllGumps",
+        "purpose": "Ensure the UI is cleared before starting cinematic ceremony steps.",
         "confidence": "high"
+      },
+      {
+        "caller": "U8P_MALCHIR::func09F2",
+        "callee": "setAvatarInStasis",
+        "purpose": "Immobilize the avatar during the ceremony to control the cinematic.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MALCHIR::func09F2",
+        "callee": "FIRESPEL::func1F65",
+        "purpose": "Spawn fire/spell visual effects at computed coordinates for ceremony visuals.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MALCHIR::func0BE7",
+        "callee": "METHOD::func091C",
+        "purpose": "Advance mid-test ceremony steps when MalchirTest is in a non-terminal range.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_MALCHIR::func090D",
+        "callee": "Item::destroy",
+        "purpose": "Destroy/cleanup an item referenced by local1 in the hostile/cleanup path.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_MALCHIR::func09F2",
+        "callee": "Camera::setCenterOn",
+        "purpose": "Center the camera during cinematic staging and restore it afterwards.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_MALCHIR::func09F2",
+        "callee": "Npc::teleport",
+        "purpose": "Teleport NPC(s) to staged scene positions for the ceremony.",
+        "confidence": "medium"
       }
     ]
   },
   "global_flags": {
     "reads": [
       {
-        "name": "MalchirTest",
-        "likely_effect": "Drive branching for U8P_MALCHIR::cast behavior and multi-step test progression (read to determine whether to consume items or escalate to combat).",
-        "confidence": "high"
-      },
-      {
         "name": "malchirName",
-        "likely_effect": "Control whether the NPC is referred to by full name/title in look() barks.",
+        "likely_effect": "Select whether name-based descriptions are used in U8P_MALCHIR::look text.",
         "confidence": "high"
       },
       {
         "name": "malchirJob",
-        "likely_effect": "Control job/title strings included in look() barks (e.g., 'Master Sorcerer' vs 'mage').",
+        "likely_effect": "Select whether job-based descriptions are used in U8P_MALCHIR::look text.",
+        "confidence": "high"
+      },
+      {
+        "name": "Npc::isDead(this)",
+        "likely_effect": "Guard: suppress dialog, scheduling, and scene starts if Malchir is dead.",
         "confidence": "high"
       },
       {
         "name": "malchirMet",
-        "likely_effect": "Used to decide whether to play introductory test dialog and avoid repeating meeting dialog.",
+        "likely_effect": "Detect first meeting to play the introductory monologue; prevents repeating the full intro.",
         "confidence": "high"
       },
       {
-        "name": "inDaemonScene",
-        "likely_effect": "Guard to prevent starting the daemon-summoning ceremony or duplicate scheduled spawns while the cinematic is active.",
+        "name": "MalchirTest",
+        "likely_effect": "Primary test-state machine value that gates whether the Acolyte test continues or Malchir enters hostile/terminal behavior (threshold checks against values like 1–5 and >=6).",
+        "confidence": "high"
+      },
+      {
+        "name": "malchirMad",
+        "likely_effect": "Escalation counter for warnings/anger that influences dialog branches and triggers hostility when incremented sufficiently.",
         "confidence": "high"
       },
       {
         "name": "avatarMasterSorcerer",
-        "likely_effect": "Used to rapidly engage the avatar as the NPC's target on fast-area entry when set.",
-        "confidence": "medium"
+        "likely_effect": "When true, change U8P_MALCHIR::enterFastArea behavior to force Malchir to target the avatar (special privileges).",
+        "confidence": "high"
       },
       {
-        "name": "malchirMad",
-        "likely_effect": "Read to decide escalation level and alter behavior/dialog depending on how angry Malchir currently is.",
+        "name": "inDaemonScene",
+        "likely_effect": "Guard to prevent re-entry/duplication of the daemon/ceremony cinematic; when true many scene-start actions are suppressed.",
         "confidence": "high"
       }
     ],
     "writes": [
       {
         "name": "malchirMad",
-        "likely_effect": "Set or increment to reflect increasing anger; certain handlers set it to 3 to indicate full hostility and trigger attack behavior.",
+        "likely_effect": "Incremented or set to escalate Malchir's warnings and eventually force hostile behavior (e.g., set to 3 in some paths).",
         "confidence": "high"
       },
       {
         "name": "malchirMet",
-        "likely_effect": "Set to true the first time a player properly uses Malchir to prevent repeated introductory dialog.",
+        "likely_effect": "Set on first interaction to indicate the player has met Malchir and prevent repeating the full intro monologue.",
         "confidence": "high"
       },
       {
         "name": "MalchirTest",
-        "likely_effect": "Initialized/advanced by MALCHIR::03F2 to begin the acolyte test and subsequently read to drive the test state machine.",
+        "likely_effect": "Set to 1 when the test begins and read subsequently to control required player actions and transitions; used to advance or terminate the ceremony.",
         "confidence": "high"
       },
       {
         "name": "inDaemonScene",
-        "likely_effect": "Set to true when the daemon-summoning ceremony begins to block additional starts and alter scheduled behavior.",
-        "confidence": "high"
+        "likely_effect": "Set to true when the ceremony cinematic starts to prevent duplicate scene starts; cleared elsewhere when the ceremony ends (clearing not shown in this script).",
+        "confidence": "medium"
+      },
+      {
+        "name": "local0",
+        "likely_effect": "Temporary flag written by U8P_MALCHIR::func0BE7 to manage internal sequencing; scope appears local to the function but persists across suspend points.",
+        "confidence": "low"
+      },
+      {
+        "name": "local1/local2/local3 (schedule)",
+        "likely_effect": "Temporary U8P_MALCHIR::schedule flags set by U8P_MALCHIR::schedule to drive METHOD::func143A behavior (movement/positioning parameters).",
+        "confidence": "medium"
       }
     ]
   },
@@ -299,10 +329,10 @@
   ],
   "quick_facts": {
     "main_function": "U8P_MALCHIR::cast",
-    "behavior_summary_one_liner": "This script implements the NPC Malchir's interaction, test/ceremony sequence, and escalation to hostility. It responds to look, use, area enter/leave, scheduled ticks, and spell-U8P_MALCHIR::cast events aimed at Malchir.",
-    "external_call_count": 17,
-    "flag_read_count": 7,
-    "flag_write_count": 4
+    "behavior_summary_one_liner": "This script implements Malchir, an NPC who runs a scripted Acolyte three‑spell test (Flame Bolt → Explosion → Summon Daemon → Banish) and who can transition to hostile behavior if the player fails or repeats actions incorrectly.",
+    "external_call_count": 18,
+    "flag_read_count": 8,
+    "flag_write_count": 6
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

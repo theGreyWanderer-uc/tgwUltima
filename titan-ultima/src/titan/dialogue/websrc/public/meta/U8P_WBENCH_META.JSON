@@ -3,26 +3,24 @@
   "source_of_truth": "dialogue/json/U8P_WBENCH.json",
   "file": "U8P_WBENCH",
   "behavior_summary": [
-    "Provides gameplay handlers for a bench item: a 'U8P_WBENCH::look' (examine) handler that makes the bench emit a short descriptive message, and a 'gotHit' handler that can change the bench's visual frame in response to a hit.",
-    "U8P_WBENCH::WBENCH::look prepares the bench process context (sets info/process-exclude), calls Item::bark to display the literal string \"bench \", examines the bark return value, then suspends the process (typical item-bark lifecycle).",
-    "U8P_WBENCH::WBENCH::gotHit examines a hit-related parameter and, when that parameter is in the expected state (inferred: zero/false), calls Item::setFrame(this, 1) to update the bench's animation/frame; otherwise it returns without changing the frame."
+    "U8P_WBENCH implements a simple interactive object: when the player 'looks' at the bench the object emits a short description ('bench') and the U8P_WBENCH::look process then suspends.",
+    "The helper process U8P_WBENCH::gotHit reacts to a hit/damage event: if its first parameter is zero/false it changes the item's visual frame to 0x01 (likely to show a damaged/altered appearance) via Item::setFrame(0x01, this)."
   ],
   "notable_control_flow": [
-    "U8P_WBENCH::WBENCH::look: initialize process context -> set process info/exclude -> push object, message, pid -> call Item::bark -> free message -> inspect retval via an 'implies' style check -> pop temp -> suspend the process. (Confidence: high)",
-    "U8P_WBENCH::WBENCH::gotHit: initialize process context -> set process info/exclude -> test third parameter ([BP+0Ah]) -> if condition met (appears to be zero/false) call Item::setFrame(this, 1) -> return. (Confidence: medium)"
+    "U8P_WBENCH::look is a short process that shows a single bark and then suspends, i.e., it is an inspect/description handler with no branching or external calls.",
+    "U8P_WBENCH::gotHit contains a conditional guard testing its first parameter; when that guard is satisfied (param1 == 0) it calls Item::setFrame to update the item's sprite/frame."
   ],
   "open_questions": [
-    "Exact semantic meaning of the bark return value inspected by WBENCH::look (what return codes imply and whether they affect game state beyond the suspend).",
-    "Precise meaning and name of the third parameter to WBENCH::gotHit ([BP+0Ah]) — inferred as a flag or direction; unclear whether it encodes damage type, source, or a boolean.",
-    "Event numbering / trigger context for gotHit: which engine event index maps to this handler in runtime (inferred only).",
-    "Whether setting frame = 1 in gotHit triggers further game logic (e.g., destructible bench, visual damage) beyond the single setFrame call."
+    "What exact runtime events invoke U8P_WBENCH::gotHit (collision, weapon hit, scripted damage)?",
+    "What are the semantic meanings of U8P_WBENCH::gotHit's two parameters (param1 and param2) across the codebase — are they damage source/type, hit magnitude, or boolean flags?",
+    "Is frame 0x01 a 'damaged' state for this item, and are there other frames restored elsewhere?"
   ],
   "main_function": {
     "name": "U8P_WBENCH::look",
     "execution_form": "process",
-    "purpose": "Handle the item's 'U8P_WBENCH::look' (examine) event: prepare process state, cause the bench to 'bark' the text \"bench \", inspect the bark return value, and suspend the process.",
+    "purpose": "Provide the player's short description when examining the bench (emit 'bench' and suspend/terminate the U8P_WBENCH::look process).",
     "entry_conditions": [
-      "Event 0 — 'U8P_WBENCH::look': fired when the avatar or relevant actor examines/looks at the bench"
+      "Invoked by the engine when the player inspects/examines the bench (U8P_WBENCH::look/examine action / U8P_WBENCH::look process)."
     ],
     "confidence": "high"
   },
@@ -30,25 +28,19 @@
     {
       "name": "U8P_WBENCH::look",
       "kind": "main",
-      "role": "Examine/U8P_WBENCH::look event handler that emits a descriptive string and manages process lifecycle for the bark action.",
+      "role": "object inspect handler that presents the short description to the player",
       "confidence": "high"
     },
     {
       "name": "U8P_WBENCH::gotHit",
       "kind": "helper",
-      "role": "Hit event handler that conditionally sets the bench's animation/frame to 1 based on a hit-related parameter.",
+      "role": "damage/hit reaction handler that conditionally updates the item's display frame",
       "confidence": "medium"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item API used to display/broadcast a short item message (here used to show 'bench ').",
-      "confidence": "high"
     },
     {
       "name": "Item::setFrame",
       "kind": "extern",
-      "role": "Engine/item API to change the visual frame/index of an item (used to set frame 1 on hit).",
+      "role": "engine/item API used to change the item's sprite/frame",
       "confidence": "high"
     }
   ],
@@ -56,16 +48,10 @@
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_WBENCH::look",
-        "callee": "Item::bark",
-        "purpose": "Make the bench emit/display the literal string \"bench \" to the target process/player and participate in the item's bark lifecycle.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_WBENCH::gotHit",
         "callee": "Item::setFrame",
-        "purpose": "Set the bench object's visual frame to 1 as a response to a qualifying hit condition.",
-        "confidence": "medium"
+        "purpose": "Change the item's display frame to index 0x01 (visual state change) when the U8P_WBENCH::gotHit conditional is met.",
+        "confidence": "high"
       }
     ]
   },
@@ -75,14 +61,13 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
     "animation",
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_WBENCH::WBENCH::look",
-    "behavior_summary_one_liner": "Provides gameplay handlers for a bench item: a 'U8P_WBENCH::look' (examine) handler that makes the bench emit a short descriptive message, and a 'gotHit' handler that can change the bench's visual frame in response to a hit.",
-    "external_call_count": 2,
+    "main_function": "U8P_WBENCH::look",
+    "behavior_summary_one_liner": "U8P_WBENCH implements a simple interactive object: when the player 'looks' at the bench the object emits a short description ('bench') and the U8P_WBENCH::look process then suspends.",
+    "external_call_count": 1,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

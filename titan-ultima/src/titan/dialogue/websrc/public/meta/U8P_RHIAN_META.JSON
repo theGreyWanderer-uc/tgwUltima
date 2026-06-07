@@ -3,33 +3,34 @@
   "source_of_truth": "dialogue/json/U8P_RHIAN.json",
   "file": "U8P_RHIAN",
   "behavior_summary": [
-    "Provides Rhian NPC's reactive behaviors: what she says when examined (U8P_RHIAN::look) and how she responds to theft, spells, area entry/exit, and scheduled activities.",
-    "RHIAN::look emits a short description string: if Rhian is dead it barks a corpse description; otherwise it composes a short description from global flags (rhianName and rhianJob) producing one of: full name+job, name only, job only, or 'woman'.",
-    "RHIAN::AvatarStoleSomething implements an escalating theft-response sequence driven by rhianMoveCheck and stolenOnce: gentle warning → firmer warning → calling/alerting guards via CALGUARD::0080 (unless guardsCalled suppresses it). It also clears area/script refs via resetRef.",
-    "Scheduling and area triggers (RHIAN::schedule, RHIAN::enterFastArea, RHIAN::leaveFastArea) read map/schedule state (via FREE helpers and rhianSchedule), set rhianSchedule and rhiangrieving/rhianKneeling as appropriate, spawn short animation/behavior methods (METHOD::*), and manage local visual state.",
-    "Specialized small behaviors (kneeling/grieving routines) set flags (rhianKneeling, rhiangrieving), pick randomized lines via urandom, spawn animation/facing helper methods, and then update/reset references."
+    "U8P_RHIAN implements the NPC Rhian: short U8P_RHIAN::look descriptions, a full conversation/shop handler, time-of-day U8P_RHIAN::schedule selection, fast-area (proximity) reactions, grief/idle monologues, and theft/attack reactions that can escalate to calling guards.",
+    "U8P_RHIAN::look() returns a context-sensitive short description string (death state, name/job metadata flags).",
+    "U8P_RHIAN::use() drives the conversation UI: builds and updates menus for shops (gems, clothing), invokes sub-flows (gem trade, clothing shop, U8P_RHIAN::schedule, monologues), manages rhianMet/ rhianKneeling/ rhianSitting flags and uses random buckets for flavor.",
+    "U8P_RHIAN::enterFastArea()/U8P_RHIAN::leaveFastArea() reset interaction references and route to immediate reaction helpers (U8P_RHIAN::func0631, U8P_RHIAN::func06DC, U8P_RHIAN::func0804, U8P_RHIAN::func0EC5) depending on U8P_RHIAN::schedule and grieving/sitting state.",
+    "U8P_RHIAN::AvatarStoleSomething(uword) inspects a stolen item, issues escalating warnings (rhianMoveCheck increments), may set stolenOnce and call CALGUARD::guardRespondToCrime if escalation reaches guard-calling, and spawns small timed helpers.",
+    "U8P_RHIAN::cast(uword) reacts to attacks: may spawn deferred helper tasks and call guardRespondToCrime when a target id matches an attack condition; also occasionally barks for help.",
+    "Several helper functions (U8P_RHIAN::func0631, U8P_RHIAN::func06DC, U8P_RHIAN::func0862, U8P_RHIAN::func0FFB, U8P_RHIAN::func1521, U8P_RHIAN::func1884, U8P_RHIAN::func1F3C) provide varied vocal lines, shop menus, gem valuation, and item-based context-sensitive reactions."
   ],
   "notable_control_flow": [
-    "U8P_RHIAN::look: branch on Npc::isDead. If dead -> bark corpse text; else compose description based on rhianName and rhianJob flags and call Item::bark with the chosen string (high confidence).",
-    "U8P_RHIAN::AvatarStoleSomething: read Item::getType of the stolen object, read rhianMoveCheck and stolenOnce, then advance rhianMoveCheck through an escalation sequence (0→1→2→3) while possibly setting stolenOnce and spawning CALGUARD::0080; resetRef is called to clear area refs during/after the response (high confidence).",
-    "U8P_RHIAN::schedule: queries FREE::* helpers and toranDead to choose and write rhianSchedule and clear/set rhianKneeling; then spawns schedule-specific methods to enact movement/animations (medium-high confidence).",
-    "U8P_RHIAN::enterFastArea: on fast-area entry checks current map/schedule and state flags (rhiangrieving, rhianSitting, rhianKneeling) and spawns short reaction/behavior methods (METHOD::15E7/METHOD::143A etc.) appropriate to the schedule/state (medium-high confidence).",
-    "U8P_RHIAN::leaveFastArea: iterates resetRef over stored refs to clean up references used while the player was inside the trigger area (high confidence)."
+    "U8P_RHIAN::look(): immediate branching based on Npc::isDead(this) and two metadata flags (rhianName, rhianJob) to choose one short bark string.",
+    "U8P_RHIAN::use(): conversation entry gates on toranDead, rhianMet, rhianKneeling, rhianSitting and then runs a conversation loop built by MenuSet/MenuUnion/MenuRemove; dispatches to sub-flows (U8P_RHIAN::func1521, U8P_RHIAN::func1884, U8P_RHIAN::func1F3C, utilities) and sets rhianMet on first meeting.",
+    "U8P_RHIAN::enterFastArea(): early-exits if NPC is dead or on map 0x03; otherwise clears several stored refs and selects one of multiple immediate reaction helpers based on rhianKneeling, rhianSchedule and rhiangrieving flags.",
+    "U8P_RHIAN::AvatarStoleSomething(param): checks rhianSchedule and item type (Item::getType), updates rhianMoveCheck/stolenOnce and calls external guard routine when escalation threshold reached; spawns deferred tasks and triggers METHOD::func15E7 for animation sync.",
+    "U8P_RHIAN::schedule(): reads FREE::getTimeOfDayPeriod, sets bitmask/route locals per period, calls METHOD::func143A then on process_result() writes rhianSchedule and calls METHOD::func133F to apply U8P_RHIAN::schedule."
   ],
   "open_questions": [
-    "Exact item shape/type constants checked by Item::getType in AvatarStoleSomething (which items trigger guard-calling vs a milder reaction) — inferred but not explicit.",
-    "Precise semantics and return values of the FREE::* helpers (FREE::1C19, FREE::28F9, FREE::2A56) used by schedule() — appear to query map/tile/schedule data but exact meaning of return bytes is uncertain.",
-    "Exact strings and pluralization rules used in all bark() calls beyond the high-level descriptions — lines are inferred from disassembly but full line table is not present.",
-    "Precise parameters and visual effect of spawned METHOD::* calls (METHOD::15E7, METHOD::143A, METHOD::133F, METHOD::15E7 usage patterns) — appear to control animation/orientation but details are engine-specific.",
-    "How guardsCalled is set elsewhere in the game and whether CALGUARD::0080 always results in immediate combat or just an alert — integration behavior is external to this script."
+    "Exact semantics and value-meaning of numeric constants used for item types (e.g., 0x0254, 0x0337) and U8P_RHIAN::schedule masks — what concrete in-game items or routes they map to.",
+    "Precise persistence scope of flags like rhianSchedule, rhianKneeling, rhiangrieving, rhianSitting and whether they are stored globally or per-save (inferred to be persistent script flags).",
+    "Behavior of METHOD::func15E7 and METHOD::func091C: inferred to be animation/gesture helpers but exact side-effects (face, timing, camera) are unknown.",
+    "The intended meaning of some reference slots (0x0205, 0x0204, 0x00F0, 0x0200) — they are reset regularly but their exact stored references (avatar/item/process) are not fully identified."
   ],
   "main_function": {
     "name": "U8P_RHIAN::look",
     "execution_form": "process",
-    "purpose": "Produce a short description when a player/actor examines Rhian: if dead, bark a corpse description; otherwise compose and bark a short descriptor using rhianName and rhianJob flags (e.g., 'Rhian the weaver', 'Rhian', 'weaver', or 'woman').",
+    "purpose": "Return a short, context-sensitive description when the player examines Rhian; chooses between corpse text, named/job combined text, name-only, job-only, or a generic fallback.",
     "entry_conditions": [
-      "Event 0 (U8P_RHIAN::look) triggered by a player/actor examining the NPC",
-      "Parameter viewer_pid (the process/player looking) is supplied"
+      "Invoked by the engine when the player 'looks' at the NPC (examine/LOOK action).",
+      "Branches on Npc::isDead(this) and script metadata flags rhianName and rhianJob."
     ],
     "confidence": "high"
   },
@@ -37,174 +38,270 @@
     {
       "name": "U8P_RHIAN::look",
       "kind": "main",
-      "role": "Handle examine/U8P_RHIAN::look event for Rhian; compose and emit descriptive bark text.",
+      "role": "short description / examine handler",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_RHIAN::use",
+      "kind": "helper",
+      "role": "conversation and interaction handler; builds menus and dispatches to shop/monologue sub-flows",
       "confidence": "high"
     },
     {
       "name": "U8P_RHIAN::AvatarStoleSomething",
       "kind": "helper",
-      "role": "React to player stealing from Rhian with an escalating warning sequence and possible guard call; clear area refs.",
+      "role": "reaction to theft: inspect stolen item, warn/escalate, possibly call guards",
       "confidence": "high"
     },
     {
       "name": "U8P_RHIAN::schedule",
       "kind": "helper",
-      "role": "Select and set Rhian's active schedule (rhianSchedule) based on FREE queries and toranDead, spawn schedule behaviors.",
+      "role": "time-of-day U8P_RHIAN::schedule selection and commit logic",
       "confidence": "high"
     },
     {
       "name": "U8P_RHIAN::cast",
       "kind": "helper",
-      "role": "React to being targeted by a spell/cast (yell for help or call guards depending on target/state).",
-      "confidence": "medium"
+      "role": "reaction to being targeted/attacked; spawn tasks and call guard response",
+      "confidence": "high"
     },
     {
       "name": "U8P_RHIAN::enterFastArea",
       "kind": "helper",
-      "role": "Fast-area entry handler that spawns short reactions/behaviors based on schedule and state flags (kneeling/grieving/sitting).",
+      "role": "fast-area entry behavior: reset refs and invoke nearby reaction helpers",
       "confidence": "high"
     },
     {
       "name": "U8P_RHIAN::leaveFastArea",
       "kind": "helper",
-      "role": "Fast-area exit handler that resets/clears stored area/script references via resetRef.",
+      "role": "fast-area exit cleanup: reset references",
       "confidence": "high"
     },
     {
-      "name": "U8P_RHIAN::0631",
+      "name": "U8P_RHIAN::func0631",
       "kind": "helper",
-      "role": "Kneeling behavior subroutine: set rhianKneeling, play crying/sniff lines and animations then clear/update refs.",
-      "confidence": "medium"
+      "role": "short crying/kneeling monologue and spawn timed follow-up",
+      "confidence": "high"
     },
     {
-      "name": "U8P_RHIAN::06DC",
+      "name": "U8P_RHIAN::func06DC",
       "kind": "helper",
-      "role": "Grieving behavior: emit sob/sniff lines, spawn animations, and schedule subsequent movement/animation.",
-      "confidence": "medium"
+      "role": "short sob/sniff monologue with spawn follow-up",
+      "confidence": "high"
     },
     {
-      "name": "U8P_RHIAN::0794",
+      "name": "U8P_RHIAN::func0794",
       "kind": "helper",
-      "role": "Set rhiangrieving and produce short animation/facing spawns used to show grieving reactions.",
+      "role": "set grieving state and run repeated animation/gesture sequence",
       "confidence": "medium"
     },
     {
-      "name": "Npc::isDead",
-      "kind": "extern",
-      "role": "Engine routine used to determine whether the NPC is dead (affects U8P_RHIAN::look() and other behaviors).",
+      "name": "U8P_RHIAN::func0804",
+      "kind": "helper",
+      "role": "enter sitting state, call idle monologue U8P_RHIAN::func0862 and U8P_RHIAN::schedule a delayed helper",
       "confidence": "high"
     },
     {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/process call that makes an NPC or item emit a short text string to a player/process.",
+      "name": "U8P_RHIAN::func0862",
+      "kind": "helper",
+      "role": "idle/varied monologue based on distance and random choice",
       "confidence": "high"
     },
     {
-      "name": "Item::getType",
-      "kind": "extern",
-      "role": "Return type id of an item reference; used to classify stolen items.",
+      "name": "U8P_RHIAN::func0EC5",
+      "kind": "helper",
+      "role": "inspect nearby item frames, possibly pathfind or call context monologue U8P_RHIAN::func0FFB",
       "confidence": "high"
     },
     {
-      "name": "U8P_RHIAN::resetRef",
-      "kind": "extern",
-      "role": "Clear/reset stored script/area references (used during leaveFastArea and theft reaction).",
+      "name": "U8P_RHIAN::func0FFB",
+      "kind": "helper",
+      "role": "context-sensitive proximity barks using item coordinates and randomness",
       "confidence": "high"
     },
     {
-      "name": "CALGUARD::0080",
-      "kind": "extern",
-      "role": "Spawn to request/alert guards when theft escalation requires it.",
+      "name": "U8P_RHIAN::func1521",
+      "kind": "helper",
+      "role": "gem valuation and yes/no trade prompt (compute coin offer, handle acceptance)",
       "confidence": "high"
     },
     {
-      "name": "FREE::1C19",
-      "kind": "extern",
-      "role": "Engine helper used by schedule/behavior logic for map/tile/schedule queries (inferred).",
-      "confidence": "medium"
+      "name": "U8P_RHIAN::func1884",
+      "kind": "helper",
+      "role": "gem shop menu flow (present options, branch on choice, confirm and attempt transaction)",
+      "confidence": "high"
     },
     {
-      "name": "FREE::28F9",
-      "kind": "extern",
-      "role": "Engine helper used by schedule/behavior logic for map/tile/schedule queries (inferred).",
-      "confidence": "medium"
+      "name": "U8P_RHIAN::func1F3C",
+      "kind": "helper",
+      "role": "clothing shop menu flow (present clothing options, prices, confirm and attempt transfer)",
+      "confidence": "high"
     },
     {
-      "name": "METHOD::15E7",
-      "kind": "extern",
-      "role": "Spawned helper method used to trigger small animations or orientation changes.",
-      "confidence": "medium"
+      "name": "U8P_RHIAN::func4E14",
+      "kind": "helper",
+      "role": "orchestrate short reaction sequence (seated vs non-seated), spawn helper tasks and release avatar stasis",
+      "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
-        "caller": "U8P_RHIAN::look",
-        "callee": "Npc::isDead",
-        "purpose": "Check if Rhian is dead to choose corpse vs live description branch.",
+        "caller": "U8P_RHIAN::enterFastArea",
+        "callee": "U8P_RHIAN::func0631",
+        "purpose": "Invoke short kneeling/crying monologue when rhianKneeling flag is set",
         "confidence": "high"
       },
       {
-        "caller": "U8P_RHIAN::AvatarStoleSomething",
-        "callee": "U8P_RHIAN::schedule",
-        "purpose": "After theft escalation the schedule may be consulted or movement state updated (inferred sequencing between theft response and schedule updates).",
-        "confidence": "medium"
+        "caller": "U8P_RHIAN::enterFastArea",
+        "callee": "U8P_RHIAN::func06DC",
+        "purpose": "Invoke grieving monologue when U8P_RHIAN::schedule==0x01 and rhiangrieving is true",
+        "confidence": "high"
       },
       {
         "caller": "U8P_RHIAN::enterFastArea",
-        "callee": "U8P_RHIAN::0631",
-        "purpose": "Spawn kneeling behavior when schedule/state indicates kneeling should occur on area entry.",
-        "confidence": "medium"
+        "callee": "U8P_RHIAN::func0804",
+        "purpose": "Invoke sitting/idling helper when U8P_RHIAN::schedule==0x01 and not grieving",
+        "confidence": "high"
       },
       {
         "caller": "U8P_RHIAN::enterFastArea",
-        "callee": "U8P_RHIAN::06DC",
-        "purpose": "Spawn grieving behavior when rhiangrieving or schedule indicates grieving on fast-area entry.",
-        "confidence": "medium"
+        "callee": "U8P_RHIAN::func0EC5",
+        "purpose": "Inspect nearby items when U8P_RHIAN::schedule==0x02",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_RHIAN::use",
+        "callee": "U8P_RHIAN::func0794",
+        "purpose": "Trigger grieving/animation sequence as part of conversation flow",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_RHIAN::use",
+        "callee": "U8P_RHIAN::func1521",
+        "purpose": "Enter gem valuation/trade flow from conversation menus",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_RHIAN::use",
+        "callee": "U8P_RHIAN::func1884",
+        "purpose": "Open gemstone shop submenu and handle purchase flow",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_RHIAN::use",
+        "callee": "U8P_RHIAN::func1F3C",
+        "purpose": "Open clothing shop submenu and handle purchase flow",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_RHIAN::func0EC5",
+        "callee": "U8P_RHIAN::func0FFB",
+        "purpose": "Call context-sensitive monologue helper when NPC can act and nobodyElseTalking is false",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_RHIAN::func0804",
+        "callee": "U8P_RHIAN::func0862",
+        "purpose": "Invoke idle monologue as part of sitting behavior",
+        "confidence": "high"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_RHIAN::look",
-        "callee": "Item::bark",
-        "purpose": "Emit the chosen short description string to the player/process who looked at Rhian.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_RHIAN::AvatarStoleSomething",
         "callee": "Item::getType",
-        "purpose": "Determine the stolen object's type to decide the theft response and whether to call guards.",
+        "purpose": "Inspect stolen item's type to determine whether it is valuable and to drive escalation behavior",
         "confidence": "high"
       },
       {
         "caller": "U8P_RHIAN::AvatarStoleSomething",
-        "callee": "U8P_RHIAN::resetRef",
-        "purpose": "Clear stored area/script references as part of theft handling cleanup.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_RHIAN::AvatarStoleSomething",
-        "callee": "CALGUARD::0080",
-        "purpose": "Alert or call guards when the theft escalation reaches the threshold (unless guardsCalled suppresses it).",
+        "callee": "CALGUARD::guardRespondToCrime",
+        "purpose": "Notify/trigger guards when theft escalation reaches the threshold",
         "confidence": "high"
       },
       {
         "caller": "U8P_RHIAN::schedule",
-        "callee": "FREE::28F9",
-        "purpose": "Query map/tile/schedule related data used to pick rhianSchedule (exact query semantics inferred).",
+        "callee": "FREE::getTimeOfDayPeriod",
+        "purpose": "Read current time period to pick a U8P_RHIAN::schedule/route variant",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_RHIAN::schedule",
+        "callee": "METHOD::func143A",
+        "purpose": "Prepare/present U8P_RHIAN::schedule choices before suspension (likely UI or computation helper)",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_RHIAN::enterFastArea",
-        "callee": "METHOD::15E7",
-        "purpose": "Spawn short animations/orientation changes when the player enters Rhian's fast-area trigger.",
+        "caller": "U8P_RHIAN::schedule",
+        "callee": "METHOD::func133F",
+        "purpose": "Commit/apply chosen U8P_RHIAN::schedule after process_result() indicates acceptance",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_RHIAN::0631",
-        "callee": "urandom",
-        "purpose": "Select randomized crying/sniff lines or animation timing for the kneeling behavior.",
+        "caller": "U8P_RHIAN::cast",
+        "callee": "CALGUARD::guardRespondToCrime",
+        "purpose": "Alert guards when NPC is attacked under a specific attacker id condition",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_RHIAN::func0631",
+        "callee": "METHOD::func15E7",
+        "purpose": "Trigger shared animation/gesture synchronized with barks",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_RHIAN::func0631",
+        "callee": "spawn -> FREE::func1C19",
+        "purpose": "Schedule delayed helper/effect after a monologue",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_RHIAN::func0862",
+        "callee": "FREE::getDistanceBetween",
+        "purpose": "Decide proximity branches for varied idle lines",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_RHIAN::func0EC5",
+        "callee": "Item::getFrame",
+        "purpose": "Inspect an item frame to choose whether to pathfind or call monologue helper",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_RHIAN::func0FFB",
+        "callee": "METHOD::func091C",
+        "purpose": "Prepare or synchronize NPC prior to certain barks (inferred animation/synchronization)",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_RHIAN::func1521",
+        "callee": "spawn -> FREE::askYesNo",
+        "purpose": "Present yes/no prompt to the player and branch on process_result() for trade acceptance",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_RHIAN::func1521",
+        "callee": "FREE::equipItem",
+        "purpose": "Give reward/coin to the player on trade acceptance",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_RHIAN::func1884",
+        "callee": "FREE::equipItem",
+        "purpose": "Attempt to complete sale by equipping/gifting the chosen item; boolean result gates success/failure responses",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_RHIAN::func1884",
+        "callee": "FREE::findNearbyItems",
+        "purpose": "Verify presence of payment or to locate items involved in the transaction after equip attempt",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_RHIAN::use",
+        "callee": "METHOD::beginConversationNoMap",
+        "purpose": "Start conversation UI loop without changing the map/camera for certain entry conditions",
         "confidence": "high"
       }
     ]
@@ -212,76 +309,86 @@
   "global_flags": {
     "reads": [
       {
-        "name": "rhianName",
-        "likely_effect": "Controls use of the short name 'Rhian' vs other descriptors in U8P_RHIAN::look() output.",
-        "confidence": "high"
-      },
-      {
-        "name": "rhianJob",
-        "likely_effect": "Controls inclusion of Rhian's job ('weaver') in the composed U8P_RHIAN::look() description.",
-        "confidence": "high"
-      },
-      {
         "name": "rhianSchedule",
-        "likely_effect": "Read to select behavior when entering fast areas and by theft/schedule logic; indicates currently selected schedule index.",
+        "likely_effect": "Used to select fast-area behaviors and to gate theft-reaction behavior and conversation options",
         "confidence": "high"
-      },
-      {
-        "name": "guardsCalled",
-        "likely_effect": "If set, suppresses guard-calling behavior during theft handling.",
-        "confidence": "high"
-      },
-      {
-        "name": "rhianMoveCheck",
-        "likely_effect": "Holds theft-response escalation state used to pick warnings or trigger guard calls.",
-        "confidence": "high"
-      },
-      {
-        "name": "rhiangrieving",
-        "likely_effect": "Indicates whether grieving behaviors should be used on area entry and in schedule logic.",
-        "confidence": "high"
-      },
-      {
-        "name": "rhianSitting",
-        "likely_effect": "Affects selection of short animation/spawns on area entry (visual state influence).",
-        "confidence": "medium"
       },
       {
         "name": "toranDead",
-        "likely_effect": "Alters schedule selection in schedule() when Toran NPC is dead.",
-        "confidence": "medium"
-      },
-      {
-        "name": "stolenOnce",
-        "likely_effect": "Prevents repeating the initial gentle theft warning after the first theft; used to change verbal response.",
-        "confidence": "high"
-      }
-    ],
-    "writes": [
-      {
-        "name": "rhianSchedule",
-        "likely_effect": "Set by schedule() to select Rhian's active behavior/schedule for use by enterFastArea and other routines.",
+        "likely_effect": "Switches initial greeting/conversation entry paths when true",
         "confidence": "high"
       },
       {
-        "name": "stolenOnce",
-        "likely_effect": "Set on the first theft to avoid repeating the initial gentle warning in future thefts.",
-        "confidence": "high"
-      },
-      {
-        "name": "rhianMoveCheck",
-        "likely_effect": "Advanced to escalate theft responses (0→1→2→3) influencing messages and guard-calls.",
+        "name": "rhianMet",
+        "likely_effect": "Selects first-encounter vs repeat greetings and influences some bark variants",
         "confidence": "high"
       },
       {
         "name": "rhianKneeling",
-        "likely_effect": "Set/cleared to indicate kneeling behavior is active (controls animations/spawns related to kneeling).",
+        "likely_effect": "Read to decide kneeling-specific reactions and monologues on area entry",
+        "confidence": "high"
+      },
+      {
+        "name": "rhianSitting",
+        "likely_effect": "Read to decide sitting-specific behavior (sitting vs kneeling flows)",
         "confidence": "high"
       },
       {
         "name": "rhiangrieving",
-        "likely_effect": "Toggled to indicate grieving mode and cause grieving-specific reactions on area entry.",
+        "likely_effect": "Read to select grieving monologue variants when U8P_RHIAN::schedule==0x01",
         "confidence": "high"
+      },
+      {
+        "name": "guardsCalled",
+        "likely_effect": "Checked to avoid re-alerting guards after they've been called",
+        "confidence": "high"
+      },
+      {
+        "name": "somebodyTalking",
+        "likely_effect": "Read to decide whether to run spoken monologue helpers or keep quiet",
+        "confidence": "medium"
+      }
+    ],
+    "writes": [
+      {
+        "name": "rhianMet",
+        "likely_effect": "Set true on first meeting to mark that player has met Rhian",
+        "confidence": "high"
+      },
+      {
+        "name": "rhianKneeling",
+        "likely_effect": "Set to 1 by monologue helpers to mark kneeling pose/state",
+        "confidence": "high"
+      },
+      {
+        "name": "rhianSitting",
+        "likely_effect": "Set to 1 by U8P_RHIAN::func0804 to mark sitting state and cleared by U8P_RHIAN::func0EC5; used to gate behavior",
+        "confidence": "high"
+      },
+      {
+        "name": "rhiangrieving",
+        "likely_effect": "Set to 1 by U8P_RHIAN::func0794 to mark grieving state",
+        "confidence": "medium"
+      },
+      {
+        "name": "rhianSchedule",
+        "likely_effect": "Written by U8P_RHIAN::schedule() when process_result() is true to commit chosen U8P_RHIAN::schedule",
+        "confidence": "high"
+      },
+      {
+        "name": "rhianMoveCheck",
+        "likely_effect": "Incremented/written by U8P_RHIAN::AvatarStoleSomething to track warning/escalation state for theft reactions",
+        "confidence": "high"
+      },
+      {
+        "name": "stolenOnce",
+        "likely_effect": "Set when a particular valuable item is stolen to prevent repeating the strongest reaction",
+        "confidence": "high"
+      },
+      {
+        "name": "somebodyTalking",
+        "likely_effect": "Cleared (set to 0) at the end of reaction flows (U8P_RHIAN::func4E14) to reset talk state",
+        "confidence": "medium"
       }
     ]
   },
@@ -292,11 +399,11 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "RHIAN::look",
-    "behavior_summary_one_liner": "Provides Rhian NPC's reactive behaviors: what she says when examined (U8P_RHIAN::look) and how she responds to theft, spells, area entry/exit, and scheduled activities.",
-    "external_call_count": 7,
-    "flag_read_count": 9,
-    "flag_write_count": 5
+    "main_function": "U8P_RHIAN::look",
+    "behavior_summary_one_liner": "U8P_RHIAN implements the NPC Rhian: short U8P_RHIAN::look descriptions, a full conversation/shop handler, time-of-day U8P_RHIAN::schedule selection, fast-area (proximity) reactions, grief/idle monologues, and theft/attack reactions that can escalate to calling guards.",
+    "external_call_count": 16,
+    "flag_read_count": 8,
+    "flag_write_count": 8
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

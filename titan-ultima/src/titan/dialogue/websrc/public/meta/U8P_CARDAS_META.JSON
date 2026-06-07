@@ -3,27 +3,28 @@
   "source_of_truth": "dialogue/json/U8P_CARDAS.json",
   "file": "U8P_CARDAS",
   "behavior_summary": [
-    "This script implements event handlers for the Cardas NPC that act as thin adapters: they prepare event context and forward the actual behavior to shared system routines (SORCERER class handlers for dialog/proximity and SPELCMBT for spell resolution).",
-    "Handlers covered: U8P_CARDAS::look (examine), use (interact), enterFastArea (proximity enter), leaveFastArea (proximity leave), and cast (spell cast).",
-    "Each handler sets local info/process-exclude state, pushes the event context and caller pid (and the spell id for cast), spawns the appropriate external routine, consumes the returned value with an implies/pop pattern, then suspends/returns.",
-    "No global flags are read or written by these handlers; state changes and actual game effects are implemented in the called SORCERER / SPELCMBT routines."
+    "This NPC (CARDAS) is a sorcerer-type actor that delegates virtually all interaction and AI reactions to shared sorcerer and spell subsystems rather than implementing unique logic in-script.",
+    "U8P_CARDAS::look handles the player 'U8P_CARDAS::look' (examine) action by calling a sorcerer-specific U8P_CARDAS::look handler and then suspending.",
+    "U8P_CARDAS::use delegates the 'U8P_CARDAS::use' interaction to a sorcerer-specific routine and then suspends.",
+    "U8P_CARDAS::enterFastArea and U8P_CARDAS::leaveFastArea respond to trigger-area entry/exit by calling sorcererDetectPlayer and sorcererResetActivity respectively (start/stop AI engagement).",
+    "U8P_CARDAS::cast forwards a numeric parameter to the combat spell subsystem (SPELCMBT::combatSpellLoop), likely to perform or control a specific spell-casting action."
   ],
   "notable_control_flow": [
-    "All handlers follow the same control pattern: set per-object info/process-exclude, push context and pid (and other params as needed), spawn an external resolver routine, free temporary string resources (when used), handle the spawn return via an implies/pop sequence, then suspend and return.",
-    "CARDAS::look and CARDAS::use pass a literal string \"Cardas\" to the SORCERER routines and free that string after spawning.",
-    "CARDAS::cast forwards a spell id (uword) to the spell-combat resolver SPELCMBT::084D and returns its result via the implied return handling."
+    "All script entry points are processes that immediately delegate to external subsystem routines and then suspend; there is no branching or local dialog/menu logic in this script.",
+    "Trigger-based handlers (U8P_CARDAS::enterFastArea/U8P_CARDAS::leaveFastArea) map directly to player-detection and activity-reset routines, indicating AI engagement is managed externally.",
+    "Spell behavior is not implemented in-script: U8P_CARDAS::cast simply forwards its parameter to SPELCMBT::combatSpellLoop and yields."
   ],
   "open_questions": [
-    "What exact side-effects and dialog text the SORCERER::039C and SORCERER::05EC routines present for U8P_CARDAS::look/use — the cardas-specific content is implemented in those routines and not visible here.",
-    "Precise semantics and side-effects of the 'set info + process-exclude' sequence used by each handler (which info key is set and how the engine uses the exclusion) — inferred from pattern but not named here.",
-    "Meaning and consequences of the implies/pop handling of the spawned routine return value (how it affects calling process flow beyond suspending)."
+    "What exact behavior SORCERER::func039C and SORCERER::func05EC perform (description, talk, or other visual/audio reactions) — the script only delegates to them.",
+    "What the numeric parameter to U8P_CARDAS::cast encodes precisely (spell id, index, or flags) — inferred but not confirmed from this script alone.",
+    "Are there any global flags or shared state modified by the external sorcerer/spell subsystems that affect broader quest/AI flow (none are written in this script)."
   ],
   "main_function": {
     "name": "U8P_CARDAS::look",
     "execution_form": "process",
-    "purpose": "Handle the player's 'U8P_CARDAS::look' (examine) event on the Cardas NPC by forwarding to the shared SORCERER U8P_CARDAS::look/description routine with appropriate context and caller pid.",
+    "purpose": "Handle the player examining the NPC by delegating to a sorcerer-specific U8P_CARDAS::look handler and yielding.",
     "entry_conditions": [
-      "Event 0: triggered when an actor (typically the player) looks at Cardas or inspects the NPC."
+      "Player uses the 'U8P_CARDAS::look' or examine action on the NPC (engine invokes a process-type 'U8P_CARDAS::look' handler)."
     ],
     "confidence": "high"
   },
@@ -31,61 +32,61 @@
     {
       "name": "U8P_CARDAS::look",
       "kind": "main",
-      "role": "Forward 'U8P_CARDAS::look' event to SORCERER::039C after preparing context and process exclusion",
+      "role": "examined-by-player handler; delegates to sorcerer U8P_CARDAS::look routine",
       "confidence": "high"
     },
     {
       "name": "U8P_CARDAS::use",
       "kind": "helper",
-      "role": "Forward 'use' event to SORCERER::05EC with context and the literal 'Cardas'",
+      "role": "handles 'U8P_CARDAS::use' interactions by delegating to sorcerer U8P_CARDAS::use routine",
       "confidence": "high"
     },
     {
       "name": "U8P_CARDAS::enterFastArea",
       "kind": "helper",
-      "role": "Handle fast-area enter by forwarding to SORCERER::258C with context and caller pid",
+      "role": "trigger-area entry handler; calls sorcererDetectPlayer to initiate engagement",
       "confidence": "high"
     },
     {
       "name": "U8P_CARDAS::leaveFastArea",
       "kind": "helper",
-      "role": "Handle fast-area leave by forwarding to SORCERER::25D2 with context and caller pid",
+      "role": "trigger-area exit handler; calls sorcererResetActivity to stop/reset engagement",
       "confidence": "high"
     },
     {
       "name": "U8P_CARDAS::cast",
       "kind": "helper",
-      "role": "Forward spell-cast event (forwards spell id and context) to SPELCMBT::084D for resolution",
+      "role": "forwards a numeric parameter into the combat spell loop to perform spell behavior",
+      "confidence": "medium"
+    },
+    {
+      "name": "SORCERER::func039C",
+      "kind": "extern",
+      "role": "sorcerer-specific U8P_CARDAS::look/visual handler invoked by U8P_CARDAS::look",
       "confidence": "high"
     },
     {
-      "name": "SORCERER::039C",
+      "name": "SORCERER::func05EC",
       "kind": "extern",
-      "role": "External SORCERER handler invoked for 'U8P_CARDAS::look' — provides Cardas-specific description/dialog",
+      "role": "sorcerer-specific U8P_CARDAS::use/interact handler invoked by U8P_CARDAS::use",
       "confidence": "high"
     },
     {
-      "name": "SORCERER::05EC",
+      "name": "SORCERER::sorcererDetectPlayer",
       "kind": "extern",
-      "role": "External SORCERER handler invoked for 'use' interactions",
+      "role": "external AI routine to detect the player and begin sorcerer activity",
       "confidence": "high"
     },
     {
-      "name": "SORCERER::258C",
+      "name": "SORCERER::sorcererResetActivity",
       "kind": "extern",
-      "role": "External SORCERER handler for fast-area enter (proximity enter)",
+      "role": "external AI routine to reset or stop sorcerer activity",
       "confidence": "high"
     },
     {
-      "name": "SORCERER::25D2",
+      "name": "SPELCMBT::combatSpellLoop",
       "kind": "extern",
-      "role": "External SORCERER handler for fast-area leave (proximity exit)",
-      "confidence": "high"
-    },
-    {
-      "name": "SPELCMBT::084D",
-      "kind": "extern",
-      "role": "External spell-combat resolver used by CARDAS::cast to evaluate spell effects",
+      "role": "combat spell runtime loop used by U8P_CARDAS::cast to implement spells",
       "confidence": "high"
     }
   ],
@@ -94,33 +95,33 @@
     "external_calls": [
       {
         "caller": "U8P_CARDAS::look",
-        "callee": "SORCERER::039C",
-        "purpose": "Perform Cardas-specific U8P_CARDAS::look/description behavior (dialog, text, or contextual reactions). Called with (context, \"Cardas\", caller pid).",
+        "callee": "SORCERER::func039C",
+        "purpose": "Perform the sorcerer-specific response to being examined (description/visual state); script delegates entirely to this routine.",
         "confidence": "high"
       },
       {
         "caller": "U8P_CARDAS::use",
-        "callee": "SORCERER::05EC",
-        "purpose": "Perform Cardas-specific use/interaction behavior. Called with (context, \"Cardas\", caller pid).",
+        "callee": "SORCERER::func05EC",
+        "purpose": "Handle 'U8P_CARDAS::use' interaction (inspect/talk/special behavior) via the sorcerer subsystem; script yields after calling it.",
         "confidence": "high"
       },
       {
         "caller": "U8P_CARDAS::enterFastArea",
-        "callee": "SORCERER::258C",
-        "purpose": "Handle actor entering Cardas's proximity (fast-area enter) to trigger proximity-based behavior in SORCERER.",
+        "callee": "SORCERER::sorcererDetectPlayer",
+        "purpose": "Detect player entry into the NPC's fast area and initiate appropriate AI/reactive behavior.",
         "confidence": "high"
       },
       {
         "caller": "U8P_CARDAS::leaveFastArea",
-        "callee": "SORCERER::25D2",
-        "purpose": "Handle actor leaving Cardas's proximity (fast-area leave) to trigger exit behavior in SORCERER.",
+        "callee": "SORCERER::sorcererResetActivity",
+        "purpose": "Reset or stop AI activity when the player leaves the NPC's trigger area.",
         "confidence": "high"
       },
       {
         "caller": "U8P_CARDAS::cast",
-        "callee": "SPELCMBT::084D",
-        "purpose": "Resolve a spell cast against Cardas by forwarding the spell id, context and caller pid to the spell-combat subsystem.",
-        "confidence": "high"
+        "callee": "SPELCMBT::combatSpellLoop",
+        "purpose": "Run the combat spell loop using the forwarded numeric parameter (likely a spell id) to perform spell-casting behavior.",
+        "confidence": "medium"
       }
     ]
   },
@@ -130,13 +131,13 @@
   },
   "ui_tags": [
     "trigger",
-    "dialog",
-    "proximity",
-    "combat"
+    "delegation",
+    "spellcasting",
+    "ai"
   ],
   "quick_facts": {
-    "main_function": "CARDAS::look",
-    "behavior_summary_one_liner": "This script implements event handlers for the Cardas NPC that act as thin adapters: they prepare event context and forward the actual behavior to shared system routines (SORCERER class handlers for dialog/proximity and SPELCMBT for spell resolution).",
+    "main_function": "U8P_CARDAS::look",
+    "behavior_summary_one_liner": "This NPC (CARDAS) is a sorcerer-type actor that delegates virtually all interaction and AI reactions to shared sorcerer and spell subsystems rather than implementing unique logic in-script.",
     "external_call_count": 5,
     "flag_read_count": 0,
     "flag_write_count": 0

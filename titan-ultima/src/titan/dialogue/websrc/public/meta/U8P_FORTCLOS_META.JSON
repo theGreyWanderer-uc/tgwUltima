@@ -3,85 +3,43 @@
   "source_of_truth": "dialogue/json/U8P_FORTCLOS.json",
   "file": "U8P_FORTCLOS",
   "behavior_summary": [
-    "When the U8P_FORTCLOS::hatch/fast-area trigger is activated (actor/avatar enters), the script may open a group of nearby door objects, schedule a delayed/auxiliary process, suspend, and later re-close those doors.",
-    "Execution is gated by a global guard (keyOfTheAcolyte) so the open/close sequence only runs when that global has the expected value.",
-    "The routine chooses between two nearby rectangular search areas based on a bit test of the trigger item's Z value, then collects candidate items from that area into a temporary list.",
-    "Candidates are filtered by item-quality tests (certain quality flags and a numeric threshold compared against MalchirTest) to skip ineligible objects.",
-    "For each remaining candidate the script clears a door-related quality bit (to mark it open), spawns a door action/animation for visual/behavioral opening, then spawns a FREE/timer-like process and suspends.",
-    "After being resumed by whatever mechanism the spawned FREE/timer provides, the script iterates the collected list again and restores the door-quality bit (re-closing the doors), frees the list, and returns."
+    "U8P_FORTCLOS::hatch is a process that manages interaction with a U8P_FORTCLOS::hatch/door item instance: it can present a player menu entry for the U8P_FORTCLOS::hatch, check the U8P_FORTCLOS::hatch's world coordinates to identify specific instances, inspect and toggle bits in the item's quality/flag word, and invoke the door use logic (DOOR_NS::useDoor) via spawn.",
+    "Progress through the main flows is gated by the global flag keyOfTheAcolyte (must be set to proceed) and by a numeric test against MalchirTest (threshold compared to 6) which selects alternate handling.",
+    "The code reads the item coordinates (Item::getX/Y/Z) to distinguish between two U8P_FORTCLOS::hatch positions and then reads Item::getQuality into a local (local2) to test bitmasks (notably 0x0100 and 0x0400). Depending on those tests the routine either clears 0x0400 before invoking DOOR_NS::useDoor or spawns/awaits a helper (FREE::func1C19) and then sets 0x0400 after useDoor.",
+    "When the 'this' interaction context is true the item reference (local3) is added to a menu options array (local4) so a player-facing menu entry can be shown."
   ],
   "notable_control_flow": [
-    "Entry gated by global keyOfTheAcolyte (quick exit if not matching expected value).",
-    "Branch on a Z-bit of the trigger item to select one of two rectangle sizes/offsets for nearby item scanning.",
-    "Two-phase iteration over found items: first build/filter/modify (open) then suspend and later iterate again to restore (close).",
-    "Single spawn of a FREE/timer process correlates with the script suspending and being resumed for cleanup.",
-    "Filtering includes bit tests and a numeric comparison against the global MalchirTest, preventing some items from being opened/modified."
+    "Entry: process-type handler executes when the item's U8P_FORTCLOS::hatch process runs (process form).",
+    "Guard: read global keyOfTheAcolyte — main interaction logic only runs if this flag is true (inferred).",
+    "Branch on item coordinates: distinct X/Y/Z checks route behavior for specific U8P_FORTCLOS::hatch instances (two coordinate branches present).",
+    "Read item quality word (Item::getQuality) into local2 and test bit 0x0100 to choose one subflow.",
+    "Within subflows use of MalchirTest >= 6 selects a path that clears 0x0400 and calls DOOR_NS::useDoor; otherwise another path may spawn FREE::func1C19, await it (suspend), then set 0x0400 after calling DOOR_NS::useDoor.",
+    "Menu construction: when the surrounding context ('this') indicates player interaction, local3 is added to local4 via MenuAdd to present a selectable menu option.",
+    "Loop/frame progression inside U8P_FORTCLOS::hatch; treated as control-flow, not explicit internal call."
   ],
   "open_questions": [
-    "What exact gameplay condition/key value on keyOfTheAcolyte gates the sequence (the expected numeric value is observed but its game-meaning is inferred)?",
-    "What precise bit(s) in item quality flag the script clears and later restores (the disassembly shows a specific bit operation but the semantic name/meaning of the bit is inferred)?",
-    "What is the exact purpose and lifetime of the spawned FREE::1C19 process (appears to be a timer that later resumes this script, but exact timing/interaction is not fully proven)?",
-    "Which door/item shapes or types are intended to be affected (shape filtering is inferred from quality tests rather than an explicit shape constant in the routine)?"
+    "Exact semantic meanings of the quality/flag bits tested/modified (0x0100 and 0x0400) — inferred as lock/state markers but not certain.",
+    "Purpose and behavior of FREE::func1C19 that is spawned and awaited in one branch — appears to be a synchronization or helper but exact role is unclear.",
+    "Precise trigger/context conveyed by 'this' (when the code adds local3 to local4) — likely 'player nearby/activating' but the canonical event source is not explicit in the decompilation.",
+    "Why two different coordinate tests exist (concrete map positions vs. position arithmetic) — likely separate U8P_FORTCLOS::hatch instances or map variants, but mapping to in-game locations is not proven."
   ],
   "main_function": {
     "name": "U8P_FORTCLOS::hatch",
     "execution_form": "process",
-    "purpose": "Handle a U8P_FORTCLOS::hatch/fast-area trigger: locate and temporarily open nearby door objects when an actor enters a trigger area, spawn a follow-up/timer process, suspend, and on resume restore the doors to their closed state.",
+    "purpose": "Handle player interaction and state changes for a U8P_FORTCLOS::hatch/door item: provide a menu option when appropriate, decide open/close actions by testing item flags and global thresholds, and invoke the door usage routine (DOOR_NS::useDoor) while updating the item's quality flags.",
     "entry_conditions": [
-      "Fast-area / U8P_FORTCLOS::hatch event (actor/Avatar enters the trigger region).",
-      "Global guard keyOfTheAcolyte must match the expected value for the sequence to run.",
-      "Trigger item's position (X/Y) and a tested Z bit determine which search rectangle to use and whether the script proceeds."
+      "Process entry (process type 0x0210) for the item instance.",
+      "Global flag keyOfTheAcolyte must be true for the primary interaction logic to run (guard).",
+      "Contextual 'this' indicates when to add the item to the player-facing menu (inferred player interaction)."
     ],
-    "confidence": "high"
+    "confidence": "medium"
   },
   "function_map": [
     {
       "name": "U8P_FORTCLOS::hatch",
       "kind": "main",
-      "role": "Process handler for a U8P_FORTCLOS::hatch/fast-area trigger that opens and later re-closes nearby doors",
+      "role": "item process that manages U8P_FORTCLOS::hatch interaction, menu option addition, quality-bit tests, and spawning of door-use logic",
       "confidence": "high"
-    },
-    {
-      "name": "Item::getX",
-      "kind": "extern",
-      "role": "Read trigger item's X coordinate (used to position/decide the search area)",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getY",
-      "kind": "extern",
-      "role": "Read trigger item's Y coordinate (used to position/decide the search area)",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getZ",
-      "kind": "extern",
-      "role": "Read trigger item's Z value for bit test that selects alternate behavior/area",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getQuality",
-      "kind": "extern",
-      "role": "Read candidate item's quality/flags for filtering and bit manipulation",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::setQuality",
-      "kind": "extern",
-      "role": "Write modified quality/flags back to a candidate item to open/close it",
-      "confidence": "high"
-    },
-    {
-      "name": "spawn DOOR_NS::08B4",
-      "kind": "extern",
-      "role": "Spawn per-door open/animation behavior after clearing the door-quality bit",
-      "confidence": "high"
-    },
-    {
-      "name": "spawn FREE::1C19",
-      "kind": "extern",
-      "role": "Spawn a follow-up/timer-like process that correlates with suspension and later resume of this script",
-      "confidence": "medium"
     }
   ],
   "call_analysis": {
@@ -90,44 +48,50 @@
       {
         "caller": "U8P_FORTCLOS::hatch",
         "callee": "Item::getX",
-        "purpose": "Obtain trigger item's X coordinate to decide whether and where to search for doors",
+        "purpose": "Read item X coordinate to identify/branch based on U8P_FORTCLOS::hatch location",
         "confidence": "high"
       },
       {
         "caller": "U8P_FORTCLOS::hatch",
         "callee": "Item::getY",
-        "purpose": "Obtain trigger item's Y coordinate to decide whether and where to search for doors",
+        "purpose": "Read item Y coordinate to identify/branch based on U8P_FORTCLOS::hatch location",
         "confidence": "high"
       },
       {
         "caller": "U8P_FORTCLOS::hatch",
         "callee": "Item::getZ",
-        "purpose": "Read Z byte/flags to choose between two rectangle sizes/offsets (branch selection)",
+        "purpose": "Read item Z coordinate to identify/branch based on U8P_FORTCLOS::hatch location",
         "confidence": "high"
       },
       {
         "caller": "U8P_FORTCLOS::hatch",
         "callee": "Item::getQuality",
-        "purpose": "Filter candidate items and read flags/values used to decide whether to operate on them",
+        "purpose": "Load the item's quality/flag word into a local for bit tests (0x0100, 0x0400)",
         "confidence": "high"
       },
       {
         "caller": "U8P_FORTCLOS::hatch",
         "callee": "Item::setQuality",
-        "purpose": "Clear a door-quality bit to mark a door open and later restore that bit to close it",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FORTCLOS::hatch",
-        "callee": "spawn DOOR_NS::08B4",
-        "purpose": "Trigger the door object's open animation/behavior after clearing its quality bit",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FORTCLOS::hatch",
-        "callee": "spawn FREE::1C19",
-        "purpose": "Spawn a timer/free process (using this script's pid and a parameter) that likely resumes or coordinates the re-closing stage",
+        "purpose": "Write back a modified quality/flag word after toggling bit 0x0400 to reflect open/closed or marked state",
         "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FORTCLOS::hatch",
+        "callee": "spawn",
+        "purpose": "Spawn a process to call addressof(local3)->DOOR_NS::useDoor (perform door open/close animation/state change) or to run FREE::func1C19 as a helper",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FORTCLOS::hatch",
+        "callee": "DOOR_NS::useDoor",
+        "purpose": "Perform the actual door/U8P_FORTCLOS::hatch action (invoked via spawn on the item reference)",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FORTCLOS::hatch",
+        "callee": "FREE::func1C19",
+        "purpose": "Spawned helper that is awaited in one branch before toggling quality bit — likely synchronization or auxiliary effect",
+        "confidence": "low"
       }
     ]
   },
@@ -135,12 +99,12 @@
     "reads": [
       {
         "name": "keyOfTheAcolyte",
-        "likely_effect": "Acts as a gate/quest flag that enables or disables the U8P_FORTCLOS::hatch open/close behavior; prevents opening unless set to expected value",
+        "likely_effect": "Gates whether U8P_FORTCLOS::hatch interaction logic runs (must be true to proceed)",
         "confidence": "high"
       },
       {
         "name": "MalchirTest",
-        "likely_effect": "Numeric threshold used to filter candidate items by quality/value; items with quality >= MalchirTest are exempted from being opened/modified",
+        "likely_effect": "Numeric threshold compared against 6 to select alternate subflow for handling the U8P_FORTCLOS::hatch and quality-bit operations",
         "confidence": "medium"
       }
     ],
@@ -153,9 +117,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "FORTCLOS::hatch",
-    "behavior_summary_one_liner": "When the U8P_FORTCLOS::hatch/fast-area trigger is activated (actor/avatar enters), the script may open a group of nearby door objects, schedule a delayed/auxiliary process, suspend, and later re-close those doors.",
-    "external_call_count": 7,
+    "main_function": "U8P_FORTCLOS::hatch",
+    "behavior_summary_one_liner": "U8P_FORTCLOS::hatch is a process that manages interaction with a U8P_FORTCLOS::hatch/door item instance: it can present a player menu entry for the U8P_FORTCLOS::hatch, check the U8P_FORTCLOS::hatch's world coordinates to identify specific instances, inspect and toggle bits in the item's quality/flag word, and invoke the door use logic (DOOR_NS::useDoor) via spawn.",
+    "external_call_count": 8,
     "flag_read_count": 2,
     "flag_write_count": 0
   },

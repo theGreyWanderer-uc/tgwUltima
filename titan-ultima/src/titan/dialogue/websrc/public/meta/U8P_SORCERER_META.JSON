@@ -3,138 +3,158 @@
   "source_of_truth": "dialogue/json/U8P_SORCERER.json",
   "file": "U8P_SORCERER",
   "behavior_summary": [
-    "Provides a small per-named-sorcerer flag system (for Cardas, Daemos, Kothius, Mentar, Tallon, Emrichol) and uses those flags to shape short barks and full dialogue when the player interacts with sorcerer NPCs.",
-    "Exposes setter helpers that map an input name string to a specific global byte flag and store a supplied value (used to record whether the player 'met' a sorcerer, whether a name form is known, job/profession variants, and avatar-name variants).",
-    "Implements brief-info/bark selection and a larger dialogue handler that read per-name flags plus NPC runtime state (dead/alive, status bits) and global story flags (e.g., acolyteKilled) to choose appropriate spoken lines, open/close dialog gumps, and spawn auxiliary behaviors/animations."
+    "This script implements the Sorcerer NPC's identity bookkeeping, conversation, short barks, and idle/activity scheduling.",
+    "A family of selector helpers (U8P_SORCERER::func0080, U8P_SORCERER::func0147, U8P_SORCERER::func020E, U8P_SORCERER::func02D5) map an input selector string (this) to per-variant storage slots (e.g., cardasMet, cardasName, cardasJob, cardasAvaName) and record a helper reference in temp for the matched Sorcerer variant (Cardas, Daemos, Kothius, Mentar, Tallon, Emrichol).",
+    "U8P_SORCERER::func05EC is the primary player-facing dialogue routine: it builds and presents a menu, personalizes lines with the player's name, branches widely on menu choices and selector names, reads per-variant data to produce variant-specific responses, sets conversation-related flags, and calls an external METHOD::func15E7 to carry out an option action.",
+    "Short utterances are produced by U8P_SORCERER::func039C (variant-aware short descriptor) and U8P_SORCERER::func1B69 (very short reactive bark).",
+    "Idle and sensing behaviors are managed by U8P_SORCERER::func1B8F (randomized idle timer, spawn npcIdleWander, and schedule barks) with entry from U8P_SORCERER::sorcererDetectPlayer. U8P_SORCERER::sorcererResetActivity cancels the scheduled activity reference."
   ],
   "notable_control_flow": [
-    "Name-based dispatch: each setter routine compares the incoming name_string to a fixed list of sorcerer names and on match writes the provided byte to the corresponding global flag; returns the stored byte or 0 if no match.",
-    "Dialogue branching: U8P_SORCERER::039C and U8P_SORCERER::05EC load the per-name flags (<name>Met, <name>Name, <name>Job, <name>AvaName) and branch on those values plus Npc::isDead() and the acolyteKilled global to choose different bark/dialogue text.",
-    "UI guard logic: Item::getStatus / openGump / closeGump status bits are inspected to open/close interaction windows as part of the dialogue flow.",
-    "Asynchronous actions: the dialogue handler spawns METHOD::<id> routines (e.g., 0BCF, 1090, 15E7) and queries Npc::getDir before spawning, indicating direction-based animations or queued conversation subroutines."
+    "Selector pattern: many functions strcmp 'this' (input string) against a fixed set of sorcerer names and on match write a per-variant global and temp = this_hi; else clear temp.",
+    "Conversation branching: U8P_SORCERER::func05EC composes a menu (MenuSet/MenuAdd/MenuUnion/MenuRemove), presents it via Ask, captures selection with SuspendAssign, then uses strcmp on the captured choice/local selector to choose dialogue branches and side effects.",
+    "Idle scheduling uses a random bucket (FREE::randomInRange / FREE::randomInRange0) to decide whether to spawn short barks or reschedule timers, and will spawn METHOD::npcIdleWander for wandering behavior.",
+    "Detection path (U8P_SORCERER::sorcererDetectPlayer) short-circuits on death, otherwise either sets the NPC target to the player (Npc::setTarget) if avatarMasterSorcerer is set, or spawns the idle/activity routine (U8P_SORCERER::func1B8F)."
   ],
   "open_questions": [
-    "Whether U8P_SORCERER::05EC directly calls U8P_SORCERER::039C as a helper: the analysis suggests reuse between the brief bark helper and the full dialogue handler but the direct call graph is inferred, not canonical.",
-    "Precise behavior and side effects of FREE::1A85 and the spawned METHOD::<id> routines (0BCF, 1090, 15E7) — their inner logic and impact on dialogue/animation are unknown from this module alone.",
-    "Exact mapping of the status bits inspected via Item::getStatus (what bit values correspond to 'gump open' vs other states) is inferred rather than explicitly documented here."
+    "What exact gameplay effect does METHOD::func15E7 invoked from U8P_SORCERER::func05EC perform (quest state, item transfer, trigger)?",
+    "How are the per-variant globals (cardasMet, cardasName, cardasJob, cardasAvaName) initialized in normal game flow (who calls the selector helpers and when)?",
+    "Is temp a localized runtime helper only, or is it persisted/inspected by other scripts/mechanics beyond this file?",
+    "What precise UI/gump semantics are expected in the dead-NPC branch of U8P_SORCERER::func05EC (Item::openGump / Item::closeGump conditions)?"
   ],
   "main_function": {
-    "name": "U8P_SORCERER::0080 (setMetFlag_byName)",
+    "name": "U8P_SORCERER::func0080",
     "execution_form": "process",
-    "purpose": "Given a sorcerer name string and a byte value, match the name to one of the known sorcerers and set that sorcerer's '<name>Met' global flag to the provided byte; return the stored byte or 0 if no match.",
+    "purpose": "Identify which named Sorcerer variant an input selector string represents; set the corresponding '<name>Met' storage and store a helper reference (temp = this_hi) or clear temp when no match is found.",
     "entry_conditions": [
-      "Called whenever game logic wants to record whether the player has 'met' a particular named sorcerer; input parameters are name_string (char*) and value_byte (byte).",
-      "Performs direct string comparisons against the known sorcerer names and updates the matching global."
+      "Invoked with 'this' set to a selector string to classify (likely called during NPC setup, dialogue assembly, or when external code reports a variant name)."
     ],
     "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_SORCERER::0080 (setMetFlag_byName)",
+      "name": "U8P_SORCERER::func0080",
       "kind": "main",
-      "role": "Name-to-global-flag setter for '<name>Met' flags; primary setter exposed by the module.",
+      "role": "identity selector (writes <name>Met and temp)",
       "confidence": "high"
     },
     {
-      "name": "U8P_SORCERER::0147 (setNameFlag_byName)",
+      "name": "U8P_SORCERER::func0147",
       "kind": "helper",
-      "role": "Name-to-global-flag setter for '<name>Name' flags (name-variant state).",
+      "role": "selector that writes <name>Name and temp",
       "confidence": "high"
     },
     {
-      "name": "U8P_SORCERER::020E (setJobFlag_byName)",
+      "name": "U8P_SORCERER::func020E",
       "kind": "helper",
-      "role": "Name-to-global-flag setter for '<name>Job' flags (job/profession variants).",
+      "role": "selector that writes <name>Job and temp",
       "confidence": "high"
     },
     {
-      "name": "U8P_SORCERER::02D5 (setAvaNameFlag_byName)",
+      "name": "U8P_SORCERER::func02D5",
       "kind": "helper",
-      "role": "Name-to-global-flag setter for '<name>AvaName' flags (avatar-name variants).",
+      "role": "selector that writes <name>AvaName and temp",
       "confidence": "high"
     },
     {
-      "name": "U8P_SORCERER::039C (bark_and_briefInfo)",
+      "name": "U8P_SORCERER::func039C",
       "kind": "helper",
-      "role": "Construct and emit a short label/bark for a named sorcerer by reading stored per-name flags and NPC state; performs Item::bark with the selected short string.",
+      "role": "short monologue/bark formatter using per-variant data and Npc::isDead to choose phrasing",
       "confidence": "high"
     },
     {
-      "name": "U8P_SORCERER::05EC (dialogue_interaction_handler)",
+      "name": "U8P_SORCERER::func05EC",
       "kind": "helper",
-      "role": "Main interaction/dialogue handler for Sorcerer NPCs: reads per-name flags and story flags, checks NPC runtime/status, chooses full dialogue lines, manages gumps, and spawns additional behaviors/animations.",
+      "role": "primary dialogue handler: build menus, capture player choice, branch responses, call METHOD::func15E7",
       "confidence": "high"
+    },
+    {
+      "name": "U8P_SORCERER::func1B69",
+      "kind": "helper",
+      "role": "very short reactive bark emitter (suspends after a single Bark)",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_SORCERER::func1B8F",
+      "kind": "helper",
+      "role": "idle/activity scheduler: random timers, set flags, spawn npcIdleWander and timed callbacks",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_SORCERER::sorcererDetectPlayer",
+      "kind": "helper",
+      "role": "called on player detection: check death, set target (if avatarMasterSorcerer) or spawn idle/activity routine",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_SORCERER::sorcererResetActivity",
+      "kind": "helper",
+      "role": "cancel/reset the stored activity reference (FREE::resetRef)",
+      "confidence": "high"
+    },
+    {
+      "name": "METHOD::func15E7",
+      "kind": "extern",
+      "role": "external action invoked from dialogue (unknown side effect)",
+      "confidence": "medium"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
-        "caller": "U8P_SORCERER::05EC (dialogue_interaction_handler)",
-        "callee": "U8P_SORCERER::039C (bark_and_briefInfo)",
-        "purpose": "Inferred reuse: short-info barks are likely produced via the brief-info helper as part of the full dialogue flow (selection and emission of short labels).",
-        "confidence": "medium"
+        "caller": "U8P_SORCERER::func1B8F",
+        "callee": "U8P_SORCERER::func1B69",
+        "purpose": "spawn short reactive barks as part of randomized idle behavior",
+        "confidence": "high"
       },
       {
-        "caller": "U8P_SORCERER::05EC (dialogue_interaction_handler)",
-        "callee": "U8P_SORCERER::0080 (setMetFlag_byName)",
-        "purpose": "Inferred: dialogue flow may set 'met' flags when appropriate during interaction; presence is plausible but not explicitly shown in snippet.",
-        "confidence": "low"
+        "caller": "U8P_SORCERER::sorcererDetectPlayer",
+        "callee": "U8P_SORCERER::func1B8F",
+        "purpose": "start/reset the NPC idle/activity routine when the player is detected (spawned)",
+        "confidence": "high"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_SORCERER::039C (bark_and_briefInfo)",
-        "callee": "Item::bark",
-        "purpose": "Emit the constructed short label/bark string to the triggering player/process.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SORCERER::05EC (dialogue_interaction_handler)",
-        "callee": "Npc::isDead",
-        "purpose": "Check whether the NPC is dead to select living vs. 'late' dialogue variants.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SORCERER::05EC (dialogue_interaction_handler)",
-        "callee": "Item::getStatus",
-        "purpose": "Read NPC/item status bits to decide whether to open/close gumps or alter dialogue flow.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SORCERER::05EC (dialogue_interaction_handler)",
-        "callee": "Item::openGump",
-        "purpose": "Open a dialog/gump for the NPC interaction when conditions demand richer UI.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SORCERER::05EC (dialogue_interaction_handler)",
-        "callee": "Item::closeGump",
-        "purpose": "Close the NPC's gump when dialogue or state requires it.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SORCERER::05EC (dialogue_interaction_handler)",
-        "callee": "Npc::getDir",
-        "purpose": "Retrieve NPC facing direction prior to spawning direction-based animations or actions.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SORCERER::05EC (dialogue_interaction_handler)",
-        "callee": "spawn METHOD::<id> (e.g., 0BCF, 1090, 15E7)",
-        "purpose": "Asynchronously launch animations, queued subroutines, or conversation sub-behaviors tied to the dialogue sequence.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SORCERER::05EC (dialogue_interaction_handler)",
-        "callee": "FREE::1A85",
-        "purpose": "Utility/freeing or small-state helper used conditionally in dialogue logic; exact role unclear.",
-        "confidence": "low"
-      },
-      {
-        "caller": "U8P_SORCERER::039C",
-        "callee": "U8P_SORCERER::set info",
-        "purpose": "Set routine-local context/info fields on the NPC/process at helper start (used to annotate processing context).",
+        "caller": "U8P_SORCERER::func05EC",
+        "callee": "METHOD::func15E7",
+        "purpose": "carry out an action tied to a conversation menu choice (exact effect unknown from data)",
         "confidence": "medium"
+      },
+      {
+        "caller": "U8P_SORCERER::func1B8F",
+        "callee": "FREE::randomInRange",
+        "purpose": "compute randomized delay/timer values for idle scheduling",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SORCERER::func1B8F",
+        "callee": "FREE::randomInRange0",
+        "purpose": "pick a small random bucket to select which idle utterance/behavior to run",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SORCERER::func1B8F",
+        "callee": "METHOD::npcIdleWander",
+        "purpose": "spawn NPC wandering behavior as part of idle routine",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SORCERER::sorcererDetectPlayer",
+        "callee": "Npc::setTarget",
+        "purpose": "assign the player as the NPC's target when avatarMasterSorcerer is set",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SORCERER::func039C",
+        "callee": "Npc::isDead",
+        "purpose": "choose 'dead' vs 'alive' wording for short descriptor barks",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SORCERER::sorcererResetActivity",
+        "callee": "FREE::resetRef",
+        "purpose": "cancel/reset the previously spawned activity/process reference",
+        "confidence": "high"
       }
     ]
   },
@@ -142,99 +162,64 @@
     "reads": [
       {
         "name": "acolyteKilled",
-        "likely_effect": "Alters dialogue branches to a different set of lines when set (story-state dependent).",
+        "likely_effect": "controls selection of alternate (often regretful or fatalistic) dialogue in U8P_SORCERER::func05EC",
         "confidence": "high"
       },
       {
-        "name": "cardasMet",
-        "likely_effect": "Used by brief-info and dialogue handlers to select phrasing depending on whether Cardas was met.",
+        "name": "avatarMasterSorcerer",
+        "likely_effect": "when true, U8P_SORCERER::sorcererDetectPlayer will set the player as target instead of just spawning idle behavior",
         "confidence": "high"
       },
       {
-        "name": "daemosMet",
-        "likely_effect": "Used to choose appropriate lines for Daemos.",
+        "name": "somebodyTalking",
+        "likely_effect": "prevents U8P_SORCERER::func1B69 from barking when another conversation is active",
         "confidence": "high"
       },
       {
-        "name": "kothiusMet",
-        "likely_effect": "Used to choose appropriate lines for Kothius.",
+        "name": "cardasMet / daemosMet / kothiusMet / mentarMet / tallonMet / emricholMet",
+        "likely_effect": "per-variant 'met' markers read by U8P_SORCERER::func05EC and U8P_SORCERER::func039C to choose variant-specific responses",
         "confidence": "high"
       },
       {
-        "name": "mentarMet",
-        "likely_effect": "Used to choose appropriate lines for Mentar.",
+        "name": "cardasName / daemosName / kothiusName / mentarName / tallonName / emricholName",
+        "likely_effect": "per-variant name storage read to personalize or choose phrasing in dialogue",
         "confidence": "high"
       },
       {
-        "name": "tallonMet",
-        "likely_effect": "Used to choose appropriate lines for Tallon.",
+        "name": "cardasJob / daemosJob / kothiusJob / mentarJob / tallonJob / emricholJob",
+        "likely_effect": "per-variant job/role strings read to influence descriptive lines",
         "confidence": "high"
       },
       {
-        "name": "emricholMet",
-        "likely_effect": "Used to choose appropriate lines for Emrichol.",
-        "confidence": "high"
-      },
-      {
-        "name": "cardasName, daemosName, kothiusName, mentarName, tallonName, emricholName",
-        "likely_effect": "Name-variant flags read to decide whether to reveal or use a proper name form in speech.",
-        "confidence": "high"
-      },
-      {
-        "name": "cardasJob, daemosJob, kothiusJob, mentarJob, tallonJob, emricholJob",
-        "likely_effect": "Job/profession flags read to select job-related phrasing in barks/dialogue.",
-        "confidence": "high"
-      },
-      {
-        "name": "cardasAvaName, daemosAvaName, kothiusAvaName, mentarAvaName, tallonAvaName, emricholAvaName",
-        "likely_effect": "Avatar-name variant flags read to choose avatar-specific naming in dialogue.",
+        "name": "cardasAvaName / daemosAvaName / kothiusAvaName / mentarAvaName / tallonAvaName / emricholAvaName",
+        "likely_effect": "avatar-facing names read to produce player-visible name lines",
         "confidence": "high"
       }
     ],
     "writes": [
       {
-        "name": "cardasMet",
-        "likely_effect": "Set by SORCERER::0080 when input name equals 'Cardas'; records that Cardas was met or update his met-state.",
+        "name": "cardasMet / daemosMet / kothiusMet / mentarMet / tallonMet / emricholMet",
+        "likely_effect": "set to indicate which Sorcerer variant 'this' refers to (written by U8P_SORCERER::func0080)",
         "confidence": "high"
       },
       {
-        "name": "daemosMet",
-        "likely_effect": "Set by SORCERER::0080 for 'Daemos'.",
+        "name": "cardasName / daemosName / kothiusName / mentarName / tallonName / emricholName",
+        "likely_effect": "written by U8P_SORCERER::func0147 to store variant name references",
         "confidence": "high"
       },
       {
-        "name": "kothiusMet",
-        "likely_effect": "Set by SORCERER::0080 for 'Kothius'.",
+        "name": "cardasJob / daemosJob / kothiusJob / mentarJob / tallonJob / emricholJob",
+        "likely_effect": "written by U8P_SORCERER::func020E to store variant job/role references",
         "confidence": "high"
       },
       {
-        "name": "mentarMet",
-        "likely_effect": "Set by SORCERER::0080 for 'Mentar'.",
+        "name": "cardasAvaName / daemosAvaName / kothiusAvaName / mentarAvaName / tallonAvaName / emricholAvaName",
+        "likely_effect": "written by U8P_SORCERER::func02D5 to store avatar-facing name references",
         "confidence": "high"
       },
       {
-        "name": "tallonMet",
-        "likely_effect": "Set by SORCERER::0080 for 'Tallon'.",
-        "confidence": "high"
-      },
-      {
-        "name": "emricholMet",
-        "likely_effect": "Set by SORCERER::0080 for 'Emrichol'.",
-        "confidence": "high"
-      },
-      {
-        "name": "cardasName, daemosName, kothiusName, mentarName, tallonName, emricholName",
-        "likely_effect": "Written by SORCERER::0147 to record name-related state per sorcerer.",
-        "confidence": "high"
-      },
-      {
-        "name": "cardasJob, daemosJob, kothiusJob, mentarJob, tallonJob, emricholJob",
-        "likely_effect": "Written by SORCERER::020E to record job-related state per sorcerer.",
-        "confidence": "high"
-      },
-      {
-        "name": "cardasAvaName, daemosAvaName, kothiusAvaName, mentarAvaName, tallonAvaName, emricholAvaName",
-        "likely_effect": "Written by SORCERER::02D5 to record avatar-name variant flags per sorcerer.",
+        "name": "temp",
+        "likely_effect": "helper slot set to this_hi on successful selector match and cleared to 0 on no-match; used as a transient reference across selector helpers",
         "confidence": "high"
       }
     ]
@@ -246,11 +231,11 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "SORCERER::0080 (setMetFlag_byName)",
-    "behavior_summary_one_liner": "Provides a small per-named-sorcerer flag system (for Cardas, Daemos, Kothius, Mentar, Tallon, Emrichol) and uses those flags to shape short barks and full dialogue when the player interacts with sorcerer NPCs.",
-    "external_call_count": 9,
-    "flag_read_count": 10,
-    "flag_write_count": 9
+    "main_function": "U8P_SORCERER::func0080",
+    "behavior_summary_one_liner": "This script implements the Sorcerer NPC's identity bookkeeping, conversation, short barks, and idle/activity scheduling.",
+    "external_call_count": 7,
+    "flag_read_count": 7,
+    "flag_write_count": 5
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

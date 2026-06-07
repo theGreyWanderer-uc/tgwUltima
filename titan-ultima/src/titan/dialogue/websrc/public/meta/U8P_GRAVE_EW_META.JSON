@@ -3,27 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_GRAVE_EW.json",
   "file": "U8P_GRAVE_EW",
   "behavior_summary": [
-    "Provides logic for player interactions with a gravestone object: examining ('U8P_GRAVE_EW::look') produces a brief descriptive message and using ('use') delegates a more complex action to a namespaced handler.",
-    "GRAVE_EW::look constructs a short string beginning with \"gravestone \", delivers it to the examining process via Item::bark, frees the temporary string, and returns.",
-    "GRAVE_EW::use records object/process context (set-info / process-exclude behavior inferred) and asynchronously spawns GRAVE_NS::00CB so the spawned handler performs the concrete 'use' behavior with knowledge of who activated the gravestone.",
-    "Both handlers perform local context housekeeping (info/process-exclude opcodes observed) before calling external routines and then inspect return values to influence final control flow."
+    "U8P_GRAVE_EW::look is the object's inspect/U8P_GRAVE_EW::look handler: when the player examines the gravestone it displays a short bark text (\"gravestone \") and then yields/suspends.",
+    "U8P_GRAVE_EW::use is the object's U8P_GRAVE_EW::use handler and does not implement local logic; it delegates the interaction to a shared handler GRAVE_NS::func00CB and then yields/suspends.",
+    "No global flags are read or written by the code in this excerpt; no local data or branching logic is present."
   ],
   "notable_control_flow": [
-    "GRAVE_EW::look runs synchronously: build-string -> Item::bark(target_pid, constructed_string) -> free string -> check retval -> implied/pop -> suspend/return.",
-    "GRAVE_EW::use runs: set object/process info and exclude the triggering process -> spawn GRAVE_NS::00CB with caller_pid (asynchronous delegation) -> check spawn retval -> implies/pop -> suspend/return.",
-    "No global flags are read or written by these snippets; behavior is contained to the object and spawned handler."
+    "U8P_GRAVE_EW::look: linear sequence — emit a single bark string then suspend/yield the process.",
+    "U8P_GRAVE_EW::use: single external call to GRAVE_NS::func00CB then suspend/yield; the process itself does not perform branching or flag manipulation."
   ],
   "open_questions": [
-    "Exact semantics of the observed 'set info' and 'process exclude' opcodes: which info key is set and what precise effect 'process exclude' has on subsequent engine processing is inferred but not explicit.",
-    "What GRAVE_NS::00CB (the spawned handler) actually does when a gravestone is 'used' — this file delegates the behavior so the gameplay effect is unknown without that namespaced script.",
-    "Whether the constructed string appended any dynamic gravestone-specific text (owner name, date, epitaph) in addition to the literal \"gravestone \" is not explicit in this snippet."
+    "What specific behavior does GRAVE_NS::func00CB implement for the gravestone 'U8P_GRAVE_EW::use' action (e.g., open tomb, start quest, give item, dialogue)?",
+    "Does the gravestone instance provide any context/this-pointer or parameters to GRAVE_NS::func00CB (the excerpt shows a call but not the forwarded arguments)?",
+    "Is the trailing space in the bark text \"gravestone \" intentional (formatting artifact) or meaningful in composed UI text?"
   ],
   "main_function": {
     "name": "U8P_GRAVE_EW::look",
     "execution_form": "process",
-    "purpose": "When a player/actor examines the gravestone, present a short descriptive text (starts with \"gravestone \") to the examiner and perform local context bookkeeping before returning.",
+    "purpose": "Handle the player's inspect/U8P_GRAVE_EW::look action for this gravestone by showing a short descriptive bark.",
     "entry_conditions": [
-      "Event 0 (U8P_GRAVE_EW::look) — triggered by the player/actor examining or 'looking at' the gravestone object."
+      "Triggered by the engine when the player 'looks at' or examines the gravestone object (U8P_GRAVE_EW::look/examine event)."
     ],
     "confidence": "high"
   },
@@ -31,49 +29,30 @@
     {
       "name": "U8P_GRAVE_EW::look",
       "kind": "main",
-      "role": "Handle 'U8P_GRAVE_EW::look' (examine) interactions: construct and deliver a brief description to the examining process.",
+      "role": "inspect/U8P_GRAVE_EW::look handler — shows a short bark description for the gravestone",
       "confidence": "high"
     },
     {
       "name": "U8P_GRAVE_EW::use",
       "kind": "helper",
-      "role": "Handle 'use' (activate) interactions: set object/process context and spawn GRAVE_NS::00CB to perform asynchronous use behavior.",
+      "role": "U8P_GRAVE_EW::use handler — delegates the U8P_GRAVE_EW::use interaction to a shared grave namespace handler",
       "confidence": "high"
     },
     {
-      "name": "Item::bark",
+      "name": "GRAVE_NS::func00CB",
       "kind": "extern",
-      "role": "Engine-provided routine to send/display a short text string on behalf of an item/process to a target process.",
-      "confidence": "high"
-    },
-    {
-      "name": "spawn GRAVE_NS::00CB",
-      "kind": "extern",
-      "role": "Engine/spawn operation to asynchronously start a handler in the GRAVE_NS namespace to process a 'use' action.",
-      "confidence": "high"
+      "role": "shared/namespace handler that implements the gravestone 'U8P_GRAVE_EW::use' interaction (called from this script)",
+      "confidence": "medium"
     }
   ],
   "call_analysis": {
-    "internal_calls": [
-      {
-        "caller": "U8P_GRAVE_EW::use",
-        "callee": "U8P_GRAVE_EW::(spawn target) GRAVE_NS::00CB",
-        "purpose": "Delegate the heavy lifting of the 'use' action to a namespaced asynchronous handler so the gravestone's use behavior runs separately and with the caller_pid context.",
-        "confidence": "high"
-      }
-    ],
+    "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_GRAVE_EW::look",
-        "callee": "Item::bark",
-        "purpose": "Deliver the constructed description string (starting with 'gravestone ') to the examining process (caller_pid).",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_GRAVE_EW::use",
-        "callee": "spawn GRAVE_NS::00CB",
-        "purpose": "Asynchronously start the GRAVE_NS::00CB handler and pass the caller_pid so the spawned process knows who activated the gravestone.",
-        "confidence": "high"
+        "callee": "GRAVE_NS::func00CB",
+        "purpose": "Delegate the object's 'U8P_GRAVE_EW::use' interaction to a shared handler that implements the actual behavior for gravestones.",
+        "confidence": "medium"
       }
     ]
   },
@@ -84,12 +63,13 @@
   "ui_tags": [
     "trigger",
     "cleanup",
+    "animation",
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_GRAVE_EW::GRAVE_EW::look",
-    "behavior_summary_one_liner": "Provides logic for player interactions with a gravestone object: examining ('U8P_GRAVE_EW::look') produces a brief descriptive message and using ('use') delegates a more complex action to a namespaced handler.",
-    "external_call_count": 2,
+    "main_function": "U8P_GRAVE_EW::look",
+    "behavior_summary_one_liner": "U8P_GRAVE_EW::look is the object's inspect/U8P_GRAVE_EW::look handler: when the player examines the gravestone it displays a short bark text (\"gravestone \") and then yields/suspends.",
+    "external_call_count": 1,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

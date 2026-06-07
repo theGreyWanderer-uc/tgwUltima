@@ -3,26 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_ALTAR.json",
   "file": "U8P_ALTAR",
   "behavior_summary": [
-    "U8P_ALTAR::look handles the object's 'U8P_ALTAR::look' (examine) event: it marks the object with an info/context and a process-exclude to avoid re-processing by the same process, then requests a short descriptive bark saying \"altar \" directed at the caller/process that triggered the U8P_ALTAR::look.",
-    "The routine allocates or converts the literal string \"altar \", passes that string and the caller/process pointer to Item::bark, frees the temporary string, performs a small logical/imply operation with the bark return value, then suspends/returns."
+    "When the player 'looks' at the ALTAR, the object's U8P_ALTAR::look handler emits a single short bark string \"altar \" (note trailing space) and then suspends the process.",
+    "The script does not read or write any global flags, call external functions, present menus, or branch on conditions — it is a minimal descriptive handler.",
+    "The presence of Unknown nodes in the raw suggests simple process delimiters; the effective behavior is: display description -> suspend/end."
   ],
   "notable_control_flow": [
-    "Entry on the 'U8P_ALTAR::look' event triggers immediate set-info and process-exclude operations (guarding against repeated handling).",
-    "Synchronous call to external Item::bark emits the visible description to the invoking process; return value is read and used only in a short implies/pop sequence before suspension.",
-    "Temporary string allocation and explicit free occur around the Item::bark call, ensuring no persistent heap allocation remains."
+    "Entry via a process-type U8P_ALTAR::look handler (processType 0x0208) for the ALTAR triggers the routine immediately.",
+    "Linear flow: bark output followed by a suspend/yield; no branching or looping is present.",
+    "No side effects (no flag writes, no item manipulation, no other process spawns)."
   ],
   "open_questions": [
-    "Exact semantic meaning of the info/context id pushed (inferred from opcode as 0x208) and how it changes runtime behavior beyond 'process exclude'.",
-    "Whether the caller/process pointer (BP+06h) is strictly the player/avatar PID or can be other processes in some cases (inferred as viewer).",
-    "Any subtle side effects of the implies/logical operation using Item::bark's return value — appears to be discarded, but intent is not explicit."
+    "Why the bark string contains a trailing space (\"altar \") — likely insignificant formatting or leftover from source data (low confidence).",
+    "Raw Unknown nodes are present (e.g., '{' and 'suspend') — their exact representation in the original script is inferred rather than certain."
   ],
   "main_function": {
     "name": "U8P_ALTAR::look",
     "execution_form": "process",
-    "purpose": "When an actor examines the altar, prepare the altar's info/state to avoid repeated processing and emit a concise description to the examining process by calling Item::bark with the literal \"altar \".",
+    "purpose": "Provide the short description shown to the player when examining the ALTAR and then pause/terminate the U8P_ALTAR::look interaction.",
     "entry_conditions": [
-      "Event 0 — 'U8P_ALTAR::look' (triggered when the Avatar or relevant actor examines/looks at the altar)",
-      "Implicit: called with a caller/process pointer (dword at BP+06h) representing the inspecting process"
+      "Triggered when the player uses the 'U8P_ALTAR::look' verb on the ALTAR (processType 0x0208).",
+      "Inferred: also triggers when an actor enters the object's U8P_ALTAR::look/examine fast area or uses the engine's inspect action."
     ],
     "confidence": "high"
   },
@@ -30,26 +30,13 @@
     {
       "name": "U8P_ALTAR::look",
       "kind": "main",
-      "role": "Handle the U8P_ALTAR::look/examine event for the altar, set object info and process-exclude, and request the item's bark string.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Emit/display a short text message for an item/process (here used to show the altar description 'altar ').",
+      "role": "examine/U8P_ALTAR::look handler that emits a single descriptive bark and suspends the process",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_ALTAR::look",
-        "callee": "Item::bark",
-        "purpose": "Request that the item produce/display the short description string 'altar ' directed at the calling process; return value is read briefly then ignored.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -58,12 +45,13 @@
   "ui_tags": [
     "trigger",
     "cleanup",
+    "animation",
     "guard"
   ],
   "quick_facts": {
-    "main_function": "ALTAR::look",
-    "behavior_summary_one_liner": "U8P_ALTAR::look handles the object's 'U8P_ALTAR::look' (examine) event: it marks the object with an info/context and a process-exclude to avoid re-processing by the same process, then requests a short descriptive bark saying \"altar \" directed at the caller/process that triggered the U8P_ALTAR::look.",
-    "external_call_count": 1,
+    "main_function": "U8P_ALTAR::look",
+    "behavior_summary_one_liner": "When the player 'looks' at the ALTAR, the object's U8P_ALTAR::look handler emits a single short bark string \"altar \" (note trailing space) and then suspends the process.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

@@ -3,176 +3,185 @@
   "source_of_truth": "dialogue/json/U8P_BODYPART.json",
   "file": "U8P_BODYPART",
   "behavior_summary": [
-    "Orchestrates a short audiovisual 'body part' effect: creates a central sprite + SFX, spawns multiple fragment item instances around a source coordinate, animates/throws those fragments, optionally locks player control while the effect runs, waits for an associated NPC to be idle, then repositions that NPC and updates the original item's display frame.",
-    "Uses type-specific helper routines to decide how fragments behave (how they are hurled, what frames/timers they run, and whether they spawn further animated pieces).",
-    "Employs short-lived spawned timers/processes as delays between visual steps and to poll NPC busy state, ensuring the sequence runs asynchronously but in a controlled order."
+    "U8P_BODYPART::func0080 is the main activation/impact routine for the BODYPART object: when triggered (the routine's active instance == 0x01) it briefly puts the avatar into stasis, waits until the actor is not busy, plays SFX and visual sprites, spawns multiple child item instances around the origin, immediately invokes those child items (Item::use), adjusts camera centering and a status flag, teleports an NPC nearby, and sets the originating item's animation frame. Timed delays between sub-steps are implemented using spawn -> FREE::func1C19 + suspend.",
+    "U8P_BODYPART::func0270 selects per-item-type throw/hurl parameters (direction/velocity/angle) and calls Item::hurl after short delays; it also advances or wraps the originating item's frame after hurling.",
+    "U8P_BODYPART::func0431 is the animation/tick driver: it advances frames, plays SFX, uses fixed and randomized delays (FREE::randomInRange), and for a particular item type delegates to U8P_BODYPART::func05DC for specialized finalization.",
+    "U8P_BODYPART::func0577 is a short delayed-spawn helper that creates a single child item (type 0x0168), pops it at the origin, destroys the original, and lets the created item fall.",
+    "U8P_BODYPART::func05DC is a specialized frame/finalize routine that steps frames with short timed waits, applies a final hit (Item::receiveHit using Npc::getHp), and performs final cleanup (Kernel::resetRef)."
   ],
   "notable_control_flow": [
-    "Guard/early-return: read of an indirect byte at obj_ptr+02; if == 1 the main routine returns immediately (acts as a usage/activation guard).",
-    "At start the routine calls setAvatarInStasis(1) to likely lock the player during the sequence.",
-    "Busy-wait loop: while Npc::isBusy(obj_ptr) is true the script spawns a short timer (FREE::1C19/FREE::1A96) and suspends; repeats until not busy.",
-    "Sequence of steps: read source coords (Item::getX/Y/Z) -> createSprite/playSFX -> repeatedly Item::create + Item::pop at offsets -> process Item::use on each fragment -> Camera::setCenterOn + METHOD::0113 -> Npc::getMap + Npc::teleport -> Item::setFrame on the source.",
-    "Helpers are called for type-dependent behavior: U8P_BODYPART::BODYPART::0270 (hurl logic), U8P_BODYPART::BODYPART::0431 (frame/timer/SFX logic), U8P_BODYPART::BODYPART::0577 (create/pop/destroy/fall combo), and U8P_BODYPART::BODYPART::05DC (fragment animation loop)."
+    "Guard + wait: U8P_BODYPART::func0080 checks Npc::isBusy(this) and yields (spawn ->FREE::func1C19 then suspend) until the NPC/item is free before continuing the sequence.",
+    "Sequenced timed behavior: many visible steps are paced by spawn ->FREE::func1C19 + suspend pairs; some later animation waits are randomized using FREE::randomInRange.",
+    "Type-dispatched behavior: U8P_BODYPART::func0270 and U8P_BODYPART::func0431 branch on Item::getType(this) to choose different hurl parameters or animation flows (including a special-case delegation to U8P_BODYPART::func05DC for one type ID).",
+    "Create-pop-use chain: U8P_BODYPART::func0080 performs repeated Item::create -> Item::pop at computed offsets then immediately Item::use on created instances to trigger chained child effects.",
+    "Finalization: camera/state toggles and an Npc::teleport occur near the end of U8P_BODYPART::func0080, followed by Item::setFrame to place the item into its final visual state."
   ],
   "open_questions": [
-    "What exact in-game event triggers BODYPART::0080 (item use, NPC limb sever, scripted cutscene)? — inferred but not definitive.",
-    "What is the precise semantics and name of the indirect byte at obj_ptr+02 (guard field) — is it a 'used' flag, 'severed' flag, or restart guard?",
-    "What are the concrete sprite IDs, SFX IDs, and METHOD::0113 semantics (UI transition/fade/other)?",
-    "Is avatar stasis released inside this script or elsewhere (script sets stasis on start but no explicit release observed in the excerpt)?"
+    "Why the activation is gated by the check this == 0x01 — does this denote avatar-held/active instance vs world-placed instance? (inferred but not explicit).",
+    "Exact semantic effect of METHOD::toggleStatusFlag(0x10) (which object/context it targets and what gameplay state it represents).",
+    "Precise mapping of the item type IDs (e.g., 0x0168, 0x0175, 0x0176, 0x0186, 0x016E) to in-game contents/effects — the script behavior differs by ID but the gameplay meanings are external to the script.",
+    "The numeric meanings and coordinate conventions for hurl parameters (local2/local3/local4) — inferred as velocity/angle/offsets but not explicitly documented.",
+    "Whether the Item::receiveHit call in U8P_BODYPART::func05DC is intended to apply damage to the origin NPC or to a nearby target (it passes Npc::getHp, suggesting a full-HP effect) — intent is inferred."
   ],
   "main_function": {
-    "name": "U8P_BODYPART::0080",
+    "name": "U8P_BODYPART::func0080",
     "execution_form": "process",
-    "purpose": "When activated, run a multi-step effect that spawns and animates body-part fragments around a source object, play associated SFX/visuals, wait for the target NPC to be idle, then teleport/reposition the NPC and update the original item's frame. Intended to represent an item/NPC body-part event such as severing or item activation.",
+    "purpose": "Run the BODYPART item's activation/impact sequence: freeze avatar briefly, sequence visual/sound effects, spawn and immediately trigger several child items around the origin, adjust camera/status, teleport an NPC, and set the item's final frame.",
     "entry_conditions": [
-      "Called with an object pointer parameter (obj_ptr at BP+06h) which is used as the source for coords and method calls.",
-      "Immediate guard: returns if the indirect byte at obj_ptr+02 equals 1 (guard prevents re-entry or redundant activation).",
-      "Invoked in contexts where the source object/NPC is present and may need to be animated/teleported — likely an item 'use' or NPC event."
+      "Activated when the script's instance equals 0x01 (inferred active/held indicator).",
+      "Waits until Npc::isBusy(this) is false before proceeding (busy-check gating).",
+      "Time sequencing between sub-steps is driven by spawn ->FREE::func1C19 + suspend waits."
     ],
     "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_BODYPART::0080",
+      "name": "U8P_BODYPART::func0080",
       "kind": "main",
-      "role": "Coordinator/process that runs the complete body-part spawn/animation/teleport sequence.",
+      "role": "Primary activation/impact routine for the bodypart item (sequenced spawning, SFX, camera and NPC repositioning).",
       "confidence": "high"
     },
     {
-      "name": "U8P_BODYPART::0270",
+      "name": "U8P_BODYPART::func0270",
       "kind": "helper",
-      "role": "Determine velocities/angles and invoke Item::hurl for fragments based on Item::getType; introduces short timed delays before hurling.",
+      "role": "Per-type hurl/throw parameter selection and Item::hurl invocation; updates item frame wrap/advance.",
       "confidence": "high"
     },
     {
-      "name": "U8P_BODYPART::0431",
+      "name": "U8P_BODYPART::func0431",
       "kind": "helper",
-      "role": "Handle frame changes, SFX, short delays and may spawn further fragment animation (calls BODYPART::05DC for piece drops for some types).",
+      "role": "Animation/tick handler that steps frames, plays SFX, uses randomized waits and delegates to U8P_BODYPART::func05DC for a particular type.",
       "confidence": "high"
     },
     {
-      "name": "U8P_BODYPART::0577",
+      "name": "U8P_BODYPART::func0577",
       "kind": "helper",
-      "role": "Create a new item of a given type, pop it at the source coordinates, destroy the original, and call Item::fall on the new instance (replace-and-fall behavior).",
+      "role": "Delayed child-item creation helper: spawn delay, Item::create, pop at origin, destroy original, and let child fall.",
       "confidence": "high"
     },
     {
-      "name": "U8P_BODYPART::05DC",
+      "name": "U8P_BODYPART::func05DC",
       "kind": "helper",
-      "role": "Animate a dropped fragment over time: set initial frame and run a timed loop to increment/adjust frames with delays, cycling until the animation completes.",
+      "role": "Specialized animation/finalize routine: timed frame steps, apply a final Item::receiveHit using Npc::getHp, and reset reference/state.",
       "confidence": "high"
     },
     {
       "name": "Item::*",
       "kind": "extern",
-      "role": "Item methods invoked (create, pop, use, hurl, setFrame, getX/getY/getZ/getType/getFrame, destroy, fall) to allocate, position, animate and remove fragment items.",
+      "role": "Engine item API used throughout (create/pop/use/setFrame/getFrame/getType/hurl/destroy/fall/receiveHit).",
       "confidence": "high"
     },
     {
       "name": "Npc::*",
       "kind": "extern",
-      "role": "Npc methods (isBusy, getMap, teleport) used to query readiness and reposition the NPC after the effect.",
+      "role": "NPC API used for busy checks, teleport and hp queries (Npc::isBusy, Npc::teleport, Npc::getHp).",
+      "confidence": "high"
+    },
+    {
+      "name": "FREE::*",
+      "kind": "extern",
+      "role": "Engine utilities providing spawn timers and randomInRange used for delays and variability.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
-        "caller": "U8P_BODYPART::0080",
-        "callee": "U8P_BODYPART::0270",
-        "purpose": "Delegate per-type hurl/throw behavior for spawned fragments (compute velocities, play short timers then call Item::hurl).",
+        "caller": "U8P_BODYPART::func0431",
+        "callee": "U8P_BODYPART::func05DC",
+        "purpose": "Delegate specialized finalization/alternate animation flow for one item type (spawned via spawn).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_BODYPART::0080",
-        "callee": "U8P_BODYPART::0431",
-        "purpose": "Drive frame/SFX/timer behavior for certain fragment types and possibly spawn BODYPART::05DC to animate drops.",
-        "confidence": "high"
+        "caller": "U8P_BODYPART::func0080",
+        "callee": "U8P_BODYPART::func0270",
+        "purpose": "Complementary helper for launching/hurling spawned child items (inferred integration with the activation sequence).",
+        "confidence": "medium"
       },
       {
-        "caller": "U8P_BODYPART::0431",
-        "callee": "U8P_BODYPART::05DC",
-        "purpose": "Spawn a timed loop to animate a dropped piece (frame cycling/aging).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_BODYPART::0080",
-        "callee": "U8P_BODYPART::0577",
-        "purpose": "Use to replace an item at source coords and trigger falling behavior for the replacement when appropriate.",
-        "confidence": "high"
+        "caller": "U8P_BODYPART::func0080",
+        "callee": "U8P_BODYPART::func0577",
+        "purpose": "Spawned helper to create a specific child-item after a short delay (inferred usage in multi-step spawn sequence).",
+        "confidence": "medium"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_BODYPART::0080",
-        "callee": "U8P_BODYPART::setAvatarInStasis",
-        "purpose": "Place avatar into stasis/locked state at sequence start to restrict player control during effect.",
+        "caller": "U8P_BODYPART::func0080",
+        "callee": "setAvatarInStasis",
+        "purpose": "Temporarily freeze avatar input/movement during the activation sequence (called with 0x01).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_BODYPART::0080",
+        "caller": "U8P_BODYPART::func0080",
         "callee": "Npc::isBusy",
-        "purpose": "Poll whether the target NPC is busy; used in a loop with spawned timers to wait until the NPC can be teleported/acted upon.",
+        "purpose": "Check whether the actor is busy; if busy the routine waits before proceeding.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_BODYPART::0080",
-        "callee": "Item::getX / Item::getY / Item::getZ",
-        "purpose": "Read source coordinates/elevation from the object that triggered the effect for positioning fragments and final teleport target.",
+        "caller": "U8P_BODYPART::func0080",
+        "callee": "spawn ->FREE::func1C19 / suspend",
+        "purpose": "Create short timed delays between sub-steps (used repeatedly to pace visual/item spawns).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_BODYPART::0080",
-        "callee": "U8P_BODYPART::createSprite",
-        "purpose": "Create a temporary visual sprite/effect centered near the source coordinate as part of the effect.",
+        "caller": "U8P_BODYPART::func0080",
+        "callee": "createSprite",
+        "purpose": "Spawn a visual sprite effect at offsets from the origin during the activation.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_BODYPART::0080",
-        "callee": "U8P_BODYPART::playSFX",
-        "purpose": "Play a sound effect associated with the visual effect (attached to the source object).",
+        "caller": "U8P_BODYPART::func0080",
+        "callee": "playSFX",
+        "purpose": "Play sound effects associated with activation/animation steps.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_BODYPART::0080",
-        "callee": "spawn (FREE::1C19 / FREE::1A96)",
-        "purpose": "Spawn short timer/processes used both as small delays between steps and to implement polling/wait behavior; common for asynchronous sequencing.",
+        "caller": "U8P_BODYPART::func0080",
+        "callee": "Item::create / Item::pop / Item::use",
+        "purpose": "Create child item instances, place them around the origin, and immediately invoke their use effects to produce chained gameplay effects.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_BODYPART::0080",
-        "callee": "Item::create / Item::pop / process Item::use",
-        "purpose": "Allocate fragment item instances, place them at computed offsets and immediately run their 'use' processing to initialize animations/behaviors.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_BODYPART::0270",
-        "callee": "Item::hurl",
-        "purpose": "Launch fragment items with computed velocities/angles to produce scattered-throw effects.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_BODYPART::0080",
+        "caller": "U8P_BODYPART::func0080",
         "callee": "Camera::setCenterOn",
-        "purpose": "Center camera on the relevant target (PID/object) to focus the player view during the effect.",
+        "purpose": "Adjust camera centering during/after the activation sequence.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_BODYPART::0080",
-        "callee": "METHOD::0113",
-        "purpose": "Trigger a small UI/visual transition or callback after centering the camera (exact semantics inferred as a transition/fade).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_BODYPART::0080",
-        "callee": "Npc::getMap / Npc::teleport",
-        "purpose": "Ensure correct map context and teleport/reposition the NPC to a spot slightly offset from the source after fragments are spawned.",
+        "caller": "U8P_BODYPART::func0080",
+        "callee": "METHOD::toggleStatusFlag",
+        "purpose": "Toggle a status flag (id 0x10) on an object/context to change UI or actor state during the sequence.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_BODYPART::0080",
-        "callee": "Item::setFrame",
-        "purpose": "Update the original item's display frame to reflect the changed/used/severed state when the sequence completes.",
+        "caller": "U8P_BODYPART::func0080",
+        "callee": "Npc::teleport",
+        "purpose": "Reposition an NPC near the origin as part of the visible outcome of the effect.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BODYPART::func0270",
+        "callee": "Item::getType / Item::hurl / Item::getFrame / Item::setFrame",
+        "purpose": "Determine hurl parameters by type and perform throw/hurl, then advance or reset animation frame.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BODYPART::func0431",
+        "callee": "FREE::randomInRange / spawn ->FREE::func1C19 / suspend / playSFX / Item::setFrame/getFrame",
+        "purpose": "Drive per-frame timing (including randomized waits), play SFX, and advance frames; special-case to spawn U8P_BODYPART::func05DC for one type.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BODYPART::func0577",
+        "callee": "Item::create / Item::pop / Item::destroy / Item::fall",
+        "purpose": "Create a child item, place it at this item's coordinates, destroy the original, and allow the child to fall.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BODYPART::func05DC",
+        "callee": "Item::setFrame / Item::getFrame / spawn ->FREE::func1C19 / Npc::getHp / Item::receiveHit / Kernel::resetRef",
+        "purpose": "Step frames with timed waits, apply a final receiveHit (using NPC HP), and perform final cleanup/reset.",
         "confidence": "high"
       }
     ]
@@ -188,9 +197,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "BODYPART::0080",
-    "behavior_summary_one_liner": "Orchestrates a short audiovisual 'body part' effect: creates a central sprite + SFX, spawns multiple fragment item instances around a source coordinate, animates/throws those fragments, optionally locks player control while the effect runs, waits for an associated NPC to be idle, then repositions that NPC and updates the original item's display frame.",
-    "external_call_count": 12,
+    "main_function": "U8P_BODYPART::func0080",
+    "behavior_summary_one_liner": "U8P_BODYPART::func0080 is the main activation/impact routine for the BODYPART object: when triggered (the routine's active instance == 0x01) it briefly puts the avatar into stasis, waits until the actor is not busy, plays SFX and visual sprites, spawns multiple child item instances around the origin, immediately invokes those child items (Item::use), adjusts camera centering and a status flag, teleports an NPC nearby, and sets the originating item's animation frame. Timed delays between sub-steps are implemented using spawn -> FREE::func1C19 + suspend.",
+    "external_call_count": 13,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

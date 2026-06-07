@@ -3,26 +3,24 @@
   "source_of_truth": "dialogue/json/U8P_FIREWOOD.json",
   "file": "U8P_FIREWOOD",
   "behavior_summary": [
-    "This script implements the 'U8P_FIREWOOD::look' (examine) handler for the FIREWOOD item. When an actor inspects the firewood, the routine constructs the literal string \"firewood \" and asks the item/process system to announce that text to the inspecting process.",
-    "Before invoking the announcement, the routine pushes several call modifiers (including a numeric flag 0x208 and what disassembly shows as 'set info' and 'process exclude') which influence how the bark is delivered.",
-    "After calling Item::bark the routine consumes/frees the temporary string and performs a small implies/pop bookkeeping sequence, then suspends and returns without modifying any global game flags."
+    "When the player examines (looks at) the FIREWOOD object, the script displays a short description text 'firewood'.",
+    "Immediately after emitting the description, the script yields/suspends so control returns to the engine/player. There are no state changes, branches, menus, or global flags affected."
   ],
   "notable_control_flow": [
-    "Triggered by an Event 0 'U8P_FIREWOOD::look' entry (area/inspect trigger).",
-    "Constructs and pushes the static string \"firewood \", then sets call modifiers (0x208, set-info, process-exclude), pushes item/process and target pid, and calls Item::bark.",
-    "Handles the return from Item::bark by storing the return value in a local (retval), uses an 'implies' opcode with that retval, performs a pop into a temporary local, then suspends; no further branching or global state changes are present."
+    "Entry: a U8P_FIREWOOD::look/examine event drives U8P_FIREWOOD::look (process type 0x0208).",
+    "Action: emits a single bark/description ('firewood').",
+    "Termination: calls suspend to yield/end the U8P_FIREWOOD::look process; no further nodes or logic follow."
   ],
   "open_questions": [
-    "The exact semantics of the numeric call flag 0x208 and the precise effects of the 'set info' / 'process exclude' modifiers in this context are not explicit in the disassembly and are inferred from pattern — appears to affect delivery scope and item processing (confidence: medium).",
-    "BP+06 is inferred to be the inspecting process/player pid (target for the bark) but the calling convention isn't directly documented here — this remains a likely inference (confidence: medium).",
-    "The 'implies' + pop sequence after Item::bark is a small control/bookkeeping idiom whose higher-level gameplay effect (if any) is unclear — it may be engine-level suspension/return handling (confidence: low)."
+    "Is 'suspend' used solely to end the U8P_FIREWOOD::look process here, or could it be relied upon by other systems to resume/sequence actions? (inferred as an immediate yield; confidence: medium)",
+    "Are there other event handlers (use, touch, destroy) for this item outside this file that change its behavior? (no evidence in this script; confidence: low)"
   ],
   "main_function": {
     "name": "U8P_FIREWOOD::look",
     "execution_form": "process",
-    "purpose": "Provide the short description/announcement for a firewood item when it is examined by an actor: produce the literal text \"firewood \" and route it to the inspecting process via Item::bark.",
+    "purpose": "Provide the short description shown when the player examines the FIREWOOD object.",
     "entry_conditions": [
-      "Event 0 (U8P_FIREWOOD::look) — called when an actor/player looks at or examines the firewood item (area/inspect trigger)."
+      "Triggered by a 'U8P_FIREWOOD::look' (examine) event on the FIREWOOD object (process type 0x0208)."
     ],
     "confidence": "high"
   },
@@ -30,7 +28,7 @@
     {
       "name": "U8P_FIREWOOD::look",
       "kind": "main",
-      "role": "Handles the Event 0 'U8P_FIREWOOD::look' for the FIREWOOD item; prepares description text and invokes the item bark to show it to the inspecting process.",
+      "role": "examine/description handler that barks 'firewood' then suspends",
       "confidence": "high"
     }
   ],
@@ -39,8 +37,14 @@
     "external_calls": [
       {
         "caller": "U8P_FIREWOOD::look",
-        "callee": "Item::bark",
-        "purpose": "Cause the item to 'bark' (emit/display) the constructed string \"firewood \" to a target process/player. Called with the item/process reference, the string, the inspecting process pid, and call modifiers (0x208, set-info, process-exclude) that likely control delivery behavior.",
+        "callee": "Bark",
+        "purpose": "Engine/UI action to display the short description text 'firewood' to the player.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FIREWOOD::look",
+        "callee": "suspend",
+        "purpose": "Yield or pause the script after producing the bark so the U8P_FIREWOOD::look process ends/returns control to the engine.",
         "confidence": "high"
       }
     ]
@@ -56,9 +60,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "FIREWOOD::look",
-    "behavior_summary_one_liner": "This script implements the 'U8P_FIREWOOD::look' (examine) handler for the FIREWOOD item. When an actor inspects the firewood, the routine constructs the literal string \"firewood \" and asks the item/process system to announce that text to the inspecting process.",
-    "external_call_count": 1,
+    "main_function": "U8P_FIREWOOD::look",
+    "behavior_summary_one_liner": "When the player examines (looks at) the FIREWOOD object, the script displays a short description text 'firewood'.",
+    "external_call_count": 2,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

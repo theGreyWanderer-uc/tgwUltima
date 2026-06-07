@@ -3,23 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_BROKSTF1.json",
   "file": "U8P_BROKSTF1",
   "behavior_summary": [
-    "Handles the 'U8P_BROKSTF1::look' (examine) event for a broken-stuff/debris object: when a player (or relevant actor) inspects the object the script marks an object info/state and excludes the process from normal processing, then makes the item 'bark' the short text \"debris \".",
-    "The return value from the bark call is captured and fed into a subsequent implication-style check (inferred), after which the script suspends/returns. The primary visible effect is the display of the single-word description \"debris \" when looked at."
+    "When a player uses the U8P_BROKSTF1::look/inspect verb on this entity, the script emits a single short descriptive line: 'debris '.",
+    "After emitting the bark the process suspends/ends; there is no branching, menu, or further behavior in this snippet."
   ],
   "notable_control_flow": [
-    "Entry on the U8P_BROKSTF1::look event -> set object info flag -> mark process excluded -> push object PID and literal string -> call Item::bark(\"debris \") -> capture return value -> apply an 'implies' style check with the return -> suspend/return."
+    "U8P_BROKSTF1::look executes as a process: produce a Bark ('debris ') then suspend/terminate immediately.",
+    "No conditional branches, menu interactions, or external calls are present in the U8P_BROKSTF1::look process."
   ],
   "open_questions": [
-    "Exact semantic meaning of the 'set info' opcode and which info id/bit is being changed for the object (opcode observed but numeric meaning not fully documented).",
-    "Precise effect of the 'process exclude' opcode in gameplay (what processing is prevented and for how long).",
-    "Meaning and gameplay consequences of the Item::bark return value and how the subsequent 'implies' operation influences control flow or other game state."
+    "Is the entity an item or an NPC (the script is a simple U8P_BROKSTF1::look handler and does not disambiguate the object type)?",
+    "Does the trailing space in the bark text 'debris ' have in-game significance (concatenation with other text) or is it incidental?",
+    "Are there other processes or game systems that reference this object by name or change the description at runtime (not visible in this snippet)?"
   ],
   "main_function": {
     "name": "U8P_BROKSTF1::look",
     "execution_form": "process",
-    "purpose": "Respond to the 'U8P_BROKSTF1::look' (Event 0) interaction on the debris object: mark object info/state and processing exclusion, then request the item to display the short description string \"debris \". Capture the bark result and then suspend/return.",
+    "purpose": "Provide the short description when the player examines/looks at the entity; specifically outputs 'debris ' and then suspends.",
     "entry_conditions": [
-      "Event 0 (U8P_BROKSTF1::look) — triggered when the Avatar or relevant actor examines/looks at this item"
+      "Player performs the 'U8P_BROKSTF1::look' (inspect) action on this entity",
+      "Engine invokes the object's U8P_BROKSTF1::look/inspect process (process type 0x0208)"
     ],
     "confidence": "high"
   },
@@ -27,54 +29,27 @@
     {
       "name": "U8P_BROKSTF1::look",
       "kind": "main",
-      "role": "Handle the U8P_BROKSTF1::look/examine interaction for the debris item, perform state marking, and invoke Item::bark with the text \"debris \".",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine-provided routine used to make an item/process emit a short text message (here called with the object's PID and the literal \"debris \").",
+      "role": "U8P_BROKSTF1::look handler / short description emitter",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_BROKSTF1::look",
-        "callee": "Item::bark",
-        "purpose": "Request that the object/process emit/display the short description string \"debris \". The function is called with the object's PID and the literal string. The returned value is captured and used in a later implication-style check.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
-    "writes": [
-      {
-        "name": "object info (set via 'set info' opcode)",
-        "likely_effect": "Write/mark a persistent or per-object info/state bit indicating the object has been examined or changed (exact bit/id is present in bytecode but its gameplay meaning is inferred).",
-        "confidence": "medium"
-      },
-      {
-        "name": "process exclude",
-        "likely_effect": "Mark the process/object as excluded from normal processing (prevents further processing/AI for this process until cleared or permanently excluded).",
-        "confidence": "high"
-      }
-    ]
+    "writes": []
   },
   "ui_tags": [
-    "trigger",
-    "cleanup",
-    "animation",
-    "guard"
+    "trigger"
   ],
   "quick_facts": {
-    "main_function": "BROKSTF1::look",
-    "behavior_summary_one_liner": "Handles the 'U8P_BROKSTF1::look' (examine) event for a broken-stuff/debris object: when a player (or relevant actor) inspects the object the script marks an object info/state and excludes the process from normal processing, then makes the item 'bark' the short text \"debris \".",
-    "external_call_count": 1,
+    "main_function": "U8P_BROKSTF1::look",
+    "behavior_summary_one_liner": "When a player uses the U8P_BROKSTF1::look/inspect verb on this entity, the script emits a single short descriptive line: 'debris '.",
+    "external_call_count": 0,
     "flag_read_count": 0,
-    "flag_write_count": 2
+    "flag_write_count": 0
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

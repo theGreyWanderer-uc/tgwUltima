@@ -3,25 +3,27 @@
   "source_of_truth": "dialogue/json/U8P_MUSIC.json",
   "file": "U8P_MUSIC",
   "behavior_summary": [
-    "When an actor or item enters the music trigger area, the script registers music-related info for that instance and ensures it is excluded from further default processing, then checks a numeric field on the instance and starts music playback if that field is non-zero.",
-    "Concretely: it invokes a 'set info' operation with id 0x0213 for the entering instance, calls a 'process exclude' opcode, queries Item::getQuality() on the same instance, and if the returned value is non-zero calls playMusic(byte) with that value."
+    "U8P_MUSIC::cachein is a short process that reads the current item's quality and, if that quality is non-zero, requests playback of a music track identified by that quality.",
+    "No global flags or other side effects are observed; the routine's only visible effect is the conditional call to playMusic.",
+    "The process uses the implicit 'this' item context (Item::getQuality(this)) and forwards the returned value to playMusic."
   ],
   "notable_control_flow": [
-    "Event entry (enterFastArea) triggers execution (MUSIC::cachein).",
-    "Always perform set info (0x0213) and process exclude for the passed instance.",
-    "Call Item::getQuality() and branch: if result == 0 then return; if result != 0 then call playMusic(result) and then return."
+    "U8P_MUSIC::cachein executes unconditionally when the engine starts this process (process type 0x0213).",
+    "It stores Item::getQuality(this) into local1 and tests local1 != 0.",
+    "If the test passes, the function calls playMusic(local1); otherwise it does nothing."
   ],
   "open_questions": [
-    "Exact semantic meaning of info id 0x0213 set by 'set info' (inferred to be music-registration metadata but not proven).",
-    "Precise effect of 'process exclude' on the instance (appears to prevent further processing but could mean a different engine-level exclusion/filter).",
-    "Whether the byte returned by Item::getQuality() is strictly a music track id, a quality/flag that indexes music, or a boolean-like marker."
+    "What exact engine event or object lifecycle triggers process U8P_MUSIC::cachein (the process-type is known but the specific entry condition is not present)?",
+    "How are numeric quality values mapped to music tracks (what music ID space or remapping does playMusic expect)?",
+    "Is the 'this' context always an item instance with a meaningful quality, or can other object types invoke this process?"
   ],
   "main_function": {
     "name": "U8P_MUSIC::cachein",
     "execution_form": "process",
-    "purpose": "Handle area-entry events: register/cache music metadata for the entering actor/item and start playback if the instance provides a non-zero music id.",
+    "purpose": "When run, read the current item's quality and play a music track corresponding to that quality if the quality is non-zero.",
     "entry_conditions": [
-      "enterFastArea (area entry / Event 4) — invoked when the Avatar or relevant actor enters the region"
+      "Invoked as an engine process (declared process type 0x0213); exact triggering event not present in excerpt and therefore inferred.",
+      "Proceeds only when Item::getQuality(this) returns a non-zero value."
     ],
     "confidence": "high"
   },
@@ -29,42 +31,35 @@
     {
       "name": "U8P_MUSIC::cachein",
       "kind": "main",
-      "role": "Register music info for entering actor/item and start music playback when indicated.",
+      "role": "reads item quality and triggers music playback when quality != 0",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getQuality",
+      "kind": "extern",
+      "role": "provide the uword quality value for the current item ('this')",
+      "confidence": "high"
+    },
+    {
+      "name": "playMusic",
+      "kind": "extern",
+      "role": "play a music track identified by the passed numeric id/value",
       "confidence": "high"
     }
   ],
   "call_analysis": {
-    "internal_calls": [
-      {
-        "caller": "U8P_MUSIC::enterFastArea",
-        "callee": "U8P_MUSIC::cachein",
-        "purpose": "Event dispatch: area-entry event invokes the U8P_MUSIC::cachein handler for the script instance.",
-        "confidence": "medium"
-      }
-    ],
+    "internal_calls": [],
     "external_calls": [
       {
         "caller": "U8P_MUSIC::cachein",
-        "callee": "U8P_MUSIC::set info (opcode 'set info' with id 0x0213)",
-        "purpose": "Register or initialize music-related info/metadata for the entering instance (marks instance for music caching).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_MUSIC::cachein",
-        "callee": "U8P_MUSIC::process exclude",
-        "purpose": "Modify engine processing state for the instance registered above (likely exclude it from some processing loops).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_MUSIC::cachein",
         "callee": "Item::getQuality",
-        "purpose": "Query a numeric field from the instance; inferred to return a music track id or indicator used to decide whether to play music.",
+        "purpose": "Retrieve the 'quality' numeric property of the current item (implicit this). The return is used to decide whether to play music.",
         "confidence": "high"
       },
       {
         "caller": "U8P_MUSIC::cachein",
         "callee": "playMusic",
-        "purpose": "Start playback of the specified music track id when Item::getQuality() returns a non-zero value.",
+        "purpose": "Request playback of a music track identified by the quality value when that value is non-zero.",
         "confidence": "high"
       }
     ]
@@ -74,12 +69,15 @@
     "writes": []
   },
   "ui_tags": [
-    "trigger"
+    "trigger",
+    "cleanup",
+    "animation",
+    "guard"
   ],
   "quick_facts": {
-    "main_function": "MUSIC::cachein",
-    "behavior_summary_one_liner": "When an actor or item enters the music trigger area, the script registers music-related info for that instance and ensures it is excluded from further default processing, then checks a numeric field on the instance and starts music playback if that field is non-zero.",
-    "external_call_count": 4,
+    "main_function": "U8P_MUSIC::cachein",
+    "behavior_summary_one_liner": "U8P_MUSIC::cachein is a short process that reads the current item's quality and, if that quality is non-zero, requests playback of a music track identified by that quality.",
+    "external_call_count": 2,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

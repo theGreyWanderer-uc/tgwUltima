@@ -3,29 +3,32 @@
   "source_of_truth": "dialogue/json/U8P_MAGARM.json",
   "file": "U8P_MAGARM",
   "behavior_summary": [
-    "MAGARM::look (Event 0) makes the item produce a short descriptive bark 'magic armor ' when examined.",
-    "When an actor enters the item's fast-area trigger (enterFastArea), the script checks an item-local status bit (0x04). If that bit is clear it spawns a persistent behavior (U8P_MAGARM::00F4) to automate attacks/throws while the actor remains in range.",
-    "When the actor leaves the fast-area (leaveFastArea) a cleanup routine (FREE::2A56) is invoked to cancel or free resources/timers associated with the spawned behavior.",
-    "The spawned behavior U8P_MAGARM::00F4 clears the 'armed/active' status bit (0x04), repeatedly computes randomized target offsets within the item's range, validates candidate targets with Item::legal_move, and calls Item::hurl to launch the magic armor toward valid targets. It biases distances via multiple urandom calls, clamps offsets, and schedules a FREE::* timer (FREE::1C19) for delayed cleanup or re-arm before suspending/looping."
+    "This script implements the behavior for a 'magic armor' item: a simple U8P_MAGARM::look/examine handler plus an autonomous proximity-driven movement routine that runs while an actor is near.",
+    "U8P_MAGARM::look is a short process that displays the single bark text 'magic armor' when the player examines the item.",
+    "When an actor enters the item's fast-area, U8P_MAGARM::enterFastArea checks the item's status and (if allowed) starts an active behavior by calling U8P_MAGARM::func00F4.",
+    "U8P_MAGARM::func00F4 is the core active routine: it clears an item status bit (~0x04), measures range to a reference (likely the avatar), computes X/Y offsets (directed toward the reference or randomized if a status bit 0x08 is set), clamps offsets, checks Item::legal_move for the target, attempts alternate rotated moves if blocked, and falls back to Item::hurl when movement is not possible. It also uses urandom for jitter and probabilistic hurl events and spawns/schedules a timer process to repeat behavior.",
+    "U8P_MAGARM::leaveFastArea performs cleanup by resetting/purging the spawned/timer reference (FREE::resetRef) so the active behavior stops when actors leave the trigger."
   ],
   "notable_control_flow": [
-    "Event-driven: MAGARM::look responds to Event 0 by calling Item::bark and suspending.",
-    "Trigger-driven: U8P_MAGARM::enterFastArea tests Item::getStatus & 0x04; if clear, spawn U8P_MAGARM::00F4.",
-    "Cleanup-driven: U8P_MAGARM::leaveFastArea calls FREE::2A56(item, 0x00F0) to cancel/clean spawned state.",
-    "Behavior loop (U8P_MAGARM::00F4): clear status bit via Item::andStatus, read Item::getRange and coordinates, compute candidate dx/dy using urandom and helper FREE::1C52, clamp and sign-adjust offsets, call Item::legal_move until a legal target is found, then call Item::hurl; finally spawn FREE::1C19 (delay/cleanup) and suspend/loop."
+    "U8P_MAGARM::enterFastArea reads the item's status (Item::getStatus) and only calls U8P_MAGARM::func00F4 when status bit 0x04 is clear (guard that prevents duplicate starts).",
+    "U8P_MAGARM::func00F4 begins by clearing the item's 0x04 bit (Item::andStatus(~0x04)), then branches on proximity (Item::getRange(0x01) compared against a threshold) deciding between directed movement and jitter/random behavior.",
+    "Movement attempt uses computed offsets (local9/local10) that are clamped then passed to Item::legal_move. If legal_move fails the code rotates/swaps offsets and retries; if still blocked it invokes Item::hurl as a fallback.",
+    "U8P_MAGARM::func00F4 uses urandom to add small random offsets and to occasionally trigger a hurl instead of a legal move, and it spawns/schedules another process (spawn -> FREE::func1C19) to repeat behavior after a delay.",
+    "U8P_MAGARM::leaveFastArea calls FREE::resetRef(0x00F0h, this) to cancel the repeating/spawned process (cleanup/stop)."
   ],
   "open_questions": [
-    "Exact semantic meanings of the item-local status bits (0x04, 0x08, 0x10) beyond their inferred roles (armed/active, alternate randomization branch) remain unconfirmed.",
-    "Precise timing and behavior of the spawned FREE::* helpers (FREE::1C19 and FREE::2A56) — whether they re-arm the item, free resources immediately, or schedule reactivation — is inferred but not certain.",
-    "Exact numeric bounds used for offset clamping (approx. ±64 inferred) and the interpretation of some temporary constants are approximate based on disassembly patterns.",
-    "Whether U8P_MAGARM::00F4 targets the avatar specifically or arbitrary nearby squares (using avatar-relative CX/CY vs. item X/Y) is inferred from calls to Item::getCX/getCY but not explicitly documented."
+    "Exact semantics and meanings of the per-item status bits (0x04, 0x08) beyond their observed uses (guard vs 'randomize' flag) — names and broader side effects are not present in the data.",
+    "Precise numeric thresholds and clamping constants used in U8P_MAGARM::func00F4 (comparisons like range vs 0x0080 and clamp magnitude +/-0x40) — these values are inferred but their tuning effects in gameplay are uncertain.",
+    "Identity of the 'reference' used for range/center calculations (Item::getCX/Item::getCY) — likely the avatar but the code doesn't name it explicitly here.",
+    "Exact timing/period of the spawned timer (FREE::func1C19) and how it affects perceived movement frequency.",
+    "Whether Item::hurl uses additional side effects (damage, collision) when invoked by this item or is purely positional."
   ],
   "main_function": {
     "name": "U8P_MAGARM::look",
     "execution_form": "process",
-    "purpose": "When the item is examined (U8P_MAGARM::look event) produce a short description/bark string identifying it as 'magic armor'.",
+    "purpose": "Present the short examine/description bark for the item (displays 'magic armor').",
     "entry_conditions": [
-      "Event 0 (U8P_MAGARM::look) — triggered when a player or actor inspects the item."
+      "Triggered by the engine when the player examines or 'looks at' the item (U8P_MAGARM::look/examine event/processType 0x0208)."
     ],
     "confidence": "high"
   },
@@ -33,25 +36,25 @@
     {
       "name": "U8P_MAGARM::look",
       "kind": "main",
-      "role": "Handle 'U8P_MAGARM::look' event: call Item::bark with the static string 'magic armor ' and suspend.",
+      "role": "Present examination text; UI-facing brief description ('magic armor').",
       "confidence": "high"
     },
     {
       "name": "U8P_MAGARM::enterFastArea",
       "kind": "helper",
-      "role": "Fast-area entry trigger: test item status bit 0x04 and spawn U8P_MAGARM::00F4 if the bit is clear.",
+      "role": "Trigger handler run when an actor enters the item's fast-area; guarded starter for active behavior (calls U8P_MAGARM::func00F4 when allowed).",
       "confidence": "high"
     },
     {
       "name": "U8P_MAGARM::leaveFastArea",
       "kind": "helper",
-      "role": "Fast-area exit trigger: invoke FREE::2A56 to cancel/cleanup timers or spawned behavior associated with the item.",
+      "role": "Cleanup handler run when actor leaves fast-area; cancels the active repeating process/handle (calls FREE::resetRef).",
       "confidence": "high"
     },
     {
-      "name": "U8P_MAGARM::00F4",
+      "name": "U8P_MAGARM::func00F4",
       "kind": "helper",
-      "role": "Spawned persistent behavior: clear the 0x04 status bit, compute randomized target offsets within range, validate targets with Item::legal_move, call Item::hurl to throw the magic armor, and schedule FREE::1C19 before suspending/looping.",
+      "role": "Core active behavior routine that drives proximity-based movement/jitter and fallback hurling; uses randomness and spawns timers to repeat.",
       "confidence": "high"
     }
   ],
@@ -59,107 +62,95 @@
     "internal_calls": [
       {
         "caller": "U8P_MAGARM::enterFastArea",
-        "callee": "U8P_MAGARM::00F4",
-        "purpose": "Spawn the persistent attack/throw behavior when the item becomes active for a nearby actor.",
+        "callee": "U8P_MAGARM::func00F4",
+        "purpose": "Start the item's active proximity behavior when fast-area entry is valid/allowed.",
         "confidence": "high"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_MAGARM::look",
-        "callee": "Item::bark",
-        "purpose": "Display the item's short description 'magic armor ' to the inspecting process/player.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_MAGARM::enterFastArea",
         "callee": "Item::getStatus",
-        "purpose": "Read item status flags and test bit 0x04 to decide whether to spawn the behavior.",
+        "purpose": "Read per-item status flags to decide whether to start active behavior (test bit 0x04).",
         "confidence": "high"
       },
       {
         "caller": "U8P_MAGARM::enterFastArea",
-        "callee": "spawn",
-        "purpose": "Engine spawn primitive used to start U8P_MAGARM::00F4 with the item as argument.",
+        "callee": "U8P_MAGARM::func00F4",
+        "purpose": "Kick off the repeated/active routine (internal but represented externally in the flow).",
         "confidence": "high"
       },
       {
         "caller": "U8P_MAGARM::leaveFastArea",
-        "callee": "FREE::2A56",
-        "purpose": "Cleanup/cancel resources or timers associated with the spawned behavior (called with item and a numeric argument).",
+        "callee": "FREE::resetRef",
+        "purpose": "Reset/cancel the spawned/timer reference so the active behavior stops when actors leave range.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_MAGARM::00F4",
+        "caller": "U8P_MAGARM::func00F4",
         "callee": "Item::andStatus",
-        "purpose": "Clear the item status bit 0x04 (bitwise-and with inverse mask) as the behavior begins.",
+        "purpose": "Clear per-item status bit ~0x04 at the start of active behavior (write to item's status flags).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_MAGARM::00F4",
+        "caller": "U8P_MAGARM::func00F4",
         "callee": "Item::getRange",
-        "purpose": "Obtain the item's effective range value used as a maximum radius for computing target offsets.",
+        "purpose": "Measure distance to a reference (param 0x01) to branch behavior by proximity.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_MAGARM::00F4",
+        "caller": "U8P_MAGARM::func00F4",
         "callee": "Item::getCX",
-        "purpose": "Read a container/avatar-relative X coordinate used as the basis for some offset computations (inferred to bias toward the avatar).",
+        "purpose": "Read reference center X when computing directed offsets toward/relative to the reference.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_MAGARM::00F4",
+        "caller": "U8P_MAGARM::func00F4",
         "callee": "Item::getCY",
-        "purpose": "Read a container/avatar-relative Y coordinate used as the basis for some offset computations (inferred to bias toward the avatar).",
+        "purpose": "Read reference center Y when computing directed offsets toward/relative to the reference.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_MAGARM::00F4",
-        "callee": "Item::getX",
-        "purpose": "Read the item's world X coordinate to compute absolute target world X = item X + dx.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_MAGARM::00F4",
-        "callee": "Item::getY",
-        "purpose": "Read the item's world Y coordinate to compute absolute target world Y = item Y + dy.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_MAGARM::00F4",
-        "callee": "Item::getZ",
-        "purpose": "Read the item's Z-plane/height for legal_move/hurl calls.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_MAGARM::00F4",
+        "caller": "U8P_MAGARM::func00F4",
         "callee": "urandom",
-        "purpose": "Generate random values used repeatedly to bias distance, sign, and perturbation of target offsets.",
+        "purpose": "Generate random values used for jitter in offsets and chance-based hurl events.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_MAGARM::00F4",
-        "callee": "FREE::1C52",
-        "purpose": "Small utility called to convert/compare random-derived values during offset selection and branching.",
+        "caller": "U8P_MAGARM::func00F4",
+        "callee": "Item::getX",
+        "purpose": "Read the item's current X coordinate to compute target X for movement/hurl.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MAGARM::func00F4",
+        "callee": "Item::getY",
+        "purpose": "Read the item's current Y coordinate to compute target Y for movement/hurl.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MAGARM::func00F4",
+        "callee": "Item::getZ",
+        "purpose": "Read the item's Z (height) used in movement/hurl decision paths (vertical checks).",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_MAGARM::00F4",
+        "caller": "U8P_MAGARM::func00F4",
         "callee": "Item::legal_move",
-        "purpose": "Check whether a computed WorldPoint is a legal target for throwing; reject and try alternate candidates if false.",
+        "purpose": "Test whether a computed target X/Y is a legal move before attempting movement; guides alternate attempts or fallback to hurl.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_MAGARM::00F4",
+        "caller": "U8P_MAGARM::func00F4",
         "callee": "Item::hurl",
-        "purpose": "Perform the throwing/hurling of the magic armor toward the validated target (passes dx, dy, dz and flags/speed).",
+        "purpose": "Forcefully move/throw the item if normal movement is blocked or per random-hurl conditions.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_MAGARM::00F4",
-        "callee": "spawn",
-        "purpose": "Spawn FREE::1C19 (a timer/cleanup helper) after launching, likely to schedule re-arming or delayed cleanup.",
-        "confidence": "medium"
+        "caller": "U8P_MAGARM::func00F4",
+        "callee": "spawn -> FREE::func1C19",
+        "purpose": "Spawn a timer/continuation to schedule repeated invocations of the behavior (creates a repeating effect).",
+        "confidence": "high"
       }
     ]
   },
@@ -174,9 +165,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "MAGARM::look",
-    "behavior_summary_one_liner": "MAGARM::look (Event 0) makes the item produce a short descriptive bark 'magic armor ' when examined.",
-    "external_call_count": 16,
+    "main_function": "U8P_MAGARM::look",
+    "behavior_summary_one_liner": "This script implements the behavior for a 'magic armor' item: a simple U8P_MAGARM::look/examine handler plus an autonomous proximity-driven movement routine that runs while an actor is near.",
+    "external_call_count": 14,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

@@ -3,28 +3,27 @@
   "source_of_truth": "dialogue/json/U8P_MUSHGRUP.json",
   "file": "U8P_MUSHGRUP",
   "behavior_summary": [
-    "MUSHGRUP::look: When a player/actor inspects this mushroom-group item, the script displays a fixed description by invoking Item::bark with the literal string \"mushroom\" and then suspends/returns.",
-    "MUSHGRUP::use: When the item is used, the script iterates with an index/counter (capped at 10), reads the item's world coordinates (getX/getY/getZ), generates a small random value, and calls an allocator/spawn routine (FREE::24A7) with those parameters and a type/id constant. If the allocator returns a non-zero value the routine returns early. If the allocator returns zero, the script sets a status bit (OR mask 0x0080) on a pointer derived from the allocator result and calls Item::fall() on that pointer to trigger falling/placement re-evaluation."
+    "U8P_MUSHGRUP::look is a simple U8P_MUSHGRUP::look/inspect handler that displays the single bark text 'mushroom' to the player and then suspends the U8P_MUSHGRUP::look process.",
+    "U8P_MUSHGRUP::use is a utility process that (when executed) can spawn mushroom item instances near this object's location. It maintains a local spawn counter (local3) to limit repeated spawns, reads the object's coordinates, creates one or more items using FREE::createItemsAtLocation with a small random count, marks created items with a status bit (0x0080) via Item::orStatus, and calls Item::fall so the items settle into the world.",
+    "The spawn path is guarded by a hard limit (local3 < 10) to avoid unlimited creation; local3 is initialized and incremented as part of process control. Several details (exact numeric meanings and some local reuse) are inferred from low-level remnants."
   ],
   "notable_control_flow": [
-    "U8P_MUSHGRUP::look is an event handler (process form) that prepares item info then immediately calls Item::bark(\"mushroom\") and suspends the process.",
-    "U8P_MUSHGRUP::use contains a guarded loop using local [BP-06h] as an index/counter; the loop enforces a cap (compare < 10) to bound iterations.",
-    "Within the loop U8P_MUSHGRUP::use sequentially calls Item::getX/getY/getZ -> urandom -> FREE::24A7 and branches on the allocator's return: non-zero -> exit/return early; zero -> set status bit (0x0080) on an item and call Item::fall.",
-    "The allocator/spawn call FREE::24A7 is a decision point whose return value determines whether spawning succeeded (inferred) or an alternate recovery path (flag+fall) should run."
+    "U8P_MUSHGRUP::look: immediate linear flow — show bark 'mushroom' then suspend.",
+    "U8P_MUSHGRUP::use: initializes local3 (counter), then branches: if 'this' condition is true it increments local3; otherwise, if local3 < 0x0A it executes spawn sequence. The spawn sequence reads coordinates (Item::getX/Y/Z), calls FREE::createItemsAtLocation(…, urandom(0x04), itemType, X), checks the returned handle, sets status 0x0080 on the created item(s) and invokes Item::fall.",
+    "Spawn attempt is bounded by the counter check (local3 < 10) which acts as a guard to prevent indefinite spawning."
   ],
   "open_questions": [
-    "What exactly does a zero vs non-zero return from FREE::24A7 represent (success vs failure, handle vs error code, or something else)?",
-    "What collection or nearby-objects structure is the loop scanning/indexing with [BP-06h]? (inventory, local spawn slots, a neighbor list?)",
-    "What is the semantic meaning of the large constant passed into FREE::24A7 (the 'huge F5 05' constant) and the type id 0x01D1 — what entity/type is being spawned?",
-    "Is the status mask 0x0080 a standard engine flag (e.g., 'falling' or 'no-collision') or a script-specific marker?",
-    "Are there additional engine-side side effects (sounds, animations) triggered implicitly by Item::fall or FREE::24A7 that this script relies on?"
+    "What exact in-game event or player action invokes U8P_MUSHGRUP::use (the script shows the routine but not its trigger)?",
+    "What specific item type ID corresponds to the literal 0x01D1h used in FREE::createItemsAtLocation (metadata shows a literal but its game meaning is inferred)?",
+    "Does the status bit 0x0080 applied by Item::orStatus represent a known semantic (e.g., temporary flag, 'do-not-pickup', or 'just-spawned') in the broader codebase?",
+    "Is local3 reused as both the spawn counter and a Z coordinate in different branches intentional (appears in raw nodes) and could that cause subtle behavior depending on call order?"
   ],
   "main_function": {
     "name": "U8P_MUSHGRUP::look",
     "execution_form": "process",
-    "purpose": "Provide the 'U8P_MUSHGRUP::look' (inspect) behavior for the mushroom-group item: present a short descriptive text to the viewer via Item::bark and then suspend/return.",
+    "purpose": "Present a short description when the player inspects/examines this object (shows 'mushroom').",
     "entry_conditions": [
-      "Event 0: 'U8P_MUSHGRUP::look' — invoked when the player/actor examines or looks at the mushroom-group item (enter area / explicit inspect action)."
+      "Invoked when the player/Avatar performs the 'U8P_MUSHGRUP::look' or examine action on this item/NPC (standard U8P_MUSHGRUP::look handler)."
     ],
     "confidence": "high"
   },
@@ -32,71 +31,59 @@
     {
       "name": "U8P_MUSHGRUP::look",
       "kind": "main",
-      "role": "Event handler for the 'U8P_MUSHGRUP::look' (inspect) action; calls Item::bark with the static description \"mushroom\" and then suspends.",
+      "role": "Player-facing description handler that barks 'mushroom' when examined.",
       "confidence": "high"
     },
     {
       "name": "U8P_MUSHGRUP::use",
       "kind": "helper",
-      "role": "Handler for the 'use' action: bounded scan/loop, coordinate sampling, randomization and attempting to spawn/allocate an entity via FREE::24A7; on allocator failure uses Item::orStatus and Item::fall to change state.",
+      "role": "Utility/spawn routine that creates mushroom item instances near this object's location and marks/settles them; uses a local counter to limit spawns.",
       "confidence": "medium"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine to display a short text message or description originating from an item/process.",
-      "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_MUSHGRUP::look",
-        "callee": "Item::bark",
-        "purpose": "Display the item's inspect description ('mushroom') to the player/viewer.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_MUSHGRUP::use",
         "callee": "Item::getX",
-        "purpose": "Read the item's X coordinate to provide spatial arguments for spawning/allocator call.",
+        "purpose": "Read the object's X coordinate for spawn positioning.",
         "confidence": "high"
       },
       {
         "caller": "U8P_MUSHGRUP::use",
         "callee": "Item::getY",
-        "purpose": "Read the item's Y coordinate to provide spatial arguments for spawning/allocator call.",
-        "confidence": "high"
+        "purpose": "Read the object's Y coordinate for spawn positioning (captured but not shown used elsewhere in excerpt).",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_MUSHGRUP::use",
         "callee": "Item::getZ",
-        "purpose": "Read the item's Z/level coordinate to provide spatial arguments for spawning/allocator call.",
-        "confidence": "high"
+        "purpose": "Read the object's Z/stack-height numeric field; appears to be stored into local3 in the spawn path (dual U8P_MUSHGRUP::use with the spawn counter).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_MUSHGRUP::use",
+        "callee": "FREE::createItemsAtLocation",
+        "purpose": "Factory call to create one or more item instances at the computed location; receives type/category flags, urandom() count, item type id, and X coordinate; returns handle(s).",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_MUSHGRUP::use",
         "callee": "urandom",
-        "purpose": "Generate a small random value used as an argument to FREE::24A7 to vary spawn behavior.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_MUSHGRUP::use",
-        "callee": "FREE::24A7",
-        "purpose": "Attempt to allocate/spawn an object/entity using coordinates, a random parameter and type/config constants; return value controls subsequent flow.",
+        "purpose": "Provide a small random integer (range 0x04) to vary item creation count.",
         "confidence": "medium"
       },
       {
         "caller": "U8P_MUSHGRUP::use",
         "callee": "Item::orStatus",
-        "purpose": "OR a status bit mask (0x0080) onto an item pointer when the allocator returned the handled/failure value, marking it for a state change.",
+        "purpose": "Set/OR a status bit (0x0080) on the created item handle(s) to mark them (semantic of bit inferred).",
         "confidence": "medium"
       },
       {
         "caller": "U8P_MUSHGRUP::use",
         "callee": "Item::fall",
-        "purpose": "Trigger falling/placement re-evaluation for an item when allocation returned the special value (inferred failure/recovery path).",
+        "purpose": "Cause created item(s) to settle/fall into the world (finalize placement/physics).",
         "confidence": "medium"
       }
     ]
@@ -113,8 +100,8 @@
   ],
   "quick_facts": {
     "main_function": "U8P_MUSHGRUP::look",
-    "behavior_summary_one_liner": "MUSHGRUP::look: When a player/actor inspects this mushroom-group item, the script displays a fixed description by invoking Item::bark with the literal string \"mushroom\" and then suspends/returns.",
-    "external_call_count": 8,
+    "behavior_summary_one_liner": "U8P_MUSHGRUP::look is a simple U8P_MUSHGRUP::look/inspect handler that displays the single bark text 'mushroom' to the player and then suspends the U8P_MUSHGRUP::look process.",
+    "external_call_count": 7,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

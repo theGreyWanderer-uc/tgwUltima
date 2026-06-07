@@ -3,29 +3,30 @@
   "source_of_truth": "dialogue/json/U8P_NSCROPS.json",
   "file": "U8P_NSCROPS",
   "behavior_summary": [
-    "Provides examination (U8P_NSCROPS::look) and use/harvest behavior for an in-world crop item.",
-    "NSCROPS::look composes a short description by prefixing the literal \"crops \" and invoking the item's bark/display routine to show that text to the examiner.",
-    "NSCROPS::use interprets the item's frame (growth stage) to compute a yield count (deterministic base plus urandom perturbation for some frames), then repeatedly attempts to create/place spawned crop objects near the original item's coordinates.",
-    "For each successful placement the script marks the spawned object with a status bit and triggers its fall/drop so it appears physically in the world. Placement attempts stop when a small cap is reached or creation fails."
+    "This script implements the in-game behavior for a crop item: a minimal inspect/U8P_NSCROPS::look handler and a U8P_NSCROPS::use handler that spawns harvest items.",
+    "U8P_NSCROPS::look (process) shows a single short description/bark ('crops ') when the player examines the crop and then suspends.",
+    "U8P_NSCROPS::use (process) reads the crop's frame/state to choose a spawn branch and uses small urandom rolls to vary the produced quantity/type. It computes spawn coordinates from the crop's X/Y/Z, creates item instances via FREE::createItemsAtLocation, tags created items with a status bit (0x0080) via Item::orStatus, and calls Item::fall so spawned items drop into the world.",
+    "The U8P_NSCROPS::use routine enforces a per-object spawn cap using a local counter (local4 compared to ~0x0A) and increments that counter on certain conditions (inferred when 'this' is truthy)."
   ],
   "notable_control_flow": [
-    "Event-driven: NSCROPS::look is invoked on Event 0 (examine/U8P_NSCROPS::look) and returns after calling Item::bark.",
-    "NSCROPS::use branches on Item::getFrame result (distinct behavior for frames 0, 1, 2) to set the yield/count.",
-    "A placement loop in U8P_NSCROPS::use iterates, calling FREE::24A7 to attempt object creation; loop increments a counter ([BP-08h]) and checks an upper bound (inferred cap ≈ 10).",
-    "After each successful FREE::24A7 call, the returned handle is stored, Item::orStatus is used to set a mask (0x0080 inferred), and Item::fall is invoked to finalize spawn. Failed placement short-circuits further actions for that iteration."
+    "U8P_NSCROPS::look: single bark then suspend — straightforward examine flow.",
+    "U8P_NSCROPS::use: switch/branch based on Item::getFrame(this) with three branches: frame 0 -> deterministic local3 then small branch via urandom(2); frame 1 -> local3 = urandom(3) + 8; frame 2 -> local3 = urandom(2) + 5.",
+    "Before spawning, local4 is compared to 0x0A (cap) and may be incremented when 'this' is truthy; only if below cap does spawning proceed.",
+    "Spawning loop: call FREE::createItemsAtLocation with chosen local3 and computed coordinates, then for created item(s) call Item::orStatus(0x0080) and Item::fall."
   ],
   "open_questions": [
-    "Exact semantics and parameter meanings of FREE::24A7: is it a factory that returns an item handle, a placement validator, or both?",
-    "Meaning of the status mask 0x0080 applied with Item::orStatus on spawned objects (visual flag, prevent-reuse, ownership tag?)",
-    "Precise spatial distribution / displacement math used for spawn placement around the parent crop (geometry inferred but not explicit).",
-    "Whether there are additional frames beyond 0..2 and how they should behave (only frames 0,1,2 were observed)."
+    "Whether the status bit 0x0080 set by Item::orStatus designates a specific gameplay state (e.g., temporary harvest flag, non-pickable, or marked for cleanup) — inferred but not certain.",
+    "Exact mapping of numeric local3 values to concrete item types or stack sizes: the numeric offsets (4, 7, +5, +8) appear to select spawn types/counts but precise meaning is unknown.",
+    "Persistence and scope of local4 (the spawn counter): does it persist across uses/instances or is it per-U8P_NSCROPS::use only? The code suggests a per-item counter but persistence semantics are inferred.",
+    "The condition 'when this is truthy local4 is incremented' is ambiguous: whether 'this' indicates a caller context, a player-held flag, or simply non-null item reference."
   ],
   "main_function": {
     "name": "U8P_NSCROPS::look",
     "execution_form": "process",
-    "purpose": "Produce a short in-game description/bark for the crop item when it is examined (prefixes 'crops ' and emits that via the item's bark routine).",
+    "purpose": "Provide the short inspect/examine description for the crop item and then suspend the process.",
     "entry_conditions": [
-      "Event 0 (U8P_NSCROPS::look) — invoked when an actor/avatar examines or looks at the crop item"
+      "Player triggers the Look/Examine action on the crop item (engine invokes the U8P_NSCROPS::look process).",
+      "In Titan semantics this corresponds to entering the object's U8P_NSCROPS::look trigger/area."
     ],
     "confidence": "high"
   },
@@ -33,125 +34,65 @@
     {
       "name": "U8P_NSCROPS::look",
       "kind": "main",
-      "role": "Examination handler that composes and emits the short description 'crops ' via Item::bark.",
+      "role": "examine/U8P_NSCROPS::look handler that displays a short description/bark and suspends",
       "confidence": "high"
     },
     {
       "name": "U8P_NSCROPS::use",
       "kind": "helper",
-      "role": "Harvest/activate handler: reads growth frame, computes yield, attempts to spawn/place multiple crop objects, marks them and triggers fall/drop.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine to present/display a short string from an item to a player/process.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getFrame",
-      "kind": "extern",
-      "role": "Return the item's frame/index (interpreted as growth stage) used to select yield behavior.",
-      "confidence": "high"
-    },
-    {
-      "name": "urandom",
-      "kind": "extern",
-      "role": "Provide nondeterministic offset in a range [0,n-1] used to randomize yield counts.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getX",
-      "kind": "extern",
-      "role": "Return item X coordinate for placement calculations.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getY",
-      "kind": "extern",
-      "role": "Return item Y coordinate for placement calculations.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getZ",
-      "kind": "extern",
-      "role": "Return item Z/plane coordinate for placement/validation.",
-      "confidence": "high"
-    },
-    {
-      "name": "FREE::24A7",
-      "kind": "extern",
-      "role": "Placement/factory routine that attempts to create or reserve a crop object at/near coordinates and returns a nonzero handle on success (inferred).",
+      "role": "U8P_NSCROPS::use handler that decides harvest yields, enforces a spawn cap, creates items at the crop location, tags them, and triggers fall",
       "confidence": "medium"
-    },
-    {
-      "name": "Item::orStatus",
-      "kind": "extern",
-      "role": "Bitwise-or a status mask into the target item's status flags (used to mark spawned items).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::fall",
-      "kind": "extern",
-      "role": "Trigger the spawned item's fall/drop behavior so it appears and settles in the world.",
-      "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_NSCROPS::look",
-        "callee": "Item::bark",
-        "purpose": "Emit the literal description string 'crops ' from the crop item to the examiner/process.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_NSCROPS::use",
         "callee": "Item::getFrame",
-        "purpose": "Read growth stage/frame to select yield/count branch.",
+        "purpose": "Read the crop object's frame/state to select which spawn branch to take.",
         "confidence": "high"
       },
       {
         "caller": "U8P_NSCROPS::use",
         "callee": "urandom",
-        "purpose": "Provide randomized offset added to deterministic base yields for some frames.",
+        "purpose": "Produce small random integers to vary produced item counts or select among sub-variants within a frame branch.",
         "confidence": "high"
       },
       {
         "caller": "U8P_NSCROPS::use",
         "callee": "Item::getX",
-        "purpose": "Obtain X coordinate of the source crop for spawn placement.",
+        "purpose": "Obtain the crop's X coordinate for placing spawned items (stored to local6).",
         "confidence": "high"
       },
       {
         "caller": "U8P_NSCROPS::use",
         "callee": "Item::getY",
-        "purpose": "Obtain Y coordinate of the source crop for spawn placement.",
+        "purpose": "Obtain the crop's Y coordinate for placing spawned items (stored to local5).",
         "confidence": "high"
       },
       {
         "caller": "U8P_NSCROPS::use",
         "callee": "Item::getZ",
-        "purpose": "Provide Z/plane coordinate to the placement routine; used for validity/plane checks.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_NSCROPS::use",
-        "callee": "FREE::24A7",
-        "purpose": "Attempt to create/place a spawned crop object at/near computed coordinates; returns a handle/id on success used by subsequent marking and fall.",
+        "purpose": "Obtain the crop's Z/stack-height value used in spawn placement and/or passed into the create call (stored into a local reused as a spawn parameter).",
         "confidence": "medium"
       },
       {
         "caller": "U8P_NSCROPS::use",
+        "callee": "FREE::createItemsAtLocation",
+        "purpose": "Create one or more item instances at the crop's coordinates representing the harvest; return value used to reference created item(s).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_NSCROPS::use",
         "callee": "Item::orStatus",
-        "purpose": "Set a status bit (mask 0x0080 observed) on the newly created object to mark it for a particular state/behavior.",
+        "purpose": "Set a status bit (0x0080) on each created item — likely tags created items for special behavior or state.",
         "confidence": "medium"
       },
       {
         "caller": "U8P_NSCROPS::use",
         "callee": "Item::fall",
-        "purpose": "Trigger the spawned item's drop/fall so it enters the world physically after creation and marking.",
+        "purpose": "Trigger physics/fall behavior for created items so they drop into the world visually/physically.",
         "confidence": "high"
       }
     ]
@@ -167,9 +108,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "NSCROPS::look",
-    "behavior_summary_one_liner": "Provides examination (U8P_NSCROPS::look) and use/harvest behavior for an in-world crop item.",
-    "external_call_count": 9,
+    "main_function": "U8P_NSCROPS::look",
+    "behavior_summary_one_liner": "This script implements the in-game behavior for a crop item: a minimal inspect/U8P_NSCROPS::look handler and a U8P_NSCROPS::use handler that spawns harvest items.",
+    "external_call_count": 8,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

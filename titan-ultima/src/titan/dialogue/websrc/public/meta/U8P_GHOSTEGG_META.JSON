@@ -3,31 +3,27 @@
   "source_of_truth": "dialogue/json/U8P_GHOSTEGG.json",
   "file": "U8P_GHOSTEGG",
   "behavior_summary": [
-    "Handles egg state transitions and hatching behavior for a GHOSTEGG item.",
-    "U8P_GHOSTEGG::leaveFastArea (Event 10) runs when the egg item leaves a fast-area trigger: it reads the egg's eggId and, if eggId < 0x64, subtracts 0x64 and writes the result back; if eggId >= 0x64 it returns without change. This appears to clear/unset a previously applied 0x64 state flag.",
-    "U8P_GHOSTEGG::hatch (Event 7, helper) performs the hatching sequence: it aborts if eggId >= 0x64, otherwise for eggId == 1 it applies a probabilistic gate via urandom(10); when proceeding it sets eggId to 0x64, creates an NPC (type 0x23), marks it with a status bit, places it at the egg's coordinates, spawns an asynchronous NPC behavior, assigns a target and alignment, and forces it into combat.",
-    "eggId values are used as an encoded state: values >= 0x64 mark a 'hatched/in-progress/flagged' state; U8P_GHOSTEGG::leaveFastArea reverses a 0x64 addition in some cases so state can change when the item leaves the trigger region."
+    "U8P_GHOSTEGG implements egg lifecycle behavior: leaving a fast-area adjusts a stored egg state, and a helper process can convert the egg into a spawned NPC (U8P_GHOSTEGG::hatch).",
+    "U8P_GHOSTEGG::leaveFastArea: when the actor leaves the fast-area trigger, the script reads the egg id/state (Egg::getEggId). If the id >= 0x64 (100) it subtracts 0x64 and writes the result back (Egg::setEggId), effectively toggling/decrementing a U8P_GHOSTEGG::hatch-related state tied to area exit.",
+    "U8P_GHOSTEGG::hatch: if the egg is not already in the >=0x64 state it may (depending on id checks and a probabilistic urandom test) set the egg id to 0x64, create an NPC (Npc::create), apply an item status bit (Item::orStatus), place/pop the spawn at the egg's coordinates (Item::pop with Item::getZ/Y/X), configure orientation/initial action (spawn->METHOD::func15E7 using Item::getDirToItem), set target/alignment (Npc::setTarget, Npc::setAlignment) and force it into combat (Npc::setInCombat)."
   ],
   "notable_control_flow": [
-    "Event-driven: U8P_GHOSTEGG::leaveFastArea is triggered by area-exit; hatch is triggered by a hatch event (separate event handler).",
-    "State gate: both U8P_GHOSTEGG::leaveFastArea and hatch check eggId against 0x64 to guard duplicate or re-entrant hatching logic.",
-    "Probabilistic branch: U8P_GHOSTEGG::hatch uses urandom(10) when eggId == 1 to sometimes abort/delay hatching (inferred ~90% chance to proceed).",
-    "Creation sequence in hatch is multi-step and aborts early if eggId indicates already-processed state (>=0x64)."
+    "U8P_GHOSTEGG::leaveFastArea: single conditional branch — only acts when Egg::getEggId(this) >= 0x64.",
+    "U8P_GHOSTEGG::hatch: guarded by Egg::getEggId(this) checks. One branch short-circuits if id >= 0x64. Another branch compares id != 0x01 and performs a probabilistic gate (urandom(0x0A) <= 0x08) before proceeding to spawn, so hatching can be random/conditional.",
+    "U8P_GHOSTEGG::hatch performs a sequence of state write (Egg::setEggId), spawn creation and world placement/configuration when the gating conditions pass."
   ],
   "open_questions": [
-    "Precise semantic meaning of eggId numeric values (what do values 0,1,n represent prior to adding 0x64?).",
-    "Who/what sets eggId prior to hatch being invoked and under which game conditions eggId == 1 vs other values occurs?",
-    "Exact meaning of the 0x64 constant (is it a bitflag, sentinel value, or index offset?) — inference is that it marks 'in-progress/hatched' state.",
-    "Which target pid is set on the spawned NPC (Npc::setTarget) — player, nearby NPC, or the egg's owner? The disassembly does not make the target source explicit.",
-    "Exact status bit mask applied with Item::orStatus on the newly created NPC (what gameplay flag is being set?)."
+    "What concrete meanings map to egg id values (0x01, 0x64, and values >=0x64)? These are inferred as state markers but exact semantics (species, stage, or flag bits) are unknown.",
+    "When and how is U8P_GHOSTEGG::hatch invoked in gameplay (timer, use, damage, or other event)? The process type suggests an item process but the entry trigger is not present in this excerpt.",
+    "Are there other systems that rely on the egg id arithmetic (subtract 0x64 on exit) for multi-state toggles or paired-area behavior? The broader interaction with other scripts is not shown."
   ],
   "main_function": {
     "name": "U8P_GHOSTEGG::leaveFastArea",
     "execution_form": "process",
-    "purpose": "On area-exit, check and adjust the egg's eggId state to clear a previously-applied 0x64 flag when appropriate so the egg's state can transition after leaving the trigger region.",
+    "purpose": "On leaving a fast-area trigger, adjust the egg's stored id/state by subtracting 0x64 when the egg id is >= 0x64 — likely to clear or decrement a U8P_GHOSTEGG::hatch-related flag set while inside the area.",
     "entry_conditions": [
-      "Event 10 (U8P_GHOSTEGG::leaveFastArea) — triggered when the egg item leaves its fast-area trigger region",
-      "Parameter: egg_item (the item instance triggering the event) provided by the engine"
+      "Triggered by the engine when the actor leaves a defined fast-area region (U8P_GHOSTEGG::leaveFastArea event).",
+      "Runtime condition: Egg::getEggId(this) >= 0x64 is required for action to occur."
     ],
     "confidence": "high"
   },
@@ -35,37 +31,25 @@
     {
       "name": "U8P_GHOSTEGG::leaveFastArea",
       "kind": "main",
-      "role": "area-exit trigger that inspects and adjusts eggId state (clears/additional-state removal)",
+      "role": "fast-area exit handler that adjusts egg state by subtracting 0x64 when current id >= 0x64",
       "confidence": "high"
     },
     {
       "name": "U8P_GHOSTEGG::hatch",
       "kind": "helper",
-      "role": "hatching sequence that may spawn and initialize a new NPC and set eggId to the flagged value 0x64 to prevent duplicate hatching",
-      "confidence": "high"
+      "role": "attempt to U8P_GHOSTEGG::hatch/transform the egg into an NPC: sets egg id, spawns and configures NPC and places it at the egg's coordinates (probabilistic and id-checked)",
+      "confidence": "medium"
     },
     {
       "name": "Egg::getEggId",
       "kind": "extern",
-      "role": "read the egg item's eggId/state",
+      "role": "read egg instance id/state",
       "confidence": "high"
     },
     {
       "name": "Egg::setEggId",
       "kind": "extern",
-      "role": "write the egg item's eggId/state",
-      "confidence": "high"
-    },
-    {
-      "name": "Npc::create",
-      "kind": "extern",
-      "role": "allocate/create an NPC instance of a given type",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::pop",
-      "kind": "extern",
-      "role": "place/spawn an item/NPC into the world at X,Y,Z",
+      "role": "write egg instance id/state",
       "confidence": "high"
     }
   ],
@@ -75,98 +59,74 @@
       {
         "caller": "U8P_GHOSTEGG::leaveFastArea",
         "callee": "Egg::getEggId",
-        "purpose": "Retrieve current eggId/state to decide if 0x64 subtraction is needed",
+        "purpose": "Read the egg's stored id/state to decide whether to subtract 0x64",
         "confidence": "high"
       },
       {
         "caller": "U8P_GHOSTEGG::leaveFastArea",
         "callee": "Egg::setEggId",
-        "purpose": "Store adjusted eggId (eggId - 0x64) when leaving the fast area and eggId < 0x64",
+        "purpose": "Write the updated egg id/state after subtracting 0x64 on area exit",
         "confidence": "high"
       },
       {
         "caller": "U8P_GHOSTEGG::hatch",
         "callee": "Egg::getEggId",
-        "purpose": "Check current eggId to guard against re-hatching when eggId >= 0x64",
+        "purpose": "Check current egg id/state to gate U8P_GHOSTEGG::hatch behavior (compares against 0x64 and 0x01)",
         "confidence": "high"
       },
       {
         "caller": "U8P_GHOSTEGG::hatch",
         "callee": "urandom",
-        "purpose": "Provide a random roll (urandom(10)) to probabilistically gate hatching when eggId == 1",
+        "purpose": "Provide a random value for probabilistic U8P_GHOSTEGG::hatch gate (e.g., urandom(0x0A) <= 0x08)",
         "confidence": "high"
       },
       {
         "caller": "U8P_GHOSTEGG::hatch",
         "callee": "Egg::setEggId",
-        "purpose": "Set eggId to 0x64 to mark that hatching/hatched state is in effect",
+        "purpose": "Mark egg as hatched/changed by setting id to 0x64 before spawning",
         "confidence": "high"
       },
       {
         "caller": "U8P_GHOSTEGG::hatch",
         "callee": "Npc::create",
-        "purpose": "Create the NPC instance that emerges from the egg (type observed as 0x23)",
+        "purpose": "Instantiate the NPC that the egg hatches into (returns reference stored in local1)",
         "confidence": "high"
       },
       {
         "caller": "U8P_GHOSTEGG::hatch",
         "callee": "Item::orStatus",
-        "purpose": "Apply a status bit/mask to the newly created NPC (mark the NPC with a flag)",
+        "purpose": "Apply a status bitmask (0x0080) to the created NPC/item, likely to mark it special or non-interactable as part of spawn",
         "confidence": "medium"
-      },
-      {
-        "caller": "U8P_GHOSTEGG::hatch",
-        "callee": "Item::getX",
-        "purpose": "Obtain egg X coordinate to place the spawned NPC",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GHOSTEGG::hatch",
-        "callee": "Item::getY",
-        "purpose": "Obtain egg Y coordinate to place the spawned NPC",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GHOSTEGG::hatch",
-        "callee": "Item::getZ",
-        "purpose": "Obtain egg Z coordinate to place the spawned NPC",
-        "confidence": "high"
       },
       {
         "caller": "U8P_GHOSTEGG::hatch",
         "callee": "Item::pop",
-        "purpose": "Place the created NPC into the world at the egg's coordinates",
+        "purpose": "Place/pop the created NPC/item at the egg's world coordinates using Item::getZ/Y/X(this)",
         "confidence": "high"
       },
       {
         "caller": "U8P_GHOSTEGG::hatch",
-        "callee": "Item::getDirToItem",
-        "purpose": "Compute a facing/direction for spawn behavior relative to the egg",
+        "callee": "spawn->METHOD::func15E7",
+        "purpose": "Finalize orientation or issue an initial action on the spawned NPC using Item::getDirToItem and a flags argument",
         "confidence": "medium"
-      },
-      {
-        "caller": "U8P_GHOSTEGG::hatch",
-        "callee": "spawn",
-        "purpose": "Spawn an asynchronous behavior/movement method for the created NPC (METHOD::15E7) with direction and pid",
-        "confidence": "high"
       },
       {
         "caller": "U8P_GHOSTEGG::hatch",
         "callee": "Npc::setTarget",
-        "purpose": "Assign a combat/AI target to the spawned NPC",
-        "confidence": "medium"
+        "purpose": "Set the spawned NPC's target (likely the player/party) so it will engage",
+        "confidence": "high"
       },
       {
         "caller": "U8P_GHOSTEGG::hatch",
         "callee": "Npc::setAlignment",
-        "purpose": "Set the spawned NPC's alignment/faction (e.g., hostile)",
+        "purpose": "Set spawned NPC alignment/faction (0x40) to affect hostility/relations",
         "confidence": "medium"
       },
       {
         "caller": "U8P_GHOSTEGG::hatch",
         "callee": "Npc::setInCombat",
-        "purpose": "Mark the spawned NPC as in combat to begin combat behavior",
-        "confidence": "medium"
+        "purpose": "Place the spawned NPC into combat state so it will act/attack immediately",
+        "confidence": "high"
       }
     ]
   },
@@ -182,8 +142,8 @@
   ],
   "quick_facts": {
     "main_function": "U8P_GHOSTEGG::leaveFastArea",
-    "behavior_summary_one_liner": "Handles egg state transitions and hatching behavior for a GHOSTEGG item.",
-    "external_call_count": 16,
+    "behavior_summary_one_liner": "U8P_GHOSTEGG implements egg lifecycle behavior: leaving a fast-area adjusts a stored egg state, and a helper process can convert the egg into a spawned NPC (U8P_GHOSTEGG::hatch).",
+    "external_call_count": 12,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

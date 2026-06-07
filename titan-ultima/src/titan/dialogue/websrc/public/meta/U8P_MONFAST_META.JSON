@@ -3,32 +3,29 @@
   "source_of_truth": "dialogue/json/U8P_MONFAST.json",
   "file": "U8P_MONFAST",
   "behavior_summary": [
-    "MONFAST::enterFastArea is an event handler that runs when an actor enters an item's fast-area trigger. It checks a per-item map-array flag (bit 0x0080) and, if set, scans nearby/contained items for a compatible monster-hatcher for the egg represented by the triggering item.",
-    "When a matching hatcher is found (matching determined by comparing MonsterEgg::getMonId to the low 4 bits of the trigger item's map-array), the handler calls MonsterEgg::hatch on the candidate and records success.",
-    "If no hatcher is found the handler notifies the player/process with a failure bark: 'Monster egg could not find hatcher!'.",
-    "The handler also obtains the egg's quality/id (Egg::getEggId), converts it to text (numToStr) and barks the 'Egg quality is <n>.' message.",
-    "Before returning it ensures the item's map-array bit 0x0080 remains set; the companion helper MONFAST::leaveFastArea clears that same bit when the actor leaves the fast-area."
+    "U8P_MONFAST::enterFastArea runs when the egg/item's fast-area is entered; it reads a per-item map/flags value and, if a one-shot processed bit (0x0080) is not set, tries to perform a hatch action or emit diagnostic barks before marking the item processed.",
+    "If a matching hatcher/monster id is found (compare MonsterEgg::getMonId against the low nibble of the item's map flags), U8P_MONFAST::enterFastArea calls MonsterEgg::hatch to trigger hatching and sets the processed bit (mapArray |= 0x0080) so the logic won't re-run immediately.",
+    "If no suitable hatcher/match is present, the function emits two barks (a failure diagnostic and an egg-quality report using Egg::getEggId) and still sets the processed bit to avoid repeated attempts until cleared.",
+    "U8P_MONFAST::leaveFastArea clears the processed bit (writes mapArray & 0x7F) when the actor leaves the fast-area so the U8P_MONFAST::enterFastArea hatch logic can run again on subsequent entries."
   ],
   "notable_control_flow": [
-    "Early guard: immediately return if Item::getMapArray(item) has bit 0x0080 clear.",
-    "Loop: iterate over a list of candidate items (inferred as contents/nearby objects) and for each call MonsterEgg::getMonId to test for a match against (mapArray & 0x000F).",
-    "On first successful match: call MonsterEgg::hatch(candidate) and set an internal found flag to prevent the failure bark.",
-    "Post-loop: if found flag is false, call Item::bark to inform about missing hatcher; always build and bark a message with Egg::getEggId and numToStr.",
-    "State maintenance: ensure map-array bit 0x0080 is set at end of U8P_MONFAST::enterFastArea; MONFAST::leaveFastArea clears that bit on exit to avoid immediate retriggering."
+    "Guard: early read of Item::getMapArray(this) into local3 and test of 0x0080 bit; if set, hatch logic is skipped (one-shot guard).",
+    "Match branch: when not processed, obtains a MonsterEgg id (MonsterEgg::getMonId) and compares it to (Item::getMapArray(this) & 0x0F). If equal, call MonsterEgg::hatch.",
+    "Fallback branch: if no hatcher/id match, emit two diagnostic barks and read Egg::getEggId for the quality message.",
+    "Finalization: regardless of match outcome the code writes back a modified mapArray with the 0x0080 bit set; U8P_MONFAST::leaveFastArea later clears that bit."
   ],
   "open_questions": [
-    "Does the loop enumerate items contained by the egg item, items on the same tile, or nearby map objects? The iteration domain is inferred but not explicit.",
-    "What exact semantics do the low 4 bits of the triggering item's map-array encode? They appear to select an expected MonsterEgg ID/quality but the canonical meaning is inferred.",
-    "Which process/player PID receives the bark calls in all cases (the triggering actor, item process, or a global UI)?",
-    "What externally sets the item's map-array bit 0x0080 initially so U8P_MONFAST::enterFastArea can run? (This code only checks/sets/clears it.)"
+    "How the code locates or constructs the MonsterEgg/hatcher object referenced by local1 (the metadata shows calls like MonsterEgg::getMonId(addressof(local1)) but the discovery path for local1 is not explicit).",
+    "Whether the low nibble (mapArray & 0x0F) always encodes a valid hatcher id in all contexts or is repurposed in some cases.",
+    "Whether setting the processed bit on failure (no hatcher) is intended behavior in all game states or an optimization to avoid spamming diagnostics."
   ],
   "main_function": {
     "name": "U8P_MONFAST::enterFastArea",
     "execution_form": "process",
-    "purpose": "When an actor enters the egg item's fast-area, attempt to find and trigger a matching hatcher for the egg; inform the player on success/failure and report egg quality. Maintain the per-item map-array 0x0080 flag to guard retriggers.",
+    "purpose": "On fast-area entry, attempt to hatch a monster egg once: check a per-item processed flag, try to match/find a hatcher and call MonsterEgg::hatch if matched, otherwise report diagnostics; mark the item processed so the attempt is one-shot until cleared.",
     "entry_conditions": [
-      "Event: U8P_MONFAST::enterFastArea for the item (actor entered fast-area).",
-      "Guard: only proceed if Item::getMapArray(item) has bit 0x0080 set ((mapArray & 0x0080) != 0). If that bit is clear the handler returns immediately."
+      "Triggered by the engine when the actor enters its fast-area (fast-area entry event).",
+      "Proceed only when the per-item processed bit 0x0080 in Item::getMapArray(this) is not already set (one-shot guard)."
     ],
     "confidence": "high"
   },
@@ -36,14 +33,44 @@
     {
       "name": "U8P_MONFAST::enterFastArea",
       "kind": "main",
-      "role": "Primary event handler that searches for a hatcher and triggers MonsterEgg::hatch; reports egg quality and ensures the fast-area guard bit is set.",
+      "role": "Fast-area entry handler that performs one-shot hatch logic and emits diagnostics on failure.",
       "confidence": "high"
     },
     {
       "name": "U8P_MONFAST::leaveFastArea",
       "kind": "helper",
-      "role": "Called on fast-area exit to clear the item's map-array bit 0x0080 so U8P_MONFAST::enterFastArea will not retrigger until set again.",
+      "role": "Fast-area exit handler that clears the per-item processed bit (0x0080) so U8P_MONFAST::enterFastArea can run again.",
       "confidence": "high"
+    },
+    {
+      "name": "Item::getMapArray",
+      "kind": "extern",
+      "role": "Read per-item map/flags used to test/compute the processed bit and extract an id nibble.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::setMapArray",
+      "kind": "extern",
+      "role": "Write per-item map/flags to set or clear the processed bit.",
+      "confidence": "high"
+    },
+    {
+      "name": "MonsterEgg::getMonId",
+      "kind": "extern",
+      "role": "Return the monster id for a MonsterEgg/hatcher object for matching.",
+      "confidence": "medium"
+    },
+    {
+      "name": "MonsterEgg::hatch",
+      "kind": "extern",
+      "role": "Trigger the egg hatching action/effects when a matching hatcher is present.",
+      "confidence": "high"
+    },
+    {
+      "name": "Egg::getEggId",
+      "kind": "extern",
+      "role": "Return an egg-quality or id value used only for diagnostic/bark output when no hatcher was found.",
+      "confidence": "medium"
     }
   ],
   "call_analysis": {
@@ -52,55 +79,43 @@
       {
         "caller": "U8P_MONFAST::enterFastArea",
         "callee": "Item::getMapArray",
-        "purpose": "Read the item's per-instance map-array flags to check the 0x0080 guard and later to extract the low 4 bits for matching.",
+        "purpose": "Read per-item flags/map value to test the processed bit (0x0080) and extract the low nibble id (& 0x0F) for matching.",
         "confidence": "high"
       },
       {
         "caller": "U8P_MONFAST::enterFastArea",
         "callee": "MonsterEgg::getMonId",
-        "purpose": "Obtain a candidate MonsterEgg's monster id to compare against the triggering item's expected id (low 4 bits of map-array).",
-        "confidence": "high"
+        "purpose": "Obtain a monster/hatcher id from the inferred MonsterEgg object referenced by local1 to compare with the item's stored id nibble.",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_MONFAST::enterFastArea",
         "callee": "MonsterEgg::hatch",
-        "purpose": "Invoke hatching behavior on a matching MonsterEgg candidate (perform the actual hatch action).",
+        "purpose": "Invoke the hatch action on the egg/hatcher when ids match.",
         "confidence": "high"
       },
       {
         "caller": "U8P_MONFAST::enterFastArea",
         "callee": "Egg::getEggId",
-        "purpose": "Read the egg's quality/id used to build the informational 'Egg quality is <n>.' message.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_MONFAST::enterFastArea",
-        "callee": "U8P_MONFAST::numToStr",
-        "purpose": "Convert the numeric egg quality/id to a string for message concatenation.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_MONFAST::enterFastArea",
-        "callee": "process Item::bark(char* str)",
-        "purpose": "Display messages to the player/process: failure to find a hatcher and the egg-quality informational message.",
-        "confidence": "high"
+        "purpose": "Read an egg-quality/id value used only for a diagnostic bark when no matching hatcher was found.",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_MONFAST::enterFastArea",
         "callee": "Item::setMapArray",
-        "purpose": "Write back the map-array value ensuring bit 0x0080 is set at the end of processing (guard for re-entry).",
+        "purpose": "Write back the per-item flags with the processed bit set (mapArray |= 0x0080) to prevent immediate repeated processing.",
         "confidence": "high"
       },
       {
         "caller": "U8P_MONFAST::leaveFastArea",
         "callee": "Item::getMapArray",
-        "purpose": "Read the item's map-array in order to clear bit 0x0080 on fast-area exit.",
+        "purpose": "Read per-item flags to compute a value with the processed bit cleared.",
         "confidence": "high"
       },
       {
         "caller": "U8P_MONFAST::leaveFastArea",
         "callee": "Item::setMapArray",
-        "purpose": "Write the updated map-array with bit 0x0080 cleared to prevent immediate retriggering.",
+        "purpose": "Write back per-item flags with the processed bit cleared (mapArray & 0x7F) so the U8P_MONFAST::enterFastArea logic can run again later.",
         "confidence": "high"
       }
     ]
@@ -112,13 +127,13 @@
   "ui_tags": [
     "trigger",
     "cleanup",
-    "notification",
+    "animation",
     "guard"
   ],
   "quick_facts": {
     "main_function": "U8P_MONFAST::enterFastArea",
-    "behavior_summary_one_liner": "MONFAST::enterFastArea is an event handler that runs when an actor enters an item's fast-area trigger. It checks a per-item map-array flag (bit 0x0080) and, if set, scans nearby/contained items for a compatible monster-hatcher for the egg represented by the triggering item.",
-    "external_call_count": 9,
+    "behavior_summary_one_liner": "U8P_MONFAST::enterFastArea runs when the egg/item's fast-area is entered; it reads a per-item map/flags value and, if a one-shot processed bit (0x0080) is not set, tries to perform a hatch action or emit diagnostic barks before marking the item processed.",
+    "external_call_count": 7,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

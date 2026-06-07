@@ -3,30 +3,30 @@
   "source_of_truth": "dialogue/json/U8P_SPIKY.json",
   "file": "U8P_SPIKY",
   "behavior_summary": [
-    "Provides the gameplay logic for a 'Spiky' world object that can be inspected, reacts to hits, and runs a small fast-update behavior while the player is nearby.",
-    "SPIKY::look: when an actor inspects the object it sets per-item process info/exclusion and emits the description string \"spiky sphere \" to the viewer (Item::bark).",
-    "SPIKY::hit / SPIKY::gotHit: handle damage/hit events. For generic small hits (type < 0x100) both compute a small random modifier and call a METHOD (METHOD::0080) to apply the physical/damage reaction; for a special attacker type (0x1F7) SPIKY::hit cycles the item's small internal 'quality' state via Item::getQuality / Item::setQuality.",
-    "U8P_SPIKY::enterFastArea / U8P_SPIKY::leaveFastArea: when an actor enters the object's fast-update region the script spawns a tight behavior loop (U8P_SPIKY::0188) and starts an ambient SFX; when the actor leaves it stops the SFX and resets a small reference/flag.",
-    "U8P_SPIKY::0188: the spawned fast-loop repeatedly updates animation frames and small x/y offsets based on the 'quality' state, validates a legal move (Item::legal_move) and spawns a mover helper (spawn FREE::1C19) to perform the movement; the loop suspends between ticks and continues while the actor is nearby."
+    "This script implements the gameplay behavior for a 'spiky sphere' world object. When the player 'looks' at it the object emits the short description/bark \"spiky sphere\" and the U8P_SPIKY::look process suspends.",
+    "The object responds to damage/U8P_SPIKY::hit events via two entrypoints: U8P_SPIKY::hit and U8P_SPIKY::gotHit. Numeric/small hits (param < 0x0100) are forwarded to the engine damage resolver (METHOD::receiveHitWrapper) with a small randomized damage value. Hits that reference an item/source are inspected (Item::getType); if the source type equals 0x01F7 the object's internal 'quality' field is read and cycled through a 4-state mapping, then written back (Item::setQuality) to drive visual/state changes.",
+    "U8P_SPIKY::func0188 centralizes visual/frame and position updates: it reads the item's frame and world coordinates and the 'quality' value, computes frame index and coordinate offsets for quality cases (0x00, 0x02, 0x04, 0x06), clamps/wraps frame indices, sets the new frame (Item::setFrame) and attempts to move the item with Item::legal_move. It contains suspend points and an allocator/spawn-related check (spawn->FREE::func1C19 appears in the logic).",
+    "Proximity behavior: U8P_SPIKY::enterFastArea calls U8P_SPIKY::func0188 and starts an ambient sound (playAmbientSFX). U8P_SPIKY::leaveFastArea stops that sound (stopSFX) and clears a reference with resetRef (cleanup when the player leaves proximity)."
   ],
   "notable_control_flow": [
-    "Event-driven: separate handlers for U8P_SPIKY::look (inspection), hit/gotHit (damage reactions), enterFastArea (spawn update loop), and leaveFastArea (cleanup).",
-    "Fast-update loop is implemented as a spawned process (U8P_SPIKY::0188) that suspends in a tight cycle: read state, compute offsets/frame, set frame, call Item::legal_move, spawn mover helper, suspend, repeat.",
-    "Conditional branching in hit handlers: small-type hits follow a randomized impulse/damage path; hits from a specific item type (0x1F7) instead modify the object's 'quality' state (4-state rotation inferred).",
-    "Resource lifecycle: enterFastArea starts ambient SFX and the fast-loop process; leaveFastArea stops SFX and clears a small ref id (resetRef 6) to tear down per-item processing."
+    "U8P_SPIKY::hit branches on its first parameter: if the parameter < 0x0100 treat as a numeric damage code and forward to METHOD::receiveHitWrapper; otherwise treat parameter as an item pointer and inspect its type via Item::getType to conditionally run the quality-cycling path (type == 0x01F7).",
+    "Quality is used as a 4-state small-state machine: observed mapping cycles values (0x00 -> 0x04, 0x02 -> 0x06, 0x04 -> 0x00, 0x06 -> 0x02) and is written back with Item::setQuality, driving frame/position updates.",
+    "Proximity entry/exit are separate fast-area processes (U8P_SPIKY::enterFastArea/U8P_SPIKY::leaveFastArea) that trigger updates and sound start/stop; U8P_SPIKY::enterFastArea explicitly calls U8P_SPIKY::func0188 before starting SFX.",
+    "U8P_SPIKY::func0188 performs coordinate/frame math and clamps/wraps results, then calls Item::setFrame and Item::legal_move; it also contains suspend points and references to spawn/allocator checks which may gate parts of the update."
   ],
   "open_questions": [
-    "Exact semantics of METHOD::0080 called by hit/gotHit (appears to apply an impulse/damage/effect but its precise effect is unknown).",
-    "Precise meaning and domain of the 'quality' values (0,2,4,6) and how they map to visible behavior — inferred as a 4-state rotation but the gameplay interpretation is unclear.",
-    "Exact role and implementation details of the spawned helper FREE::1C19 (it appears to move the item but the mover's side-effects and timing are inferred).",
-    "Whether any global game flags are affected elsewhere by these handlers (metadata shows no global reads/writes, but per-item info flags are set/cleared)."
+    "What is the exact meaning and valid range of the object's 'quality' field beyond the observed 4-state cases? (inferred usage is high-confidence for these cases, but overall semantics remain partially unknown).",
+    "What precisely is spawn->FREE::func1C19 and how it affects U8P_SPIKY::func0188's execution (allocator/spawn check inferred but purpose unclear).",
+    "What does resetRef(0x06, this) represent internally (which reference id 0x06 controls and how other scripts may depend on it)?",
+    "What are the exact semantics and game effect of the numeric constants used with playAmbientSFX (0x32, 0x00CE) and stopSFX (0x00CE) beyond starting/stopping the SFX slot?"
   ],
   "main_function": {
     "name": "U8P_SPIKY::look",
     "execution_form": "process",
-    "purpose": "Handle the player/actor looking at (inspecting) the Spiky item: set per-item info/exclusion as needed and emit a short descriptive message \"spiky sphere \" to the viewer via Item::bark.",
+    "purpose": "Handle player examine/U8P_SPIKY::look interactions: emit a short player-facing description ('spiky sphere') and then suspend/return.",
     "entry_conditions": [
-      "Event 0: actor (typically the Avatar) inspects/looks at the Spiky item."
+      "Player inspects or 'looks at' the object (U8P_SPIKY::look/examine action).",
+      "Engine invokes the object's U8P_SPIKY::look process (processType 0x0208)."
     ],
     "confidence": "high"
   },
@@ -34,157 +34,175 @@
     {
       "name": "U8P_SPIKY::look",
       "kind": "main",
-      "role": "Inspection handler that emits the item's descriptive text and sets per-item processing info/exclusion.",
+      "role": "Player-facing examine/description handler (bark + suspend).",
       "confidence": "high"
     },
     {
       "name": "U8P_SPIKY::hit",
       "kind": "helper",
-      "role": "Respond to hit events: apply randomized reaction for generic hits (calls METHOD::0080) and, for a special attacker type (0x1F7), rotate the item's internal 'quality' state (Item::getQuality/Item::setQuality).",
+      "role": "General U8P_SPIKY::hit/damage entrypoint: forwards numeric hits to engine or cycles quality when U8P_SPIKY::hit by a specific item type.",
       "confidence": "high"
     },
     {
       "name": "U8P_SPIKY::gotHit",
       "kind": "helper",
-      "role": "Simpler hit reaction for got-hit events: for small-type hits compute random modifier and call METHOD::0080; does not alter 'quality'.",
+      "role": "Narrow U8P_SPIKY::hit handler: forwards certain small numeric U8P_SPIKY::hit codes to engine with randomized damage.",
       "confidence": "high"
     },
     {
-      "name": "U8P_SPIKY::0188",
+      "name": "U8P_SPIKY::func0188",
       "kind": "helper",
-      "role": "Spawned fast-update loop that animates the item, computes short x/y offsets based on 'quality', validates moves (Item::legal_move) and spawns mover helper (FREE::1C19) to perform movement while the player is nearby.",
+      "role": "Compute and apply visual frame and positional offsets based on 'quality'; drives Item::setFrame and Item::legal_move (animation/placement update routine).",
       "confidence": "high"
     },
     {
       "name": "U8P_SPIKY::enterFastArea",
       "kind": "helper",
-      "role": "Triggered when an actor enters the fast-update area: set per-item info/exclusion, spawn U8P_SPIKY::0188, and start ambient SFX (playAmbientSFX).",
+      "role": "Proximity-enter behavior: run U8P_SPIKY::func0188 and start ambient SFX.",
       "confidence": "high"
     },
     {
       "name": "U8P_SPIKY::leaveFastArea",
       "kind": "helper",
-      "role": "Triggered when an actor leaves the fast-update area: clear per-item info/exclusion, stop ambient SFX (stopSFX), and call resetRef(6) to clean up references/flags.",
+      "role": "Proximity-exit behavior: stop ambient SFX and reset internal reference for cleanup.",
       "confidence": "high"
+    },
+    {
+      "name": "METHOD::receiveHitWrapper",
+      "kind": "extern",
+      "role": "Engine method to resolve/apply damage to items; called with randomized damage values from U8P_SPIKY::hit/U8P_SPIKY::gotHit.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::*",
+      "kind": "extern",
+      "role": "Engine item accessors/mutators (getType, getQuality, setQuality, getFrame, setFrame, getX/getY/getZ, legal_move) used extensively for state, frame and positioning.",
+      "confidence": "high"
+    },
+    {
+      "name": "playAmbientSFX / stopSFX / resetRef",
+      "kind": "extern",
+      "role": "Audio and reference-management engine calls used for proximity sound start/stop and ref cleanup.",
+      "confidence": "high"
+    },
+    {
+      "name": "urandom",
+      "kind": "extern",
+      "role": "Random number generator used to vary damage amounts passed to the engine U8P_SPIKY::hit resolver.",
+      "confidence": "high"
+    },
+    {
+      "name": "spawn->FREE::func1C19",
+      "kind": "extern",
+      "role": "Spawn/allocator-related callback/check referenced by U8P_SPIKY::func0188; exact role inferred/uncertain.",
+      "confidence": "low"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
         "caller": "U8P_SPIKY::enterFastArea",
-        "callee": "U8P_SPIKY::0188",
-        "purpose": "Spawn the fast-update behavior loop when an actor enters the nearby area.",
+        "callee": "U8P_SPIKY::func0188",
+        "purpose": "Run the visual/frame/position update routine when an actor enters proximity.",
         "confidence": "high"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_SPIKY::look",
-        "callee": "Item::bark",
-        "purpose": "Emit the inspection text \"spiky sphere \" to the viewer/process.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_SPIKY::hit",
-        "callee": "urandom",
-        "purpose": "Produce a small random value used to compute a modifier for the hit reaction.",
+        "callee": "METHOD::receiveHitWrapper",
+        "purpose": "Forward small numeric hits as engine-resolved damage with randomized amount (urandom(4)+2).",
         "confidence": "high"
       },
       {
         "caller": "U8P_SPIKY::gotHit",
-        "callee": "urandom",
-        "purpose": "Produce a small random value for the simpler got-hit reaction.",
+        "callee": "METHOD::receiveHitWrapper",
+        "purpose": "Forward certain small numeric U8P_SPIKY::hit codes to engine with randomized damage (urandom(4)+2).",
         "confidence": "high"
-      },
-      {
-        "caller": "U8P_SPIKY::hit",
-        "callee": "METHOD::0080",
-        "purpose": "Apply a computed hit/impulse/damage-like effect using parameters derived from the random modifier and passed values.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_SPIKY::gotHit",
-        "callee": "METHOD::0080",
-        "purpose": "Apply the same computed reaction as U8P_SPIKY::hit for small-type hits.",
-        "confidence": "medium"
       },
       {
         "caller": "U8P_SPIKY::hit",
         "callee": "Item::getType",
-        "purpose": "Check the attacker's item/type id to detect the special type 0x1F7 that triggers quality-state rotation.",
+        "purpose": "Inspect the type of an item/source parameter to detect the special source type (0x01F7) that triggers quality cycling.",
         "confidence": "high"
       },
       {
         "caller": "U8P_SPIKY::hit",
         "callee": "Item::getQuality",
-        "purpose": "Read the item's small internal state used to determine animation/movement behavior and to be cycled by certain hits.",
+        "purpose": "Read this object's 'quality' to determine the next visual/state mapping upon special hits.",
         "confidence": "high"
       },
       {
         "caller": "U8P_SPIKY::hit",
         "callee": "Item::setQuality",
-        "purpose": "Write back the new quality/state after cycling in response to the special attacker type.",
+        "purpose": "Write back the transformed quality value after cycling; used to persist state change that drives frame/position updates.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SPIKY::0188",
+        "caller": "U8P_SPIKY::func0188",
         "callee": "Item::getFrame",
-        "purpose": "Read current animation frame to compute frame updates.",
+        "purpose": "Read current visual frame before computing a new frame index.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SPIKY::0188",
-        "callee": "Item::setFrame",
-        "purpose": "Set the chosen animation frame after computation.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SPIKY::0188",
+        "caller": "U8P_SPIKY::func0188",
         "callee": "Item::getX",
-        "purpose": "Read base X coordinate as starting point for computed offsets.",
+        "purpose": "Read X coordinate to compute offset for repositioning during animation/update.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SPIKY::0188",
+        "caller": "U8P_SPIKY::func0188",
         "callee": "Item::getY",
-        "purpose": "Read base Y coordinate as starting point for computed offsets.",
+        "purpose": "Read Y coordinate to compute offset for repositioning during animation/update.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SPIKY::0188",
+        "caller": "U8P_SPIKY::func0188",
         "callee": "Item::getZ",
-        "purpose": "Read Z coordinate (byte) used when building a WorldPoint for movement validation.",
+        "purpose": "Read Z coordinate to compute offset for repositioning during animation/update.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SPIKY::0188",
+        "caller": "U8P_SPIKY::func0188",
+        "callee": "Item::setFrame",
+        "purpose": "Apply the computed visual frame index to change object's appearance.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SPIKY::func0188",
         "callee": "Item::legal_move",
-        "purpose": "Validate/prepare a legal move to the computed WorldPoint before spawning the mover helper.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SPIKY::0188",
-        "callee": "spawn",
-        "purpose": "Spawn the mover helper (FREE::1C19) that performs the actual item movement/physics side-effect.",
+        "purpose": "Attempt to move/place the item to computed coordinates while respecting placement rules.",
         "confidence": "high"
       },
       {
         "caller": "U8P_SPIKY::enterFastArea",
-        "callee": "U8P_SPIKY::playAmbientSFX",
-        "purpose": "Start an ambient looping sound for the item while an actor is nearby.",
+        "callee": "playAmbientSFX",
+        "purpose": "Start an ambient sound effect for the object when player enters proximity.",
         "confidence": "high"
       },
       {
         "caller": "U8P_SPIKY::leaveFastArea",
-        "callee": "U8P_SPIKY::stopSFX",
-        "purpose": "Stop the ambient sound started on enterFastArea.",
+        "callee": "stopSFX",
+        "purpose": "Stop the ambient sound effect when player leaves proximity (cleanup).",
         "confidence": "high"
       },
       {
         "caller": "U8P_SPIKY::leaveFastArea",
-        "callee": "U8P_SPIKY::resetRef",
-        "purpose": "Clear/reset a small item reference/flag (id 6) as part of cleanup.",
+        "callee": "resetRef",
+        "purpose": "Clear/reset an internal object reference/flag as part of leave-area cleanup.",
         "confidence": "high"
+      },
+      {
+        "caller": "U8P_SPIKY::hit",
+        "callee": "urandom",
+        "purpose": "Produce a small random value used to vary forwarded damage amounts.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SPIKY::func0188",
+        "callee": "spawn->FREE::func1C19",
+        "purpose": "A spawn/allocator-related check or callback invoked during the update routine; exact purpose unknown.",
+        "confidence": "low"
       }
     ]
   },
@@ -200,8 +218,8 @@
   ],
   "quick_facts": {
     "main_function": "U8P_SPIKY::look",
-    "behavior_summary_one_liner": "Provides the gameplay logic for a 'Spiky' world object that can be inspected, reacts to hits, and runs a small fast-update behavior while the player is nearby.",
-    "external_call_count": 18,
+    "behavior_summary_one_liner": "This script implements the gameplay behavior for a 'spiky sphere' world object. When the player 'looks' at it the object emits the short description/bark \"spiky sphere\" and the U8P_SPIKY::look process suspends.",
+    "external_call_count": 16,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

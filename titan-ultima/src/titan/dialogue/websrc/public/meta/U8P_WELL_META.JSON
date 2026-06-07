@@ -3,26 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_WELL.json",
   "file": "U8P_WELL",
   "behavior_summary": [
-    "Handles the item's 'U8P_WELL::look' (examine) event: when a viewer inspects the well, the script marks the item with an info/process-exclude state, builds the short label string \"well  \", and asks the item system to 'bark' that string to the inspecting process (viewer).",
-    "After calling the bark routine it frees the ephemeral string, pushes the bark return value into an implies/pop sequence (likely for engine control) and then suspends/returns.",
-    "No global read/write flags are modified by this handler in the extracted snippet."
+    "Provides the game's response when the player examines (looks at) the well. When invoked it emits a single short bark text \"well\" and then yields/ends the U8P_WELL::look process.",
+    "No branching, no menus, no parameters, and no reads/writes of global flags or external calls are present.",
+    "Function appears to be a minimal descriptive handler or placeholder for the well object."
   ],
   "notable_control_flow": [
-    "Entry on Event 0 (U8P_WELL::look) causes immediate setup (set info / process exclude) to control processing while describing the item.",
-    "Construct ephemeral string literal for the short description, call Item::bark with that string and the viewer process id, then free the string.",
-    "Pushes the bark return value into an 'implies' operation and pops a temporary before suspending; this indicates a small control/return implication after the message delivery."
+    "Linear: U8P_WELL::look displays one bark string then immediately suspends/terminates the process.",
+    "There are no conditional branches, no menu/Ask flow, and no subsequent internal or external procedure calls."
   ],
   "open_questions": [
-    "Exact parameter ordering and calling convention for Item::bark (which parameter is pid vs. message pointer) is inferred but not explicitly documented.",
-    "Precise semantics of the 'set info' opcode and the 'process exclude' flag in this context (what processing is excluded and for how long) are inferred from instruction patterns.",
-    "Meaning and impact of the 'implies' operation on the bark return value: is it used to change flow, suppress further processing, or purely bookkeeping?"
+    "Does the trailing 'suspend' end the process permanently or yield to the engine to resume later? (inferred behavior; confidence: medium)",
+    "Is this U8P_WELL::look handler ever extended at runtime by other systems (e.g., contextual augmentation based on player state)? (unknown; confidence: low)",
+    "Is the bark text localized elsewhere or hardcoded here as the single token \"well\"? (uncertain; confidence: low)"
   ],
   "main_function": {
     "name": "U8P_WELL::look",
     "execution_form": "process",
-    "purpose": "Respond to an examine/U8P_WELL::look event by preparing and delivering the well's short description to the inspecting process and adjusting item processing state while the description is delivered.",
+    "purpose": "Respond to the player's Look/Examine action on the well by showing a short description/bark.",
     "entry_conditions": [
-      "Event 0 (U8P_WELL::look) — triggered when an actor/avatar looks at or examines the well"
+      "Player performs the Look/Examine verb on the well",
+      "Engine invokes a process of type 0x0208 for the object's U8P_WELL::look handler"
     ],
     "confidence": "high"
   },
@@ -30,53 +30,25 @@
     {
       "name": "U8P_WELL::look",
       "kind": "main",
-      "role": "Handles the item's U8P_WELL::look/examine event: set item info/exclude, construct description string, call Item::bark, cleanup, then suspend/return.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine used to deliver/display a short description or message originating from the item to a target process/player.",
+      "role": "Provides the short descriptive text shown when the player examines the well.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
-    "internal_calls": [
-      {
-        "caller": "U8P_WELL::look",
-        "callee": "U8P_WELL::set info / process exclude (engine opcode)",
-        "purpose": "Apply an info/state key to the item and exclude it from normal processing while preparing/delivering the description.",
-        "confidence": "medium"
-      }
-    ],
-    "external_calls": [
-      {
-        "caller": "U8P_WELL::look",
-        "callee": "Item::bark",
-        "purpose": "Send or display the short label string \"well  \" to the inspecting process (viewer pid).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_WELL::look",
-        "callee": "FREE::free",
-        "purpose": "Free the ephemeral string buffer allocated/used for the short description.",
-        "confidence": "medium"
-      }
-    ]
+    "internal_calls": [],
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
     "writes": []
   },
   "ui_tags": [
-    "trigger",
-    "cleanup",
-    "guard"
+    "trigger"
   ],
   "quick_facts": {
-    "main_function": "WELL::look",
-    "behavior_summary_one_liner": "Handles the item's 'U8P_WELL::look' (examine) event: when a viewer inspects the well, the script marks the item with an info/process-exclude state, builds the short label string \"well  \", and asks the item system to 'bark' that string to the inspecting process (viewer).",
-    "external_call_count": 2,
+    "main_function": "U8P_WELL::look",
+    "behavior_summary_one_liner": "Provides the game's response when the player examines (looks at) the well. When invoked it emits a single short bark text \"well\" and then yields/ends the U8P_WELL::look process.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

@@ -3,30 +3,27 @@
   "source_of_truth": "dialogue/json/U8P_EWSHELF.json",
   "file": "U8P_EWSHELF",
   "behavior_summary": [
-    "Handles the 'U8P_EWSHELF::look' (inspect) event for a shelf object: when an actor inspects the shelf it prepares the object state, emits a short visible label, and then returns/suspends.",
-    "Sets a per-object info entry using constant 0x0208 (appears to register or expose inspection metadata for the shelf).",
-    "Temporarily excludes the process/object from normal processing (a 'process exclude' operation) before generating the visible label — likely to avoid recursion or side-effects while barking.",
-    "Constructs and passes the literal string \"shelf \" to Item::bark so the viewer receives the shelf label; the temporary string is freed/cleaned up after the call.",
-    "Captures the return value from Item::bark, applies an imply/pop pattern and then suspends/returns, following the engine's process-oriented calling convention."
+    "Provides the 'U8P_EWSHELF::look' (examine) handler for a shelf object. When the player examines the shelf this script displays a single short descriptive text: \"shelf \".",
+    "After displaying the text the process suspends (the code contains a trailing suspend), so the U8P_EWSHELF::look process yields/waits after the bark — likely to allow player acknowledgement or to return control to the engine.",
+    "There is no branching, menu interaction, item manipulation, or global flag access; the handler is a minimal read-only description response."
   ],
   "notable_control_flow": [
-    "Entry on Event 0 (U8P_EWSHELF::look/inspect) into a process-style handler (suspend/return form).",
-    "A small internal state change: push 0x0208 and 'set info' on the object occurs before messaging the viewer.",
-    "A 'process exclude' opcode is executed immediately before calling Item::bark, changing processing context for the emission step.",
-    "Call to external routine Item::bark (synchronous request to emit/display text) with stack-managed string allocation and cleanup.",
-    "Return value from Item::bark is captured and passed through an imply/pop sequence before the handler suspends."
+    "U8P_EWSHELF::look executes linearly: emit a Bark with text \"shelf \", then hit a suspend node (pause/terminate the U8P_EWSHELF::look process).",
+    "No conditional branches, no menu/Ask nodes, and no calls to external systems are present in the process.",
+    "The presence of an opening block/Unknown node and a trailing suspend/Unknown node suggests a simple start/display/wait lifecycle for the U8P_EWSHELF::look process."
   ],
   "open_questions": [
-    "What is the precise semantic meaning of info id 0x0208 (what UI/engine behavior or inspector data it enables)?",
-    "What exact effect does the 'process exclude' opcode have here (only prevention of recursion, or also affects visibility/AI processing)?",
-    "Does the Item::bark return value influence game logic elsewhere (the handler captures and implies it but does not appear to use it here)?"
+    "Is the trailing space in the bark text \"shelf \" intentional (formatting/concatenation with other text) or an artifact of extraction?",
+    "Does U8P_EWSHELF::look also get invoked by a fast-area entry (enterFastArea) in some contexts, or only by an explicit player 'U8P_EWSHELF::look' action?",
+    "Does the suspend node represent a temporary pause waiting for player input, or does it indicate the process ends immediately after the bark (engine-dependent behavior)?"
   ],
   "main_function": {
     "name": "U8P_EWSHELF::look",
     "execution_form": "process",
-    "purpose": "Respond to an actor/player looking at the shelf: register inspection info and emit the short label \"shelf \" to the viewer, then suspend/return.",
+    "purpose": "Respond to the player's examine/U8P_EWSHELF::look action for the shelf by showing a short descriptive text and yielding the U8P_EWSHELF::look process.",
     "entry_conditions": [
-      "Event 0 — triggered when an actor looks at or inspects the shelf object (viewer enters U8P_EWSHELF::look/inspect context)"
+      "Invoked when the player examines or 'looks at' the shelf (U8P_EWSHELF::look/inspect action).",
+      "May also be invoked by engine U8P_EWSHELF::look-type fast-area/trigger entry in contexts where U8P_EWSHELF::look processes are started automatically (inferred)."
     ],
     "confidence": "high"
   },
@@ -34,39 +31,13 @@
     {
       "name": "U8P_EWSHELF::look",
       "kind": "main",
-      "role": "Event handler for 'U8P_EWSHELF::look' (examine) interaction on the shelf object.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine used to display or emit short text/messages from an item/process to a player/process; used here to show the label 'shelf '.",
+      "role": "show short description for the shelf and suspend the U8P_EWSHELF::look process",
       "confidence": "high"
     }
   ],
   "call_analysis": {
-    "internal_calls": [
-      {
-        "caller": "U8P_EWSHELF::look",
-        "callee": "U8P_EWSHELF::set info (info_id 0x0208)",
-        "purpose": "Attach/register inspection metadata or state to the shelf object before presenting its label (inferred).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_EWSHELF::look",
-        "callee": "U8P_EWSHELF::process exclude",
-        "purpose": "Temporarily change processing context or exclude the object/process from normal processing while emitting text (likely to avoid recursion or side-effects).",
-        "confidence": "medium"
-      }
-    ],
-    "external_calls": [
-      {
-        "caller": "U8P_EWSHELF::look",
-        "callee": "Item::bark",
-        "purpose": "Emit/display the literal label string \"shelf \" to the viewer PID so the player sees the shelf's short description.",
-        "confidence": "high"
-      }
-    ]
+    "internal_calls": [],
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -74,13 +45,14 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "guard"
+    "description",
+    "suspend",
+    "no-flags"
   ],
   "quick_facts": {
     "main_function": "U8P_EWSHELF::look",
-    "behavior_summary_one_liner": "Handles the 'U8P_EWSHELF::look' (inspect) event for a shelf object: when an actor inspects the shelf it prepares the object state, emits a short visible label, and then returns/suspends.",
-    "external_call_count": 1,
+    "behavior_summary_one_liner": "Provides the 'U8P_EWSHELF::look' (examine) handler for a shelf object. When the player examines the shelf this script displays a single short descriptive text: \"shelf \".",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

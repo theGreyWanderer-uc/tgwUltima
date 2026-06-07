@@ -3,28 +3,27 @@
   "source_of_truth": "dialogue/json/U8P_BLANKETS.json",
   "file": "U8P_BLANKETS",
   "behavior_summary": [
-    "BLANKETS::look is the 'U8P_BLANKETS::look' (examine) handler for blanket-type items. When a player (or relevant actor/process) examines the item, the script queries the item's frame/state and, if the frame equals 0, 1, or 2, it emits the short description \"blanket \" using the item's bark method and then suspends the process.",
-    "Frames 0, 1, and 2 are treated identically: the script builds or references the string \"blanket \", calls Item::bark with the item, that string, and the current pid context, frees the temporary string, and runs an implies/pop/suspend control sequence to pause the process after barking.",
-    "If the item's frame is any other value the handler performs no special action and returns normally."
+    "When the BLANKETS item is examined (U8P_BLANKETS::look), the script chooses a short description/bark based on the item's visual frame and displays it to the player.",
+    "The U8P_BLANKETS::look handler compares Item::getFrame(this) against at least three frame values (0x00, 0x01, 0x02) and in each shown branch emits the short bark text \"blanket \" then issues a suspend to pause the U8P_BLANKETS::look interaction.",
+    "No global flags are read or written and no menus or player-choice branching are present; behavior is entirely local to the item instance."
   ],
   "notable_control_flow": [
-    "Entry occurs on the 'U8P_BLANKETS::look' event for a BLANKETS instance (examine trigger).",
-    "Control branches on Item::getFrame(): three explicit branches check for frame == 0, == 1, and == 2. Each matching branch performs the same bark and suspend sequence.",
-    "After calling Item::bark the script frees the temporary string and uses an implies/pop/suspend sequence (engine control idiom) to suspend the process — indicating the message was displayed and handling/dialog state is paused.",
-    "Non-matching frames fall through with no side effects."
+    "U8P_BLANKETS::look branches on Item::getFrame(this) == 0x00 / 0x01 / 0x02 to select which bark branch to run.",
+    "Each branch contains a Bark (display short text) followed by suspend — inferred to pause/terminate the U8P_BLANKETS::look display until player continues.",
+    "Although branches are frame-specific, the visible output in the excerpt is identical across the three frames; branching appears prepared for per-frame variation."
   ],
   "open_questions": [
-    "What semantic difference (if any) exists between frames 0, 1, and 2 beyond visual variants? The script treats them identically, but art/animation differences are possible.",
-    "Precisely where the pid (process/player id) value is sourced from in the caller context — it's read and passed to Item::bark but its origin is inferred from calling convention.",
-    "Why the script uses the implies/pop/suspend sequence here instead of a simple return — is it coordinating with a broader dialog/processing system or preventing immediate re-entry?"
+    "Why do all three shown frame-branches produce the identical bark text \"blanket \"? (Possibly placeholder data or other frames not shown.)",
+    "Are there additional frames or branches outside this excerpt that produce different descriptions?",
+    "Does the suspend node end the U8P_BLANKETS::look process or simply pause it until player acknowledgement in the engine's UI semantics (engine-dependent)?"
   ],
   "main_function": {
     "name": "U8P_BLANKETS::look",
     "execution_form": "process",
-    "purpose": "Respond to an examine ('U8P_BLANKETS::look') event for blanket items by identifying the item to the viewer. It queries the item's visual frame and, for frames 0, 1, or 2, instructs the item to 'bark' the label \"blanket \" to the viewer and then suspends further processing of the message.",
+    "purpose": "Provide the short description/bark when the player examines the BLANKETS item; select text based on the item's frame and pause the interaction after displaying it.",
     "entry_conditions": [
-      "Triggered by Event 0 (the actor/player looks at or examines the BLANKETS item).",
-      "Runs with an item/object pointer parameter (inferred at BP+06) representing the specific blanket instance."
+      "Invoked by the engine when the player uses the 'U8P_BLANKETS::look' / examine action on the BLANKETS item (processType 0x0208).",
+      "Runs in response to an examine/inspect trigger for the item instance (implicit 'this' reference)."
     ],
     "confidence": "high"
   },
@@ -32,19 +31,7 @@
     {
       "name": "U8P_BLANKETS::look",
       "kind": "main",
-      "role": "Examine ('U8P_BLANKETS::look') event handler for BLANKETS items",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getFrame",
-      "kind": "extern",
-      "role": "Engine/item API: return numeric frame/state of the item used to branch behavior",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item API: emit/display a short text message from the item to the provided process/player context",
+      "role": "Handle the item's U8P_BLANKETS::look/examine event and show a short bark based on Item::getFrame(this).",
       "confidence": "high"
     }
   ],
@@ -54,37 +41,38 @@
       {
         "caller": "U8P_BLANKETS::look",
         "callee": "Item::getFrame",
-        "purpose": "Obtain the item's numeric frame/state so the handler can determine whether to describe it as a blanket (frame comparison against 0,1,2).",
+        "purpose": "Query the BLANKETS item instance's current visual frame/index to decide which description branch to run.",
         "confidence": "high"
       },
       {
         "caller": "U8P_BLANKETS::look",
-        "callee": "Item::bark",
-        "purpose": "Cause the item to display/say the short string \"blanket \" to the viewer/process context (pid). The call passes the item, the string, and the pid; the returned value is used in the subsequent implies/pop/suspend sequence.",
+        "callee": "Bark",
+        "purpose": "Engine/dialog action to present the short object label/text ('blanket ') to the player.",
         "confidence": "high"
+      },
+      {
+        "caller": "U8P_BLANKETS::look",
+        "callee": "suspend",
+        "purpose": "Engine control to pause/terminate the U8P_BLANKETS::look process after presenting the bark (inferred from suspend usage in U8P_BLANKETS::look handlers).",
+        "confidence": "medium"
       }
     ]
   },
   "global_flags": {
-    "reads": [
-      {
-        "name": "pid",
-        "likely_effect": "Provides the process/player context passed to Item::bark so the message targets the correct viewer/process.",
-        "confidence": "medium"
-      }
-    ],
+    "reads": [],
     "writes": []
   },
   "ui_tags": [
     "trigger",
     "cleanup",
+    "animation",
     "guard"
   ],
   "quick_facts": {
-    "main_function": "BLANKETS::look",
-    "behavior_summary_one_liner": "BLANKETS::look is the 'U8P_BLANKETS::look' (examine) handler for blanket-type items. When a player (or relevant actor/process) examines the item, the script queries the item's frame/state and, if the frame equals 0, 1, or 2, it emits the short description \"blanket \" using the item's bark method and then suspends the process.",
-    "external_call_count": 2,
-    "flag_read_count": 1,
+    "main_function": "U8P_BLANKETS::look",
+    "behavior_summary_one_liner": "When the BLANKETS item is examined (U8P_BLANKETS::look), the script chooses a short description/bark based on the item's visual frame and displays it to the player.",
+    "external_call_count": 3,
+    "flag_read_count": 0,
     "flag_write_count": 0
   },
   "hypotheses": {

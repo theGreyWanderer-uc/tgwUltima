@@ -3,27 +3,24 @@
   "source_of_truth": "dialogue/json/U8P_LEGS.json",
   "file": "U8P_LEGS",
   "behavior_summary": [
-    "Responds to an examine/'U8P_LEGS::look' event for the legs object by producing a short descriptive message beginning with the literal \"legs \".",
-    "Builds a temporary string that prefixes process-specific/instance info onto the literal \"legs \", calls the item's output routine to present that string to the triggering process, frees the temporary string, then yields/suspends after returning a success-like result.",
-    "No global flags are read or written by this handler; its effect is presentation-only (informational) and it returns a success-like value to the caller/event system."
+    "U8P_LEGS::look is a simple U8P_LEGS::look/examine handler: when the player inspects this NPC/object it emits a single bark containing the text \"legs \" and then issues a suspend.",
+    "There are no menu interactions, conditionals, flag reads/writes, or external API calls in this snippet; the behavior is a one-shot response to the U8P_LEGS::look event."
   ],
   "notable_control_flow": [
-    "Entry on Event 0 (U8P_LEGS::look/examine) for the legs item.",
-    "Allocate/construct a string: literal \"legs \" concatenated with process-specific info.",
-    "Push the target process pointer and the constructed string and invoke Item::bark to display/emit the message.",
-    "Capture Item::bark return into local retval, perform an implies/pop sequence to produce the handler's result, free the temporary string, and suspend (yield)."
+    "Entry via the engine's 'U8P_LEGS::look' process (process type 0x0208) triggers the function.",
+    "Function executes a single player-facing bark and then immediately suspends the process — no branching or follow-up logic.",
+    "The suspend appears to be an engine-level handoff/end of processing rather than custom looping or state machine logic."
   ],
   "open_questions": [
-    "What exact process-specific information is concatenated to the literal \"legs \" (e.g., an item name, an adjective, or a status string) — this was inferred but not explicitly decoded.",
-    "What is the semantic purpose of the pushed mode/constant (0x0208) and the implies/pop sequence surrounding the return value — interpreted as producing a success-like result but exact engine semantics are unclear.",
-    "Are there any conditional branches or alternate messages for different states of the legs object (none observed, but bytecode-level branches could be elided in this small handler)."
+    "Is the trailing space in the bark text \"legs \" intentional or an artifact of extraction?",
+    "Is this script attached to an NPC, an object, or an item instance in the game world (the snippet itself does not disambiguate)?"
   ],
   "main_function": {
     "name": "U8P_LEGS::look",
     "execution_form": "process",
-    "purpose": "Handle the examine/U8P_LEGS::look event for the legs object: construct and present a short descriptive string ('legs ' + instance info) to the viewer, then return/suspend.",
+    "purpose": "Respond to the player's 'U8P_LEGS::look' (examine) action by displaying a short descriptive bark ('legs ') and then suspending the process.",
     "entry_conditions": [
-      "Event 0 — the avatar or another actor looks at / examines the legs object (area entry or explicit U8P_LEGS::look trigger)."
+      "Invoked by the engine when the player 'looks at' or inspects the associated NPC/object (process type 0x0208)."
     ],
     "confidence": "high"
   },
@@ -31,26 +28,13 @@
     {
       "name": "U8P_LEGS::look",
       "kind": "main",
-      "role": "Event handler for the 'U8P_LEGS::look' (examine) event on the legs object; constructs and barks a description.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine that displays or emits a short text message from an item/process to a target process/player.",
+      "role": "U8P_LEGS::look/examine handler that emits a short bark and suspends",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_LEGS::look",
-        "callee": "Item::bark",
-        "purpose": "Present or emit the constructed description string to the target process/player (display/voice the message).",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -58,12 +42,14 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup"
+    "cleanup",
+    "animation",
+    "guard"
   ],
   "quick_facts": {
-    "main_function": "LEGS::look",
-    "behavior_summary_one_liner": "Responds to an examine/'U8P_LEGS::look' event for the legs object by producing a short descriptive message beginning with the literal \"legs \".",
-    "external_call_count": 1,
+    "main_function": "U8P_LEGS::look",
+    "behavior_summary_one_liner": "U8P_LEGS::look is a simple U8P_LEGS::look/examine handler: when the player inspects this NPC/object it emits a single bark containing the text \"legs \" and then issues a suspend.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

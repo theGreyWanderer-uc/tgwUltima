@@ -3,51 +3,49 @@
   "source_of_truth": "dialogue/json/U8P_RECALL.json",
   "file": "U8P_RECALL",
   "behavior_summary": [
-    "Provides the gameplay behavior for a \"Recall\" item: when the player uses the item it checks whether teleporting is allowed on the current map, and if allowed presents a menu of known teleporter destinations built from global \"saw...Teleporter\" flags.",
-    "Maps the player's textual choice into an internal destination code (with a conditional code choice for Carthax Lake depending on hydrosFree).",
-    "If the chosen destination code is non-zero it spawns a helper (U8P_RECALL::03C8) to play SFX, call the engine teleport routine (process teleportToEgg), and set the usedRecall global flag.",
-    "Also contains a simple look handler (U8P_RECALL::look) that displays the item's descriptive text via Item::bark."
+    "U8P_RECALL::look is the item's inspect/U8P_RECALL::look handler; it displays a short player-facing text 'recall item' and then suspends — it does not perform teleportation.",
+    "U8P_RECALL::use implements the item 'U8P_RECALL::use' behavior: it closes UI, optionally plays an SFX depending on the player's current map, builds a destination menu from discovered-teleporter flags, asks the player to choose a destination (includes a 'Nowhere' cancel option), maps the chosen menu string to an internal destination code, and if a nonzero destination is chosen calls U8P_RECALL::func03C8 to perform the teleport.",
+    "U8P_RECALL::func03C8 performs the teleport sequence: plays a SFX, spawns/requests the teleport process (process teleportToEgg) with constants and the destination parameter, waits/suspends around the spawn as needed, and writes the global flag usedRecall to record that the recall was used."
   ],
   "notable_control_flow": [
-    "Early-block: U8P_RECALL::use queries Npc::getMap() and early-exits (optionally playing/queuing a feedback SFX) when the player is on certain maps where recall is not permitted or should be treated specially.",
-    "Preparation: calls FREE::36E7 as a preparatory/cleanup step before building the UI list.",
-    "Menu construction: builds a selectable string list (slist) from multiple saw...Teleporter globals and always appends a \"Nowhere\" option.",
-    "Decision: presents slist with Item::ask, compares the returned string via strcmp against known labels to compute a numeric destination code (selected_code); Carthax Lake's mapped code depends on hydrosFree.",
-    "Action spawn: if selected_code != 0 then U8P_RECALL::use spawns U8P_RECALL::03C8 with parameters (destination code, pid) to perform the teleport; otherwise the function returns without spawning."
+    "On U8P_RECALL::use: close UI (FREE::closeAllGumps), construct local1 as a list of menu option strings conditionally based on many saw...Teleporter flags, always add a 'Nowhere' cancel entry, present menu (Ask) and suspend until player selection is assigned to local2.",
+    "Choice mapping: local2 is strcmp-compared against menu strings; mapping sets local3 (an integer destination code) to a nonzero value for real destinations. A special-case mapping exists for 'Carthax Lake' which branches on hydrosFree to select between two internal codes.",
+    "Only when local3 != 0 does U8P_RECALL::use call U8P_RECALL::func03C8(param1 = local3).",
+    "U8P_RECALL::func03C8 plays a teleport SFX (playSFX), spawns process teleportToEgg(0x01, 0x1E, param1), waits/suspends around the spawn, then sets usedRecall = 1."
   ],
   "open_questions": [
-    "Which concrete map IDs cause the early exit behavior and what in-game locations do they correspond to (the disassembly compared map IDs but their textual mapping is not present)?",
-    "What exactly does FREE::36E7 do (UI cleanup, memory free, or other preparatory action)?",
-    "What are the precise numeric destination codes and their mapping to engine map ids passed to process teleportToEgg (the script maps names to byte codes but the engine-level meanings are inferred)?",
-    "What is the exact semantics of process teleportToEgg's non-destination parameters (the second/third args observed in the spawn are not fully documented here)?"
+    "Exact mapping table of menu strings (local1 entries) to concrete destination code values passed as param1 — inferred but not explicitly enumerated here.",
+    "Whether the written flag usedRecall acts as a cooldown/prevent-reuse guard or only as a usage record for quests/statistics.",
+    "Precise behavior differences on specific maps (which SFX ids are played and whether alternate flow is triggered) beyond the presence of a map check via Npc::getMap.",
+    "Whether teleportToEgg's constant arguments (0x01, 0x1E) have additional side effects or modes that affect the teleport process lifecycle."
   ],
   "main_function": {
-    "name": "U8P_RECALL::use",
+    "name": "U8P_RECALL::look",
     "execution_form": "process",
-    "purpose": "Handle player U8P_RECALL::use of the Recall item: validate whether recall is allowed on the current map, present the player with a list of known teleport destinations (derived from saw...Teleporter flags), interpret the textual choice as an internal destination code (special-casing Carthax Lake depending on hydrosFree), and if a valid destination is chosen spawn the teleport helper to perform the teleport.",
+    "purpose": "Provide the short/inspect description for the recall item to the player (display 'recall item').",
     "entry_conditions": [
-      "Triggered by the item-U8P_RECALL::use event (called when a process/actor uses the Recall item).",
-      "Receives the caller process id (pid) as its execution context/parameter."
+      "Triggered when the player 'looks at' or inspects the item (item U8P_RECALL::look/inspect handler, processType 0x0208).",
+      "Also functions as a fast-area style entry when the actor enters the item's trigger region (enterFastArea semantics inferred)."
     ],
     "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_RECALL::use",
-      "kind": "main",
-      "role": "Primary item-U8P_RECALL::use handler that implements the recall destination selection and spawn logic.",
-      "confidence": "high"
-    },
-    {
       "name": "U8P_RECALL::look",
-      "kind": "helper",
-      "role": "Item look/examine handler; calls Item::bark with the static string \"recall item\" to describe the item to the player.",
+      "kind": "main",
+      "role": "inspect/description handler (displays 'recall item')",
       "confidence": "high"
     },
     {
-      "name": "U8P_RECALL::03C8",
+      "name": "U8P_RECALL::use",
       "kind": "helper",
-      "role": "Spawned helper that executes the teleport: plays SFX, calls process teleportToEgg with the chosen destination and pid, sets usedRecall = 1, and handles timing/suspension around the SFX.",
+      "role": "player-facing 'U8P_RECALL::use' handler: build destination menu, capture choice, map to destination code, and invoke teleport helper",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_RECALL::func03C8",
+      "kind": "helper",
+      "role": "utility teleport helper: play SFX, spawn process teleportToEgg with a destination parameter, set usedRecall flag",
       "confidence": "high"
     }
   ],
@@ -55,8 +53,8 @@
     "internal_calls": [
       {
         "caller": "U8P_RECALL::use",
-        "callee": "U8P_RECALL::03C8",
-        "purpose": "Spawn the helper process that performs the actual teleport after a non-zero destination is chosen.",
+        "callee": "U8P_RECALL::func03C8",
+        "purpose": "Invoke the teleport helper with the selected internal destination code (param1) when a real destination is chosen (local3 != 0).",
         "confidence": "high"
       }
     ],
@@ -64,56 +62,44 @@
       {
         "caller": "U8P_RECALL::use",
         "callee": "Npc::getMap",
-        "purpose": "Fetch the player's current map id to decide whether recall should be blocked or treated specially.",
+        "purpose": "Query the player's current map ID to choose SFX or conditional behavior before presenting the menu or teleporting.",
         "confidence": "high"
       },
       {
         "caller": "U8P_RECALL::use",
-        "callee": "U8P_RECALL::isSFXPlaying",
-        "purpose": "Check whether a particular SFX is already playing to avoid overlapping feedback sounds when recall is blocked.",
+        "callee": "isSFXPlaying",
+        "purpose": "Check whether an SFX is currently playing to avoid overlapping sounds before calling playSFX.",
         "confidence": "medium"
       },
       {
         "caller": "U8P_RECALL::use",
-        "callee": "U8P_RECALL::playSFX",
-        "purpose": "Play or queue a feedback sound effect when recall is attempted on a blocked map or in other feedback moments.",
+        "callee": "playSFX",
+        "purpose": "Play a feedback sound when the recall is used (different indices observed depending on map check).",
         "confidence": "high"
       },
       {
         "caller": "U8P_RECALL::use",
-        "callee": "FREE::36E7",
-        "purpose": "Perform an unknown preparatory/cleanup step prior to building the destination list (likely UI or memory housekeeping).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_RECALL::use",
-        "callee": "Item::ask",
-        "purpose": "Present the constructed destination string list (slist) to the player and return the chosen string pointer.",
+        "callee": "FREE::closeAllGumps",
+        "purpose": "Close UI windows (gumps) before showing the destination menu or proceeding with teleportation.",
         "confidence": "high"
       },
       {
         "caller": "U8P_RECALL::use",
-        "callee": "U8P_RECALL::strcmp",
-        "purpose": "Compare the string returned by Item::ask against literal destination names to map the textual choice to an internal destination code.",
+        "callee": "Ask / dialogue menu system",
+        "purpose": "Present the dynamically-built destination menu (local1) to the player and suspend until a choice is captured into local2.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_RECALL::look",
-        "callee": "Item::bark",
-        "purpose": "Display the item's description text (\"recall item\") when the player looks at the item.",
+        "caller": "U8P_RECALL::func03C8",
+        "callee": "playSFX",
+        "purpose": "Play the teleport SFX as part of the teleport sequence.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_RECALL::03C8",
-        "callee": "U8P_RECALL::playSFX",
-        "purpose": "Play the teleport/activation sound effect when initiating the teleport sequence.",
+        "caller": "U8P_RECALL::func03C8",
+        "callee": "process teleportToEgg",
+        "purpose": "Spawn/execute the actual teleport process with constants and the destination parameter (param1) to move the player.",
         "confidence": "high"
-      },
-      {
-        "caller": "U8P_RECALL::03C8",
-        "callee": "U8P_RECALL::process teleportToEgg",
-        "purpose": "Invoke the engine teleport routine with player pid, the chosen destination code/map id, and an extra parameter to perform the actual teleport.",
-        "confidence": "medium"
       }
     ]
   },
@@ -121,49 +107,49 @@
     "reads": [
       {
         "name": "sawCentralTenebraeTeleporter",
-        "likely_effect": "If true, adds \"Central Tenebrae\" to the recall destination menu.",
+        "likely_effect": "Controls whether 'Central Tenebrae' is included in the destination menu (discovery gating).",
         "confidence": "high"
       },
       {
         "name": "sawPlateauTeleporter",
-        "likely_effect": "If true, adds \"Plateau\" to the recall destination menu.",
+        "likely_effect": "Controls whether 'Plateau' is included in the destination menu.",
         "confidence": "high"
       },
       {
         "name": "sawUpperCatacombsTeleporter",
-        "likely_effect": "If true, adds \"Upper Catacombs\" to the recall destination menu.",
+        "likely_effect": "Controls whether 'Upper Catacombs' is included in the destination menu.",
         "confidence": "high"
       },
       {
         "name": "sawMountainKingTeleporter",
-        "likely_effect": "If true, adds \"Hall of the Mountain King\" to the recall destination menu.",
+        "likely_effect": "Controls whether 'Hall of the Mountain King' is included in the destination menu.",
         "confidence": "high"
       },
       {
         "name": "sawArgentrockIsleTeleporter",
-        "likely_effect": "If true, adds \"Argentrock Isle\" to the recall destination menu.",
+        "likely_effect": "Controls whether 'Argentrock Isle' is included in the destination menu.",
         "confidence": "high"
       },
       {
         "name": "sawCarthaxLakeTeleporter",
-        "likely_effect": "If true, adds \"Carthax Lake\" to the recall destination menu; mapped internal code depends on hydrosFree.",
+        "likely_effect": "Controls whether 'Carthax Lake' is included in the destination menu; selection mapping also reads hydrosFree.",
         "confidence": "high"
       },
       {
         "name": "sawDaemonsCragTeleporter",
-        "likely_effect": "If true, adds \"Daemon's Crag\" to the recall destination menu.",
+        "likely_effect": "Controls whether 'Daemon\\u0027s Crag' is included in the destination menu.",
         "confidence": "high"
       },
       {
         "name": "hydrosFree",
-        "likely_effect": "Alters which internal destination code is used for the \"Carthax Lake\" menu entry (environment/quest state dependent).",
+        "likely_effect": "Condition used when mapping the 'Carthax Lake' menu choice to one of two internal destination codes (alternative target selection).",
         "confidence": "medium"
       }
     ],
     "writes": [
       {
         "name": "usedRecall",
-        "likely_effect": "Set to 1 by U8P_RECALL::03C8 when a teleport is initiated to record that the recall item was used.",
+        "likely_effect": "Set to 1 after initiating the teleport to record that the recall was used (may act as usage record or cooldown guard).",
         "confidence": "high"
       }
     ]
@@ -175,9 +161,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "RECALL::use",
-    "behavior_summary_one_liner": "Provides the gameplay behavior for a \"Recall\" item: when the player uses the item it checks whether teleporting is allowed on the current map, and if allowed presents a menu of known teleporter destinations built from global \"saw...Teleporter\" flags.",
-    "external_call_count": 9,
+    "main_function": "U8P_RECALL::look",
+    "behavior_summary_one_liner": "U8P_RECALL::look is the item's inspect/U8P_RECALL::look handler; it displays a short player-facing text 'recall item' and then suspends — it does not perform teleportation.",
+    "external_call_count": 7,
     "flag_read_count": 8,
     "flag_write_count": 1
   },

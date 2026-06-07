@@ -3,27 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_AGWARE.json",
   "file": "U8P_AGWARE",
   "behavior_summary": [
-    "AGWARE::look is a short process that runs when the player (or relevant actor) examines the silverware object. It prepares the object state, constructs the literal message \"silverware \", and asks the item/process system to 'bark' that string so the player sees the short description.",
-    "Before barking, the routine performs local object info/setup operations (set info and process-exclude opcodes inferred from the disassembly), then passes a target PID and the message to Item::bark.",
-    "After calling Item::bark it frees the constructed string and inspects the bark return value in an implies/pop sequence which influences the subsequent suspend/return behavior of the script."
+    "Provides the 'U8P_AGWARE::look' (examine) behavior for the AGWARE entity. When the player inspects this object/NPC the script emits a single bark: \"silverware\".",
+    "The U8P_AGWARE::look process yields/terminates immediately after playing the bark; there is no branching, menu, or external interaction.",
+    "No global flags, parameters, locals, or external calls are used by the canonical behavior; the script is a minimal descriptive handler."
   ],
   "notable_control_flow": [
-    "Entry on Event 0 ('U8P_AGWARE::look'): routine runs immediately when the object is looked at.",
-    "A call to external process method Item::bark is the core action; its return value is tested (pushed, used with 'implies', popped) and that test appears to affect whether/when the script suspends or continues.",
-    "The script executes some object-info and process-exclusion opcodes before the bark call (likely to mark state or prevent further immediate processing of the object).",
-    "The function frees the temporary string after the call and then suspends, so the visible effect is synchronous bark followed by script suspension."
+    "U8P_AGWARE::look executes as a process triggered by an examine/U8P_AGWARE::look event, plays one bark ('silverware'), then suspends/ends the U8P_AGWARE::look process.",
+    "There are no conditional branches or repeated loops — control is straight-line: enter -> bark -> suspend/terminate."
   ],
   "open_questions": [
-    "Exact meaning and numeric id of the 'set info' opcode applied before barking (the disassembly shows an info/set and process-exclude but the specific info id and game semantic are not documented here).",
-    "Precise semantics of the implies/pop sequence using Item::bark's return value — does the return indicate success, a prompt, or a control flag for suspension? (inferred but not certain).",
-    "Clarify the exact identity of the parameter at BP+06h in all contexts: disassembly indicates it is the target PID for Item::bark (the item/process receiving the bark), but whether callers always supply a viewer PID or the item instance is not fully demonstrated in this snippet."
+    "Is AGWARE an item or a static world object/NPC? The name and single-word bark suggest an object (silverware) but canonical metadata does not disambiguate.",
+    "Is the bark text used as a short description only, or is it referenced elsewhere by other systems (e.g., inventory tooltip)?",
+    "Are there any other engine triggers (fast-area entry variants) that call this process beyond the standard 'U8P_AGWARE::look' examine action?"
   ],
   "main_function": {
     "name": "U8P_AGWARE::look",
     "execution_form": "process",
-    "purpose": "Respond to the 'U8P_AGWARE::look' event by causing the silverware object to emit a short description message ('silverware ') via the item bark mechanism, performing brief object-state setup, and then suspending.",
+    "purpose": "Handle the player's inspect/U8P_AGWARE::look action for the AGWARE entity by providing a short descriptive output (bark).",
     "entry_conditions": [
-      "Event 0 ('U8P_AGWARE::look') — triggered when an actor (player or other process) looks at or inspects the object"
+      "Triggered by the engine's U8P_AGWARE::look/examine action on the AGWARE entity (player uses 'U8P_AGWARE::look' or inspects the object).",
+      "May also be invoked via the engine's fast-area U8P_AGWARE::look/process entry semantics for objects with process type 0x0208."
     ],
     "confidence": "high"
   },
@@ -31,26 +30,13 @@
     {
       "name": "U8P_AGWARE::look",
       "kind": "main",
-      "role": "Handle the object's 'U8P_AGWARE::look' event; build and pass a description string to Item::bark and manage short-lived object state and suspension.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/process method invoked to present or emit a short text message on behalf of an item/process.",
+      "role": "Provides the short description / U8P_AGWARE::look handler that plays the bark 'silverware' and ends the process.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_AGWARE::look",
-        "callee": "Item::bark",
-        "purpose": "Request the item/process to produce/display the short message 'silverware ' to the target PID. The call is central to presenting the item's description to the player.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -58,14 +44,13 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "animation",
-    "guard"
+    "inspection",
+    "bark"
   ],
   "quick_facts": {
-    "main_function": "AGWARE::look",
-    "behavior_summary_one_liner": "AGWARE::look is a short process that runs when the player (or relevant actor) examines the silverware object. It prepares the object state, constructs the literal message \"silverware \", and asks the item/process system to 'bark' that string so the player sees the short description.",
-    "external_call_count": 1,
+    "main_function": "U8P_AGWARE::look",
+    "behavior_summary_one_liner": "Provides the 'U8P_AGWARE::look' (examine) behavior for the AGWARE entity. When the player inspects this object/NPC the script emits a single bark: \"silverware\".",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

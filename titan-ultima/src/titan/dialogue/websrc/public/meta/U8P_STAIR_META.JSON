@@ -3,157 +3,163 @@
   "source_of_truth": "dialogue/json/U8P_STAIR.json",
   "file": "U8P_STAIR",
   "behavior_summary": [
-    "Provides the runtime logic for interacting with a stair item: reading the stair's position and state, deciding a movement direction/orientation from the stair's type/frame/z bits, testing whether the destination tile is free/legal, and initiating the move or reporting failure.",
-    "Implements two cooperating processes: U8P_STAIR::STAIR::0080 which executes a single immediate stair interaction (plays entry SFX, performs legality tests, and spawns a short-lived helper on success) and U8P_STAIR::STAIR::0192 which monitors the stair, sets a global blocked/unblocked flag, plays feedback SFX, and spawns STAIR::0080 when a move should proceed.",
-    "Uses asynchronous patterns: suspend/loop and spawn of helper processes (FREE::1C19 and STAIR::0080) so the visible movement/animation and freeing are handled outside the immediate decision code."
+    "Implements stair/tile relocation and type-change attempts for a single stair/item instance. The routines read an item's coordinates, orientation (Z), type and frame, then try to change the tile or move the item to an alternate position depending on orientation and type.",
+    "U8P_STAIR::func0192 is the higher-level attempt: it calls FREE::changeItemType with a requested type (param1) and on success clears a blocked flag; on failure it sets a blocked flag, plays an error SFX, and falls back to a recovery/local-move routine.",
+    "U8P_STAIR::func0080 is a lower-level/local recovery handler invoked when direct changes or moves fail; it computes an alternate new type or destination (based on Z masking and current type), grabs the item, and either calls FREE::changeItemType at an adjusted Z or checks Item::legal_move and spawns a continuation if legal.",
+    "Sound effects (playSFX) are used to signal action start, success, or failure; the global flag hanoiStairBlocked is used to mark when a stair-change operation is blocked after a failed attempt."
   ],
   "notable_control_flow": [
-    "Entry triggers interpret the actor entering the stair's trigger region or activating the stair; the code runs as a process that can suspend and be resumed.",
-    "Branching heavily depends on item state bits (Item::getZ low bits), item type (Item::getType), and frame/orientation (Item::getFrame) to select candidate destination frame/direction bytes.",
-    "Destination legality is decided by calling FREE::2411 and, in some branches, Item::legal_move. On success the code spawns FREE::1C19 (helper) and/or U8P_STAIR::STAIR::0080; on failure it plays a failure SFX and sets or leaves the hill-stair blocked state.",
-    "U8P_STAIR::STAIR::0192 sets/clears the global hanoiStairBlocked flag (0 = unblocked, 1 = blocked) to serialize/guard stair usage based on the test results."
+    "U8P_STAIR::func0192: attempt FREE::changeItemType(param1) -> if success: clear hanoiStairBlocked and play success SFX; suspend and re-evaluate -> branch by (Z & mask) to attempt alternate relocation or legal_move; on failure mark hanoiStairBlocked, play error SFX and call U8P_STAIR::func0080 as fallback.",
+    "U8P_STAIR::func0080: read X/Y/Z/type/frame, play initial SFX and suspend -> branch by (Z & 0x07) equality test to select either a type-to-type mapping and direct FREE::changeItemType at adjusted Z, or compute a destination coordinate and test Item::legal_move -> spawn continuation on success, otherwise treat as failure.",
+    "Both routines preserve/passthrough item frame when calling FREE::changeItemType and use Item::grab before attempting item modifications."
   ],
   "open_questions": [
-    "Exact numeric mapping of specific frame values (e.g., 0x62, 0x70, 0x63, 0x64) to world directions/orientations — code chooses these but their concrete meaning in world coords is inferred.",
-    "Who else in the system reads hanoiStairBlocked and how that flag coordinates with other gameplay systems (the routines here only write it).",
-    "Precise behavior performed by the spawned FREE::1C19 helper (likely free/animation/delayed effect) — its full semantics are inferred but not proven here.",
-    "Precise trigger/event that launches these processes (enterFastArea vs. explicit use) and whether they can be re-entered concurrently in unusual cases."
+    "Exact numeric mappings between source type ids and candidate replacement type ids (the small type->type table inferred from SetFlag patterns) — mapping is inferred but not concretely identified.",
+    "Precise semantic meaning of the Z bitmask tests ((local3 & 0x07) == 0x00 vs 0x06) — likely indicates vertical orientation (up/down) but the exact convention is inferred.",
+    "Broader usage and lifecycle of the global hanoiStairBlocked flag elsewhere in the game (how long it remains set and what systems observe it) — effect inferred from writes only.",
+    "Whether FREE::changeItemType returns strict boolean success/failure or richer error codes that are being interpreted as truthy/falsy here."
   ],
   "main_function": {
-    "name": "U8P_STAIR::0080",
+    "name": "U8P_STAIR::func0080",
     "execution_form": "process",
-    "purpose": "Execute a single stair interaction for a given stair Item*: play an entry sound, read the item's x/y/z/type/frame, compute a candidate destination orientation and coordinates, test destination availability (FREE::2411 and optionally Item::legal_move), spawn a short helper process on success to perform the follow-up (animation/free), or play a failure sound and suspend/loop on failure.",
+    "purpose": "Perform a local recovery or alternate stair relocation/type-change for the current item when a primary change/move failed: compute alternate type or destination based on item orientation and type, grab the item, attempt engine-level change or legal_move, and spawn follow-up processing on success.",
     "entry_conditions": [
-      "Activated when the actor/owner interacts with or enters the stair's trigger region (inferred from naming and immediate SFX + suspend behavior).",
-      "Runs per-activation as a process that can suspend, so it reacts to the stair item's current state at time of activation."
+      "Invoked as a fallback/recovery from U8P_STAIR::func0192 after a failed change/move attempt.",
+      "Likely invoked directly when a stair/item needs local relocation or type adjustment (inferred from Item::grab usage and suspend points)."
     ],
-    "confidence": "high"
+    "confidence": "medium"
   },
   "function_map": [
     {
-      "name": "U8P_STAIR::0080",
+      "name": "U8P_STAIR::func0080",
       "kind": "main",
-      "role": "Immediate stair interaction executor: decides target frame/direction from item state, tests destination, spawns helper processes to realize movement or plays failure SFX.",
-      "confidence": "high"
+      "role": "local recovery / alternate stair relocation and type-change handler",
+      "confidence": "medium"
     },
     {
-      "name": "U8P_STAIR::0192",
+      "name": "U8P_STAIR::func0192",
       "kind": "helper",
-      "role": "Higher-level stair monitor/orchestrator: repeatedly examines the stair state, runs availability/legal checks for candidate destinations, sets/clears the hanoiStairBlocked flag, plays feedback SFX, and spawns U8P_STAIR::STAIR::0080 when a move should proceed.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_STAIR::playSFX",
-      "kind": "extern",
-      "role": "Play sound effects for success/failure/entry feedback during stair interactions.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::* (getX,getY,getZ,getType,getFrame,grab,legal_move,destroy,bark)",
-      "kind": "extern",
-      "role": "Item API used to read item coordinates and state, lock/grab the item prior to testing/moving, and in other modules to report or destroy items.",
-      "confidence": "high"
-    },
-    {
-      "name": "FREE::2411",
-      "kind": "extern",
-      "role": "Primary world/tile availability checker used to determine if the target world point is free for the move.",
-      "confidence": "high"
-    },
-    {
-      "name": "FREE::1C19",
-      "kind": "extern",
-      "role": "Spawned short-lived helper (likely handles freeing, animation, or delayed follow-up) after a successful move test.",
+      "role": "primary stair-change attempt routine that drives FREE::changeItemType(param1) and coordinates fallback logic",
       "confidence": "medium"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
-        "caller": "U8P_STAIR::0192",
-        "callee": "U8P_STAIR::0080",
-        "purpose": "Spawn the immediate stair executor when a monitored stair state indicates a move should proceed.",
+        "caller": "U8P_STAIR::func0192",
+        "callee": "U8P_STAIR::func0080",
+        "purpose": "Fallback/local recovery when primary change/move fails (invoke alternate local relocation logic).",
         "confidence": "high"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_STAIR::0080",
-        "callee": "U8P_STAIR::playSFX",
-        "purpose": "Play entry or failure sound to give audio feedback on attempted stair interaction.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_STAIR::0080",
+        "caller": "U8P_STAIR::func0080",
         "callee": "Item::getX",
-        "purpose": "Read the stair item X coordinate to build candidate destination WorldPoint(s).",
+        "purpose": "Read item's X coordinate to target change or move.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_STAIR::0080",
+        "caller": "U8P_STAIR::func0080",
         "callee": "Item::getY",
-        "purpose": "Read the stair item Y coordinate to build candidate destination WorldPoint(s).",
+        "purpose": "Read item's Y coordinate to target change or move.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_STAIR::0080",
+        "caller": "U8P_STAIR::func0080",
         "callee": "Item::getZ",
-        "purpose": "Read Z/elevation/packed flags; low bits determine branch selections for direction/frame.",
+        "purpose": "Read item's Z/orientation; used to branch behavior and compute adjusted Z for FREE::changeItemType.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_STAIR::0080",
+        "caller": "U8P_STAIR::func0080",
         "callee": "Item::getType",
-        "purpose": "Select stair subtype behavior and map frames to target directions.",
-        "confidence": "high"
+        "purpose": "Read current tile/type to choose a candidate replacement type in the primary branch.",
+        "confidence": "medium"
       },
       {
-        "caller": "U8P_STAIR::0080",
+        "caller": "U8P_STAIR::func0080",
         "callee": "Item::getFrame",
-        "purpose": "Use the current frame/orientation to compute the destination frame/dir byte.",
+        "purpose": "Preserve item frame/subtype when calling FREE::changeItemType.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_STAIR::0080",
+        "caller": "U8P_STAIR::func0080",
         "callee": "Item::grab",
-        "purpose": "Lock or prepare the item before testing moves and potentially moving it.",
+        "purpose": "Prepare/grab the item for modification before attempting change or move.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_STAIR::0080",
-        "callee": "FREE::2411",
-        "purpose": "Test whether the computed destination WorldPoint is free/available.",
+        "caller": "U8P_STAIR::func0080",
+        "callee": "FREE::changeItemType",
+        "purpose": "Engine-level attempt to change the tile/item at specified coordinates to a new type; used for direct relocation/transform.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_STAIR::0080",
+        "caller": "U8P_STAIR::func0080",
         "callee": "Item::legal_move",
-        "purpose": "Perform a secondary/more stringent legality check for a candidate destination in some branches.",
+        "purpose": "Check whether moving the item to a computed destination coordinate is permitted before spawning follow-up processing.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_STAIR::0080",
-        "callee": "FREE::1C19 (spawn)",
-        "purpose": "Spawn a helper process to carry out freeing, animation, or follow-up after a successful move test.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_STAIR::0192",
-        "callee": "FREE::2411",
-        "purpose": "Probe candidate tiles to determine whether the stair is blocked and whether to spawn STAIR::0080.",
+        "caller": "U8P_STAIR::func0080",
+        "callee": "spawn -> FREE::func1C19",
+        "purpose": "Spawn a continuation/follow-up process after a successful Item::legal_move.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_STAIR::0192",
-        "callee": "U8P_STAIR::playSFX",
-        "purpose": "Play success or failure feedback when monitoring stair availability.",
+        "caller": "U8P_STAIR::func0080",
+        "callee": "playSFX",
+        "purpose": "Play action/success/failure sound effects to signal operation progress or errors.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_STAIR::0192",
-        "callee": "FREE::1C19 (spawn)",
-        "purpose": "Spawn auxiliary helper following monitoring decisions (similar role to STAIR::0080's spawn).",
-        "confidence": "medium"
+        "caller": "U8P_STAIR::func0192",
+        "callee": "Item::getX",
+        "purpose": "Read X for initial change attempt coordinates.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STAIR::func0192",
+        "callee": "Item::getY",
+        "purpose": "Read Y for initial change attempt coordinates.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STAIR::func0192",
+        "callee": "Item::getZ",
+        "purpose": "Read Z/orientation to decide alternate relocation path.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STAIR::func0192",
+        "callee": "Item::getType",
+        "purpose": "Save original type so it can be restored on failure and used to compute alternate type values.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STAIR::func0192",
+        "callee": "Item::getFrame",
+        "purpose": "Read frame to preserve subtype when calling FREE::changeItemType.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STAIR::func0192",
+        "callee": "FREE::changeItemType",
+        "purpose": "Primary engine call to attempt tile/type change at the item's coordinates using param1.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STAIR::func0192",
+        "callee": "playSFX",
+        "purpose": "Signal success or failure of change/relocation attempts.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_STAIR::func0192",
+        "callee": "Item::legal_move",
+        "purpose": "As a fallback alternate relocation test; spawn continuation if allowed.",
+        "confidence": "high"
       }
     ]
   },
@@ -162,8 +168,8 @@
     "writes": [
       {
         "name": "hanoiStairBlocked",
-        "likely_effect": "Marks the stair as blocked (1) or unblocked (0) based on destination availability tests; used to guard/serialize stair usage by other systems.",
-        "confidence": "high"
+        "likely_effect": "Marks whether a stair-change/move operation is blocked: set (0x01) on failure, cleared (0x00) on success. Used to prevent repeated/invalid attempts or signal error state to other systems.",
+        "confidence": "medium"
       }
     ]
   },
@@ -174,9 +180,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_STAIR::STAIR::0080",
-    "behavior_summary_one_liner": "Provides the runtime logic for interacting with a stair item: reading the stair's position and state, deciding a movement direction/orientation from the stair's type/frame/z bits, testing whether the destination tile is free/legal, and initiating the move or reporting failure.",
-    "external_call_count": 13,
+    "main_function": "U8P_STAIR::func0080",
+    "behavior_summary_one_liner": "Implements stair/tile relocation and type-change attempts for a single stair/item instance. The routines read an item's coordinates, orientation (Z), type and frame, then try to change the tile or move the item to an alternate position depending on orientation and type.",
+    "external_call_count": 18,
     "flag_read_count": 0,
     "flag_write_count": 1
   },

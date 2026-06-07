@@ -3,25 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_TROUGHEW.json",
   "file": "U8P_TROUGHEW",
   "behavior_summary": [
-    "Provides the behavior for the 'U8P_TROUGHEW::look' (examine) action on the trough object: when an actor/process inspects the trough, the routine asks the item system to 'bark' the static description text \"trough \" directed at the requesting process.",
-    "Does not change persistent object state or global flags; its effect is purely presentation (emitting a short text) and returning the bark call result.",
-    "Allocates/prepares a small string, calls Item::bark with the requester and that string, frees the string, and then returns the call's return value (propagated as this routine's return)."
+    "U8P_TROUGHEW::look is a simple U8P_TROUGHEW::look/examine handler that presents a one-word description 'trough' to the player.",
+    "After emitting the bark/text, the process reaches a suspend/terminate node — inferred to end or pause the U8P_TROUGHEW::look interaction immediately after displaying the description.",
+    "No global flags are read or written, and there are no calls to external systems or other game objects; the routine is purely presentational."
   ],
   "notable_control_flow": [
-    "Entry on the 'U8P_TROUGHEW::look' event -> prepare arguments (requester id and string) -> call external Item::bark -> cleanup/frees temporary string -> return the bark return value.",
-    "No branching or global-state mutations are performed; control flow is linear and ends with a suspend/return."
+    "Single linear path: emit bark/text 'trough' -> suspend/terminate.",
+    "No branching, menus, or conditional logic are present.",
+    "No external calls or side-effects besides displaying text are observed."
   ],
   "open_questions": [
-    "What is the semantic meaning of the pushed constant 0x0208 observed in the routine (appears to be an internal info/selector but its game-level meaning is not explicit).",
-    "Is BP+06h strictly a player/process id in all call sites (inferred from similar scripts but not explicitly named in this file)?",
-    "Are there any localization/formatting implications for the literal string \"trough \" (e.g., trailing space or tokenization) when displayed by Item::bark?"
+    "Does the 'suspend' node always fully terminate the U8P_TROUGHEW::look process for this object, or can it be resumed by engine logic? (inferred 'ends' the handler; confidence: low)",
+    "Is the displayed text used anywhere else (e.g., inspection logs or UI tooltips) beyond the immediate bark? (likely just immediate display; confidence: low)"
   ],
   "main_function": {
     "name": "U8P_TROUGHEW::look",
     "execution_form": "process",
-    "purpose": "Handle the 'U8P_TROUGHEW::look' event for the trough object by emitting a short descriptive text to the requesting process via Item::bark and returning that call's result. No persistent state is modified.",
+    "purpose": "Provide the short description when the player examines the TROUGHEW object; display the word 'trough' and then suspend/end the U8P_TROUGHEW::look process.",
     "entry_conditions": [
-      "Triggered by the 'U8P_TROUGHEW::look' (examine) event when an actor/player inspects the trough (actor entering the trough's observation/trigger area)."
+      "Invoked when the player uses the 'U8P_TROUGHEW::look'/'examine' action on the TROUGHEW object (process type 0x0208)."
     ],
     "confidence": "high"
   },
@@ -29,20 +29,13 @@
     {
       "name": "U8P_TROUGHEW::look",
       "kind": "main",
-      "role": "Handle the 'U8P_TROUGHEW::look' interaction for the trough item; prepare and forward a short description via Item::bark.",
+      "role": "U8P_TROUGHEW::look/examine handler that displays a short descriptive bark ('trough')",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_TROUGHEW::look",
-        "callee": "Item::bark",
-        "purpose": "Ask the item system to present/emit the literal description string (\"trough \") to the requesting process/player and return a status/result. Used to show the trough's short description.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -56,8 +49,8 @@
   ],
   "quick_facts": {
     "main_function": "U8P_TROUGHEW::look",
-    "behavior_summary_one_liner": "Provides the behavior for the 'U8P_TROUGHEW::look' (examine) action on the trough object: when an actor/process inspects the trough, the routine asks the item system to 'bark' the static description text \"trough \" directed at the requesting process.",
-    "external_call_count": 1,
+    "behavior_summary_one_liner": "U8P_TROUGHEW::look is a simple U8P_TROUGHEW::look/examine handler that presents a one-word description 'trough' to the player.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

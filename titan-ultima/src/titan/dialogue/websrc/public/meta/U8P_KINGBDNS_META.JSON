@@ -3,27 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_KINGBDNS.json",
   "file": "U8P_KINGBDNS",
   "behavior_summary": [
-    "U8P_KINGBDNS::look services the object's 'U8P_KINGBDNS::look' (examine) event: it prepares the object for an inspection, makes the item emit a short text 'bed ' (via an Item::bark call), records the bark return value, uses that result to indicate the event was handled, then suspends/returns.",
-    "Before barking, the routine performs a 'set info' with a constant (observed as 0x0208) on the object and applies a process-exclude-like operation; these likely configure UI/processing state so the U8P_KINGBDNS::look interaction is handled cleanly and other processors won't immediately reprocess the object.",
-    "The routine passes the object pointer and a process id/context (pid) along with the string pointer for 'bed ' to an external Item::bark-like routine, captures its return value, and uses an 'implies' operation to produce the final return value that signals the event was handled."
+    "This script defines a single U8P_KINGBDNS::look-type process (U8P_KINGBDNS::look) that runs when the player examines/looks at the NPC/object.",
+    "When triggered the process emits a single short bark with the text \"bed \" and then immediately suspends/ends the U8P_KINGBDNS::look process.",
+    "There are no menus, conditional branches, global flags read or written, or external calls — the behavior is a minimal, purely descriptive examine response."
   ],
   "notable_control_flow": [
-    "Entry triggered by Event 0 ('U8P_KINGBDNS::look') for the object; routine runs synchronously in the object's process context.",
-    "Sequence: set-info(0x0208) on the object -> process-exclude on the object -> push parameters (object pointer, string 'bed ', pid) -> call Item::bark -> capture return value -> apply 'implies' to indicate the event was handled -> suspend/return.",
-    "The handler does not set or read any global flags (no global reads/writes were observed)."
+    "U8P_KINGBDNS::look: entry on U8P_KINGBDNS::look/examine (processType 0x0208) -> Bark('bed ') -> Suspend/terminate the process.",
+    "No branching or looping; control flow is linear and ends after the single bark and suspend."
   ],
   "open_questions": [
-    "Exact semantic effect of the set-info constant 0x0208: what UI/interaction state or gameplay tag does it represent?",
-    "Precise semantics of 'process exclude' in this context: does it stop other scripts, prevent immediate reprocessing, or control visibility?",
-    "Exact parameter ordering and types for the Item::bark call are inferred from the push sequence; the mapping (object pointer, string pointer, pid) is likely but not guaranteed.",
-    "Whether the Item::bark return value influences anything beyond signalling the event was handled (the code uses it with 'implies' but further effects are unclear)."
+    "What is the in-game meaning/context of the bark text \"bed \" (note trailing space) — is this a fragment, localization key, or full intended string?",
+    "The disassembly shows two low-confidence Unknown nodes ('{' and 'suspend') — do these represent any additional behavior or are they decompiler remnants?",
+    "Is this NPC used anywhere else (e.g., dialogue, triggers) beyond this simple U8P_KINGBDNS::look handler? The script contains no calls or flags to indicate other interactions."
   ],
   "main_function": {
     "name": "U8P_KINGBDNS::look",
     "execution_form": "process",
-    "purpose": "Handle the object's 'U8P_KINGBDNS::look' (examine) event: configure object info/processing state and present a short descriptive text ('bed ') to the viewer, then signal that the event was handled and suspend.",
+    "purpose": "Provide the short examine/description response when the player looks at this NPC — plays a one-line bark ('bed ') and suspends the process.",
     "entry_conditions": [
-      "Event 0 — the player or actor examines/looks at the object (area-entry or examine trigger)."
+      "Triggered when the player uses the 'U8P_KINGBDNS::look' or 'examine' action on this NPC (process type 0x0208)."
     ],
     "confidence": "high"
   },
@@ -31,40 +29,25 @@
     {
       "name": "U8P_KINGBDNS::look",
       "kind": "main",
-      "role": "Event handler for 'U8P_KINGBDNS::look' (examine) interactions on the KINGBDNS object.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine invoked to make an item emit/display a short text or message to a process/player; used here to show the string 'bed '.",
+      "role": "examine/U8P_KINGBDNS::look handler that plays a single bark and suspends",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_KINGBDNS::look",
-        "callee": "Item::bark",
-        "purpose": "Ask the item to emit/display a short text message ('bed ') to the requesting process/player context; return value is captured to indicate success/handling.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
     "writes": []
   },
   "ui_tags": [
-    "trigger",
-    "cleanup",
-    "guard"
+    "trigger"
   ],
   "quick_facts": {
     "main_function": "U8P_KINGBDNS::look",
-    "behavior_summary_one_liner": "U8P_KINGBDNS::look services the object's 'U8P_KINGBDNS::look' (examine) event: it prepares the object for an inspection, makes the item emit a short text 'bed ' (via an Item::bark call), records the bark return value, uses that result to indicate the event was handled, then suspends/returns.",
-    "external_call_count": 1,
+    "behavior_summary_one_liner": "This script defines a single U8P_KINGBDNS::look-type process (U8P_KINGBDNS::look) that runs when the player examines/looks at the NPC/object.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

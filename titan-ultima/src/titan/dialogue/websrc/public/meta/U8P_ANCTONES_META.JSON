@@ -3,204 +3,230 @@
   "source_of_truth": "dialogue/json/U8P_ANCTONES.json",
   "file": "U8P_ANCTONES",
   "behavior_summary": [
-    "U8P_ANCTONES::hatch (Event 7) is a trigger that runs when an actor (typically the Avatar) enters the Ancient Ones' fast/trigger area. It marks the triggering actor with script info/process-exclude, scans nearby tokens/items to decide whether the encounter should proceed, and then either launches the main Ancient Ones interaction (U8P_ANCTONES::0116) or schedules a cleanup (external FREE::1C19).",
-    "The main interaction (U8P_ANCTONES::0116) orchestrates the multi-stage encounter: it gates first-time vs repeat visit behavior using global flags (ancientOnesMet, getPowerAO, gotObTip), sets/clears a startedConvo guard, plays encounter music, freezes the Avatar (stasis), creates temporary visual NPC/items (Item::create + Item::pop), makes those items 'speak' lines (Item::bark), spawns animation/movement helper processes (METHOD::091C and multiple U8P_ANCTONES::xxxx spawned helpers), awards or withholds an artifact under flag conditions, destroys temporary items, and restores Avatar control.",
-    "U8P_ANCTONES::leaveFastArea (Event 10) is a small cleanup handler invoked when the actor leaves the trigger area: it sets info/process-exclude for the leaving actor and calls external FREE::2A56 to finalize cleanup."
+    "This script implements an area-triggered 'Ancient Ones' encounter/cutscene. When the player (or relevant actor) enters the U8P_ANCTONES::hatch fast-area the script either launches a one-time full encounter/cutscene (music, camera control, temporary visual items, staged barks/dialog lines and animations) or, on repeat activations, spawns a small helper cinematic effect and yields.",
+    "U8P_ANCTONES::hatch uses a local-first-activation marker to gate the full sequence so the heavy cutscene only runs once; subsequent activations produce a small repeated effect via engine helper spawns.",
+    "U8P_ANCTONES::func0116 is the orchestrator for the full encounter: it checks gating conditions (power/state flags), sets conversation/encounter flags, freezes the avatar, plays music, centers the camera, creates temporary items used as visual anchors, issues a multi-line bark sequence with suspend/timed beats, calls several same-script animation helpers to step item frames, and destroys temporary items when finished.",
+    "A family of same-script helpers (U8P_ANCTONES::func130F .. ::func1848) drive timed frame changes and simple state machines on created items by repeatedly calling Item::setFrame, spawning short-lived FREE helper processes (timers), and yielding (suspend) between steps to pace animations."
   ],
   "notable_control_flow": [
-    "hatch scan -> branch: a short loop sets a local flag (BP-01h). If the scan indicates the right condition and global startedConvo is clear, hatch spawns U8P_ANCTONES::0116; otherwise hatch spawns cleanup (FREE::1C19) and suspends.",
-    "U8P_ANCTONES::0116 sets startedConvo=1 at start and clears it when the scripted sequence finishes; ancientOnesMet is set on the first meeting to switch subsequent visits into a repeat branch.",
-    "During the interaction the Avatar is placed into stasis (setAvatarInStasis(1)), temporary items are created/popped and made to bark, then destroyed; many helper processes are spawned and run concurrently to produce animation/effects.",
-    "leaveFastArea is a defensive cleanup path to remove processing info and free any per-trigger resources via FREE::2A56."
+    "First-entry gating: U8P_ANCTONES::hatch tests a local marker (local0) and only calls U8P_ANCTONES::func0116 to run the full encounter when local0 indicates 'not run yet'; it then sets local0.",
+    "On non-first activations U8P_ANCTONES::hatch spawns a small helper process (FREE::func1C19) and suspends rather than replaying the full cutscene.",
+    "U8P_ANCTONES::func0116 contains an entry gate (getPowerAO or similar) and uses startedConvo to avoid re-entrancy while the scene runs; it sets ancientOnesMet on first completion.",
+    "Timing/animation is implemented cooperatively: helpers call Item::setFrame, spawn FREE::* timing helpers (spawn -> FREE::func1C19 / func1C8B), and issue suspend to yield across ticks and pace visual steps.",
+    "Cleanup: temporary visual items are destroyed between barks/steps; U8P_ANCTONES::leaveFastArea calls FREE::resetRef to clear stored references when the actor leaves the trigger region."
   ],
   "open_questions": [
-    "What exact token/item criteria does the hatch scan loop (BP-01h) look for to permit the conversation branch? The scan's matching condition is inferred but not explicit.",
-    "What is the exact semantic meaning of the 'info' id (0x210 referenced by set-info) applied to the trigger actor/item?",
-    "What precise game effect does getPowerAO represent (granting a power, gating an artifact, or another progression flag)? Its use is inferred from context but not concretely labeled.",
-    "Which exact U8P_ANCTONES::xxxx helper processes are spawned by U8P_ANCTONES::0116 and what distinct visual/animation each implements?"
+    "Exact semantics and parameter meanings for several external calls (precise spawn parameters to FREE::func1C19/func1C8B and their timing behavior).",
+    "Precise item types/IDs created by Item::create (only numeric codes observed); exact appearance and choreography are inferred but not fully certain.",
+    "Whether any other global game flags beyond startedConvo and ancientOnesMet are read/written by the script (some inferred flags like gotObTip appear but are low-confidence)."
   ],
   "main_function": {
-    "name": "U8P_ANCTONES::hatch (Event 7)",
+    "name": "U8P_ANCTONES::hatch",
     "execution_form": "process",
-    "purpose": "Entry trigger run when an actor enters the Ancient Ones' fast/trigger area. Prepares actor context (set info/process-exclude), scans nearby items/tokens to decide whether to launch the Ancient Ones' interaction (U8P_ANCTONES::0116) or to schedule a cleanup (FREE::1C19), and prevents reentrancy via startedConvo checks.",
+    "purpose": "Area-entry trigger that launches the Ancient Ones encounter/cutscene on first activation and spawns a smaller cinematic helper on subsequent activations.",
     "entry_conditions": [
-      "Actor entering the Ancient Ones' fast/trigger area (enterFastArea semantics).",
-      "Invoked with a trigger item/actor handle passed at BP+06h (indirect 02h usage)."
+      "Triggered by entering the U8P_ANCTONES::hatch fast-area (process-type 0x0210).",
+      "Presence of 'this' trigger object influences initialization of positional references.",
+      "local0 == 0 (first-time activation) causes full encounter; otherwise spawn a small helper and suspend."
     ],
     "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_ANCTONES::hatch (Event 7)",
+      "name": "U8P_ANCTONES::hatch",
       "kind": "main",
-      "role": "Trigger entry that decides whether to start the Ancient Ones encounter or do a cleanup",
+      "role": "area-entry trigger / gate for full encounter vs repeated effect",
       "confidence": "high"
     },
     {
-      "name": "U8P_ANCTONES::leaveFastArea (Event 10)",
+      "name": "U8P_ANCTONES::leaveFastArea",
       "kind": "helper",
-      "role": "Cleanup when the actor leaves the area; removes processing info and calls FREE::2A56",
+      "role": "leave-area cleanup: call FREE::resetRef to clear stored reference for this trigger",
       "confidence": "high"
     },
     {
-      "name": "U8P_ANCTONES::0116",
+      "name": "U8P_ANCTONES::func0116",
       "kind": "helper",
-      "role": "Primary interaction/dialog process: controls music, stasis, temporary manifests, dialog barks, spawned visual/animation sub-processes, and conditional reward giving",
+      "role": "orchestrate full Ancient Ones encounter/cutscene (music, camera, freeze, create visuals, barks, call animation helpers, cleanup)",
       "confidence": "high"
     },
     {
-      "name": "Item::create",
-      "kind": "extern",
-      "role": "Create temporary visual/manifestation items used in the encounter",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::pop",
-      "kind": "extern",
-      "role": "Place created items in the world at computed X,Y,Z positions",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Make an item/NPC display or speak a dialog line to a process/player",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::destroy",
-      "kind": "extern",
-      "role": "Remove temporary items after use",
-      "confidence": "high"
-    },
-    {
-      "name": "playMusic",
-      "kind": "extern",
-      "role": "Start encounter background music (byte id)",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_ANCTONES::setAvatarInStasis",
-      "kind": "extern",
-      "role": "Freeze/unfreeze player control during scripted sequence",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getX/Item::getY/Item::getZ",
-      "kind": "extern",
-      "role": "Read coordinates used to place/spawn temporary objects and schedule effects",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getDirToItem",
-      "kind": "extern",
-      "role": "Compute direction between items used to orient spawned movement/animation processes",
-      "confidence": "medium"
-    },
-    {
-      "name": "METHOD::091C (spawned)",
-      "kind": "extern",
-      "role": "Spawned movement/animation helper taking direction and an item pointer",
-      "confidence": "medium"
-    },
-    {
-      "name": "FREE::1C19 (spawned)",
-      "kind": "extern",
-      "role": "Spawned cleanup/free routine used by hatch when conversation branch does not run",
-      "confidence": "medium"
-    },
-    {
-      "name": "FREE::1C6D (spawned)",
-      "kind": "extern",
-      "role": "Spawned helper, likely a timed/delay cleanup at coordinates",
-      "confidence": "medium"
-    },
-    {
-      "name": "FREE::2A56",
-      "kind": "extern",
-      "role": "Cleanup/free routine called by leaveFastArea",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_ANCTONES::(many spawned ANCTONES::xxxx)",
+      "name": "U8P_ANCTONES::func130F",
       "kind": "helper",
-      "role": "Multiple short spawned sub-behaviors/animations invoked by U8P_ANCTONES::0116 for visuals/audio",
+      "role": "item-frame animation utility / small timed frame sequence",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_ANCTONES::func13CE",
+      "kind": "helper",
+      "role": "item-frame animation utility (multi-step) used by the main sequence",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_ANCTONES::func146C",
+      "kind": "helper",
+      "role": "item-frame stepping utility (reverse-stepped sequence)",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_ANCTONES::func150A",
+      "kind": "helper",
+      "role": "short multi-step frame setter for a visual element",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_ANCTONES::func1575",
+      "kind": "helper",
+      "role": "longer multi-step frame animator (0..8 sequence)",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_ANCTONES::func16A7",
+      "kind": "helper",
+      "role": "frame-loop helper with small conditional/phase counter",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_ANCTONES::func1732",
+      "kind": "helper",
+      "role": "frame/timer helper that advances frames over multiple ticks",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_ANCTONES::func17BD",
+      "kind": "helper",
+      "role": "frame/tick helper managing a small frame counter/phase",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_ANCTONES::func1848",
+      "kind": "helper",
+      "role": "final-stage frame/phase helper used to conclude animation steps",
       "confidence": "medium"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
-        "caller": "U8P_ANCTONES::hatch (Event 7)",
-        "callee": "U8P_ANCTONES::0116",
-        "purpose": "Spawn the primary Ancient Ones interaction/dialog process when scan conditions and startedConvo guard permit",
+        "caller": "U8P_ANCTONES::hatch",
+        "callee": "U8P_ANCTONES::func0116",
+        "purpose": "Delegate to the full Ancient Ones encounter flow on first activation",
         "confidence": "high"
       },
       {
-        "caller": "U8P_ANCTONES::0116",
-        "callee": "U8P_ANCTONES::(many spawned ANCTONES::xxxx)",
-        "purpose": "Spawn multiple internal animation/visual helper processes to run concurrently during the encounter",
+        "caller": "U8P_ANCTONES::func0116",
+        "callee": "U8P_ANCTONES::func130F",
+        "purpose": "Animate/configure one created visual item as part of the cutscene",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ANCTONES::func0116",
+        "callee": "U8P_ANCTONES::func13CE",
+        "purpose": "Animate a created visual item across multiple steps",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ANCTONES::func0116",
+        "callee": "U8P_ANCTONES::func146C",
+        "purpose": "Drive a reverse step animation on a created item",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ANCTONES::func0116",
+        "callee": "U8P_ANCTONES::func150A",
+        "purpose": "Short staged frame updates for a visual element at an early beat",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ANCTONES::func0116",
+        "callee": "U8P_ANCTONES::func1575",
+        "purpose": "Longer multi-step animation for a visual element",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ANCTONES::func0116",
+        "callee": "U8P_ANCTONES::func16A7",
+        "purpose": "Per-frame looping helper to advance animation over ticks",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ANCTONES::func0116",
+        "callee": "U8P_ANCTONES::func1732",
+        "purpose": "Intermediate animation helper called before a bark",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ANCTONES::func0116",
+        "callee": "U8P_ANCTONES::func17BD",
+        "purpose": "Another per-item animation step helper",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ANCTONES::func0116",
+        "callee": "U8P_ANCTONES::func1848",
+        "purpose": "Final animation helper to conclude visuals",
         "confidence": "medium"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_ANCTONES::hatch (Event 7)",
-        "callee": "FREE::1C19",
-        "purpose": "Spawned cleanup/free routine used when conversation is not started",
+        "caller": "U8P_ANCTONES::hatch",
+        "callee": "FREE::func1C19 (spawn)",
+        "purpose": "Spawn a short-lived helper/cinematic on non-first activations to produce a small repeated effect",
         "confidence": "high"
       },
       {
-        "caller": "U8P_ANCTONES::leaveFastArea (Event 10)",
-        "callee": "FREE::2A56",
-        "purpose": "Finalize cleanup when actor leaves trigger area",
+        "caller": "U8P_ANCTONES::leaveFastArea",
+        "callee": "FREE::resetRef",
+        "purpose": "Clear stored reference to this trigger when actor leaves the area (cleanup)",
         "confidence": "high"
       },
       {
-        "caller": "U8P_ANCTONES::0116",
+        "caller": "U8P_ANCTONES::func0116",
         "callee": "playMusic",
-        "purpose": "Start encounter music at the beginning of the interaction",
+        "purpose": "Play encounter music at sequence start (example id 0x78 observed)",
         "confidence": "high"
       },
       {
-        "caller": "U8P_ANCTONES::0116",
-        "callee": "U8P_ANCTONES::setAvatarInStasis",
-        "purpose": "Freeze and later unfreeze Avatar control for the scripted sequence",
+        "caller": "U8P_ANCTONES::func0116",
+        "callee": "setAvatarInStasis / getAvatarInStasis",
+        "purpose": "Freeze the avatar at the start of the cutscene and later restore control (avoid player input during cinematic)",
         "confidence": "high"
       },
       {
-        "caller": "U8P_ANCTONES::0116",
-        "callee": "Item::create",
-        "purpose": "Create temporary visual/NPC items used to deliver dialog and effects",
+        "caller": "U8P_ANCTONES::func0116",
+        "callee": "FREE::cameraFollowAvatar",
+        "purpose": "Center/move the camera to focus on encounter coordinates",
         "confidence": "high"
       },
       {
-        "caller": "U8P_ANCTONES::0116",
-        "callee": "Item::pop",
-        "purpose": "Place created items into the world at computed coordinates",
+        "caller": "U8P_ANCTONES::func0116",
+        "callee": "Item::create / Item::pop / Item::destroy",
+        "purpose": "Create temporary visual items, position them near reference points, and clean them up after each beat",
         "confidence": "high"
       },
       {
-        "caller": "U8P_ANCTONES::0116",
-        "callee": "Item::bark",
-        "purpose": "Have created items speak dialog lines to the player/process",
+        "caller": "U8P_ANCTONES::func0116",
+        "callee": "Item::getX / Item::getY / Item::getZ / Item::getDirToItem",
+        "purpose": "Read coordinates and directions from reference items to position spawned visual items and orient spawned actors",
         "confidence": "high"
       },
       {
-        "caller": "U8P_ANCTONES::0116",
-        "callee": "Item::destroy",
-        "purpose": "Remove temporary items after their dialog/effect completes",
+        "caller": "U8P_ANCTONES::*helpers (func130F..func1848)",
+        "callee": "Item::setFrame",
+        "purpose": "Apply animation/frame indices to temporary items during staged animation steps",
         "confidence": "high"
       },
       {
-        "caller": "U8P_ANCTONES::0116",
-        "callee": "Item::getDirToItem / METHOD::091C",
-        "purpose": "Compute orientation and spawn movement/animation helper to orient visual elements toward the trigger",
-        "confidence": "medium"
+        "caller": "U8P_ANCTONES::*helpers (func13CE, func130F, etc.)",
+        "callee": "FREE::func1C19 (spawn)",
+        "purpose": "Spawn short-lived timing/helper processes between frame updates to pace animations (spawn + suspend pattern)",
+        "confidence": "high"
       },
       {
-        "caller": "U8P_ANCTONES::0116",
-        "callee": "FREE::1C6D",
-        "purpose": "Spawned helper likely used for timed effects/cleanup at given coordinates",
+        "caller": "U8P_ANCTONES::func0116",
+        "callee": "spawn -> METHOD::func091C",
+        "purpose": "Spawn helper actor/process to perform an action (movement/animation) oriented with Item::getDirToItem",
         "confidence": "medium"
       }
     ]
@@ -208,51 +234,36 @@
   "global_flags": {
     "reads": [
       {
-        "name": "ancientOnesMet",
-        "likely_effect": "Used to detect first-time meeting vs repeat visit and select dialog/behavior branch",
-        "confidence": "high"
-      },
-      {
         "name": "getPowerAO",
-        "likely_effect": "Gates an alternate branch related to awarding/denying a power or artifact during the encounter",
+        "likely_effect": "Gating condition read at U8P_ANCTONES::func0116 entry to decide whether to run full sequence or alternate path",
         "confidence": "medium"
-      },
-      {
-        "name": "gotObTip",
-        "likely_effect": "Indicates whether the player already has the obelisk tip; used to avoid giving duplicate rewards or to choose dialog",
-        "confidence": "medium"
-      },
-      {
-        "name": "doneDefault",
-        "likely_effect": "Used in combination with gotObTip to prevent repeating certain default content",
-        "confidence": "low"
       },
       {
         "name": "startedConvo",
-        "likely_effect": "Reentrancy guard: prevents starting the conversation if one is already in progress",
-        "confidence": "high"
+        "likely_effect": "Checked to avoid re-entrancy if a conversation/cutscene is already running",
+        "confidence": "medium"
+      },
+      {
+        "name": "ancientOnesMet",
+        "likely_effect": "Read to determine whether the full encounter already occurred (skip vs run)",
+        "confidence": "medium"
       }
     ],
     "writes": [
       {
         "name": "startedConvo",
-        "likely_effect": "Set to 1 at the start of U8P_ANCTONES::0116 to mark an active conversation and cleared when finished; prevents duplicate/concurrent runs",
-        "confidence": "high"
+        "likely_effect": "Set to mark the cutscene as in-progress and prevent re-entrancy while the encounter runs",
+        "confidence": "medium"
       },
       {
         "name": "ancientOnesMet",
-        "likely_effect": "Set on the first meeting to ensure future visits use the repeat branch",
-        "confidence": "high"
-      },
-      {
-        "name": "getPowerAO",
-        "likely_effect": "Set in some branches to record that the player has become eligible for or received a power/artifact (inferred)",
+        "likely_effect": "Set on first meeting to record that the Ancient Ones encounter has taken place (prevents replaying full encounter)",
         "confidence": "medium"
       },
       {
         "name": "gotObTip",
-        "likely_effect": "Set when the player receives the obelisk tip/Blackrock artifact to prevent re-awarding (inferred)",
-        "confidence": "medium"
+        "likely_effect": "Inferred small script-level flag set when a particular frame/item condition occurs (low-confidence auxiliary state)",
+        "confidence": "low"
       }
     ]
   },
@@ -263,11 +274,11 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_ANCTONES::hatch (Event 7)",
-    "behavior_summary_one_liner": "U8P_ANCTONES::hatch (Event 7) is a trigger that runs when an actor (typically the Avatar) enters the Ancient Ones' fast/trigger area. It marks the triggering actor with script info/process-exclude, scans nearby tokens/items to decide whether the encounter should proceed, and then either launches the main Ancient Ones interaction (U8P_ANCTONES::0116) or schedules a cleanup (external FREE::1C19).",
+    "main_function": "U8P_ANCTONES::hatch",
+    "behavior_summary_one_liner": "This script implements an area-triggered 'Ancient Ones' encounter/cutscene. When the player (or relevant actor) enters the U8P_ANCTONES::hatch fast-area the script either launches a one-time full encounter/cutscene (music, camera control, temporary visual items, staged barks/dialog lines and animations) or, on repeat activations, spawns a small helper cinematic effect and yields.",
     "external_call_count": 10,
-    "flag_read_count": 5,
-    "flag_write_count": 4
+    "flag_read_count": 3,
+    "flag_write_count": 3
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

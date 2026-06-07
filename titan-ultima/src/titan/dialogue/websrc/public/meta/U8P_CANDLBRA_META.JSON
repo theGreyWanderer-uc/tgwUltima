@@ -3,28 +3,28 @@
   "source_of_truth": "dialogue/json/U8P_CANDLBRA.json",
   "file": "U8P_CANDLBRA",
   "behavior_summary": [
-    "CANDLBRA::look: When the player 'looks at' the candelabra the item is prepared for a short info/action and Item::bark is invoked with the literal string \"candelabra \", causing the object to present that description to the player.",
-    "CANDLBRA::anim: An animation/auxiliary process is spawned (METHOD::0610) for the candelabra; this is likely used to drive a visual or timed effect associated with the object.",
-    "CANDLBRA::use: The item's frame value is read (Item::getFrame) and the low two bits are tested. If both low bits are clear the frame is incremented by one; otherwise the low two bits are cleared (frame & 0xFC). The modified frame is written back with Item::setFrame, effectively toggling a visual/state bit (e.g., lit/unlit or on/off)."
+    "This script implements a simple in-world candelabra item with three process handlers: a U8P_CANDLBRA::look handler that displays the item's short label, an U8P_CANDLBRA::anim helper that triggers a visual animation change, and a U8P_CANDLBRA::use handler that toggles or advances the item's visual frame bits to change its visible state.",
+    "U8P_CANDLBRA::look: when the player examines the object it emits a single bark text 'candelabra' and then suspends/waits.",
+    "U8P_CANDLBRA::anim: invokes the engine helper METHOD::reverseAnimFrame(this) to step or reverse the item's displayed animation and then suspends.",
+    "U8P_CANDLBRA::use: reads the item's current frame (via Item::getFrame(this)), inspects the low two bits and updates the frame (via Item::setFrame): if (frame & 0x03) == 0 then frame += 1 (advance a low-state); otherwise clear the low two bits (frame &= 0x00FC), effectively resetting that lower-state."
   ],
   "notable_control_flow": [
-    "Event-driven: each exposed routine is an event handler (U8P_CANDLBRA::look/anim/use) invoked by the engine as a 'process'.",
-    "Imply/suspend pattern: after external calls (Item::bark, spawn) the code uses an implies/pop and suspend-style control sequence (engine pattern for waiting or chaining effects).",
-    "Branch in U8P_CANDLBRA::use based on (frame & 3) == 0 controls two distinct write-backs to Item::setFrame (increment vs. clear low bits).",
-    "U8P_CANDLBRA::anim uses a spawn call to METHOD::0610 rather than modifying frame directly, separating animation from state changes."
+    "U8P_CANDLBRA::look: linear — show bark 'candelabra' then suspend (no branching).",
+    "U8P_CANDLBRA::anim: linear — calls METHOD::reverseAnimFrame(this) then suspend.",
+    "U8P_CANDLBRA::use: contains a single conditional based on the item's frame low two bits: branch A when (frame & 0x03) == 0 (increment low-state), branch B otherwise (clear low two bits)."
   ],
   "open_questions": [
-    "What exact in-game visual or gameplay meaning do the low two frame bits encode (literal lit/unlit, level of flame, or other visual variants)? (inferred, confidence: medium)",
-    "What specific behavior METHOD::0610 implements when spawned for the candelabra (animation, timed toggle, particle effect)? (inferred, confidence: low)",
-    "Are there any global flags elsewhere that interact with the candelabra's state transitions (none are written or read here, but global interactions are possible)? (confidence: low)",
-    "Is the 'anim' event invoked automatically on use/other events or only by external triggers (entry conditions for anim not present here)? (confidence: medium)"
+    "What exact game-state meaning do the low two frame bits encode (e.g., lit/unlit, flicker stages, or number of candles)? (inferred only from bitwise ops).",
+    "What engine or script action triggers U8P_CANDLBRA::anim in normal gameplay (timed event, explicit call from another script, or called internally after U8P_CANDLBRA::use)?",
+    "Does U8P_CANDLBRA::use also intend to call U8P_CANDLBRA::anim after changing the frame to produce a visible transition, or are animation and frame updates decoupled?"
   ],
   "main_function": {
     "name": "U8P_CANDLBRA::look",
     "execution_form": "process",
-    "purpose": "Provide the short descriptive bark for the candelabra when the player examines it (display the string \"candelabra \") and perform standard item info/exclude setup for the call.",
+    "purpose": "Display the short in-world description when the player examines the candelabra (player-facing label).",
     "entry_conditions": [
-      "Event 0 (U8P_CANDLBRA::look) — invoked by the engine when an actor/player examines/looks at the candelabra."
+      "Invoked by the engine when the player 'looks at' or examines this item (U8P_CANDLBRA::look/examine event).",
+      "Behavior: present the bark text 'candelabra' and then suspend/end the U8P_CANDLBRA::look process."
     ],
     "confidence": "high"
   },
@@ -32,43 +32,19 @@
     {
       "name": "U8P_CANDLBRA::look",
       "kind": "main",
-      "role": "Handle the 'U8P_CANDLBRA::look' (examine) event: prepare item context and call Item::bark with the literal description.",
+      "role": "present short description / player-facing bark",
       "confidence": "high"
     },
     {
       "name": "U8P_CANDLBRA::anim",
       "kind": "helper",
-      "role": "Spawn an auxiliary animation/process (METHOD::0610) for visual or timed effects tied to the candelabra.",
-      "confidence": "medium"
+      "role": "drive visual animation frame change via engine helper",
+      "confidence": "high"
     },
     {
       "name": "U8P_CANDLBRA::use",
       "kind": "helper",
-      "role": "Toggle or update the candelabra's visual state by reading and writing the item's frame low bits via Item::getFrame/Item::setFrame.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine-provided routine used to show short item text/messages; called by U8P_CANDLBRA::look to display 'candelabra '.",
-      "confidence": "high"
-    },
-    {
-      "name": "METHOD::0610",
-      "kind": "extern",
-      "role": "External method identifier used with spawn to run an animation/auxiliary process for the item.",
-      "confidence": "medium"
-    },
-    {
-      "name": "Item::getFrame",
-      "kind": "extern",
-      "role": "Read the item's uword frame/state; used by use to inspect low bits.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::setFrame",
-      "kind": "extern",
-      "role": "Write a uword frame/state back to the item; used by use to apply toggled state.",
+      "role": "handle player activation: read and update the item's frame bits to toggle/advance visual state",
       "confidence": "high"
     }
   ],
@@ -76,27 +52,21 @@
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_CANDLBRA::look",
-        "callee": "Item::bark",
-        "purpose": "Display the fixed description string 'candelabra ' to the inspecting process/player.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_CANDLBRA::anim",
-        "callee": "METHOD::0610 (spawn)",
-        "purpose": "Spawn an animation/auxiliary method/process to manage visual or timed effects for the candelabra.",
-        "confidence": "medium"
+        "callee": "METHOD::reverseAnimFrame",
+        "purpose": "Reverse or step the displayed animation frame for the item (visual effect).",
+        "confidence": "high"
       },
       {
         "caller": "U8P_CANDLBRA::use",
         "callee": "Item::getFrame",
-        "purpose": "Retrieve the current frame/uword that encodes the item's visual/state bits for decision making.",
+        "purpose": "Return the current frame/index for the item so the script can inspect low bits and decide state transition.",
         "confidence": "high"
       },
       {
         "caller": "U8P_CANDLBRA::use",
         "callee": "Item::setFrame",
-        "purpose": "Write back a modified frame value either incremented by one or with the low two bits cleared to effect a state change.",
+        "purpose": "Set the item's frame/index to the new value computed by the U8P_CANDLBRA::use handler (apply state change).",
         "confidence": "high"
       }
     ]
@@ -112,9 +82,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "CANDLBRA::look",
-    "behavior_summary_one_liner": "CANDLBRA::look: When the player 'looks at' the candelabra the item is prepared for a short info/action and Item::bark is invoked with the literal string \"candelabra \", causing the object to present that description to the player.",
-    "external_call_count": 4,
+    "main_function": "U8P_CANDLBRA::look",
+    "behavior_summary_one_liner": "This script implements a simple in-world candelabra item with three process handlers: a U8P_CANDLBRA::look handler that displays the item's short label, an U8P_CANDLBRA::anim helper that triggers a visual animation change, and a U8P_CANDLBRA::use handler that toggles or advances the item's visual frame bits to change its visible state.",
+    "external_call_count": 3,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

@@ -3,32 +3,33 @@
   "source_of_truth": "dialogue/json/U8P_SEED.json",
   "file": "U8P_SEED",
   "behavior_summary": [
-    "Provides a minimal initializer for the SEED usecode object. The function executes an 'init 00' operation (interpreted as setting the object's internal seed/state to zero) and immediately returns.",
-    "No parameters, no external calls, and no observable branching — the routine's sole purpose is to establish a canonical initial state for the SEED object."
+    "Contains a single utility function U8P_SEED::func0080 that decompiles to an 'Unknown' node with no structured statements, calls, dialogue, or flag operations.",
+    "Likely a stub or placeholder in the game data or an incomplete decompilation; as provided it performs no observable gameplay action."
   ],
   "notable_control_flow": [
-    "U8P_SEED::SEED::0080 executes a single initialization opcode ('init 00') and then returns; there are no loops, conditional branches, or calls to other routines."
+    "No structured control flow present in the excerpt — only an 'Unknown' node was produced by the decompiler.",
+    "Function is marked non-process (isProcess:false) and thus is intended as a callable utility rather than an automatic event/process entry."
   ],
   "open_questions": [
-    "What exactly does the 'init 00' opcode set on the object (which field or info id)? This is inferred to be a PRNG seed or internal state but not explicit.",
-    "When and by what systems is U8P_SEED::SEED::0080 invoked in gameplay (object creation, respawn, script reset)? The disassembly excerpt gives no entry trigger.",
-    "Are there other SEED-related handlers (helpers) that read or modify the value set here later in gameplay?"
+    "Is the provided excerpt incomplete or truncated, hiding the real implementation of U8P_SEED::func0080?",
+    "If U8P_SEED::func0080 is a placeholder, which other scripts or engine systems are expected to call it (callers are not present in the extracted metadata)?",
+    "Was this function intended to be a process/event handler originally (mismarked) or truly a no-op utility?"
   ],
   "main_function": {
-    "name": "U8P_SEED::0080",
+    "name": "U8P_SEED::func0080",
     "execution_form": "process",
-    "purpose": "Initialize the SEED usecode object's internal state by performing an 'init 00' operation (interpreted as zeroing the object's seed/state), then return immediately.",
+    "purpose": "Unknown/empty utility function — appears to be a stub or incomplete decompilation with no executable behavior in the excerpt.",
     "entry_conditions": [
-      "No explicit entry triggers in the excerpt; likely called when a SEED object is constructed, spawned, or otherwise needs initialization."
+      "No entry conditions shown; function is not a process and would only run if called by other code."
     ],
-    "confidence": "medium"
+    "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_SEED::0080",
+      "name": "U8P_SEED::func0080",
       "kind": "main",
-      "role": "initializer/constructor for the SEED usecode object (sets initial seed/state to 0)",
-      "confidence": "medium"
+      "role": "utility stub / placeholder (no decompiled content present)",
+      "confidence": "high"
     }
   ],
   "call_analysis": {
@@ -46,8 +47,8 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_SEED::SEED::0080",
-    "behavior_summary_one_liner": "Provides a minimal initializer for the SEED usecode object. The function executes an 'init 00' operation (interpreted as setting the object's internal seed/state to zero) and immediately returns.",
+    "main_function": "U8P_SEED::func0080",
+    "behavior_summary_one_liner": "Contains a single utility function U8P_SEED::func0080 that decompiles to an 'Unknown' node with no structured statements, calls, dialogue, or flag operations.",
     "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0

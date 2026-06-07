@@ -3,32 +3,35 @@
   "source_of_truth": "dialogue/json/U8P_BEREN.json",
   "file": "U8P_BEREN",
   "behavior_summary": [
-    "Controls NPC 'Beren' gameplay behavior: reactions to spell-casting, theft, player 'look' and 'use' interactions, timed scheduling, and fast-area triggers.",
-    "BEREN::cast dispatches either local guards (CALGUARD::0080) when on a specific map (0x29 / 41) or sets a global anger state (berenMad) and invokes spell-combat handling (SPELCMBT::084D) otherwise.",
-    "BEREN::AvatarStoleSomething implements an escalating theft-response: validate vertical range (Item::getZ), free stored references (FREE::2A56), warn the player (Item::bark) while incrementing berenWarned, apply stasis (setAvatarInStasis), set Beren's target (Npc::setTarget) and spawn guard/movement/combat routines to engage the thief when warnings escalate.",
-    "BEREN::look composes contextual description barks based on berenName, berenJob, and Npc::isDead to present appropriate flavor text.",
-    "BEREN::schedule toggles/maintains berenSchedule and launches timed behavior methods (METHOD::143A / METHOD::133F / METHOD::0BCF) depending on map and pyrosFree.",
-    "Fast-area handlers (enterFastArea, leaveFastArea) set up immediate targeting or movement toward the avatar and perform cleanup (FREE::2A56) when the avatar leaves."
+    "This script implements the NPC 'Beren' behavior, including combat entry, theft reaction, scheduling, fast-area reactions, and a multi-stage conversation system with menu-driven dialogue and temperamental state.",
+    "U8P_BEREN::cast (process) is the primary combat entry: if the NPC is on map 0x29 it treats the action as a crime (calls guard response); otherwise it sets berenMad and enters a combat/spell AI loop.",
+    "U8P_BEREN::AvatarStoleSomething (process) handles nearby thefts: verifies vertical proximity to the stolen object, resets internal references, increments an escalating warning counter (berenWarned), issues progressively sterner barks, may immobilize the avatar briefly, call guards, or set the NPC target to attack.",
+    "U8P_BEREN::look (process) provides context-sensitive short descriptions depending on flags (berenName, berenJob) and whether the NPC is dead.",
+    "U8P_BEREN::schedule (process) chooses a U8P_BEREN::schedule/movement plan based on map, pyrosFree and time-of-day; it asks a helper (METHOD::func143A), tests the result and writes berenSchedule when a choice is committed.",
+    "U8P_BEREN::enterFastArea / U8P_BEREN::leaveFastArea are area entry/exit triggers: entering can set targets or trigger quick movement; leaving clears fast-area references (FREE::resetRef).",
+    "U8P_BEREN::use (process) is the interaction entry: opens/closes gumps, begins conversation and dispatches into several dialogue handlers (U8P_BEREN::func0862, ::func1FD1, ::func31C2, ::func369B, ::func3856) depending on flags and context.",
+    "U8P_BEREN::func3856 and U8P_BEREN::func1FD1 are the main menu-driven conversation cores, building MenuSet/MenuUnion/MenuRemove lists, looping Ask prompts, capturing choices into locals (menu_choice variables) and branching into temper/forgive/attack flows (including calls to U8P_BEREN::func1296 and U8P_BEREN::func1A56)."
   ],
   "notable_control_flow": [
-    "Map-conditional branching: many behaviors branch on Npc::getMap() (notably BEREN::cast and theft responses), producing different spawns and flag writes depending on location.",
-    "Escalation loop in BEREN::AvatarStoleSomething uses a berenWarned counter to change outputs and actions (warnings → stasis → setTarget → spawn guards → attack).",
-    "Spawn-and-suspend pattern: multiple handlers spawn external/process routines (CALGUARD::0080, SPELCMBT::084D, METHOD::* , MOVE::0080) and then suspend until those processes complete, ensuring synchronous reaction sequences.",
-    "Fast-area entry triggers immediate short-circuit behavior (setTarget or spawn MOVE) when certain globals (avatarMasterSorcerer, inDaemonScene) and map conditions are met."
+    "U8P_BEREN::cast: check Npc::getMap(this) == 0x29 -> CALGUARD::guardRespondToCrime (suspend) else set berenMad=0x03 -> SPELCMBT::combatSpellLoop (suspend).",
+    "U8P_BEREN::AvatarStoleSomething: validate param1 and Z-distance (Item::getZ) -> FREE::resetRef + METHOD::func091C -> suspend -> branch by map and berenWarned to escalate warning barks, call guards or set target and setAvatarInStasis.",
+    "U8P_BEREN::schedule: skip if dead or inDaemonScene; choose branch by Npc::getMap and pyrosFree, compute local2/local1/local0, call METHOD::func143A and on process_result() success set berenSchedule then call METHOD::func133F.",
+    "U8P_BEREN::use: if NPC dead toggle gump via Item::getStatus/Item::openGump/Item::closeGump; BeginConversation -> call appropriate dialogue helper based on acolyteKilled, berenMad, map checks and target isDead checks -> EndConversation.",
+    "Conversation loops (U8P_BEREN::func3856/U8P_BEREN::func1FD1): assemble menu lists, move 'Farewell.' to end, ensure list length > 1, Ask -> SuspendAssign into local menu_choice variables -> strcmp branches to route to specific responses and adjust flags (berenName, berenMad, berenAvaName, startedQuestions/finishedQuestions)."
   ],
   "open_questions": [
-    "Exact numeric semantics of the uword parameter to BEREN::cast — inferred as a spell id or caster action code but not provable from disassembly alone.",
-    "Precise effects and parameter contracts of spawned METHOD::* routines (METHOD::091C, METHOD::0BCF, METHOD::143A, METHOD::133F) — their internal behaviors are inferred (movement, timed behavior, scheduler) but not confirmed.",
-    "Meaning of some numeric constants pushed into schedule() spawn calls and exact timing semantics used to set berenSchedule.",
-    "Whether some global flags (pyrosFree, avatarMasterSorcerer) are shared game-wide or are scene-specific toggles in this mod's environment."
+    "What exact data type is the U8P_BEREN::cast/U8P_BEREN::AvatarStoleSomething parameter (uword param1)? It appears to be an item or actor reference but this is inferred (confidence: medium).",
+    "What does METHOD::func091C and METHOD::func143A / METHOD::func133F concretely do? They appear to be bookkeeping/movement/scheduling helpers but their side effects are only inferred (confidence: low/medium).",
+    "Some internal function names referenced in calls (e.g., BEREN::func06E5) are present in call lists but not available as full definitions here; the role and effect of those are uncertain (confidence: low).",
+    "Exact numeric meanings of berenMad values (0x01..0x03) are inferred as tone/anger levels; mapping to in-game states (e.g., friendly/annoyed/hostile) is plausible but not fully enumerated (confidence: medium)."
   ],
   "main_function": {
     "name": "U8P_BEREN::cast",
     "execution_form": "process",
-    "purpose": "Handle Beren being the source of a 'U8P_BEREN::cast' event: choose a location-appropriate reaction (spawn guards when on map 0x29, otherwise mark Beren angry and route to spell combat), coordinate spawned processes and wait for their completion.",
+    "purpose": "Primary combat/U8P_BEREN::cast entry point: decide whether the action should be treated as a crime (map 0x29) or as hostile combat, set anger state and enter combat AI.",
     "entry_conditions": [
-      "Event 11 (U8P_BEREN::cast) delivered by the engine to Beren",
-      "Called with a uword parameter (likely a spell id / action code) pushed by the event dispatch"
+      "Invoked by the engine when this NPC's 'U8P_BEREN::cast' behavior/process triggers (process signature: process U8P_BEREN::cast(uword)).",
+      "Parameter param1 is passed in but not used for branching in the main path (appears to be context/item reference in other callers)."
     ],
     "confidence": "high"
   },
@@ -36,228 +39,338 @@
     {
       "name": "U8P_BEREN::cast",
       "kind": "main",
-      "role": "Entry for handling U8P_BEREN::cast/spell events for Beren; decides guard vs spell-combat behavior and sets 'berenMad' when appropriate.",
+      "role": "Combat/behavior entry: branch on map for guard response or set berenMad and start combat/spell loop.",
       "confidence": "high"
     },
     {
       "name": "U8P_BEREN::AvatarStoleSomething",
       "kind": "helper",
-      "role": "Respond to avatar/item theft: validates theft, issues escalating warnings using berenWarned, applies stasis, sets targets, and spawns guard/movement/combat processes.",
+      "role": "Process theft reactions: validate stolen object proximity, reset refs, increment berenWarned, bark/escalate, call guards or force attack/stasis.",
       "confidence": "high"
     },
     {
       "name": "U8P_BEREN::look",
       "kind": "helper",
-      "role": "Produce descriptive bark text when the player 'looks' at Beren using berenName/berenJob and Npc::isDead.",
+      "role": "Provide U8P_BEREN::look/examine text variants depending on berenName/berenJob and death state.",
       "confidence": "high"
     },
     {
       "name": "U8P_BEREN::schedule",
       "kind": "helper",
-      "role": "Periodic scheduler toggling berenSchedule and spawning timed behavior methods according to map and pyrosFree.",
-      "confidence": "medium"
+      "role": "NPC scheduling: choose movement/U8P_BEREN::schedule based on map, pyrosFree and time-of-day and commit via METHOD helpers.",
+      "confidence": "high"
     },
     {
       "name": "U8P_BEREN::enterFastArea",
       "kind": "helper",
-      "role": "Fast-area entry trigger: may set Beren's target to the avatar or spawn MOVE to approach depending on avatarMasterSorcerer, inDaemonScene and map checks.",
+      "role": "Fast-area entry trigger: set NPC target or call quick-move helper to react to nearby actor entry.",
       "confidence": "medium"
     },
     {
       "name": "U8P_BEREN::leaveFastArea",
       "kind": "helper",
-      "role": "Fast-area exit trigger: cleanup/unregister a stored reference via FREE::2A56.",
-      "confidence": "medium"
+      "role": "Fast-area exit trigger: clear fast-area reference via FREE::resetRef.",
+      "confidence": "high"
     },
     {
       "name": "U8P_BEREN::use",
       "kind": "helper",
-      "role": "Handle player 'use' interactions: different behavior when dead vs alive, toggles gumps, and spawns contextual reactions based on berenMad and acolyteKilled.",
+      "role": "Player 'U8P_BEREN::use' interaction entry: open/close gumps, begin conversation and dispatch to dialogue helpers based on flags/context.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BEREN::func0862",
+      "kind": "helper",
+      "role": "Short dialogue/menu routine for first-meeting or small greetings; captures player-provided name and sets bergen-related flags.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BEREN::func1296",
+      "kind": "helper",
+      "role": "Short randomized monologue / temperamental bark bucket (insults/anger variants).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BEREN::func1A56",
+      "kind": "helper",
+      "role": "Randomized closing / farewell monologue bucket, modulated by berenMad and berenAvaName.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BEREN::func1FD1",
+      "kind": "helper",
+      "role": "Menu-driven dialogue handler that assembles/augments menus, captures choices, and routes to forgiveness/insult/attack branches.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BEREN::func31C2",
+      "kind": "helper",
+      "role": "Lore/roleplay monologue chooser; handles 'acolyteKilled' grief branch and increments tickedOff.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BEREN::func369B",
+      "kind": "helper",
+      "role": "Short deferential reply; gates longer grovelling line via berenGroveled flag and calls bookkeeping helper METHOD::func15E7.",
       "confidence": "medium"
     },
     {
-      "name": "Npc::getMap",
-      "kind": "extern",
-      "role": "Engine function returning NPC's current map id; used to branch location-specific behavior.",
-      "confidence": "high"
-    },
-    {
-      "name": "CALGUARD::0080",
-      "kind": "extern",
-      "role": "Spawned guard/attack routine used to dispatch guards in response to casts or theft.",
-      "confidence": "high"
-    },
-    {
-      "name": "SPELCMBT::084D",
-      "kind": "extern",
-      "role": "Spell-combat handler invoked for off-map casts to resolve spell effects/combats.",
+      "name": "U8P_BEREN::func3856",
+      "kind": "helper",
+      "role": "Primary complex conversation core: builds and mutates menus, Ask loops, captures multiple choices and drives most player-facing dialog branches.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
-        "caller": "U8P_BEREN::cast",
-        "callee": "U8P_BEREN::spawn/CALGUARD::0080",
-        "purpose": "When Npc::getMap() == 0x29 spawn guard routine to respond to the U8P_BEREN::cast and suspend until it finishes.",
+        "caller": "U8P_BEREN::use",
+        "callee": "U8P_BEREN::func0862",
+        "purpose": "Route to the short greeting/first-meeting dialog when acolyteKilled == 0.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_BEREN::cast",
-        "callee": "U8P_BEREN::spawn/SPELCMBT::084D",
-        "purpose": "When not on map 0x29, set berenMad and spawn spell-combat resolution passing the original uword parameter, then suspend until completion.",
+        "caller": "U8P_BEREN::use",
+        "callee": "U8P_BEREN::func1FD1",
+        "purpose": "Enter mid-sized/angry dialogue when berenMad is set.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEREN::use",
+        "callee": "U8P_BEREN::func31C2",
+        "purpose": "Call lore/roleplay monologue when target actor is alive.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEREN::use",
+        "callee": "U8P_BEREN::func369B",
+        "purpose": "Fallback polite/deferential reply when other branches don't apply and target is dead or context requires it.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEREN::use",
+        "callee": "U8P_BEREN::func3856",
+        "purpose": "Route into the main complex conversation when acolyteKilled != 0 and other conditions (default richer dialog).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEREN::func1FD1",
+        "callee": "U8P_BEREN::func3856",
+        "purpose": "When the player chooses conciliatory options, escalate into the main conversation handler.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEREN::func1FD1",
+        "callee": "U8P_BEREN::func1296",
+        "purpose": "Invoke short temperamental monologue as an angry response branch.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BEREN::func3856",
+        "callee": "U8P_BEREN::func1296",
+        "purpose": "Invoke temperamental response in conversation branches.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEREN::func3856",
+        "callee": "U8P_BEREN::func1A56",
+        "purpose": "Invoke closing/farewell monologue in certain conversation branches.",
         "confidence": "high"
       },
       {
         "caller": "U8P_BEREN::AvatarStoleSomething",
-        "callee": "U8P_BEREN::Npc::setTarget",
-        "purpose": "Set Beren's combat/interest target to the avatar when theft is detected or escalates.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_BEREN::AvatarStoleSomething",
-        "callee": "U8P_BEREN::spawn/METHOD::091C",
-        "purpose": "After computing direction with Item::getDirToItem, spawn a movement/attack method toward the stolen item/actor.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_BEREN::enterFastArea",
-        "callee": "U8P_BEREN::spawn/MOVE::0080",
-        "purpose": "When conditions met (not inDaemonScene and map match), approach the avatar by spawning MOVE::0080.",
-        "confidence": "medium"
+        "callee": "U8P_BEREN::func06E5",
+        "purpose": "Referenced bookkeeping / Beren-specific helper called during theft response (definition not present in this sheet).",
+        "confidence": "low"
       }
     ],
     "external_calls": [
       {
         "caller": "U8P_BEREN::cast",
-        "callee": "Npc::getMap",
-        "purpose": "Query Beren's map id to decide whether to spawn CALGUARD or SPELCMBT.",
+        "callee": "CALGUARD::guardRespondToCrime",
+        "purpose": "Alert guards / treat action as a crime when NPC is on map 0x29.",
         "confidence": "high"
       },
       {
         "caller": "U8P_BEREN::cast",
-        "callee": "CALGUARD::0080",
-        "purpose": "Spawned as the guard response when U8P_BEREN::cast happens on map 0x29.",
+        "callee": "SPELCMBT::combatSpellLoop",
+        "purpose": "Enter combat/spell AI loop after setting berenMad (start hostile behavior).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_BEREN::cast",
-        "callee": "SPELCMBT::084D",
-        "purpose": "Spawned to handle spell-combat when U8P_BEREN::cast occurs off-map; receives pid and the uword param.",
+        "caller": "U8P_BEREN::AvatarStoleSomething",
+        "callee": "FREE::resetRef",
+        "purpose": "Clear stored fast-area or stolen-item reference before escalation.",
         "confidence": "high"
       },
       {
         "caller": "U8P_BEREN::AvatarStoleSomething",
         "callee": "Item::getZ",
-        "purpose": "Check Z coordinate of item to validate theft vertical range before escalating.",
+        "purpose": "Compare vertical positions to verify stolen item proximity before executing theft reaction.",
         "confidence": "high"
       },
       {
         "caller": "U8P_BEREN::AvatarStoleSomething",
-        "callee": "FREE::2A56",
-        "purpose": "Free or unregister a stored reference related to the theft (cleanup) before pursuing escalation actions.",
+        "callee": "METHOD::func091C",
+        "purpose": "Internal bookkeeping called during theft handling (purpose inferred).",
+        "confidence": "low"
+      },
+      {
+        "caller": "U8P_BEREN::AvatarStoleSomething",
+        "callee": "Npc::setTarget",
+        "purpose": "Assign NPC aggro/attack target when escalating to direct aggression.",
         "confidence": "high"
       },
       {
         "caller": "U8P_BEREN::AvatarStoleSomething",
-        "callee": "Item::getDirToItem",
-        "purpose": "Compute direction from Beren to the item/actor to pass to a movement/attack method.",
-        "confidence": "high"
+        "callee": "setAvatarInStasis",
+        "purpose": "Temporarily immobilize the avatar as part of the theft reaction.",
+        "confidence": "medium"
       },
       {
-        "caller": "U8P_BEREN::AvatarStoleSomething",
-        "callee": "U8P_BEREN::setAvatarInStasis",
-        "purpose": "Temporarily freeze the avatar as part of a theft punishment/escalation.",
-        "confidence": "high"
+        "caller": "U8P_BEREN::schedule",
+        "callee": "METHOD::func143A",
+        "purpose": "Request/apply a candidate U8P_BEREN::schedule/movement option; result is tested by process_result().",
+        "confidence": "medium"
       },
       {
-        "caller": "U8P_BEREN::AvatarStoleSomething",
-        "callee": "Item::bark",
-        "purpose": "Emit warning/threat text to the player; used multiple times with escalating messages determined by berenWarned.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_BEREN::use",
-        "callee": "Item::getStatus",
-        "purpose": "Read item/NPC status bits to decide whether to open/close a gump (UI) when player uses Beren.",
+        "caller": "U8P_BEREN::schedule",
+        "callee": "METHOD::func133F",
+        "purpose": "Post-selection finalization after a U8P_BEREN::schedule is accepted (commit or follow-up action).",
         "confidence": "medium"
       },
       {
         "caller": "U8P_BEREN::use",
         "callee": "Item::openGump",
-        "purpose": "Open a UI gump for interacting with Beren when conditions match.",
-        "confidence": "medium"
+        "purpose": "Open the NPC/item gump when the player interacts and conditions permit.",
+        "confidence": "high"
       },
       {
         "caller": "U8P_BEREN::use",
         "callee": "Item::closeGump",
-        "purpose": "Close Beren's UI gump when the use event indicates it should.",
-        "confidence": "medium"
+        "purpose": "Close the gump on certain dead-state interactions.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEREN::func3856",
+        "callee": "FREE::getListLength",
+        "purpose": "Check menu length to ensure there are choices before asking; repopulate if needed.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEREN::func3856",
+        "callee": "FREE::moveToEndOfList",
+        "purpose": "Reorder menu so 'Farewell.' appears last prior to Ask.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEREN::func0862",
+        "callee": "getName",
+        "purpose": "Retrieve the player's name to compose personalized reply when the avatar provides their name.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEREN::func1296",
+        "callee": "FREE::randomInRange0",
+        "purpose": "Select among randomized bark variants.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEREN::func31C2",
+        "callee": "FREE::randomInRange0",
+        "purpose": "Select among alternative lore/roleplay lines.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BEREN::func369B",
+        "callee": "METHOD::func15E7",
+        "purpose": "Bookkeeping/interaction calls surrounding the deferential reply (purpose inferred).",
+        "confidence": "low"
       }
     ]
   },
   "global_flags": {
     "reads": [
       {
-        "name": "pyrosFree",
-        "likely_effect": "Controls which scheduled behavior schedule() will run; read to pick between METHOD spawn variants.",
-        "confidence": "medium"
-      },
-      {
-        "name": "avatarMasterSorcerer",
-        "likely_effect": "If set, causes enterFastArea to immediately set Beren's target to the avatar (gives avatar privileged status).",
-        "confidence": "medium"
-      },
-      {
-        "name": "inDaemonScene",
-        "likely_effect": "Suppresses certain fast-area behaviors when true (enterFastArea short-circuits movement in daemon scenes).",
-        "confidence": "medium"
-      },
-      {
-        "name": "berenMad",
-        "likely_effect": "Read by use() and possibly other behaviors to change Beren's reactions; set by U8P_BEREN::cast when casting off the protected map.",
-        "confidence": "high"
-      },
-      {
-        "name": "acolyteKilled",
-        "likely_effect": "Read by use() to select alternate interaction sequences (different spawn path when an acolyte is dead).",
-        "confidence": "medium"
-      },
-      {
         "name": "berenName",
-        "likely_effect": "Determines whether 'look' includes the NPC's proper name in the descriptive text.",
+        "likely_effect": "Controls whether Beren uses name-based or full-name title variants in U8P_BEREN::look and dialogue branches.",
         "confidence": "high"
       },
       {
         "name": "berenJob",
-        "likely_effect": "Determines whether 'look' includes job/title information (Sorcerer/Mage) in the description.",
+        "likely_effect": "Controls U8P_BEREN::use of job/title wording in U8P_BEREN::look and some dialogue options.",
         "confidence": "high"
       },
       {
-        "name": "berenWarned",
-        "likely_effect": "Tracks how many theft warnings have been issued; read to choose escalation branch in AvatarStoleSomething.",
+        "name": "pyrosFree",
+        "likely_effect": "Used by U8P_BEREN::schedule() together with map to pick U8P_BEREN::schedule branches when on map 0x29.",
+        "confidence": "medium"
+      },
+      {
+        "name": "inDaemonScene",
+        "likely_effect": "Short-circuits scheduling and some fast-area behavior when set.",
         "confidence": "high"
       },
       {
-        "name": "berenSchedule",
-        "likely_effect": "Indicates the current scheduled behavior state for Beren; read/checked and updated by schedule().",
+        "name": "acolyteKilled",
+        "likely_effect": "Switches certain dialogue/monologue branches into grief/vengeful responses.",
+        "confidence": "high"
+      },
+      {
+        "name": "berenMad",
+        "likely_effect": "Represents NPC anger/hostility level read by dialogue/speech routines to change tone and by U8P_BEREN::use/U8P_BEREN::cast to route to hostility behavior.",
+        "confidence": "high"
+      },
+      {
+        "name": "berenAvaName",
+        "likely_effect": "Controls whether Beren addresses the avatar by name (getName) in dialogues.",
+        "confidence": "high"
+      },
+      {
+        "name": "startedQuestions",
+        "likely_effect": "Used to resume or alter a question thread in U8P_BEREN::func3856 conversation assembly.",
+        "confidence": "medium"
+      },
+      {
+        "name": "finishedQuestions",
+        "likely_effect": "Used with startedQuestions to gate resumed-question branches.",
+        "confidence": "medium"
+      },
+      {
+        "name": "tickedOff",
+        "likely_effect": "Tracks how many times Beren has issued angry lines in response to acolyteKilled events; used to escalate barks and set target.",
         "confidence": "medium"
       }
     ],
     "writes": [
       {
         "name": "berenMad",
-        "likely_effect": "Set (written to a value like 3) when BEREN::cast runs off the protected map to mark Beren as angry and alter future interactions.",
+        "likely_effect": "Set to 0x03 by U8P_BEREN::cast() to mark NPC as fully enraged/hostile before entering combat AI.",
         "confidence": "high"
       },
       {
         "name": "berenWarned",
-        "likely_effect": "Incremented on theft incidents to record how many warnings the player has received and drive escalation.",
+        "likely_effect": "Incremented by U8P_BEREN::AvatarStoleSomething to track theft warnings and escalate behavior (guards/attack) as warnings accumulate.",
         "confidence": "high"
       },
       {
         "name": "berenSchedule",
-        "likely_effect": "Toggled/updated by schedule() to reflect which timed sequence is active or to clear that state.",
+        "likely_effect": "Set by U8P_BEREN::schedule() to record the chosen U8P_BEREN::schedule variant after METHOD::func143A succeeds.",
+        "confidence": "medium"
+      },
+      {
+        "name": "berenMet",
+        "likely_effect": "Set when the player first meets Beren (used to avoid repeating name-capture dialog).",
+        "confidence": "high"
+      },
+      {
+        "name": "berenAvaName",
+        "likely_effect": "Set when the avatar supplies their name in U8P_BEREN::func0862, enabling personalized dialogue later.",
+        "confidence": "high"
+      },
+      {
+        "name": "berenGroveled",
+        "likely_effect": "Set by U8P_BEREN::func369B after a long deferential line to avoid repeating the grovel; acts as a one-time gating flag.",
         "confidence": "medium"
       }
     ]
@@ -269,11 +382,11 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_BEREN::BEREN::cast",
-    "behavior_summary_one_liner": "Controls NPC 'Beren' gameplay behavior: reactions to spell-casting, theft, player 'look' and 'use' interactions, timed scheduling, and fast-area triggers.",
-    "external_call_count": 11,
-    "flag_read_count": 9,
-    "flag_write_count": 3
+    "main_function": "U8P_BEREN::cast",
+    "behavior_summary_one_liner": "This script implements the NPC 'Beren' behavior, including combat entry, theft reaction, scheduling, fast-area reactions, and a multi-stage conversation system with menu-driven dialogue and temperamental state.",
+    "external_call_count": 17,
+    "flag_read_count": 10,
+    "flag_write_count": 6
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

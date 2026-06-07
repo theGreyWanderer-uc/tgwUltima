@@ -3,169 +3,128 @@
   "source_of_truth": "dialogue/json/U8P_NEC1.json",
   "file": "U8P_NEC1",
   "behavior_summary": [
-    "NEC1::use is the 'U8P_NEC1::use' handler for a Necromancer NPC. When the player activates the NPC it: sets item info/process exclusion, guards against an early-exit via the global deathSpeakCast, puts the avatar into brief stasis, spawns location-based helper/effect scripts, plays a short frame-based animation on the NPC, and runs a conversation/teaching sequence determined by the NPC's Item::getQuality() value (stages 1..4).",
-    "Each quality branch produces multi-line dialog via Item::bark, may teach a spell or perform a teleport/fade sequence, and marks progression using metNec1..metNec4 so later interactions change behavior.",
-    "NEC1::look is a short helper invoked on 'look' that sets item info/exclusion and barks the string 'Necromancer '."
+    "This script implements a Necromancer NPC with a simple inspect/label (U8P_NEC1::look) and a multi-stage 'U8P_NEC1::use' interaction that teaches spells and advances the player's test.",
+    "U8P_NEC1::look responds to player examine/U8P_NEC1::look by barks the single label \"Necromancer\" and then suspends.",
+    "U8P_NEC1::use branches on Item::getQuality (quality values 0x01..0x04) to select one of four staged interactions. Each stage runs dialog teaching a spell, sets a corresponding global metNecN flag to prevent repetition, and may run camera/stasis/fade/teleport sequences to present the lesson.",
+    "U8P_NEC1::func2311 prepares the scene (avatar stasis, camera reposition/spawned directional effect) before dialog/transition sequences; U8P_NEC1::func23DB finalizes the scene (spawns a concluding effect based on distance and clears avatar stasis).",
+    "Several spawned free functions and fade/teleport operations are used to orchestrate short cinematic sequences; exact effect details are via spawned FREE::* functions and are inferred."
   ],
   "notable_control_flow": [
-    "Early guard: script checks global deathSpeakCast on entry and will alter/skip the normal sequence if set (read guard).",
-    "Stage branching: behavior is routed by Item::getQuality() with distinct code paths for quality==1,==2,==3,==4.",
-    "Progress gating: each stage checks the corresponding metNecN flag and only performs teaching/progression actions when appropriate, then writes the metNecN flag to mark completion.",
-    "Synchronous scripted sequence: the handler places the avatar in stasis (setAvatarInStasis), spawns effects at the NPC's coordinates (Item::getX/Y/Z -> spawn), animates the NPC via a small Item::setFrame loop, and uses fade/teleport processes for scene transitions on completion."
+    "Entry: U8P_NEC1::look is a process-type handler for U8P_NEC1::look/examine and is terminal after a single bark.",
+    "U8P_NEC1::use begins by reading a gate flag (deathSpeakCast) and then calls Item::getQuality to branch into four quality-based paths (0x01..0x04).",
+    "Each quality branch checks a per-stage global flag (metNec1..metNec4); if unset the script runs the teaching dialog and sets the corresponding metNecN flag.",
+    "Some branches call U8P_NEC1::func2311 before dialog and U8P_NEC1::func23DB after dialog to orchestrate stasis/camera/effect/teleport sequences; these helpers choose different spawned effect codes based on FREE::getDistanceBetween.",
+    "Sequences frequently spawn processes (spawn), store returned pids/temps, suspend to wait for them, manipulate Item::setFrame in a short loop (local1), and U8P_NEC1::use FadeToBlack / Npc::teleport / FadeFromBlack for higher-stage transitions."
   ],
   "open_questions": [
-    "Exact text and mechanical effects of the spells taught in each quality branch are inferred but not present in this excerpt (strings show dialog but spell mechanics handled elsewhere).",
-    "Precise semantics and timing of the spawned routines (FREE::* and NEC1::* spawn targets) are unknown; they likely produce visual effects or follow-up behaviors but are not defined here.",
-    "Whether NEC1::use ever calls NEC1::look internally (they appear as separate event handlers) — the relationship is unknown from the provided data.",
-    "Any side-effects on other global flags (beyond metNec1..metNec4 and deathSpeakCast) caused by spawned processes or later steps (e.g., setting talkedToDeadDudes in a related script) are not fully tied to this file's execution."
+    "Exact visual/audio behavior of spawned functions (->FREE::func1C19, ->FREE::func1C8B, addressof(...)->METHOD::func091C) — their concrete effects are inferred (likely sound/visual/timed sequences) but not certain.",
+    "Precise teleport targets and ownership semantics in the Npc::teleport calls used for higher-stage transitions (map/instance/x/y arguments are present but their gameplay intent is inferred).",
+    "Scope and persistence of local1: it appears to be a short-lived frame/counter for Item::setFrame animation, but exact lifetime and reuse across calls is low-confidence."
   ],
   "main_function": {
-    "name": "U8P_NEC1::use",
+    "name": "U8P_NEC1::look",
     "execution_form": "process",
-    "purpose": "Handle player 'U8P_NEC1::use' interaction with a Necromancer NPC: present stage-specific dialog, teach spells or trigger scripted progression based on the NPC's quality, spawn visual/effect processes at the NPC location, animate the NPC briefly, and set progression flags so future interactions change behavior.",
+    "purpose": "Respond to player examine / 'U8P_NEC1::look' on the Necromancer by displaying the short label and ending the U8P_NEC1::look process.",
     "entry_conditions": [
-      "Triggered when the player uses/activates the Necromancer NPC (U8P_NEC1::use event).",
-      "Normal sequence guarded by the global deathSpeakCast flag (script checks this flag at start and may early-exit or alter behavior).",
-      "Branches on Item::getQuality() to select which stage/dialog to run."
+      "Triggered by the engine when the player examines/looks at this NPC (process type 0x0208)."
     ],
     "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_NEC1::use",
-      "kind": "main",
-      "role": "Primary 'U8P_NEC1::use' event handler implementing multi-stage dialog/teaching progression and small scripted effects/animation.",
-      "confidence": "high"
-    },
-    {
       "name": "U8P_NEC1::look",
+      "kind": "main",
+      "role": "inspect/description handler that barks 'Necromancer' and suspends",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_NEC1::use",
       "kind": "helper",
-      "role": "'look' event handler: set item info/exclusion and bark the short identifier 'Necromancer '.",
+      "role": "primary interaction process: branches by Item::getQuality to teach staged Necromancer spells, sets metNecN flags, and controls cinematic/effect transitions",
       "confidence": "high"
     },
     {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine call used to present dialog lines / short messages from the NPC to the player.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_NEC1::setAvatarInStasis",
-      "kind": "extern",
-      "role": "Temporarily restrict player input/movement during scripted dialog sequences.",
-      "confidence": "high"
-    },
-    {
-      "name": "spawn",
-      "kind": "extern",
-      "role": "Create helper/effect scripts or processes (used to spawn FREE::* and NEC1::* child routines at NPC coordinates).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getX",
-      "kind": "extern",
-      "role": "Read NPC X coordinate for spawning location-tied effects/processes.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getY",
-      "kind": "extern",
-      "role": "Read NPC Y coordinate for spawning location-tied effects/processes.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getZ",
-      "kind": "extern",
-      "role": "Read NPC Z/floor coordinate for spawning location-tied effects/processes.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::setFrame",
-      "kind": "extern",
-      "role": "Animate the NPC by setting display frames inside a small loop.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getQuality",
-      "kind": "extern",
-      "role": "Return an integer quality/state value used to select which Necromancer-stage branch executes (1..4).",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_NEC1::process FadeToBlack / process FadeFromBlack",
-      "kind": "extern",
-      "role": "Screen transition effects used during teleport/fade sequences for scene changes.",
+      "name": "U8P_NEC1::func2311",
+      "kind": "helper",
+      "role": "scene preparatory helper: ensures avatar stasis, spawns directional/effect and cameraFollowAvatar variants, centers camera",
       "confidence": "medium"
     },
     {
-      "name": "Npc::teleport",
-      "kind": "extern",
-      "role": "Teleport/move the player or NPC during scripted progression (used in some stage completions).",
+      "name": "U8P_NEC1::func23DB",
+      "kind": "helper",
+      "role": "scene finalizer helper: spawns concluding effect variant based on distance and clears avatar stasis",
       "confidence": "medium"
     }
   ],
   "call_analysis": {
-    "internal_calls": [],
+    "internal_calls": [
+      {
+        "caller": "U8P_NEC1::use",
+        "callee": "U8P_NEC1::func2311",
+        "purpose": "Prepare avatar/camera/stasis and spawn short directional/camera effects before teaching/transition sequences",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_NEC1::use",
+        "callee": "U8P_NEC1::func23DB",
+        "purpose": "Run a concluding effect (distance-dependent) and unset avatar stasis after certain branches (finalize transition)",
+        "confidence": "medium"
+      }
+    ],
     "external_calls": [
       {
         "caller": "U8P_NEC1::use",
-        "callee": "Item::bark",
-        "purpose": "Deliver NPC dialog lines and short messages to the player's process during conversation branches.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_NEC1::use",
-        "callee": "U8P_NEC1::setAvatarInStasis",
-        "purpose": "Put the avatar in stasis to prevent player control/movement during the scripted sequence.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_NEC1::use",
-        "callee": "Item::getX",
-        "purpose": "Fetch the NPC's X coordinate to U8P_NEC1::use when spawning location-based effects/processes.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_NEC1::use",
-        "callee": "Item::getY",
-        "purpose": "Fetch the NPC's Y coordinate to U8P_NEC1::use when spawning location-based effects/processes.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_NEC1::use",
-        "callee": "Item::getZ",
-        "purpose": "Fetch the NPC's Z/floor coordinate to U8P_NEC1::use when spawning location-based effects/processes.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_NEC1::use",
-        "callee": "spawn",
-        "purpose": "Spawn FREE::* or NEC1::* child processes/effects at the NPC location (visuals, helpers, follow-up routines).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_NEC1::use",
-        "callee": "Item::setFrame",
-        "purpose": "Animate the NPC through a short frame loop (progresses frame index 1..8).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_NEC1::use",
         "callee": "Item::getQuality",
-        "purpose": "Read the NPC's quality value that determines which dialog/teaching branch executes.",
+        "purpose": "Select which stage (0x01..0x04) of dialog/teaching to run",
         "confidence": "high"
       },
       {
         "caller": "U8P_NEC1::use",
-        "callee": "U8P_NEC1::process FadeToBlack / process FadeFromBlack",
-        "purpose": "Perform screen fade transitions to conceal teleportation or scene changes during certain completions.",
+        "callee": "setAvatarInStasis",
+        "purpose": "Freeze/unfreeze the avatar during cinematic/effect sequences",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_NEC1::func2311",
+        "callee": "FREE::getDistanceBetween",
+        "purpose": "Decide which camera/effect timing variant to spawn based on player distance",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_NEC1::func2311",
+        "callee": "spawn addressof(...)->METHOD::func091C",
+        "purpose": "Spawn a directional/method effect using Item::getDirToItem (likely an oriented effect/sound)",
         "confidence": "medium"
+      },
+      {
+        "caller": "U8P_NEC1::func2311",
+        "callee": "spawn ->FREE::cameraFollowAvatar",
+        "purpose": "Move/position the camera at computed coordinates before suspending",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_NEC1::func23DB",
+        "callee": "spawn ->FREE::func1C8B",
+        "purpose": "Spawn a concluding effect variant (code 0x19 or 0x14) based on distance and wait for it",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_NEC1::use",
+        "callee": "process FadeToBlack / process FadeFromBlack",
+        "purpose": "Fade out/in around teleport transitions for higher-stage branches",
+        "confidence": "high"
       },
       {
         "caller": "U8P_NEC1::use",
         "callee": "Npc::teleport",
-        "purpose": "Teleport the player/NPC as part of stage completion sequences (used in conjunction with fades).",
+        "purpose": "Teleport the NPC or related entity as part of advancing stage transitions",
         "confidence": "medium"
+      },
+      {
+        "caller": "U8P_NEC1::use",
+        "callee": "Item::getX / Item::getY / Item::getZ / Item::setFrame",
+        "purpose": "Query NPC coordinates for camera/teleport and animate Item frames during short loops",
+        "confidence": "high"
       }
     ]
   },
@@ -173,50 +132,30 @@
     "reads": [
       {
         "name": "deathSpeakCast",
-        "likely_effect": "Early-exit/alter execution if set; prevents the normal Necromancer dialog/sequence from running.",
-        "confidence": "high"
-      },
-      {
-        "name": "metNec1",
-        "likely_effect": "Checked to determine whether the player has already completed the quality==1 stage; gates repeat teaching/dialog.",
-        "confidence": "high"
-      },
-      {
-        "name": "metNec2",
-        "likely_effect": "Checked in the quality==2 branch to gate progression or dialog.",
-        "confidence": "high"
-      },
-      {
-        "name": "metNec3",
-        "likely_effect": "Checked by higher-quality branches to gate dialog/progression.",
-        "confidence": "medium"
-      },
-      {
-        "name": "metNec4",
-        "likely_effect": "Checked by the final-quality branch to gate dialog/progression.",
+        "likely_effect": "A gate/guard read at U8P_NEC1::use start that determines whether the initial stasis/camera prep sequence should run",
         "confidence": "medium"
       }
     ],
     "writes": [
       {
         "name": "metNec1",
-        "likely_effect": "Set when the NPC teaches the first-stage spell or completes the quality==1 branch; used to mark progression so later interactions change behavior.",
+        "likely_effect": "Set when the quality==0x01 lesson is completed to prevent repeating the first-stage teaching",
         "confidence": "high"
       },
       {
         "name": "metNec2",
-        "likely_effect": "Set when the second-stage teaching completes; progression marker for quality==2 branch.",
+        "likely_effect": "Set when the quality==0x02 lesson is completed to prevent repeating the second-stage teaching",
         "confidence": "high"
       },
       {
         "name": "metNec3",
-        "likely_effect": "Set on completion of the third-stage teaching; progression marker for quality==3 branch.",
-        "confidence": "medium"
+        "likely_effect": "Set when the quality==0x03 lesson is completed to prevent repeating the third-stage teaching",
+        "confidence": "high"
       },
       {
         "name": "metNec4",
-        "likely_effect": "Set on completion of the final-stage teaching; progression marker for quality==4 branch.",
-        "confidence": "medium"
+        "likely_effect": "Set when the quality==0x04 lesson is completed to prevent repeating the fourth-stage teaching",
+        "confidence": "high"
       }
     ]
   },
@@ -227,10 +166,10 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "NEC1::use",
-    "behavior_summary_one_liner": "NEC1::use is the 'U8P_NEC1::use' handler for a Necromancer NPC. When the player activates the NPC it: sets item info/process exclusion, guards against an early-exit via the global deathSpeakCast, puts the avatar into brief stasis, spawns location-based helper/effect scripts, plays a short frame-based animation on the NPC, and runs a conversation/teaching sequence determined by the NPC's Item::getQuality() value (stages 1..4).",
-    "external_call_count": 10,
-    "flag_read_count": 5,
+    "main_function": "U8P_NEC1::look",
+    "behavior_summary_one_liner": "This script implements a Necromancer NPC with a simple inspect/label (U8P_NEC1::look) and a multi-stage 'U8P_NEC1::use' interaction that teaches spells and advances the player's test.",
+    "external_call_count": 9,
+    "flag_read_count": 1,
     "flag_write_count": 4
   },
   "hypotheses": {

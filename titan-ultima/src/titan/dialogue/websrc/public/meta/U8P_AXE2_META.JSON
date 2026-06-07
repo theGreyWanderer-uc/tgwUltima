@@ -3,27 +3,27 @@
   "source_of_truth": "dialogue/json/U8P_AXE2.json",
   "file": "U8P_AXE2",
   "behavior_summary": [
-    "Responds to the 'U8P_AXE2::look' (examine) event for the axe item by producing and sending the short description string \"axe \" to the appropriate recipient(s).",
-    "Sets messaging/context state (pid and processing exclusions) so the description is routed to the intended viewer(s), calls Item::bark with the allocated string, captures the bark return value, uses it in a subsequent implies/pop sequence, then suspends/returns.",
-    "All changes are local to the item and message routing; no global flags are read or written by this script."
+    "U8P_AXE2::look is the object's U8P_AXE2::look/inspect handler. When the player inspects this item it displays a single short text/bark: \"axe \".",
+    "After emitting the text the process suspends/pauses (inferred from the presence of a suspend node), waiting for the player to dismiss the message.",
+    "There is no branching, menu interaction, external calls, or global flag access — this is a minimal static description response.",
+    "Item property metadata (damage values and types) exists for the object but is not referenced by the U8P_AXE2::look process."
   ],
   "notable_control_flow": [
-    "Event-driven: the function runs in response to a U8P_AXE2::look/examine trigger (Event 0).",
-    "Message-routing setup occurs before the bark call (set info / process exclude / pid adjustments), so recipients are determined prior to emitting text.",
-    "Return value from Item::bark is captured and immediately used in an 'implies' operation; the result is popped and the process is suspended — indicating the bark's result may affect ephemeral control/state but not persistent globals."
+    "Single-entry process invoked by the engine's U8P_AXE2::look/inspect action (process type 0x0208).",
+    "Emit one player-facing Bark/DialogueLine then suspend the process.",
+    "No conditional branches, no reads/writes of global flags, and no function calls."
   ],
   "open_questions": [
-    "Which exact recipients are excluded or included by the set-info/process-exclude sequence (the script configures routing but the exact pid semantics are engine-level and not fully specified here).",
-    "What concrete effect the 'implies' operation has in the surrounding engine (it uses the bark return value but its gameplay impact is only inferred).",
-    "Whether the allocated string lifetime or allocation site has any additional side effects beyond being passed to Item::bark and freed."
+    "Why the displayed text includes a trailing space ('axe ')? (Could be formatting or data artifact.)",
+    "Why the item's damage/type properties are present in metadata but unused by the U8P_AXE2::look handler — are they used elsewhere?",
+    "What exact semantics does the Unknown 'suspend' node have in this script instance (inferred as standard Titan suspend)?"
   ],
   "main_function": {
     "name": "U8P_AXE2::look",
     "execution_form": "process",
-    "purpose": "Handle the 'U8P_AXE2::look' (examine) event for the axe item: prepare message routing, emit the item's short description \"axe \", capture the bark return value for a downstream implies operation, then suspend/return.",
+    "purpose": "Provide the short description shown to the player when they inspect this item.",
     "entry_conditions": [
-      "Triggered by Event 0 (player/actor looks at or examines the axe).",
-      "Runs with an implicit 'this' / item reference provided (inferred at BP+06h)."
+      "Triggered by the player's Look/inspect action on the object (engine invokes U8P_AXE2::look processType 0x0208)."
     ],
     "confidence": "high"
   },
@@ -31,26 +31,13 @@
     {
       "name": "U8P_AXE2::look",
       "kind": "main",
-      "role": "Process-event handler for the axe item's U8P_AXE2::look/examine action; builds and emits the short description to viewer(s).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine used to emit/display short text messages from an item/process to one or more player/process recipients.",
+      "role": "Look/inspect handler that displays the object's short name/description.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_AXE2::look",
-        "callee": "Item::bark",
-        "purpose": "Deliver the literal description string \"axe \" from the axe item to the configured recipient(s). Caller precedes this call by setting pid and using set-info/process-exclude to control routing; return value is captured for immediate use.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -58,12 +45,14 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup"
+    "cleanup",
+    "animation",
+    "guard"
   ],
   "quick_facts": {
-    "main_function": "AXE2::look",
-    "behavior_summary_one_liner": "Responds to the 'U8P_AXE2::look' (examine) event for the axe item by producing and sending the short description string \"axe \" to the appropriate recipient(s).",
-    "external_call_count": 1,
+    "main_function": "U8P_AXE2::look",
+    "behavior_summary_one_liner": "U8P_AXE2::look is the object's U8P_AXE2::look/inspect handler. When the player inspects this item it displays a single short text/bark: \"axe \".",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

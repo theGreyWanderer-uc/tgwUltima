@@ -3,26 +3,27 @@
   "source_of_truth": "dialogue/json/U8P_HAY.json",
   "file": "U8P_HAY",
   "behavior_summary": [
-    "Handles the 'U8P_HAY::look' (examine) event for a hay item: marks an info id for the item and emits a short one-line description 'hay ' to the observing process/player.",
-    "Writes an info identifier (0x0208) for the item (used to record which info line was provided), then uses a process-exclude step before delivering the description to avoid duplicate processing.",
-    "Calls Item::bark with the observing process id, the literal string 'hay ', and the item/context pointer; frees the temporary string and returns an implied success value based on the bark return."
+    "When the entity is inspected/looked at, the U8P_HAY::look process emits a single bark with the text \"hay\" and then the process suspends.",
+    "There is no branching, menuing, flag manipulation, or external calls; the routine is a minimal, self-contained U8P_HAY::look/inspect response.",
+    "The behavior likely runs in response to the engine's U8P_HAY::look/inspect event (processType 0x0208) and may also act as a fast-area/triggered U8P_HAY::look handler."
   ],
   "notable_control_flow": [
-    "Entry on U8P_HAY::look event -> push info id 0x0208 and item/context pointer -> set info (writes info 0x0208) -> process-exclude (guard to prevent repeat handling) -> construct literal 'hay ' -> call Item::bark(pid, 'hay ', item) -> free temporary string -> use bark retval to form implied return -> suspend/return.",
-    "No other global state is modified by this handler aside from the item info write described above."
+    "Linear sequence: bark (emit text) -> suspend/terminate the U8P_HAY::look process.",
+    "No conditional branches, loops, or calls to helper or external routines are present.",
+    "Function is implemented as a process (processType 0x0208) and ends immediately after producing the bark."
   ],
   "open_questions": [
-    "Exact semantic meaning of info id 0x0208 (what UI/info panel or internal state it corresponds to).",
-    "Precise identity and ordering of pushed parameters: which pushed value is the observing process/player id (pid) vs. the item/context pointer (BP+06h) — inferred but not explicit.",
-    "Whether the process-exclude step is strictly preventing duplicate barks, preventing concurrent processing, or serves another engine-level purpose.",
-    "Whether the return value from Item::bark is used by callers beyond this implied success (broader calling convention for 'implies' result)."
+    "Is this handler ever invoked as a fast-area 'enterFastArea' trigger (proximity) in addition to an explicit player 'U8P_HAY::look' action?",
+    "The raw disassembly included low-confidence 'Unknown' nodes (e.g., tokens like '{' and 'suspend'); are there any subtle side-effects encoded in those remnants or are they purely decompiler artifacts?",
+    "The stored text appears as \"hay \" (with trailing space) in samples — is the trailing space intentional for concatenation/formatting elsewhere?"
   ],
   "main_function": {
     "name": "U8P_HAY::look",
     "execution_form": "process",
-    "purpose": "Respond to a U8P_HAY::look/examine event on a hay item by recording which info line was provided (info id 0x0208) and displaying the brief description 'hay ' to the observing process/player via Item::bark.",
+    "purpose": "Provide the short/inspect response for this entity by emitting a single audible/text bark and then suspending the U8P_HAY::look process.",
     "entry_conditions": [
-      "Event 0 (U8P_HAY::look) — triggered when an actor/player looks at or inspects the hay object."
+      "Invoked by the engine's U8P_HAY::look/inspect event (processType 0x0208).",
+      "May also be triggered when the player enters a relevant fast-area associated with this entity (inferred)."
     ],
     "confidence": "high"
   },
@@ -30,48 +31,27 @@
     {
       "name": "U8P_HAY::look",
       "kind": "main",
-      "role": "Handle the U8P_HAY::look/examine event for the hay item; set info and display a short description.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine used to emit/display a short text message from the item to a target process/player.",
+      "role": "Responds to a U8P_HAY::look/inspect event by emitting a single bark (\"hay\") and suspending the process.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_HAY::look",
-        "callee": "Item::bark",
-        "purpose": "Display a one-line description 'hay ' to the observing process/player (parameters appear to be pid, char* 'hay ', and the item/context pointer).",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
-    "writes": [
-      {
-        "name": "info 0x0208",
-        "likely_effect": "Marks which info/description line has been provided for this item instance (used by UI or engine to track that this description was shown).",
-        "confidence": "medium"
-      }
-    ]
+    "writes": []
   },
   "ui_tags": [
-    "trigger",
-    "description",
-    "process-exclude"
+    "trigger"
   ],
   "quick_facts": {
-    "main_function": "HAY::look",
-    "behavior_summary_one_liner": "Handles the 'U8P_HAY::look' (examine) event for a hay item: marks an info id for the item and emits a short one-line description 'hay ' to the observing process/player.",
-    "external_call_count": 1,
+    "main_function": "U8P_HAY::look",
+    "behavior_summary_one_liner": "When the entity is inspected/looked at, the U8P_HAY::look process emits a single bark with the text \"hay\" and then the process suspends.",
+    "external_call_count": 0,
     "flag_read_count": 0,
-    "flag_write_count": 1
+    "flag_write_count": 0
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

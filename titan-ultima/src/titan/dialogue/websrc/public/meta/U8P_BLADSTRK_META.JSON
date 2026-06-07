@@ -3,28 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_BLADSTRK.json",
   "file": "U8P_BLADSTRK",
   "behavior_summary": [
-    "Handles the 'U8P_BLADSTRK::look' (examine) event for the Blade of Striking item (U8P_BLADSTRK::look).",
-    "When the item is examined, the script constructs the literal string \"Blade of Striking \", routes display context information, and calls the item's bark routine so that text is presented to the examining process/player.",
-    "The constructed string buffer is freed after use; the return value from Item::bark is captured and used in a short implies/pop sequence before the script suspends/returns.",
-    "No persistent global flags are read or written by this handler; effects are local to the item/process context."
+    "U8P_BLADSTRK::look is a simple 'U8P_BLADSTRK::look' (examine) process that displays the short name text \"Blade of Striking\" to the player and then suspends/ends the U8P_BLADSTRK::look processing.",
+    "The script contains no branching, menus, or flag manipulation; its visible effect is purely informational (show the item's name).",
+    "Item metadata present in the same package indicates this object represents a special weapon (baseDamage 5, damageModifier 13, types blade and magic, etc.), but the U8P_BLADSTRK::look handler does not read or modify those properties."
   ],
   "notable_control_flow": [
-    "Entry via a U8P_BLADSTRK::look/examine trigger that runs as a process-style handler.",
-    "Set-up of display/message context (inferred 'set info' / 'process exclude' style ops) prior to producing text.",
-    "Heap/stack allocation of the literal message string followed by a call to Item::bark and subsequent free of the string.",
-    "The bark return value is pushed and combined with an 'implies' operation then popped into a temp; the function then suspends/returns."
+    "Entry to U8P_BLADSTRK::look (process form) -> emit a Bark with text \"Blade of Striking\" -> suspend the process.",
+    "No conditional branches or calls to other internal script functions are present."
   ],
   "open_questions": [
-    "Exact semantics of the 'implies' + pop sequence and whether that return value affects higher-level game flow (inferred, not explicit).",
-    "Precise source and meaning of the pid/process id used for Item::bark (it is pushed for the call but the full origin is inferred).",
-    "Details of the 'set info' and 'process exclude' operations — which info key/object they target and whether they change any visible state (these are inferred from opcodes)."
+    "Is the U8P_BLADSTRK::look process invoked via an on-examine action or by entering a fast-area trigger (enterFastArea) in the engine? The process classification (0x0208) suggests an examine/lookup trigger but exact entry semantics are inferred.",
+    "Does the suspend node terminate the U8P_BLADSTRK::look process only, or is it used here to yield for engine timing reasons? (Behavior is inferred from a suspend node presence.)",
+    "Are the item properties listed in metadata consumed by other systems (combat/equip) even though this script does not reference them? (Likely, but outside this script's scope.)"
   ],
   "main_function": {
     "name": "U8P_BLADSTRK::look",
     "execution_form": "process",
-    "purpose": "Present the item's name/short description to the player when the Blade of Striking is examined by constructing the text \"Blade of Striking \" and invoking Item::bark with the item context and target process.",
+    "purpose": "Provide the object's short description when the player examines or inspects it; display the label \"Blade of Striking\" and then suspend/terminate the U8P_BLADSTRK::look process.",
     "entry_conditions": [
-      "Triggered by the 'U8P_BLADSTRK::look' (examine) event — typically when the Avatar or actor inspects the item's trigger region or uses an examine action."
+      "Player examines/looks at the object (U8P_BLADSTRK::look/examine action).",
+      "Possibly invoked when the player or relevant actor enters the object's fast-area trigger (inferred from U8P_BLADSTRK::look process type)."
     ],
     "confidence": "high"
   },
@@ -32,13 +30,7 @@
     {
       "name": "U8P_BLADSTRK::look",
       "kind": "main",
-      "role": "Handle the 'U8P_BLADSTRK::look' event for the Blade of Striking item; prepare and dispatch the item's visible name/description.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item API used to display or emit a text message from an item/process to a target process/player.",
+      "role": "Handle examine/U8P_BLADSTRK::look event: display short name text and suspend.",
       "confidence": "high"
     }
   ],
@@ -47,9 +39,15 @@
     "external_calls": [
       {
         "caller": "U8P_BLADSTRK::look",
-        "callee": "Item::bark",
-        "purpose": "Display the constructed string \"Blade of Striking \" to the correct process/player, using the item instance as the calling context.",
+        "callee": "Bark",
+        "purpose": "Display the short description / on-screen text \"Blade of Striking\" to the player.",
         "confidence": "high"
+      },
+      {
+        "caller": "U8P_BLADSTRK::look",
+        "callee": "suspend",
+        "purpose": "Pause or end the U8P_BLADSTRK::look process after the bark (inferred process termination/yield).",
+        "confidence": "medium"
       }
     ]
   },
@@ -59,12 +57,12 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup"
+    "informational"
   ],
   "quick_facts": {
     "main_function": "U8P_BLADSTRK::look",
-    "behavior_summary_one_liner": "Handles the 'U8P_BLADSTRK::look' (examine) event for the Blade of Striking item (U8P_BLADSTRK::look).",
-    "external_call_count": 1,
+    "behavior_summary_one_liner": "U8P_BLADSTRK::look is a simple 'U8P_BLADSTRK::look' (examine) process that displays the short name text \"Blade of Striking\" to the player and then suspends/ends the U8P_BLADSTRK::look processing.",
+    "external_call_count": 2,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

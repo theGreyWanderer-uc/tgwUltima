@@ -3,26 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_CANOPY.json",
   "file": "U8P_CANOPY",
   "behavior_summary": [
-    "Responds to the object's 'U8P_CANOPY::look' (examine) event by producing a short in-game text/dialog from the canopy item: the literal string \"canopy \".",
-    "Per-call setup opcodes are executed (inferred set-info / process-exclude style operations) before the message is delivered; no persistent global state is modified.",
-    "The handler constructs the message string, calls the engine/item routine to display it (Item::bark), frees the temporary string, and then suspends/returns the script."
+    "This script implements a minimal 'U8P_CANOPY::look' (examine) handler for the canopy. When the player examines the canopy, the U8P_CANOPY::look process emits a single short bark text 'canopy' and then suspends/terminates.",
+    "No global flags are read or written and there are no calls to external game systems. The function's sole visible effect is to present the brief description string.",
+    "Process type 0x0208 indicates this is the engine's examine/U8P_CANOPY::look process for the object."
   ],
   "notable_control_flow": [
-    "Entry on a trigger-style event (Event 0 / U8P_CANOPY::look).",
-    "Simple linear flow: prepare state, allocate/build literal message, call Item::bark, free the message, handle the bark return value (pushed/used by an implies/pop), then suspend/return.",
-    "No loops, no iterations, and no global flag branching observed in this script."
+    "U8P_CANOPY::look is a single-entry process that runs when the canopy is examined and immediately issues a bark followed by a suspend (end/pause of the U8P_CANOPY::look process).",
+    "There is no branching, menu logic, or external calls; control flow is linear and terminative after emitting the string."
   ],
   "open_questions": [
-    "Exact semantics of the 'set info' / 'process exclude' opcodes in this handler: what precise per-object state or exclusion is being applied and whether it affects future processing of this item.",
-    "Whether the returned value from Item::bark (pushed and consumed by an implies) can affect other engine-level behavior outside this short handler.",
-    "Whether other events for the canopy share or rely on the same info key that this handler briefly sets (if any)."
+    "Is the bark text 'canopy' a localization key or the literal displayed string in-game?",
+    "Does the engine treat the observed 'suspend' as a full termination of the U8P_CANOPY::look process or as a short pause (affects whether subsequent engine processing resumes immediately)?"
   ],
   "main_function": {
     "name": "U8P_CANOPY::look",
     "execution_form": "process",
-    "purpose": "Handle the 'U8P_CANOPY::look' (examine) event for a canopy item by making the item emit a short description/dialog ('canopy ').",
+    "purpose": "Provide the short, immediate description when the player examines/looks at the canopy by emitting a single bark text 'canopy' and ending the U8P_CANOPY::look process.",
     "entry_conditions": [
-      "Event 0: invoked when an actor (typically the Avatar) examines or 'looks' at the canopy object (area/interaction trigger)."
+      "Triggered by the player 'U8P_CANOPY::look' or examine action on the canopy (engine U8P_CANOPY::look/examine event).",
+      "Process type 0x0208 (U8P_CANOPY::look/examine handler) used by the engine for object inspection."
     ],
     "confidence": "high"
   },
@@ -30,26 +29,13 @@
     {
       "name": "U8P_CANOPY::look",
       "kind": "main",
-      "role": "Event handler for the canopy object's 'U8P_CANOPY::look' (examine) action.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine used to display a short text/dialog message sourced from an item/process.",
+      "role": "Look/examine handler that emits a short description ('canopy') and suspends the process.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_CANOPY::look",
-        "callee": "Item::bark",
-        "purpose": "Deliver/display a short in-game message coming from the canopy item; called with the canopy object instance and the string \"canopy \".",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -57,14 +43,12 @@
   },
   "ui_tags": [
     "trigger",
-    "dialog",
-    "suspend",
-    "info"
+    "description"
   ],
   "quick_facts": {
     "main_function": "U8P_CANOPY::look",
-    "behavior_summary_one_liner": "Responds to the object's 'U8P_CANOPY::look' (examine) event by producing a short in-game text/dialog from the canopy item: the literal string \"canopy \".",
-    "external_call_count": 1,
+    "behavior_summary_one_liner": "This script implements a minimal 'U8P_CANOPY::look' (examine) handler for the canopy. When the player examines the canopy, the U8P_CANOPY::look process emits a single short bark text 'canopy' and then suspends/terminates.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

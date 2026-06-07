@@ -3,33 +3,34 @@
   "source_of_truth": "dialogue/json/U8P_GUARD3.json",
   "file": "U8P_GUARD3",
   "behavior_summary": [
-    "Provides NPC (guardsman) responses to being looked at and used (talked to), manages area-trigger resurrection/cleanup, and runs a patrol/movement helper.",
-    "GUARD3::look: when the player inspects the guard, the script checks if the NPC is dead and barks an appropriate short description ('dead guardsman' vs 'guardsman').",
-    "U8P_GUARD3::enterFastArea: on area entry the script will revive and reposition a dead guard (clearing dead/in-combat flags and teleporting) or, if not dead, perform area cleanup and spawn a patrol helper U8P_GUARD3::077B.",
-    "U8P_GUARD3::leaveFastArea: cleans up/unregisters area resources related to the fast-area trigger.",
-    "U8P_GUARD3::use: implements a dialog flow (greeting, question list, replies) that reads and updates per-guard flags (guard3Met, guard3Pissed) and reads world-state flags (hydrosFree, hasHeart, pyrosFree) to choose warning lines about Titans/undead; it also spawns animation/movement helper methods for follow-up behavior.",
-    "U8P_GUARD3::schedule: constructs timing/config values and spawns scheduled helper methods to drive periodic guard behavior; behavior may change depending on which method spawns succeed.",
-    "U8P_GUARD3::077B: a script-driven patrol/movement loop that issues pathfind requests and spawns short animation/movement METHOD::091C sequences interleaved with small waits."
+    "This script controls a guard NPC's basic interactions: examining (U8P_GUARD3::look), talking (U8P_GUARD3::use), proximity entry/exit (U8P_GUARD3::enterFastArea / U8P_GUARD3::leaveFastArea), simple scheduling (U8P_GUARD3::schedule), and a path/movement utility (U8P_GUARD3::func077B).",
+    "U8P_GUARD3::look: when the player 'looks' at the NPC it emits a short bark depending on life state (dead vs alive) and then suspends.",
+    "U8P_GUARD3::enterFastArea: when an actor enters the NPC's fast/trigger area the script will revive and reposition a dead guard (Npc::clrDead, Npc::clrInCombat, Npc::teleport) or, if alive, reset an external reference and invoke a movement helper (U8P_GUARD3::func077B).",
+    "U8P_GUARD3::leaveFastArea: resets/unregisters an external reference for this NPC on exit (cleanup).",
+    "U8P_GUARD3::use: starts a conversation; reads global world-state flags (hydrosFree, pyrosFree, hasHeart) to decide whether to issue urgent warnings (Titan/undead messages). Otherwise it runs a menu-driven conversation, using per-NPC flags guard3Met and guard3Pissed to vary greeting and to update NPC mood. Menu choices are presented via a local menu array and removed once chosen; 'Bye' ends the loop.",
+    "U8P_GUARD3::schedule: initializes several local numeric parameters, calls engine scheduling methods (METHOD::func143A) and, if a spawned process returns success, runs a continuation (METHOD::func133F).",
+    "U8P_GUARD3::func077B: inferred utility that spawns Npc::pathfind to move the NPC toward a target (local1), waits for completion, calls METHOD::func091C for follow-up, spawns auxiliary FREE helper(s), and toggles local1 at sequence end."
   ],
   "notable_control_flow": [
-    "Look -> conditional branch on Npc::isDead(process) to choose a 'dead' vs 'alive' bark.",
-    "enterFastArea -> if Npc::isDead(process) then clear dead/in-combat and teleport; else free area info and spawn the patrol helper U8P_GUARD3::077B.",
-    "use -> linear greeting then spawn METHOD::0BCF and a short delay, tally world flags (hydrosFree, hasHeart, pyrosFree) into a local counter to select a warning line, then present an ask-list to the player and branch on the returned string to multiple canned replies; updates guard3Met and guard3Pissed based on choices and may spawn METHOD::1090 as a follow-up.",
-    "schedule -> builds timer/config locals and spawns METHOD::143A; depending on the returned pid it may spawn METHOD::133F instead (i.e., alternate scheduled callbacks).",
-    "077B -> small byte-driven loop controlling calls to Npc::pathfind and a sequence of spawned METHOD::091C actions with waits, implementing patrol steps."
+    "U8P_GUARD3::look branches on Npc::isDead(this) to pick between two short barks.",
+    "U8P_GUARD3::enterFastArea branches on whether the NPC is dead: if dead -> revive, clear combat, teleport; else -> FREE::resetRef and call U8P_GUARD3::func077B.",
+    "U8P_GUARD3::use counts world-state flags hydrosFree/hasHeart/pyrosFree into local3; if more than one of these are true it emits an urgent Titans/undead warning and ends the conversation; if only hasHeart is true it emits an undead warning and ends the conversation.",
+    "U8P_GUARD3::use then selects greeting based on guard3Met and guard3Pissed and enters a conversation loop: present local2 (menu), suspend to capture choice in local1, strcmp local1 to route to choice handlers, MenuRemove to remove used options, loop until 'Bye' is chosen.",
+    "U8P_GUARD3::func077B spawns a pathfind process (spawn Npc::pathfind), suspends for completion, runs METHOD::func091C, spawns auxiliary FREE::func1C19 calls, and flips/clears local1 at the end."
   ],
   "open_questions": [
-    "Exact dialog text variants (full strings for all warning/answer lines) and their mapping to each world-flag combination are inferred but not exhaustively enumerated.",
-    "Precise timing values and meanings of schedule locals (BP-07h / BP-05h / BP-03h / BP-01h) used to configure METHOD::143A/METHOD::133F are not explicit in the extraction.",
-    "Behavioral detail of METHOD::* helpers (0BCF, 1090, 143A, 133F, 091C) is inferred from usage but their internal effects (animations, movement semantics) are not defined here.",
-    "077B's internal script format and the exact conditions that control its loop branches (BP-03h values) remain only partially inferred."
+    "What exactly does FREE::func1C19 do when spawned (timer/helper/animation); current evidence shows it is spawned several times but purpose is unclear.",
+    "Precise semantics and intended targets of local1 outside of being a menu_choice/path target (it is toggled by U8P_GUARD3::func077B and also used to store Ask result in U8P_GUARD3::use) — are these separate uses interfering or intentionally reused?",
+    "Exact effects of METHOD::func143A / METHOD::func133F / METHOD::func091C — inferred to be scheduling and post-path/movement handlers but engine-specific behaviors are unknown.",
+    "Whether guard3Met and guard3Pissed are global or per-NPC flags in the broader system (script treats them as per-NPC but storage scope depends on engine)."
   ],
   "main_function": {
     "name": "U8P_GUARD3::look",
     "execution_form": "process",
-    "purpose": "Respond to a player examining the guard: detect if the NPC is dead and produce a short context-appropriate bark/description.",
+    "purpose": "Provide a short description/bark when the player examines the guard; differentiate output if the guard is dead vs alive and then suspend the U8P_GUARD3::look process.",
     "entry_conditions": [
-      "Event 0 (U8P_GUARD3::look) — invoked when a player or other actor examines/looks at the guard process"
+      "Player performs a 'U8P_GUARD3::look' / examine action on this NPC (process type 0x0208).",
+      "Branches on the NPC's death state (Npc::isDead(this))."
     ],
     "confidence": "high"
   },
@@ -37,187 +38,115 @@
     {
       "name": "U8P_GUARD3::look",
       "kind": "main",
-      "role": "Handle 'U8P_GUARD3::look' examination event for the guard (produce short descriptive bark; checks dead state).",
+      "role": "examine/U8P_GUARD3::look handler that barks 'dead guardsman' or 'guardsman' depending on NPC life state",
       "confidence": "high"
     },
     {
       "name": "U8P_GUARD3::enterFastArea",
       "kind": "helper",
-      "role": "Area-entry trigger: revive/teleport dead guard or perform cleanup and spawn patrol helper.",
+      "role": "proximity-entry behavior: revive/teleport dead NPC or reset reference and start movement helper when player enters trigger area",
       "confidence": "high"
     },
     {
       "name": "U8P_GUARD3::leaveFastArea",
       "kind": "helper",
-      "role": "Area-exit trigger: cleanup/free area resources.",
-      "confidence": "high"
+      "role": "proximity-exit cleanup: reset/unregister an external reference for this NPC",
+      "confidence": "medium"
     },
     {
       "name": "U8P_GUARD3::schedule",
       "kind": "helper",
-      "role": "Set up periodic/scheduled behaviors by spawning helper methods with constructed timing/config parameters.",
+      "role": "initialize scheduling parameters and start a scheduled/timed process (calls engine scheduling methods), then possibly run follow-up on success",
       "confidence": "medium"
     },
     {
       "name": "U8P_GUARD3::use",
       "kind": "helper",
-      "role": "Handle direct player interaction: dialog branching, state flag updates, and spawning follow-up animations/movement.",
+      "role": "conversation/talk handler: issues urgent warnings based on world flags or runs a menu-driven dialog that updates per-NPC mood flags",
       "confidence": "high"
     },
     {
-      "name": "U8P_GUARD3::077B",
+      "name": "U8P_GUARD3::func077B",
       "kind": "helper",
-      "role": "Patrol/movement routine: script-driven loop issuing pathfind requests and spawning animation/movement sequences.",
-      "confidence": "high"
-    },
-    {
-      "name": "Npc::isDead",
-      "kind": "extern",
-      "role": "Engine query: returns whether the NPC is in a dead state.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine: make the NPC/item produce a short spoken/text bark.",
-      "confidence": "high"
-    },
-    {
-      "name": "Npc::clrDead",
-      "kind": "extern",
-      "role": "Engine: clear the NPC 'dead' flag (revive semantics inferred).",
-      "confidence": "high"
-    },
-    {
-      "name": "Npc::clrInCombat",
-      "kind": "extern",
-      "role": "Engine: clear the NPC 'in combat' flag (make non-hostile).",
-      "confidence": "high"
-    },
-    {
-      "name": "Npc::teleport",
-      "kind": "extern",
-      "role": "Engine: teleport/reposition NPC and set visual parameters (x,y,frame,shape).",
-      "confidence": "high"
+      "role": "movement/pathfinding utility: spawn pathfind, wait, call post-path method, toggle a local flag—used to reposition or animate the NPC",
+      "confidence": "medium"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
         "caller": "U8P_GUARD3::enterFastArea",
-        "callee": "U8P_GUARD3::077B",
-        "purpose": "Spawn the patrol/movement helper when area entry occurs and the guard was not revived; drives subsequent patrol behavior.",
+        "callee": "U8P_GUARD3::func077B",
+        "purpose": "Invoke pathfinding/movement utility when the guard is alive on area entry (repositioning / follow-up behavior).",
         "confidence": "high"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_GUARD3::look",
-        "callee": "Npc::isDead",
-        "purpose": "Determine whether to use the 'dead guardsman' vs 'guardsman' bark.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GUARD3::look",
-        "callee": "Item::bark",
-        "purpose": "Emit the short description text to the inspecting player/process.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GUARD3::enterFastArea",
-        "callee": "Npc::isDead",
-        "purpose": "Check if the guard is dead to decide whether to revive/teleport it or spawn patrol helper.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_GUARD3::enterFastArea",
         "callee": "Npc::clrDead",
-        "purpose": "Clear the dead flag when reviving a guard on area entry.",
+        "purpose": "Clear the NPC's dead state to revive the guard on player approach.",
         "confidence": "high"
       },
       {
         "caller": "U8P_GUARD3::enterFastArea",
         "callee": "Npc::clrInCombat",
-        "purpose": "Clear combat status after reviving so the guard is non-hostile.",
+        "purpose": "Clear in-combat flag/state after reviving to ensure proper NPC behavior.",
         "confidence": "high"
       },
       {
         "caller": "U8P_GUARD3::enterFastArea",
         "callee": "Npc::teleport",
-        "purpose": "Reposition the revived guard to specific coordinates/appearance.",
+        "purpose": "Teleport revived NPC to specific map coordinates to reposition it into the world.",
         "confidence": "high"
       },
       {
         "caller": "U8P_GUARD3::enterFastArea",
-        "callee": "FREE::2A56",
-        "purpose": "Free/unregister area-related info/resources when not reviving the guard (cleanup).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GUARD3::leaveFastArea",
-        "callee": "FREE::2A56",
-        "purpose": "Cleanup/unregister area resources on leaving the fast-area.",
+        "callee": "FREE::resetRef",
+        "purpose": "Reset/unregister an external reference for the NPC (cleanup or re-registration).",
         "confidence": "high"
       },
       {
         "caller": "U8P_GUARD3::use",
-        "callee": "Item::bark",
-        "purpose": "Emit greetings, warnings and replies as short barks during dialog.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GUARD3::use",
-        "callee": "METHOD::0BCF",
-        "purpose": "Spawn a small response animation/behavior at the start of dialog (inferred).",
+        "callee": "FREE::func1C19 (spawn)",
+        "purpose": "Spawn an auxiliary/timed helper process at conversation start (purpose inferred as timer/auxiliary helper).",
         "confidence": "medium"
       },
       {
         "caller": "U8P_GUARD3::use",
-        "callee": "FREE::1C19",
-        "purpose": "Spawn short waits/delays between dialog or animation steps.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GUARD3::use",
-        "callee": "METHOD::1090",
-        "purpose": "Spawn a follow-up action after some dialog branches (likely causes the NPC to walk off or perform an action).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_GUARD3::use",
-        "callee": "urandom",
-        "purpose": "Introduce randomness into greeting/reply selection to vary dialog.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GUARD3::use",
-        "callee": "strptr / Item::ask",
-        "purpose": "Present the player with a list of dialogue choices and receive the selected string for branching.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GUARD3::schedule",
-        "callee": "METHOD::143A",
-        "purpose": "Spawn scheduled behavior callback configured by schedule locals.",
+        "callee": "FREE::resetRef",
+        "purpose": "Reset/unregister an external reference early in the interaction (cleanup/registration step).",
         "confidence": "medium"
       },
       {
         "caller": "U8P_GUARD3::schedule",
-        "callee": "METHOD::133F",
-        "purpose": "Spawn an alternate scheduled callback depending on METHOD::143A's spawn result.",
+        "callee": "METHOD::func143A",
+        "purpose": "Register/start an engine scheduling/timed process using local parameters.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_GUARD3::077B",
-        "callee": "Npc::pathfind",
-        "purpose": "Request pathfinding towards patrol target coordinates in the scripted loop.",
+        "caller": "U8P_GUARD3::schedule",
+        "callee": "METHOD::func133F",
+        "purpose": "Run a continuation/follow-up action if the scheduled/spawned process returns success.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GUARD3::func077B",
+        "callee": "Npc::pathfind (spawn)",
+        "purpose": "Spawn engine pathfinding to move the NPC toward a target/location (local1).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_GUARD3::077B",
-        "callee": "METHOD::091C",
-        "purpose": "Spawn short animation/movement actions as part of patrol steps (byte-parameterized sequences).",
-        "confidence": "high"
+        "caller": "U8P_GUARD3::func077B",
+        "callee": "METHOD::func091C",
+        "purpose": "Post-path completion method to finalize movement/animation or trigger follow-up behavior.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GUARD3::func077B",
+        "callee": "FREE::func1C19 (spawn)",
+        "purpose": "Spawn auxiliary helper processes around path completion (purpose inferred as timing/animation helpers).",
+        "confidence": "low"
       }
     ]
   },
@@ -225,39 +154,39 @@
     "reads": [
       {
         "name": "hydrosFree",
-        "likely_effect": "Used in U8P_GUARD3::use to influence which Titan/warning line is chosen; increments a local counter used for selection.",
-        "confidence": "high"
-      },
-      {
-        "name": "hasHeart",
-        "likely_effect": "Read by U8P_GUARD3::use to distinguish undead vs other threats in dialog selection; affects the warning branch and counter.",
+        "likely_effect": "Contributes to an urgent Titans-related warning when set; counted by U8P_GUARD3::use.",
         "confidence": "high"
       },
       {
         "name": "pyrosFree",
-        "likely_effect": "Used in U8P_GUARD3::use to influence warning text selection and increment the local counter.",
+        "likely_effect": "Contributes to an urgent Titans-related warning when set; counted by U8P_GUARD3::use.",
+        "confidence": "high"
+      },
+      {
+        "name": "hasHeart",
+        "likely_effect": "If set, triggers an undead-specific warning branch in U8P_GUARD3::use and contributes to the urgent-warning counter.",
         "confidence": "high"
       },
       {
         "name": "guard3Met",
-        "likely_effect": "Per-guard persistent flag read to choose greeting variants (whether the player met this guard before).",
+        "likely_effect": "Per-NPC 'met' flag read to choose first-meeting vs repeat greeting in U8P_GUARD3::use.",
         "confidence": "high"
       },
       {
         "name": "guard3Pissed",
-        "likely_effect": "Per-guard flag read to determine if the guard should use an angry reply variant during use dialog.",
+        "likely_effect": "Per-NPC mood flag read to produce terse/angry greeting in U8P_GUARD3::use; cleared when that branch runs.",
         "confidence": "high"
       }
     ],
     "writes": [
       {
         "name": "guard3Met",
-        "likely_effect": "Set to true once the player meets/queries the guard so future interactions use the 'met before' branch.",
+        "likely_effect": "Set to 1 when the player first talks to the guard to remember the meeting (affects future greetings).",
         "confidence": "high"
       },
       {
         "name": "guard3Pissed",
-        "likely_effect": "Set or cleared by dialog choices (e.g., 'Where am I?' can set it), influencing later dialog tone and replies.",
+        "likely_effect": "Cleared (set to 0) when the guard responds angrily; can be set by conversation branches to change mood.",
         "confidence": "medium"
       }
     ]
@@ -269,9 +198,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "GUARD3::look",
-    "behavior_summary_one_liner": "Provides NPC (guardsman) responses to being looked at and used (talked to), manages area-trigger resurrection/cleanup, and runs a patrol/movement helper.",
-    "external_call_count": 18,
+    "main_function": "U8P_GUARD3::look",
+    "behavior_summary_one_liner": "This script controls a guard NPC's basic interactions: examining (U8P_GUARD3::look), talking (U8P_GUARD3::use), proximity entry/exit (U8P_GUARD3::enterFastArea / U8P_GUARD3::leaveFastArea), simple scheduling (U8P_GUARD3::schedule), and a path/movement utility (U8P_GUARD3::func077B).",
+    "external_call_count": 11,
     "flag_read_count": 5,
     "flag_write_count": 2
   },

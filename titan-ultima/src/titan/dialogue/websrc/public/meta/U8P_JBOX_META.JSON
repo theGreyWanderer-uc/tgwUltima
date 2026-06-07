@@ -3,26 +3,24 @@
   "source_of_truth": "dialogue/json/U8P_JBOX.json",
   "file": "U8P_JBOX",
   "behavior_summary": [
-    "Provides the examine ('U8P_JBOX::look') and use behaviors for a jewelry box item.",
-    "U8P_JBOX::look announces the item to the player by preparing item context (set info / process exclude opcodes) and invoking Item::bark with the literal string \"jewelry box \", producing the short description shown when the player inspects the item.",
-    "U8P_JBOX::use reads the item's status word (Item::getStatus) and tests bit 0x0100. If that bit is clear the script closes the item's UI/gump (Item::closeGump); if set it opens a gump with parameter 0x0A (Item::openGump(0x0A)). This implements conditional open/close UI behavior based on the item's status."
+    "U8P_JBOX::look: When the player examines the object it displays the short description 'jewelry box' (single bark) and then the process suspends/ends.",
+    "U8P_JBOX::use: Toggles the item's UI gump. It reads the item's status bits (via Item::getStatus(this)) into a temporary (local1). If the 0x0100 bit is set it calls Item::closeGump(this); otherwise it calls Item::openGump(0x0A, this)."
   ],
   "notable_control_flow": [
-    "Examine path (U8P_JBOX::look) is straightforward: set info / process exclude -> call Item::bark with a static string -> local cleanup -> suspend/return.",
-    "Use path (U8P_JBOX::use) branches on a status bit: it fetches the item status into a local (status_flag) and performs a bitwise test (& 0x0100). One branch calls Item::closeGump, the other calls Item::openGump(0x0A).",
-    "Both functions run as item/process scripts (execution_form: process) and use implicit item context (item pointer passed via the process stack)."
+    "U8P_JBOX::look is a simple linear flow: Bark('jewelry box') then suspend — no branching or external calls.",
+    "U8P_JBOX::use performs a conditional branch based on a status bit read from Item::getStatus(this): branch true -> Item::closeGump(this); branch false -> Item::openGump(0x0A, this)."
   ],
   "open_questions": [
-    "Exact semantic meaning of the 'set info' and 'process exclude' opcodes used before barking and before use handling (which info id is set and what exclusion scope this enforces) — inferred but not explicit.",
-    "Precise gameplay semantic of status bit 0x0100 tested in U8P_JBOX::use (appears to be an 'open' flag for the gump, but the canonical meaning of the bit is not present).",
-    "Meaning/purpose of the small 'implies' / retval/temp sequence after Item::bark in U8P_JBOX::look — likely scripting housekeeping or implicit control flow, exact engine effect unclear."
+    "What specific UI content or behavior corresponds to gump id 0x0A in this project (inventory, custom dialog, etc.)?",
+    "Does status bit 0x0100 strictly mean 'gump open' or represent a broader item state that correlates with the gump being open?",
+    "Is local1 used elsewhere beyond this excerpt, or is it strictly a temporary for the single bit test?"
   ],
   "main_function": {
     "name": "U8P_JBOX::look",
     "execution_form": "process",
-    "purpose": "Handle the player inspecting/examining the jewelry box: set item context and present a short description string to the player via Item::bark.",
+    "purpose": "Provide the short description shown to the player when they examine the jewelry box.",
     "entry_conditions": [
-      "Event 0 (U8P_JBOX::look/examine) — triggered when an actor inspects the jewelry box (implicit item pointer passed at BP+06h)."
+      "Invoked by the engine when the player uses the 'U8P_JBOX::look'/'examine' action on the item (object U8P_JBOX::look/examine event)."
     ],
     "confidence": "high"
   },
@@ -30,13 +28,31 @@
     {
       "name": "U8P_JBOX::look",
       "kind": "main",
-      "role": "Examine/U8P_JBOX::look handler that announces the item and sets item processing context before suspending.",
+      "role": "present short description to player on examine",
       "confidence": "high"
     },
     {
       "name": "U8P_JBOX::use",
       "kind": "helper",
-      "role": "Use/activate handler that toggles or conditionally opens/closes the item's UI/gump based on the item's status word (tests bit 0x0100).",
+      "role": "handle player 'U8P_JBOX::use' interaction by toggling the item's UI gump open/close",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getStatus",
+      "kind": "extern",
+      "role": "external API returning the item's status bitfield",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::closeGump",
+      "kind": "extern",
+      "role": "external API to close the item's UI gump",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::openGump",
+      "kind": "extern",
+      "role": "external API to open a UI gump (used here with id 0x0A)",
       "confidence": "high"
     }
   ],
@@ -44,27 +60,21 @@
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_JBOX::look",
-        "callee": "Item::bark",
-        "purpose": "Cause the item to emit/display the short description string \"jewelry box \" to the player/viewer.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_JBOX::use",
         "callee": "Item::getStatus",
-        "purpose": "Retrieve the item's status word so the script can test bit 0x0100 and decide whether to open or close the gump.",
+        "purpose": "Read the item's status/bitfield so code can test specific state bits (result stored in local1).",
         "confidence": "high"
       },
       {
         "caller": "U8P_JBOX::use",
         "callee": "Item::closeGump",
-        "purpose": "Close the item's UI/gump when the tested status bit (0x0100) is clear.",
+        "purpose": "Close the item's associated UI gump when the tested status bit (0x0100) is set.",
         "confidence": "high"
       },
       {
         "caller": "U8P_JBOX::use",
         "callee": "Item::openGump",
-        "purpose": "Open the item's UI/gump with parameter 0x0A when the tested status bit (0x0100) is set.",
+        "purpose": "Open UI gump 0x0A for this item when the tested status bit (0x0100) is not set.",
         "confidence": "high"
       }
     ]
@@ -75,14 +85,12 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "animation",
     "guard"
   ],
   "quick_facts": {
     "main_function": "U8P_JBOX::look",
-    "behavior_summary_one_liner": "Provides the examine ('U8P_JBOX::look') and use behaviors for a jewelry box item.",
-    "external_call_count": 4,
+    "behavior_summary_one_liner": "U8P_JBOX::look: When the player examines the object it displays the short description 'jewelry box' (single bark) and then the process suspends/ends.",
+    "external_call_count": 3,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

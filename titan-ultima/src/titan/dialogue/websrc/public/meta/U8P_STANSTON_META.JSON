@@ -3,63 +3,45 @@
   "source_of_truth": "dialogue/json/U8P_STANSTON.json",
   "file": "U8P_STANSTON",
   "behavior_summary": [
-    "U8P_STANSTON::release runs when the object is released (Event 9).",
-    "The handler records or marks state on the subject by calling the engine 'set info' with info code 0x020D and a value loaded via an indirect pointer, then calls 'process exclude' to remove the subject from normal processing.",
-    "It queries the subject's Item::getSurfaceWeight() and, if that weight equals zero, calls AccumulateDexterity(15) to grant 15 dexterity/training points.",
-    "Overall effect: upon U8P_STANSTON::release the object is flagged/excluded (cleanup/transition) and may grant dexterity if it is weightless on a surface — likely modelling a small/light object being released and rewarding a dexterity interaction."
+    "U8P_STANSTON::release is a short utility process that tests the current object's surface weight and, if that weight equals zero, awards 15 points of dexterity by calling AccumulateDexterity(0x0F).",
+    "No global flags are read or written by this script; its only observable effect is the conditional dexterity accumulation.",
+    "The process is likely invoked by an item U8P_STANSTON::release/drop event (process type 0x020D) though the exact trigger context is inferred rather than explicit in the script."
   ],
   "notable_control_flow": [
-    "Entry: Event 9 (U8P_STANSTON::release) -> U8P_STANSTON::release.",
-    "Step 1: push info id 0x020D, push subject (arg_item_pointer), push value from an indirect 2-byte reference -> set info.",
-    "Step 2: immediately call process exclude to unregister/exclude the subject's process.",
-    "Step 3: call Item::getSurfaceWeight(subject) -> compare returned value to 0.",
-    "Step 4 (conditional): if surface weight == 0 then call AccumulateDexterity(0x0F) (grant 15).",
-    "Return/exit after these actions."
+    "U8P_STANSTON::release calls Item::getSurfaceWeight(this) -> compares returned value to 0; if equal then call AccumulateDexterity(0x0F); otherwise do nothing."
   ],
   "open_questions": [
-    "What semantic meaning does info code 0x020D encode for this object (state, ownership, quest tag, animation stage)?",
-    "What exactly is the value loaded via 'push indirect 02h bytes' that is passed to set info (pointer, numeric flag, reference to a process or actor)?",
-    "Which actor/process receives the AccumulateDexterity points (the releasing actor, the item owner, or a global player context) — calling convention is inferred but not explicit in the excerpt.",
-    "Under what gameplay situations is Event 9 fired for this specific object (manual drop, thrown, auto-U8P_STANSTON::release) and does 'leaveFastArea' interplay with the U8P_STANSTON::release behavior in other scripts?"
+    "Which actor receives the dexterity? (AccumulateDexterity is called but the implicit target — owner, user, or global actor — is not explicit in the snippet.)",
+    "What exact engine event or player action schedules the processType 0x020D for this item? (Inferred to be a U8P_STANSTON::release/drop event but not explicit.)",
+    "Are there additional contextual guards (ownership, location, or actor state) applied by surrounding systems before this process runs?"
   ],
   "main_function": {
     "name": "U8P_STANSTON::release",
     "execution_form": "process",
-    "purpose": "On U8P_STANSTON::release, mark the subject with info id 0x020D, exclude its process from further handling, then check the subject's surface weight and award 15 dexterity if the weight is zero.",
+    "purpose": "Check the current object's surface weight and grant 15 dexterity if the surface weight is zero.",
     "entry_conditions": [
-      "Event 9 (U8P_STANSTON::release) — invoked when the object/actor is released"
+      "Registered as a process (processType 0x020D).",
+      "Inferred: invoked when the item is released/dropped or its U8P_STANSTON::release lifecycle runs."
     ],
-    "confidence": "high"
+    "confidence": "medium"
   },
   "function_map": [
     {
       "name": "U8P_STANSTON::release",
       "kind": "main",
-      "role": "Handles the 'U8P_STANSTON::release' event for the STANSTON usecode object; orchestrates state marking, process exclusion, and conditional dexterity awarding.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_STANSTON::set info",
-      "kind": "extern",
-      "role": "Engine opcode to attach metadata/state (used with info id 0x020D and a pushed value/reference).",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_STANSTON::process exclude",
-      "kind": "extern",
-      "role": "Engine opcode to remove/exclude a process/object from further AI/processing.",
+      "role": "Utility process that conditionally awards dexterity based on the item's surface weight.",
       "confidence": "high"
     },
     {
       "name": "Item::getSurfaceWeight",
       "kind": "extern",
-      "role": "Query the item's surface weight/property; returns a word compared to zero.",
+      "role": "Return the surface weight of the referenced object; used here to test for zero weight.",
       "confidence": "high"
     },
     {
-      "name": "U8P_STANSTON::AccumulateDexterity",
+      "name": "AccumulateDexterity",
       "kind": "extern",
-      "role": "Award dexterity/training points (called here with constant 15).",
+      "role": "Increase or award dexterity (or dexterity experience) by the supplied amount (called with 0x0F).",
       "confidence": "high"
     }
   ],
@@ -68,26 +50,14 @@
     "external_calls": [
       {
         "caller": "U8P_STANSTON::release",
-        "callee": "U8P_STANSTON::set info",
-        "purpose": "Attach an info/state key (0x020D) and an associated value/reference to the subject; marks the object for some state change or bookkeeping.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_STANSTON::release",
-        "callee": "U8P_STANSTON::process exclude",
-        "purpose": "Exclude/unregister the subject's process from further engine processing (cleanup or state transition).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_STANSTON::release",
         "callee": "Item::getSurfaceWeight",
-        "purpose": "Obtain the object's surface weight to decide whether to grant dexterity reward.",
+        "purpose": "Query the current object's surface weight to determine whether it equals zero.",
         "confidence": "high"
       },
       {
         "caller": "U8P_STANSTON::release",
-        "callee": "U8P_STANSTON::AccumulateDexterity",
-        "purpose": "Grant 15 dexterity/training points when the object's surface weight is zero.",
+        "callee": "AccumulateDexterity",
+        "purpose": "Grant 15 dexterity (0x0F) when the surface weight check passes.",
         "confidence": "high"
       }
     ]
@@ -104,8 +74,8 @@
   ],
   "quick_facts": {
     "main_function": "U8P_STANSTON::release",
-    "behavior_summary_one_liner": "U8P_STANSTON::release runs when the object is released (Event 9).",
-    "external_call_count": 4,
+    "behavior_summary_one_liner": "U8P_STANSTON::release is a short utility process that tests the current object's surface weight and, if that weight equals zero, awards 15 points of dexterity by calling AccumulateDexterity(0x0F).",
+    "external_call_count": 2,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

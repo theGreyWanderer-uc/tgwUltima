@@ -3,30 +3,34 @@
   "source_of_truth": "dialogue/json/U8P_ARAMINA.json",
   "file": "U8P_ARAMINA",
   "behavior_summary": [
-    "Implements the NPC Aramina's local gameplay behavior: how she is described when examined, how she picks and runs one of several 'schedules' (patrol/dialog routines), how she reacts to the avatar entering/leaving her fast-area trigger, theft events, and being targeted by spells.",
-    "ARAMINA::look presents a short descriptive 'bark' depending on whether Aramina is dead and on two configuration globals (araminaName and araminaJob).",
-    "A schedule subsystem chooses a numeric araminaSchedule (written by ARAMINA::schedule) and enter/leave triggers spawn specific schedule runners (examples: U8P_ARAMINA::0460 for schedule 1 and other hex-named routines for others).",
-    "Reactive behaviors: AvatarStoleSomething makes Aramina orient/move toward stolen items and bark a warning; cast may call guards or shout for help with some randomness; leaveFastArea cleans up refs and, if Aramina is alive, teleports her to random coordinates."
+    "Aramina is an NPC whose short description (U8P_ARAMINA::look) changes based on whether she is dead and on two internal name/job flags.",
+    "A U8P_ARAMINA::schedule system (araminaSchedule) selects one of several behavior branches; U8P_ARAMINA::schedule selection is performed by U8P_ARAMINA::schedule() and drive-time behavior is dispatched when the player enters the NPC's fast area (U8P_ARAMINA::enterFastArea).",
+    "Behavior branches (U8P_ARAMINA::schedule values 1, 2, 3) run distinct helper utilities (U8P_ARAMINA::func0460, U8P_ARAMINA::func0CEC, U8P_ARAMINA::func0BBB) that inspect nearby items, possibly pathfind to them, play attention/animation helpers, speak monologues, spawn timed helper processes, or manipulate items (create/pop/setFrame/destroy).",
+    "U8P_ARAMINA::use() is the full conversation handler presented when the player talks to Aramina: it builds a dynamic menu, presents choices, captures the choice, updates an 'met' flag, and emits many dialogue lines depending on U8P_ARAMINA::schedule, quest flags, and prior interactions.",
+    "U8P_ARAMINA::AvatarStoleSomething and U8P_ARAMINA::cast implement crime/combat reactions: they clear interaction refs, call a preparatory/method service, bark warning/panic lines, notify guards (CALGUARD::guardRespondToCrime), and spawn helper processes for follow-up.",
+    "U8P_ARAMINA::leaveFastArea clears refs and, if Aramina is dead, teleports her to random coordinates (likely to remove or randomize corpse placement)."
   ],
   "notable_control_flow": [
-    "Entry point for player-visible behavior is U8P_ARAMINA::look which first checks Npc::isDead(pid) and branches to corpse vs alive text.",
-    "Schedule selection: U8P_ARAMINA::schedule reads devonInRule and spawns helper routines that eventually write the global araminaSchedule; enter fast-area handler reads that global and spawns the corresponding schedule runner.",
-    "Many actions are implemented by spawning other methods (spawn) rather than blocking: movement, guard-calls (CALGUARD::0080), and schedule runners are all spawned.",
-    "leaveFastArea performs cleanup (resetRef calls) then conditionally teleports the NPC using urandom-generated coordinates — dead NPCs are not teleported.",
-    "Reactive loop/timing in cast and schedule runners uses engine utility routines (FREE::1C19, FREE::1D62, FREE::2A56) for pacing/pauses; speech is gated by the global somebodyTalking in schedule runners."
+    "U8P_ARAMINA::look (process): test Npc::isDead(this) -> corpse bark; else choose label by araminaName && araminaJob -> 'servant Aramina', then araminaName -> 'Aramina', then araminaJob -> 'servant', default -> 'girl'.",
+    "U8P_ARAMINA::schedule (process): computes candidate U8P_ARAMINA::schedule (local4), calls METHOD::func143A (suspend), and on process_result() true assigns araminaSchedule = local4 and calls METHOD::func133F.",
+    "U8P_ARAMINA::enterFastArea (process): clears reference slots (resetRef) then dispatches to U8P_ARAMINA::func0460, ::func0CEC, or ::func0BBB based on araminaSchedule == 1, 2, 3 respectively.",
+    "U8P_ARAMINA::func0460 / U8P_ARAMINA::func0BBB: read Item::getFrame, optionally Npc::pathfind (suspend) and branch on pathfind/process_result; success paths choose between short bark utilities (U8P_ARAMINA::func4CF1), longer monologues (U8P_ARAMINA::func059D), or spawn helpers (FREE::func1C19) plus METHOD::func15E7.",
+    "U8P_ARAMINA::use (process): construct menu array (local3) with MenuSet/MenuUnion/MenuAdd/MenuRemove, Ask -> SuspendAssign to capture selection into local1, strcmp on local1 to handle options and loop until player chooses 'bye '."
   ],
   "open_questions": [
-    "Precise behaviors of the schedule routines named only by hex (e.g., U8P_ARAMINA::0CEC, U8P_ARAMINA::0BBB) are inferred but their full role and timings are not shown in the extracted text.",
-    "Exact semantics of FREE::1C19 / FREE::1D62 / FREE::2A56 (timing vs resource cleanup) — they appear to be pacing or utility calls but that is not certain.",
-    "Whether araminaName/araminaJob are boolean toggles or multi-value enums (the logic suggests boolean-like selection but full range is unknown).",
-    "Whether teleport coordinates chosen by leaveFastArea can put Aramina into invalid or off-map locations depending on urandom ranges (map-clamping details handled by Npc::teleport are not visible)."
+    "Are flags such as araminaMet, araminaSchedule, araminaName and araminaJob script-local variables or global script flags shared across multiple instances? (metadata shows no engine-global flags written).",
+    "What is the exact semantic meaning of the raw conditions labeled '0x0D' that gate item-create vs item-set branches in U8P_ARAMINA::func0E05/U8P_ARAMINA::func0F6F/U8P_ARAMINA::func4CF1? (appears to be an item-presence or state test).",
+    "What does ARAMINA::func01D6 (called from U8P_ARAMINA::AvatarStoleSomething) fully do? It is referenced but not included in the functions list; its exact follow-up actions are inferred only.",
+    "Precise side-effects of METHOD::func091C and METHOD::func15E7 are inferred as 'prepare to speak / animation' but their concrete engine effects (UI vs animation vs state) are not proven in this extract."
   ],
   "main_function": {
     "name": "U8P_ARAMINA::look",
     "execution_form": "process",
-    "purpose": "Provide the textual description emitted when a process (usually the player) examines Aramina. Chooses an appropriate short-description bark based on Aramina's alive/dead state and two configuration globals (araminaName, araminaJob).",
+    "purpose": "Return a short examination description for Aramina that depends on life state and local name/job flags.",
     "entry_conditions": [
-      "Triggered when the player/process performs the 'U8P_ARAMINA::look' (examine) action on Aramina (process pid passed in)."
+      "Player performs the 'U8P_ARAMINA::look' / examine action on the NPC.",
+      "Npc::isDead(this) determines whether to show corpse text vs living variants.",
+      "Reads script-local flags araminaName and araminaJob to choose between labelled variants."
     ],
     "confidence": "high"
   },
@@ -34,224 +38,241 @@
     {
       "name": "U8P_ARAMINA::look",
       "kind": "main",
-      "role": "Handle 'U8P_ARAMINA::look' examine event for Aramina; emit corpse vs alive description using Item::bark.",
+      "role": "short description / examine handler (shows corpse or name/job variants)",
       "confidence": "high"
     },
     {
       "name": "U8P_ARAMINA::schedule",
       "kind": "helper",
-      "role": "Decide and set the global araminaSchedule (reads devonInRule), spawn helper schedule-calculation and a schedule startup routine.",
-      "confidence": "medium"
+      "role": "select/write araminaSchedule by querying scheduling service (METHOD::func143A) and finalize with METHOD::func133F",
+      "confidence": "high"
     },
     {
       "name": "U8P_ARAMINA::enterFastArea",
       "kind": "helper",
-      "role": "Triggered when avatar enters Aramina's fast-area trigger; resets references and spawns the active schedule runner based on araminaSchedule.",
+      "role": "triggered when Avatar enters NPC fast/trigger area; clears refs and dispatches U8P_ARAMINA::schedule-driven behavior",
       "confidence": "high"
     },
     {
       "name": "U8P_ARAMINA::leaveFastArea",
       "kind": "helper",
-      "role": "Triggered on exit of the fast-area; clears refs and teleports the NPC to random coordinates if alive.",
+      "role": "cleanup when Avatar leaves fast area; clears refs and teleports dead NPCs away",
       "confidence": "high"
     },
     {
       "name": "U8P_ARAMINA::AvatarStoleSomething",
       "kind": "helper",
-      "role": "React to theft by resetting refs, orienting/moving toward the stolen item, barking a warning, and spawning reactive schedule behavior.",
+      "role": "theft/crime reaction handler (clears refs, alerts, barks and delegates to follow-up handler)",
       "confidence": "high"
     },
     {
       "name": "U8P_ARAMINA::cast",
       "kind": "helper",
-      "role": "Handle being targeted by spells: checks target, spawns guard-calling behavior, and may vocalize calls for help with probabilistic branching.",
+      "role": "responds to being targeted/U8P_ARAMINA::cast upon: spawn helpers while untargeted; notify guards and bark when targeted",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ARAMINA::func0460",
+      "kind": "helper",
+      "role": "U8P_ARAMINA::schedule==1 behavior: inspect item frames, optionally pathfind and choose between short/long monologues or spawn helpers",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ARAMINA::func059D",
+      "kind": "helper",
+      "role": "larger monologue/idle-talk utility that chooses among many greeting/hostile lines and spawns helper processes",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ARAMINA::func0BBB",
+      "kind": "helper",
+      "role": "U8P_ARAMINA::schedule==3 behavior: frame inspection, pathfind attempts and frame-specific handlers or default spawn/animation sequence",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ARAMINA::func0CEC",
+      "kind": "helper",
+      "role": "U8P_ARAMINA::schedule==2 behavior: randomized short action choice between METHOD::func091C and METHOD::func15E7 and spawn follow-up helper",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ARAMINA::func0E05",
+      "kind": "helper",
+      "role": "auxiliary item-frame manipulation or item create/pop with animation steps and spawn helper process",
       "confidence": "medium"
     },
     {
-      "name": "U8P_ARAMINA::0460",
+      "name": "U8P_ARAMINA::func0F6F",
       "kind": "helper",
-      "role": "Schedule runner (schedule 1): iterates positions/frames, pathfinds and spawns movement/talk actions; respects somebodyTalking to avoid interrupting others.",
+      "role": "support routine for item drop/create/destroy sequences with timed helper spawns and animations",
       "confidence": "medium"
     },
     {
-      "name": "U8P_ARAMINA::059D",
+      "name": "U8P_ARAMINA::use",
       "kind": "helper",
-      "role": "Dialog/greeting handler used by schedules; chooses barks based on araminaMet and other parameters and may cause movement/animation spawns.",
-      "confidence": "medium"
+      "role": "conversation/dialog handler: builds dynamic menu, captures player's choice, presents dialogue lines and sets araminaMet when introduced",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_ARAMINA::func4CF1",
+      "kind": "helper",
+      "role": "short monologue/door interaction helper ('Why is this open?') and spawn DOOR_NS::useDoor",
+      "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
-        "caller": "U8P_ARAMINA::schedule",
-        "callee": "U8P_ARAMINA::0460",
-        "purpose": "Spawn a schedule-runner method when schedule selection decides on schedule 1 (spawned indirectly via schedule-selection helpers).",
-        "confidence": "medium"
-      },
-      {
         "caller": "U8P_ARAMINA::enterFastArea",
-        "callee": "U8P_ARAMINA::0460",
-        "purpose": "Spawn the schedule runner corresponding to araminaSchedule == 1 when avatar enters the fast area.",
+        "callee": "U8P_ARAMINA::func0460",
+        "purpose": "Run behavior for araminaSchedule == 1",
         "confidence": "high"
       },
       {
         "caller": "U8P_ARAMINA::enterFastArea",
-        "callee": "U8P_ARAMINA::0CEC",
-        "purpose": "Spawn alternate schedule runner when araminaSchedule == 2 (callee named by hex id in extracted code).",
-        "confidence": "medium"
+        "callee": "U8P_ARAMINA::func0BBB",
+        "purpose": "Run behavior for araminaSchedule == 3",
+        "confidence": "high"
       },
       {
         "caller": "U8P_ARAMINA::enterFastArea",
-        "callee": "U8P_ARAMINA::0BBB",
-        "purpose": "Spawn alternate schedule runner when araminaSchedule == 3 (callee named by hex id in extracted code).",
+        "callee": "U8P_ARAMINA::func0CEC",
+        "purpose": "Run behavior for araminaSchedule == 2",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ARAMINA::func0460",
+        "callee": "U8P_ARAMINA::func059D",
+        "purpose": "Invoke longer monologue/idle-talk when pathfind succeeds and conditions allow (nobodyTalking)",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ARAMINA::func0460",
+        "callee": "U8P_ARAMINA::func4CF1",
+        "purpose": "Invoke short bark/door-handling when specific frame values (0 or 3) encountered after successful pathfind",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ARAMINA::func0BBB",
+        "callee": "U8P_ARAMINA::func0F6F",
+        "purpose": "Handle item frame 0x0A specific sequence",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ARAMINA::func0BBB",
+        "callee": "U8P_ARAMINA::func4CF1",
+        "purpose": "Handle item frame 0x0B specific short interaction",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_ARAMINA::func0BBB",
+        "callee": "U8P_ARAMINA::func0E05",
+        "purpose": "Handle item frame 0x0F specific interaction (frame update or item create path)",
         "confidence": "medium"
       },
       {
         "caller": "U8P_ARAMINA::AvatarStoleSomething",
-        "callee": "U8P_ARAMINA::enterFastArea",
-        "purpose": "Spawn enter-fast-area behavior after responding to theft to switch Aramina into a reactive schedule/state.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_ARAMINA::059D",
-        "callee": "U8P_ARAMINA::0460",
-        "purpose": "Likely spawned/used by schedule runners to handle local dialog/greeting branches during movement loops (inferred usage).",
-        "confidence": "medium"
+        "callee": "U8P_ARAMINA::func01D6",
+        "purpose": "Follow-up theft handling (state changes / aggression / guard notification) — referenced but function body not present in listing",
+        "confidence": "low"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_ARAMINA::look",
-        "callee": "Npc::isDead",
-        "purpose": "Check whether Aramina is dead to choose corpse vs alive description.",
+        "caller": "U8P_ARAMINA::schedule",
+        "callee": "METHOD::func143A",
+        "purpose": "Query scheduling service that can suspend and return a boolean to accept candidate U8P_ARAMINA::schedule",
         "confidence": "high"
       },
       {
-        "caller": "U8P_ARAMINA::look",
-        "callee": "process Item::bark",
-        "purpose": "Emit the selected short description string to the viewer/process.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_ARAMINA::enterFastArea",
-        "callee": "U8P_ARAMINA::resetRef",
-        "purpose": "Clear stored reference fields for Aramina (IDs like 0205, 0204, 00F0, 0200) when avatar enters area.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_ARAMINA::leaveFastArea",
-        "callee": "U8P_ARAMINA::resetRef",
-        "purpose": "Clear stored references on area exit.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_ARAMINA::leaveFastArea",
-        "callee": "Npc::teleport",
-        "purpose": "Teleport Aramina to random coordinates (uses urandom) when avatar leaves fast area and Aramina is alive.",
+        "caller": "U8P_ARAMINA::schedule",
+        "callee": "METHOD::func133F",
+        "purpose": "Finalize or apply the chosen U8P_ARAMINA::schedule after successful query",
         "confidence": "high"
       },
       {
         "caller": "U8P_ARAMINA::AvatarStoleSomething",
-        "callee": "Item::getDirToItem",
-        "purpose": "Compute direction from Aramina to the stolen item so Aramina can orient/move toward it.",
+        "callee": "METHOD::func091C",
+        "purpose": "Prepare NPC for speaking/attention before barking in theft response",
         "confidence": "high"
       },
       {
-        "caller": "U8P_ARAMINA::AvatarStoleSomething",
-        "callee": "spawn (METHOD::091C)",
-        "purpose": "Spawn a movement/animation method to move/orient Aramina toward the stolen item.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_ARAMINA::cast",
-        "callee": "Npc::getTarget",
-        "purpose": "Determine who the incoming spell targeted (to check if the avatar or NPC is targeted).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_ARAMINA::cast",
-        "callee": "spawn (CALGUARD::0080)",
-        "purpose": "Call guards or summon help when Aramina is targeted by a hostile spell (spawned helper).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_ARAMINA::cast",
-        "callee": "urandom",
-        "purpose": "Randomize whether Aramina shouts for help and which phrase she uses.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_ARAMINA::0460",
+        "caller": "U8P_ARAMINA::func0460",
         "callee": "Npc::pathfind",
-        "purpose": "Request pathfinding to chosen coordinates as part of patrol/movement schedule.",
-        "confidence": "medium"
+        "purpose": "Order NPC to move toward item/target and suspend until pathfinding completes",
+        "confidence": "high"
       },
       {
-        "caller": "U8P_ARAMINA::0460",
-        "callee": "Item::getFrame",
-        "purpose": "Read map tile/frame data to decide movement or behavior in the schedule loop.",
-        "confidence": "medium"
+        "caller": "U8P_ARAMINA::func0460",
+        "callee": "process_result",
+        "purpose": "Test the outcome of suspended pathfind or other SERVICE calls to branch on success/failure",
+        "confidence": "high"
       },
       {
-        "caller": "U8P_ARAMINA::0460",
-        "callee": "Item::getShape",
-        "purpose": "Read map tile/shape data to influence schedule decisions (walkable/occupied checks inferred).",
-        "confidence": "medium"
+        "caller": "U8P_ARAMINA::func0460",
+        "callee": "FREE::func1C19 (spawn)",
+        "purpose": "Spawn a helper/timed process for asynchronous follow-up or cleanup",
+        "confidence": "high"
       },
       {
-        "caller": "U8P_ARAMINA::0460",
-        "callee": "Npc::getDir",
-        "purpose": "Get Aramina's facing direction before spawning directional movement/animation methods.",
-        "confidence": "medium"
+        "caller": "U8P_ARAMINA::func059D",
+        "callee": "METHOD::func091C",
+        "purpose": "Prepare NPC to speak/act prior to monologue lines",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ARAMINA::func059D",
+        "callee": "METHOD::func15E7",
+        "purpose": "Play an animation/attention helper between barks or as alternate action",
+        "confidence": "high"
       },
       {
         "caller": "U8P_ARAMINA::cast",
-        "callee": "FREE::1C19",
-        "purpose": "Utility/timing call used inside a loop while handling spell targeting (likely pacing).",
-        "confidence": "low"
+        "callee": "CALGUARD::guardRespondToCrime",
+        "purpose": "Notify guard system of a crime/combat incident",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ARAMINA::func4CF1",
+        "callee": "DOOR_NS::useDoor (spawn)",
+        "purpose": "Spawn a door-U8P_ARAMINA::use action after the NPC barks about an open door",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ARAMINA::func0E05",
+        "callee": "Item::setFrame",
+        "purpose": "Update an item's frame/appearance in the then-branch",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ARAMINA::func0E05",
+        "callee": "Item::create / Item::pop",
+        "purpose": "Create and place an item in the else-branch when no existing item is present",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ARAMINA::func0F6F",
+        "callee": "Item::destroy",
+        "purpose": "Destroy referenced item in one branch of the behavior sequence",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ARAMINA::func0F6F",
+        "callee": "Item::create / Item::pop",
+        "purpose": "Create/place an item in the alternate branch",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_ARAMINA::use",
+        "callee": "FREE::func1C19 (spawn)",
+        "purpose": "Spawn helper/timed processes during conversation-driven sequences or follow-ups (used across many utilities called from conversation paths)",
+        "confidence": "medium"
       }
     ]
   },
   "global_flags": {
-    "reads": [
-      {
-        "name": "araminaName (global [0204])",
-        "likely_effect": "Selects which name-string variant is used in ARAMINA::look and possibly other dialog (e.g., toggles full name vs short).",
-        "confidence": "high"
-      },
-      {
-        "name": "araminaJob (global [0205])",
-        "likely_effect": "Controls whether to include a job/title word in Aramina's description (e.g., 'servant' vs 'girl') used by ARAMINA::look and dialog.",
-        "confidence": "high"
-      },
-      {
-        "name": "araminaSchedule (global [0207])",
-        "likely_effect": "Determines which schedule runner is spawned when the avatar enters Aramina's fast area; written by U8P_ARAMINA::schedule and read by enter/steal handlers.",
-        "confidence": "high"
-      },
-      {
-        "name": "araminaMet (global [0203])",
-        "likely_effect": "Tracks whether the player has met Aramina; affects greeting/dialog choices in schedule/dialog helpers like U8P_ARAMINA::059D.",
-        "confidence": "high"
-      },
-      {
-        "name": "devonInRule (global [0058])",
-        "likely_effect": "Alters schedule selection logic inside U8P_ARAMINA::schedule (world-rule dependent branching).",
-        "confidence": "medium"
-      },
-      {
-        "name": "somebodyTalking (global [000F])",
-        "likely_effect": "Gates speaking behavior inside schedule runner U8P_ARAMINA::0460 to avoid overlapping speech with other NPCs/processes.",
-        "confidence": "medium"
-      }
-    ],
-    "writes": [
-      {
-        "name": "araminaSchedule (global [0207])",
-        "likely_effect": "Set by U8P_ARAMINA::schedule to choose which behavior/patrol/dialog schedule will run when area events occur.",
-        "confidence": "high"
-      }
-    ]
+    "reads": [],
+    "writes": []
   },
   "ui_tags": [
     "trigger",
@@ -260,11 +281,11 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "ARAMINA::look",
-    "behavior_summary_one_liner": "Implements the NPC Aramina's local gameplay behavior: how she is described when examined, how she picks and runs one of several 'schedules' (patrol/dialog routines), how she reacts to the avatar entering/leaving her fast-area trigger, theft events, and being targeted by spells.",
+    "main_function": "U8P_ARAMINA::look",
+    "behavior_summary_one_liner": "Aramina is an NPC whose short description (U8P_ARAMINA::look) changes based on whether she is dead and on two internal name/job flags.",
     "external_call_count": 15,
-    "flag_read_count": 6,
-    "flag_write_count": 1
+    "flag_read_count": 0,
+    "flag_write_count": 0
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

@@ -3,27 +3,28 @@
   "source_of_truth": "dialogue/json/U8P_SWORD2.json",
   "file": "U8P_SWORD2",
   "behavior_summary": [
-    "SWORD2::look handles the 'U8P_SWORD2::look' (examine) event for the longsword item: it prepares item-processing state, constructs the literal description \"longsword \", and asks the item/process system to 'bark' that description to the viewer.",
-    "Before producing the description the script sets local item/info processing flags (a 'set info' and 'process exclude' action) which likely influence how the bark is presented or prevent recursive processing while the bark runs.",
-    "The function allocates or constructs a short string, passes the item PID and that string to Item::bark, frees the constructed string, captures the bark return value, runs a small implies/pop sequence storing a temporary, then suspends/returns (propagating the bark result)."
+    "The script implements the item's U8P_SWORD2::look/inspect handler. When the engine runs the U8P_SWORD2::look process for this item it emits a single short description bark: \"longsword \".",
+    "After displaying the bark the process suspends/ends (the raw contains a suspend node immediately following the bark).",
+    "No dialogue branching, menus, helper functions, or external calls are present in the script; all gameplay effect is limited to showing the item name/description.",
+    "Item metadata (weapon properties such as baseDamage, damageModifier, damageType, etc.) is present in the file as resource metadata but is not referenced by any runtime nodes in this script."
   ],
   "notable_control_flow": [
-    "Entry on Event 0 ('U8P_SWORD2::look' / examine) for the item.",
-    "Set item/info and process-exclude flags prior to composition and display of the description.",
-    "Allocate/construct literal string \"longsword \", push item PID and string and call external Item::bark.",
-    "Free the constructed string after the bark call, capture its return value, run an implies/pop (small conditional/guard) storing a temporary, then suspend/return the result."
+    "Single-entry process (U8P_SWORD2::look) that performs: display bark -> suspend.",
+    "No conditional branches or menu selection paths; control flow is linear and terminates after the bark.",
+    "The process is classified as a U8P_SWORD2::look-type process (processType 0x0208) and is therefore triggered by the engine's inspect/U8P_SWORD2::look action (or equivalent fast-area entry semantics)."
   ],
   "open_questions": [
-    "Exact numeric/info id used by the 'set info' opcode and its concrete effect on item processing (inferred but not explicitly documented).",
-    "Precise semantics of the 'process exclude' opcode in this context (how long the exclusion lasts and whether it affects other systems).",
-    "Meaning and effect of the implies/pop sequence observed after the bark return (appears to be a small boolean/guard but its runtime effect is unclear)."
+    "Is the trailing space in the bark text \"longsword \" intentional (formatting/padding) or an artifact of extraction?",
+    "Are the weapon metadata fields (baseDamage=5, damageModifier=13, damageType=['blade'], etc.) consumed by the engine elsewhere (combat/equipment systems) even though this script does not reference them?",
+    "Could this U8P_SWORD2::look process also be invoked by fast-area triggers (enterFastArea) in some contexts even though the script only defines the U8P_SWORD2::look process?"
   ],
   "main_function": {
     "name": "U8P_SWORD2::look",
     "execution_form": "process",
-    "purpose": "Respond to an examine/U8P_SWORD2::look event for the longsword by preparing processing flags, constructing the textual description \"longsword \", invoking Item::bark to present that text to the viewer, cleaning up the temporary string, and returning the bark result.",
+    "purpose": "Display the short item name/description when the player examines or 'looks at' the item.",
     "entry_conditions": [
-      "Event 0 — U8P_SWORD2::look/examine (triggered when a player or actor inspects the longsword item)"
+      "Invoked when the engine runs the U8P_SWORD2::look/inspect process for the item (processType 0x0208).",
+      "Inferred: may also run when the Avatar enters a fast-area trigger tied to this object's location (based on project fast-area semantics)."
     ],
     "confidence": "high"
   },
@@ -31,53 +32,28 @@
     {
       "name": "U8P_SWORD2::look",
       "kind": "main",
-      "role": "Handle 'U8P_SWORD2::look' event for the longsword item, assemble and present its short description.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/API call used to present or emit a text message (the item's description) to a target process/player.",
+      "role": "U8P_SWORD2::look/inspect handler that emits a single bark (short description)",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_SWORD2::look",
-        "callee": "Item::bark",
-        "purpose": "Present the constructed description string \"longsword \" to the viewer/target process (cause the item to 'bark' or display the description).",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
-    "writes": [
-      {
-        "name": "info (item processing) flag",
-        "likely_effect": "Set a per-item info/processing state prior to presentation of the description; likely used to alter display/processing behavior for the duration of the bark.",
-        "confidence": "medium"
-      },
-      {
-        "name": "process_exclude (item processing) flag",
-        "likely_effect": "Exclude the object from normal processing (or from re-entrant processing) while displaying the description; likely a short-lived guard around the bark call.",
-        "confidence": "medium"
-      }
-    ]
+    "writes": []
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "guard"
+    "description"
   ],
   "quick_facts": {
-    "main_function": "SWORD2::look",
-    "behavior_summary_one_liner": "SWORD2::look handles the 'U8P_SWORD2::look' (examine) event for the longsword item: it prepares item-processing state, constructs the literal description \"longsword \", and asks the item/process system to 'bark' that description to the viewer.",
-    "external_call_count": 1,
+    "main_function": "U8P_SWORD2::look",
+    "behavior_summary_one_liner": "The script implements the item's U8P_SWORD2::look/inspect handler. When the engine runs the U8P_SWORD2::look process for this item it emits a single short description bark: \"longsword \".",
+    "external_call_count": 0,
     "flag_read_count": 0,
-    "flag_write_count": 2
+    "flag_write_count": 0
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

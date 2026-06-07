@@ -3,25 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_GHOSTHED.json",
   "file": "U8P_GHOSTHED",
   "behavior_summary": [
-    "Handles the 'U8P_GHOSTHED::look' (examine) event for the Ghost Head item. When a player/actor inspects the object the script constructs the literal string \"ghost head \", adjusts some item/process context (via 'set info' and 'process exclude' opcodes), and calls Item::bark to deliver that short description to the inspecting process. After the bark call the temporary string is freed and the routine suspends/returns."
+    "The script implements a U8P_GHOSTHED::look/inspect handler for an in-game object labeled 'ghost head'.",
+    "When the player examines the object, U8P_GHOSTHED::look emits a single short bark/text 'ghost head' visible to the player.",
+    "Immediately after displaying the bark the process suspends/ends (there are no branches, menus, flag reads/writes, or external calls)."
   ],
   "notable_control_flow": [
-    "Entry on the 'U8P_GHOSTHED::look' event: read a target process id parameter (from stack/BP+06h).",
-    "Perform 'set info' and 'process exclude' opcodes immediately before producing output — likely to set object state or visibility for the bark operation (inferred).",
-    "Create a transient string containing \"ghost head \", push the target process id and the string pointer, then call Item::bark.",
-    "Free the temporary string, capture the bark return value, use it with an 'implies' operation, then suspend/return."
+    "Entry: U8P_GHOSTHED::look-type process is invoked (processType 0x0208) when the player uses the 'U8P_GHOSTHED::look' action on the object.",
+    "Action: single Bark node displays text.",
+    "Termination: a suspend token follows the bark, causing the U8P_GHOSTHED::look process to yield/terminate with no further behavior."
   ],
   "open_questions": [
-    "Exact semantics and effect of the 'set info' and 'process exclude' opcodes in this context (they appear to alter object processing/visibility but the precise flags and downstream effects are not explicit).",
-    "Whether the constructed string ever incorporates dynamic data (for example the pid or other contextual info) beyond the literal \"ghost head \"; disassembly shows only the literal but push order hints at possible PID-related behavior.",
-    "Meaning and side-effects of the 'implies' instruction applied to the bark return value prior to suspend/return—how the return value influences engine behavior is inferred but not certain."
+    "None critical for gameplay: behavior is minimal and self-contained. (Minor question: whether the suspend is intended to yield for timing or to terminate immediately — inferred only.)"
   ],
   "main_function": {
     "name": "U8P_GHOSTHED::look",
     "execution_form": "process",
-    "purpose": "Respond to the item's 'U8P_GHOSTHED::look' event by producing a short descriptive bark/description for the Ghost Head and delivering it to the inspecting process/player.",
+    "purpose": "Provide the short examination description for the object by showing the text 'ghost head' when the player looks at it.",
     "entry_conditions": [
-      "Event 0 (U8P_GHOSTHED::look) — invoked when an actor/player examines the Ghost Head object."
+      "Invoked by the engine when the player examines or 'looks' at the object (U8P_GHOSTHED::look/inspect action).",
+      "Runs as a U8P_GHOSTHED::look-type process (processType 0x0208); no additional flags or gating conditions present in the extracted script."
     ],
     "confidence": "high"
   },
@@ -29,26 +29,13 @@
     {
       "name": "U8P_GHOSTHED::look",
       "kind": "main",
-      "role": "Main handler for the Ghost Head 'U8P_GHOSTHED::look' event; builds and emits the item's short description via Item::bark.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine used to display or emit a short text message from an item to a target process/player.",
+      "role": "Handles the object's U8P_GHOSTHED::look/examine interaction; displays the short bark 'ghost head' then suspends.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_GHOSTHED::look",
-        "callee": "Item::bark",
-        "purpose": "Deliver the short description string (constructed as \"ghost head \") to the target process/player (pid read from BP+06h).",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -56,13 +43,13 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "guard"
+    "presentation",
+    "suspend"
   ],
   "quick_facts": {
-    "main_function": "U8P_GHOSTHED::GHOSTHED::look",
-    "behavior_summary_one_liner": "Handles the 'U8P_GHOSTHED::look' (examine) event for the Ghost Head item. When a player/actor inspects the object the script constructs the literal string \"ghost head \", adjusts some item/process context (via 'set info' and 'process exclude' opcodes), and calls Item::bark to deliver that short description to the inspecting process. After the bark call the temporary string is freed and the routine suspends/returns.",
-    "external_call_count": 1,
+    "main_function": "U8P_GHOSTHED::look",
+    "behavior_summary_one_liner": "The script implements a U8P_GHOSTHED::look/inspect handler for an in-game object labeled 'ghost head'.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

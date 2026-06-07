@@ -3,26 +3,28 @@
   "source_of_truth": "dialogue/json/U8P_LAVA.json",
   "file": "U8P_LAVA",
   "behavior_summary": [
-    "Provides the in-game behavior for a lava object: when a player 'looks' at the lava it reports a short description ('molten rock ').",
-    "Separately, a coroutine (helper) drives the lava object's visual/audio lifecycle across ticks: it reads and advances the animation frame, periodically spawns a small auxiliary effect (FREE::1C19) with variant bytes, and destroys the lava item when the animation reaches a terminal frame.",
-    "The coroutine uses suspend points so its loop runs over multiple engine ticks and uses small-byte locals as timing/variant markers to choose when to spawn effects and how to step frames."
+    "U8P_LAVA::look is the object's 'U8P_LAVA::look' (examine) handler: it presents a short description 'molten rock' to the player and then yields/suspends.",
+    "U8P_LAVA::func00AF is a helper that appears to drive the lava/fire visual state and lifecycle: it reads the item's current frame, advances or reverses the frame index based on comparisons with constants, updates the item's frame, uses repeated spawn calls (spawn ->FREE::func1C19) with suspend points (inferred delays/timers), toggles small local control values, and eventually calls Item::destroy(this) when a terminal frame/state is reached.",
+    "The helper logic is likely reused by FIRE/PYROS-class objects to sequence animation frames and cleanup; exact numeric thresholds and timing are inferred from constants and spawn/suspend patterns."
   ],
   "notable_control_flow": [
-    "U8P_LAVA::LAVA::look: on Event 0 (examine/U8P_LAVA::look) calls Item::bark with the literal 'molten rock ' and then suspends once before returning. (high)",
-    "U8P_LAVA::LAVA::00AF: runs as a coroutine (multi-tick). It initially spawns FREE::1C19 once, then loops: getFrame -> adjust local frame counter -> setFrame -> conditionally spawn FREE::1C19 with a byte variant -> suspend and repeat. When a terminal frame condition is reached it calls Item::destroy. (high)",
-    "Timing/variant decisions are driven by byte local [BP-04h] and a boolean flag [BP-05h], which select different byte constants (0x07, 0x20, 0x2D) and different frame progression behavior. (medium)"
+    "U8P_LAVA::look: single linear flow — bark 'molten rock' then suspend/return.",
+    "U8P_LAVA::func00AF: loop/sequence-like flow driven by frame value: read Item::getFrame(this) into a temporary, compare to constants (0x00, 0x05, 0x08), choose increment/decrement behavior, call Item::setFrame(..., this), then spawn ->FREE::func1C19 and suspend to time the next step.",
+    "U8P_LAVA::func00AF sets small local control values (local2) to different constants (examples: 0x07, 0x01, 0x20, 0x2D) to control direction or timing; upon reaching a terminal frame the function eventually invokes Item::destroy(this)."
   ],
   "open_questions": [
-    "What exact visual/sound effect FREE::1C19 produces (spawn inferred as particle/sound). (low)",
-    "Precise frame index values and which frame is considered 'terminal' are not shown in the excerpt; exact thresholds are inferred from comparisons but not concretely named. (medium)",
-    "How and where the coroutine U8P_LAVA::LAVA::00AF is started in the game world (trigger or spawn by other code) is not present in the excerpt. (medium)"
+    "What is the precise encoding and semantic role of local2 (is it a bitmask, a direction flag, or a spawn handle)?",
+    "What exact delays/timing does spawn ->FREE::func1C19 provide and how long are the suspend intervals in gameplay seconds?",
+    "Which external scripts/processes explicitly call U8P_LAVA::func00AF at runtime (metadata mentions FIRE and PYROS classes but the direct callers in-game are not enumerated here)?",
+    "What are the exact numeric frame thresholds for animation transitions and destruction (constants like 0x05, 0x08 are observed but mapping to visual frames is inferred)?"
   ],
   "main_function": {
     "name": "U8P_LAVA::look",
     "execution_form": "process",
-    "purpose": "Handle the 'U8P_LAVA::look' (examine) event for the lava item by emitting a short description ('molten rock ') so the player sees that text.",
+    "purpose": "Present the short description for the lava object when examined by the player ('molten rock') and then yield/suspend.",
     "entry_conditions": [
-      "Event 0 (player/actor performs 'U8P_LAVA::look' or examine on the lava item)."
+      "Player uses the 'U8P_LAVA::look' / examine action on the lava object",
+      "Engine invokes the object's U8P_LAVA::look process (standard U8P_LAVA::look/examine handler)"
     ],
     "confidence": "high"
   },
@@ -30,84 +32,41 @@
     {
       "name": "U8P_LAVA::look",
       "kind": "main",
-      "role": "Show a short description when the lava is examined (calls Item::bark with 'molten rock ').",
+      "role": "present short description for examine/U8P_LAVA::look interaction",
       "confidence": "high"
     },
     {
-      "name": "U8P_LAVA::00AF",
+      "name": "U8P_LAVA::func00AF",
       "kind": "helper",
-      "role": "Coroutine managing the lava item's animation lifecycle: reads/sets frames, spawns periodic effects (FREE::1C19), and destroys the item at animation end.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine routine to emit/display a textual message from an item/process. Called by LAVA::look to present 'molten rock '.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getFrame",
-      "kind": "extern",
-      "role": "Read the current animation/frame index for an item (used by the coroutine).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::setFrame",
-      "kind": "extern",
-      "role": "Set the item's animation/frame index (used to advance or rewind animation).",
-      "confidence": "high"
-    },
-    {
-      "name": "FREE::1C19",
-      "kind": "extern",
-      "role": "Spawn an auxiliary transient effect (likely sound/particle). Spawned by the lava coroutine with pid and a small variant byte plus a 0 argument.",
+      "role": "drive item visual/frame animation, timing sequencing, and eventual cleanup/destroy",
       "confidence": "medium"
-    },
-    {
-      "name": "Item::destroy",
-      "kind": "extern",
-      "role": "Remove/destroy the item from the world when the animation lifecycle completes.",
-      "confidence": "high"
     }
   ],
   "call_analysis": {
-    "internal_calls": [
-      {
-        "caller": "U8P_LAVA::00AF",
-        "callee": "U8P_LAVA::00AF (self / coroutine scheduler)",
-        "purpose": "Runs across multiple ticks using suspend points; not invoked directly by LAVA::look in the provided excerpt — appears started/managed by the engine or other code. (medium)",
-        "confidence": "medium"
-      }
-    ],
+    "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_LAVA::look",
-        "callee": "Item::bark",
-        "purpose": "Deliver the short description string 'molten rock ' to be presented to the player. Arguments: item (pid) and char* string. (high)",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_LAVA::00AF",
+        "caller": "U8P_LAVA::func00AF",
         "callee": "Item::getFrame",
-        "purpose": "Read the current animation/frame index into local [BP-02h] to decide progression. (high)",
-        "confidence": "medium"
+        "purpose": "Read the current animation/frame index of this item (drive branching and arithmetic).",
+        "confidence": "high"
       },
       {
-        "caller": "U8P_LAVA::00AF",
+        "caller": "U8P_LAVA::func00AF",
         "callee": "Item::setFrame",
-        "purpose": "Write updated animation/frame index back to the item after increment/decrement logic. (high)",
+        "purpose": "Update the item's animation/frame index after increment/decrement decisions.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LAVA::func00AF",
+        "callee": "spawn ->FREE::func1C19",
+        "purpose": "Spawn a lightweight timing/sequencing helper and suspend around it — inferred to implement delays between frame changes.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_LAVA::00AF",
-        "callee": "FREE::1C19",
-        "purpose": "Spawn a transient effect periodically during the coroutine's loop; passed the owner's pid and a small byte variant from [BP-04h]. (medium)",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_LAVA::00AF",
+        "caller": "U8P_LAVA::func00AF",
         "callee": "Item::destroy",
-        "purpose": "Remove the lava item when the animation reaches its terminal frame/condition. (high)",
+        "purpose": "Remove/destroy the item when a terminal animation/frame condition is reached.",
         "confidence": "medium"
       }
     ]
@@ -123,9 +82,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_LAVA::LAVA::look",
-    "behavior_summary_one_liner": "Provides the in-game behavior for a lava object: when a player 'looks' at the lava it reports a short description ('molten rock ').",
-    "external_call_count": 5,
+    "main_function": "U8P_LAVA::look",
+    "behavior_summary_one_liner": "U8P_LAVA::look is the object's 'U8P_LAVA::look' (examine) handler: it presents a short description 'molten rock' to the player and then yields/suspends.",
+    "external_call_count": 4,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

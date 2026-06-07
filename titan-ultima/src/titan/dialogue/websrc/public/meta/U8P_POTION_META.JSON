@@ -3,29 +3,31 @@
   "source_of_truth": "dialogue/json/U8P_POTION.json",
   "file": "U8P_POTION",
   "behavior_summary": [
-    "Implements in-game inspection and use behavior for potion items. POTION::look displays a short description ('potion ') to the viewer.",
-    "POTION::use dispatches behavior by the potion's frame (a subtype index). Depending on frame it: reports empty, heals (large or small), restores mana, applies temporary status/buffs (including an enrage/immortal window), applies a stasis/sleep effect on the avatar, or spawns helper routines to manage multi-step visual/sound/effect sequences.",
-    "Several effects compute amounts/durations from NPC stats (Str, Int) and urandom-generated randomness, update the NPC HP/Mana, set/clear item frame to mark consumption, and spawn engine methods/processes for visuals, SFX, and timed cleanup."
+    "This script implements the in-game behavior for a generic potion item. When the player 'looks' at the item it shows the short description \"potion \".",
+    "The usable behavior (U8P_POTION::use) reads the item's frame (Item::getFrame) and dispatches to multiple effect variants: empty/no-effect, two different HP-affecting branches (heals or reduces HP depending on caps), mana restoration (capped by Int*2), direct damage via a hit wrapper, a temporary berserk/enrage sequence, a sleep/stasis sequence with spawned visuals, and a status-toggle effect.",
+    "Most effect branches clear/consume the potion by calling Item::setFrame(0, this) after applying the effect. Several branches add a small randomized component (urandom) to vary amounts.",
+    "Timed or multi-step behaviors (berserk in U8P_POTION::func059B, timed status in U8P_POTION::func0687, sleep sequence in U8P_POTION::use) U8P_POTION::use spawn to create helper processes, suspend loops for timing, and stat-derived durations computed from Npc::getInt or Npc::getStr (commonly multiplied by 2).",
+    "Audio/visual feedback is provided by playSFX and spawned visual processes; some branches make the target temporarily immortal (Npc::setImmortal / Npc::clrImmortal) or put the avatar into stasis (setAvatarInStasis) during multi-step effects."
   ],
   "notable_control_flow": [
-    "Main entry (Event 0) is POTION::look which is a short, single-path handler that barks 'potion ' to the viewer and returns.",
-    "Use handler branches on Item::getFrame() (local 'frame') to select one of multiple potion behaviors — this switch is the central control flow pivot.",
-    "Some potion effects perform immediate state changes (set HP/Mana, setFrame to mark empty) while others spawn helper processes (U8P_POTION::POTION::059B, U8P_POTION::POTION::0687) that implement timed or multi-step behavior (visuals, immortal window, clearing flags after delay).",
-    "Many branches call Item::bark to communicate results (messages like 'it's empty...', 'I feel much better!', 'Yummm...', 'Zzzzz...'), then either finish or schedule further actions via spawn.",
-    "Timed behaviors often compute a duration from Npc::getInt() or Npc::getStr() (commonly doubled) and use spawn/suspend patterns to wait and then reverse temporary flags (e.g., Npc::clrImmortal)."
+    "Primary dispatch is by Item::getFrame(this) inside U8P_POTION::use; each integer frame selects a distinct effect branch.",
+    "Multi-step effects U8P_POTION::use spawn to create visual/audio/timer processes and suspend to yield between steps; duration loops increment a local counter and compare it against a threshold derived from Npc stats (Int*2 or Str*2).",
+    "U8P_POTION::func059B implements a looped timed period that sets immortality at start and clears it after a counter exceeds Npc::getInt(target) * 2.",
+    "U8P_POTION::func0687 tests item status bits (0x04 and 0x10 via Item::getStatus) and either toggles a flag immediately or enters a timed toggle/untoggle loop when the 0x10 bit is present.",
+    "Most branches perform cleanup/consumption by calling Item::setFrame(0, this) to clear the potion's frame."
   ],
   "open_questions": [
-    "Exact game-visible labels for each numeric frame value (only inferred from behavior; e.g., frame 1 = strong heal or harmful if over-heal, frame 3 = weaker heal, frame 2 = mana potion, frame 5 = berserk/enrage, frame 6 = stasis/sleep, frame 7 = complex SFX/status) — the canonical mapping of subtype->name is not present.",
-    "Precise semantics of engine METHODS invoked (METHOD::0113, METHOD::015E7, METHOD::0080, METHOD::091C, FREE::1C19, FREE::29D8): appear to create/position visuals and free resources, but exact visual/effect semantics remain uncertain.",
-    "Exact status bits tested and set by Item::getStatus interactions in POTION::0687 (which bits correspond to what gameplay flag).",
-    "Whether some healing branches can actively harm an actor (inferred from a path that reduces HP and barks an agonal message) and the exact condition triggering that harm is inferred but not fully certain."
+    "Exact semantics of the item status bits checked in U8P_POTION::func0687 (0x04 and 0x10): which in-game status flags do they represent (inferred as a toggleable status effect, but concrete meaning is unknown).",
+    "Precise actor target(s) for every branch — analysis assumes the player/target NPC/avatar context, but some branches may operate on different bound entities depending on how the item is used.",
+    "Whether clearing the item frame (Item::setFrame(0)) fully destroys/consumes the potion in inventory or only marks it visually empty (metadata implies consumption but exact lifecycle beyond frame clear is not shown).",
+    "Exact mapping of SFX/visual spawn IDs to in-game animations/effects — SFX ids were observed but their user-visible labels are not present."
   ],
   "main_function": {
     "name": "U8P_POTION::look",
     "execution_form": "process",
-    "purpose": "Handle an inspect/U8P_POTION::look event for a potion item; produce the short description/bark directed at the viewer.",
+    "purpose": "Provide the short description/inspection text for the potion when the player examines it.",
     "entry_conditions": [
-      "Event 0 (U8P_POTION::look/examine) — called when an actor views/inspects the potion (viewer pid passed implicitly)."
+      "Player triggers a U8P_POTION::look/examine action on the potion item (U8P_POTION::look process type 0x0208)."
     ],
     "confidence": "high"
   },
@@ -33,157 +35,115 @@
     {
       "name": "U8P_POTION::look",
       "kind": "main",
-      "role": "Inspect/describe the potion to the viewer (Event 0).",
+      "role": "examine handler (shows item short description)",
       "confidence": "high"
     },
     {
       "name": "U8P_POTION::use",
       "kind": "helper",
-      "role": "Primary use handler (Event 1). Branches by Item::getFrame() to implement different potion subtypes (healing, mana, stasis, buffs, spawn helpers).",
+      "role": "U8P_POTION::use/activate handler — dispatches potion effects based on Item::getFrame",
       "confidence": "high"
     },
     {
-      "name": "U8P_POTION::059B",
+      "name": "U8P_POTION::func059B",
       "kind": "helper",
-      "role": "Spawned helper for a berserk/enrage-type potion: set item used, bark, apply temporary immortal/combat buff, spawn visual effects, wait, then clear buff and free effects.",
+      "role": "implements the temporary 'I feel like fighting!' berserk/enrage sequence with immortality and a timed loop",
       "confidence": "medium"
     },
     {
-      "name": "U8P_POTION::0687",
+      "name": "U8P_POTION::func0687",
       "kind": "helper",
-      "role": "Spawned helper for a complex/status SFX potion: plays sound, inspects/sets item status bits, calls engine methods to create/position effects, computes duration from Int, and schedules cleanup.",
+      "role": "implements a status-toggle effect (plays SFX, toggles status flags, optionally timed by Int*2)",
       "confidence": "medium"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine-provided call used to display short text messages from an item/actor to a viewer/process.",
-      "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
         "caller": "U8P_POTION::use",
-        "callee": "U8P_POTION::059B",
-        "purpose": "Spawn a helper process to implement a temporary berserk/enrage effect (visuals, immortal window, timed duration).",
+        "callee": "U8P_POTION::func059B",
+        "purpose": "Invoke the berserk/enrage multi-step helper for the frame that produces an 'I feel like fighting!' effect.",
         "confidence": "high"
       },
       {
         "caller": "U8P_POTION::use",
-        "callee": "U8P_POTION::0687",
-        "purpose": "Spawn a helper process to implement a complex multi-step SFX/status routine (sound, flags, timed cleanup).",
+        "callee": "U8P_POTION::func0687",
+        "purpose": "Invoke the status-toggle helper for the frame that applies or toggles a timed status effect.",
         "confidence": "high"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_POTION::look",
-        "callee": "Item::bark",
-        "purpose": "Display the short description string 'potion ' to the viewing process/pid.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_POTION::use",
         "callee": "Item::getFrame",
-        "purpose": "Read potion subtype/frame to decide which effect to apply.",
+        "purpose": "Read the potion's variant/state to decide which effect branch to execute.",
         "confidence": "high"
       },
       {
         "caller": "U8P_POTION::use",
         "callee": "Item::setFrame",
-        "purpose": "Clear or change the potion frame to mark it used/consumed or transition state after use.",
+        "purpose": "Clear/consume the potion by setting its frame to 0 after most effects.",
         "confidence": "high"
       },
       {
         "caller": "U8P_POTION::use",
-        "callee": "Npc::getHp",
-        "purpose": "Read current HP to compute healing or conditional harmful effects.",
+        "callee": "Npc::getHp / Npc::setHp / Npc::getStr",
+        "purpose": "Query and adjust HP and U8P_POTION::use Strength-derived caps (Str*2) for healing/damage branches.",
         "confidence": "high"
       },
       {
         "caller": "U8P_POTION::use",
-        "callee": "Npc::setHp",
-        "purpose": "Apply new HP value after healing or damage calculations.",
+        "callee": "Npc::getMana / Npc::setMana / Npc::getInt",
+        "purpose": "Query and restore mana with an Int-derived cap (Int*2) in the mana-restore branch.",
         "confidence": "high"
       },
       {
         "caller": "U8P_POTION::use",
-        "callee": "Npc::getStr",
-        "purpose": "Supply Strength stat to scale healing/damage amounts (commonly multiplied by 2).",
+        "callee": "METHOD::receiveHitWrapper",
+        "purpose": "Apply immediate damage/hit to the target for the damaging potion variant.",
         "confidence": "high"
       },
       {
         "caller": "U8P_POTION::use",
         "callee": "urandom",
-        "purpose": "Produce small random offsets for healed/restored amounts or durations.",
+        "purpose": "Generate small random offsets to vary heal, mana, and damage amounts.",
         "confidence": "high"
       },
       {
         "caller": "U8P_POTION::use",
-        "callee": "Npc::getMana",
-        "purpose": "Read current Mana for mana-restoring potion branches.",
+        "callee": "setAvatarInStasis",
+        "purpose": "Put the avatar into stasis during the sleep potion multi-step visual/timer sequence.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_POTION::use / U8P_POTION::func059B / U8P_POTION::func0687",
+        "callee": "spawn (and spawn->FREE::* helpers)",
+        "purpose": "Spawn auxiliary processes for animations, visual effects, and timing for multi-step effects.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_POTION::use",
-        "callee": "Npc::getInt",
-        "purpose": "Use Intelligence to scale mana restoration or effect durations (often doubled).",
+        "caller": "U8P_POTION::func059B",
+        "callee": "Npc::setImmortal / Npc::clrImmortal",
+        "purpose": "Temporarily make the target immortal during the berserk period and clear it after the timed loop.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_POTION::use",
-        "callee": "Npc::setMana",
-        "purpose": "Apply new Mana value after restoration calculations.",
+        "caller": "U8P_POTION::func0687",
+        "callee": "Item::getStatus / METHOD::toggleStatusFlag",
+        "purpose": "Check item status bits and toggle an in-game status flag on the target; if bit 0x10 is set the toggle is timed using a duration derived from Npc::getInt.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_POTION::func059B / U8P_POTION::func0687 / U8P_POTION::use",
+        "callee": "playSFX",
+        "purpose": "Play sound effects to signal effect start/end or transitions in multi-step sequences.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_POTION::use",
-        "callee": "spawn",
-        "purpose": "Start auxiliary processes for visuals, SFX, helper routines, and timed cleanup (e.g., spawn FREE::1C19, METHOD::* or helper functions).",
+        "caller": "U8P_POTION::use / U8P_POTION::func059B / U8P_POTION::func0687",
+        "callee": "suspend",
+        "purpose": "Yield the process or pause between spawned steps and during timing loops.",
         "confidence": "high"
-      },
-      {
-        "caller": "U8P_POTION::059B",
-        "callee": "Npc::setImmortal",
-        "purpose": "Set the NPC immortal for a temporary buff duration to prevent death during the effect.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_POTION::059B",
-        "callee": "Npc::clrImmortal",
-        "purpose": "Clear the immortal flag after the effect duration expires.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_POTION::0687",
-        "callee": "U8P_POTION::playSFX",
-        "purpose": "Play sound effect(s) associated with the potion's status/SFX routine.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_POTION::use",
-        "callee": "U8P_POTION::setAvatarInStasis",
-        "purpose": "Place the avatar/player in stasis/immobilized state (used by the stasis/sleep-type potion).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_POTION::use",
-        "callee": "Npc::getDir",
-        "purpose": "Read actor facing direction to orient spawned visual effects.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_POTION::use",
-        "callee": "Item::getStatus",
-        "purpose": "Inspect item status bits to decide conditional behaviors in some complex potion branches (notably POTION::0687).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_POTION::use",
-        "callee": "METHOD::0113",
-        "purpose": "Invoke an engine method likely used to create/position visuals or effect actors tied to potion use.",
-        "confidence": "low"
       }
     ]
   },
@@ -198,9 +158,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "POTION::look",
-    "behavior_summary_one_liner": "Implements in-game inspection and use behavior for potion items. POTION::look displays a short description ('potion ') to the viewer.",
-    "external_call_count": 18,
+    "main_function": "U8P_POTION::look",
+    "behavior_summary_one_liner": "This script implements the in-game behavior for a generic potion item. When the player 'looks' at the item it shows the short description \"potion \".",
+    "external_call_count": 12,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

@@ -3,26 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_OAKTBLNS.json",
   "file": "U8P_OAKTBLNS",
   "behavior_summary": [
-    "Responds to the object's 'U8P_OAKTBLNS::look' (examine) event by preparing local process/context state, constructing the literal label string \"table \", and asking the item system to 'bark' that string to the examining actor.",
-    "The actor/process that triggered the U8P_OAKTBLNS::look is passed through as the target of the bark call so the message is delivered to the correct process/player.",
-    "After calling Item::bark the temporary string is freed and the function inspects the bark return value via an implication-style operation, then suspends/returns."
+    "Provides the object's response when the player 'looks at' (examines) the oak table: it displays a single short label/string 'table ' and then suspends the U8P_OAKTBLNS::look process.",
+    "Acts as a minimal/placeholder examine handler rather than a descriptive or interactive script — there are no menus, conditions, or external calls.",
+    "The process ends immediately after showing the bark, so no state is changed and no further interactions are offered."
   ],
   "notable_control_flow": [
-    "Event-driven: this runs on the Look/Examine event (Event 0) for the object.",
-    "Performs local process/context setup (inferred 'set info' and 'process exclude') before producing output — likely to mark or temporarily alter processing for the object.",
-    "Allocates/constructs a short literal string (\"table \"), calls Item::bark with the actor PID and that string, frees the string, and then processes the bark return value (implies/pop) before suspending."
+    "U8P_OAKTBLNS::look executes as a process (processType 0x0208) triggered by the engine's U8P_OAKTBLNS::look/examine action.",
+    "The flow is linear: show a Bark (the short text 'table ') then suspend/terminate the process.",
+    "There are two low-confidence Unknown nodes present in the raw which appear to be structural remnants; they do not introduce branching or additional behavior."
   ],
   "open_questions": [
-    "Exact semantic effect of the 'set info' and 'process exclude' opcodes used before barking: do they change object's state, prevent reentrancy, or affect rendering?",
-    "The precise meaning and use of the bark return value that is inspected with the 'implies' operation — is it an error code, conditional signal, or interaction flag?",
-    "Whether the actor argument ([BP+06h]) is always a player PID or can be another process type in some contexts."
+    "Is the short text 'table ' a complete label or a placeholder for a longer resource string stored elsewhere?",
+    "Was the minimal response chosen intentionally (object design) or as an artifact of incomplete script/data extraction?",
+    "Does the engine supply an implicit context/actor parameter to the U8P_OAKTBLNS::look process here (implicit 'this' or player reference) even though no explicit parameters are declared?"
   ],
   "main_function": {
     "name": "U8P_OAKTBLNS::look",
     "execution_form": "process",
-    "purpose": "Handle the in-game 'U8P_OAKTBLNS::look' (examine) event for the table-like object by producing the label/description string to the examining actor and performing local process/context setup and cleanup.",
+    "purpose": "Handle the object's examine/U8P_OAKTBLNS::look action by presenting a single short label and then suspending the process.",
     "entry_conditions": [
-      "Event 0: invoked when an actor (player/process) looks at or examines the object"
+      "Invoked by the engine when the player uses the 'U8P_OAKTBLNS::look' (examine) action on the oak table (processType 0x0208)."
     ],
     "confidence": "high"
   },
@@ -30,26 +30,13 @@
     {
       "name": "U8P_OAKTBLNS::look",
       "kind": "main",
-      "role": "Event handler for the object's 'U8P_OAKTBLNS::look' (examine) event. Prepares context, builds label string, calls Item::bark, frees resources, then suspends.",
+      "role": "examine/U8P_OAKTBLNS::look handler that displays a short label and suspends",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_OAKTBLNS::look",
-        "callee": "Item::bark",
-        "purpose": "Deliver/display the constructed label string (\"table \") to the specified process/actor so the player sees or hears the object's name/description.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_OAKTBLNS::look",
-        "callee": "U8P_OAKTBLNS::engine: set info / process exclude (inferred)",
-        "purpose": "Local process/context adjustments applied before barking; likely marks object state or prevents further processing while handling the event.",
-        "confidence": "medium"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -57,12 +44,14 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup"
+    "suspend",
+    "label",
+    "examine"
   ],
   "quick_facts": {
-    "main_function": "OAKTBLNS::look",
-    "behavior_summary_one_liner": "Responds to the object's 'U8P_OAKTBLNS::look' (examine) event by preparing local process/context state, constructing the literal label string \"table \", and asking the item system to 'bark' that string to the examining actor.",
-    "external_call_count": 2,
+    "main_function": "U8P_OAKTBLNS::look",
+    "behavior_summary_one_liner": "Provides the object's response when the player 'looks at' (examines) the oak table: it displays a single short label/string 'table ' and then suspends the U8P_OAKTBLNS::look process.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

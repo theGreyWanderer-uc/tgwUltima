@@ -3,33 +3,36 @@
   "source_of_truth": "dialogue/json/U8P_GWILLIM.json",
   "file": "U8P_GWILLIM",
   "behavior_summary": [
-    "Provides GWILLIM NPC behavior: handles player 'U8P_GWILLIM::look' interaction, theft reactions, schedule-driven short behaviors, and fast-area entry/exit cleanup.",
-    "GWILLIM::look chooses between a first-meeting greeting and a repeat greeting based on a global flag metGwillim.",
-    "GWILLIM::AvatarStoleSomething processes an avatar theft event: records the stolen item, resets internal refs, inspects the stolen type, sets stolenOnce for some classes, issues vocal warnings, and (if appropriate and not already done) spawns guard-calling routines and timers.",
-    "GWILLIM::schedule queries an external schedule utility (FREE::28F9) to select and persist a gwillimSchedule value and then spawns short schedule-methods to enact that plan.",
-    "GWILLIM::enterFastArea reacts to fast-area entry by clearing refs, checking gwillimSchedule, and spawning one of several short behavior helpers (U8P_GWILLIM::0398, U8P_GWILLIM::0A50, U8P_GWILLIM::10D3) that perform movement/dialog/animation.",
-    "GWILLIM::leaveFastArea performs reference cleanup (FREE::2A56) when leaving the fast-area trigger."
+    "This script implements the NPC Gwillim's examine label, conversation, daily scheduling, ambient activity/monologues, and theft-reaction behavior.",
+    "U8P_GWILLIM::look returns a short bark/label when the player examines the NPC: it shows 'Gwillim' if the global flag metGwillim is set, otherwise it shows 'Herdsman'.",
+    "U8P_GWILLIM::use is the conversation handler run when the player talks to Gwillim. It constructs a dynamic menu (local3), presents choices via Ask, captures the selected option into local1, and loops through dialogue branches until the 'Farewell.' exit option. Using the greeting sets metGwillim.",
+    "U8P_GWILLIM::schedule chooses a U8P_GWILLIM::schedule branch based on FREE::getTimeOfDayPeriod, sets gwillimSchedule, and invokes scheduler/movement helpers (METHOD::func143A then METHOD::func133F) to apply or start actions.",
+    "U8P_GWILLIM::enterFastArea is triggered when an actor enters Gwillim's fast-update trigger; if alive it clears fast-area refs and dispatches one of three activity utilities based on gwillimSchedule (U8P_GWILLIM::func0398, ::func0A50, ::func10D3).",
+    "Activity utilities (U8P_GWILLIM::func0398, ::func0A50, ::func10D3) inspect item frames/positions, optionally request Npc::pathfind, wait for the spawned path process, then either call a monologue (U8P_GWILLIM::func0510, ::func0B93, ::func1216) when no one else is talking or run a spawn/sync fallback when somebodyTalking is true or pathfinding fails.",
+    "U8P_GWILLIM::AvatarStoleSomething reacts to stolen items (uword param = item ref): it queries Item::getType; for certain types (engine ids seen in the disassembly) it will, on first occurrence, set stolenOnce, bark a unique warning, and call a helper (U8P_GWILLIM::func02BC). For general qualifying thefts it barks, spawns a timed helper (FREE::func1C19), and calls CALGUARD::guardRespondToCrime unless guardsCalled suppresses the alert.",
+    "U8P_GWILLIM::leaveFastArea clears the fast-area reference (resetRef 0x0205) to stop fast-update behavior when the actor leaves the area."
   ],
   "notable_control_flow": [
-    "Event-driven: functions are dispatched by engine events (U8P_GWILLIM::look, theft, schedule, fast-area enter/leave).",
-    "Branching on global flags: metGwillim controls greeting in GWILLIM::look; guardsCalled and stolenOnce affect theft response branching and whether guards are summoned.",
-    "Schedule selection: GWILLIM::schedule loops/calls FREE::28F9 to choose a schedule index, writes gwillimSchedule, and spawns follow-up methods to enact it.",
-    "Fast-area immediate behaviors: enterFastArea reads gwillimSchedule and spawns one of several short helper routines to run immediately rather than executing a long schedule in-place.",
-    "Asynchronous actions via spawn: many behaviors are implemented by spawning small METHODs or other scripts (animations, guard-calling, timers) instead of inline blocking logic."
+    "U8P_GWILLIM::look: simple conditional on global flag metGwillim to select one of two brief barks; then suspend.",
+    "U8P_GWILLIM::use: menu lifecycle — MenuSet/MenuAdd/MenuRemove build local3, Ask captures choice into local1 (SuspendAssign), ConversationLoop dispatches branches via strcmp(local1) until exit ('Farewell.'). metGwillim is set on the greeting path.",
+    "U8P_GWILLIM::schedule: if not dead, initializes local values, queries FREE::getTimeOfDayPeriod to pick a branch, calls METHOD::func143A and waits; if process_result() true then writes gwillimSchedule = local4 and calls METHOD::func133F.",
+    "U8P_GWILLIM::enterFastArea: checks Npc::isDead; if alive resets refs (0x0200/0x0204/0x0205) then reads gwillimSchedule and calls the matching activity utility (U8P_GWILLIM::func0398/U8P_GWILLIM::func0A50/U8P_GWILLIM::func10D3).",
+    "Activity utilities: read Item::getFrame or coordinates, loop with increments, and when a threshold is met call Npc::pathfind and suspend to wait; after waiting branch on process_result() and somebodyTalking to choose between direct monologue, speech-sync fallback (METHOD::func15E7), or spawning FREE::func1C19 as a timed helper.",
+    "U8P_GWILLIM::AvatarStoleSomething: clears fast-area refs, calls METHOD::func15E7 and suspends, checks Item::getType(param) against several constants, gates first-time reaction by stolenOnce flag, sets stolenOnce when applicable, then uses FREE::func1C19 and CALGUARD::guardRespondToCrime to escalate."
   ],
   "open_questions": [
-    "Exact numeric meanings of schedule slot values returned by FREE::28F9 (what each gwillimSchedule value maps to in-game timing/locations) are inferred but not exact.",
-    "Precise contents and triggers of spawned helper scripts U8P_GWILLIM::0A50 and U8P_GWILLIM::10D3 are not present and only inferred as schedule variants.",
-    "The complete list of item types that trigger the more severe theft branch (guard calling) is inferred from type comparisons but not enumerated concretely here.",
-    "The semantics of some FREE::* helpers (FREE::1CE3, FREE::28F9 variants) are inferred from usage; their exact return ranges/meanings are unknown."
+    "Exact semantic meaning of the numeric item type constants compared in U8P_GWILLIM::AvatarStoleSomething (0x021D, 0x008F, 0x01C6 in disassembly) — which in-game item categories should trigger the theft response?",
+    "Precise timing/behavior of FREE::func1C19 spawns (different parameter values observed) and how they affect later state — are they delay timers, visual effects, or temporary processes?",
+    "Exact behavior of U8P_GWILLIM::func02BC (called on the unique first-theft branch) — its role is inferred but not present in the excerpt.",
+    "Mapping between FREE::getTimeOfDayPeriod return values and gwillimSchedule ids (which period number maps to U8P_GWILLIM::schedule id 0x01/0x02/0x03) is inferred but not explicitly named.",
+    "Whether any other scripts modify gwillimSchedule or stolenOnce and how cross-script interactions affect this NPC's behavior timing (external dependencies)."
   ],
   "main_function": {
     "name": "U8P_GWILLIM::look",
     "execution_form": "process",
-    "purpose": "Respond to a player 'U8P_GWILLIM::look' interaction by making the NPC speak an appropriate greeting. If the global flag metGwillim is unset (first meeting), use the first-meeting line; otherwise use the repeat greeting.",
+    "purpose": "Provide a short examine/label bark for the NPC, selecting between 'Gwillim' and 'Herdsman' based on whether the player has met him (global flag metGwillim).",
     "entry_conditions": [
-      "Event 0 (player examines/looks at the NPC)",
-      "Called with pid (viewer process id) and NPC reference as parameters"
+      "Invoked by the engine when the player 'looks at' or examines this NPC."
     ],
     "confidence": "high"
   },
@@ -37,157 +40,211 @@
     {
       "name": "U8P_GWILLIM::look",
       "kind": "main",
-      "role": "Handle the 'U8P_GWILLIM::look' (examine) event and produce greeting dialog.",
+      "role": "examine/label handler",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_GWILLIM::use",
+      "kind": "helper",
+      "role": "full conversation/dialogue manager (menu construction, Ask/SuspendAssign, branches)",
       "confidence": "high"
     },
     {
       "name": "U8P_GWILLIM::AvatarStoleSomething",
       "kind": "helper",
-      "role": "Handle theft events: record stolen item, check type, warn player, set stolenOnce and possibly call guards/timers.",
+      "role": "theft reaction handler (inspects stolen item, sets stolenOnce, barks, may call guards)",
       "confidence": "high"
     },
     {
       "name": "U8P_GWILLIM::schedule",
       "kind": "helper",
-      "role": "Query scheduling system and set gwillimSchedule, spawn schedule enactment methods.",
+      "role": "time-of-day driven U8P_GWILLIM::schedule selection and scheduler/movement invocation",
       "confidence": "high"
     },
     {
       "name": "U8P_GWILLIM::enterFastArea",
       "kind": "helper",
-      "role": "React to entering a fast-area trigger: clear refs and spawn short behavior routine based on gwillimSchedule.",
+      "role": "fast-area entry trigger: clear refs and dispatch U8P_GWILLIM::schedule-specific activity routine",
       "confidence": "high"
     },
     {
       "name": "U8P_GWILLIM::leaveFastArea",
       "kind": "helper",
-      "role": "Fast-area exit cleanup; release stored reference via FREE::2A56.",
+      "role": "fast-area exit cleanup (reset ref)",
       "confidence": "high"
     },
     {
-      "name": "U8P_GWILLIM::0398",
+      "name": "U8P_GWILLIM::func0398",
       "kind": "helper",
-      "role": "Iterative scanning/selection routine used by fast-area schedule branch; examines item frames/slots and initiates pathfind/dialog actions.",
-      "confidence": "medium"
+      "role": "activity utility for U8P_GWILLIM::schedule branch 1: frame checks, pathfind, spawn/speech orchestration",
+      "confidence": "high"
     },
     {
-      "name": "U8P_GWILLIM::0510",
+      "name": "U8P_GWILLIM::func0510",
       "kind": "helper",
-      "role": "Randomized short activity routine used by schedule/enterFastArea: chooses actions via urandom, moves NPC, and emits varied dialog lines.",
-      "confidence": "medium"
+      "role": "monologue for U8P_GWILLIM::func0398: picks barks by proximity/random and plays them (uses coords)",
+      "confidence": "high"
     },
     {
-      "name": "U8P_GWILLIM::0A50",
+      "name": "U8P_GWILLIM::func0A50",
       "kind": "helper",
-      "role": "Schedule-variant short behavior spawned by enterFastArea (body not shown; inferred as movement/dialog variant).",
-      "confidence": "low"
+      "role": "activity utility for U8P_GWILLIM::schedule branch 2 analogous to U8P_GWILLIM::func0398",
+      "confidence": "high"
     },
     {
-      "name": "U8P_GWILLIM::10D3",
+      "name": "U8P_GWILLIM::func0B93",
       "kind": "helper",
-      "role": "Schedule-variant short behavior spawned by enterFastArea (body not shown; inferred as movement/dialog variant).",
-      "confidence": "low"
+      "role": "monologue for U8P_GWILLIM::func0A50: proximity/random barks about family/flock",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_GWILLIM::func10D3",
+      "kind": "helper",
+      "role": "activity utility for U8P_GWILLIM::schedule branch 3 analogous to U8P_GWILLIM::func0398/U8P_GWILLIM::func0A50",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_GWILLIM::func1216",
+      "kind": "helper",
+      "role": "monologue for U8P_GWILLIM::func10D3: alternate barks about home and son",
+      "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
         "caller": "U8P_GWILLIM::enterFastArea",
-        "callee": "U8P_GWILLIM::0398",
-        "purpose": "Spawned when gwillimSchedule selects the corresponding schedule branch to perform a short, immediate behavior.",
+        "callee": "U8P_GWILLIM::func0398",
+        "purpose": "Dispatch U8P_GWILLIM::schedule-1 activity when gwillimSchedule == 0x01 (clear refs then run activity)",
         "confidence": "high"
       },
       {
         "caller": "U8P_GWILLIM::enterFastArea",
-        "callee": "U8P_GWILLIM::0A50",
-        "purpose": "Alternate short behavior spawned based on gwillimSchedule value.",
-        "confidence": "medium"
+        "callee": "U8P_GWILLIM::func0A50",
+        "purpose": "Dispatch U8P_GWILLIM::schedule-2 activity when gwillimSchedule == 0x02",
+        "confidence": "high"
       },
       {
         "caller": "U8P_GWILLIM::enterFastArea",
-        "callee": "U8P_GWILLIM::10D3",
-        "purpose": "Alternate short behavior spawned based on gwillimSchedule value.",
-        "confidence": "medium"
+        "callee": "U8P_GWILLIM::func10D3",
+        "purpose": "Dispatch U8P_GWILLIM::schedule-3 activity when gwillimSchedule == 0x03",
+        "confidence": "high"
       },
       {
-        "caller": "U8P_GWILLIM::schedule",
-        "callee": "U8P_GWILLIM::0510",
-        "purpose": "schedule may spawn or route into a richer short-activity routine to enact the chosen schedule (inferred from spawn patterns).",
-        "confidence": "medium"
+        "caller": "U8P_GWILLIM::func0398",
+        "callee": "U8P_GWILLIM::func0510",
+        "purpose": "Run the monologue after successful pathfinding and speech setup",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GWILLIM::func0A50",
+        "callee": "U8P_GWILLIM::func0B93",
+        "purpose": "Run the monologue for U8P_GWILLIM::schedule-2 activity when appropriate",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GWILLIM::func10D3",
+        "callee": "U8P_GWILLIM::func1216",
+        "purpose": "Run the monologue for U8P_GWILLIM::schedule-3 activity when appropriate",
+        "confidence": "high"
       },
       {
         "caller": "U8P_GWILLIM::AvatarStoleSomething",
-        "callee": "U8P_GWILLIM::02BC",
-        "purpose": "Spawned in a theft branch after setting stolenOnce to perform a follow-up animation or response sequence.",
+        "callee": "U8P_GWILLIM::func02BC",
+        "purpose": "Invoke a script-local helper for the unique first-theft reaction (called when a certain item type is stolen and stolenOnce was false)",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_GWILLIM::use",
+        "callee": "U8P_GWILLIM::schedule",
+        "purpose": "Conversation branches reference/trigger U8P_GWILLIM::schedule decisions or read U8P_GWILLIM::schedule-related flags (menu content can depend on U8P_GWILLIM::schedule/flags)",
         "confidence": "medium"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_GWILLIM::look",
-        "callee": "Item::bark",
-        "purpose": "Make the NPC speak a greeting string to the player/process.",
+        "caller": "U8P_GWILLIM::func0398",
+        "callee": "Npc::pathfind",
+        "purpose": "Request NPC movement toward an item/target before speaking; spawn and wait for the movement process",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GWILLIM::func0A50",
+        "callee": "Npc::pathfind",
+        "purpose": "Request NPC movement using path id (0x0A observed) before monologue",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GWILLIM::func10D3",
+        "callee": "Npc::pathfind",
+        "purpose": "Request NPC movement before monologue for U8P_GWILLIM::schedule-3",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GWILLIM::func0510",
+        "callee": "Item::getX / Item::getY / Item::getZ",
+        "purpose": "Read positions for proximity checks determining which bark set to U8P_GWILLIM::use",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GWILLIM::func0510",
+        "callee": "FREE::maxDelta3D",
+        "purpose": "Compute a 3D distance metric used to choose 'near' vs 'far' barks",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GWILLIM::func0510",
+        "callee": "METHOD::func091C",
+        "purpose": "Prepare/start speech before a bark (speech-queue helper)",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GWILLIM::func0510",
+        "callee": "METHOD::func15E7",
+        "purpose": "Finalize/commit speech and synchronize suspend points after barks",
         "confidence": "high"
       },
       {
         "caller": "U8P_GWILLIM::AvatarStoleSomething",
         "callee": "Item::getType",
-        "purpose": "Determine the stolen item's class/type to decide theft-response severity and whether to summon guards.",
+        "purpose": "Determine the stolen item's type/category to decide whether and how to react",
         "confidence": "high"
       },
       {
         "caller": "U8P_GWILLIM::AvatarStoleSomething",
-        "callee": "Npc::getDir",
-        "purpose": "Get NPC facing direction before spawning a theft-reaction animation (METHOD::15E7).",
+        "callee": "FREE::func1C19 (spawn)",
+        "purpose": "Spawn a timed helper process (used as a fallback/timer effect when theft occurs or speech is deferred)",
         "confidence": "high"
       },
       {
         "caller": "U8P_GWILLIM::AvatarStoleSomething",
-        "callee": "spawn (CALGUARD::0080)",
-        "purpose": "Invoke guard-calling routine when a guard-worthy theft occurs and guards have not already been called.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GWILLIM::AvatarStoleSomething",
-        "callee": "FREE::1C19",
-        "purpose": "Spawn or set a timer/timeout related to the guard/alarm response path.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_GWILLIM::enterFastArea",
-        "callee": "U8P_GWILLIM::resetRef",
-        "purpose": "Clear/ release reserved object or schedule reference slots prior to starting fast-area behavior.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_GWILLIM::leaveFastArea",
-        "callee": "FREE::2A56",
-        "purpose": "Clear a stored reference when leaving the fast area (cleanup).",
+        "callee": "CALGUARD::guardRespondToCrime",
+        "purpose": "Alert/trigger guard AI in response to theft (escalation after barks and spawn)",
         "confidence": "high"
       },
       {
         "caller": "U8P_GWILLIM::schedule",
-        "callee": "FREE::28F9",
-        "purpose": "Query scheduling/timetable utility repeatedly to select an appropriate schedule slot/value.",
+        "callee": "FREE::getTimeOfDayPeriod",
+        "purpose": "Query time-of-day to pick a U8P_GWILLIM::schedule branch",
         "confidence": "high"
       },
       {
-        "caller": "U8P_GWILLIM::0398",
-        "callee": "Item::getFrame",
-        "purpose": "Inspect frames/animation indices on items while scanning a set of world objects to decide actions.",
+        "caller": "U8P_GWILLIM::schedule",
+        "callee": "METHOD::func143A",
+        "purpose": "Start or prepare a scheduler/movement process used to test/apply the chosen U8P_GWILLIM::schedule",
         "confidence": "high"
       },
       {
-        "caller": "U8P_GWILLIM::0510",
+        "caller": "U8P_GWILLIM::schedule",
+        "callee": "METHOD::func133F",
+        "purpose": "Finalize or apply the chosen U8P_GWILLIM::schedule when the preparatory process returns success",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_GWILLIM::func0B93",
         "callee": "urandom",
-        "purpose": "Introduce variety into short-activity behavior (choose dialog/animation variants randomly).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_GWILLIM::0398",
-        "callee": "Npc::pathfind",
-        "purpose": "Request NPC movement towards a selected target discovered by the scanner routine.",
-        "confidence": "medium"
+        "purpose": "Choose a random bark index within near/far sets",
+        "confidence": "high"
       }
     ]
   },
@@ -195,39 +252,39 @@
     "reads": [
       {
         "name": "metGwillim",
-        "likely_effect": "Selects greeting variant in GWILLIM::look (first-meeting vs repeat).",
+        "likely_effect": "Determines which short 'U8P_GWILLIM::look' label and initial greeting/menu is shown (whether player has met Gwillim)",
         "confidence": "high"
       },
       {
         "name": "guardsCalled",
-        "likely_effect": "Prevents repeated guard calls in theft handling; read to avoid re-invoking guard response.",
+        "likely_effect": "Prevents duplicate guard alerts when a theft is already being handled",
         "confidence": "high"
       },
       {
-        "name": "gwillimSchedule",
-        "likely_effect": "Selects which short behavior routine to spawn on fast-area enter; persists schedule selection from GWILLIM::schedule.",
+        "name": "stolenOnce",
+        "likely_effect": "Gate for a unique first-theft reaction so it only occurs once",
         "confidence": "high"
       },
       {
         "name": "somebodyTalking",
-        "likely_effect": "Read to avoid starting new dialog or actions when other speech is ongoing (avoid interrupting).",
-        "confidence": "medium"
-      },
-      {
-        "name": "stolenOnce",
-        "likely_effect": "Read to choose theft-response branch (different bark/behavior if theft previously occurred).",
+        "likely_effect": "Prevents interrupting another ongoing conversation; used to pick speech vs spawn fallback",
         "confidence": "high"
       }
     ],
     "writes": [
       {
         "name": "stolenOnce",
-        "likely_effect": "Set to 1 when a theft of certain item types is detected to suppress repeat warnings/alternate behavior later.",
+        "likely_effect": "Marked true when a qualifying stolen item is detected to record that the first-time reaction has occurred",
         "confidence": "high"
       },
       {
         "name": "gwillimSchedule",
-        "likely_effect": "Updated by GWILLIM::schedule to record the selected schedule slot for later use by enterFastArea and other behaviors.",
+        "likely_effect": "Records the U8P_GWILLIM::schedule id chosen by U8P_GWILLIM::schedule and drives which activity utility is used on U8P_GWILLIM::enterFastArea",
+        "confidence": "high"
+      },
+      {
+        "name": "metGwillim",
+        "likely_effect": "Set when the player first uses the greeting branch (so future 'U8P_GWILLIM::look' and conversation initialization reflect that the player has met Gwillim)",
         "confidence": "high"
       }
     ]
@@ -239,11 +296,11 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "GWILLIM::look",
-    "behavior_summary_one_liner": "Provides GWILLIM NPC behavior: handles player 'U8P_GWILLIM::look' interaction, theft reactions, schedule-driven short behaviors, and fast-area entry/exit cleanup.",
-    "external_call_count": 11,
-    "flag_read_count": 5,
-    "flag_write_count": 2
+    "main_function": "U8P_GWILLIM::look",
+    "behavior_summary_one_liner": "This script implements the NPC Gwillim's examine label, conversation, daily scheduling, ambient activity/monologues, and theft-reaction behavior.",
+    "external_call_count": 14,
+    "flag_read_count": 4,
+    "flag_write_count": 3
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

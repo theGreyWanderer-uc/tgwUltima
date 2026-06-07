@@ -3,27 +3,27 @@
   "source_of_truth": "dialogue/json/U8P_BASEBOOK.json",
   "file": "U8P_BASEBOOK",
   "behavior_summary": [
-    "BASEBOOK::look is invoked when an actor (player or NPC) examines a book item and presents a human-readable title/description for that book.",
-    "The routine reads the inspected Item's numeric 'quality' field (used as a book subtype/ID) and maps many discrete quality values to literal title/description strings.",
-    "For the matched quality value the code calls the item’s display routine (Item::bark) with the selected string, directed at the examining actor (pid).",
-    "Behavior is descriptive/display-only in the observed excerpt: no global flags are read or written and no game state changes occur."
+    "This script implements the in-game behavior for book items. The primary 'U8P_BASEBOOK::look' process (U8P_BASEBOOK::look) provides a short title/label when a player examines the book; the label is chosen by reading the book's numeric quality/ID and mapping that value to a small set of fixed strings (many values map to explicit titles, some to a generic \"Read me.\").",
+    "The 'U8P_BASEBOOK::use' process (U8P_BASEBOOK::use) handles the player using/reading the book: it captures a reference to the item instance, calls AccumulateIntelligence with a constant (inferred to register/grant knowledge or an intelligence increment), then spawns a book-specific handler (module function selected by the book quality/ID) to present the full content or effect, and finally suspends the current process.",
+    "No global flags are read or written by these routines in the provided fragment; most state is local and execution is delegated to other module handlers via spawn."
   ],
   "notable_control_flow": [
-    "Repeated read of the item's quality via Item::getQuality followed by a large switch/mapping on that returned value to choose the message string.",
-    "After selecting a string the function pushes pid and the string and calls Item::bark to show the message to the viewer.",
-    "There is an implied default/unmatched path (no observed state change) if the item's quality does not match any listed case."
+    "U8P_BASEBOOK::look reads Item::getQuality(this) and performs a multi-way branch (switch) over discrete numeric quality codes to select a short bark/string to display, then calls suspend.",
+    "U8P_BASEBOOK::use sets local1 = this, calls AccumulateIntelligence(0x0F) (constant seen), then performs a dispatch by spawning a handler determined by Item::getQuality(this) (many quality codes map to different module functions such as BOOK1::func0080, EARTHMAG::func0080, STEVBOOK::func0080), stores/compares the spawn result into a temp, and finally suspends.",
+    "Display of text in both flows is implemented via bark/DialogueLine nodes and is followed by suspend to pause the process until the engine resumes it."
   ],
   "open_questions": [
-    "What is the exhaustive list of quality values handled and the exact strings for each (the disassembly excerpt lists many but full table coverage is unknown)?",
-    "How are unknown/unsupported quality values handled at runtime (silent/no-op, generic label, or a fallback string)?",
-    "Are the book titles localized or stored externally (strings appear literal here but may be keys to a localization table)?"
+    "Does AccumulateIntelligence actually increase a player stat or merely record a reading event? (inferred from name; not explicit).",
+    "Exactly which quality code maps to each spawned module function (BOOK1::funcXXXX, EARTHMAG::..., STEVBOOK::...)? The fragment indicates many mappings but does not enumerate them all.",
+    "Does the spawn pid/result stored in the temp variable influence subsequent logic elsewhere, or is it only captured for possible debugging/comparison? (spawn result is seen but later U8P_BASEBOOK::use is unclear)."
   ],
   "main_function": {
     "name": "U8P_BASEBOOK::look",
     "execution_form": "process",
-    "purpose": "When an actor inspects a BASEBOOK item, determine the book's subtype from the item's quality field and present an appropriate title/description by invoking the item's bark/display routine directed at the inspecting actor.",
+    "purpose": "Provide the short in-inventory/world label when the player examines the book by mapping the book's quality/ID to a human-readable title and presenting it as a short bark/label, then suspend the process.",
     "entry_conditions": [
-      "Event 0 'U8P_BASEBOOK::look' — invoked when an actor examines or 'looks' at a BASEBOOK item (the inspect/U8P_BASEBOOK::look event)."
+      "Triggered by the game's LOOK/inspect action for this item (examine/U8P_BASEBOOK::look event).",
+      "Branches based on the numeric value returned by Item::getQuality(this)."
     ],
     "confidence": "high"
   },
@@ -31,19 +31,37 @@
     {
       "name": "U8P_BASEBOOK::look",
       "kind": "main",
-      "role": "Handle the 'U8P_BASEBOOK::look' (examine) event for BASEBOOK items: map item quality to a title/description and call Item::bark to display it.",
+      "role": "Examine/description handler that selects and displays a short title based on Item::getQuality(this).",
       "confidence": "high"
+    },
+    {
+      "name": "U8P_BASEBOOK::use",
+      "kind": "helper",
+      "role": "Use/reading handler that prepares context, grants/records intelligence via AccumulateIntelligence, and dispatches to a book-specific reader/effect by spawn.",
+      "confidence": "medium"
     },
     {
       "name": "Item::getQuality",
       "kind": "extern",
-      "role": "Engine/item interface used to read the numeric 'quality' field from the inspected item; used as the selector for the mapping.",
+      "role": "External API used to obtain the book's numeric quality/ID for selecting titles or handlers.",
       "confidence": "high"
     },
     {
-      "name": "Item::bark",
+      "name": "AccumulateIntelligence",
       "kind": "extern",
-      "role": "Engine/item interface to present/display a string message to a target process/actor; used here to show the selected title to pid.",
+      "role": "External routine called when a book is used; inferred to adjust or record intelligence/knowledge gain.",
+      "confidence": "medium"
+    },
+    {
+      "name": "spawn",
+      "kind": "extern",
+      "role": "Engine operation used to start book-specific handler processes (e.g., BOOK1::funcXXXX) based on quality/ID.",
+      "confidence": "high"
+    },
+    {
+      "name": "suspend",
+      "kind": "extern",
+      "role": "Engine operation used to pause the current script/process after displaying text or spawning handlers.",
       "confidence": "high"
     }
   ],
@@ -53,14 +71,44 @@
       {
         "caller": "U8P_BASEBOOK::look",
         "callee": "Item::getQuality",
-        "purpose": "Obtain the inspected item's numeric quality/subtype which selects which title/description to display.",
+        "purpose": "Return the book's numeric quality/ID used to select which short title/label to display.",
         "confidence": "high"
       },
       {
         "caller": "U8P_BASEBOOK::look",
-        "callee": "Item::bark",
-        "purpose": "Display the chosen title/description string to the inspecting actor (pid) by making the item 'speak' the string.",
+        "callee": "suspend",
+        "purpose": "Pause the U8P_BASEBOOK::look process after displaying the label.",
         "confidence": "high"
+      },
+      {
+        "caller": "U8P_BASEBOOK::use",
+        "callee": "AccumulateIntelligence",
+        "purpose": "Register or grant an intelligence/knowledge increment when the book is used (inferred from name and constant argument observed).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BASEBOOK::use",
+        "callee": "Item::getQuality",
+        "purpose": "Select which module/handler to spawn for the book's content/effect.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BASEBOOK::use",
+        "callee": "spawn",
+        "purpose": "Start a book-specific handler process (examples: BOOK1::func0080, EARTHMAG::func0080, STEVBOOK::func0080) based on the quality/ID.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BASEBOOK::use",
+        "callee": "suspend",
+        "purpose": "Pause the U8P_BASEBOOK::use process after dispatching the book-specific handler.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BASEBOOK::use",
+        "callee": "BOOK1::func0080 (and other module handlers)",
+        "purpose": "Provide the actual readable content or apply per-book effects; invoked via spawn determined by quality code.",
+        "confidence": "medium"
       }
     ]
   },
@@ -70,12 +118,14 @@
   },
   "ui_tags": [
     "trigger",
-    "display"
+    "display",
+    "spawn",
+    "suspend"
   ],
   "quick_facts": {
-    "main_function": "BASEBOOK::look",
-    "behavior_summary_one_liner": "BASEBOOK::look is invoked when an actor (player or NPC) examines a book item and presents a human-readable title/description for that book.",
-    "external_call_count": 2,
+    "main_function": "U8P_BASEBOOK::look",
+    "behavior_summary_one_liner": "This script implements the in-game behavior for book items. The primary 'U8P_BASEBOOK::look' process (U8P_BASEBOOK::look) provides a short title/label when a player examines the book; the label is chosen by reading the book's numeric quality/ID and mapping that value to a small set of fixed strings (many values map to explicit titles, some to a generic \"Read me.\").",
+    "external_call_count": 7,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

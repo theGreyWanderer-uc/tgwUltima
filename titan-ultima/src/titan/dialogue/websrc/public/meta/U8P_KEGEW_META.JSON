@@ -3,26 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_KEGEW.json",
   "file": "U8P_KEGEW",
   "behavior_summary": [
-    "KEGEW::look is the 'U8P_KEGEW::look' (examine) handler for a keg item. When the object is examined it marks the object with an info code (0x0208) and excludes it from normal processing, then makes the item 'bark' the short description string \"keg \".",
-    "The handler allocates a temporary string containing \"keg \", converts/passes its pointer together with the item PID to Item::bark, frees the temporary string, consumes the bark return value in an implies/pop sequence that affects immediate control flow, then suspends/returns.",
-    "All observed behavior is local to the item/process; no global flags are read or written by this script."
+    "U8P_KEGEW::look is the object's U8P_KEGEW::look/examine handler. When the player inspects this object/NPC, the script emits a single short bark text: \"keg \".",
+    "Immediately after speaking the bark the process yields/ends (the script issues a suspend/terminate).",
+    "There are no menus, conditionals, flag reads/writes, parameters, or external calls in this excerpt — it is a minimal descriptive handler."
   ],
   "notable_control_flow": [
-    "Set info (0x0208) on the referenced object and apply a process-exclude action before producing the bark.",
-    "Dynamic allocation of the literal string \"keg \", call to Item::bark, then explicit free of that temporary buffer.",
-    "Return value from Item::bark is used in an 'implies' then popped — inferred to influence whether the script suspends/continues, after which the script suspends/returns."
+    "Linear: entry -> Bark(\"keg \") -> suspend/terminate. No branching or loops.",
+    "The presence of two raw/Unknown nodes surrounding the bark suggests minimal wrapper/usecode artifacts, but they do not change observable behavior."
   ],
   "open_questions": [
-    "Exact gameplay/semantic meaning of info code 0x0208 (what state/flag it encodes) is not explicit in the disassembly and is inferred only as an object info mark.",
-    "Precise semantics of the implies/pop sequence using the Item::bark return value (what conditions it gates) are unclear from the snippet.",
-    "Whether the BP+06h parameter is strictly the item instance PID (high confidence) or a viewer/process PID (lower confidence) in every engine context — evidence favors item PID here."
+    "Is the trailing space in the bark text \"keg \" intentional (part of a longer concatenated label) or an artifact of extraction? (confidence: medium)",
+    "Is this object an item, scene prop, or NPC (the script is a U8P_KEGEW::look handler and does not disambiguate type)? (confidence: low)",
+    "Do the Unknown nodes correspond to engine metadata (enter/leave fast-area) or leftover decompiler markers that could alter invocation context? (confidence: low)"
   ],
   "main_function": {
     "name": "U8P_KEGEW::look",
     "execution_form": "process",
-    "purpose": "Respond to the 'U8P_KEGEW::look' (examine) event for the keg item: mark the item with an info code, exclude it from normal processing, and produce a short descriptive bark \"keg \".",
+    "purpose": "Provide the short description/bark when the player examines the object; then end the U8P_KEGEW::look process.",
     "entry_conditions": [
-      "Event 0 / 'U8P_KEGEW::look' — invoked when the Avatar or relevant actor examines (looks at) the keg object"
+      "Triggered by the engine when the player uses the Look/examine action on the object (process type 0x0208).",
+      "No additional runtime conditions or parameters are checked by the script."
     ],
     "confidence": "high"
   },
@@ -30,42 +30,25 @@
     {
       "name": "U8P_KEGEW::look",
       "kind": "main",
-      "role": "Handle the item's 'U8P_KEGEW::look' event; orchestrates info setting, process exclude, and Item::bark call.",
+      "role": "U8P_KEGEW::look/examine handler that emits a short bark and suspends",
       "confidence": "high"
     }
   ],
   "call_analysis": {
-    "internal_calls": [
-      {
-        "caller": "U8P_KEGEW::look",
-        "callee": "U8P_KEGEW::set_info + process_exclude",
-        "purpose": "Apply info id 0x0208 to the referenced object and mark it excluded from further processing (engine ops inferred from opcodes).",
-        "confidence": "medium"
-      }
-    ],
-    "external_calls": [
-      {
-        "caller": "U8P_KEGEW::look",
-        "callee": "Item::bark",
-        "purpose": "Ask the item/process to present/display the short string \"keg \" to the viewer/process. Return value is consumed by the script.",
-        "confidence": "high"
-      }
-    ]
+    "internal_calls": [],
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
     "writes": []
   },
   "ui_tags": [
-    "trigger",
-    "cleanup",
-    "animation",
-    "guard"
+    "trigger"
   ],
   "quick_facts": {
-    "main_function": "KEGEW::look",
-    "behavior_summary_one_liner": "KEGEW::look is the 'U8P_KEGEW::look' (examine) handler for a keg item. When the object is examined it marks the object with an info code (0x0208) and excludes it from normal processing, then makes the item 'bark' the short description string \"keg \".",
-    "external_call_count": 1,
+    "main_function": "U8P_KEGEW::look",
+    "behavior_summary_one_liner": "U8P_KEGEW::look is the object's U8P_KEGEW::look/examine handler. When the player inspects this object/NPC, the script emits a single short bark text: \"keg \".",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

@@ -3,31 +3,31 @@
   "source_of_truth": "dialogue/json/U8P_SFX.json",
   "file": "U8P_SFX",
   "behavior_summary": [
-    "Provides ambient sound behavior for objects/areas when an actor enters or leaves a designated trigger region.",
-    "On enter (U8P_SFX::enterFastArea) the script marks the entity for processing, queries its Item::getQuality(), and spawns one of two helper processes that manage repeated ambient SFX based on that quality.",
-    "Quality==0 launches U8P_SFX::00DD which intermittently plays one of two short SFX (IDs 0x73 / 0x74) when they are not already playing.",
-    "Quality==1 launches U8P_SFX::013F which uses timers/spawned helper processes and probabilistic choices to play one of two different SFX (IDs 0x00A3 / 0x00A5) on a loop.",
-    "On leaving the trigger region (U8P_SFX::leaveFastArea) the script clears the stored reference/state associated with the entity (resetRef slot 0x06) to stop/clean up ambient SFX linkage."
+    "This script provides area-triggered sound/effect behavior for an object when an actor enters or leaves a 'fast-area'.",
+    "U8P_SFX::enterFastArea runs on area entry, queries Item::getQuality(this) and dispatches to one of two utility routines depending on the quality value (quality==0 -> U8P_SFX::func00DD, quality==1 -> U8P_SFX::func013F).",
+    "U8P_SFX::func00DD: small suspend/delay, guards against overlapping playback (checks isSFXPlaying for specific SFX ids), uses short-range urandom tests to probabilistically play one of two short SFX (ids 0x73 or 0x74) on this object.",
+    "U8P_SFX::func013F: spawns helper/free processes (FREE::func1C19) with fixed and randomized delays, suspends/waits, then uses urandom(100) thresholding to choose and play one of two longer SFX variants (ids 0x00A3 or 0x00A5).",
+    "U8P_SFX::leaveFastArea clears object association/state on exit by calling resetRef(0x06, this)."
   ],
   "notable_control_flow": [
-    "Entry handler U8P_SFX::enterFastArea queries Item::getQuality(entity) and branches based on the returned byte: 0 -> spawn U8P_SFX::00DD; 1 -> spawn U8P_SFX::013F.",
-    "Both helper processes use a loop with suspend semantics (they sleep/yield and then re-evaluate) to produce intermittent sounds while alive.",
-    "U8P_SFX::00DD avoids overlapping sounds by calling isSFXPlaying(0x73) and isSFXPlaying(0x74) before deciding via urandom(2) to play one.",
-    "U8P_SFX::013F spawns auxiliary FREE::1C19 helpers (likely timers/delays), uses urandom(100) to pick between two SFX ids, and repeats this timed/randomized behavior."
+    "Entry routing: U8P_SFX::enterFastArea reads Item::getQuality(this) and branches to U8P_SFX::func00DD or U8P_SFX::func013F based on the returned value.",
+    "Probabilistic branches: U8P_SFX::func00DD and U8P_SFX::func013F rely on urandom() results to choose which SFX to play and to stagger/delay spawned helpers.",
+    "Overlap guard: U8P_SFX::func00DD checks isSFXPlaying for specific ids and will avoid playing if those sounds are already active.",
+    "Cleanup on exit: U8P_SFX::leaveFastArea resets reference slot 0x06 for this object to remove stored state."
   ],
   "open_questions": [
-    "Exact semantic meaning(s) of Item::getQuality() values beyond 0 and 1 (are there other qualities and behaviors?), and whether 'quality' corresponds to item type, material, or a mode flag.",
-    "Precise role and implementation of spawned FREE::1C19 processes (inferred as timers/delay helpers but not proven).",
-    "Exact meaning of numeric playSFX third parameter (0x0A) — volume, attenuation radius, channel, or a flag combination.",
-    "Whether spawn return values are later used to explicitly terminate or reference the spawned SFX helper processes elsewhere in game logic."
+    "What concrete gameplay meaning maps to Item::getQuality values beyond the observed 0 and 1 (e.g., additional qualities)?",
+    "What exact sounds / gameplay cues correspond to SFX ids 0x73, 0x74, 0x00A3 and 0x00A5 (audio assets mapping)?",
+    "What does the spawned FREE::func1C19 process do visually or mechanically (particle effect, animation, or auxiliary sound)?",
+    "Is reference slot 0x06 used elsewhere to track the entering actor or to gate repeated triggers?"
   ],
   "main_function": {
     "name": "U8P_SFX::enterFastArea",
     "execution_form": "process",
-    "purpose": "Handle an actor or object entering a fast-trigger area: register/process the target entity, query its quality/type, and spawn an appropriate ambient-SFX manager process for the entity.",
+    "purpose": "Route area-entry behavior by this item's quality and trigger appropriate sound/effect helper routines so the object produces context-appropriate audio/auxiliary effects when an actor enters the fast-area.",
     "entry_conditions": [
-      "Triggered by the engine's U8P_SFX::enterFastArea event when an actor or relevant entity enters the trigger region.",
-      "Uses the pushed parameter at [BP+06h] (inferred 'trigger_entity') as the subject for setup and quality query."
+      "Triggered when an actor (likely the player/avatar or relevant entity) enters the object's fast-area trigger region (engine fires U8P_SFX::enterFastArea).",
+      "Reads local1 = Item::getQuality(this) to decide which helper routine to invoke."
     ],
     "confidence": "high"
   },
@@ -35,40 +35,40 @@
     {
       "name": "U8P_SFX::enterFastArea",
       "kind": "main",
-      "role": "Trigger entry handler that initializes processing for the entity and selects which SFX helper to spawn based on Item::getQuality().",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_SFX::00DD",
-      "kind": "helper",
-      "role": "Looping ambient-SFX manager for quality==0: periodically checks if SFX 0x73/0x74 are playing and randomly plays one when appropriate.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_SFX::013F",
-      "kind": "helper",
-      "role": "Ambient/timed SFX manager for quality==1: spawns auxiliary timer helpers, uses randomness to choose and play between SFX 0x00A3 and 0x00A5 on a loop.",
+      "role": "Entry process that routes behavior by Item::getQuality and invokes helper SFX/effect routines.",
       "confidence": "high"
     },
     {
       "name": "U8P_SFX::leaveFastArea",
       "kind": "helper",
-      "role": "Cleanup handler run on leaveFastArea: clears the stored reference/state for the entity (resetRef slot 0x06) to stop/undo SFX linkage.",
+      "role": "Exit/cleanup process that resets reference slot 0x06 for this object to remove stored association/state when an actor leaves the area.",
       "confidence": "high"
+    },
+    {
+      "name": "U8P_SFX::func00DD",
+      "kind": "helper",
+      "role": "Utility that delays briefly, guards against overlapping SFX, and probabilistically plays one of two short SFX variants (0x73/0x74).",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_SFX::func013F",
+      "kind": "helper",
+      "role": "Utility that spawns helper/free processes with fixed/random delays, waits, then probabilistically plays one of two SFX variants (0x00A3/0x00A5).",
+      "confidence": "medium"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
         "caller": "U8P_SFX::enterFastArea",
-        "callee": "U8P_SFX::00DD",
-        "purpose": "Spawn the quality==0 ambient SFX manager for the trigger entity.",
+        "callee": "U8P_SFX::func00DD",
+        "purpose": "Invoke the short-SFX helper when Item::getQuality(this) == 0 to produce occasional short sound effects.",
         "confidence": "high"
       },
       {
         "caller": "U8P_SFX::enterFastArea",
-        "callee": "U8P_SFX::013F",
-        "purpose": "Spawn the quality==1 ambient SFX manager for the trigger entity.",
+        "callee": "U8P_SFX::func013F",
+        "purpose": "Invoke the spawn/delayed-SFX helper when Item::getQuality(this) == 1 to produce delayed/variant sound effects and spawn auxiliary processes.",
         "confidence": "high"
       }
     ],
@@ -76,50 +76,50 @@
       {
         "caller": "U8P_SFX::enterFastArea",
         "callee": "Item::getQuality",
-        "purpose": "Query the entity's 'quality' or type to decide which SFX helper to spawn.",
+        "purpose": "Query this object's quality/type to select which helper routine to run.",
         "confidence": "high"
       },
       {
         "caller": "U8P_SFX::leaveFastArea",
-        "callee": "U8P_SFX::resetRef",
-        "purpose": "Clear/reset the stored reference/state slot (0x06) for the entity when leaving the trigger to stop SFX linkage.",
+        "callee": "resetRef",
+        "purpose": "Clear reference slot 0x06 for this object on area exit (cleanup of stored association/state).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SFX::00DD",
-        "callee": "U8P_SFX::isSFXPlaying",
-        "purpose": "Check whether a candidate SFX (0x73 or 0x74) is already playing to avoid overlap before issuing playSFX.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SFX::00DD",
-        "callee": "urandom",
-        "purpose": "Make a binary/random choice (urandom(2)) to decide which of the two SFX ids to play when allowed.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SFX::00DD",
-        "callee": "U8P_SFX::playSFX",
-        "purpose": "Play the chosen SFX id (0x73 or 0x74) for the entity with parameter 0x0A.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SFX::013F",
-        "callee": "spawn",
-        "purpose": "Spawn FREE::1C19 auxiliary helper processes (likely timers/delays) to schedule or manage timed behavior.",
+        "caller": "U8P_SFX::func00DD",
+        "callee": "isSFXPlaying",
+        "purpose": "Check whether particular SFX ids (0x73/0x74) are already playing to avoid overlapping playback.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_SFX::013F",
+        "caller": "U8P_SFX::func00DD",
         "callee": "urandom",
-        "purpose": "Use random numbers (e.g., urandom(100)) to probabilistically choose between SFX ids (compare to 32).",
+        "purpose": "Provide small-range random values to probabilistically select which short SFX to play and to reduce frequency.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_SFX::func00DD",
+        "callee": "playSFX",
+        "purpose": "Play the chosen short SFX (examples observed: playSFX(this, 0x0A, 0x73) or playSFX(this, 0x0A, 0x74)).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_SFX::013F",
-        "callee": "U8P_SFX::playSFX",
-        "purpose": "Play one of the two SFX ids (0x00A3 or 0x00A5) for the entity, with parameter 0x0A.",
-        "confidence": "high"
+        "caller": "U8P_SFX::func013F",
+        "callee": "spawn -> FREE::func1C19",
+        "purpose": "Spawn reusable helper processes (likely visual/auxiliary effects) with fixed or randomized delays; capture pid for bookkeeping.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_SFX::func013F",
+        "callee": "urandom",
+        "purpose": "Compute randomized spawn delay and to run a threshold test (urandom(100) > 50) that chooses between two SFX variants.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_SFX::func013F",
+        "callee": "playSFX",
+        "purpose": "Play the chosen SFX variant (examples observed: playSFX(this, 0x0A, 0x00A3) or playSFX(this, 0x0A, 0x00A5)).",
+        "confidence": "medium"
       }
     ]
   },
@@ -135,7 +135,7 @@
   ],
   "quick_facts": {
     "main_function": "U8P_SFX::enterFastArea",
-    "behavior_summary_one_liner": "Provides ambient sound behavior for objects/areas when an actor enters or leaves a designated trigger region.",
+    "behavior_summary_one_liner": "This script provides area-triggered sound/effect behavior for an object when an actor enters or leaves a 'fast-area'.",
     "external_call_count": 8,
     "flag_read_count": 0,
     "flag_write_count": 0

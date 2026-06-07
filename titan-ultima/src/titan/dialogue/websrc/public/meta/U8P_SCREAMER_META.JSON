@@ -3,30 +3,28 @@
   "source_of_truth": "dialogue/json/U8P_SCREAMER.json",
   "file": "U8P_SCREAMER",
   "behavior_summary": [
-    "This script implements the behaviour for a 'screamer' game object with two visible behaviors: a short audible/text response when looked at, and multi-path hit handling when damaged.",
-    "U8P_SCREAMER::SCREAMER::look: when the object is inspected/entered by an actor (inferred Event 0 / enterFastArea), it emits a bark/voice string \"screamer\" directed at the triggering process/player and then suspends — a simple attention/description reaction.",
-    "U8P_SCREAMER::SCREAMER::gotHit: on hit events the handler branches: if the incoming control flag indicates an early/ignored hit it returns; otherwise it tests whether the target reference is an NPC. If not an NPC it destroys the item. If it is an NPC it has two main paths: for a specific hit-type (inferred == 1) it plays a scream SFX and applies damage equal to the NPC's current HP (via Npc::getHp -> Item::receiveHit) and then resets a kernel reference; for other hit-types it teleports the NPC to random coordinates, marks it dead (Npc::setDead), and invokes cleanup/free routines (FREE::2A56) multiple times."
+    "U8P_SCREAMER::look: When the engine runs the object's U8P_SCREAMER::look/process handler (examine or related fast-area trigger), the object emits a single short bark 'screamer' and then suspends/ends the U8P_SCREAMER::look process.",
+    "U8P_SCREAMER::gotHit: Handles an incoming hit/target reference (param1). It treats the parameter as an item reference and branches based on whether the target is an NPC. If Item::isNpc(local1) is true then local2 is used as an NPC index/reference: when local2 == 0x01 a special-hit flow runs (play sound, apply Item::receiveHit using the NPC's HP, reset a kernel ref); otherwise the NPC is teleported to a random offset, marked dead, and several FREE/Kernel reference slots are cleared. If the target is not an NPC the code destroys the item."
   ],
   "notable_control_flow": [
-    "U8P_SCREAMER::SCREAMER::look: linear flow — set object info/exclusion, call Item::bark(targetProcess, \"screamer\"), free string, capture return value and suspend.",
-    "U8P_SCREAMER::SCREAMER::gotHit: early-return behavior if the incoming hit flag/word is non-zero (interpreted as 'ignore' or a different hit class).",
-    "U8P_SCREAMER::SCREAMER::gotHit: branch on Item::isNpc(target) — non-NPC -> Item::destroy(target); NPC -> further branching by hit-type value.",
-    "U8P_SCREAMER::SCREAMER::gotHit: hit-type==1 path applies a scream SFX, reads NPC HP (Npc::getHp) and calls Item::receiveHit with that HP (effectively killing/consuming the NPC), then calls Kernel::resetRef.",
-    "U8P_SCREAMER::SCREAMER::gotHit: other-NPC-hit path generates random coordinates (urandom), teleports the NPC (Npc::teleport), marks it dead (Npc::setDead), and runs FREE::2A56 with several codes for cleanup/freeing."
+    "U8P_SCREAMER::look: Straight-line behavior — single Bark node then suspend/return.",
+    "U8P_SCREAMER::gotHit: Primary branching on Item::isNpc(local1) (NPC vs non-NPC).",
+    "U8P_SCREAMER::gotHit: Secondary branch when NPC: compare local2 == 0x01 to choose between (a) special-hit handling (playSFX + Item::receiveHit + Kernel::resetRef) or (b) teleport + Npc::setDead + FREE::resetRef cleanup.",
+    "U8P_SCREAMER::gotHit: Non-NPC path -> Item::destroy(local1)."
   ],
   "open_questions": [
-    "Whether Event 0 is strictly the 'U8P_SCREAMER::look' opcode or also fired via enterFastArea triggers in all engine contexts (inferred from project fast-area semantics).",
-    "Exact meanings of the numeric parameters passed into SCREAMER::gotHit (the uword and word): inferred roles are attacker/source id and hit-type/flags/damage, but not certain.",
-    "Precise semantics and meanings of the numeric codes passed to FREE::2A56 in the teleport/death path (inferred as cleanup/free codes).",
-    "Whether the hit-type test uses value==1 to represent a particular weapon/type/effect or a script-specific 'instant kill' flag (inferred but not confirmed).",
-    "Whether Kernel::resetRef targets a particular engine timer or process reference associated with the NPC, and what side-effects that has on subsequent AI/processing."
+    "Who/what invokes U8P_SCREAMER::gotHit and under which in-game events is it called (projectile hit, scripted effect, trap)? (confidence: medium)",
+    "What is the semantic meaning of the numeric literal 0x01 compared against local2 (e.g., a specific NPC index, a flagged state, or a particular handler id)? (confidence: low)",
+    "What exactly do the numeric flags passed to Item::receiveHit (0x0080) and the various ref-slot ids (0x00F0, 0x0200, 0x0205) denote in runtime bookkeeping? (confidence: low)",
+    "Is U8P_SCREAMER::look also invoked by entering a fast-area trigger in addition to explicit player 'U8P_SCREAMER::look' actions, or is it strictly the player's examine action? (confidence: medium)"
   ],
   "main_function": {
     "name": "U8P_SCREAMER::look",
     "execution_form": "process",
-    "purpose": "Produce a short audible/text response ('screamer') directed at the triggering process/player when the object is examined or its trigger area is entered, then suspend processing for the object.",
+    "purpose": "Provide the player-facing short description when the object/NPC is examined (emit a single bark 'screamer').",
     "entry_conditions": [
-      "Event 0 (U8P_SCREAMER::look/examine) or equivalent area-enter trigger (enterFastArea) from the engine that passes the calling process/player pointer."
+      "Engine 'U8P_SCREAMER::look' / inspect action targeting this object (process type 0x0208).",
+      "Inferred: possibly also triggered by entering the object's fast-area (common engine behavior for U8P_SCREAMER::look-type processes)."
     ],
     "confidence": "high"
   },
@@ -34,150 +32,78 @@
     {
       "name": "U8P_SCREAMER::look",
       "kind": "main",
-      "role": "Look/examine handler that barks the literal string \"screamer\" to the caller and suspends.",
+      "role": "examine/U8P_SCREAMER::look handler that emits a single bark",
       "confidence": "high"
     },
     {
       "name": "U8P_SCREAMER::gotHit",
       "kind": "helper",
-      "role": "Hit/damage event handler: distinguishes non-NPC vs NPC, provides a scream-and-receiveHit path and a teleport/death cleanup path; destroys non-NPC items.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine routine used to display/emit a short text/voice string from an item/process to a target process/player.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::isNpc",
-      "kind": "extern",
-      "role": "Engine query to determine whether a referenced item is an NPC instance (used to branch hit behavior).",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_SCREAMER::playSFX",
-      "kind": "extern",
-      "role": "Play a sound effect (used here for a scream/impact sound in the hit-type==1 path).",
-      "confidence": "high"
-    },
-    {
-      "name": "Npc::getHp",
-      "kind": "extern",
-      "role": "Return NPC current HP (used to compute damage applied via Item::receiveHit).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::receiveHit",
-      "kind": "extern",
-      "role": "Apply damage/effects to an item/NPC (called with attacker/source, flags, damage word, context).",
-      "confidence": "high"
-    },
-    {
-      "name": "Kernel::resetRef",
-      "kind": "extern",
-      "role": "Reset or refresh a kernel/process reference or timer related to the NPC after receiveHit.",
+      "role": "utility process to handle incoming hit/target references and apply NPC vs non-NPC effects (damage, teleport, death, or destruction)",
       "confidence": "medium"
-    },
-    {
-      "name": "urandom",
-      "kind": "extern",
-      "role": "Generate uniform random values (used to compute random teleport coordinates).",
-      "confidence": "high"
-    },
-    {
-      "name": "Npc::teleport",
-      "kind": "extern",
-      "role": "Teleport/move the NPC to given coordinates (used in teleport/death path).",
-      "confidence": "high"
-    },
-    {
-      "name": "Npc::setDead",
-      "kind": "extern",
-      "role": "Mark the NPC as dead (used after teleport in the non-hit-type-1 death path).",
-      "confidence": "high"
-    },
-    {
-      "name": "FREE::2A56",
-      "kind": "extern",
-      "role": "Cleanup/free routine invoked multiple times with codes and the NPC reference (likely removes effects, spawn debris, or free resources).",
-      "confidence": "medium"
-    },
-    {
-      "name": "Item::destroy",
-      "kind": "extern",
-      "role": "Destroy non-NPC items (used when Item::isNpc returns false in gotHit).",
-      "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_SCREAMER::look",
-        "callee": "Item::bark",
-        "purpose": "Emit the label/voice string \"screamer\" to the calling process/player.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_SCREAMER::gotHit",
         "callee": "Item::isNpc",
-        "purpose": "Test whether the hit target is an NPC to decide destroy vs NPC-specific logic.",
+        "purpose": "Determine whether the passed reference param1/local1 is an NPC to select NPC-specific handling.",
         "confidence": "high"
       },
       {
         "caller": "U8P_SCREAMER::gotHit",
-        "callee": "Item::destroy",
-        "purpose": "Destroy the item when it is not an NPC.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SCREAMER::gotHit",
-        "callee": "U8P_SCREAMER::playSFX",
-        "purpose": "Play scream/impact sound in the hit-type==1 path.",
+        "callee": "playSFX",
+        "purpose": "Play a specific sound effect in the special-hit branch (called with 0x00C8, 0x5C).",
         "confidence": "high"
       },
       {
         "caller": "U8P_SCREAMER::gotHit",
         "callee": "Npc::getHp",
-        "purpose": "Obtain the NPC's current HP to use as the damage amount passed to Item::receiveHit (to finish/kill it).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SCREAMER::gotHit",
-        "callee": "Item::receiveHit",
-        "purpose": "Apply damage/effect to the NPC (called with attacker/source, flags, and damage equal to current HP for the instant-death path).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_SCREAMER::gotHit",
-        "callee": "Kernel::resetRef",
-        "purpose": "Reset/refresh a kernel/process reference or timer after applying the receiveHit effect.",
+        "purpose": "Obtain the NPC's current HP to pass as the damage/HP argument into Item::receiveHit in the special-hit flow.",
         "confidence": "medium"
       },
       {
         "caller": "U8P_SCREAMER::gotHit",
-        "callee": "urandom",
-        "purpose": "Generate random coordinates (range 0x2710 inferred) for the teleport destination in the non-hit-type-1 death path.",
-        "confidence": "high"
+        "callee": "Item::receiveHit",
+        "purpose": "Apply a hit/damage to the NPC/item (special-hit path uses flags 0x0080 and the NPC's HP).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_SCREAMER::gotHit",
+        "callee": "Kernel::resetRef",
+        "purpose": "Reset/clear a kernel-level reference slot after special-hit handling (slot 0x00F0, using local2).",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_SCREAMER::gotHit",
         "callee": "Npc::teleport",
-        "purpose": "Teleport the NPC to generated random coordinates as part of the death/escape/debris path.",
+        "purpose": "Teleport the NPC to a new location using random offsets (non-special NPC branch).",
         "confidence": "high"
       },
       {
         "caller": "U8P_SCREAMER::gotHit",
         "callee": "Npc::setDead",
-        "purpose": "Mark the NPC dead after teleporting in the non-hit-type-1 path.",
+        "purpose": "Mark the teleported/handled NPC as dead in the non-special branch.",
         "confidence": "high"
       },
       {
         "caller": "U8P_SCREAMER::gotHit",
-        "callee": "FREE::2A56",
-        "purpose": "Invoke cleanup/free routines with several codes and the NPC reference after the teleport/death path.",
+        "callee": "FREE::resetRef",
+        "purpose": "Clear/free bookkeeping references for the NPC (observed slot ids: 0x0200, 0x00F0, 0x0205) during cleanup.",
         "confidence": "medium"
+      },
+      {
+        "caller": "U8P_SCREAMER::gotHit",
+        "callee": "Item::destroy",
+        "purpose": "Destroy or remove the target when the passed parameter does not refer to an NPC.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_SCREAMER::gotHit",
+        "callee": "urandom",
+        "purpose": "Generate random offsets (max 0x2710) used for NPC teleport coordinates.",
+        "confidence": "high"
       }
     ]
   },
@@ -192,9 +118,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_SCREAMER::SCREAMER::look",
-    "behavior_summary_one_liner": "This script implements the behaviour for a 'screamer' game object with two visible behaviors: a short audible/text response when looked at, and multi-path hit handling when damaged.",
-    "external_call_count": 11,
+    "main_function": "U8P_SCREAMER::look",
+    "behavior_summary_one_liner": "U8P_SCREAMER::look: When the engine runs the object's U8P_SCREAMER::look/process handler (examine or related fast-area trigger), the object emits a single short bark 'screamer' and then suspends/ends the U8P_SCREAMER::look process.",
+    "external_call_count": 10,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

@@ -3,180 +3,165 @@
   "source_of_truth": "dialogue/json/U8P_LOGBOOK4.json",
   "file": "U8P_LOGBOOK4",
   "behavior_summary": [
-    "Orchestrates a multi-stage scripted scene/cutscene: it changes/starts music, sequences dialog 'barks' from NPCs/items, triggers LightningBolt effects, spawns temporary visual/attack items at positions computed relative to existing objects, animates those temporary items, and then destroys them when finished.",
-    "Uses many short-lived spawned helper processes and suspend/wait points to space actions in time, producing a timed cinematic rather than an instantaneous effect.",
-    "Creates temporary Item instances (via Item::create / Item::pop), queries their X/Y/Z to compute placement offsets, modifies their visual state (setFrame / spawn METHOD::15E7) for animation, and later cleans them up with Item::destroy.",
-    "Coordination and sequencing are driven by repeated spawn calls to small utility processes (FREE::1C19, FREE::29D8) and a blocking helper (FREE::2A56) used as timing primitives."
+    "Orchestrates a scripted multi-stage sequence (cutscene/encounter) that plays music and SFX, spawns timed effects/processes (including repeated LightningBolt processes), creates temporary item objects as visual effects, animates them by changing frames over short timed waits, and cleans up those objects.",
+    "Uses spawn + suspend patterns extensively to sequence asynchronous helpers and timers (FREE::func1C19, FREE::func29D8, spawned METHOD::func15E7) so visual/sound events are staggered over time rather than instant.",
+    "Delegates repeated item/effect placement and small animations to helper functions U8P_LOGBOOK4::func126A, U8P_LOGBOOK4::func1360 and U8P_LOGBOOK4::func11F2; these compute offsets from a param (param3) and call Item::create / Item::pop / Item::setFrame / Item::destroy around short waits.",
+    "A small integer local counter (local5 / local1 in helpers) controls iteration counts and selects variant behaviors/SFX on particular iterations (e.g., local5 == 0x04 branch).",
+    "A helper U8P_LOGBOOK4::func10DD appears to put the Avatar into stasis briefly (setAvatarInStasis) and spawn timer/process helpers to hold player control during parts of the sequence."
   ],
   "notable_control_flow": [
-    "Heavily uses spawn + suspend semantics to schedule helpers and create timed delays between scene phases (spawned helpers act as timers or per-entity animators).",
-    "Loops iterate over small sets of created temporary items: set frames, play SFX, possibly call per-item animator METHOD::15E7, and conditionally destroy entries as the scene progresses.",
-    "Many operations are side-effect oriented (spawn, playMusic, playSFX, Item::bark, LightningBolt, Item::pop/create/destroy) with minimal branching — primarily linear sequencing with scheduled waits."
+    "Main sequencing driven by spawn (async) + suspend (yield) pairs: spawn creates helper/timer processes and suspend waits for the timing window before continuing.",
+    "Repeated loops animate temporary items by incrementing a small frame counter (local4) while spawning FREE::func1C19 between iterations to create visible frame-by-frame timing.",
+    "Branching based on a short counter (local5/local1) changes audio/visual calls on particular iterations (bounds checks like <= 0x0E and equality local5 == 0x04 are present).",
+    "Main function U8P_LOGBOOK4::func0080 calls helper spawners (U8P_LOGBOOK4::func126A, U8P_LOGBOOK4::func1360) multiple times to place effects at computed offsets."
   ],
   "open_questions": [
-    "Exact semantic meaning of the dword parameter passed at BP+06h (referred to here as 'context'): likely an area/container/owner reference but not explicitly named in the disassembly.",
-    "Precise meanings of numeric constants (type ids, frame ids, and byte flags) passed to helpers, Item::create/pop, and FREE::* spawns — their gameplay-role (what visual/attack they correspond to) is inferred from usage patterns.",
-    "Targeting semantics of process LightningBolt(): whether it uses global state, the last spawned helper, or an explicit target passed elsewhere is not explicit in the excerpt.",
-    "Whether METHOD::15E7 is a generic per-entity animator shared across many scripts or a file-local method specialized to this scene."
+    "Exact mapping of numeric ids to audio/music assets and item templates (e.g., what musicId 0x36 or item templates 0x01FF/0x01E0/0x00A6 visually represent) — inferred only from call patterns.",
+    "Precise gameplay effect of the repeated 'LightningBolt' process spawns (visual only vs. damage application) and their target selection — presence is clear but effect is inferred.",
+    "Exact semantics and timing details of FREE::func1C19 and FREE::func29D8 (they act as timers or camera/FX drivers but their full behavior is unknown).",
+    "Whether U8P_LOGBOOK4::func0080 is triggered by a map fast-area, an item present event, or a scripted actor presentation in all usages — metadata shows called_from_present = true but not the in-game trigger condition."
   ],
   "main_function": {
-    "name": "U8P_LOGBOOK4::0080",
+    "name": "U8P_LOGBOOK4::func0080",
     "execution_form": "process",
-    "purpose": "Run a scripted multi-stage encounter/cutscene: change music, emit dialog lines, spawn visual/attack effects (lightning bolts and temporary items), animate/move temporary entities, and then destroy those temporary entities — all paced with timed helper spawns and suspends.",
+    "purpose": "Coordinate a multi-stage audiovisual scripted sequence: change music, play SFX and spoken barks, spawn timed visual/damage effects (LightningBolt and other spawned helpers), create/pop short-lived item objects as visual debris/effects, animate those items via frame changes and timed waits, and perform cleanup.",
     "entry_conditions": [
-      "Appears to be invoked as a scene/logbook activation (e.g., player interaction or area trigger); inferred from sequencing and absence of explicit enterFastArea opcode in the excerpt."
+      "Invoked by other game code or presentation logic (metadata: called_from_present = true).",
+      "No explicit fast-area enter/leave triggers found in the extract; sequencing is driven by spawned helpers and suspend timing."
     ],
     "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_LOGBOOK4::0080",
+      "name": "U8P_LOGBOOK4::func0080",
       "kind": "main",
-      "role": "Primary scripted scene process coordinating music, dialog, effects, temporary item creation/animation, and cleanup.",
+      "role": "Scripted sequence coordinator / cutscene orchestrator (music, SFX, spawn effects, item/effect placement, barks)",
       "confidence": "high"
     },
     {
-      "name": "U8P_LOGBOOK4::126A",
+      "name": "U8P_LOGBOOK4::func10DD",
       "kind": "helper",
-      "role": "Spawned helper used repeatedly to place or animate specific scene elements/decorations; receives small numeric ids and the main context.",
+      "role": "Put Avatar in stasis briefly and spawn short-lived timer/helper processes; used to freeze player during parts of the sequence",
       "confidence": "medium"
     },
     {
-      "name": "U8P_LOGBOOK4::1360",
+      "name": "U8P_LOGBOOK4::func1196",
       "kind": "helper",
-      "role": "Spawned helper that is given computed x,y,z coordinates and the context; likely creates or places items/effects at positions relative to existing items.",
+      "role": "Periodically spawn METHOD::func15E7 on a provided target to change its state/animation over repeated activations (changes args after a threshold)",
       "confidence": "medium"
     },
     {
-      "name": "METHOD::15E7",
+      "name": "U8P_LOGBOOK4::func11F2",
       "kind": "helper",
-      "role": "Per-entity animator/movement helper spawned for temporary items to drive timed animation or behavior.",
-      "confidence": "medium"
-    },
-    {
-      "name": "FREE::1C19",
-      "kind": "helper",
-      "role": "Lightweight spawn target used as a short-timer/delay placeholder.",
+      "role": "Create an item (template 0x01FF), pop it at (param1,param2,param3 ordering in calls), animate its frames via looped setFrame + spawn/timers, play SFX, then destroy the item",
       "confidence": "high"
     },
     {
-      "name": "FREE::29D8",
+      "name": "U8P_LOGBOOK4::func126A",
       "kind": "helper",
-      "role": "Utility helper/process spawned for effects or longer-lived temporary helpers during the scene.",
-      "confidence": "medium"
+      "role": "Create/pop two temporary items (templates 0x01FF and 0x01E0) at coordinates offset by param3, animate them with frame loops and spawn/timers, play SFX, then destroy — specialized effect spawner",
+      "confidence": "high"
     },
     {
-      "name": "FREE::2A56",
+      "name": "U8P_LOGBOOK4::func1360",
       "kind": "helper",
-      "role": "Blocking helper called (not spawned) with small numeric args; used repeatedly to prepare/register state before waits.",
-      "confidence": "medium"
+      "role": "Variant of U8P_LOGBOOK4::func126A: compute offset from param3, spawn/pop temporary item(s), animate via frame changes with spawn/timers, play SFX, and cleanup",
+      "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
-        "caller": "U8P_LOGBOOK4::0080",
-        "callee": "U8P_LOGBOOK4::126A",
-        "purpose": "Place/animate small scene elements or register decoration/state using numeric ids and the context; used repeatedly to build the scene.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_LOGBOOK4::0080",
-        "callee": "U8P_LOGBOOK4::1360",
-        "purpose": "Spawn/place an object/effect at computed x,y,z coordinates relative to an existing item plus the context parameter.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_LOGBOOK4::0080",
-        "callee": "METHOD::15E7",
-        "purpose": "Animate or advance state for individual temporary items (per-entity timing/behavior).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_LOGBOOK4::0080",
-        "callee": "FREE::1C19",
-        "purpose": "Spawn short-timer helpers as delays between actions.",
+        "caller": "U8P_LOGBOOK4::func0080",
+        "callee": "U8P_LOGBOOK4::func126A",
+        "purpose": "Place/animate a temporary visual item effect at a computed offset as part of the main sequence",
         "confidence": "high"
       },
       {
-        "caller": "U8P_LOGBOOK4::0080",
-        "callee": "FREE::29D8",
-        "purpose": "Spawn utility/process helpers for composite effects or timing.",
-        "confidence": "medium"
+        "caller": "U8P_LOGBOOK4::func0080",
+        "callee": "U8P_LOGBOOK4::func1360",
+        "purpose": "Place/animate another variant of a temporary effect/debris at an offset; used repeatedly by the main sequencer",
+        "confidence": "high"
       },
       {
-        "caller": "U8P_LOGBOOK4::0080",
-        "callee": "FREE::2A56",
-        "purpose": "Call a blocking helper to prepare or register state before waits or sequencing steps.",
+        "caller": "U8P_LOGBOOK4::func11F2",
+        "callee": "U8P_LOGBOOK4::func10DD",
+        "purpose": "Auxiliary freeze/timer usage (inferred reuse pattern) — helper coordination for timing/Avatar stasis in sequences",
+        "confidence": "low"
+      },
+      {
+        "caller": "U8P_LOGBOOK4::func1196",
+        "callee": "METHOD::func15E7 (via spawn on a target)",
+        "purpose": "Indirect internal-method invocation to change a target object's state/animation; invoked repeatedly with differing args based on a local counter",
         "confidence": "medium"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_LOGBOOK4::0080",
+        "caller": "U8P_LOGBOOK4::func0080",
         "callee": "playMusic",
-        "purpose": "Start or change background music to set mood for scene phases.",
+        "purpose": "Start or transition background music for the scripted sequence",
         "confidence": "high"
       },
       {
-        "caller": "U8P_LOGBOOK4::0080",
-        "callee": "U8P_LOGBOOK4::playSFX",
-        "purpose": "Play short sound effects to emphasize actions or hits during the scene.",
+        "caller": "U8P_LOGBOOK4::func0080",
+        "callee": "playSFX",
+        "purpose": "Play short sound cues tied to item spawns and sequence beats",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK4::func0080",
+        "callee": "spawn -> process LightningBolt",
+        "purpose": "Trigger repeated LightningBolt processes (timed visual/damage strikes) during the sequence",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK4::func0080",
+        "callee": "FREE::func1C19 (spawned)",
+        "purpose": "Spawned helper used as a short timer/delay between animation frames and sequence beats",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK4::func0080",
+        "callee": "FREE::func29D8 (spawned)",
+        "purpose": "Spawned helper likely used for camera or additional FX timing around SFX/music/barks",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_LOGBOOK4::0080",
-        "callee": "Item::bark",
-        "purpose": "Have NPCs/items speak dialog lines (display text or vocalization) as part of the scene.",
+        "caller": "U8P_LOGBOOK4::func10DD",
+        "callee": "setAvatarInStasis",
+        "purpose": "Freeze or unfreeze the Avatar (prevent player input) during parts of the sequence",
         "confidence": "high"
       },
       {
-        "caller": "U8P_LOGBOOK4::0080",
-        "callee": "U8P_LOGBOOK4::process LightningBolt",
-        "purpose": "Trigger a LightningBolt effect/attack at specific points in the scene.",
+        "caller": "U8P_LOGBOOK4::func11F2",
+        "callee": "Item::create / Item::pop / Item::setFrame / Item::destroy",
+        "purpose": "Allocate a temporary item instance, place it in the world, animate via frames, then destroy it to produce visible/debris effects",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK4::func126A",
+        "callee": "Item::create / Item::pop / Item::setFrame / Item::destroy",
+        "purpose": "Two-stage spawn/pop/animate/destroy sequence to produce layered visual effects at computed offsets",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK4::func1360",
+        "callee": "Item::create / Item::pop / Item::setFrame / Item::destroy",
+        "purpose": "Variant effect spawner: create/pop/animate/destroy temporary items with SFX and timed waits",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGBOOK4::func1196",
+        "callee": "spawn -> addressof(param1)->METHOD::func15E7",
+        "purpose": "Invoke a target object's METHOD::func15E7 in a spawned process to change its state/animation; arguments change after a counter threshold",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_LOGBOOK4::0080",
-        "callee": "Item::create",
-        "purpose": "Create temporary item entities used for visual/attack effects during the scene.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LOGBOOK4::0080",
-        "callee": "Item::pop",
-        "purpose": "Spawn/pop created items into the world at computed coordinates or in containers with flags.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LOGBOOK4::0080",
-        "callee": "Item::getX",
-        "purpose": "Query existing item X coordinate to compute relative spawn positions.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LOGBOOK4::0080",
-        "callee": "Item::getY",
-        "purpose": "Query existing item Y coordinate to compute relative spawn positions.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LOGBOOK4::0080",
-        "callee": "Item::getZ",
-        "purpose": "Query existing item Z coordinate (height) to compute spawn elevation offsets.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LOGBOOK4::0080",
-        "callee": "Item::setFrame",
-        "purpose": "Change visual frame/animation state of temporary items during the scene.",
+        "caller": "U8P_LOGBOOK4::func0080",
+        "callee": "FREE::resetRef",
+        "purpose": "Reset or clear scripted references/slots used by FREE system during sequence cleanup",
         "confidence": "medium"
-      },
-      {
-        "caller": "U8P_LOGBOOK4::0080",
-        "callee": "Item::destroy",
-        "purpose": "Remove temporary items from the world when their role in the scene is complete.",
-        "confidence": "high"
       }
     ]
   },
@@ -191,8 +176,8 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_LOGBOOK4::0080",
-    "behavior_summary_one_liner": "Orchestrates a multi-stage scripted scene/cutscene: it changes/starts music, sequences dialog 'barks' from NPCs/items, triggers LightningBolt effects, spawns temporary visual/attack items at positions computed relative to existing objects, animates those temporary items, and then destroys them when finished.",
+    "main_function": "U8P_LOGBOOK4::func0080",
+    "behavior_summary_one_liner": "Orchestrates a scripted multi-stage sequence (cutscene/encounter) that plays music and SFX, spawns timed effects/processes (including repeated LightningBolt processes), creates temporary item objects as visual effects, animates them by changing frames over short timed waits, and cleans up those objects.",
     "external_call_count": 11,
     "flag_read_count": 0,
     "flag_write_count": 0

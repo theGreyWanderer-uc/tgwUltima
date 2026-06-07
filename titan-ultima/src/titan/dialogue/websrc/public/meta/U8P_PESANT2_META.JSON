@@ -3,33 +3,31 @@
   "source_of_truth": "dialogue/json/U8P_PESANT2.json",
   "file": "U8P_PESANT2",
   "behavior_summary": [
-    "Provides AI/interaction logic for a peasant NPC: handles being looked at, used (player interaction), area enter/exit triggers, being targeted/cast upon, and runs two spawnable dialog/behavior routines.",
-    "U8P_PESANT2::leaveFastArea (Event 10) performs cleanup when the actor/Avatar leaves the NPC's fast-area trigger by clearing several stored reference slots via repeated resetRef calls.",
-    "enterFastArea (Event F) starts an ambient interaction routine when an actor enters the NPC's fast-area: selects a short routine (U8P_PESANT2::0468) or a longer routine (U8P_PESANT2::06CD) depending on map and NPC state.",
-    "use (Event 1) handles direct player interaction: sets info/exclude flags, clears some stored refs, issues a randomized greeting, spawns animation/method calls based on map and facing, and then launches finishing methods.",
-    "cast (Event 11) handles being targeted/attacked: loops waiting for a valid target, can spawn guard-related behavior (CALGUARD::0080) and produce randomized combat barks, and may clear the NPC's in-combat flag.",
-    "Spawned routines U8P_PESANT2::0468 and U8P_PESANT2::06CD implement randomized, stateful dialog loops with timing, selection of canned lines, checks against a global somebodyTalking flag, and spawn animation/facing updates."
+    "This script implements an NPC ambient/interaction/alert behavior set for a peasant-like actor. It manages: cleanup when the player leaves the NPC's fast-area trigger; a short 'U8P_PESANT2::look' description; player-initiated interaction ('U8P_PESANT2::use') that begins a conversation and plays short greeting barks; ambient, map-dependent periodic barks scheduled by timers; and a reaction to being targeted/attacked that can notify guards and schedule followups.",
+    "Timers/delays are implemented by spawning a shared helper (FREE::func1C19) and references/ timers are tracked via FREE::resetRef so they can be cancelled on leave or before new interactions.",
+    "Ambient speech is gated by player distance and an engine-level 'somebodyTalking' state to avoid overlapping lines. Map 0x29 triggers a separate ambient bark set (U8P_PESANT2::func0468) while other maps U8P_PESANT2::use U8P_PESANT2::func06CD.",
+    "The U8P_PESANT2::cast(uword) process reacts to targeting: if the player is the attacker it calls the guard system (CALGUARD::guardRespondToCrime), clears combat state, and emits panic barks; otherwise it retries with a short countdown using spawn delays."
   ],
   "notable_control_flow": [
-    "Event-driven: distinct handlers for look, use, enterFastArea, U8P_PESANT2::leaveFastArea, cast and two spawnable dialog loops — script primarily reacts to engine events.",
-    "enterFastArea makes a mapping decision (Npc::getMap() == 0x29) to choose between two distinct spawnable behaviors (0468 vs 06CD).",
-    "U8P_PESANT2::leaveFastArea performs linear cleanup: multiple resetRef(referenceId, pid) calls to clear stored references — deterministic cleanup path on area exit.",
-    "cast contains a short retry/wait loop using a local byte ([BP-02h]) and timed waits (FREE::1C19) to poll Npc::getTarget(); specific target values (e.g., 0 or 1) drive branching to guard/spawn behavior.",
-    "Spawned dialog routines loop with randomized delays (urandom / FREE::1C19), maintain a small local index/state ([BP-02h]) to choose lines, and gate speaking on a global somebodyTalking flag to avoid overlapping speech."
+    "U8P_PESANT2::leaveFastArea — unconditional cleanup: calls FREE::resetRef on several reference ids to cancel conversation/timer state whenever an actor leaves the fast-area.",
+    "U8P_PESANT2::enterFastArea — early checks (an ID/threshold test, then Npc::isDead) and a map dispatch: if Npc::getMap(this) == 0x29 then call U8P_PESANT2::func0468 else call U8P_PESANT2::func06CD.",
+    "U8P_PESANT2::func0468 and U8P_PESANT2::func06CD — schedule respawned timers (spawn -> FREE::func1C19), choose a random bark index, check FREE::getDistanceBetween(0x01,this) and a 'somebodyTalking' guard, then call METHOD::func15E7 to emit a bark.",
+    "U8P_PESANT2::use — clears/cancels relevant refs, picks a greeting at random, calls METHOD::beginConversationNoMap and METHOD::func15E7 to run short player-facing lines, and uses a spawned delay to manage conversation timing.",
+    "U8P_PESANT2::cast(uword) — initializes a retry counter, if no target repeatedly spawns a short delay and decrements the counter; if the target is the player it calls CALGUARD::guardRespondToCrime, spawns a longer delay, clears in-combat state (Npc::clrInCombat) and emits an alarm bark chosen randomly."
   ],
   "open_questions": [
-    "Exact meanings and semantic roles of the cleared reference slots (IDs like 0x021C, 0x0205, 0x0204, 0x00F0, 0x0200) — they appear to be pointers/links the NPC stores, but to what game systems (quests, targets, followers) is not explicit.",
-    "The comparison with constant 0xFA present in enterFastArea/use: appears to be an early-out/state check (maybe 'disabled' or 'inactive' marker) but its precise semantic meaning is unknown.",
-    "Precise behaviors of FREE::1D62 and FREE::2A56 (used in dialog and ref-clearing): inferred from usage but their concrete implementations are not visible.",
-    "Meaning of target values returned from Npc::getTarget() (for example when equal to 1 cast spawns CALGUARD::0080): whether these are special sentinel targets (player, guard token) is inferred but uncertain.",
-    "What map id 0x29 corresponds to in-game (a special interior/area) and why it selects the shorter dialog routine."
+    "What precisely does the numeric check 'this > 0x00FA' represent? (appears to be an ID/threshold gate — confidence: medium).",
+    "What is the semantic meaning of the uword parameter to U8P_PESANT2::cast(uword)? (likely a spell/target id or damage source indicator — confidence: low).",
+    "Is 'somebodyTalking' an explicit global flag in script space or purely engine state provided at runtime? (appears engine-level read-only — confidence: medium).",
+    "Exact schedule semantics and units for spawn -> FREE::func1C19 delays (milliseconds vs ticks) are not encoded here — inferred behavior only (confidence: low)."
   ],
   "main_function": {
     "name": "U8P_PESANT2::leaveFastArea",
     "execution_form": "process",
-    "purpose": "Clean up per-NPC stored references and remove transient associations when the Avatar (or relevant actor) leaves the NPC's fast-area trigger region. This prevents retained references after the actor exits proximity.",
+    "purpose": "Unconditionally cancel and clean up area-specific timers, conversation references, and other ephemeral state for this NPC when an actor leaves its fast-area trigger so ambient/interaction behaviors stop.",
     "entry_conditions": [
-      "Event 10 (U8P_PESANT2::leaveFastArea) — triggered by leaving the NPC's fast-area trigger"
+      "Called by the engine when an actor (player or other relevant entity) exits the NPC's fast-area trigger region.",
+      "No parameters; executes cleanup regardless of NPC state."
     ],
     "confidence": "high"
   },
@@ -37,43 +35,43 @@
     {
       "name": "U8P_PESANT2::leaveFastArea",
       "kind": "main",
-      "role": "Area-exit cleanup handler: clears multiple stored reference slots using resetRef to forget associations when the actor leaves proximity.",
+      "role": "fast-area exit cleanup (resets conversation/timer refs)",
       "confidence": "high"
     },
     {
       "name": "U8P_PESANT2::look",
       "kind": "helper",
-      "role": "Respond to 'look' (examine) events: if dead bark 'dead peasant <pid>' else 'peasant <pid>'; minimal dialog output.",
+      "role": "player 'U8P_PESANT2::look' handler; emits a short description or dead variant",
       "confidence": "high"
     },
     {
       "name": "U8P_PESANT2::enterFastArea",
       "kind": "helper",
-      "role": "Area-entry handler: sets info/exclude, optionally returns early on a state check, and spawns a short or long dialog routine depending on map and NPC liveliness.",
+      "role": "fast-area entry handler; checks and dispatches to ambient bark schedulers",
       "confidence": "high"
     },
     {
       "name": "U8P_PESANT2::cast",
       "kind": "helper",
-      "role": "React to being targeted/cast upon: poll for a target, possibly call guard behavior, produce randomized combat/help barks and clear in-combat state in a branch.",
-      "confidence": "high"
+      "role": "reaction to being U8P_PESANT2::cast on / targeted: retries or notifies guard system and schedules followups",
+      "confidence": "medium"
     },
     {
       "name": "U8P_PESANT2::use",
       "kind": "helper",
-      "role": "Handle player 'use' interaction: set states, clear some refs, issue randomized greeting lines, spawn animation/method calls based on map and facing, then finalize with another method.",
+      "role": "player interaction handler; begins conversation, plays greeting barks and schedules conversation timers",
       "confidence": "high"
     },
     {
-      "name": "U8P_PESANT2::0468",
+      "name": "U8P_PESANT2::func0468",
       "kind": "helper",
-      "role": "Spawned short dialog/behavior loop: randomized timed barks, local state-driven line selection, and facing/animation updates.",
+      "role": "ambient bark scheduler/emitter for map 0x29",
       "confidence": "high"
     },
     {
-      "name": "U8P_PESANT2::06CD",
+      "name": "U8P_PESANT2::func06CD",
       "kind": "helper",
-      "role": "Spawned longer dialog/behavior loop: similar to 0468 but with extended lines/timing; used for alternate flavor of ambient interaction.",
+      "role": "ambient/drunken bark scheduler/emitter for non-0x29 maps",
       "confidence": "high"
     }
   ],
@@ -81,136 +79,112 @@
     "internal_calls": [
       {
         "caller": "U8P_PESANT2::enterFastArea",
-        "callee": "U8P_PESANT2::0468",
-        "purpose": "Spawn the short interaction/dialog routine when map condition is met and NPC is alive.",
+        "callee": "U8P_PESANT2::func0468",
+        "purpose": "Dispatch to map-specific ambient scheduler when Npc::getMap(this) == 0x29",
         "confidence": "high"
       },
       {
         "caller": "U8P_PESANT2::enterFastArea",
-        "callee": "U8P_PESANT2::06CD",
-        "purpose": "Spawn the longer interaction/dialog routine when map condition differs (map != 0x29) and NPC is alive.",
+        "callee": "U8P_PESANT2::func06CD",
+        "purpose": "Dispatch to alternate ambient scheduler for maps other than 0x29",
         "confidence": "high"
       }
     ],
     "external_calls": [
       {
         "caller": "U8P_PESANT2::leaveFastArea",
-        "callee": "U8P_PESANT2::resetRef",
-        "purpose": "Clear stored reference slots for this NPC (resetRef(referenceId, pid)) as cleanup on area exit.",
+        "callee": "FREE::resetRef",
+        "purpose": "Clear stored references/timers/state ids (refs 0x0205, 0x0204, 0x00F0, 0x0200) to cancel ongoing behaviors",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PESANT2::func0468",
+        "callee": "FREE::func1C19 (spawn)",
+        "purpose": "Spawn a delayed/timed helper process to schedule next ambient check or bark",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PESANT2::func06CD",
+        "callee": "FREE::func1C19 (spawn)",
+        "purpose": "Spawn a delayed/timed helper process to schedule next ambient check or bark",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PESANT2::func0468",
+        "callee": "FREE::getDistanceBetween",
+        "purpose": "Measure distance from player (entity 0x01) to this NPC to gate ambient barks",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PESANT2::func06CD",
+        "callee": "FREE::getDistanceBetween",
+        "purpose": "Measure distance from player to NPC to gate ambient barks",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PESANT2::func0468",
+        "callee": "METHOD::func15E7",
+        "purpose": "Emit or queue the chosen ambient bark/dialogue line",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PESANT2::func06CD",
+        "callee": "METHOD::func15E7",
+        "purpose": "Emit or queue the chosen ambient/drunken bark/dialogue line",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PESANT2::use",
+        "callee": "METHOD::beginConversationNoMap",
+        "purpose": "Begin a conversation with the player without changing map context",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PESANT2::use",
+        "callee": "METHOD::func15E7",
+        "purpose": "Play greeting/interaction lines during the conversation flow",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PESANT2::cast",
+        "callee": "CALGUARD::guardRespondToCrime",
+        "purpose": "Notify guard/crime system when the player is detected as the attacker/target",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PESANT2::cast",
+        "callee": "Npc::clrInCombat",
+        "purpose": "Clear NPC's in-combat state after scheduling guard response/delay",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_PESANT2::cast",
+        "callee": "FREE::func1C19 (spawn)",
+        "purpose": "Spawn short or longer delays used for retry or post-attack scheduling",
         "confidence": "high"
       },
       {
         "caller": "U8P_PESANT2::look",
-        "callee": "Item::bark",
-        "purpose": "Emit a short text line to indicate the NPC identity or death state (e.g., 'peasant <pid>' or 'dead peasant <pid>').",
+        "callee": "Npc::isDead",
+        "purpose": "Decide whether to emit a 'dead' description or the live description",
         "confidence": "high"
       },
       {
         "caller": "U8P_PESANT2::enterFastArea",
         "callee": "Npc::isDead",
-        "purpose": "Check whether NPC is dead and skip spawning interaction if dead.",
+        "purpose": "Short-circuit ambient scheduling for dead NPCs",
         "confidence": "high"
       },
       {
         "caller": "U8P_PESANT2::enterFastArea",
         "callee": "Npc::getMap",
-        "purpose": "Determine which dialog routine to spawn (0468 vs 06CD) based on map id.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_PESANT2::cast",
-        "callee": "Npc::getTarget",
-        "purpose": "Poll current combat/target id inside a wait loop to decide reaction or to call guard behavior.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_PESANT2::cast",
-        "callee": "CALGUARD::0080",
-        "purpose": "Spawn guard-related behavior when a specific target condition is observed (inferred: request nearby guard help).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_PESANT2::cast",
-        "callee": "Npc::clrInCombat",
-        "purpose": "Clear in-combat state in a branch after spawning guard behavior or resolving the target condition.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_PESANT2::use",
-        "callee": "FREE::2A56",
-        "purpose": "Clear stored references or reset slots as part of preparing/handling direct player interaction.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_PESANT2::use",
-        "callee": "METHOD::0E4F",
-        "purpose": "Spawn an animation/action method as part of the 'use' interaction flow.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_PESANT2::use",
-        "callee": "METHOD::15E7",
-        "purpose": "Spawn a facing/direction-specific method determined by Npc::getDir() to adjust NPC orientation/action during interaction.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_PESANT2::use",
-        "callee": "METHOD::1090",
-        "purpose": "Spawn a finishing method at the end of the use/interaction sequence.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_PESANT2::0468",
-        "callee": "FREE::1C19",
-        "purpose": "Introduce timed delays between dialog iterations and manage pacing of the short interaction loop.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_PESANT2::06CD",
-        "callee": "FREE::1C19",
-        "purpose": "Introduce timed delays between dialog iterations and manage pacing of the longer interaction loop.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_PESANT2::0468",
-        "callee": "Item::bark",
-        "purpose": "Emit one of several canned short lines chosen by randomized local state during the short interaction loop.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_PESANT2::06CD",
-        "callee": "Item::bark",
-        "purpose": "Emit one of several canned lines (longer flavor) chosen by randomized local state during the long interaction loop.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_PESANT2::0468",
-        "callee": "spawn",
-        "purpose": "Spawn methods to adjust facing/animation as part of dialog line delivery.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_PESANT2::06CD",
-        "callee": "spawn",
-        "purpose": "Spawn methods to adjust facing/animation as part of dialog line delivery.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_PESANT2::enterFastArea",
-        "callee": "urandom",
-        "purpose": "Use randomization to choose timing and dialog variants for the spawned interaction.",
+        "purpose": "Select map-specific ambient behavior",
         "confidence": "high"
       }
     ]
   },
   "global_flags": {
-    "reads": [
-      {
-        "name": "somebodyTalking",
-        "likely_effect": "Used to avoid overlapping dialog: spawn routines check this flag before deciding to speak or modify dialog index behavior.",
-        "confidence": "high"
-      }
-    ],
+    "reads": [],
     "writes": []
   },
   "ui_tags": [
@@ -221,9 +195,9 @@
   ],
   "quick_facts": {
     "main_function": "U8P_PESANT2::leaveFastArea",
-    "behavior_summary_one_liner": "Provides AI/interaction logic for a peasant NPC: handles being looked at, used (player interaction), area enter/exit triggers, being targeted/cast upon, and runs two spawnable dialog/behavior routines.",
-    "external_call_count": 18,
-    "flag_read_count": 1,
+    "behavior_summary_one_liner": "This script implements an NPC ambient/interaction/alert behavior set for a peasant-like actor. It manages: cleanup when the player leaves the NPC's fast-area trigger; a short 'U8P_PESANT2::look' description; player-initiated interaction ('U8P_PESANT2::use') that begins a conversation and plays short greeting barks; ambient, map-dependent periodic barks scheduled by timers; and a reaction to being targeted/attacked that can notify guards and schedule followups.",
+    "external_call_count": 15,
+    "flag_read_count": 0,
     "flag_write_count": 0
   },
   "hypotheses": {

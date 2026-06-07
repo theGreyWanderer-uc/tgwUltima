@@ -3,29 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_FISHBONZ.json",
   "file": "U8P_FISHBONZ",
   "behavior_summary": [
-    "FISHBONZ::look is invoked when an actor 'looks at' or examines the Fish Bones item. The script prepares delivery flags, constructs the literal string \"fish bones \", and directs the item to emit that short description to the examining process/actor using the engine display routine (Item::bark).",
-    "The allocated string is explicitly freed after use. The function captures the return value from Item::bark and runs a small implies/pop sequence before suspending and returning, which likely propagates or respects the call's result in engine control flow.",
-    "Two engine-level opcodes are executed before the message: a 'set info' and a 'process exclude' (inferred). These likely adjust message delivery or item processing state for the duration of the bark."
+    "When the player uses the 'U8P_FISHBONZ::look' (inspect) action on the FISHBONZ entity, the script emits a single short descriptive bark: \"fish bones\".",
+    "After displaying the bark the process yields/suspends, indicating the U8P_FISHBONZ::look handler ends immediately after the message.",
+    "No branching, menus, parameters, external calls, or global flag reads/writes are present — this is a minimal descriptive U8P_FISHBONZ::look handler."
   ],
   "notable_control_flow": [
-    "Entry on the 'U8P_FISHBONZ::look' event: main handler executes immediately when the item is examined.",
-    "Set item/info flags (set info opcode) and set a process exclusion state (process exclude opcode) before producing the message.",
-    "Call to Item::bark with parameters: pid (target process/actor) and the string \"fish bones \".",
-    "Free the allocated string buffer after the bark call returns.",
-    "Capture the bark return value, apply an implies/pop sequence (small control/propagation step), then suspend/return the script."
+    "Single entry point: U8P_FISHBONZ::look (process, processType 0x0208).",
+    "Execution sequence: display Bark(\"fish bones\") -> suspend/yield the process.",
+    "No conditionals or menu logic; two unknown/decompiler remnants are present but do not alter the observable behavior."
   ],
   "open_questions": [
-    "Exact semantic meaning of the specific 'set info' opcode value used and how it affects message routing or item state.",
-    "Precise effect of the 'process exclude' opcode in this context — whether it prevents other processing during the bark or marks the item for temporary exclusion.",
-    "What the implies/pop sequence does in engine terms (error/propagation handling vs. control/return shaping).",
-    "Whether any additional cleanup or side-effects occur elsewhere in the engine in response to the set-info/process-exclude opcodes."
+    "Are the Unknown nodes purely decompiler remnants or do they represent invisible engine bookkeeping? (low priority — behavior is clear.)",
+    "Is the bark text localized via an external lookup key in the engine, or embedded literally as shown? (inference only)."
   ],
   "main_function": {
     "name": "U8P_FISHBONZ::look",
     "execution_form": "process",
-    "purpose": "Handle the 'U8P_FISHBONZ::look' (examine) event for the Fish Bones item by presenting a short descriptive message to the examining actor.",
+    "purpose": "Provide the short description when the player inspects the FISHBONZ entity by showing a single bark and ending the inspection process.",
     "entry_conditions": [
-      "Event 0 (U8P_FISHBONZ::look) — invoked when an actor examines or 'looks at' the Fish Bones item; the examining process id (pid) is provided as a parameter."
+      "Triggered by the player's U8P_FISHBONZ::look/inspect action on the entity (process type 0x0208).",
+      "Inferred: invoked whenever the engine routes a 'U8P_FISHBONZ::look' event to this NPC/object; no additional runtime guards present."
     ],
     "confidence": "high"
   },
@@ -33,46 +30,30 @@
     {
       "name": "U8P_FISHBONZ::look",
       "kind": "main",
-      "role": "Primary event handler for the item's 'U8P_FISHBONZ::look' event; constructs and emits the description string and manages temporary flags and cleanup.",
+      "role": "U8P_FISHBONZ::look/inspect handler that displays a single bark and suspends",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_FISHBONZ::look",
-        "callee": "Item::bark",
-        "purpose": "Display or emit the provided text string ('fish bones ') to the target process/actor (pid). Used to show the item's U8P_FISHBONZ::look description to the examiner.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
-    "writes": [
-      {
-        "name": "item info (set info opcode)",
-        "likely_effect": "Temporarily set or modify an info/state bit on the item that influences message delivery or processing.",
-        "confidence": "medium"
-      },
-      {
-        "name": "process exclude (process exclude opcode)",
-        "likely_effect": "Mark the item/process as excluded from some processing path or change how the engine dispatches further processing during the bark.",
-        "confidence": "medium"
-      }
-    ]
+    "writes": []
   },
   "ui_tags": [
     "trigger",
-    "cleanup"
+    "bark",
+    "suspend",
+    "inspect"
   ],
   "quick_facts": {
-    "main_function": "FISHBONZ::look",
-    "behavior_summary_one_liner": "FISHBONZ::look is invoked when an actor 'looks at' or examines the Fish Bones item. The script prepares delivery flags, constructs the literal string \"fish bones \", and directs the item to emit that short description to the examining process/actor using the engine display routine (Item::bark).",
-    "external_call_count": 1,
+    "main_function": "U8P_FISHBONZ::look",
+    "behavior_summary_one_liner": "When the player uses the 'U8P_FISHBONZ::look' (inspect) action on the FISHBONZ entity, the script emits a single short descriptive bark: \"fish bones\".",
+    "external_call_count": 0,
     "flag_read_count": 0,
-    "flag_write_count": 2
+    "flag_write_count": 0
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

@@ -3,33 +3,30 @@
   "source_of_truth": "dialogue/json/U8P_DAGGER2.json",
   "file": "U8P_DAGGER2",
   "behavior_summary": [
-    "Provides the examine ('U8P_DAGGER2::look') text for the dagger and implements the dagger's use-on-target behavior.",
-    "U8P_DAGGER2::look (event 0) makes the dagger emit a short label/description to the player via Item::bark.",
-    "use requests a target (process target()); if no target is chosen it returns immediately.",
-    "use enforces reachability with Item::canReach; if unreachable it barks a \"can't reach\" message and aborts.",
-    "When a target is reachable, use reads the target's coordinates and type (Item::getX/Y/Z, Item::getType) and branches on type: for some types it delegates to the target's own use handler (process Item::use), for others it sets up spawn-template/parameter locals indicating a creation should occur (these cases early-return or are handled elsewhere).",
-    "If no spawn-template marker is set, use runs a local loop/inspection to accumulate a counter (loopscr-like behavior); only when the counter meets a threshold (>=5 inferred) does it call the allocator (FREE::24A7). On successful allocation it marks the new item (Item::orStatus), sets its quantity to 1 (Item::setQuantity), and causes it to fall into the world (Item::fall)."
+    "U8P_DAGGER2 implements the in-game behavior for a dagger-type item. Its U8P_DAGGER2::look handler presents the item's short label to the player ('dagger ').",
+    "The U8P_DAGGER2::use process (U8P_DAGGER2::use) resolves a concrete item instance to operate on (via process target()), enforces reachability (barks 'can't reach' when out of range), then inspects the target's coordinates and type to decide behavior.",
+    "Depending on the item type the script either delegates to the item's own U8P_DAGGER2::use behavior (Item::use) or prepares parameters for spawning/creating item instances at the target location.",
+    "When spawning is enabled (local3 > 0), the script repeatedly calls FREE::createItemsAtLocation to create items at the target X/Y/Z, applies a status mask (Item::orStatus), sets stack quantity (Item::setQuantity), and calls Item::fall so they appear in the world. Creation is capped by a local counter (local8, compared against ~5) to avoid excessive spawns."
   ],
   "notable_control_flow": [
-    "U8P_DAGGER2::look: straight-line, call Item::bark then return.",
-    "U8P_DAGGER2::use: early-return if process target() yields 0 (no target).",
-    "Reachability guard: Item::canReach gates all subsequent behavior; failing it triggers a localized error bark and returns.",
-    "Type-dispatch: Item::getType result drives two major paths — delegation (process Item::use) for several type codes, or setting spawn-template/param values for other type codes.",
-    "Spawn path vs. create-in-place path: if spawn_template_or_marker is set by the type-dispatch the routine does not proceed to allocation here (spawn handled separately or earlier); otherwise a counter loop must meet a threshold before calling FREE::24A7 to create an item."
+    "U8P_DAGGER2::look: Immediately emits a bark with text 'dagger ' and suspends/terminates the U8P_DAGGER2::look process (high confidence).",
+    "U8P_DAGGER2::use: Suspends on process target() and stores the resolved instance in local2; if no valid target or Item::canReach(...) indicates unreachable, the routine barks 'can't reach' and aborts (high confidence).",
+    "U8P_DAGGER2::use: Reads coordinates via Item::getX/Y/Z into local6/local5/local4, reads type via Item::getType into local7, then performs a type-based dispatch: some types call Item::use (spawn/delegate) and others configure local3/local4 to drive creation (medium confidence).",
+    "U8P_DAGGER2::use: If local3 > 0 enters a creation loop that calls FREE::createItemsAtLocation (count=1), stores the returned handle in local1, applies Item::orStatus(0x0080) and Item::setQuantity, calls Item::fall, and increments local8; creation stops when local8 reaches an inferred limit (~5) (medium confidence)."
   ],
   "open_questions": [
-    "Precise meanings of the numeric type codes (0x4B, 0x39, 0x00C7, 0x028A, 0x0289, 0x01D2): which exact in-game object/classes they map to?",
-    "What exactly sets or consumes the spawn_template_or_marker when the type-dispatch assigns it — where is the spawn-handling performed when the function early-returns?",
-    "What is the semantic meaning of the loopscr counter (what is being counted or checked) and why is the threshold 5 (inferred) chosen?",
-    "Exact mask value or semantics passed to Item::orStatus on the newly created item.",
-    "Failure modes and return values of FREE::24A7 (allocator) beyond non-zero/zero are not fully known."
+    "Exact mapping of numeric item type IDs to game concepts — the script branches on type values but the specific type -> behavior mapping is inferred, not explicit (low confidence).",
+    "Precise argument ordering and semantics for FREE::createItemsAtLocation calls in this script: ordering is inferred from call-site patterns but not canonical here (medium confidence).",
+    "Some Unknown nodes and raw remnants remain in the decompilation (e.g., small brace/suspend artifacts) — whether they represent additional minor side effects is unclear (low confidence).",
+    "Whether U8P_DAGGER2::use is ever invoked indirectly through other systems (inventory UI, NPC interactions) beyond the player 'U8P_DAGGER2::use item' action is not recorded here (low confidence)."
   ],
   "main_function": {
     "name": "U8P_DAGGER2::look",
     "execution_form": "process",
-    "purpose": "Emit the dagger's short description/label to the player when examined.",
+    "purpose": "Provide the short descriptive label for the dagger when the player examines the item; display the single-line bark 'dagger '.",
     "entry_conditions": [
-      "Event 0: invoked when the player/actor 'looks at' or inspects the dagger object (area/inspect trigger)."
+      "Invoked when the player inspects/examines the dagger (U8P_DAGGER2::look/examine action).",
+      "May also be triggered by entering a fast-area trigger associated with the item's U8P_DAGGER2::look process (inferred from process type)."
     ],
     "confidence": "high"
   },
@@ -37,162 +34,84 @@
     {
       "name": "U8P_DAGGER2::look",
       "kind": "main",
-      "role": "Provide examine/description behavior (calls Item::bark to display 'dagger ').",
+      "role": "Present short item description / U8P_DAGGER2::look handler",
       "confidence": "high"
     },
     {
       "name": "U8P_DAGGER2::use",
       "kind": "helper",
-      "role": "Handle 'use dagger on target': resolve target, guard by reachability, branch on target type to either delegate or prepare/create items, and perform allocation+initialization when conditions are met.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Emit short text messages to the player/process (used by both U8P_DAGGER2::look and use for messages).",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_DAGGER2::process target",
-      "kind": "extern",
-      "role": "Prompt/resolve a target for a use action; returns 0 when none selected.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::canReach",
-      "kind": "extern",
-      "role": "Check reachability/interaction range between actor/item and chosen target.",
-      "confidence": "high"
-    },
-    {
-      "name": "FREE::24A7",
-      "kind": "extern",
-      "role": "Allocator/creator used to spawn a new item instance when creation conditions are satisfied.",
+      "role": "Handle player 'U8P_DAGGER2::use' on the dagger: resolve target, guard reachability, dispatch by item type, optionally spawn items at the target location",
       "confidence": "medium"
-    },
-    {
-      "name": "Item::orStatus",
-      "kind": "extern",
-      "role": "Set status bits on a created item (logical OR).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::setQuantity",
-      "kind": "extern",
-      "role": "Initialize stack/quantity of created item (used to set quantity to 1).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::fall",
-      "kind": "extern",
-      "role": "Cause the created item to drop/appear in the world.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getX",
-      "kind": "extern",
-      "role": "Read target X coordinate for decision/inspection logic.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getY",
-      "kind": "extern",
-      "role": "Read target Y coordinate for decision/inspection logic.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getZ",
-      "kind": "extern",
-      "role": "Read target Z coordinate for decision/inspection logic.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getType",
-      "kind": "extern",
-      "role": "Return the target object's type code used to branch behavior.",
-      "confidence": "high"
-    },
-    {
-      "name": "process Item::use",
-      "kind": "extern",
-      "role": "Delegate the use action to the target object's own use handler for specific types.",
-      "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_DAGGER2::look",
-        "callee": "Item::bark",
-        "purpose": "Display the dagger's short description string to the player.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_DAGGER2::use",
-        "callee": "U8P_DAGGER2::process target",
-        "purpose": "Ask the player/process to select a target for using the dagger; early-return if 0 (none).",
+        "callee": "process target()",
+        "purpose": "Resolve which item/process instance the player targeted; result captured into local2 (high confidence).",
         "confidence": "high"
       },
       {
         "caller": "U8P_DAGGER2::use",
         "callee": "Item::canReach",
-        "purpose": "Guard to ensure the chosen target is within interaction range; failure triggers a 'can't reach' bark and return.",
+        "purpose": "Check whether the player can reach the resolved item instance; used to block U8P_DAGGER2::use and trigger 'can't reach' bark when false (high confidence).",
         "confidence": "high"
       },
       {
         "caller": "U8P_DAGGER2::use",
         "callee": "Item::getX",
-        "purpose": "Read target X coordinate for subsequent inspection/loop logic.",
+        "purpose": "Read target item's X coordinate into local6 for spawn placement (high confidence).",
         "confidence": "high"
       },
       {
         "caller": "U8P_DAGGER2::use",
         "callee": "Item::getY",
-        "purpose": "Read target Y coordinate for subsequent inspection/loop logic.",
+        "purpose": "Read target item's Y coordinate into local5 for spawn placement (high confidence).",
         "confidence": "high"
       },
       {
         "caller": "U8P_DAGGER2::use",
         "callee": "Item::getZ",
-        "purpose": "Read target Z coordinate for subsequent inspection/loop logic.",
-        "confidence": "high"
+        "purpose": "Read target item's Z coordinate into local4 for spawn placement or per-type overrides (medium confidence).",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_DAGGER2::use",
         "callee": "Item::getType",
-        "purpose": "Obtain target type code to decide whether to delegate the use or prepare spawning parameters.",
+        "purpose": "Obtain the target item's type id (stored in local7) to drive type-based branching (high confidence).",
         "confidence": "high"
       },
       {
         "caller": "U8P_DAGGER2::use",
-        "callee": "process Item::use",
-        "purpose": "Delegate use behavior to the target item for certain type codes (type-dispatch path).",
-        "confidence": "high"
+        "callee": "Item::use",
+        "purpose": "Delegate to the item's own U8P_DAGGER2::use process for certain types; the script spawns/suspends until that process completes (medium confidence).",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_DAGGER2::use",
-        "callee": "FREE::24A7",
-        "purpose": "Allocate/create a new item instance when the internal counter threshold and spawn conditions are met.",
+        "callee": "FREE::createItemsAtLocation",
+        "purpose": "Spawn a new item instance at the resolved X/Y/Z location; called with count=1 and quantity/local3 (inferred ordering) to create copies/fragments (medium confidence).",
         "confidence": "medium"
       },
       {
         "caller": "U8P_DAGGER2::use",
         "callee": "Item::orStatus",
-        "purpose": "Mark or set status bits on the newly created item after allocation.",
-        "confidence": "high"
+        "purpose": "Apply a status mask (0x0080) to a newly created item instance (likely to mark it as temporary/special) (medium confidence).",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_DAGGER2::use",
         "callee": "Item::setQuantity",
-        "purpose": "Set the created item's quantity to 1.",
-        "confidence": "high"
+        "purpose": "Set the stack quantity of a created item instance (e.g., 1) after creation (medium confidence).",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_DAGGER2::use",
         "callee": "Item::fall",
-        "purpose": "Cause the created item to fall/drop into the world so it becomes visible/placed.",
-        "confidence": "high"
+        "purpose": "Let the newly created item fall into the world (physics/placement) so it appears at the spawn location (medium confidence).",
+        "confidence": "medium"
       }
     ]
   },
@@ -208,8 +127,8 @@
   ],
   "quick_facts": {
     "main_function": "U8P_DAGGER2::look",
-    "behavior_summary_one_liner": "Provides the examine ('U8P_DAGGER2::look') text for the dagger and implements the dagger's use-on-target behavior.",
-    "external_call_count": 12,
+    "behavior_summary_one_liner": "U8P_DAGGER2 implements the in-game behavior for a dagger-type item. Its U8P_DAGGER2::look handler presents the item's short label to the player ('dagger ').",
+    "external_call_count": 11,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

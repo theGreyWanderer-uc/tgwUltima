@@ -3,31 +3,28 @@
   "source_of_truth": "dialogue/json/U8P_CEMHAT2.json",
   "file": "U8P_CEMHAT2",
   "behavior_summary": [
-    "U8P_CEMHAT2::hatch runs in response to an Event 7 trigger and inspects an actor's equipment to decide whether the actor possesses a dagger-like item.",
-    "At start it checks the global 'vivTold' flag and returns immediately if that flag is set (guard/early-out).",
-    "If vivTold is clear, it clears the global 'haveDagger' flag, queries the actor's equipment slot 6 via Npc::getEquip, and if an item is present it iterates (via the script's loopscr/loop mechanism) to read the item's shape.",
-    "If the item's shape equals 0x23B (inferred to be a dagger shape), the script sets global 'haveDagger' to 1.",
-    "After this check the function returns; it does not modify vivTold."
+    "U8P_CEMHAT2::hatch is a process that checks whether a specific NPC equipment slot (0x06) contains an item and records that fact in a global flag haveDagger.",
+    "The check only runs when the global gate vivTold is true. When triggered, the routine clears haveDagger, queries the NPC's equipment via Npc::getEquip(slot=0x06), tests the returned value, and sets haveDagger = 1 if the equip query indicates a valid item is present.",
+    "Npc::getEquip is the key external call used to read the equipment slot; a temporary local (local2) stores its result and is tested for non-zero / sentinel values to decide whether to set haveDagger."
   ],
   "notable_control_flow": [
-    "Early-return guard: read of global 'vivTold' immediately returns the function if nonzero (prevents repeated/duplicate processing).",
-    "Linear check path: clear haveDagger -> fetch equip slot -> if nonzero then run loopscr/loop to inspect item shape -> set haveDagger on match.",
-    "The item-inspection is implemented via an interpreted loop construct (loopscr/loop) rather than a direct function call; this is inferred from disassembly patterns."
+    "Gate: execution of U8P_CEMHAT2::hatch is guarded by the global flag vivTold (only proceeds when vivTold == true).",
+    "Initialization: haveDagger is explicitly cleared (set to 0) at the start of the gated block before any equip checks.",
+    "Query and test: Npc::getEquip(slot=0x06, &local2) is invoked; if local2 indicates an item (non-sentinel), an additional check (disassembly shows a 0xFFFFFFFFh comparison) enables setting haveDagger = 1."
   ],
   "open_questions": [
-    "What exact gameplay event maps to 'Event 7' in this context (likely an area-enter/trigger like enterFastArea but not confirmed)?",
-    "Is shape constant 0x23B strictly the dagger item type, or a broader category that includes other items? (shape-to-item mapping is inferred, not verified).",
-    "The precise semantics of the loopscr/loop interpreter used to inspect item properties are not fully known — could affect edge cases of the check.",
-    "Does the script need to consider other equipment slots besides slot 6 for dagger detection in gameplay (currently only slot 6 is checked)?"
+    "What exact item or item-class corresponds to equipment slot 0x06 (is it guaranteed to be a dagger or could other items occupy that slot)?",
+    "What is the semantics of the 0xFFFFFFFFh-like check in the disassembly (is that a sentinel meaning 'no item' or a special success code)?",
+    "When (which game events) does this process run in practice (timing/scheduler for process type 0x0210 in this project context)?",
+    "Is local2 a raw item handle, pointer, or an index/ID (the disassembly hints but the precise type is uncertain)?"
   ],
   "main_function": {
     "name": "U8P_CEMHAT2::hatch",
     "execution_form": "process",
-    "purpose": "On Event 7, determine whether the relevant NPC/actor possesses an equipped dagger-like item and record that fact in the global flag haveDagger, but do nothing if vivTold indicates prior processing.",
+    "purpose": "When the global gate vivTold is set, determine whether the relevant NPC has an item equipped in slot 0x06 and record that state in the global flag haveDagger.",
     "entry_conditions": [
-      "Triggered by Event 7 (interpreted as a fast-area/trigger event).",
-      "Receives actor pointer parameter (actor_ptr) passed on the stack (BP+06h).",
-      "Immediate guard: returns if global 'vivTold' is nonzero."
+      "vivTold == true (global gate must be set)",
+      "Process scheduler invocation for process-type 0x0210 (implicit)"
     ],
     "confidence": "high"
   },
@@ -35,14 +32,14 @@
     {
       "name": "U8P_CEMHAT2::hatch",
       "kind": "main",
-      "role": "Event handler for Event 7 that checks an actor's equipment for a dagger and sets haveDagger accordingly.",
+      "role": "Checks NPC equipment slot 0x06 and updates haveDagger flag",
       "confidence": "high"
     },
     {
       "name": "Npc::getEquip",
       "kind": "extern",
-      "role": "External engine function called to query the NPC's equipment in slot 6; returns an item id or 0.",
-      "confidence": "high"
+      "role": "External API used to query an NPC's equipment slot and return/store the equipped item",
+      "confidence": "medium"
     }
   ],
   "call_analysis": {
@@ -51,8 +48,8 @@
       {
         "caller": "U8P_CEMHAT2::hatch",
         "callee": "Npc::getEquip",
-        "purpose": "Query the actor's equipped item in slot index 6 so the script can inspect the returned item's properties (shape).",
-        "confidence": "high"
+        "purpose": "Query the NPC's equipment slot 0x06 and write the result into a temporary (local2) for presence/validity testing",
+        "confidence": "medium"
       }
     ]
   },
@@ -60,27 +57,25 @@
     "reads": [
       {
         "name": "vivTold",
-        "likely_effect": "Guard/early-return flag indicating this processing has already been performed; when nonzero the function exits immediately.",
-        "confidence": "high"
+        "likely_effect": "Gate that enables the U8P_CEMHAT2::hatch equip check; when true the function runs its equip-test logic",
+        "confidence": "medium"
       }
     ],
     "writes": [
       {
         "name": "haveDagger",
-        "likely_effect": "Cleared to 0 at start. Set to 1 if an inspected equipped item's shape equals 0x23B (records that a dagger is present).",
+        "likely_effect": "Cleared at the start of the check and set to 1 if the equip-slot checks indicate a valid dagger/item is present; used to record that the NPC 'has' a dagger",
         "confidence": "high"
       }
     ]
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "animation",
     "guard"
   ],
   "quick_facts": {
     "main_function": "U8P_CEMHAT2::hatch",
-    "behavior_summary_one_liner": "U8P_CEMHAT2::hatch runs in response to an Event 7 trigger and inspects an actor's equipment to decide whether the actor possesses a dagger-like item.",
+    "behavior_summary_one_liner": "U8P_CEMHAT2::hatch is a process that checks whether a specific NPC equipment slot (0x06) contains an item and records that fact in a global flag haveDagger.",
     "external_call_count": 1,
     "flag_read_count": 1,
     "flag_write_count": 1

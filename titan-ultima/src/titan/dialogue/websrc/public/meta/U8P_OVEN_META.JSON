@@ -3,29 +3,27 @@
   "source_of_truth": "dialogue/json/U8P_OVEN.json",
   "file": "U8P_OVEN",
   "behavior_summary": [
-    "OVEN::look handles the player/actor 'U8P_OVEN::look' (examine) action for the oven object.",
-    "When invoked it marks the target item with item-level flags (a 'set info' and 'process exclude' operation), constructs the short description string \"oven \", and asks the item/engine to present that text via Item::bark.",
-    "The temporary string is freed after use and the return value from Item::bark is propagated by the handler (the disassembly shows it pushing the bark return then using an 'implies' opcode before suspend/return).",
-    "All effects are localized to the item/engine call and item-level flags; no global flags are read or written in this routine."
+    "Provides the \"U8P_OVEN::look\" (examine) handler for the oven object: when the player inspects the oven the script shows a short bark reading \"oven \".",
+    "The process contains no branching, menus, external calls, or flag manipulation — it is a minimal descriptive response for a static object.",
+    "After emitting the bark the process appears to suspend/terminate, leaving no persistent state changes."
   ],
   "notable_control_flow": [
-    "Entry on the 'U8P_OVEN::look' event: prepares context and target item, then performs item-level flagging before communication.",
-    "Allocates a temporary literal string \"oven \", passes it to Item::bark, then frees that temporary.",
-    "Captures Item::bark's return value and uses an 'implies' opcode to influence the routine's outward result/propagation.",
-    "No branching based on global state is observed; behavior is deterministic for the examine action."
+    "U8P_OVEN::look is executed as a process-type handler (process).",
+    "Execution flow: entry -> emit single Bark \"oven \" -> suspend/terminate the U8P_OVEN::look process.",
+    "No conditional branches, loops, or calls to other scripts or engine functions are present."
   ],
   "open_questions": [
-    "Exact semantics of the engine opcodes labeled 'set info' and 'process exclude' (what info id is set and how exclusion changes later processing).",
-    "Precise meaning of the 'implies' opcode in control-flow/return semantics — how it maps to a script-level return or suspension policy.",
-    "Which stack slot holds the item instance versus the calling process/pid in canonical engine terms (disassembly shows pushes/indirect loads but not named parameters).",
-    "Whether freeing the temporary string is an explicit FREE call or handled by a runtime-managed pattern in the engine."
+    "The bark text contains a trailing space (\"oven \"): is that intentional (formatting/concatenation placeholder) or an artifact?",
+    "The raw nodes include low-confidence tokens like '{' and 'suspend' — are there additional engine-side behaviors tied to the suspend that are not visible here?",
+    "What in-game event exactly triggers this process (explicit player 'U8P_OVEN::look' action vs. fast-area entry) in this asset's placement?"
   ],
   "main_function": {
     "name": "U8P_OVEN::look",
     "execution_form": "process",
-    "purpose": "Respond to a player's examine/U8P_OVEN::look action on the oven by preparing item state and producing the short descriptive text \"oven \" via the engine's Item::bark routine; then propagate the result back to the caller.",
+    "purpose": "Display the oven's short description when the player examines the oven and then end the U8P_OVEN::look process.",
     "entry_conditions": [
-      "Event 0 — invoked when the player or relevant actor inspects/examines the oven (U8P_OVEN::look command)."
+      "Invoked when the player performs a 'U8P_OVEN::look' or examine interaction on the oven object (inferred from function classification 'U8P_OVEN::look').",
+      "May also be invoked by engine fast-area U8P_OVEN::look triggers when the avatar enters the object's examine region (inferred)."
     ],
     "confidence": "high"
   },
@@ -33,50 +31,13 @@
     {
       "name": "U8P_OVEN::look",
       "kind": "main",
-      "role": "Handle the 'U8P_OVEN::look' event for the oven object; prepare item state, produce description, and return bark result.",
+      "role": "Object U8P_OVEN::look/examine handler that emits a single descriptive bark",
       "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine invoked to emit/display/append the short description string for an item/process.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_OVEN::set info + process exclude (engine opcodes)",
-      "kind": "extern",
-      "role": "Engine operations applied to the target item before barking; inferred to mark item state and exclude it from standard processing.",
-      "confidence": "medium"
-    },
-    {
-      "name": "U8P_OVEN::free (temporary string)",
-      "kind": "extern",
-      "role": "Deallocate/free the temporary literal string constructed for the bark call (inferred from free pattern in disassembly).",
-      "confidence": "medium"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_OVEN::look",
-        "callee": "Item::bark",
-        "purpose": "Display or otherwise present the short description text \"oven \" to the calling process/player; primary visible gameplay effect of the handler.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_OVEN::look",
-        "callee": "U8P_OVEN::set info + process exclude (engine opcodes)",
-        "purpose": "Set item-level information/flags on the target and exclude it from further processing; likely used to adjust item state while barking.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_OVEN::look",
-        "callee": "U8P_OVEN::free (temporary string)",
-        "purpose": "Release the temporary string buffer created to hold \"oven \".",
-        "confidence": "medium"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -84,12 +45,13 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup"
+    "description",
+    "suspend"
   ],
   "quick_facts": {
-    "main_function": "OVEN::look",
-    "behavior_summary_one_liner": "OVEN::look handles the player/actor 'U8P_OVEN::look' (examine) action for the oven object.",
-    "external_call_count": 3,
+    "main_function": "U8P_OVEN::look",
+    "behavior_summary_one_liner": "Provides the \"U8P_OVEN::look\" (examine) handler for the oven object: when the player inspects the oven the script shows a short bark reading \"oven \".",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

@@ -3,28 +3,30 @@
   "source_of_truth": "dialogue/json/U8P_CARTHAXH.json",
   "file": "U8P_CARTHAXH",
   "behavior_summary": [
-    "U8P_CARTHAXH::hatch is an event handler that runs when a U8P_CARTHAXH::hatch trigger fires for an actor/process. It prepares the process state, decides a teleport destination and option byte based on the actor's current map and a global flag, then invokes a teleport routine to move the actor to an egg/U8P_CARTHAXH::hatch location and suspends the process.",
-    "The handler obtains the actor's current map via Npc::getMap. If the map equals 0x1C it selects destination selector 0x02; otherwise it selects 0x05.",
-    "It reads the global flag hydrosFree to choose the option byte passed to the teleport: 0x1A when hydrosFree is set, otherwise 0x10.",
-    "Finally it calls process teleportToEgg with (pid, 0x01, destinationSelector, optionByte), handles the return, then suspends the process."
+    "U8P_CARTHAXH::hatch computes two temporary parameters (local1, local2) based on game state and then launches a teleport/U8P_CARTHAXH::hatch action by calling teleportToEgg(0x01, local2, local1).",
+    "local1 is a mode/flag code: default 0x10, changed to 0x1A if the global flag hydrosFree is set. This toggles an alternate behavior or bitmask passed to the teleport/spawn routine.",
+    "local2 selects a location/type: it is set to 0x02 when the NPC is on map 0x1C (Npc::getMap == 0x1C) and 0x05 otherwise.",
+    "The function captures the spawned process id (pid) from teleportToEgg into a temporary and then suspends; it does not write global flags."
   ],
   "notable_control_flow": [
-    "Branch on global flag hydrosFree -> choose option byte: 0x1A (if true) or 0x10 (if false).",
-    "Branch on Npc::getMap() return -> choose destination selector: 0x02 (map == 0x1C) or 0x05 (otherwise).",
-    "Single outward call to process teleportToEgg followed by handling of its return and a process suspend (end of handler)."
+    "Initialize local1 to 0x10; if global flag hydrosFree is true, set local1 = 0x1A.",
+    "Query the NPC's map via Npc::getMap(this); if equal to 0x1C set local2 = 0x02 else set local2 = 0x05.",
+    "Call external teleportToEgg with params (0x01, local2, local1) and store returned pid in a temporary.",
+    "Suspend the process after launching the teleport/spawn; no further local or global state is modified."
   ],
   "open_questions": [
-    "What exact game semantics do the numeric constants mean (0x01, 0x02, 0x05, 0x10, 0x1A)? Their usage is clear but their gameplay meaning (which egg/location or options) is inferred, not explicit.",
-    "What precise effect does hydrosFree represent in-game beyond selecting the option byte? It appears to alter teleport behavior or permissions.",
-    "What side effects (if any) are produced by teleportToEgg beyond teleportation (e.g., animation, state changes)? The script only passes parameters and suspends."
+    "What exact gameplay effect teleportToEgg produces (spawn vs. relocate vs. animation attachment) and how its second and third parameters are interpreted.",
+    "Precise semantic meaning of the local1 codes 0x10 vs 0x1A (which bits or mode flags they represent).",
+    "Whether the spawned pid is used elsewhere (caller or other processes) to track or manage the spawned entity.",
+    "Which NPC instance is 'this' in this context (item owner, nearby NPC, or the egg object) and what triggers U8P_CARTHAXH::hatch to run in-game."
   ],
   "main_function": {
     "name": "U8P_CARTHAXH::hatch",
     "execution_form": "process",
-    "purpose": "Handle a U8P_CARTHAXH::hatch-region event for an actor: set brief process state, choose teleport destination and option flags based on current map and the global hydrosFree flag, then call the engine teleport routine to move the actor to an egg/U8P_CARTHAXH::hatch point and suspend the process.",
+    "purpose": "Prepare and start a teleport-to-egg/U8P_CARTHAXH::hatch action by selecting a location/type and a mode/flag code based on game state, then launch the teleportToEgg process and suspend.",
     "entry_conditions": [
-      "Event 7 (U8P_CARTHAXH::hatch) — invoked when the actor enters the U8P_CARTHAXH::hatch/fast-area trigger (area entry event).",
-      "Called with the event's actor/process context (pid implicit via frame/stack)."
+      "Invoked as a process (process type 0x0210) with no explicit parameters in the snippet; likely started when an item/NPC needs to perform a U8P_CARTHAXH::hatch/teleport action.",
+      "Behavior depends on the global flag 'hydrosFree' and the NPC's current map id (obtained via Npc::getMap)."
     ],
     "confidence": "high"
   },
@@ -32,49 +34,36 @@
     {
       "name": "U8P_CARTHAXH::hatch",
       "kind": "main",
-      "role": "Event handler for U8P_CARTHAXH::hatch/area-entry that selects teleport parameters and invokes teleportToEgg.",
+      "role": "compute U8P_CARTHAXH::hatch/teleport params and launch teleportToEgg",
       "confidence": "high"
+    },
+    {
+      "name": "teleportToEgg",
+      "kind": "extern",
+      "role": "spawn or move an entity to/near an egg (external engine/utility called with flags/type params)",
+      "confidence": "medium"
     },
     {
       "name": "Npc::getMap",
       "kind": "extern",
-      "role": "Query the actor's current map id (used to pick the teleport destination).",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_CARTHAXH::process teleportToEgg",
-      "kind": "extern",
-      "role": "Engine/process routine that teleports a process/actor to an egg/U8P_CARTHAXH::hatch location using provided selector and option byte.",
+      "role": "query the NPC's current map id (used to select local2)",
       "confidence": "high"
     }
   ],
   "call_analysis": {
-    "internal_calls": [
-      {
-        "caller": "U8P_CARTHAXH::hatch",
-        "callee": "U8P_CARTHAXH::engine:set_info / engine:process_exclude (implicit engine ops)",
-        "purpose": "Prepare the target/process for event handling by setting info flags and excluding it from normal process loops (setup before teleport).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_CARTHAXH::hatch",
-        "callee": "U8P_CARTHAXH::engine:suspend",
-        "purpose": "Suspend the process after initiating the teleport operation (normal closure for an event handler).",
-        "confidence": "high"
-      }
-    ],
+    "internal_calls": [],
     "external_calls": [
       {
         "caller": "U8P_CARTHAXH::hatch",
         "callee": "Npc::getMap",
-        "purpose": "Return the actor's current map id so the handler can decide which teleport destination selector to use (compares to 0x1C).",
+        "purpose": "Return the NPC's map id so the function can choose between two location/type codes (0x02 vs 0x05).",
         "confidence": "high"
       },
       {
         "caller": "U8P_CARTHAXH::hatch",
-        "callee": "U8P_CARTHAXH::process teleportToEgg",
-        "purpose": "Perform the teleport for the actor/process. Called with (pid, 0x01, destinationSelector (0x02 or 0x05), optionByte (0x10 or 0x1A)).",
-        "confidence": "high"
+        "callee": "teleportToEgg",
+        "purpose": "Launch a teleport/spawn process using parameters (0x01, local2, local1); pid is captured into a temporary for bookkeeping.",
+        "confidence": "medium"
       }
     ]
   },
@@ -82,21 +71,22 @@
     "reads": [
       {
         "name": "hydrosFree",
-        "likely_effect": "Selects which option byte to pass to process teleportToEgg; when set the handler uses 0x1A, otherwise 0x10. This likely alters teleport behavior or gating.",
-        "confidence": "high"
+        "likely_effect": "When true, switch local1 from default 0x10 to alternate 0x1A to alter teleport/spawn behavior or mode.",
+        "confidence": "medium"
       }
     ],
     "writes": []
   },
   "ui_tags": [
     "trigger",
+    "spawn",
     "teleport",
     "suspend",
-    "conditional"
+    "guard"
   ],
   "quick_facts": {
     "main_function": "U8P_CARTHAXH::hatch",
-    "behavior_summary_one_liner": "U8P_CARTHAXH::hatch is an event handler that runs when a U8P_CARTHAXH::hatch trigger fires for an actor/process. It prepares the process state, decides a teleport destination and option byte based on the actor's current map and a global flag, then invokes a teleport routine to move the actor to an egg/U8P_CARTHAXH::hatch location and suspends the process.",
+    "behavior_summary_one_liner": "U8P_CARTHAXH::hatch computes two temporary parameters (local1, local2) based on game state and then launches a teleport/U8P_CARTHAXH::hatch action by calling teleportToEgg(0x01, local2, local1).",
     "external_call_count": 2,
     "flag_read_count": 1,
     "flag_write_count": 0

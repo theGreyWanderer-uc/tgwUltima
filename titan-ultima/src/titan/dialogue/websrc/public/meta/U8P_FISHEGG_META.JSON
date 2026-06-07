@@ -3,29 +3,29 @@
   "source_of_truth": "dialogue/json/U8P_FISHEGG.json",
   "file": "U8P_FISHEGG",
   "behavior_summary": [
-    "This script implements an egg hatching sequence. When the egg's U8P_FISHEGG::hatch trigger fires, it checks an item-local guard (Egg::getEggId) and, if not set, marks the egg as started (Egg::setEggId = 1) and spawns an asynchronous worker that runs a timed, randomized hatching animation which creates transient visual pieces, plays SFX at key frames, and destroys those pieces when their animation finishes.",
-    "A leave-fast-area handler clears the egg's guard (Egg::setEggId = 0) so the egg can be reinitialized later.",
-    "The asynchronous worker repeatedly: schedules cleanup via a spawned helper, suspends/yields between steps, uses urandom(100) to pick between two visual branches, creates an item fragment (Item::create), positions it at the egg's coordinates (Item::getX/Y/Z + Item::pop), advances its visual frames (Item::setFrame), optionally plays SFX at particular frames, and destroys the fragment when its animation completes."
+    "This script manages an egg object's U8P_FISHEGG::hatch lifecycle. U8P_FISHEGG::hatch guards starting a U8P_FISHEGG::hatch sequence by checking the egg's stored id (Egg::getEggId(this)). If the id is 0 (uninitialized), U8P_FISHEGG::hatch sets the id to 1 (Egg::setEggId(1, this)) and launches a timed U8P_FISHEGG::hatch/animation routine (U8P_FISHEGG::func00CC).",
+    "U8P_FISHEGG::func00CC implements the U8P_FISHEGG::hatch animation and outcome: it creates a temporary item for visuals, places (pop) it at the egg's coordinates, advances visual frames in a loop with short timed waits (spawn ->FREE::func1C19 + suspend), plays SFX at specific frames, uses urandom to choose between two visual/outcome branches, and destroys the temporary item at the end.",
+    "U8P_FISHEGG::leaveFastArea resets the egg state by clearing its stored id (Egg::setEggId(0, this)), inferred to cancel or allow retriggering when the actor leaves the trigger area."
   ],
   "notable_control_flow": [
-    "Guard check in U8P_FISHEGG::FISHEGG::hatch: only spawn the worker if Egg::getEggId(this) == 0 — prevents concurrent/duplicate hatching workers.",
-    "Spawner behavior: U8P_FISHEGG::FISHEGG::hatch sets Egg::setEggId(this, 1) then spawns U8P_FISHEGG::FISHEGG::00CC (as asynchronous process) and stores the spawn return value locally.",
-    "Worker loop in U8P_FISHEGG::FISHEGG::00CC: each iteration spawns FREE::1C19 tied to the worker's pid (cleanup), yields/suspends, branches on urandom(100) > 50 to select one of two fragment/item types and frame sequences, creates/populates the item at egg coordinates, advances frames over multiple iterations with SFX at thresholds, and destroys the fragment when its sequence is finished."
+    "Guard: U8P_FISHEGG::hatch reads Egg::getEggId(this) and only proceeds if the id == 0; otherwise it does nothing.",
+    "State set + kickoff: U8P_FISHEGG::hatch sets Egg::setEggId(1, this) to mark initialization and calls U8P_FISHEGG::func00CC to run the sequence.",
+    "Timed animation loop: U8P_FISHEGG::func00CC creates a temporary item and runs a frame counter (local1) that is updated each iteration, using spawn/suspend to delay between frames, triggering playSFX at specific frames and finally destroying the temporary item.",
+    "Randomized branch: U8P_FISHEGG::func00CC uses urandom to pick between two branches which choose different temporary item types, starting frames, frame ranges, and SFX timing.",
+    "Reset on exit: U8P_FISHEGG::leaveFastArea clears the egg id to 0, allowing the U8P_FISHEGG::hatch guard to be satisfied again on re-entry or retrigger."
   ],
   "open_questions": [
-    "The exact event binding: U8P_FISHEGG::hatch is inferred to be a fast-area entry trigger (Event 7) but the precise trigger type (enter vs other) is not fully proven.",
-    "Concrete item type IDs (the specific item kinds created during the animation) and exact SFX IDs used are not listed in the disassembly output and remain unknown.",
-    "Precise timing/delay values used by the worker between frames and the lifetime (frame counts) of created fragments are inferred from counters but exact numeric timing is unspecified.",
-    "The exact semantics and implementation details of FREE::1C19 (spawned repeatedly) are inferred as a cleanup helper but its precise role and parameters remain uncertain.",
-    "Whether Egg::setEggId is used elsewhere in game logic (beyond guarding concurrent workers) is not known from this file alone."
+    "What specific gameplay consequences correspond to nonzero egg id values beyond '1' (are other ids used elsewhere to represent hatched outcomes)?",
+    "Exact meanings of numeric constants (item type ids, frame indices, SFX ids and spawn/timer delay values) — the code uses literals whose gameplay mapping is not explicit here.",
+    "Whether U8P_FISHEGG::leaveFastArea is invoked by an engine-area-exit event (fast-area leave) or some other trigger in all contexts where the egg should reset."
   ],
   "main_function": {
     "name": "U8P_FISHEGG::hatch",
     "execution_form": "process",
-    "purpose": "Handle the egg 'U8P_FISHEGG::hatch' trigger: if the egg is not already initialized (eggId == 0), mark it started and spawn an asynchronous worker to run the hatching animation/sequence.",
+    "purpose": "Guard and initiate an egg U8P_FISHEGG::hatch sequence: if the egg's stored id is 0, mark it initialized (set to 1) and start the timed U8P_FISHEGG::hatch/animation routine.",
     "entry_conditions": [
-      "Event 7 (U8P_FISHEGG::hatch) — invoked when the egg's U8P_FISHEGG::hatch trigger fires (inferred fast-area/entry-type event).",
-      "Egg::getEggId(this) == 0 must hold for the worker to be spawned."
+      "Invoked as the egg's U8P_FISHEGG::hatch/trigger process (likely when the player/actor enters a fast-area or triggers the egg).",
+      "Only proceeds when Egg::getEggId(this) == 0 (egg in uninitialized state)."
     ],
     "confidence": "high"
   },
@@ -33,28 +33,28 @@
     {
       "name": "U8P_FISHEGG::hatch",
       "kind": "main",
-      "role": "Entry handler for the egg's U8P_FISHEGG::hatch trigger; guards and spawns the asynchronous U8P_FISHEGG::hatch worker.",
+      "role": "Guard + kickoff for U8P_FISHEGG::hatch sequence; checks egg id, sets it to 1, calls the timed sequence.",
       "confidence": "high"
     },
     {
       "name": "U8P_FISHEGG::leaveFastArea",
       "kind": "helper",
-      "role": "Handler for leave-fast-area that clears the egg's id/flag (Egg::setEggId(this, 0)) so the egg can be restarted later.",
-      "confidence": "high"
+      "role": "Reset behavior: clears egg id (Egg::setEggId(0, this)) when the trigger/area is left to allow retriggering.",
+      "confidence": "medium"
     },
     {
-      "name": "U8P_FISHEGG::00CC",
+      "name": "U8P_FISHEGG::func00CC",
       "kind": "helper",
-      "role": "Asynchronous U8P_FISHEGG::hatch worker process: runs the timed/randomized animation, creates transient fragments, plays SFX, and destroys fragments when finished.",
-      "confidence": "medium"
+      "role": "Timed U8P_FISHEGG::hatch/animation and outcome routine: create/pop temporary item, run frame loop with spawn/suspend, play SFX, randomize branch, destroy temp item.",
+      "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
         "caller": "U8P_FISHEGG::hatch",
-        "callee": "U8P_FISHEGG::00CC",
-        "purpose": "Spawn the asynchronous U8P_FISHEGG::hatch worker/process after setting the egg guard (Egg::setEggId = 1).",
+        "callee": "U8P_FISHEGG::func00CC",
+        "purpose": "Start the timed U8P_FISHEGG::hatch/animation/outcome routine after setting the egg id to indicate initialization.",
         "confidence": "high"
       }
     ],
@@ -62,79 +62,85 @@
       {
         "caller": "U8P_FISHEGG::hatch",
         "callee": "Egg::getEggId",
-        "purpose": "Read the egg's stored id/flag to determine whether a U8P_FISHEGG::hatch worker is already running (guard).",
+        "purpose": "Read the egg's stored id/state to decide whether to start the U8P_FISHEGG::hatch sequence (guard).",
         "confidence": "high"
       },
       {
         "caller": "U8P_FISHEGG::hatch",
         "callee": "Egg::setEggId",
-        "purpose": "Set the egg's stored id/flag to 1 to mark that hatching has been started (prevents duplicate workers).",
+        "purpose": "Set the egg's stored id to 1 to mark initialization/start of U8P_FISHEGG::hatch sequence.",
         "confidence": "high"
       },
       {
         "caller": "U8P_FISHEGG::leaveFastArea",
         "callee": "Egg::setEggId",
-        "purpose": "Clear/reset the egg's id/flag to 0 when the actor leaves the trigger area so the egg can be reinitialized.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FISHEGG::00CC",
-        "callee": "FREE::1C19",
-        "purpose": "Spawn a cleanup/delayed-free helper tied to the worker's pid; used repeatedly to schedule cleanup (inferred).",
+        "purpose": "Clear/reset egg id to 0 when leaving the trigger area so the U8P_FISHEGG::hatch can be retriggered.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_FISHEGG::00CC",
+        "caller": "U8P_FISHEGG::func00CC",
         "callee": "urandom",
-        "purpose": "Generate a 0..99 random value (urandom(100)) to choose between two animation/item branches (~50% split).",
+        "purpose": "Generate a random roll to choose between two U8P_FISHEGG::hatch visual/outcome branches.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_FISHEGG::00CC",
+        "caller": "U8P_FISHEGG::func00CC",
+        "callee": "spawn ->FREE::func1C19",
+        "purpose": "Create short timer processes used with suspend to implement per-frame delays in the animation loop.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FISHEGG::func00CC",
+        "callee": "suspend",
+        "purpose": "Yield the U8P_FISHEGG::hatch process until the spawned timer completes to space animation frames.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FISHEGG::func00CC",
         "callee": "Item::create",
-        "purpose": "Create a temporary visual fragment/hatchling item used in the animation; the specific type depends on the random branch.",
+        "purpose": "Create the temporary item used for U8P_FISHEGG::hatch visuals (different item ids chosen per random branch).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_FISHEGG::00CC",
-        "callee": "Item::getX",
-        "purpose": "Obtain the egg's X coordinate to position the spawned fragment.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FISHEGG::00CC",
-        "callee": "Item::getY",
-        "purpose": "Obtain the egg's Y coordinate to position the spawned fragment.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FISHEGG::00CC",
-        "callee": "Item::getZ",
-        "purpose": "Obtain the egg's Z coordinate to position the spawned fragment correctly in elevation.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FISHEGG::00CC",
+        "caller": "U8P_FISHEGG::func00CC",
         "callee": "Item::pop",
-        "purpose": "Place/insert the newly created fragment item at the egg's coordinates with an initial frame/orientation.",
+        "purpose": "Place the created temporary item into the world at the egg's coordinates (uses Item::getZ/Y/X on the egg).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_FISHEGG::00CC",
+        "caller": "U8P_FISHEGG::func00CC",
+        "callee": "Item::getZ",
+        "purpose": "Read egg's Z coordinate for placing the temporary item.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FISHEGG::func00CC",
+        "callee": "Item::getY",
+        "purpose": "Read egg's Y coordinate for placing the temporary item.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FISHEGG::func00CC",
+        "callee": "Item::getX",
+        "purpose": "Read egg's X coordinate for placing the temporary item.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FISHEGG::func00CC",
         "callee": "Item::setFrame",
-        "purpose": "Advance the fragment's visual frame/state to animate cracking/hatching progression.",
+        "purpose": "Advance the temporary item's visual frame each loop iteration to animate U8P_FISHEGG::hatch progress.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_FISHEGG::00CC",
-        "callee": "U8P_FISHEGG::playSFX",
-        "purpose": "Play sound effects at particular frame thresholds to emphasize cracking/U8P_FISHEGG::hatch events.",
+        "caller": "U8P_FISHEGG::func00CC",
+        "callee": "playSFX",
+        "purpose": "Play sound effects at specific animation frames to accent the U8P_FISHEGG::hatch progression.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_FISHEGG::00CC",
+        "caller": "U8P_FISHEGG::func00CC",
         "callee": "Item::destroy",
-        "purpose": "Destroy/remove the temporary fragment when its animation sequence completes.",
+        "purpose": "Destroy/remove the temporary item when the animation/sequence completes.",
         "confidence": "high"
       }
     ]
@@ -150,9 +156,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_FISHEGG::FISHEGG::hatch",
-    "behavior_summary_one_liner": "This script implements an egg hatching sequence. When the egg's U8P_FISHEGG::hatch trigger fires, it checks an item-local guard (Egg::getEggId) and, if not set, marks the egg as started (Egg::setEggId = 1) and spawns an asynchronous worker that runs a timed, randomized hatching animation which creates transient visual pieces, plays SFX at key frames, and destroys those pieces when their animation finishes.",
-    "external_call_count": 13,
+    "main_function": "U8P_FISHEGG::hatch",
+    "behavior_summary_one_liner": "This script manages an egg object's U8P_FISHEGG::hatch lifecycle. U8P_FISHEGG::hatch guards starting a U8P_FISHEGG::hatch sequence by checking the egg's stored id (Egg::getEggId(this)). If the id is 0 (uninitialized), U8P_FISHEGG::hatch sets the id to 1 (Egg::setEggId(1, this)) and launches a timed U8P_FISHEGG::hatch/animation routine (U8P_FISHEGG::func00CC).",
+    "external_call_count": 14,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

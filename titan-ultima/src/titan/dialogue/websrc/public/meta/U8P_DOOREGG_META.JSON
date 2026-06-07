@@ -3,28 +3,28 @@
   "source_of_truth": "dialogue/json/U8P_DOOREGG.json",
   "file": "U8P_DOOREGG",
   "behavior_summary": [
-    "This script implements egg-related trigger logic used to manage door/slider activation when an egg 'hatches' and simple housekeeping when an actor leaves the egg's fast-area trigger.",
-    "U8P_DOOREGG::leaveFastArea acts as cleanup: it reads the egg's eggId, detects a previously-applied +0x64 (100) marker that denotes an active/hatched state, subtracts 0x64 to restore the base id, and writes the result back (undoes the active marker).",
-    "U8P_DOOREGG::hatch (helper) is responsible for the complex hatch behavior: it branches on eggId (special-case 0xC8/200 and comparisons around 0x64/100), may set the egg as active by adding 0x64, scans nearby tiles/items for matches by attributes (id/frame/shape/quality), spawns door or slider scripts for matched items, and sets a 0x0400 item-quality bit on some matched items to mark them handled."
+    "U8P_DOOREGG implements egg lifecycle handlers. The primary behavior on area-exit (U8P_DOOREGG::leaveFastArea) normalizes an internal egg id by subtracting 0x64 when the id is at least 0x64.",
+    "The U8P_DOOREGG::hatch process advances or alters the egg's id/state (adds 0x64 in typical flow) and triggers world-side effects: it scans item/object slots for items whose Item::getQuality matches a snapshot of the egg id and then spawns activations on linked objects (doors/sliders).",
+    "There is a special-case when the egg id equals 0xC8 (200): a matching item with low-byte quality 0xFA causes a DOOR_NS::useDoor spawn, a suspend/wait, and then the item's quality is updated with an OR 0x0400 flag."
   ],
   "notable_control_flow": [
-    "U8P_DOOREGG::leaveFastArea: single conditional branch — if eggId has the 0x64 marker, compute eggId - 0x64 and call Egg::setEggId; otherwise do nothing. This is straightforward cleanup.",
-    "hatch: multi-branch control flow — special case when eggId == 0xC8 (200) that triggers a distinct scanning/spawn path; otherwise if eggId < 0x64 it marks the egg active by adding 0x64; subsequently performs several iterative scans over nearby items with conditional spawns (DOOR_NS or SLIDER variants) and item-quality updates.",
-    "Spawning behavior is used to delegate door/slider animation or activation to other scripts (spawn calls return a temp that is popped/discarded)."
+    "U8P_DOOREGG::leaveFastArea: read Egg::getEggId(this); if >= 0x64 write Egg::setEggId(getEggId(this) - 0x64). No other side effects observed.",
+    "U8P_DOOREGG::hatch: branch on Egg::getEggId(this) == 0xC8 (special door/quality flag path) else snapshot egg id into local5, write Egg::setEggId(local5 + 0x64) then run repeated per-slot/per-type scan blocks comparing Item::getQuality(...) == local5 and spawning SLIDER or DOOR actions.",
+    "Spawns are used to invoke DOOR_NS::useDoor or SLIDER::activateSlider / SLIDER::deactivateSlider. At least one DOOR_NS::useDoor is followed by suspend (synchronous wait) before modifying item quality."
   ],
   "open_questions": [
-    "Precise semantic meaning of eggId numeric ranges and the magic constants 0x64 (100) and 0xC8 (200) — they appear to be state markers (base id vs. active/hatched marker) but exact mapping to gameplay content is inferred.",
-    "Exact gameplay effect of setting the item quality bit 0x0400 — likely a 'processed/linked' flag so the same item isn't processed twice, but that is not explicitly documented.",
-    "Whether spawn DOOR_NS::08B4 always opens a door or sometimes only animates it; likewise the exact difference between SLIDER::0080 and SLIDER::01A1 variants is inferred from context but not certain.",
-    "Whether the pid passed into some spawn calls is always the actor who triggered the hatch or sometimes another process id; the role of the pid in the door spawn is likely contextual for permissions/ownership."
+    "What exact in-game items/slots correspond to the repeated scan blocks in U8P_DOOREGG::hatch (which item groups/indices are iterated)?",
+    "What semantic meaning do the numeric id increments/decrements of 0x64 represent in gameplay terms (stages, tiers, or encoding of sub-state)?",
+    "What does the quality low-byte value 0xFA signify and what gameplay event is encoded by setting the 0x0400 bit on an item's quality?",
+    "Are there any global flags or external state changes outside item quality and egg id that this code relies on but which are not present in the decompiled fragments?"
   ],
   "main_function": {
     "name": "U8P_DOOREGG::leaveFastArea",
     "execution_form": "process",
-    "purpose": "Housekeeping when an actor leaves the egg's fast-area trigger: if the egg's eggId contains the +0x64 active/hatched marker, remove that marker by subtracting 0x64 and writing the resulting eggId back.",
+    "purpose": "Area-exit handler that normalizes / reduces an egg's internal id by 0x64 when the egg id is at least 0x64, likely to roll back or change egg state when leaving a trigger region.",
     "entry_conditions": [
-      "Called on fast-area exit (U8P_DOOREGG::leaveFastArea event) for the egg object instance.",
-      "Operates on the egg instance referenced by the method call (egg_object passed implicitly at BP+06h)."
+      "Triggered when an actor leaves the fast-area trigger region (U8P_DOOREGG::leaveFastArea event).",
+      "Acts only when Egg::getEggId(this) >= 0x64; otherwise it is a no-op."
     ],
     "confidence": "high"
   },
@@ -32,56 +32,68 @@
     {
       "name": "U8P_DOOREGG::leaveFastArea",
       "kind": "main",
-      "role": "Fast-area exit handler that clears an active/hatched marker from the egg's eggId.",
+      "role": "area-exit state normalizer for egg id",
       "confidence": "high"
     },
     {
       "name": "U8P_DOOREGG::hatch",
       "kind": "helper",
-      "role": "Handles the egg hatch event: marks the egg active, scans nearby items, spawns door/slider scripts, and marks processed items.",
+      "role": "egg-processing / hatching routine that advances egg id and triggers door/slider activations and item quality modifications",
       "confidence": "medium"
     },
     {
       "name": "Egg::getEggId",
       "kind": "extern",
-      "role": "Read the egg object's eggId (state field) used for branching and comparisons.",
+      "role": "read egg internal id/state",
       "confidence": "high"
     },
     {
       "name": "Egg::setEggId",
       "kind": "extern",
-      "role": "Write a new eggId for the egg object (used to add/remove the 0x64 active marker).",
+      "role": "write egg internal id/state",
       "confidence": "high"
     },
     {
       "name": "Item::getQuality",
       "kind": "extern",
-      "role": "Read an item's quality/flags word used to test attributes and mask bits during scans.",
+      "role": "read item quality/metadata for matching and flag checks",
       "confidence": "high"
     },
     {
       "name": "Item::setQuality",
       "kind": "extern",
-      "role": "Write back a modified quality/flags word (used to OR in marker 0x0400 on matched items).",
+      "role": "write modified quality/metadata (e.g., OR in flags)",
       "confidence": "high"
     },
     {
-      "name": "spawn DOOR_NS::08B4",
+      "name": "DOOR_NS::useDoor",
       "kind": "extern",
-      "role": "Spawn/activate a north/south door-related script for a matched item (likely to animate/open the door).",
-      "confidence": "medium"
+      "role": "trigger/activate door-like object",
+      "confidence": "high"
     },
     {
-      "name": "spawn SLIDER::0080",
+      "name": "SLIDER::activateSlider",
       "kind": "extern",
-      "role": "Spawn a slider-related script variant for matched items.",
-      "confidence": "medium"
+      "role": "activate/open slider mechanism",
+      "confidence": "high"
     },
     {
-      "name": "spawn SLIDER::01A1",
+      "name": "SLIDER::deactivateSlider",
       "kind": "extern",
-      "role": "Spawn an alternate slider-related script variant for a different class of matched items.",
-      "confidence": "medium"
+      "role": "deactivate/close slider mechanism",
+      "confidence": "high"
+    },
+    {
+      "name": "spawn",
+      "kind": "extern",
+      "role": "asynchronously start a method/process on a target object",
+      "confidence": "high"
+    },
+    {
+      "name": "suspend",
+      "kind": "extern",
+      "role": "suspend current process (used after spawning when waiting for result)",
+      "confidence": "high"
     }
   ],
   "call_analysis": {
@@ -90,55 +102,67 @@
       {
         "caller": "U8P_DOOREGG::leaveFastArea",
         "callee": "Egg::getEggId",
-        "purpose": "Read current eggId to detect whether the +0x64 active marker is present.",
+        "purpose": "Read the egg's id to decide whether to subtract 0x64.",
         "confidence": "high"
       },
       {
         "caller": "U8P_DOOREGG::leaveFastArea",
         "callee": "Egg::setEggId",
-        "purpose": "Write eggId - 0x64 back to the egg to remove the active/hatched marker when the actor leaves the trigger.",
+        "purpose": "Write back egg id = oldId - 0x64 when condition met.",
         "confidence": "high"
       },
       {
         "caller": "U8P_DOOREGG::hatch",
         "callee": "Egg::getEggId",
-        "purpose": "Read eggId to determine hatch branch (special-case 0xC8, whether to add 0x64 marker, and to compare against nearby item attributes).",
+        "purpose": "Read current egg id to branch on special-case 0xC8 and to snapshot into local5 for item comparisons.",
         "confidence": "high"
       },
       {
         "caller": "U8P_DOOREGG::hatch",
         "callee": "Egg::setEggId",
-        "purpose": "Mark the egg active by writing eggId + 0x64 (when appropriate branch is taken).",
-        "confidence": "medium"
+        "purpose": "Advance egg id by writing local5 + 0x64 in the non-0xC8 flow.",
+        "confidence": "high"
       },
       {
         "caller": "U8P_DOOREGG::hatch",
         "callee": "Item::getQuality",
-        "purpose": "Read candidate items' quality flags to filter matches and decide whether to spawn scripts or set the 0x0400 flag.",
+        "purpose": "Compare item quality low-byte or full quality against egg id snapshot (local5) or test for 0xFA low-byte in special branch.",
         "confidence": "high"
       },
       {
         "caller": "U8P_DOOREGG::hatch",
         "callee": "Item::setQuality",
-        "purpose": "Write back item quality after OR-ing in 0x0400 to mark items as processed/linked.",
+        "purpose": "Set or OR-in quality flags (e.g., OR 0x0400) on items in the 0xC8 branch.",
         "confidence": "medium"
       },
       {
         "caller": "U8P_DOOREGG::hatch",
-        "callee": "spawn DOOR_NS::08B4",
-        "purpose": "Spawn a door-related process for matched door items (likely opens/activates the door); sometimes called with item pointer and triggering pid.",
+        "callee": "spawn",
+        "purpose": "Invoke DOOR_NS::useDoor or SLIDER::<activate|deactivate> on target objects asynchronously as part of world-side activation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DOOREGG::hatch",
+        "callee": "DOOR_NS::useDoor",
+        "purpose": "Trigger door usage/action on matched item/object; in at least one branch the process suspends afterwards.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DOOREGG::hatch",
+        "callee": "SLIDER::activateSlider",
+        "purpose": "Activate slider mechanisms associated with items whose quality equals the egg snapshot.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DOOREGG::hatch",
+        "callee": "SLIDER::deactivateSlider",
+        "purpose": "Deactivate slider mechanisms in alternate repeated scan blocks for matching items.",
         "confidence": "medium"
       },
       {
         "caller": "U8P_DOOREGG::hatch",
-        "callee": "spawn SLIDER::0080",
-        "purpose": "Spawn a slider process for matched slider-type items.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_DOOREGG::hatch",
-        "callee": "spawn SLIDER::01A1",
-        "purpose": "Spawn an alternate slider process for a different matched item category.",
+        "callee": "suspend",
+        "purpose": "Wait for a spawned DOOR_NS::useDoor to complete in the special-case branch before continuing to modify item quality.",
         "confidence": "medium"
       }
     ]
@@ -155,8 +179,8 @@
   ],
   "quick_facts": {
     "main_function": "U8P_DOOREGG::leaveFastArea",
-    "behavior_summary_one_liner": "This script implements egg-related trigger logic used to manage door/slider activation when an egg 'hatches' and simple housekeeping when an actor leaves the egg's fast-area trigger.",
-    "external_call_count": 9,
+    "behavior_summary_one_liner": "U8P_DOOREGG implements egg lifecycle handlers. The primary behavior on area-exit (U8P_DOOREGG::leaveFastArea) normalizes an internal egg id by subtracting 0x64 when the id is at least 0x64.",
+    "external_call_count": 11,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

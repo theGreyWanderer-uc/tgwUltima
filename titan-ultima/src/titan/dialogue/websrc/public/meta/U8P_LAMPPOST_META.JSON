@@ -3,25 +3,24 @@
   "source_of_truth": "dialogue/json/U8P_LAMPPOST.json",
   "file": "U8P_LAMPPOST",
   "behavior_summary": [
-    "Handles the player's or actor's 'U8P_LAMPPOST::look' (examine) action on a lamppost item.",
-    "When examined, the script invokes Item::bark on the lamppost instance to emit the short description string \"lamp \".",
-    "The handler performs small setup/cleanup and inspects the return value from the bark call (via an implies/pop sequence) before suspending/returning; no global game flags are read or written by this script."
+    "Provides the 'U8P_LAMPPOST::look' (examine) handler for the lamppost object. When the player examines the lamppost, the process emits a single short bark text \"lamp \" and then yields/suspends.",
+    "No branching, menu interaction, flag reads/writes, or external calls are present. The routine is a minimal, single-purpose description/emote responder."
   ],
   "notable_control_flow": [
-    "After calling Item::bark the function reads the bark return value into a retval local, uses an implies/pop sequence (appears to be a control/flow check) and then executes a suspend before returning.",
-    "The implies/pop and suspend opcodes are used locally for control/yield behavior and do not appear to modify item state or global flags."
+    "Single straight-line flow: display bark text \"lamp \" then suspend/yield the process.",
+    "No conditional logic, loops, or callouts — deterministic on every examine invocation."
   ],
   "open_questions": [
-    "Exact runtime semantics of the implies/pop sequence and how its boolean/result affects overall process scheduling or message display (appears to be flow control but precise effect is unclear).",
-    "Whether a separate pid (viewer/process id) is explicitly passed to Item::bark or implicitly derived from the call context.",
-    "Whether any higher-level process-info / process-exclude setup observed in opcodes has side effects outside this script (it appears to set process info and exclusion for the item but the full implications are inferred)."
+    "Is the trailing space in the bark text \"lamp \" intentional formatting or an artifact of extraction?",
+    "Does any engine-level behavior occur after the suspend (resume semantics) that affects this object? The script itself yields but performs no explicit cleanup or state change.",
+    "Is this U8P_LAMPPOST::look handler ever invoked by fast-area entry semantics in addition to direct player examine actions? (Classification suggests 'U8P_LAMPPOST::look' only.)"
   ],
   "main_function": {
     "name": "U8P_LAMPPOST::look",
     "execution_form": "process",
-    "purpose": "Respond to a 'U8P_LAMPPOST::look' (examine) event on a lamppost item by making the item emit its short description.",
+    "purpose": "Show the lamppost's short examine description to the player by emitting a single bark text and yielding.",
     "entry_conditions": [
-      "Triggered when the player or another actor issues a 'U8P_LAMPPOST::look' / examine command on the lamppost object."
+      "Triggered by the engine when the player uses the U8P_LAMPPOST::look/examine action on the lamppost (process type 0x0208)."
     ],
     "confidence": "high"
   },
@@ -29,41 +28,25 @@
     {
       "name": "U8P_LAMPPOST::look",
       "kind": "main",
-      "role": "Handle the lamppost 'U8P_LAMPPOST::look' event and call Item::bark to display the item's short description.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine that displays or emits a short text message for an item (used here to show \"lamp \").",
+      "role": "Examine/U8P_LAMPPOST::look handler that displays a short description (bark) for the lamppost.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_LAMPPOST::look",
-        "callee": "Item::bark",
-        "purpose": "Make the lamppost item emit a one-line description/message (literal string \"lamp \") to the viewer/process; invoked on the item instance.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
     "writes": []
   },
   "ui_tags": [
-    "trigger",
-    "cleanup",
-    "animation",
-    "guard"
+    "trigger"
   ],
   "quick_facts": {
-    "main_function": "LAMPPOST::look",
-    "behavior_summary_one_liner": "Handles the player's or actor's 'U8P_LAMPPOST::look' (examine) action on a lamppost item.",
-    "external_call_count": 1,
+    "main_function": "U8P_LAMPPOST::look",
+    "behavior_summary_one_liner": "Provides the 'U8P_LAMPPOST::look' (examine) handler for the lamppost object. When the player examines the lamppost, the process emits a single short bark text \"lamp \" and then yields/suspends.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

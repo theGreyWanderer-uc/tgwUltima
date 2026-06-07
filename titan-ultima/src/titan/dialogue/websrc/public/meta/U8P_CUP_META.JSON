@@ -3,28 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_CUP.json",
   "file": "U8P_CUP",
   "behavior_summary": [
-    "U8P_CUP::look handles the 'U8P_CUP::look' (examine) event for the cup item. When an actor examines the cup it sets an info/state marker on the object (info id 0x0208), then constructs the short name string \"cup \", calls Item::bark to present that short description to the examining actor, frees the temporary string, and then suspends/returns.",
-    "The call to Item::bark is the visible effect: it causes the cup to 'bark' the text \"cup \" to the provided actor/process (the viewer).",
-    "The function performs small bookkeeping (implies/pop sequence) typical of Usecode/engine handlers before finishing; no persistent global flags are read or written by this script."
+    "U8P_CUP::look is the object's 'U8P_CUP::look' (examine) handler. When the player inspects the CUP object it displays a single short text/bark: \"cup \".",
+    "After emitting the bark the handler yields/ends by calling suspend (returns control to the engine).",
+    "There is no branching, menu interaction, flag read/write, or other side effects recorded; the handler is purely descriptive."
   ],
   "notable_control_flow": [
-    "Entry on Event 0 (U8P_CUP::look) with a caller/actor pid parameter passed at BP+06h.",
-    "Set info operation is performed with constant 0x0208 and a process-exclude step (marking or adjusting object processing state).",
-    "Dynamically allocate/construct the literal string \"cup \", push it and the caller pid to Item::bark, capture the returned value (retval).",
-    "Free the constructed string, push retval, perform an implies/pop control bookkeeping sequence, then suspend/return the process."
+    "Single linear flow: on entry (U8P_CUP::look) -> emit bark \"cup \" -> call suspend to yield/terminate the process.",
+    "No conditional branches, loops, or calls to other internal functions are present."
   ],
   "open_questions": [
-    "Precise semantic meaning of info id 0x0208 (what object state/flag it represents) — inferred only from opcode usage.",
-    "Whether the process-exclude/set-info step changes long-term processing of the cup or is purely transient bookkeeping.",
-    "Exact effects and interpretation of the Item::bark return value (stored in retval) and how it influences the enclosing script beyond being pushed before suspend."
+    "Is the trailing space in the bark text \"cup \" intentional (formatting artifact) or meaningful in the game UI?",
+    "The raw metadata included two 'Unknown' nodes (\"{\" and a raw 'suspend' node). Are there any context-specific side effects of the suspend call beyond ending the U8P_CUP::look handler?"
   ],
   "main_function": {
     "name": "U8P_CUP::look",
     "execution_form": "process",
-    "purpose": "Respond to an actor looking at/examining the cup: mark/set an info flag on the item, and display its short name \"cup \" to the examining actor via Item::bark, then finish.",
+    "purpose": "Provide the short descriptive text when the player examines the CUP object and then yield/terminate the U8P_CUP::look handler.",
     "entry_conditions": [
-      "Event 0 (U8P_CUP::look) — triggered when an actor examines or 'looks' at the cup",
-      "Caller/actor pid supplied as parameter at BP+06h"
+      "Invoked by the engine when the player uses the U8P_CUP::look/examine action on the CUP object (process type 0x0208).",
+      "Triggered by the object's 'U8P_CUP::look' event (inferred)."
     ],
     "confidence": "high"
   },
@@ -32,13 +29,7 @@
     {
       "name": "U8P_CUP::look",
       "kind": "main",
-      "role": "Handles the U8P_CUP::look/examine event for the cup object; performs set-info, builds a short-name string and invokes Item::bark to show it to the viewer.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item service used to present short text/bark from the item to a target process/player (used to display \"cup \").",
+      "role": "U8P_CUP::look/examine handler that emits a single bark and ends",
       "confidence": "high"
     }
   ],
@@ -47,9 +38,9 @@
     "external_calls": [
       {
         "caller": "U8P_CUP::look",
-        "callee": "Item::bark",
-        "purpose": "Display or emit the short name/description string \"cup \" to the actor/process that examined the item (pid passed from BP+06h).",
-        "confidence": "high"
+        "callee": "suspend",
+        "purpose": "Yield or terminate the U8P_CUP::look process and return control to the engine (end the handler).",
+        "confidence": "medium"
       }
     ]
   },
@@ -59,13 +50,11 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "animation",
-    "guard"
+    "description"
   ],
   "quick_facts": {
     "main_function": "U8P_CUP::look",
-    "behavior_summary_one_liner": "U8P_CUP::look handles the 'U8P_CUP::look' (examine) event for the cup item. When an actor examines the cup it sets an info/state marker on the object (info id 0x0208), then constructs the short name string \"cup \", calls Item::bark to present that short description to the examining actor, frees the temporary string, and then suspends/returns.",
+    "behavior_summary_one_liner": "U8P_CUP::look is the object's 'U8P_CUP::look' (examine) handler. When the player inspects the CUP object it displays a single short text/bark: \"cup \".",
     "external_call_count": 1,
     "flag_read_count": 0,
     "flag_write_count": 0

@@ -3,28 +3,28 @@
   "source_of_truth": "dialogue/json/U8P_KEY.json",
   "file": "U8P_KEY",
   "behavior_summary": [
-    "When a player/actor inspects ('looks' at) a key item, the script reads the key's quality/code and causes the actor to emit a short, context-sensitive description (a bark) describing the key type.",
-    "Many specific numeric quality codes are mapped to distinct human-readable key names (examples: a blank key, silver mine key, 'Key of the Conventicler', 'Devon's key', etc.). If no specific match is found a generic 'key' description is used.",
-    "Using the key (KEY::use) does not perform unlock logic itself; instead it prepares processing state and spawns the KEYRING::0119 script with the actor id and the item to handle key-use behavior (likely UI or unlocking logic).",
-    "The script temporarily sets script-processing/info flags (process-exclude, set info) and uses implies/suspend-style control around bark/spawn operations to avoid reentrancy during these short interactions."
+    "Provides the short examine/\"U8P_KEY::look at\" description for a key item and delegates key usage to a keyring handler.",
+    "U8P_KEY::look chooses a single-line bark based on the item's quality code (Item::getQuality(this)), with many quality codes mapping to a generic \"key\" text and a handful mapping to specific names like \"silver mine key\", \"Key of the Conventicler\", \"Devon's key\", \"Disciple's key\", \"Acolyte's key\", and \"Master's key\".",
+    "After emitting the selected bark the U8P_KEY::look process suspends (ends).",
+    "U8P_KEY::use does not implement U8P_KEY::use logic itself; it immediately calls the keyring handler KEYRING::func0119 and then suspends, delegating any U8P_KEY::use/equip/open behavior to that external routine.",
+    "No global flags are read or written by these functions; behavior is local to the item instance and the keyring call."
   ],
   "notable_control_flow": [
-    "Event-driven: main entry is a 'U8P_KEY::look' event that triggers immediate short output (bark).",
-    "Branching on Item::getQuality return value: a sequence of comparisons selects the description string to bark.",
-    "Around bark and spawn calls the script sets processing/info flags and uses implies/suspend-style control to serialize/guard the operation.",
-    "KEY::use delegates runtime behavior to a spawned KEYRING::0119 process rather than performing unlocking inline."
+    "U8P_KEY::look: read item quality (via Item::getQuality(this)), select one bark from many possibilities, show bark, then suspend.",
+    "U8P_KEY::use: call KEYRING::func0119, then suspend (no branching or menus).",
+    "No conditional game-state flags or menu interactions gate these behaviors; selection is purely data-driven from the item's quality code."
   ],
   "open_questions": [
-    "Exact numeric-to-string mapping is known for many values but some quality codes observed in the sequence may map to similar or identical 'Key' strings — are there external data tables that canonicalize all quality values?",
-    "The precise info id(s) set by 'set info' and their engine-level meaning are not recorded here; what persistent state (if any) is intended by those flags for key items?",
-    "Which in-game interactions (e.g., inventory context menu vs. world use) invoke KEY::use versus other key-related scripts (KEYRING::0119) remains inferred from spawn usage."
+    "Exact mapping of numeric quality codes to each specific bark string (the script shows examples but the full mapping and codes are not present).",
+    "Whether KEYRING::func0119 receives the 'this' item handle implicitly or via other context and what precise side effects (equip vs open vs transfer) it performs.",
+    "If any quality codes encode additional metadata (ownership, bound/unbound) that would change behavior beyond choosing a bark (no flags observed here)."
   ],
   "main_function": {
     "name": "U8P_KEY::look",
     "execution_form": "process",
-    "purpose": "Provide a concise, context-sensitive textual description (bark) when an actor inspects a key item by reading the item's quality/code and selecting an appropriate short string.",
+    "purpose": "When the player inspects the key item, select and display a one-line description/bark determined by the item's quality value.",
     "entry_conditions": [
-      "Event 0 / 'U8P_KEY::look' action: invoked when the player/actor examines or looks at the key item."
+      "Invoked when the player uses the 'U8P_KEY::look' / examine action on the key item (processType 0x0208)."
     ],
     "confidence": "high"
   },
@@ -32,32 +32,20 @@
     {
       "name": "U8P_KEY::look",
       "kind": "main",
-      "role": "Responds to the 'U8P_KEY::look' event for a key item; inspects item quality and causes the actor to bark an appropriate description.",
+      "role": "Provide the examine/description text for the key based on Item::getQuality(this).",
       "confidence": "high"
     },
     {
       "name": "U8P_KEY::use",
       "kind": "helper",
-      "role": "Handles the 'use' action for a key by preparing processing state and spawning KEYRING::0119 with the actor and the item; delegates actual use/unlock behavior.",
+      "role": "Delegate 'U8P_KEY::use' handling for this key to the keyring handler (no inline U8P_KEY::use logic).",
       "confidence": "high"
     },
     {
-      "name": "Item::getQuality",
+      "name": "KEYRING::func0119",
       "kind": "extern",
-      "role": "Returns an integer quality/code used to distinguish key subtypes; used to select which description to bark.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Emit/display a short text string from the actor/item to the player (used for the key description strings).",
-      "confidence": "high"
-    },
-    {
-      "name": "spawn (KEYRING::0119)",
-      "kind": "extern",
-      "role": "Start the KEYRING::0119 process with the actor id and item pointer to handle key-use UI or unlocking logic.",
-      "confidence": "high"
+      "role": "External keyring routine that actually performs key management or U8P_KEY::use (equip/open/transfer) for the player's keyring.",
+      "confidence": "medium"
     }
   ],
   "call_analysis": {
@@ -66,51 +54,33 @@
       {
         "caller": "U8P_KEY::look",
         "callee": "Item::getQuality",
-        "purpose": "Read the numeric quality/code of the key item so the script can branch to the appropriate human-readable description.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_KEY::look",
-        "callee": "Item::bark",
-        "purpose": "Make the actor speak the selected short description string for the key (the visible/played result of 'U8P_KEY::look').",
+        "purpose": "Read this item's quality code to decide which bark/description to display.",
         "confidence": "high"
       },
       {
         "caller": "U8P_KEY::use",
-        "callee": "spawn (KEYRING::0119)",
-        "purpose": "Delegate key-use behavior (likely keyring UI or unlocking logic) to a separate process, passing actor id and item pointer.",
+        "callee": "KEYRING::func0119",
+        "purpose": "Perform the actual key U8P_KEY::use/management; U8P_KEY::use acts as a thin delegator to keyring logic.",
         "confidence": "high"
-      },
-      {
-        "caller": "U8P_KEY::look",
-        "callee": "U8P_KEY::string/runtime ops (alloc/format/free)",
-        "purpose": "Prepare and free the descriptive string passed to Item::bark; bookkeeping around string parameters for bark.",
-        "confidence": "medium"
       }
     ]
   },
   "global_flags": {
     "reads": [],
-    "writes": [
-      {
-        "name": "script processing/info flags (set info / process-exclude)",
-        "likely_effect": "Temporarily exclude the object/process from concurrent processing and mark an informational state while producing barks or spawning; controls reentrancy and short-lived script behavior.",
-        "confidence": "high"
-      }
-    ]
+    "writes": []
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
-    "animation",
-    "guard"
+    "description",
+    "delegation",
+    "item"
   ],
   "quick_facts": {
-    "main_function": "U8P_KEY::KEY::look",
-    "behavior_summary_one_liner": "When a player/actor inspects ('looks' at) a key item, the script reads the key's quality/code and causes the actor to emit a short, context-sensitive description (a bark) describing the key type.",
-    "external_call_count": 4,
+    "main_function": "U8P_KEY::look",
+    "behavior_summary_one_liner": "Provides the short examine/\"U8P_KEY::look at\" description for a key item and delegates key usage to a keyring handler.",
+    "external_call_count": 2,
     "flag_read_count": 0,
-    "flag_write_count": 1
+    "flag_write_count": 0
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

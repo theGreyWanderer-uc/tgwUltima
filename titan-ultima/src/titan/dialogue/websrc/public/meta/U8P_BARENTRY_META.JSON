@@ -3,25 +3,27 @@
   "source_of_truth": "dialogue/json/U8P_BARENTRY.json",
   "file": "U8P_BARENTRY",
   "behavior_summary": [
-    "U8P_BARENTRY::hatch is a fast-area entry event handler for the bar-entry region. When an actor (usually the Avatar) enters the region it configures processing state on a target process/actor, then causes that process to emit a short spoken/text message (a 'bark'): \"I'm in a fantasy-type bar setting!\". After issuing the bark the handler frees its temporary string, inspects the bark return value, then suspends/returns, acting as a one-shot area-triggered message emitter."
+    "U8P_BARENTRY::hatch is a one-shot utility process that plays a single player-facing bark: \"I'm in a fantasy-type bar setting!\" and then suspends itself.",
+    "There are no parameters, no conditionals, and no global flags read or written by this script.",
+    "The process functions as a short flavor/announcement likely intended for an area-entry or lifecycle event (inference) and then ends immediately."
   ],
   "notable_control_flow": [
-    "U8P_BARENTRY::hatch is invoked on a fast-area entry trigger (enterFastArea / Event 7) for the bar-entry region.",
-    "The routine targets a process id (inferred from BP+06h), sets process-related info and excludes the process from further processing using engine opcodes (set info / process exclude).",
-    "It pushes the target pid, an option byte (value 0x01), and a pointer to the literal string \"I'm in a fantasy-type bar setting!\" and calls Item::bark to make that process emit the message.",
-    "After the bark call the temporary string is freed, the return value is tested with an 'implies' style opcode, a small temporary is popped, and the handler suspends/returns (one-shot behavior)."
+    "U8P_BARENTRY::hatch -> call Bark(text) to display the line.",
+    "Immediately after Bark returns, U8P_BARENTRY::hatch calls suspend to stop the process (one-shot behavior).",
+    "No branches, loops, flag checks, or data manipulation are present; control flow is linear and trivial."
   ],
   "open_questions": [
-    "Exact semantic meaning of the 'set info' key/id used before excluding the process (what game state or behavior it encodes) — inferred but not certain.",
-    "Precise purpose of the option byte value 0x01 passed to Item::bark (e.g., audience mask, priority, or formatting flag).",
-    "Meaning and intended effect of the post-call 'implies' check on the bark return value (used for control flow or logging?) — observed but unclear in higher-level intent."
+    "What exact engine event launches the process (explicit evidence: processType 0x0210); is it triggered by entering a specific fast-area, item lifecycle, or another external event? (confidence: medium)",
+    "Which in-game entity or object is associated with this U8P_BARENTRY::hatch process (item instance, static trigger, NPC)? (confidence: low)",
+    "Is the bark localized or tied to other dialogue systems (only a literal sample was extracted)? (confidence: low)"
   ],
   "main_function": {
     "name": "U8P_BARENTRY::hatch",
     "execution_form": "process",
-    "purpose": "On entering the bar-entry fast-area, prepare a target process and make it emit the short bark \"I'm in a fantasy-type bar setting!\", then clean up and suspend/return.",
+    "purpose": "Emit a short flavor bark to the player and terminate/suspend the process (one-shot announcement).",
     "entry_conditions": [
-      "enterFastArea (Event 7) — triggered when the Avatar or an actor enters the bar-entry region"
+      "Process start (utility process, process_type 0x0210) — triggered when the associated process is launched (high confidence).",
+      "Likely invoked by an area-entry trigger or item lifecycle event in gameplay context (appears inferred; medium/low confidence)."
     ],
     "confidence": "high"
   },
@@ -29,36 +31,35 @@
     {
       "name": "U8P_BARENTRY::hatch",
       "kind": "main",
-      "role": "Fast-area entry (enterFastArea) event handler for the bar-entry region; configures process info/exclusion and triggers a short bark from the target process.",
+      "role": "one-shot flavor announcement (plays a bark then suspends)",
       "confidence": "high"
     },
     {
-      "name": "Item::bark",
+      "name": "Bark",
       "kind": "extern",
-      "role": "Engine/item routine called to make a process/item emit a short text or spoken message (the 'bark').",
+      "role": "display/play a short player-facing line of text",
+      "confidence": "high"
+    },
+    {
+      "name": "suspend",
+      "kind": "extern",
+      "role": "suspend or terminate the running process",
       "confidence": "high"
     }
   ],
   "call_analysis": {
-    "internal_calls": [
-      {
-        "caller": "U8P_BARENTRY::hatch",
-        "callee": "U8P_BARENTRY::engine.set_info / engine.process_exclude",
-        "purpose": "Configure an info/state key on the referenced process and exclude it from normal processing (prepares/guards the target process before barking).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_BARENTRY::hatch",
-        "callee": "U8P_BARENTRY::engine.suspend",
-        "purpose": "Suspend or return control after finishing the one-shot handler.",
-        "confidence": "high"
-      }
-    ],
+    "internal_calls": [],
     "external_calls": [
       {
         "caller": "U8P_BARENTRY::hatch",
-        "callee": "Item::bark",
-        "purpose": "Request the target process to emit the message \"I'm in a fantasy-type bar setting!\". Parameters observed: pid (target process id), option byte (0x01), char* message pointer.",
+        "callee": "Bark",
+        "purpose": "Show the single flavor line \"I'm in a fantasy-type bar setting!\" to the player.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BARENTRY::hatch",
+        "callee": "suspend",
+        "purpose": "Stop/suspend the process immediately after the bark to make this a one-shot action.",
         "confidence": "high"
       }
     ]
@@ -69,14 +70,14 @@
   },
   "ui_tags": [
     "trigger",
-    "speech",
     "cleanup",
+    "animation",
     "guard"
   ],
   "quick_facts": {
     "main_function": "U8P_BARENTRY::hatch",
-    "behavior_summary_one_liner": "U8P_BARENTRY::hatch is a fast-area entry event handler for the bar-entry region. When an actor (usually the Avatar) enters the region it configures processing state on a target process/actor, then causes that process to emit a short spoken/text message (a 'bark'): \"I'm in a fantasy-type bar setting!\". After issuing the bark the handler frees its temporary string, inspects the bark return value, then suspends/returns, acting as a one-shot area-triggered message emitter.",
-    "external_call_count": 1,
+    "behavior_summary_one_liner": "U8P_BARENTRY::hatch is a one-shot utility process that plays a single player-facing bark: \"I'm in a fantasy-type bar setting!\" and then suspends itself.",
+    "external_call_count": 2,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

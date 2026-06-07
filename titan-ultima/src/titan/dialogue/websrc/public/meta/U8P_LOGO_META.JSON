@@ -3,27 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_LOGO.json",
   "file": "U8P_LOGO",
   "behavior_summary": [
-    "Provides examine ('U8P_LOGO::look') and use behaviors for a logo/item. When examined, the script chooses a short descriptive prefix based on the item's frame (variant) and asks the item to 'bark' that string to the viewer.",
-    "When used, the script sequences spawned effects oriented to the actor and two short dialog barks from the item. It spawns a general effect, queries the actor's facing direction, spawns a direction-dependent effect, barks a first line, spawns a second direction-dependent effect, then barks a concluding line.",
-    "Frame thresholds partition descriptors into three categories: 'magical sphere ', 'magical tetrahedron ', and 'magical cube '."
+    "Provides the player-facing examine (U8P_LOGO::look) description for the item and a usage interaction that sequences visual/animation effects and two short barks.",
+    "U8P_LOGO::look reads the item's frame/index via Item::getFrame(this) and selects one of three short descriptive barks: 'magical sphere', 'magical tetrahedron', or 'magical cube', based on that frame value.",
+    "U8P_LOGO::use performs an asynchronous sequence: it spawns other methods (likely animation/effect processes), suspends/waits for them, and emits two barks ('I have not the strength, nor the wisdom to master such power... ' and '...but one day I shall!')."
   ],
   "notable_control_flow": [
-    "U8P_LOGO::LOGO::look calls Item::getFrame(item) and branches on the returned frame value to pick one of three descriptor strings, then calls Item::bark(item, string) and frees the temporary string.",
-    "U8P_LOGO::LOGO::use runs a sequence of spawn and wait/suspend operations interleaved with calls to Npc::getDir(pid) to obtain orientation and Item::bark(item, string) for two dialog lines.",
-    "Use-handler relies on suspension points (waits) between spawns and barks to sequence effects and dialog, implying temporal ordering rather than instantaneous multi-spawn."
+    "U8P_LOGO::look branches on a local (local1 = Item::getFrame(this)) into three mutually exclusive bark outcomes using frame thresholds (local1 < 0x06, local1 < 0x0B, else).",
+    "U8P_LOGO::use issues multiple spawn calls (capturing pid/temp), interleaves suspend/wait points, and sequences two barks around spawn/suspend — implying timed/asynchronous effect playback rather than immediate state changes."
   ],
   "open_questions": [
-    "Exact semantics and visual/functional effect of spawn METHOD::091C and METHOD::15E7 (inferred to be visual/timed effects but implementation details are unknown).",
-    "Precise meaning of the numeric frame thresholds (why <6, 6–10, >=11) and whether they map to art assets or gameplay tiers.",
-    "The callback/addr parameters passed to spawn calls are visible only as addresses/values in the disassembly — their runtime behavior and lifetime are not fully recoverable here.",
-    "Whether LOGO::use is triggered by a specific event code (inferred Event 1) or other interaction types in the engine's event dispatcher."
+    "Exact runtime purpose of spawned METHOD::func091C and METHOD::func15E7 (inferred to be animations/effects but not confirmed).",
+    "Precise meanings of numeric literal arguments passed to spawned methods (0x0A, 0x31, 0x32 etc.) — likely effect/animation identifiers but uncertain.",
+    "Whether U8P_LOGO::use affects any game-state or quests beyond playing effects and barks (no global flags are read/written in this excerpt)."
   ],
   "main_function": {
     "name": "U8P_LOGO::look",
     "execution_form": "process",
-    "purpose": "Handle the item's examine/U8P_LOGO::look action: determine the item's visual variant (frame) and present a short descriptive prefix by invoking Item::bark.",
+    "purpose": "Return a short, frame-dependent description when the player examines the item (U8P_LOGO::look/examine handler).",
     "entry_conditions": [
-      "Event 0: item is 'looked at' / examined (actor triggered the item's U8P_LOGO::look event)"
+      "Invoked when the player uses the 'U8P_LOGO::look' (examine) verb on this item (process type 0x0208).",
+      "Relies on the item's frame/index (Item::getFrame(this)) to pick which description to show."
     ],
     "confidence": "high"
   },
@@ -31,43 +30,13 @@
     {
       "name": "U8P_LOGO::look",
       "kind": "main",
-      "role": "Examine handler that selects a descriptor based on Item::getFrame and calls Item::bark with that string.",
+      "role": "examine/U8P_LOGO::look handler that chooses among three short barks based on the item's frame/index",
       "confidence": "high"
     },
     {
       "name": "U8P_LOGO::use",
       "kind": "helper",
-      "role": "Use handler that spawns effects (METHOD::091C, METHOD::15E7), queries actor direction (Npc::getDir), and emits two dialog barks via Item::bark while sequencing waits.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getFrame",
-      "kind": "extern",
-      "role": "Return the item's frame/variant index so logic can pick the descriptor.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Emit or queue a text/dialog line associated with the item (used for descriptors and spoken lines).",
-      "confidence": "high"
-    },
-    {
-      "name": "Npc::getDir",
-      "kind": "extern",
-      "role": "Return facing direction for an actor/pid so spawned effects can be oriented.",
-      "confidence": "high"
-    },
-    {
-      "name": "METHOD::091C",
-      "kind": "extern",
-      "role": "Spawned engine routine; likely creates a timed or attachment effect tied to pid (exact effect inferred).",
-      "confidence": "medium"
-    },
-    {
-      "name": "METHOD::15E7",
-      "kind": "extern",
-      "role": "Direction-dependent spawn routine called with effect codes (0x31, 0x32); likely draws orientation-specific visual effects.",
+      "role": "usage handler that spawns asynchronous effects/animations and emits two barks, with suspend/wait sequencing",
       "confidence": "medium"
     }
   ],
@@ -77,38 +46,32 @@
       {
         "caller": "U8P_LOGO::look",
         "callee": "Item::getFrame",
-        "purpose": "Retrieve the item's frame/variant index to decide which descriptor string to present.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LOGO::look",
-        "callee": "Item::bark",
-        "purpose": "Make the item 'speak' the chosen descriptor to the examining actor/process.",
+        "purpose": "Obtain the item's frame/index used to determine which short description/bark to display.",
         "confidence": "high"
       },
       {
         "caller": "U8P_LOGO::use",
-        "callee": "METHOD::091C",
-        "purpose": "Spawn a general effect attached to the actor/pid before directional effects (likely a non-directional visual/timed effect).",
+        "callee": "spawn",
+        "purpose": "Launch asynchronous processes (used to start METHOD::func091C and METHOD::func15E7); return is captured (pid/temp) and awaited via suspend.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LOGO::use",
+        "callee": "METHOD::func091C",
+        "purpose": "Spawned with literals (0x0A, 0x00, 0x03); likely starts an effect/animation or visual sub-process.",
         "confidence": "medium"
       },
       {
         "caller": "U8P_LOGO::use",
         "callee": "Npc::getDir",
-        "purpose": "Get the actor's facing direction so subsequent directional effects can be oriented correctly.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LOGO::use",
-        "callee": "METHOD::15E7",
-        "purpose": "Spawn a direction-dependent effect using the direction from Npc::getDir and an effect code (called twice with codes 0x31 and 0x32).",
+        "purpose": "Retrieve an actor/NPC direction to pass into a spawned METHOD::func15E7 call (direction-dependent animation selection).",
         "confidence": "medium"
       },
       {
         "caller": "U8P_LOGO::use",
-        "callee": "Item::bark",
-        "purpose": "Emit two short dialog lines from the item interleaved with effect spawns to convey narrative flavor ('I have not the strength...' and '...but one day I shall!').",
-        "confidence": "high"
+        "callee": "METHOD::func15E7",
+        "purpose": "Spawned with a direction and constants (0x31/0x32); likely triggers a direction-specific animation/effect.",
+        "confidence": "medium"
       }
     ]
   },
@@ -118,14 +81,15 @@
   },
   "ui_tags": [
     "trigger",
-    "cleanup",
+    "examine",
     "animation",
-    "guard"
+    "asynchronous",
+    "bark"
   ],
   "quick_facts": {
-    "main_function": "U8P_LOGO::LOGO::look",
-    "behavior_summary_one_liner": "Provides examine ('U8P_LOGO::look') and use behaviors for a logo/item. When examined, the script chooses a short descriptive prefix based on the item's frame (variant) and asks the item to 'bark' that string to the viewer.",
-    "external_call_count": 6,
+    "main_function": "U8P_LOGO::look",
+    "behavior_summary_one_liner": "Provides the player-facing examine (U8P_LOGO::look) description for the item and a usage interaction that sequences visual/animation effects and two short barks.",
+    "external_call_count": 5,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

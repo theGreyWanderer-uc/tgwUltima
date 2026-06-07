@@ -3,30 +3,32 @@
   "source_of_truth": "dialogue/json/U8P_FORTOPEN.json",
   "file": "U8P_FORTOPEN",
   "behavior_summary": [
-    "When the U8P_FORTOPEN::hatch fast-area trigger runs, the routine scans a set of nearby map items/tiles around the triggering item and clears a particular quality bit (observed mask 0x0400) on matching items. After clearing that bit it may spawn a door/U8P_FORTOPEN::hatch behavior/animation (spawn DOOR_NS::08B4) for items whose 0x0100 bit is clear. The whole action is gated by global state and by spatial checks on the trigger item's coordinates and tile flags."
+    "U8P_FORTOPEN::hatch is a process that runs to potentially open a U8P_FORTOPEN::hatch/door when certain game-state and item conditions are met.",
+    "The routine is gated by the global flag keyOfTheAcolyte: if that flag is not true the U8P_FORTOPEN::hatch logic does not run.",
+    "When keyOfTheAcolyte is true the code can take a coordinate-checked branch (Item::getX == 0x157F, Item::getY == 0x493F, Item::getZ == 0x60) that also requires MalchirTest >= 6; this branch and a duplicate downstream sequence both perform similar item-quality manipulation and may spawn the door-use action.",
+    "For a chosen item reference (local2) the script reads its quality bitfield (local3), clears bit 0x0400 if present (writing the modified quality back via Item::setQuality), and — if the item exists and bit 0x0100 is not set — spawns DOOR_NS::useDoor(0x00) to open the U8P_FORTOPEN::hatch.",
+    "The code contains duplicated sequences of the quality-clear + spawn logic, implying the U8P_FORTOPEN::hatch-opening behavior can be triggered from multiple sub-branches when the acolyte key condition is met."
   ],
   "notable_control_flow": [
-    "Early-return guard: if global keyOfTheAcolyte is non-zero the function exits immediately.",
-    "Spatial gating: reads trigger item's X and Y coordinates and Z/tile flags (Item::getX, Item::getY, Item::getZ). X compared against 0x157F, Y compared against 0x493F and (Z & 0x60) selects between two nearly identical scanning branches.",
-    "Quest/state gating: global MalchirTest is compared against 6; MalchirTest >= 6 selects a specific loop/behavior path.",
-    "Two loop variants (chosen by the Z mask) iterate nearby map locations. For each scanned item: read quality (Item::getQuality), if bit 0x0400 is set clear it and write back (Item::setQuality).",
-    "After scanning, for the final/current scanned item if bit 0x0100 is clear the script spawns DOOR_NS::08B4 at that item with a zero byte argument (likely to animate/open the U8P_FORTOPEN::hatch)."
+    "Top-level guard: check global keyOfTheAcolyte before doing any U8P_FORTOPEN::hatch-related operations.",
+    "Optional coordinate branch: when the item is at X=0x157F, Y=0x493F, Z=0x60 and MalchirTest >= 6, run a coordinate-specific sequence that includes the same quality/door logic.",
+    "Quality-bit handling: read quality -> test bit 0x0400 -> clear it and write back -> test bit 0x0100 to decide whether to spawn the door.",
+    "Door spawn call appears after confirming the item reference exists and the 0x0100 quality bit is not set; spawn result is stored in a temp but not clearly used further in the decompilation."
   ],
   "open_questions": [
-    "Exact semantic meaning of the quality bits 0x0400 and 0x0100 (appear to represent an internal 'closed/needs-opening' bit and an 'already opened/animated' bit, respectively) — inferred but not confirmed.",
-    "Precise game-world meaning of the numeric coordinate constants (0x157F, 0x493F) and the Z mask 0x60 (tile layer/flag interpretation is inferred).",
-    "Whether spawn DOOR_NS::08B4 both changes logic state and plays an animation or only provides a visual/temporary effect; the effect of the byte arg (0) is unknown.",
-    "Whether the routine should run on enterFastArea only or also on leaveFastArea in some contexts — disassembly shows fast-area event but exact engine semantics are inferred."
+    "What exact gameplay meaning do quality bits 0x0400 and 0x0100 represent (flags, one-shot marker, or status)?",
+    "What is the provenance and role of local1 (source used to populate local2) — is it an inventory handle, nearby item lookup, or passed context)?",
+    "What are the semantics of the low-level constants seen in the raw (0x0154h, 0x0156h, 0x0Ah * 0x20h) and do they affect timing/animation or other side effects?",
+    "Does the spawned DOOR_NS::useDoor process return or communicate state that other systems rely on, or is it purely fire-and-forget here?"
   ],
   "main_function": {
     "name": "U8P_FORTOPEN::hatch",
     "execution_form": "process",
-    "purpose": "Respond to the U8P_FORTOPEN::hatch fast-area trigger by scanning nearby map items, clearing a specific quality flag on matching items and spawning a door/U8P_FORTOPEN::hatch instance to present an open/animation effect when appropriate; gated by global flags and spatial checks.",
+    "purpose": "When permitted by keyOfTheAcolyte (and optionally by item coordinates + MalchirTest), update an item's quality flags and trigger the door-use action to open a U8P_FORTOPEN::hatch.",
     "entry_conditions": [
-      "Invoked as a fast-area event (Event 7) when an actor/item triggers the U8P_FORTOPEN::hatch region.",
-      "Only proceeds when global keyOfTheAcolyte == 0 (otherwise returns early).",
-      "Spatial conditions on the trigger item's X, Y and Z/tile flags determine which scanning branch runs.",
-      "Certain behavior requires global MalchirTest >= 6 (quest/state gating)."
+      "Global keyOfTheAcolyte must be true (gate).",
+      "Optional coordinate check: Item::getX == 0x157F, Item::getY == 0x493F, Item::getZ == 0x60 combined with MalchirTest >= 6 to take a specific sub-branch.",
+      "Implicit: an item reference (local2) must be obtainable for the quality/read/write and potential door spawn to occur."
     ],
     "confidence": "high"
   },
@@ -34,44 +36,50 @@
     {
       "name": "U8P_FORTOPEN::hatch",
       "kind": "main",
-      "role": "Fast-area/U8P_FORTOPEN::hatch trigger handler that scans nearby items to clear a quality bit and optionally spawn a door/U8P_FORTOPEN::hatch animation.",
+      "role": "process that conditionally opens a U8P_FORTOPEN::hatch after adjusting an item's quality bits",
       "confidence": "high"
     },
     {
       "name": "Item::getX",
       "kind": "extern",
-      "role": "Read trigger item's X coordinate (spatial gating).",
+      "role": "reads an item's world X coordinate (used for coordinate branch)",
       "confidence": "high"
     },
     {
       "name": "Item::getY",
       "kind": "extern",
-      "role": "Read trigger item's Y coordinate (spatial gating).",
+      "role": "reads an item's world Y coordinate (used for coordinate branch)",
       "confidence": "high"
     },
     {
       "name": "Item::getZ",
       "kind": "extern",
-      "role": "Read trigger item's Z/tile flags (mask & 0x60) to select code path.",
+      "role": "reads an item's world Z (height) coordinate (used for coordinate branch)",
       "confidence": "high"
     },
     {
       "name": "Item::getQuality",
       "kind": "extern",
-      "role": "Read scanned item's quality word to test flags (notably 0x0400 and 0x0100).",
+      "role": "reads the item's quality/flag bitfield into a local for testing",
       "confidence": "high"
     },
     {
       "name": "Item::setQuality",
       "kind": "extern",
-      "role": "Write modified quality word back to scanned item (clear 0x0400).",
+      "role": "writes back a modified quality/flag bitfield after clearing a bit",
       "confidence": "high"
     },
     {
-      "name": "spawn DOOR_NS::08B4",
+      "name": "DOOR_NS::useDoor",
       "kind": "extern",
-      "role": "Spawn/trigger a door/U8P_FORTOPEN::hatch behavior/animation at the scanned item (passed scanned item and byte arg 0).",
-      "confidence": "medium"
+      "role": "spawnable door-use action that opens the U8P_FORTOPEN::hatch (called with parameter 0x00)",
+      "confidence": "high"
+    },
+    {
+      "name": "spawn",
+      "kind": "extern",
+      "role": "engine function used to create/run DOOR_NS::useDoor asynchronously",
+      "confidence": "high"
     }
   ],
   "call_analysis": {
@@ -80,38 +88,44 @@
       {
         "caller": "U8P_FORTOPEN::hatch",
         "callee": "Item::getX",
-        "purpose": "Obtain trigger item's X coordinate to evaluate spatial eligibility for the U8P_FORTOPEN::hatch behavior.",
+        "purpose": "Check item X coordinate to select coordinate-specific branch",
         "confidence": "high"
       },
       {
         "caller": "U8P_FORTOPEN::hatch",
         "callee": "Item::getY",
-        "purpose": "Obtain trigger item's Y coordinate to evaluate spatial eligibility for the U8P_FORTOPEN::hatch behavior.",
+        "purpose": "Check item Y coordinate to select coordinate-specific branch",
         "confidence": "high"
       },
       {
         "caller": "U8P_FORTOPEN::hatch",
         "callee": "Item::getZ",
-        "purpose": "Read trigger item's Z/tile flags, mask with 0x60 to choose scanning branch.",
+        "purpose": "Check item Z coordinate to select coordinate-specific branch",
         "confidence": "high"
       },
       {
         "caller": "U8P_FORTOPEN::hatch",
         "callee": "Item::getQuality",
-        "purpose": "Read each scanned item's quality word for bit tests (0x0400, 0x0100).",
+        "purpose": "Read the item's quality/flag word for testing and modification (local3)",
         "confidence": "high"
       },
       {
         "caller": "U8P_FORTOPEN::hatch",
         "callee": "Item::setQuality",
-        "purpose": "Persistently clear the 0x0400 bit on scanned items by writing back the modified quality word.",
+        "purpose": "Write back a modified quality word after clearing bit 0x0400",
         "confidence": "high"
       },
       {
         "caller": "U8P_FORTOPEN::hatch",
-        "callee": "spawn DOOR_NS::08B4",
-        "purpose": "Create/activate a door/U8P_FORTOPEN::hatch instance (animation/behavior) for items whose 0x0100 bit is clear; passed item address and byte arg 0.",
-        "confidence": "medium"
+        "callee": "spawn",
+        "purpose": "Spawn DOOR_NS::useDoor(0x00) to perform the door-open action; spawn result saved in a temp",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FORTOPEN::hatch",
+        "callee": "DOOR_NS::useDoor",
+        "purpose": "Actual door-use function invoked (via spawn) to open the U8P_FORTOPEN::hatch when conditions are met",
+        "confidence": "high"
       }
     ]
   },
@@ -119,12 +133,12 @@
     "reads": [
       {
         "name": "keyOfTheAcolyte",
-        "likely_effect": "Acts as an early guard preventing the U8P_FORTOPEN::hatch-opening/scan routine from running when non-zero (player possession/state gate).",
+        "likely_effect": "Gate that enables U8P_FORTOPEN::hatch-opening logic when true",
         "confidence": "high"
       },
       {
         "name": "MalchirTest",
-        "likely_effect": "Compared against 6; MalchirTest >= 6 selects a particular scanning branch or enables additional behavior (quest/state gating).",
+        "likely_effect": "Controls access to the coordinate-specific branch (requires MalchirTest >= 6)",
         "confidence": "high"
       }
     ],
@@ -137,9 +151,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_FORTOPEN::FORTOPEN::hatch",
-    "behavior_summary_one_liner": "When the U8P_FORTOPEN::hatch fast-area trigger runs, the routine scans a set of nearby map items/tiles around the triggering item and clears a particular quality bit (observed mask 0x0400) on matching items. After clearing that bit it may spawn a door/U8P_FORTOPEN::hatch behavior/animation (spawn DOOR_NS::08B4) for items whose 0x0100 bit is clear. The whole action is gated by global state and by spatial checks on the trigger item's coordinates and tile flags.",
-    "external_call_count": 6,
+    "main_function": "U8P_FORTOPEN::hatch",
+    "behavior_summary_one_liner": "U8P_FORTOPEN::hatch is a process that runs to potentially open a U8P_FORTOPEN::hatch/door when certain game-state and item conditions are met.",
+    "external_call_count": 7,
     "flag_read_count": 2,
     "flag_write_count": 0
   },

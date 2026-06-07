@@ -3,30 +3,29 @@
   "source_of_truth": "dialogue/json/U8P_MISSTRAP.json",
   "file": "U8P_MISSTRAP",
   "behavior_summary": [
-    "Implements a proximity-activated missile/trap: when an actor enters the trap's fast trigger region the trap is marked and a handler process is spawned to perform the firing/animation sequence.",
-    "The spawned handler (MISSTRAP::00B2) reads the trap's frame/state, may schedule a randomized delay, attempts to create a projectile or effect at an offset from the trap, marks the created object with a status bit, plays a sound, and either hurls the created object or places it into the world (then fixes placement).",
-    "When the actor leaves the fast trigger region the trap is again marked and a free/cancel routine is invoked (likely to stop or cleanup the handler).",
-    "The trap handler updates the trap's animation/frame when the firing sequence completes and then returns to its process/suspend lifecycle."
+    "This script implements a floor/trap item that begins an internal ticking/activation routine when an actor enters its fast-area trigger (U8P_MISSTRAP::enterFastArea).",
+    "The ticking routine (U8P_MISSTRAP::func00B2) advances an internal frame counter, and on specific frames schedules or spawns a projectile/effect, plays a sound, and propels or places that spawned item using the trap's coordinates with fixed offsets.",
+    "When the actor leaves the fast-area (U8P_MISSTRAP::leaveFastArea) the trap clears its reference to stop targeting or continuing behavior for that actor (cleanup).",
+    "Spawn timing is staggered with urandom-based randomness and suspend/periodic points, producing variable delays between activations."
   ],
   "notable_control_flow": [
-    "U8P_MISSTRAP::enterFastArea: sets item info/process-exclude on the trap item and spawns the handler process U8P_MISSTRAP::00B2 (spawn retval discarded).",
-    "U8P_MISSTRAP::00B2 (handler): suspend/loop process that reads current frame (Item::getFrame) and branches behavior based on frame/state, optionally computes a randomized delay (urandom) and schedules FREE::1C19, computes spawn worldpoint from trap X/Y/Z, tries Item::legal_create (falls back to Item::create), marks the created item via Item::orStatus, plays sound (playSFX), either starts Item::hurl on the created object or Item::pop + Item::legal_move to place it, then updates trap frame via Item::setFrame.",
-    "U8P_MISSTRAP::leaveFastArea: sets item info/process-exclude on the trap item and calls FREE::2A56 with parameter 1 to free/cancel the handler or finalize the trap."
+    "U8P_MISSTRAP::enterFastArea immediately calls U8P_MISSTRAP::func00B2 to start the periodic/tick behavior.",
+    "U8P_MISSTRAP::func00B2: read frame = Item::getFrame(this); increment/branch on frame; write back via Item::setFrame(this).",
+    "On key frame values (inferred: 0x00/0x05/0x0A) U8P_MISSTRAP::func00B2 schedules a delayed spawn (urandom + constant), and either uses Item::legal_create or Item::create to produce an item then applies orStatus/playSFX and Item::hurl or Item::pop + Item::legal_move.",
+    "U8P_MISSTRAP::leaveFastArea calls FREE::resetRef(0x01, this) to clear the trap's stored reference."
   ],
   "open_questions": [
-    "Exact semantics of FREE::1C19 (appears to schedule a delayed action or timer) and the meaning of its first pointer parameter (0 worldpoint was passed in the trace).",
-    "Precise meaning of the item info bit(s) set via 'set info' and the full effects of 'process_exclude' on trap lifecycle.",
-    "Exact identity/type of the item created (projectile id/shape) and meaning of the status bit set by Item::orStatus.",
-    "Whether FREE::2A56 always terminates the spawned handler or sometimes performs other cleanup semantics.",
-    "Exact mapping between trap frames (Item::getFrame values) and animation/behavior states (which frames correspond to 'ready', 'firing', 'reloading')."
+    "Exact identity and gameplay effect of item id 0x02B9 created/spawned by the trap (inferred to be a projectile/effect but unknown).",
+    "Precise meaning of status bit 0x0080 set by Item::orStatus (likely marks the spawned item temporary or engine-managed).",
+    "Whether the trap targets a specific actor reference when the actor enters (the script clears a reference on leave but explicit setting of that reference is not visible).",
+    "Exact numeric frame thresholds and wrap values (0x05/0x0A inferred from decompilation remnants) — frame values are low-confidence in exact boundaries."
   ],
   "main_function": {
     "name": "U8P_MISSTRAP::enterFastArea",
     "execution_form": "process",
-    "purpose": "Respond to an actor entering the trap's fast-area trigger: mark the trap item (info/process-exclude) and spawn a dedicated handler process (U8P_MISSTRAP::00B2) to animate/activate the trap and perform projectile/effect creation and launch.",
+    "purpose": "Begin the trap's activation/ticker routine so the trap will periodically advance its animation/state and spawn/project projectiles or effects when appropriate.",
     "entry_conditions": [
-      "Event: U8P_MISSTRAP::enterFastArea — triggered when the Avatar or another relevant actor enters the trap's fast trigger region.",
-      "Handler is spawned with the trap item as a parameter (BP+06h inferred as triggering_item)."
+      "Triggered when an avatar or relevant actor enters the trap's fast-area trigger region."
     ],
     "confidence": "high"
   },
@@ -34,152 +33,140 @@
     {
       "name": "U8P_MISSTRAP::enterFastArea",
       "kind": "main",
-      "role": "Trigger entry handler that marks the trap and spawns the activation/animation process.",
+      "role": "start the trap's ticking/activation routine",
       "confidence": "high"
     },
     {
       "name": "U8P_MISSTRAP::leaveFastArea",
       "kind": "helper",
-      "role": "Trigger exit handler that marks the trap and invokes FREE::2A56 to free/cancel the spawned handler or finalize the trap.",
+      "role": "cleanup: clear the trap's stored actor/reference so it no longer targets or runs for that actor",
       "confidence": "high"
     },
     {
-      "name": "U8P_MISSTRAP::00B2",
+      "name": "U8P_MISSTRAP::func00B2",
       "kind": "helper",
-      "role": "Spawned handler process performing the trap activation sequence: frame check, optional delay scheduling, projectile creation/legalization, sound, hurl/pop placement, and trap frame update.",
-      "confidence": "high"
+      "role": "tick/update handler: advance frame, schedule/spawn projectiles/effects, play SFX, and attempt legal placement/movement",
+      "confidence": "medium"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
         "caller": "U8P_MISSTRAP::enterFastArea",
-        "callee": "U8P_MISSTRAP::00B2",
-        "purpose": "Spawn a handler process to carry out the trap's timed/animated firing behavior.",
+        "callee": "U8P_MISSTRAP::func00B2",
+        "purpose": "Start the trap's tick/update routine when the fast-area is entered.",
         "confidence": "high"
-      },
-      {
-        "caller": "U8P_MISSTRAP::leaveFastArea",
-        "callee": "FREE::2A56",
-        "purpose": "Free or cancel the handler/process associated with the trap (called with parameter 1), likely to stop ongoing activation or cleanup after exit.",
-        "confidence": "medium"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_MISSTRAP::00B2",
+        "caller": "U8P_MISSTRAP::leaveFastArea",
+        "callee": "FREE::resetRef",
+        "purpose": "Clear the trap's stored reference (cleanup when actor leaves fast-area).",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MISSTRAP::func00B2",
         "callee": "Item::getFrame",
-        "purpose": "Read the trap's current animation/frame/state to decide which activation branch and timing to execute.",
+        "purpose": "Read the trap's current animation/state frame to decide timing/branching.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_MISSTRAP::00B2",
+        "caller": "U8P_MISSTRAP::func00B2",
+        "callee": "Item::setFrame",
+        "purpose": "Write back the advanced frame/state after updating the internal counter.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_MISSTRAP::func00B2",
         "callee": "urandom",
-        "purpose": "Generate randomized delay values for scheduling a delayed effect or staggering trap firing timing.",
+        "purpose": "Generate a randomized delay used before scheduling/spawning an effect to stagger timing.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_MISSTRAP::00B2",
-        "callee": "FREE::1C19",
-        "purpose": "Schedule or spawn a delayed routine/effect using the computed/randomized delay (inferred as a timer or delayed action).",
+        "caller": "U8P_MISSTRAP::func00B2",
+        "callee": "FREE::func1C19 (spawn)",
+        "purpose": "Schedule or spawn an asynchronous process/item (likely the projectile/effect) with the computed delay.",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_MISSTRAP::00B2",
+        "caller": "U8P_MISSTRAP::func00B2",
         "callee": "Item::legal_create",
-        "purpose": "Attempt to create a projectile/effect at a computed worldpoint in a rules-validated way; returns success and an out handle on success.",
-        "confidence": "high"
+        "purpose": "Preferred creation path: attempt to legally create the projectile/effect at computed coordinates and return a handle.",
+        "confidence": "medium"
       },
       {
-        "caller": "U8P_MISSTRAP::00B2",
+        "caller": "U8P_MISSTRAP::func00B2",
         "callee": "Item::create",
-        "purpose": "Fallback creation of the projectile/effect when legal_create fails; returns a created item handle.",
-        "confidence": "high"
+        "purpose": "Fallback creation path for the projectile/effect if legal_create was not used or failed.",
+        "confidence": "medium"
       },
       {
-        "caller": "U8P_MISSTRAP::00B2",
+        "caller": "U8P_MISSTRAP::func00B2",
         "callee": "Item::orStatus",
-        "purpose": "Set status bits on the newly created item (marking it as temporary/special or otherwise flagged).",
+        "purpose": "Set a status bit (0x0080) on the created item, likely marking it temporary or special for trap logic.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_MISSTRAP::func00B2",
+        "callee": "playSFX",
+        "purpose": "Play the trap's activation/spawn sound effect when an item is created/spawned.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_MISSTRAP::00B2",
-        "callee": "U8P_MISSTRAP::playSFX",
-        "purpose": "Play the trap firing sound effect at the trap's location or for the event.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_MISSTRAP::00B2",
+        "caller": "U8P_MISSTRAP::func00B2",
         "callee": "Item::hurl",
-        "purpose": "Start a hurl/throw process for the created item to impart trajectory/physics when the trap fires.",
-        "confidence": "high"
+        "purpose": "Propel the created item as a projectile (apply movement/force) when legal_create succeeded.",
+        "confidence": "medium"
       },
       {
-        "caller": "U8P_MISSTRAP::00B2",
+        "caller": "U8P_MISSTRAP::func00B2",
         "callee": "Item::pop",
-        "purpose": "Place the created item into the world at computed coordinates when not hurled directly.",
-        "confidence": "high"
+        "purpose": "Place/pop the created item into the world at computed coordinates when fallback create path is used.",
+        "confidence": "medium"
       },
       {
-        "caller": "U8P_MISSTRAP::00B2",
+        "caller": "U8P_MISSTRAP::func00B2",
         "callee": "Item::legal_move",
-        "purpose": "Attempt to move or adjust the placed item to a legal nearby position after popping it into the world.",
-        "confidence": "high"
+        "purpose": "Attempt a legal move/placement check for the created item, used after pop/create to validate placement.",
+        "confidence": "medium"
       },
       {
-        "caller": "U8P_MISSTRAP::00B2",
-        "callee": "Item::setFrame",
-        "purpose": "Update the trap's animation/frame/state after the activation/firing sequence completes.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_MISSTRAP::00B2",
+        "caller": "U8P_MISSTRAP::func00B2",
         "callee": "Item::getX",
-        "purpose": "Read trap X coordinate to compute projectile spawn/placement offset.",
+        "purpose": "Read trap X coordinate to compute spawn/pop X (inferred X - 0x20).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_MISSTRAP::00B2",
+        "caller": "U8P_MISSTRAP::func00B2",
         "callee": "Item::getY",
-        "purpose": "Read trap Y coordinate to compute projectile spawn/placement offset.",
+        "purpose": "Read trap Y coordinate to compute spawn/pop Y (inferred Y + 0x40).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_MISSTRAP::00B2",
+        "caller": "U8P_MISSTRAP::func00B2",
         "callee": "Item::getZ",
-        "purpose": "Read trap Z/floor level for constructing the spawn worldpoint.",
+        "purpose": "Read trap Z/level coordinate for spawn/pop/creation checks.",
         "confidence": "high"
       }
     ]
   },
   "global_flags": {
     "reads": [],
-    "writes": [
-      {
-        "name": "item info bits (set via 'set info')",
-        "likely_effect": "Mark the trap item with a state/flag used to control processing or indicate activation state (e.g., reserved/triggered).",
-        "confidence": "high"
-      },
-      {
-        "name": "process_exclude (item-level)",
-        "likely_effect": "Exclude the trap item from normal processing or alter scheduling while it is in the triggered/handled state.",
-        "confidence": "high"
-      }
-    ]
+    "writes": []
   },
   "ui_tags": [
     "trigger",
     "cleanup",
     "animation",
-    "projectile",
-    "audio"
+    "guard"
   ],
   "quick_facts": {
     "main_function": "U8P_MISSTRAP::enterFastArea",
-    "behavior_summary_one_liner": "Implements a proximity-activated missile/trap: when an actor enters the trap's fast trigger region the trap is marked and a handler process is spawned to perform the firing/animation sequence.",
-    "external_call_count": 14,
+    "behavior_summary_one_liner": "This script implements a floor/trap item that begins an internal ticking/activation routine when an actor enters its fast-area trigger (U8P_MISSTRAP::enterFastArea).",
+    "external_call_count": 15,
     "flag_read_count": 0,
-    "flag_write_count": 2
+    "flag_write_count": 0
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

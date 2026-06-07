@@ -3,27 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_PULCHNEW.json",
   "file": "U8P_PULCHNEW",
   "behavior_summary": [
-    "When the object is examined (U8P_PULCHNEW::look event), the script marks/sets per-process info and applies a process-exclusion for a target process, then causes that target process to emit a short bark message reading \"bell ringer \".",
-    "The bark is invoked on the viewer/process pointer passed into the event handler. A temporary string pointer for the literal \"bell ringer \" is created, passed to Item::bark, and freed after use.",
-    "After the bark call the function handles the bark return value through a small boolean/implies sequence, then suspends/returns (the function runs in the process execution form)."
+    "U8P_PULCHNEW::look is a short 'U8P_PULCHNEW::look' (examine) handler for the object/NPC. When the player inspects this entity the script emits a single short bark: \"bell ringer \".",
+    "Immediately after producing the bark the process yields/suspends; there is no branching, menus, or external interactions.",
+    "No global flags, parameters, or external calls are read or written by this script; it is self-contained and purely presentational."
   ],
   "notable_control_flow": [
-    "Entry on Event 0 (U8P_PULCHNEW::look/examine).",
-    "Push and use of a pid value, then set a process info key and apply a process-exclude using pushed/in-stack values (these operations prepare/mark the target process).",
-    "Construct a string pointer for the literal \"bell ringer \", call process Item::bark using the viewer/process as 'this' and the string pointer as the message.",
-    "Free the temporary string, capture the bark return, feed it through an 'implies' / pop micro-sequence, then suspend and return the result."
+    "Linear: entry -> emit Bark('bell ringer ') -> suspend/yield/terminate the U8P_PULCHNEW::look process.",
+    "No conditional branches, menus, or subsequent actions observed."
   ],
   "open_questions": [
-    "Does the pushed pid get embedded into the message or is it only used for the set-info/process-exclude sequence? (appears to be used in the info/exclude sequence but ordering leaves room for either interpretation).",
-    "What exact info key (0x210 or similar inferred id) semantics are being set on the target process/object and how does that affect later behavior?",
-    "What is the precise effect of the implies/pop sequence after the bark return (control-flow influence vs. a discard/cleanup of a boolean)?"
+    "The raw disassembly contained low-confidence 'Unknown' nodes (e.g., a lone '{' and 'suspend' token). Is there any additional teardown or engine interaction intended after the bark, or is the suspend purely to yield the U8P_PULCHNEW::look process?",
+    "Is this handler invoked only by the explicit player 'U8P_PULCHNEW::look' action, or also by an engine fast-area enter trigger in certain contexts? (Process type 0x0208 suggests a U8P_PULCHNEW::look/inspect handler.)",
+    "The bark text includes a trailing space (\"bell ringer \"). Is the trailing space meaningful (concatenation target) or an artifact of extraction?"
   ],
   "main_function": {
     "name": "U8P_PULCHNEW::look",
     "execution_form": "process",
-    "purpose": "Handle the 'U8P_PULCHNEW::look' (examine) event for this object: mark/set per-process info and exclusion for the relevant process, and make that process emit the short description string \"bell ringer \".",
+    "purpose": "Provide the short inspection/description response when the player looks at this NPC/object; display the short bark text and then suspend the process.",
     "entry_conditions": [
-      "Event 0: triggered when an actor/player looks at or examines the object (the U8P_PULCHNEW::look interaction)."
+      "Triggered by the game's U8P_PULCHNEW::look/inspect action for this NPC/object (process type 0x0208).",
+      "May also run in contexts where the engine invokes U8P_PULCHNEW::look-type processes (e.g., fast-area/inspection entry) but canonical data marks it as a U8P_PULCHNEW::look handler."
     ],
     "confidence": "high"
   },
@@ -31,26 +30,13 @@
     {
       "name": "U8P_PULCHNEW::look",
       "kind": "main",
-      "role": "Event handler for the object's U8P_PULCHNEW::look/examine event; prepares process info/exclusion and invokes Item::bark to present the literal description.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/Item call used to make a target process/item emit/display a short text message (called with the viewer/process as 'this' and the constructed string pointer).",
+      "role": "Handles the entity's response to being examined; emits a single bark and suspends.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_PULCHNEW::look",
-        "callee": "process Item::bark",
-        "purpose": "Ask the viewer/process to 'bark' (emit/display) the message string \"bell ringer \".",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -64,8 +50,8 @@
   ],
   "quick_facts": {
     "main_function": "U8P_PULCHNEW::look",
-    "behavior_summary_one_liner": "When the object is examined (U8P_PULCHNEW::look event), the script marks/sets per-process info and applies a process-exclusion for a target process, then causes that target process to emit a short bark message reading \"bell ringer \".",
-    "external_call_count": 1,
+    "behavior_summary_one_liner": "U8P_PULCHNEW::look is a short 'U8P_PULCHNEW::look' (examine) handler for the object/NPC. When the player inspects this entity the script emits a single short bark: \"bell ringer \".",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

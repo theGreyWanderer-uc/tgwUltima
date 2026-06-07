@@ -3,157 +3,238 @@
   "source_of_truth": "dialogue/json/U8P_FREE.json",
   "file": "U8P_FREE",
   "behavior_summary": [
-    "Presents a context-sensitive fire-magic UI to the player, composed of category submenus (offensive, defensive, other, pentagram) and individual spell entries, accepts the player's selection, and returns or invokes the corresponding spell/action code or incantation.",
-    "Scans the player's inventory and pentagram slots to count reagents and decide special-case behaviors (notably the 'Ignite' case) used to build menu content and to validate or alter casting behavior.",
-    "Provides helpers to map human-readable spell names to internal numeric IDs or to invoke the internal cast/handler; also includes an item stack-splitting helper used when reagents/items must be moved or spawned in the world."
+    "Provides a dialogue-driven interface for fire-magic interactions: presents a top-level menu of fire-related actions (empower offensive/defensive/other spells, invoke pentagram, cancel) and, when appropriate, one or more sub-menus of specific spells.",
+    "Maps player menu selections to canonical spell incantation strings (the function result) and returns special choices (e.g., \"Invoke Pentagram\" or \"Nevermind\") immediately.",
+    "Includes helpers that convert incantation strings into numeric parameters (randomized ranges) and into small flag/bit encodings; many utility routines perform item creation/placement, spawn visual/sound effects, and manage timing via spawn/suspend."
   ],
   "notable_control_flow": [
-    "FREE::0080 (Func_80) builds an slist (selection list) and repeatedly calls Item::ask to obtain the player's selection; the loop repeats until the player picks a non-empty entry or chooses 'Nevermind'.",
-    "Selection strings returned from Item::ask are compared against category labels and spell-name strings; matches are either translated to incantation strings (then returned) or converted to numeric result codes via mapping helpers.",
-    "Inventory/pentagram scanning (U8P_FREE::FREE::091E) iterates item lists, reads item frames/types, uses PENT::0F4B checks, and buckets reagent counts into byte counters that influence menu entries and special-case spells.",
-    "When a spell name is selected and requires direct invocation, U8P_FREE::FREE::0512 pushes two small numeric parameters and calls U8P_FREE::FREE::1A96 to perform the actual cast/handler invocation; the handler's return value is propagated back.",
-    "Loop/frame progression inside U8P_FREE::FREE::0895; treated as control-flow, not explicit internal call."
+    "U8P_FREE::func0080 uses MenuSet + Item::ask + SuspendAssign to block for player selection and then strcmp branches the captured answer into category sub-menus or final incantation string assignments.",
+    "Spawn + suspend + process_result() pattern is pervasive in helpers (e.g., U8P_FREE::func121C, U8P_FREE::func148D, U8P_FREE::func3768) to sequence visual/SFX effects and to gate success/failure handling based on spawned-process outcomes.",
+    "Many utilities follow a defensive/validation pattern: try-create-or-legal_create probes (Item::legal_create), then either commit (Item::pop/Item::setQuantity/etc.) or destroy temporary items and set failure temp flags."
   ],
   "open_questions": [
-    "Exact numeric semantics and full mapping table returned by U8P_FREE::FREE::071E (Func_71E) — the mapping of all spell-name strings to byte IDs is inferred but not fully enumerated.",
-    "Precise effects and parameter semantics of U8P_FREE::FREE::1A96 (the internal cast/handler) — inferred to perform casting but its full behavior and return codes are unknown.",
-    "Complete rules for 'Ignite' and other pentagram-specific behavior inside U8P_FREE::FREE::091E — the helper tallies reagents and has branches, but exact thresholds/conditions are not exhaustively documented.",
-    "The calling convention / initial inputs to FREE::0080 (which process/pid invokes it and with which contextual parameters) — the function appears to be invoked in a player/avatar context but the explicit param is not in the excerpt."
+    "Is any engine-level global flag written by these routines? (Some section summaries mention flags like 'pyrosFree' but the canonical global_flags list in the metadata is empty — this discrepancy is unresolved.)",
+    "What higher-level system consumes the incantation string returned by U8P_FREE::func0080 (which subsystem cast/executes the spell)? The mapping to spell execution is inferred but not shown here.",
+    "Exact semantics and consumers of numeric results from U8P_FREE::func0512 and U8P_FREE::func2A79 (likely cost/power/duration) are inferred but not proven; where these numeric results are consumed remains uncertain."
   ],
   "main_function": {
-    "name": "FREE::0080 (Func_80)",
+    "name": "U8P_FREE::func0080",
     "execution_form": "process",
-    "purpose": "Offer a fire-magic selection menu to the player, build context-specific submenus (offensive, defensive, other, pentagram), obtain the player's choice, and convert that choice into a numeric result or trigger a spell-invocation string for downstream casting.",
+    "purpose": "Interactive dialogue that lets the player choose fire-magic related operations and resolves those choices to canonical incantation strings (or immediate special actions like invoking a pentagram or canceling).",
     "entry_conditions": [
-      "Invoked when the player activates a fire-magic item or UI (appears to run in the player/process context).",
-      "Runs when the engine needs to present an actionable spell list (based on inventory/pentagram contents and context)."
+      "Triggered by player interaction with the FREE object/NPC (dialogue/menu invocation).",
+      "Runs as a menu/dialogue process that suspends while waiting for the player's menu choice (Item::ask + suspend pattern)."
     ],
     "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_FREE::0080",
+      "name": "U8P_FREE::func0080",
       "kind": "main",
-      "role": "Orchestrates the fire-magic menu UI, handles player selection loops, and returns or routes the chosen spell/action.",
+      "role": "dialogue/menu driver — presents top-level and sub-menus, captures player choice and maps it to incantation strings or special commands.",
       "confidence": "high"
     },
     {
-      "name": "U8P_FREE::0512",
+      "name": "U8P_FREE::func0512",
       "kind": "helper",
-      "role": "Translate a selected spell-name string into an invocation by calling the internal cast/handler (U8P_FREE::FREE::1A96) with small numeric parameters; returns handler retval.",
+      "role": "map incantation string (this) -> numeric parameter (randomized value chosen from incantation-specific ranges); returns numeric result.",
       "confidence": "high"
     },
     {
-      "name": "U8P_FREE::071E",
+      "name": "U8P_FREE::func071E",
       "kind": "helper",
-      "role": "Map a spell-name string to a small numeric ID (lookup); used by the main flow to convert human-readable choices to internal codes.",
+      "role": "map incantation string (this) -> small flag/bit encoding used by pentagram/spell-registration logic.",
       "confidence": "medium"
     },
     {
-      "name": "U8P_FREE::0895",
+      "name": "U8P_FREE::askYesNo",
       "kind": "helper",
-      "role": "Handle item stack splitting and placement: decrement source stack or create/pop a single-quantity item at a nearby coordinate (used for reagent handling).",
+      "role": "present a binary Yes/No menu and return a normalized boolean-like result.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FREE::randomInRange",
+      "kind": "helper",
+      "role": "utility: produce a pseudorandom integer in an inclusive range; used by spell-parameter computations.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FREE::isWithinRange",
+      "kind": "helper",
+      "role": "utility: test whether coordinates/objects are within a rectangular distance/range (bounding check).",
       "confidence": "medium"
     },
     {
-      "name": "U8P_FREE::091E",
+      "name": "U8P_FREE::splitOneFromStack",
       "kind": "helper",
-      "role": "Scan inventories and pentagram slots to count reagent types/frames, bucket counts into locals, and provide pentagram-aware decisions for menu construction and certain spells (e.g., 'Ignite').",
+      "role": "item utility: split one unit from an item stack and prepare/place the single unit instance.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FREE::func091E",
+      "kind": "helper",
+      "role": "inventory/pentagram validator: inspect nearby inventory items, classify pentagram-slot counts and presence of required components.",
       "confidence": "medium"
     },
     {
-      "name": "U8P_FREE::1A96",
+      "name": "U8P_FREE::func121C",
       "kind": "helper",
-      "role": "Internal cast/handler invoked by U8P_FREE::FREE::0512 to perform the concrete spell effect or higher-level action; treated as an internal engine-facing routine.",
+      "role": "orchestrates pentagram/spell registration: spawn pentagram processes, validate mana and requirements, set per-spell flags and produce player feedback.",
       "confidence": "medium"
+    },
+    {
+      "name": "U8P_FREE::func148D",
+      "kind": "helper",
+      "role": "spawn fire-spell visual/effect at computed coordinates and wait for completion.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_FREE::func1511",
+      "kind": "helper",
+      "role": "spawn helper + mark pyrosFree (section suggests a global write) and reposition item; used in free-fire sequences.",
+      "confidence": "low"
+    },
+    {
+      "name": "U8P_FREE::func156E",
+      "kind": "helper",
+      "role": "spawn helper that runs and returns; used to coordinate per-item effects then destroys a temporary item.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_FREE::func159B",
+      "kind": "helper",
+      "role": "create/animate multiple temporary sprites/items near an origin with randomized offsets and timing; used for visual flourish.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_FREE::func2A12",
+      "kind": "helper",
+      "role": "play SFX and optionally wait for it (set volume + spawn wait behavior).",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FREE::func2A79",
+      "kind": "helper",
+      "role": "compute mana-scaled/randomized numeric output or boolean based on item frame and caller context (used as a validation/strength heuristic).",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_FREE::createItemAtSpot",
+      "kind": "helper",
+      "role": "attempt to create an item at or near coordinates by probing nearby spots until Item::legal_create succeeds and then optionally set quality.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FREE::createItemsAtLocation",
+      "kind": "helper",
+      "role": "high-level item-creator: create multiple items at a spot with family/quantity handling and stack-frame updates.",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_FREE::equipItem",
+      "kind": "helper",
+      "role": "prepare/equip/create items for NPCs or inventory, split stacks and build a selectable menu/list of candidate items.",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_FREE::many_misc_utilities",
+      "kind": "helper",
+      "role": "collection of smaller utilities: U8P_FREE::updateStackFrame, U8P_FREE::setItemFrame, U8P_FREE::getDistanceBetween, U8P_FREE::getDistanceInTiles, U8P_FREE::cameraFollowAvatar, time utilities, list ops, and stack/merge ops used across the module.",
+      "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
-        "caller": "U8P_FREE::0080",
-        "callee": "U8P_FREE::091E",
-        "purpose": "Obtain reagent counts and pentagram-related info to decide which menu entries to present and whether special-cases (like Ignite) apply.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FREE::0080",
-        "callee": "U8P_FREE::071E",
-        "purpose": "Convert selected spell-name strings into numeric IDs for returning to the caller or for further handling.",
+        "caller": "U8P_FREE::func0080",
+        "callee": "U8P_FREE::askYesNo",
+        "purpose": "present binary confirmations during some menu flows (inferred helper use).",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_FREE::0080",
-        "callee": "U8P_FREE::0512",
-        "purpose": "When a spell selection must be invoked rather than just mapped, forward the spell-name string to the invoker helper which calls the cast/handler.",
+        "caller": "U8P_FREE::func0080",
+        "callee": "U8P_FREE::func0512",
+        "purpose": "after mapping player choice to an incantation string, compute a numeric parameter (power/cost/duration) from that incantation (inferred consumer).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FREE::func121C",
+        "callee": "U8P_FREE::func2A79",
+        "purpose": "validate mana/requirements for a spell attempt and compute adjustment; used as a gate before registering spells.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_FREE::0512",
-        "callee": "U8P_FREE::1A96",
-        "purpose": "Perform the actual spell invocation/handling by passing two small numeric parameters prepared from the matched spell mapping.",
+        "caller": "U8P_FREE::func1511",
+        "callee": "U8P_FREE::func1C19",
+        "purpose": "spawn an asynchronous helper/process for timing/visual side-effects and wait (spawn + suspend).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FREE::func148D",
+        "callee": "U8P_FREE::func1C19",
+        "purpose": "spawn follow-up helper after creating a fire-spell visual and wait for completion.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_FREE::func159B",
+        "callee": "U8P_FREE::randomInRange",
+        "purpose": "produce randomized offsets and timing values for spawned visual/items.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_FREE::func2A12",
+        "callee": "U8P_FREE::func1C19",
+        "purpose": "spawn/wait helper when SFX is active to manage timing/side effects.",
         "confidence": "high"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_FREE::0080",
+        "caller": "U8P_FREE::func0080",
         "callee": "Item::ask",
-        "purpose": "Show the built selection list (slist) to the player and return the selected string pointer used to determine the spell/action.",
+        "purpose": "display the main and sub-menus to the player and block until the player's selection is made.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_FREE::0512",
-        "callee": "Item::bark",
-        "purpose": "Report an unexpected input or error message (e.g., 'Ooops.') to the player/process when mapping fails.",
+        "caller": "U8P_FREE::func0512",
+        "callee": "FREE::randomInRange",
+        "purpose": "choose a random integer from a spell-specific inclusive range to compute the numeric parameter returned for the incantation.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_FREE::0895",
-        "callee": "Item::getQuantity",
-        "purpose": "Read source item stack size to decide whether to decrement and spawn or to directly place a single item instance.",
+        "caller": "U8P_FREE::func121C",
+        "callee": "PENT::func0BCF / PENT::func1066 / PENT::func10C3",
+        "purpose": "orchestrate pentagram visual/process work and test spawned-process results to decide success/failure.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_FREE::0895",
-        "callee": "Item::setQuantity",
-        "purpose": "Adjust stack quantities after splitting (set the remaining quantity on the source or the new item).",
+        "caller": "U8P_FREE::func148D",
+        "callee": "FIRESPEL::func1F65",
+        "purpose": "spawn the fire-spell visual/effect at computed coordinates.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_FREE::0895",
-        "callee": "Item::create",
-        "purpose": "Create a new item instance (single-quantity) when splitting a stack for reagent spawning/placement.",
+        "caller": "U8P_FREE::func2A12",
+        "callee": "playSFX / setVolumeSFX / isSFXPlaying",
+        "purpose": "start and manage sound effects associated with spell/UI events and optionally wait while they play.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_FREE::0895",
-        "callee": "Item::push / Item::pop",
-        "purpose": "Place items into containers or the world at computed coordinates after creation/splitting.",
+        "caller": "U8P_FREE::createItemAtSpot",
+        "callee": "Item::legal_create / Item::create / Item::setQuality",
+        "purpose": "validate and produce world item instances at targeted coordinates, then adjust metadata (quality) as required.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_FREE::091E",
-        "callee": "Item::getFrame",
-        "purpose": "Identify reagent types/frames while scanning inventories/pentagram slots to bucket counts.",
+        "caller": "U8P_FREE::updateStackFrame",
+        "callee": "FREE::setItemFrame / Item::getQuantity",
+        "purpose": "update an item's visual frame based on its quantity (stack UI maintenance).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_FREE::091E",
-        "callee": "Item::getType",
-        "purpose": "Retrieve item type when needed during scanning or when creating items (used by stack helpers).",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_FREE::091E",
-        "callee": "PENT::0F4B",
-        "purpose": "Test pentagram membership/slot properties of items while scanning; used to influence pentagram-specific menu entries and behavior.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_FREE::0895",
-        "callee": "Item::getX / Item::getY / Item::getZ",
-        "purpose": "Read coordinates of a source item to compute where to place the spawned/split item in the world.",
+        "caller": "U8P_FREE::func36B8",
+        "callee": "MenuRemove",
+        "purpose": "remove options from menus (list manipulation).",
         "confidence": "high"
       }
     ]
@@ -169,9 +250,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "FREE::0080 (Func_80)",
-    "behavior_summary_one_liner": "Presents a context-sensitive fire-magic UI to the player, composed of category submenus (offensive, defensive, other, pentagram) and individual spell entries, accepts the player's selection, and returns or invokes the corresponding spell/action code or incantation.",
-    "external_call_count": 10,
+    "main_function": "U8P_FREE::func0080",
+    "behavior_summary_one_liner": "Provides a dialogue-driven interface for fire-magic interactions: presents a top-level menu of fire-related actions (empower offensive/defensive/other spells, invoke pentagram, cancel) and, when appropriate, one or more sub-menus of specific spells.",
+    "external_call_count": 8,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

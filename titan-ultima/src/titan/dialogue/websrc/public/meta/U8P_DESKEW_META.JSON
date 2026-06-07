@@ -3,24 +3,24 @@
   "source_of_truth": "dialogue/json/U8P_DESKEW.json",
   "file": "U8P_DESKEW",
   "behavior_summary": [
-    "DESKEW::look: When the desk item is examined (U8P_DESKEW::look event), the script prepares item info/exclude state and causes the item to 'bark' the short literal string \"desk \", i.e., present its label/description to the viewer, then returns/suspends.",
-    "DESKEW::use: When the desk item is used, the script reads the item's status word and tests bit 0x0100. If that bit is set the script opens a specific UI/gump (id 0x0D) for the item; if the bit is not set the script closes the item's gump. The use handler also performs the same info/exclude preparation as U8P_DESKEW::look."
+    "U8P_DESKEW::look: When the player examines or 'looks at' this desk object, the script emits a single short label/bark \"desk\" and then ends the U8P_DESKEW::look process.",
+    "U8P_DESKEW::use: When the player uses the desk, the script reads the item's status word, tests bit 0x0100, and toggles the desk's UI gump accordingly: if the bit is set it calls Item::closeGump(this), otherwise it calls Item::openGump(0x0D, this)."
   ],
   "notable_control_flow": [
-    "DESKEW::look is an event-driven handler (process form) triggered by the 'U8P_DESKEW::look' event; it makes a single external call (Item::bark) and then completes.",
-    "DESKEW::use branches based on a bit-test: read Item::getStatus() into a local ([BP-02h]) and test bit 0x0100 to decide between calling Item::openGump(gumpId=0x0D) or Item::closeGump()."
+    "U8P_DESKEW::look is a simple process handler: emit bark \"desk\" then suspend/return (no branching or external calls).",
+    "U8P_DESKEW::use reads a status word into a temporary (local1), performs a bitmask test against 0x0100, and branches: true -> Item::closeGump(this); false -> Item::openGump(0x0D, this)."
   ],
   "open_questions": [
-    "Exact semantic meaning of the 0x0100 bit in the item's status word (inferred to represent 'gump open state' or similar) — appears likely but not explicitly named.",
-    "Precise effects of the 'info/exclude' setup sequence (pushes of 0208h/0207h) performed at the start of handlers — inferred as preparatory UI/info state but not concretely defined.",
-    "Whether DESKEW::use is directly invoked by player 'use' actions only, or also by other scripted triggers (inferred from pattern but not proven)."
+    "What concrete UI/gump does id 0x0D correspond to (furniture editor, contents, properties, etc.)? (inferred only from id numeric value)",
+    "Is bit 0x0100 strictly a 'gump open' flag for this item type, or a more generic state bit with additional meanings for related items?",
+    "Are there other status bits or conditions that should be considered when toggling the gump (the script only checks 0x0100)?"
   ],
   "main_function": {
     "name": "U8P_DESKEW::look",
     "execution_form": "process",
-    "purpose": "Present the desk item's short descriptive label to the viewer when examined and set up per-item info/exclude state before returning.",
+    "purpose": "Provide the short in-world label/bark when the desk is examined by the player.",
     "entry_conditions": [
-      "Event 0 (U8P_DESKEW::look) — invoked when a player or actor examines/looks at the desk item"
+      "Triggered by the engine's 'U8P_DESKEW::look' (examine) process for this item instance or when a player inspects the desk."
     ],
     "confidence": "high"
   },
@@ -28,37 +28,31 @@
     {
       "name": "U8P_DESKEW::look",
       "kind": "main",
-      "role": "Handle 'U8P_DESKEW::look' (examine) event for the desk item: set up info/exclude state and call Item::bark with \"desk \".",
+      "role": "show short description / player-facing bark on inspect",
       "confidence": "high"
     },
     {
       "name": "U8P_DESKEW::use",
       "kind": "helper",
-      "role": "Handle 'use' event for the desk item: test status bit 0x0100 and open/close the item's gump (id 0x0D) accordingly.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "External API to emit/display a short text string associated with an item (used for labels/messages).",
+      "role": "handle player 'U8P_DESKEW::use' action; read status and open/close UI gump",
       "confidence": "high"
     },
     {
       "name": "Item::getStatus",
       "kind": "extern",
-      "role": "External API returning the item's status flags/word used for bit testing.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::openGump",
-      "kind": "extern",
-      "role": "External API to open a gump/UI for an item given a gump id.",
+      "role": "query item status word (used to test bit 0x0100)",
       "confidence": "high"
     },
     {
       "name": "Item::closeGump",
       "kind": "extern",
-      "role": "External API to close an item's gump/UI.",
+      "role": "close the currently open gump/UI for the item",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::openGump",
+      "kind": "extern",
+      "role": "open a specific gump/UI (called with id 0x0D and the item instance)",
       "confidence": "high"
     }
   ],
@@ -66,27 +60,21 @@
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_DESKEW::look",
-        "callee": "Item::bark",
-        "purpose": "Make the desk item emit/display the literal label \"desk \" to the examining actor/viewer.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_DESKEW::use",
         "callee": "Item::getStatus",
-        "purpose": "Retrieve the item's status word so the script can test bit 0x0100 to decide UI state.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_DESKEW::use",
-        "callee": "Item::openGump",
-        "purpose": "Open the item's gump/UI with gump id 0x0D when the status bit 0x0100 is set.",
+        "purpose": "Obtain the item's status word (stored into local1) to test bit 0x0100 for gump open/closed state.",
         "confidence": "high"
       },
       {
         "caller": "U8P_DESKEW::use",
         "callee": "Item::closeGump",
-        "purpose": "Close the item's gump/UI when the status bit 0x0100 is not set.",
+        "purpose": "Close the item's UI/gump when the status bit 0x0100 indicates the gump is currently open.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_DESKEW::use",
+        "callee": "Item::openGump",
+        "purpose": "Open gump id 0x0D for the item when the status bit 0x0100 indicates the gump is closed.",
         "confidence": "high"
       }
     ]
@@ -97,13 +85,14 @@
   },
   "ui_tags": [
     "trigger",
-    "guard",
-    "cleanup"
+    "ui",
+    "toggle",
+    "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_DESKEW::DESKEW::look",
-    "behavior_summary_one_liner": "DESKEW::look: When the desk item is examined (U8P_DESKEW::look event), the script prepares item info/exclude state and causes the item to 'bark' the short literal string \"desk \", i.e., present its label/description to the viewer, then returns/suspends.",
-    "external_call_count": 4,
+    "main_function": "U8P_DESKEW::look",
+    "behavior_summary_one_liner": "U8P_DESKEW::look: When the player examines or 'looks at' this desk object, the script emits a single short label/bark \"desk\" and then ends the U8P_DESKEW::look process.",
+    "external_call_count": 3,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

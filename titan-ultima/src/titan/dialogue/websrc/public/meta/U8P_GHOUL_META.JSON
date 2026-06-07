@@ -3,28 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_GHOUL.json",
   "file": "U8P_GHOUL",
   "behavior_summary": [
-    "U8P_GHOUL::look handles the 'U8P_GHOUL::look' (inspect) event for a ghoul. When a player/actor inspects the ghoul, the script marks process/item metadata, excludes the process from normal processing, and invokes Item::bark to emit the short descriptive string \"ghoul \".",
-    "After calling Item::bark the script frees the temporary string, examines the bark return value briefly (used in an implies/pop cleanup sequence), then suspends the process and returns. The overall effect is a one-off description/bark when the ghoul is examined.",
-    "The handler runs in the engine's process execution model (it suspends), so it is executed as an event-driven process rather than a pure function call."
+    "U8P_GHOUL::look is a simple U8P_GHOUL::look/examine handler for the Ghoul entity. When the player examines the Ghoul, the script issues a single player-facing bark containing the text \"ghoul \" and then suspends/ends the U8P_GHOUL::look process.",
+    "There is no branching, menu interaction, global-flag manipulation, or external API calls in this script.",
+    "The presence of a suspend/terminate node indicates the handler yields or finishes immediately after emitting the bark."
   ],
   "notable_control_flow": [
-    "Write 'info' metadata to the process/item (set info opcode) immediately when the event begins — likely to annotate state for the bark or to prevent re-entry.",
-    "Mark the process as excluded from normal processing (process_exclude opcode) before producing output — acts as a guard against recursive processing or visibility changes.",
-    "Push a pid and the string literal \"ghoul \", convert the literal to a pointer, and call Item::bark with the process/object pointer passed in at [BP+06h].",
-    "Free the temporary string buffer after the bark call, inspect the bark return (retval), perform an implies/pop sequence for cleanup, then suspend the process and return."
+    "Linear one-shot flow: entry -> emit bark \"ghoul \" -> suspend/terminate.",
+    "No conditional branches, loops, or external calls are present in the U8P_GHOUL::look handler."
   ],
   "open_questions": [
-    "Is the parameter at [BP+06h] the ghoul's process/object (this) or the viewer's process id? The code passes it to Item::bark as the 'this' value but the exact identity is inferred.",
-    "What exact info id is written by the 'set info' opcode and what semantic meaning does that info store for the ghoul? (the disassembly shows an info write but not its high-level meaning).",
-    "Why is process exclusion applied here — to prevent recursion, hide the process, or control other engine behavior? The exact intent is inferred from usage.",
-    "How is the bark return value used by the engine after the implies/pop sequence and suspend? The script inspects it briefly but the broader effect is unclear."
+    "Does the engine interpret the 'suspend' as an immediate end-of-process or as a yield that can be resumed later? (inferred behavior only)",
+    "Is the trailing space in the bark text \"ghoul \" intentional (formatting/concatenation placeholder) or an artifact of extraction?",
+    "Are there context-sensitive variants (e.g., different barks under certain global flags) implemented elsewhere that call or override U8P_GHOUL::look?"
   ],
   "main_function": {
     "name": "U8P_GHOUL::look",
     "execution_form": "process",
-    "purpose": "Produce a short descriptive/bark when the ghoul is inspected while setting transient process/item metadata and excluding the process from normal processing, then suspend.",
+    "purpose": "Provide the short description / examine response for the Ghoul NPC: display a single bark and then end or suspend the U8P_GHOUL::look process.",
     "entry_conditions": [
-      "Event 0 (U8P_GHOUL::look/examine) — triggered when a player/actor looks at or inspects the ghoul"
+      "Triggered when the player uses the 'U8P_GHOUL::look' or examine action on the Ghoul NPC (inferred from classification 'U8P_GHOUL::look' and process type 0x0208)."
     ],
     "confidence": "high"
   },
@@ -32,53 +29,30 @@
     {
       "name": "U8P_GHOUL::look",
       "kind": "main",
-      "role": "Event handler for the ghoul 'U8P_GHOUL::look' (inspect) event; orchestrates info writes, process exclusion, and a descriptive bark.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item VM routine invoked to emit/display a short text message ('bark') to a player/process. Called by U8P_GHOUL::look with a process/object pointer and the literal \"ghoul \".",
+      "role": "Look/examine handler that emits a one-line bark for the Ghoul and ends the process.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_GHOUL::look",
-        "callee": "Item::bark",
-        "purpose": "Ask the item/process to present the short description string \"ghoul \" to the target viewer/process. This is the visible output of the 'U8P_GHOUL::look' event.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
-    "writes": [
-      {
-        "name": "info (process/item metadata)",
-        "likely_effect": "A specific info key/flag is written to the process/item to mark state related to the U8P_GHOUL::look/bark. Exact key semantics are inferred and not proven by the disassembly.",
-        "confidence": "medium"
-      },
-      {
-        "name": "process_exclude",
-        "likely_effect": "The process is excluded from some normal processing loop (guard against recursion/visibility) for the duration of the event. This is inferred from the process_exclude opcode observed before barking.",
-        "confidence": "medium"
-      }
-    ]
+    "writes": []
   },
   "ui_tags": [
     "trigger",
     "cleanup",
+    "animation",
     "guard"
   ],
   "quick_facts": {
     "main_function": "U8P_GHOUL::look",
-    "behavior_summary_one_liner": "U8P_GHOUL::look handles the 'U8P_GHOUL::look' (inspect) event for a ghoul. When a player/actor inspects the ghoul, the script marks process/item metadata, excludes the process from normal processing, and invokes Item::bark to emit the short descriptive string \"ghoul \".",
-    "external_call_count": 1,
+    "behavior_summary_one_liner": "U8P_GHOUL::look is a simple U8P_GHOUL::look/examine handler for the Ghoul entity. When the player examines the Ghoul, the script issues a single player-facing bark containing the text \"ghoul \" and then suspends/ends the U8P_GHOUL::look process.",
+    "external_call_count": 0,
     "flag_read_count": 0,
-    "flag_write_count": 2
+    "flag_write_count": 0
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

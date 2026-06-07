@@ -3,26 +3,27 @@
   "source_of_truth": "dialogue/json/U8P_VIVALTER.json",
   "file": "U8P_VIVALTER",
   "behavior_summary": [
-    "Provides the 'U8P_VIVALTER::look' (examine) handler for an altar object: when examined it composes the literal label \"altar \", asks the item/process to 'bark' that label so the player sees the altar name/description, then signals the U8P_VIVALTER::look succeeded.",
-    "The handler does not modify global game flags or inventories; its sole gameplay effect is producing the UI text for examination and returning a success implication for the U8P_VIVALTER::look action."
+    "Provides the 'U8P_VIVALTER::look' (inspect) handler for the NPC/object VIVALTER.",
+    "When the player examines VIVALTER the process emits a single short bark containing the text \"altar \" and then yields/suspends.",
+    "There is no branching, menu, dialog tree, flag manipulation, or external calls in the recovered snippet; the behavior is a one-line response followed by a suspend."
   ],
   "notable_control_flow": [
-    "Construct literal string \"altar \".",
-    "Push the object/process reference (inferred from the event parameter) and the string, then call Item::bark to display the label.",
-    "Free the constructed string buffer after the call.",
-    "Use the bark call return value and an 'implies' operation to indicate the U8P_VIVALTER::look succeeded, then suspend/return the handler."
+    "The flow is linear: entry -> play a single Bark ('altar ') -> suspend/return the U8P_VIVALTER::look process.",
+    "Decompiler produced unknown tokens around the bark (notably '{' and 'suspend'); these likely represent the typical process entry/exit scaffolding and a suspend/yield after the bark, not additional game logic.",
+    "No conditional or iterative constructs are present in the decompiled nodes for this function."
   ],
   "open_questions": [
-    "Is the pushed [BP+06h] parameter the altar object instance (the thing being examined) or the viewer's process id? (analysis infers it's the object/process reference to which bark is directed).",
-    "Does Item::bark return any status beyond success/failure that affects the implies semantics in downstream logic?",
-    "Are there any locale/grammar variants of the label beyond the static literal \"altar \" that could be selected by other code paths?"
+    "Is the trailing space in the bark text \"altar \" significant (formatting artifact) or intended text displayed to the player?",
+    "Do the unknown decompiled nodes correspond to engine scheduling semantics (e.g., brief delay, dialog queueing) beyond a simple suspend?",
+    "Is this 'U8P_VIVALTER::look' handler ever augmented elsewhere (other process layers, scripted overlays) in the full game data that are not visible in this snippet?"
   ],
   "main_function": {
     "name": "U8P_VIVALTER::look",
     "execution_form": "process",
-    "purpose": "Handle the 'U8P_VIVALTER::look' event for the altar object by producing and displaying the altar label and indicating the U8P_VIVALTER::look succeeded.",
+    "purpose": "Handle the player's U8P_VIVALTER::look/inspect interaction with VIVALTER by producing a short descriptive bark ('altar ') and then suspending the U8P_VIVALTER::look process.",
     "entry_conditions": [
-      "Event 0 / 'U8P_VIVALTER::look' — invoked when a player or actor examines/looks at the altar object (the object's U8P_VIVALTER::look handler is triggered)."
+      "Triggered when the player uses the 'U8P_VIVALTER::look' (inspect/examine) interaction on the VIVALTER entity.",
+      "Classified as a U8P_VIVALTER::look-type process (processType 0x0208) in the decompilation metadata."
     ],
     "confidence": "high"
   },
@@ -30,26 +31,13 @@
     {
       "name": "U8P_VIVALTER::look",
       "kind": "main",
-      "role": "Look handler for an altar item that composes and emits a short label via Item::bark.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine used to display short text/messages associated with an item/process.",
+      "role": "U8P_VIVALTER::look/inspect handler that emits a single bark ('altar ') and then suspends",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_VIVALTER::look",
-        "callee": "Item::bark",
-        "purpose": "Request the item/process to display a short text label (here the literal \"altar \") to the player or viewing process.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -62,9 +50,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_VIVALTER::VIVALTER::look",
-    "behavior_summary_one_liner": "Provides the 'U8P_VIVALTER::look' (examine) handler for an altar object: when examined it composes the literal label \"altar \", asks the item/process to 'bark' that label so the player sees the altar name/description, then signals the U8P_VIVALTER::look succeeded.",
-    "external_call_count": 1,
+    "main_function": "U8P_VIVALTER::look",
+    "behavior_summary_one_liner": "Provides the 'U8P_VIVALTER::look' (inspect) handler for the NPC/object VIVALTER.",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

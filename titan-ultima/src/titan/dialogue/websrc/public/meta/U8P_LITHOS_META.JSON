@@ -3,150 +3,228 @@
   "source_of_truth": "dialogue/json/U8P_LITHOS.json",
   "file": "U8P_LITHOS",
   "behavior_summary": [
-    "U8P_LITHOS::look (Event 0) responds to a player 'look' action by setting inspector info/exclusion flags for the target instance and making that instance 'bark' the short identification string \"Earth Titan\", then returning immediately. This is a pure presentation/inspection handler.",
-    "U8P_LITHOS::use (Event 1) implements a long, gated interaction/cutscene: it checks the item's map id (skips the main sequence on a specific map), starts music, puts the avatar in stasis, spawns many helper visual/effect/process scripts, clears combat state on numerous NPC indices so the scene is uninterrupted, runs many dialog lines and animations (including camera quake effects and item frame animations), uses randomness for varied timings, and at the end writes the global flag lithosMet = 1 to record quest progression.",
-    "Helpers U8P_LITHOS::09B2 and U8P_LITHOS::0A14 animate item frames while coordinating camera quakes and small timed waits; multiple other short helpers are spawned to orchestrate parallel visual/timing elements during the cutscene."
+    "Provides the examine ('U8P_LITHOS::look') description for the Lithos NPC and a multi-step interaction sequence for when the player 'uses' or talks to Lithos.",
+    "U8P_LITHOS::look is a short process that displays a single identification line ('Earth Titan') and then suspends.",
+    "U8P_LITHOS::use orchestrates a cutscene-like interaction: it optionally guards by map, plays music, places the avatar in stasis, recenters the camera, clears NPC combat flags, runs multiple animation/timing helper sequences (including U8P_LITHOS::lithosAnimSequence and several lower-level frame steppers), triggers camera quake/effects, sequences multi-line barks/dialogue with suspends between lines, and finally sets a persistent flag (lithosMet) to record the encounter.",
+    "Several small helper routines (U8P_LITHOS::func09B2, U8P_LITHOS::func0A14, U8P_LITHOS::func0AC8, U8P_LITHOS::func0B7C, U8P_LITHOS::func0C30, U8P_LITHOS::func0CCD, U8P_LITHOS::func0D7C, U8P_LITHOS::func0DAC, U8P_LITHOS::func0DDC) perform frame-by-frame visual updates and pacing using spawned timing helpers (FREE::func1C19, FREE::func29D8 etc.) and suspend to create visible animation timing."
   ],
   "notable_control_flow": [
-    "The main interactive sequence in U8P_LITHOS::use is gated by Npc::getMap() — if the item is on a particular map id (inferred as 0x1F) the heavy cutscene is skipped and the function exits earlier (confidence: high).",
-    "U8P_LITHOS::use performs many parallel spawns (spawn of FREE::*/METHOD::* helpers and other small LITHOS helpers) so the cutscene is orchestrated by multiple concurrent processes rather than a single linear script (confidence: high).",
-    "Camera::startQuake/stopQuake are used around frame animation loops (U8P_LITHOS::09B2) to synchronize quake effects with item frame changes (confidence: high).",
-    "The function freezes player control via setAvatarInStasis at the start and releases later; scene end sets global lithosMet = 1 to record that the event occurred (confidence: high)."
+    "Initial guard: U8P_LITHOS::use appears to check the NPC's map (Npc::getMap) and may skip the whole sequence if not on the expected map (guard to avoid running cutscene off-map).",
+    "Cutscene sequencing: U8P_LITHOS::use sets avatar stasis, may spawn a camera-follow helper, then repeatedly calls animation helper functions interleaved with spawn -> FREE::* timers and suspend statements to pace visuals and dialogue.",
+    "Camera and emphasis effects (playMusic, Camera::startQuake/stopQuake, spawned helper processes) are used at key beats; camera quake calls bracket some animation loops (e.g., U8P_LITHOS::func09B2, U8P_LITHOS::func0CCD).",
+    "End-of-interaction cleanup: U8P_LITHOS::use writes global flag lithosMet and uses finalization helpers (U8P_LITHOS::func0CCD / U8P_LITHOS::func0DDC) to reset frames and stop effects."
   ],
   "open_questions": [
-    "Exact map id(s) that gate/skips the main cutscene in U8P_LITHOS::use beyond the inferred 0x1F — the canonical numeric value is observed but the gameplay intent/context for that map is not fully described (confidence: medium).",
-    "Precise dialog text and full dialog order used in the cutscene (the scout facts list many barks but not full strings or branching conditions) — some lines are inferred from bark calls (confidence: medium).",
-    "Detailed roles of the many spawned helpers (e.g., labeled helpers 0D3C, 0D7C, 0DAC, 0DDC) beyond their general purpose of timing/visual effects — exact effect assets and timings remain un-documented here (confidence: low)."
+    "What exact map id or map condition is checked by the Npc::getMap guard inside U8P_LITHOS::use (prevents running the sequence off the expected map)?",
+    "Are there alternate dialogue branches or player choices (menus/asks) reachable in other builds or data; the extracted script shows only linear barks with no menu/strcmp nodes.",
+    "Precise timing values and visual assets used by the frame indices (which animation names / sprite sheets correspond to frames like 0x0E, 0x16, 0x23) — these are engine-level resources not recoverable from the script alone."
   ],
   "main_function": {
-    "name": "U8P_LITHOS::look (Event 0)",
+    "name": "U8P_LITHOS::look",
     "execution_form": "process",
-    "purpose": "Provide a quick in-world description when a player examines the Lithos instance: set inspector/processing flags and make the item speak the short identifier string \"Earth Titan\".",
+    "purpose": "Handle player 'U8P_LITHOS::look' / examine on Lithos by showing a short identifier line ('Earth Titan') and then suspending; serves as the in-world short description for the NPC.",
     "entry_conditions": [
-      "Triggered when the player/avatar performs the 'look' (examine) action on the Lithos instance.",
-      "Runs as a short reaction; no long-running or branching behavior in this handler."
+      "Invoked by the engine when the player examines (looks at) the Lithos NPC."
     ],
     "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_LITHOS::look (Event 0)",
+      "name": "U8P_LITHOS::look",
       "kind": "main",
-      "role": "Inspection/display handler that barks the item name and sets inspection/process exclusion flags.",
+      "role": "examine handler / short description",
       "confidence": "high"
     },
     {
-      "name": "U8P_LITHOS::use (Event 1)",
+      "name": "U8P_LITHOS::use",
       "kind": "helper",
-      "role": "Primary interaction/cutscene handler that orchestrates music, stasis, animations, dialog, camera shakes, NPC state clearing, and sets quest flag lithosMet on completion.",
+      "role": "primary interaction / cutscene orchestrator (dialogue, camera, stasis, animations)",
       "confidence": "high"
     },
     {
-      "name": "U8P_LITHOS::09B2",
+      "name": "U8P_LITHOS::func09B2",
       "kind": "helper",
-      "role": "Anim/quake helper: starts camera quake, steps item frames in a loop up to a limit, then stops quake.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_LITHOS::0A14",
-      "kind": "helper",
-      "role": "Short frame-step helper: advance frames across a small range with waits/spawns between steps.",
-      "confidence": "high"
-    },
-    {
-      "name": "U8P_LITHOS::0D3C",
-      "kind": "helper",
-      "role": "Spawned sub-behavior used by the cutscene for timing/visual effects (inferred purpose).",
+      "role": "camera-quake + per-frame animation loop (emphasis beat)",
       "confidence": "medium"
     },
     {
-      "name": "U8P_LITHOS::0D7C",
+      "name": "U8P_LITHOS::func0A14",
       "kind": "helper",
-      "role": "Spawned sub-behavior used by the cutscene for timing/visual effects (inferred purpose).",
+      "role": "short timing/frame helper for small step animations",
       "confidence": "medium"
     },
     {
-      "name": "U8P_LITHOS::0DAC",
+      "name": "U8P_LITHOS::func0AC8",
       "kind": "helper",
-      "role": "Spawned sub-behavior used by the cutscene for timing/visual effects (inferred purpose).",
+      "role": "low-level frame stepper (forward/reverse frame sequence)",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_LITHOS::func0B7C",
+      "kind": "helper",
+      "role": "low-level frame stepper (small loops and finalize frame)",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_LITHOS::func0C30",
+      "kind": "helper",
+      "role": "low-level frame stepper (longer forward/reverse sequence)",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_LITHOS::func0CCD",
+      "kind": "helper",
+      "role": "finalization animation + camera quake stop",
       "confidence": "medium"
+    },
+    {
+      "name": "U8P_LITHOS::lithosAnimSequence",
+      "kind": "helper",
+      "role": "high-level animation orchestrator that calls U8P_LITHOS::func0AC8, U8P_LITHOS::func0B7C, U8P_LITHOS::func0C30 with suspends",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_LITHOS::func0D7C",
+      "kind": "helper",
+      "role": "brief animation/timing wrapper (calls U8P_LITHOS::func0AC8 + U8P_LITHOS::func0B7C)",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_LITHOS::func0DAC",
+      "kind": "helper",
+      "role": "brief animation/timing wrapper (calls U8P_LITHOS::func0B7C + U8P_LITHOS::func0AC8)",
+      "confidence": "medium"
+    },
+    {
+      "name": "U8P_LITHOS::func0DDC",
+      "kind": "helper",
+      "role": "reset/pacing helper: resetRef, set frame 0x0E, spawn timer and suspend",
+      "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
-        "caller": "U8P_LITHOS::use (Event 1)",
-        "callee": "U8P_LITHOS::09B2",
-        "purpose": "Animate item frames while surrounding the animation with camera quake effects; used to emphasize visual beats in the cutscene.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LITHOS::use (Event 1)",
-        "callee": "U8P_LITHOS::0A14",
-        "purpose": "Advance a short frame sequence with timed waits; used for small percussive animations in the scene.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LITHOS::use (Event 1)",
-        "callee": "U8P_LITHOS::0D3C",
-        "purpose": "Spawned to run concurrent timing/visual work in parallel with the main script (exact effects inferred).",
+        "caller": "U8P_LITHOS::use",
+        "callee": "U8P_LITHOS::func09B2",
+        "purpose": "Play a camera quake + run a short per-frame animation for emphasis early in the cutscene.",
         "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LITHOS::use",
+        "callee": "U8P_LITHOS::func0CCD",
+        "purpose": "Run a finalization animation loop and stop camera quake near interaction end.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LITHOS::use",
+        "callee": "U8P_LITHOS::lithosAnimSequence",
+        "purpose": "Invoke a composed animation sequence (U8P_LITHOS::func0AC8 -> U8P_LITHOS::func0B7C -> U8P_LITHOS::func0C30) to animate Lithos between dialogue beats.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LITHOS::use",
+        "callee": "U8P_LITHOS::func0D7C",
+        "purpose": "Short timing/gesture step called between dialogue lines to vary pose.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LITHOS::use",
+        "callee": "U8P_LITHOS::func0DAC",
+        "purpose": "Another short timing/gesture step for pose changes prior to some lines.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LITHOS::lithosAnimSequence",
+        "callee": "U8P_LITHOS::func0AC8",
+        "purpose": "Run first low-level frame sequence of the animation trio.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LITHOS::lithosAnimSequence",
+        "callee": "U8P_LITHOS::func0B7C",
+        "purpose": "Run second low-level frame sequence of the animation trio.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LITHOS::lithosAnimSequence",
+        "callee": "U8P_LITHOS::func0C30",
+        "purpose": "Run third low-level frame sequence of the animation trio.",
+        "confidence": "high"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_LITHOS::look (Event 0)",
-        "callee": "Item::bark",
-        "purpose": "Display the short identifying string \"Earth Titan\" to the player who examined the item.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LITHOS::use (Event 1)",
-        "callee": "Npc::getMap",
-        "purpose": "Obtain the item's/current NPC map id to decide whether to execute the full cutscene or skip (scene gating).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LITHOS::use (Event 1)",
+        "caller": "U8P_LITHOS::use",
         "callee": "playMusic",
-        "purpose": "Start background music for the cutscene.",
+        "purpose": "Start background or scene music for the interaction (music ID passed).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_LITHOS::use (Event 1)",
-        "callee": "U8P_LITHOS::setAvatarInStasis",
-        "purpose": "Freeze player input/movement for the duration of the cutscene.",
+        "caller": "U8P_LITHOS::use",
+        "callee": "setAvatarInStasis",
+        "purpose": "Disable avatar controls during the cutscene (flag 0/1).",
         "confidence": "high"
       },
       {
-        "caller": "U8P_LITHOS::use (Event 1)",
-        "callee": "spawn",
-        "purpose": "Launch many parallel helper scripts/processes (visuals, waits, free timers, small helpers like 09B2/0A14) to orchestrate the scene.",
+        "caller": "U8P_LITHOS::use",
+        "callee": "Npc::getMap",
+        "purpose": "Query NPC's map to decide whether to run the full interaction (map guard).",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LITHOS::use",
+        "callee": "spawn ->FREE::cameraFollowAvatar",
+        "purpose": "Spawn a camera-follow helper to recenter or follow the avatar for the cutscene.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_LITHOS::use (Event 1)",
+        "caller": "U8P_LITHOS::use",
+        "callee": "spawn ->FREE::func1C19",
+        "purpose": "Spawn short-lived timer/effect processes; used ubiquitously by animation helpers to pace frame changes and suspend.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LITHOS::func09B2",
+        "callee": "Camera::startQuake",
+        "purpose": "Start camera shaking at the start of the emphasis animation.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LITHOS::func09B2",
+        "callee": "Camera::stopQuake",
+        "purpose": "Stop camera shaking after the emphasis animation loop.",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_LITHOS::func0CCD",
+        "callee": "Camera::startQuake",
+        "purpose": "Begin camera quake for the finalization effect, then stop it at end.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_LITHOS::use",
         "callee": "Npc::clrInCombat",
-        "purpose": "Clear combat flags on many NPC indices so the cutscene is not interrupted by combat behavior.",
+        "purpose": "Clear the NPC's in-combat flag to ensure the cutscene runs without combat behavior interrupting.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_LITHOS::09B2",
-        "callee": "Camera::startQuake / Camera::stopQuake",
-        "purpose": "Start and stop camera quake effects around the frame-animation loop.",
-        "confidence": "high"
+        "caller": "U8P_LITHOS::use",
+        "callee": "Npc::pathfind",
+        "purpose": "Optionally reposition an NPC via pathfinding before or during the interaction (used conditionally).",
+        "confidence": "medium"
       },
       {
-        "caller": "U8P_LITHOS::use (Event 1)",
+        "caller": "U8P_LITHOS::*",
         "callee": "Item::setFrame",
-        "purpose": "Change the Lithos/item display frame as part of visual animation sequences.",
+        "purpose": "Change the visual frame (pose) of the NPC/item to animate; called repeatedly by many helpers.",
         "confidence": "high"
       },
       {
-        "caller": "U8P_LITHOS::use (Event 1)",
-        "callee": "urandom",
-        "purpose": "Provide randomized timing values to vary delays and make the sequence feel less deterministic.",
-        "confidence": "high"
+        "caller": "U8P_LITHOS::use",
+        "callee": "spawn ->FREE::func29D8",
+        "purpose": "Spawn an auxiliary visual/timer helper used at certain animation starts.",
+        "confidence": "medium"
       }
     ]
   },
@@ -155,7 +233,7 @@
     "writes": [
       {
         "name": "lithosMet",
-        "likely_effect": "Mark that the Lithos interaction / meeting / cutscene has occurred (quest progression flag); set to 1 near the end of U8P_LITHOS::use.",
+        "likely_effect": "Set to true when the U8P_LITHOS::use interaction completes to record that the player has met Lithos.",
         "confidence": "high"
       }
     ]
@@ -167,9 +245,9 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_LITHOS::look (Event 0)",
-    "behavior_summary_one_liner": "U8P_LITHOS::look (Event 0) responds to a player 'look' action by setting inspector info/exclusion flags for the target instance and making that instance 'bark' the short identification string \"Earth Titan\", then returning immediately. This is a pure presentation/inspection handler.",
-    "external_call_count": 9,
+    "main_function": "U8P_LITHOS::look",
+    "behavior_summary_one_liner": "Provides the examine ('U8P_LITHOS::look') description for the Lithos NPC and a multi-step interaction sequence for when the player 'uses' or talks to Lithos.",
+    "external_call_count": 12,
     "flag_read_count": 0,
     "flag_write_count": 1
   },

@@ -3,26 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_LAMP1.json",
   "file": "U8P_LAMP1",
   "behavior_summary": [
-    "Provides simple interaction handlers for a wall lamp item. When the player 'looks' at the lamp it emits a short identifying text ('wall lamp '). When the player 'uses' the lamp the script collects the lamp's map coordinates (X,Y,Z), adjusts X by -0x20 and invokes an engine routine (FREE::2411) with those coordinates and constants — inferred to spawn/trigger an object or effect near the lamp.",
-    "Both handlers set process/context info and exclude normal processing before performing their action to ensure the bark or engine call runs under the intended engine context.",
-    "No persistent global flags are read or written by these handlers in the provided excerpt."
+    "U8P_LAMP1::look is the object's 'U8P_LAMP1::look' (examine) handler and simply displays a short description to the player: the single bark \"wall lamp\"; the process then suspends/returns to the engine.",
+    "U8P_LAMP1::use is a utility process that changes the world item at the lamp's location by calling FREE::changeItemType with the lamp instance coordinates (Item::getZ(this), Item::getY(this), Item::getX(this) - 0x20) and a target type id 0x025E — effectively replacing or toggling the lamp object in the map.",
+    "No global flags, menus, or branching logic are present; behavior is limited to inspect text and a single world-item transformation call."
   ],
   "notable_control_flow": [
-    "LAMP1::look: set process/info context -> call Item::bark(this, \"wall lamp \") -> free temporary string -> implies/pop return handling -> suspend.",
-    "LAMP1::use: set process/info context -> call Item::getZ/Y/X to read coordinates -> compute X-0x20 -> push (X-0x20, Y, Z, 0x00, 0x025E, item, context) -> call FREE::2411 -> return.",
-    "Both functions perform pre-call context setup (set info/process exclude) to guard their operations from normal processing."
+    "U8P_LAMP1::look emits one bark ('wall lamp') and then suspends/ends — a minimal, linear examine flow.",
+    "U8P_LAMP1::use performs a single external call to FREE::changeItemType and contains no observed branching; control-flow artifacts in the raw are low-confidence and do not change the apparent linear behavior."
   ],
   "open_questions": [
-    "Exact semantics of FREE::2411: the call appears to spawn or trigger something at the provided coordinates (0x025E looks like an object/type id), but its precise effect is inferred.",
-    "Meaning and effect of the specific info/process-exclude values set before calls (what engine state key is being set and how it affects other systems).",
-    "Whether LAMP1::use is tied to a particular event id in the engine (Event 1/use is inferred from pattern but not explicitly labeled here)."
+    "Does the target item type 0x025E represent a different lamp state (toggle) or an unrelated replacement item? (inferred only)",
+    "Why is the X coordinate adjusted by subtracting 0x20 from Item::getX(this)? Is that a coordinate-system offset required by this map or an engine quirk?",
+    "What external triggers call U8P_LAMP1::use in gameplay (player 'U8P_LAMP1::use' action, scripted event, or other)? The script shows the handler but not its invocations."
   ],
   "main_function": {
     "name": "U8P_LAMP1::look",
     "execution_form": "process",
-    "purpose": "When the player inspects (looks at) the wall lamp, present a short descriptive text ('wall lamp ') as an item bark and then suspend. Ensures the bark runs under the correct process/context.",
+    "purpose": "Provide the short examination text for the lamp object (display 'wall lamp').",
     "entry_conditions": [
-      "Event 0 (U8P_LAMP1::look) — triggered when the Avatar or relevant actor looks at or examines the wall lamp."
+      "Invoked when the player inspects or uses the 'U8P_LAMP1::look' action on the lamp object (engine U8P_LAMP1::look/examine event).",
+      "Function appears to suspend/return to the engine after showing the bark."
     ],
     "confidence": "high"
   },
@@ -30,43 +30,13 @@
     {
       "name": "U8P_LAMP1::look",
       "kind": "main",
-      "role": "Handle the 'U8P_LAMP1::look' event for the wall lamp; present identifying bark text and suspend.",
+      "role": "examine handler that emits a short description ('wall lamp')",
       "confidence": "high"
     },
     {
       "name": "U8P_LAMP1::use",
       "kind": "helper",
-      "role": "Handle the 'use' event: read lamp coordinates, adjust X, and call engine routine (FREE::2411) to spawn/trigger an effect/object near the lamp.",
-      "confidence": "medium"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item routine to show/emit short text associated with an item (used by U8P_LAMP1::look to show 'wall lamp ').",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getZ",
-      "kind": "extern",
-      "role": "Return item Z coordinate (height) for use in spatial calls.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getY",
-      "kind": "extern",
-      "role": "Return item Y coordinate for use in spatial calls.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getX",
-      "kind": "extern",
-      "role": "Return item X coordinate; value is adjusted by -0x20 before use.",
-      "confidence": "high"
-    },
-    {
-      "name": "FREE::2411",
-      "kind": "extern",
-      "role": "Engine routine invoked with coordinates and constants; likely spawns, frees, or triggers an object/effect at or near the lamp (inferred).",
+      "role": "utility to change/replace the map item at the lamp's coordinates (calls FREE::changeItemType)",
       "confidence": "medium"
     }
   ],
@@ -74,33 +44,9 @@
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_LAMP1::look",
-        "callee": "Item::bark",
-        "purpose": "Display/emit the lamp's short identifying text 'wall lamp ' to the viewer/process.",
-        "confidence": "high"
-      },
-      {
         "caller": "U8P_LAMP1::use",
-        "callee": "Item::getZ",
-        "purpose": "Obtain the lamp's Z coordinate to pass to FREE::2411.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LAMP1::use",
-        "callee": "Item::getY",
-        "purpose": "Obtain the lamp's Y coordinate to pass to FREE::2411.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LAMP1::use",
-        "callee": "Item::getX",
-        "purpose": "Obtain the lamp's X coordinate, which is then adjusted (X - 0x20) before being passed to FREE::2411.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_LAMP1::use",
-        "callee": "FREE::2411",
-        "purpose": "Invoke an engine routine with (X-0x20, Y, Z, 0x00, 0x025E, item, context) — likely to spawn or trigger an object/effect at or near the lamp; exact effect is inferred.",
+        "callee": "FREE::changeItemType",
+        "purpose": "Change the map item at the lamp's coordinates to item type 0x025E using parameters: Item::getZ(this), Item::getY(this), Item::getX(this) - 0x20, 0x00, 0x025E, this. Purpose: replace or toggle the lamp instance in the world.",
         "confidence": "medium"
       }
     ]
@@ -110,14 +56,12 @@
     "writes": []
   },
   "ui_tags": [
-    "trigger",
-    "guard",
-    "cleanup"
+    "trigger"
   ],
   "quick_facts": {
-    "main_function": "LAMP1::look",
-    "behavior_summary_one_liner": "Provides simple interaction handlers for a wall lamp item. When the player 'looks' at the lamp it emits a short identifying text ('wall lamp '). When the player 'uses' the lamp the script collects the lamp's map coordinates (X,Y,Z), adjusts X by -0x20 and invokes an engine routine (FREE::2411) with those coordinates and constants — inferred to spawn/trigger an object or effect near the lamp.",
-    "external_call_count": 5,
+    "main_function": "U8P_LAMP1::look",
+    "behavior_summary_one_liner": "U8P_LAMP1::look is the object's 'U8P_LAMP1::look' (examine) handler and simply displays a short description to the player: the single bark \"wall lamp\"; the process then suspends/returns to the engine.",
+    "external_call_count": 1,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

@@ -3,26 +3,25 @@
   "source_of_truth": "dialogue/json/U8P_STOVPIPE.json",
   "file": "U8P_STOVPIPE",
   "behavior_summary": [
-    "STOVPIPE::look: When a player/actor examines the stovepipe object the script prepares the item for inspection and emits a short descriptive text ('stove pipe ') via Item::bark directed at the viewer, then suspends (typical U8P_STOVPIPE::look-handler behavior).",
-    "U8P_STOVPIPE::enterFastArea: When an actor enters the stovepipe's fast-area trigger the script performs a permission/guard check (FREE::1A85 with argument 0x02). If that check passes, it computes a spawn position based on the stovepipe's coordinates (Z + 0x18, Y, X), attempts to create a specific prototype (id 0x02F5) via Item::legal_create, and on successful creation sets a status bit (OR mask 0x0080) on the created item."
+    "U8P_STOVPIPE::look: When the player examines this object, the script shows a short description/bark: \"stove pipe \".",
+    "U8P_STOVPIPE::enterFastArea: When an actor enters the object's fast-area trigger, the script performs a probabilistic check (FREE::randomInRange0(2) == 1, roughly 50% chance). If the check passes it computes a spawn location using the object's coordinates (Z + 0x18, Y, X), attempts to create a specific item prototype (0x02F5) at that location via Item::legal_create, and if creation succeeds marks the created item with a status flag via Item::orStatus(0x0080)."
   ],
   "notable_control_flow": [
-    "The U8P_STOVPIPE::look handler (STOVPIPE::look) is a short process-style routine that calls Item::bark then suspends; flow is linear and ends in a suspend.",
-    "The enterFastArea helper performs an early guard check (FREE::1A85). Only when that returns true does it continue to compute coordinates and attempt item creation; success of Item::legal_create gates setting the created item's status bit.",
-    "No global flags are written by these routines; all state changes are local to item instances (bark output and created-item status)."
+    "U8P_STOVPIPE::look is a simple, single-step process: emit a bark text then suspend/exit.",
+    "U8P_STOVPIPE::enterFastArea is gated by a random check; only on the positive branch does it proceed to attempt item creation, and creation is conditional on Item::legal_create returning success.",
+    "If Item::legal_create fails no further action is taken; if it succeeds the created item is flagged and then the behavior ends."
   ],
   "open_questions": [
-    "What exactly does FREE::1A85(0x02) check for? (permission, cooldown, world-state guard, or actor type?)",
-    "What is prototype 0x02F5 (what object is being spawned) and what gameplay role does it play?",
-    "What is the semantic meaning of the status mask 0x0080 applied to the newly created item?",
-    "Is the fast-area entry intended to spawn a persistent world object or a transient effect/visual object?"
+    "The concrete meaning of the prototype id 0x02F5 used in Item::legal_create is not explicit — what item is being spawned?",
+    "The exact semantics of the status flag 0x0080 applied by Item::orStatus are inferred but unknown (what gameplay state does that flag represent?).",
+    "Which actor types trigger U8P_STOVPIPE::enterFastArea in practice (player only, NPCs, or any actor)? The trigger condition is inferred from engine semantics but not explicit in the script."
   ],
   "main_function": {
     "name": "U8P_STOVPIPE::look",
     "execution_form": "process",
-    "purpose": "Provide the player a short description of the stovepipe when examined; prepare item info/exclude state and emit the literal text 'stove pipe ' via Item::bark, then suspend.",
+    "purpose": "Provide the short description when the object is examined by the player.",
     "entry_conditions": [
-      "Event 0: the object is examined/looked-at by a player or relevant actor (U8P_STOVPIPE::look/examine command)."
+      "Triggered by the engine when the player (or relevant actor) performs a 'U8P_STOVPIPE::look' / examine action on this object."
     ],
     "confidence": "high"
   },
@@ -30,55 +29,49 @@
     {
       "name": "U8P_STOVPIPE::look",
       "kind": "main",
-      "role": "Handle the object's 'U8P_STOVPIPE::look' (examine) event and emit the descriptive text via Item::bark.",
+      "role": "Display object short description (bark) on examine.",
       "confidence": "high"
     },
     {
       "name": "U8P_STOVPIPE::enterFastArea",
       "kind": "helper",
-      "role": "Fast-area entry trigger: guard-check then possibly spawn a prototype near the stovepipe and set a status bit on it.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine-provided call used to emit/display short text or messages for an item/process.",
-      "confidence": "high"
-    },
-    {
-      "name": "FREE::1A85",
-      "kind": "extern",
-      "role": "External guard/permission-style check called with a byte argument (here 0x02); return determines whether spawn logic proceeds.",
+      "role": "Fast-area entry behavior: probabilistic spawn attempt of a specific item above this object and mark it with a status flag.",
       "confidence": "medium"
     },
     {
-      "name": "Item::getZ",
+      "name": "FREE::randomInRange0",
       "kind": "extern",
-      "role": "Return the item Z coordinate (used to compute spawn Z = Z + 0x18).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getY",
-      "kind": "extern",
-      "role": "Return the item Y coordinate (used as spawn Y).",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::getX",
-      "kind": "extern",
-      "role": "Return the item X coordinate (used as spawn X).",
+      "role": "Random number provider used to gate the spawn (~50% chance when called with 2).",
       "confidence": "high"
     },
     {
       "name": "Item::legal_create",
       "kind": "extern",
-      "role": "Attempt to create/spawn an item at given coordinates with provided prototype and flags; returns status and writes an out-item id on success.",
+      "role": "Attempt to create/place an item at world coordinates; returns success and the created item via out-parameter.",
       "confidence": "high"
     },
     {
       "name": "Item::orStatus",
       "kind": "extern",
-      "role": "Bitwise-OR a status mask into a target item's status word (used here to set mask 0x0080 on the spawned item).",
+      "role": "Set status bits on an item (bitwise OR).",
+      "confidence": "medium"
+    },
+    {
+      "name": "Item::getZ",
+      "kind": "extern",
+      "role": "Read this object's Z coordinate for spawn location calculation.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getY",
+      "kind": "extern",
+      "role": "Read this object's Y coordinate for spawn location calculation.",
+      "confidence": "high"
+    },
+    {
+      "name": "Item::getX",
+      "kind": "extern",
+      "role": "Read this object's X coordinate for spawn location calculation.",
       "confidence": "high"
     }
   ],
@@ -86,46 +79,40 @@
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_STOVPIPE::look",
-        "callee": "Item::bark",
-        "purpose": "Emit the static descriptive string 'stove pipe ' to the viewer/process that examined the item.",
+        "caller": "U8P_STOVPIPE::enterFastArea",
+        "callee": "FREE::randomInRange0",
+        "purpose": "Produce a 0..n-1 random value with n=2 to implement an approximately 50% chance gate; checked for equality with 1.",
         "confidence": "high"
       },
       {
         "caller": "U8P_STOVPIPE::enterFastArea",
-        "callee": "FREE::1A85",
-        "purpose": "Guard/permission check invoked with byte 0x02 to decide whether spawn logic should proceed.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_STOVPIPE::enterFastArea",
         "callee": "Item::getZ",
-        "purpose": "Read the stovepipe's Z coordinate so spawn Z can be computed (Z + 0x18).",
+        "purpose": "Read the object's Z coordinate; spawn Z is computed as getZ(this) + 0x18 to place the new item above this object.",
         "confidence": "high"
       },
       {
         "caller": "U8P_STOVPIPE::enterFastArea",
         "callee": "Item::getY",
-        "purpose": "Read the stovepipe's Y coordinate for spawn position.",
+        "purpose": "Read the object's Y coordinate for spawn placement.",
         "confidence": "high"
       },
       {
         "caller": "U8P_STOVPIPE::enterFastArea",
         "callee": "Item::getX",
-        "purpose": "Read the stovepipe's X coordinate for spawn position.",
+        "purpose": "Read the object's X coordinate for spawn placement.",
         "confidence": "high"
       },
       {
         "caller": "U8P_STOVPIPE::enterFastArea",
         "callee": "Item::legal_create",
-        "purpose": "Attempt to spawn prototype id 0x02F5 at computed coordinates with flags 0x04 and receive the new item id via out parameter.",
-        "confidence": "high"
+        "purpose": "Attempt to create/place a specific item prototype (0x02F5) at computed coordinates; returns created item via out-parameter if successful. Acts as a guard: subsequent marking only happens on success.",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_STOVPIPE::enterFastArea",
         "callee": "Item::orStatus",
-        "purpose": "Set status mask 0x0080 on the newly created item (applies a bit flag to the spawned instance).",
-        "confidence": "high"
+        "purpose": "Mark the newly created item by OR-ing status bits (0x0080) into it, presumably to tag it for later behavior or to set a spawn-state flag.",
+        "confidence": "medium"
       }
     ]
   },
@@ -137,12 +124,12 @@
     "trigger",
     "spawn",
     "description",
-    "guard"
+    "probability"
   ],
   "quick_facts": {
-    "main_function": "STOVPIPE::look",
-    "behavior_summary_one_liner": "STOVPIPE::look: When a player/actor examines the stovepipe object the script prepares the item for inspection and emits a short descriptive text ('stove pipe ') via Item::bark directed at the viewer, then suspends (typical U8P_STOVPIPE::look-handler behavior).",
-    "external_call_count": 7,
+    "main_function": "U8P_STOVPIPE::look",
+    "behavior_summary_one_liner": "U8P_STOVPIPE::look: When the player examines this object, the script shows a short description/bark: \"stove pipe \".",
+    "external_call_count": 6,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

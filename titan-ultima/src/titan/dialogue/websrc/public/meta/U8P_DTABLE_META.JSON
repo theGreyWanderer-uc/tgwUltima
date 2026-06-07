@@ -3,26 +3,26 @@
   "source_of_truth": "dialogue/json/U8P_DTABLE.json",
   "file": "U8P_DTABLE",
   "behavior_summary": [
-    "DTABLE::look is a short event handler that runs when an actor 'looks' at the table object. It prepares per-viewer state (sets info and applies a process-exclude) and then causes the table item to 'bark' the short description \"table \" to the viewing process.",
-    "The handler allocates a transient string buffer for the literal \"table \", calls Item::bark with that string, the viewer/process id, and the implicit item context; it then frees the buffer.",
-    "The return value from Item::bark is captured and passed through a boolean/implication sequence (implies + pop) before the script suspends and returns, suggesting the bark result influences event propagation or suppression."
+    "This script provides the object's response when the player 'looks at' (examines) it: it emits a single short bark/text reading \"table \".",
+    "The routine is implemented as a U8P_DTABLE::look-type process (processType 0x0208) so it is invoked by the engine's examine/U8P_DTABLE::look system.",
+    "There are no menu interactions, flag reads/writes, parameter usage, local variables, or external API calls present in the excerpt — the behavior is purely descriptive and immediate."
   ],
   "notable_control_flow": [
-    "Entry triggered by the 'U8P_DTABLE::look' event (an area/inspect trigger).",
-    "A 'set info' followed by a 'process exclude' is applied before emitting output — likely to avoid self-feedback or to mark per-viewer state.",
-    "After calling Item::bark the code inspects the call's return (push/implie/pop) and then suspends; the imply/pop sequence is an engine-level boolean propagation step rather than complex branching."
+    "U8P_DTABLE::look executes a single player-facing Bark node with text \"table \".",
+    "The bark is followed by a suspension/termination of the U8P_DTABLE::look process (raw tokens indicate a suspend/return after speaking).",
+    "No conditional branches, loops, or calls are present; control flow is linear and immediate."
   ],
   "open_questions": [
-    "What exact info key is being set by the 'set info' opcode and how it affects per-viewer behavior (the disassembly shows a set-info operation but the numeric id/semantic meaning is not explicit).",
-    "What precise semantics does the process-exclude have in this context (preventing callbacks to the viewing process, blocking re-entrant events, or something else)?",
-    "What does the return value from Item::bark represent here and how does the implies/pop sequence affect higher-level event handling?"
+    "What is the significance of the trailing space in the bark text \"table \" — is it intentional formatting or an extraction artifact?",
+    "The source contained low-level tokens ('{' and 'suspend') around the bark; are these simply engine delimiters or do they encode additional lifecycle behavior?",
+    "Is this U8P_DTABLE::look handler ever extended by other scripts or external calls in other context (none are present here, but relationships outside this file are unknown)?"
   ],
   "main_function": {
     "name": "U8P_DTABLE::look",
     "execution_form": "process",
-    "purpose": "Handle a player's or actor's 'U8P_DTABLE::look' (examine) action on the table: prepare per-viewer state and emit the short description \"table \" to the viewer via Item::bark.",
+    "purpose": "Handle the player's examine/U8P_DTABLE::look action by displaying a short descriptive bark for the object.",
     "entry_conditions": [
-      "Event 0 — the 'U8P_DTABLE::look' verb/trigger (player or actor inspects/looks at the table)."
+      "Invoked by the game's U8P_DTABLE::look/examine system when the Avatar/player examines this object (process type 0x0208)."
     ],
     "confidence": "high"
   },
@@ -30,26 +30,13 @@
     {
       "name": "U8P_DTABLE::look",
       "kind": "main",
-      "role": "Look handler for the table object; prepares per-viewer info/exclusion and emits the short description to the viewing process.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item API used to display or emit a short text message (here: \"table \") toward a specific process/player.",
+      "role": "Provides the object's short description when examined; emits a single bark and ends the U8P_DTABLE::look process.",
       "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [],
-    "external_calls": [
-      {
-        "caller": "U8P_DTABLE::look",
-        "callee": "Item::bark",
-        "purpose": "Make the table item emit/display the literal string \"table \" to the target process/viewer passed into the U8P_DTABLE::look event; used to present the item's short description.",
-        "confidence": "high"
-      }
-    ]
+    "external_calls": []
   },
   "global_flags": {
     "reads": [],
@@ -58,12 +45,13 @@
   "ui_tags": [
     "trigger",
     "cleanup",
+    "animation",
     "guard"
   ],
   "quick_facts": {
-    "main_function": "DTABLE::look",
-    "behavior_summary_one_liner": "DTABLE::look is a short event handler that runs when an actor 'looks' at the table object. It prepares per-viewer state (sets info and applies a process-exclude) and then causes the table item to 'bark' the short description \"table \" to the viewing process.",
-    "external_call_count": 1,
+    "main_function": "U8P_DTABLE::look",
+    "behavior_summary_one_liner": "This script provides the object's response when the player 'looks at' (examines) it: it emits a single short bark/text reading \"table \".",
+    "external_call_count": 0,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

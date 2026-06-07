@@ -3,32 +3,41 @@
   "source_of_truth": "dialogue/json/U8P_EARTHMAG.json",
   "file": "U8P_EARTHMAG",
   "behavior_summary": [
-    "Presents the contents of an Earthen Magic tome to the player: marks/sets info for the target object, prepares a large descriptive string containing spells, reagent lists, and ritual words, and invokes the engine's Book::read routine to display or process that text.",
-    "After Book::read returns the handler frees the temporary text buffer (implicit), inspects the call's return value (used in an 'implies' pattern), consumes the small temporary result, and then suspends the process.",
-    "No global game-state flags are read or written by this excerpt; the handler's effects are local presentation and possible control flow determined by Book::read's return value."
+    "U8P_EARTHMAG::func0080 launches a Book::read process to present a long Earthen Magic tome text to the player, captures the returned process id, and then suspends to wait for the display/process to continue or finish.",
+    "The embedded text contains instructions for Earthen Magic spells (Open Ground and Death Speak), reagents, and incantations; the routine's role is to hand that text to the book-reading subsystem rather than manage UI/dialog branching itself.",
+    "No global flags, branching logic, menus, or dialogue nodes are present; the function acts as a simple bridge between the object activation and the Book::read external routine."
   ],
   "notable_control_flow": [
-    "U8P_EARTHMAG::0080: set info (flag/type 0x0001) on the passed-in context/object (BP+06) → allocate/point to large literal string (the tome text) → call Book::read with (BP+06, text) → free/cleanup text → push retval, evaluate implication, pop temporary → suspend."
+    "Call Book::read with a pointer to a large string literal containing the Earthen Magic book text and 'this' as the caller.",
+    "Store the returned process id into local 'temp'.",
+    "Suspend the current process (yield/wait) after spawning the Book::read process."
   ],
   "open_questions": [
-    "Is the BP+06 parameter the book object instance, the reader/player PID, or a combined reader-context? (inferred from usage but not explicit).",
-    "What exact meaning does the 'set info' call with id 0x0001 have in engine semantics for this object (appearance, state, or UI mode)?",
-    "What control effect does the Book::read return value have when used with the implies/pop sequence (is it a success/abort encoding, or a dialog-choice result)?"
+    "Which engine event or player action directly invokes U8P_EARTHMAG::func0080 (inferred to be 'read' or 'use' on the book but not explicit in the snippet)?",
+    "Does the suspend wait specifically for the spawned Book::read pid to finish, or does it perform a generic suspend until some external resume event occurs?",
+    "Are there any downstream script hooks (flags or callbacks) that react when the Book::read process completes which are not visible in this file?"
   ],
   "main_function": {
-    "name": "U8P_EARTHMAG::0080",
+    "name": "U8P_EARTHMAG::func0080",
     "execution_form": "process",
-    "purpose": "Display the Earthen Magic tome text to the player by setting up object info and calling Book::read with a long lore/spell string, then handle the return and suspend.",
+    "purpose": "Begin the book-reading/display process for the Earthen Magic tome by invoking Book::read with the embedded long text and the caller pid, then yield/suspend to wait for the reading process.",
     "entry_conditions": [
-      "Invoked when the player/actor attempts to read or activate the Earthen Magic tome (inferred from being a Book::read invocation and typical item 'read' handlers)."
+      "No explicit entry checks inside the function.",
+      "Inferred: invoked when the player activates/reads the Earthen Magic book (caller responsibility)."
     ],
     "confidence": "high"
   },
   "function_map": [
     {
-      "name": "U8P_EARTHMAG::0080",
+      "name": "U8P_EARTHMAG::func0080",
       "kind": "main",
-      "role": "Handles the 'read' or 'examine' presentation for the Earthen Magic tome; prepares text and delegates presentation to Book::read.",
+      "role": "Spawn/bridge to Book::read to display the Earthen Magic book text; capture spawned pid and suspend.",
+      "confidence": "high"
+    },
+    {
+      "name": "Book::read",
+      "kind": "extern",
+      "role": "External subsystem function that begins a book-reading/display process when given a pointer to text and a caller pid.",
       "confidence": "high"
     }
   ],
@@ -36,15 +45,9 @@
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_EARTHMAG::0080",
-        "callee": "U8P_EARTHMAG::set info",
-        "purpose": "Set an info/state key (id 0x0001) on the target referenced by BP+06; likely adjusts the object's presentation/state before reading.",
-        "confidence": "medium"
-      },
-      {
-        "caller": "U8P_EARTHMAG::0080",
+        "caller": "U8P_EARTHMAG::func0080",
         "callee": "Book::read",
-        "purpose": "Display or otherwise process the provided book text for the player/reader. Receives the prepared tome string and the BP+06 context and returns a value that the script inspects.",
+        "purpose": "Start/display a book-reading UI/process using a pointer to the embedded Earthen Magic text and the current pid; returns a process id for the spawned reader.",
         "confidence": "high"
       }
     ]
@@ -56,13 +59,13 @@
   "ui_tags": [
     "trigger",
     "cleanup",
-    "presentation",
-    "suspend"
+    "animation",
+    "guard"
   ],
   "quick_facts": {
-    "main_function": "EARTHMAG::0080",
-    "behavior_summary_one_liner": "Presents the contents of an Earthen Magic tome to the player: marks/sets info for the target object, prepares a large descriptive string containing spells, reagent lists, and ritual words, and invokes the engine's Book::read routine to display or process that text.",
-    "external_call_count": 2,
+    "main_function": "U8P_EARTHMAG::func0080",
+    "behavior_summary_one_liner": "U8P_EARTHMAG::func0080 launches a Book::read process to present a long Earthen Magic tome text to the player, captures the returned process id, and then suspends to wait for the display/process to continue or finish.",
+    "external_call_count": 1,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

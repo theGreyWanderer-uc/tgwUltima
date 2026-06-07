@@ -3,27 +3,28 @@
   "source_of_truth": "dialogue/json/U8P_AIRFOCUS.json",
   "file": "U8P_AIRFOCUS",
   "behavior_summary": [
-    "Provides the in-game behavior for AIRFOCUS items: when a player 'looks' at (examines) the item it emits a short identifying text ('bark') naming the specific focus represented by the item (examples: 'sextant focus', 'pointing hand focus', etc.).",
-    "When the item is 'used' it maps the item's frame/index to a corresponding AIRSPEL procedure and spawns that spell/process (passing the caller pid and occasional small integer arguments).",
-    "Both handlers perform initial process setup/housekeeping (inferred set info / process exclude) before acting, and they free temporary strings after barking or synchronize with spawned processes before returning/suspending."
+    "U8P_AIRFOCUS implements two processes: a U8P_AIRFOCUS::look() handler that reports a short, player-facing label for an AIRFOCUS item based on the item's frame index, and a U8P_AIRFOCUS::use() handler that activates (spawns) AIRSPEL behaviors for certain frame values.",
+    "U8P_AIRFOCUS::look() reads the item frame (uword Item::getFrame(this)) and selects one of many short barks/labels (frames 0x00..0x11 map to distinct 'focus' names). This is a read-only display action with no flag side-effects.",
+    "U8P_AIRFOCUS::use() initializes a small temporary/local state, checks the same frame value, and for a subset of frames spawns corresponding AIRSPEL functions (dispatching the actual spell/effect). Some spawn calls include an extra literal argument (observed for frames 0x09 and 0x0B).",
+    "No global flags are read or written by these handlers; the logic is local to the item instance and spawn operations. U8P_AIRFOCUS::look() is purely descriptive; U8P_AIRFOCUS::use() performs effect dispatch via spawn + suspend."
   ],
   "notable_control_flow": [
-    "U8P_AIRFOCUS::AIRFOCUS::look: perform process setup, call Item::getFrame repeatedly and compare against a sequence of constants (0x00..0x11); for the matched frame allocate/push a literal string and call Item::bark(item, string); free the string and perform an implies/suspend sequence before returning.",
-    "U8P_AIRFOCUS::AIRFOCUS::use: perform process setup, initialize a small local byte ([BP-02h]) to 0, call Item::getFrame and for each recognized frame spawn a specific AIRSPEL process (different entry addresses per frame). Some spawn calls include extra small integer args. After spawn the code synchronizes/implies with the spawned process and then suspends/returns.",
-    "If no frame matches, both handlers fall through to a quiet return (no bark or spawn)."
+    "U8P_AIRFOCUS::look branches on Item::getFrame(this) for exact frame values 0x00..0x11 and emits a single Bark for each branch (short label per frame).",
+    "U8P_AIRFOCUS::use sets a temporary local (local1 = 0), obtains a pid/target, then for specific frames executes spawn(AIRSPEL::funcXXXX, ...) followed by a suspend pattern; two spawns include an extra 0x01 literal argument.",
+    "Only a subset of frames (notably 0x08..0x0F and 0x11) are observed to trigger spawn calls; lower-numbered frames still produce descriptive barks in U8P_AIRFOCUS::look() but do not show spawn activity in the decompiled excerpt."
   ],
   "open_questions": [
-    "Exact runtime semantics and side-effects of the 'set info / process exclude' sequence invoked at start of both handlers (appears to be process metadata/housekeeping but exact keys and effects are not explicit).",
-    "Precise mapping from each frame value to the full gameplay effect of the spawned AIRSPEL (we see spawn addresses but not the spell implementation or its gameplay description).",
-    "Whether the [BP-02h] local initialized in AIRFOCUS::use is ever mutated/used by other code-paths not present in this excerpt (its purpose is inferred as a small flag/argument)."
+    "Which exact in-game targets (player vs. caster vs. item owner) are passed as the pid argument to the AIRSPEL spawn calls? The decompilation suggests a pid is fetched but the precise identity is inferred, not explicit.",
+    "Do frames 0x00..0x07 correspond to any active effects when used, or are they purely descriptive (U8P_AIRFOCUS::look-only)? The extracted code shows spawn calls for 0x08..0x0F and 0x11 only.",
+    "What is the intended meaning of the temporary local 'local1' in U8P_AIRFOCUS::use()? It appears to be a short-lived activation flag but its broader role (e.g., cooldown/guard) is not explicit."
   ],
   "main_function": {
     "name": "U8P_AIRFOCUS::look",
     "execution_form": "process",
-    "purpose": "Respond to the 'U8P_AIRFOCUS::look' (examine) event for an AIRFOCUS item by reporting which specific focus the item represents via a short text bark; perform initial process setup/housekeeping beforehand.",
+    "purpose": "Provide the short descriptive label presented to the player when they inspect/examine the AIRFOCUS item; selects the label based on Item::getFrame(this).",
     "entry_conditions": [
-      "Event 0 (examine/U8P_AIRFOCUS::look) - invoked when the player or another actor inspects the AIRFOCUS item.",
-      "Requires the item instance (inferred at BP+06h) and the caller pid to target/broadcast the bark."
+      "Triggered by the engine when the player performs a U8P_AIRFOCUS::look/examine action on the AIRFOCUS item (process type 0x0208).",
+      "Branches deterministically on the item's frame value (0x00..0x11) to produce the appropriate label/bark."
     ],
     "confidence": "high"
   },
@@ -31,43 +32,67 @@
     {
       "name": "U8P_AIRFOCUS::look",
       "kind": "main",
-      "role": "Examine/U8P_AIRFOCUS::look handler that emits a short identifying string for the focus item based on its frame.",
+      "role": "Inspect/display handler that maps item frame to human-readable focus label (bark).",
       "confidence": "high"
     },
     {
       "name": "U8P_AIRFOCUS::use",
       "kind": "helper",
-      "role": "Use handler that spawns the AIRSPEL process corresponding to the focus's effect (frame→spell mapping), performing spawn args and synchronization.",
+      "role": "Activation handler: prepares local state and spawns AIRSPEL behaviors corresponding to certain focus frames.",
       "confidence": "high"
     },
     {
-      "name": "Item::getFrame",
+      "name": "AIRSPEL::func00CF",
       "kind": "extern",
-      "role": "Query the item's frame/index to determine which focus variant this instance represents.",
-      "confidence": "high"
+      "role": "Spawned effect: appears to implement the Divination-focus spell (mapped from frame 0x08).",
+      "confidence": "medium"
     },
     {
-      "name": "Item::bark",
+      "name": "AIRSPEL::func0BEB",
       "kind": "extern",
-      "role": "Emit a short text/message from the item to a process/player (used to show the focus name when looked at).",
-      "confidence": "high"
+      "role": "Spawned effect: appears to implement Healing Touch (mapped from frame 0x09); observed spawn includes literal 0x01 argument.",
+      "confidence": "medium"
     },
     {
-      "name": "spawn (AIRSPEL::<addr>)",
+      "name": "AIRSPEL::func11AA",
       "kind": "extern",
-      "role": "Spawn/launch the spell/process implementing the focus's active effect; many addresses are used depending on frame value.",
-      "confidence": "high"
+      "role": "Spawned effect: appears to implement the Aerial Servant (mapped from frame 0x0A).",
+      "confidence": "medium"
     },
     {
-      "name": "FREE::free (string cleanup)",
+      "name": "AIRSPEL::func1E4B",
       "kind": "extern",
-      "role": "Free temporary string buffers allocated for bark messages after they are passed to Item::bark.",
-      "confidence": "high"
+      "role": "Spawned effect: appears to implement Restoration (mapped from frame 0x0B); observed spawn includes literal 0x01 argument.",
+      "confidence": "medium"
     },
     {
-      "name": "U8P_AIRFOCUS::engine:set info / process exclude",
+      "name": "AIRSPEL::func2506",
       "kind": "extern",
-      "role": "Process-level setup/housekeeping invoked at the start of handlers (likely configures process metadata or exclusion from normal processing).",
+      "role": "Spawned effect: appears to implement Fade From Sight (mapped from frame 0x0C).",
+      "confidence": "medium"
+    },
+    {
+      "name": "AIRSPEL::func27ED",
+      "kind": "extern",
+      "role": "Spawned effect: appears to implement Air Walk (mapped from frame 0x0D).",
+      "confidence": "medium"
+    },
+    {
+      "name": "AIRSPEL::func2CC0",
+      "kind": "extern",
+      "role": "Spawned effect: appears to implement Hear Truth (mapped from frame 0x0E).",
+      "confidence": "medium"
+    },
+    {
+      "name": "AIRSPEL::func2F00",
+      "kind": "extern",
+      "role": "Spawned effect: appears to implement Intervention (mapped from frame 0x0F).",
+      "confidence": "medium"
+    },
+    {
+      "name": "AIRSPEL::func314A",
+      "kind": "extern",
+      "role": "Spawned effect: appears to implement Reveal focus (mapped from frame 0x11).",
       "confidence": "medium"
     }
   ],
@@ -75,39 +100,57 @@
     "internal_calls": [],
     "external_calls": [
       {
-        "caller": "U8P_AIRFOCUS::look",
-        "callee": "Item::getFrame",
-        "purpose": "Read the item's frame value to decide which focus name to bark.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_AIRFOCUS::look",
-        "callee": "Item::bark",
-        "purpose": "Cause the item to emit a short identifying string (e.g., 'sextant focus') to the inspecting process/player.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_AIRFOCUS::look",
-        "callee": "FREE::free",
-        "purpose": "Free the temporary string buffer allocated for the bark message after calling Item::bark.",
-        "confidence": "high"
+        "caller": "U8P_AIRFOCUS::use",
+        "callee": "AIRSPEL::func00CF",
+        "purpose": "Spawn the Divination-focus spell/effect when Item::getFrame(this) == 0x08.",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_AIRFOCUS::use",
-        "callee": "Item::getFrame",
-        "purpose": "Determine which spell (AIRSPEL) to spawn based on the item's frame.",
-        "confidence": "high"
+        "callee": "AIRSPEL::func0BEB",
+        "purpose": "Spawn the Healing Touch effect when Item::getFrame(this) == 0x09; observed with extra literal 0x01 argument.",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_AIRFOCUS::use",
-        "callee": "spawn (AIRSPEL::<addr>)",
-        "purpose": "Spawn the spell/process that implements the focus's active ability; passes caller pid and occasional small integer args.",
-        "confidence": "high"
+        "callee": "AIRSPEL::func11AA",
+        "purpose": "Spawn the Aerial Servant effect when Item::getFrame(this) == 0x0A.",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_AIRFOCUS::use",
-        "callee": "U8P_AIRFOCUS::engine:set info / process exclude",
-        "purpose": "Initial process setup/housekeeping performed before spawn decisions (exact semantics inferred).",
+        "callee": "AIRSPEL::func1E4B",
+        "purpose": "Spawn the Restoration effect when Item::getFrame(this) == 0x0B; observed with extra literal 0x01 argument.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_AIRFOCUS::use",
+        "callee": "AIRSPEL::func2506",
+        "purpose": "Spawn the Fade From Sight effect when Item::getFrame(this) == 0x0C.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_AIRFOCUS::use",
+        "callee": "AIRSPEL::func27ED",
+        "purpose": "Spawn the Air Walk effect when Item::getFrame(this) == 0x0D.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_AIRFOCUS::use",
+        "callee": "AIRSPEL::func2CC0",
+        "purpose": "Spawn the Hear Truth effect when Item::getFrame(this) == 0x0E.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_AIRFOCUS::use",
+        "callee": "AIRSPEL::func2F00",
+        "purpose": "Spawn the Intervention effect when Item::getFrame(this) == 0x0F.",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_AIRFOCUS::use",
+        "callee": "AIRSPEL::func314A",
+        "purpose": "Spawn the Reveal-focus effect when Item::getFrame(this) == 0x11.",
         "confidence": "medium"
       }
     ]
@@ -118,14 +161,14 @@
   },
   "ui_tags": [
     "trigger",
-    "bark",
-    "spawn",
-    "setup"
+    "cleanup",
+    "animation",
+    "guard"
   ],
   "quick_facts": {
-    "main_function": "U8P_AIRFOCUS::AIRFOCUS::look",
-    "behavior_summary_one_liner": "Provides the in-game behavior for AIRFOCUS items: when a player 'looks' at (examines) the item it emits a short identifying text ('bark') naming the specific focus represented by the item (examples: 'sextant focus', 'pointing hand focus', etc.).",
-    "external_call_count": 6,
+    "main_function": "U8P_AIRFOCUS::look",
+    "behavior_summary_one_liner": "U8P_AIRFOCUS implements two processes: a U8P_AIRFOCUS::look() handler that reports a short, player-facing label for an AIRFOCUS item based on the item's frame index, and a U8P_AIRFOCUS::use() handler that activates (spawns) AIRSPEL behaviors for certain frame values.",
+    "external_call_count": 9,
     "flag_read_count": 0,
     "flag_write_count": 0
   },

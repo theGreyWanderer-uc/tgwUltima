@@ -3,33 +3,34 @@
   "source_of_truth": "dialogue/json/U8P_BANE.json",
   "file": "U8P_BANE",
   "behavior_summary": [
-    "Controls the NPC Bane's interactive gameplay behavior: dialog/look text, area-trigger reactions, theft response escalation, scheduled positioning, 'use' interactions, and a cast action that marks Bane as enraged and delegates actual spell/combat work to a combat spell handler.",
-    "BANE::cast (Func_80, Event 11) sets a persistent enraged state (baneMad = 3) then immediately spawns SPELCMBT::084D to perform the combat/spell effect, suspending until that spawned action returns.",
-    "AvatarStoleSomething (Event 13) implements a progressive theft-response: warns the avatar, may place the avatar in stasis, set Bane's combat target, increment baneWarned, and escalate to attack if warnings accumulate.",
-    "enterFastArea (Event F) runs spatial/scene transition logic when an avatar enters Bane's trigger area: iterates area items and may destroy or reposition them, teleport or move Bane depending on scenario flags (acolyteKilled, goToInnerSanctum, sponsorTest, keyOfTheAcolyte, inDaemonScene), and spawn movement/behavior scripts.",
-    "schedule (Event 8) periodically repositions or changes Bane's frame/state according to major scenario flags and may teleport or spawn MOVE/METHOD scripts when not in special scenes.",
-    "use (Event 1) routes player interactions into different sequences (BANE2.* or DAEMSCEN.*) depending on flags (baneMad, baneJoined, keyOfTheAcolyte, acolyteKilled) and ends by spawning a standard METHOD::1090 animation/behavior."
+    "This script implements the NPC 'Bane' behavior: combat casting entry, theft response, conversation/dialogue, scheduled movement, and fast-area item cleanup.",
+    "U8P_BANE::cast marks the NPC aggressive (sets baneMad) and enters a combat-spell AI loop (SPELCMBT::combatSpellLoop).",
+    "U8P_BANE::AvatarStoleSomething enforces owner/privilege checks (baneJoined, sponsorTest, keyOfTheAcolyte), issues incremental warnings (tracking baneWarned) or immediately escalates to hostile action (stasis, setTarget, barks).",
+    "U8P_BANE::use begins player interaction: starts a conversation, inspects actor/flags, and routes into dialogue/scene handlers (U8P_BANE::func0782, U8P_BANE::func5614 or external scene helpers) before ending the conversation.",
+    "U8P_BANE::func0782 is the main menu-driven dialog: builds a dynamic menu, presents Ask to the player, captures choices (suspendAssign) and dispatches to many topic barks and helper subroutines.",
+    "U8P_BANE::schedule controls periodic movement/routing based on world flags (inDaemonScene, acolyteKilled, goToInnerSanctum) and calls movement helpers to initiate/complete routes.",
+    "U8P_BANE::enterFastArea/U8P_BANE::leaveFastArea handle fast-update area entry/exit: item coordinate checks, item destruction or frame updates (when acolyteKilled), possible teleport/movement triggers, and cleanup of engine references."
   ],
   "notable_control_flow": [
-    "Most interactive handlers use early-exit guards when Npc::isDead is true — many action paths are skipped if Bane is dead.",
-    "Cast immediately writes baneMad=3 then spawns an external combat script (SPELCMBT::084D) and suspends until it returns.",
-    "AvatarStoleSomething uses branching on global flags (baneJoined, sponsorTest, keyOfTheAcolyte) to either ignore, warn, or punish the thief; it increments baneWarned to escalate behavior over repeated thefts.",
-    "Area-enter (enterFastArea) loops over items found in the trigger region and may call Item::destroy or FREE::2A56, then conditionally teleports or spawns movement methods for Bane based on combined scenario flags.",
-    "Schedule and use handlers frequently spawn engine METHODS and MOVE scripts rather than performing long inline sequences, delegating animation/motion to reusable methods."
+    "U8P_BANE::cast: set flag baneMad then call SPELCMBT::combatSpellLoop and suspend — simple, high-confidence linear entry to combat behavior.",
+    "U8P_BANE::AvatarStoleSomething: privileging check (baneJoined/sponsorTest/keyOfTheAcolyte) -> if privileged: early return/ignore; else call resetRef/METHOD::func091C and either (a) special-case immediate hostile stasis/target if stolen reference matches a protected local, or (b) issue incremental warnings by incrementing baneWarned, or (c) on final escalation stasis + setTarget + call U8P_BANE::func050A.",
+    "U8P_BANE::use: if this NPC is dead skip; otherwise BeginConversation -> suspend -> inspect actor at stack slot then select one of several dialog/scene routes depending on baneMad, baneJoined, keyOfTheAcolyte, acolyteKilled, or actor-dead state.",
+    "U8P_BANE::func0782 (dialogue loop): build menu (local3) from static options and global-flag-driven options, append 'Farewell.' with FREE::moveToEndOfList, Ask -> suspend & capture choice (local2/local5), strcmp-driven branching to many lines or subcalls, loop until 'Farewell.' chosen.",
+    "U8P_BANE::schedule: early exit if Npc::isDead(this) or inDaemonScene; choose route constants by acolyteKilled/goToInnerSanctum flags, call METHOD::func143A, suspend, if process_result() true call METHOD::func133F."
   ],
   "open_questions": [
-    "Exact numeric semantics of acolyteKilled (multi-bit checks) and how its different values map to the distinct teleport/movement branches.",
-    "Precise texts and player-facing dialog choices assembled by Func_782 (dialog builder) beyond the inferred examples — strings are inferred but not enumerated here.",
-    "Whether baneMad values other than 3 are meaningful elsewhere (cast forcibly sets to 3; other writes/reads may interpret other values).",
-    "Full behavior of some spawned internal scripts (BANE2::0080, BANE2::1162, BANE2::170E, DAEMSCEN::*): their concrete game effects are inferred but not disassembled here."
+    "What exact entity/meaning does the U8P_BANE::cast parameter (uword param1) carry for U8P_BANE::cast? The process receives a param but does not U8P_BANE::use it in the visible body.",
+    "Is BANE::func050A an internal helper in the same script with side-effects beyond those inferred (it is called but not listed as a top-level function here)?",
+    "Exact semantics and numeric meanings of the route/coordinate constants used by U8P_BANE::schedule (local2/local1/local0) are inferred but not fully known.",
+    "Precise conditions under which U8P_BANE::enterFastArea destroys specific items (coordinate thresholds and which items are targeted) are only inferred from Item::getX comparisons; the exact threshold logic is unclear."
   ],
   "main_function": {
-    "name": "U8P_BANE::cast (Func_80, Event 11)",
+    "name": "U8P_BANE::cast",
     "execution_form": "process",
-    "purpose": "When Bane performs a cast action, mark Bane as enraged (baneMad=3) and delegate the actual combat/spell effect to the combat-spell handler SPELCMBT::084D; suspend until the spawned spell completes.",
+    "purpose": "Mark the NPC as aggressive (baneMad) and start the combat spell-casting AI loop.",
     "entry_conditions": [
-      "Triggered by Event 11 (cast) on the Bane NPC.",
-      "Operates on the NPC instance (implicit this) and expects a pid/process and an additional forwarded argument ([BP+0Ah]) representing the spell target or parameter."
+      "Invoked when the NPC begins a casting/combat-spell action (engine calls this process to start spell behavior).",
+      "Receives a uword parameter but the visible body only sets the 'baneMad' flag and calls the external spell-loop routine."
     ],
     "confidence": "high"
   },
@@ -37,144 +38,210 @@
     {
       "name": "U8P_BANE::cast",
       "kind": "main",
-      "role": "Handle Bane's cast action: set enraged state and spawn SPELCMBT::084D to perform the spell/combat effect.",
+      "role": "Combat spell-entry: set aggressive state and enter spell AI loop",
       "confidence": "high"
     },
     {
       "name": "U8P_BANE::AvatarStoleSomething",
       "kind": "helper",
-      "role": "Respond to avatar theft in Bane's area: warn, increment baneWarned, place avatar in stasis, set combat target, and spawn follow-up behavior or punishment.",
+      "role": "Theft response: privilege checks, warnings escalation, and immediate hostile reaction",
       "confidence": "high"
     },
     {
       "name": "U8P_BANE::look",
       "kind": "helper",
-      "role": "Return or bark a textual description of Bane, choosing variants based on baneName, baneJob and Npc::isDead.",
+      "role": "Look/short-description provider; selects among name/job/dead variants",
       "confidence": "high"
     },
     {
       "name": "U8P_BANE::schedule",
       "kind": "helper",
-      "role": "Periodic scheduling: reposition Bane, change frames, and spawn movement/teleport methods depending on scenario flags.",
+      "role": "Scheduled movement/routing controller based on world flags",
       "confidence": "high"
     },
     {
       "name": "U8P_BANE::enterFastArea",
       "kind": "helper",
-      "role": "Triggered when an avatar enters Bane's fast-area: iterate items, destroy or adjust them, and teleport or move Bane based on flags (scene transitions).",
-      "confidence": "high"
+      "role": "Fast-area entry handler: item cleanup, frame changes, teleport/movement triggers",
+      "confidence": "medium"
     },
     {
       "name": "U8P_BANE::leaveFastArea",
       "kind": "helper",
-      "role": "Cleanup when an actor leaves Bane's trigger area (calls FREE::2A56 / cleanup routine).",
+      "role": "Fast-area exit cleanup (reset engine references)",
       "confidence": "high"
     },
     {
       "name": "U8P_BANE::use",
       "kind": "helper",
-      "role": "Handle player 'use' interactions with Bane, spawning appropriate BANE2 or DAEMSCEN scripts or METHOD::1090 depending on state flags.",
+      "role": "Player-U8P_BANE::use interaction entry: begin conversation and route to dialog/scene handlers",
       "confidence": "high"
     },
     {
-      "name": "U8P_BANE::0782",
+      "name": "U8P_BANE::func0782",
       "kind": "helper",
-      "role": "Dialog/question builder: assemble conversation options based on baneHasAsked, baneName and baneJob to present choices to the player.",
-      "confidence": "medium"
+      "role": "Main dialogue routine: menu-driven conversation and branching topics",
+      "confidence": "high"
+    },
+    {
+      "name": "U8P_BANE::func5614",
+      "kind": "helper",
+      "role": "Short monologue/yes-no petition flow (acolyte petition behavior)",
+      "confidence": "high"
     }
   ],
   "call_analysis": {
     "internal_calls": [
       {
-        "caller": "U8P_BANE::AvatarStoleSomething",
-        "callee": "U8P_BANE::enterFastArea",
-        "purpose": "After handling theft/warnings, spawn or schedule enterFastArea to process area items or continue behavior flow.",
+        "caller": "U8P_BANE::use",
+        "callee": "U8P_BANE::func0782",
+        "purpose": "Default main dialogue branch (menu-driven conversation) when player interacts and no special scene flags override",
         "confidence": "high"
       },
       {
         "caller": "U8P_BANE::use",
-        "callee": "U8P_BANE::schedule",
-        "purpose": "Behaviorally related: use may trigger repositioning/scene scripts; schedule governs periodic repositioning (relationship inferred).",
-        "confidence": "medium"
+        "callee": "U8P_BANE::func5614",
+        "purpose": "Alternate monologue branch used when inspected actor is dead (shorter interaction)",
+        "confidence": "high"
       },
       {
-        "caller": "U8P_BANE::0782",
-        "callee": "U8P_BANE::look",
-        "purpose": "Dialog builder queries look/state to decide which strings/options to expose (inferred relation rather than explicit call).",
-        "confidence": "low"
+        "caller": "U8P_BANE::AvatarStoleSomething",
+        "callee": "U8P_BANE::func050A",
+        "purpose": "Cleanup/follow-up after escalated theft response (appears to be an internal Bane helper called on escalation)",
+        "confidence": "medium"
       }
     ],
     "external_calls": [
       {
-        "caller": "U8P_BANE::cast (Func_80, Event 11)",
-        "callee": "SPELCMBT::084D",
-        "purpose": "Perform the actual combat/spell effect; cast delegates the mechanics to the spell-combat handler and waits for its result.",
+        "caller": "U8P_BANE::cast",
+        "callee": "SPELCMBT::combatSpellLoop",
+        "purpose": "Start/run the combat spell-casting AI loop for this NPC",
         "confidence": "high"
       },
       {
         "caller": "U8P_BANE::AvatarStoleSomething",
-        "callee": "FREE::2A56",
-        "purpose": "Cleanup/destroy area items or remove objects found when handling theft/area triggers.",
-        "confidence": "high"
+        "callee": "METHOD::func091C",
+        "purpose": "Theft-handling side-effects/notification called during non-privileged theft branch",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_BANE::AvatarStoleSomething",
-        "callee": "U8P_BANE::setAvatarInStasis",
-        "purpose": "Place the avatar into stasis (prevent movement/action) during warning/punishment sequences.",
+        "callee": "FREE::resetRef",
+        "purpose": "Reset an engine reference slot as part of theft handling",
         "confidence": "high"
       },
       {
         "caller": "U8P_BANE::AvatarStoleSomething",
         "callee": "Npc::setTarget",
-        "purpose": "Set Bane's combat/AI target to the avatar when escalating to attack.",
+        "purpose": "Set NPC's combat/attention target to the Avatar when escalating to hostile action",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BANE::AvatarStoleSomething",
+        "callee": "setAvatarInStasis",
+        "purpose": "Temporarily freeze/unfreeze Avatar as part of a dramatic hostile reaction",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BANE::schedule",
+        "callee": "METHOD::func143A",
+        "purpose": "Initiate/queue movement/route using computed route/coordinate parameters",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BANE::schedule",
+        "callee": "METHOD::func133F",
+        "purpose": "Follow-up call executed when movement completes (process_result true)",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BANE::enterFastArea",
+        "callee": "MOVE::func0080",
+        "purpose": "Low-level movement/routing invoked during fast-area entry under certain flag conditions",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BANE::enterFastArea",
+        "callee": "Item::getX",
+        "purpose": "Query item X coordinate for conditional destruction/cleanup",
         "confidence": "high"
       },
       {
         "caller": "U8P_BANE::enterFastArea",
         "callee": "Item::destroy",
-        "purpose": "Remove items present in Bane's trigger region as part of scene cleanup/transition.",
+        "purpose": "Remove targeted item objects during fast-area entry cleanup",
         "confidence": "high"
       },
       {
         "caller": "U8P_BANE::enterFastArea",
-        "callee": "Item::getDirToItem",
-        "purpose": "Compute facing/direction for direction-dependent METHOD spawn (animation/movement).",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_BANE::schedule",
-        "callee": "Npc::teleport",
-        "purpose": "Teleport Bane to predetermined coordinates for scene transitions or repositioning.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_BANE::schedule",
-        "callee": "MOVE::0080",
-        "purpose": "Spawn movement behavior when teleport is not used; move Bane toward a location instead of instant reposition.",
-        "confidence": "high"
-      },
-      {
-        "caller": "U8P_BANE::use",
-        "callee": "BANE2::0080",
-        "purpose": "Spawn secondary Bane behavior/dialog sequences depending on flags (alternate behavior when Bane has joined or other quest state).",
+        "callee": "Item::setFrame",
+        "purpose": "Change item appearance/state when acolyteKilled flag is set",
         "confidence": "medium"
       },
       {
         "caller": "U8P_BANE::use",
-        "callee": "DAEMSCEN::4355",
-        "purpose": "Enter or coordinate special daemon-scene sequences when relevant flags indicate such a transition.",
+        "callee": "BANE2::func0080",
+        "purpose": "Conversation/scene helper executed when the inspected actor is alive (first U8P_BANE::use branch)",
         "confidence": "medium"
       },
       {
-        "caller": "U8P_BANE::look",
-        "callee": "Item::bark",
-        "purpose": "Display the appropriate look/description string to the viewing process.",
-        "confidence": "high"
+        "caller": "U8P_BANE::use",
+        "callee": "BANE2::func1162",
+        "purpose": "Conversation/behavior helper used when 'baneMad' is set",
+        "confidence": "medium"
       },
       {
         "caller": "U8P_BANE::use",
-        "callee": "METHOD::1090",
-        "purpose": "Play a standard METHOD sequence (animation/behavior) following use interactions.",
+        "callee": "BANE2::func170E",
+        "purpose": "Conversation/scene helper used when 'baneJoined' is set (joined/faction branch)",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BANE::use",
+        "callee": "DAEMSCEN::func4355",
+        "purpose": "Scene helper called when 'keyOfTheAcolyte' is set",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BANE::use",
+        "callee": "DAEMSCEN::func19C9",
+        "purpose": "Scene helper called when 'acolyteKilled' is set",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BANE::func0782",
+        "callee": "FREE::moveToEndOfList",
+        "purpose": "Append 'Farewell.' exit option to the dialogue menu (local3)",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BANE::func0782",
+        "callee": "BANE2::func0A03",
+        "purpose": "Subdialogue/scene helper invoked from certain menu branches",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BANE::func0782",
+        "callee": "BANE2::func0D58",
+        "purpose": "Another subdialogue/scene helper invoked from menu branches",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BANE::func5614",
+        "callee": "METHOD::func15E7",
+        "purpose": "Apply or finalize state changes for the petition monologue (called before and after the yes/no prompt)",
+        "confidence": "medium"
+      },
+      {
+        "caller": "U8P_BANE::func5614",
+        "callee": "FREE::askYesNo",
+        "purpose": "Spawn/present a yes/no prompt to player and capture the result",
+        "confidence": "high"
+      },
+      {
+        "caller": "U8P_BANE::leaveFastArea",
+        "callee": "FREE::resetRef",
+        "purpose": "Reset an engine reference (cleanup) when leaving the fast-update area",
         "confidence": "high"
       }
     ]
@@ -183,69 +250,74 @@
     "reads": [
       {
         "name": "baneJoined",
-        "likely_effect": "Changes responses and which BANE2 behaviors are spawned (treat Bane as ally/member vs. hostile NPC).",
+        "likely_effect": "Used to exempt/alter responses (theft handling and dialogue branches for joined NPC state)",
         "confidence": "high"
       },
       {
         "name": "sponsorTest",
-        "likely_effect": "Gates movement/teleport or behavior in area-enter logic and theft handling (quest gating).",
+        "likely_effect": "Part of privilege checks for theft handling and movement conditions",
         "confidence": "medium"
       },
       {
         "name": "keyOfTheAcolyte",
-        "likely_effect": "Alters dialog and area/scene transitions when the player holds this key item.",
-        "confidence": "high"
-      },
-      {
-        "name": "baneWarned",
-        "likely_effect": "Counter used by AvatarStoleSomething to escalate from warnings to attack; read to choose which bark/behavior to use.",
+        "likely_effect": "Selects key-related scene/dialog branches and factors into movement/privilege checks",
         "confidence": "high"
       },
       {
         "name": "baneName",
-        "likely_effect": "Controls whether Bane reveals a proper name string in look/dialog logic.",
+        "likely_effect": "Controls whether name-based text appears in U8P_BANE::look() and whether Truename dialog is offered",
         "confidence": "high"
       },
       {
         "name": "baneJob",
-        "likely_effect": "Controls whether Bane reveals his job/title (e.g., 'Sorcerer') in look/dialog logic.",
+        "likely_effect": "Controls whether job/title text appears in U8P_BANE::look() and whether certain dialog options are included",
         "confidence": "high"
       },
       {
         "name": "acolyteKilled",
-        "likely_effect": "Major scene flag that changes teleport/position branches, movement and aggression; treated as multi-bit state with several branch outcomes.",
+        "likely_effect": "Alters U8P_BANE::schedule and U8P_BANE::enterFastArea behavior (different routing, item frame changes, scene triggers)",
         "confidence": "high"
       },
       {
         "name": "goToInnerSanctum",
-        "likely_effect": "Combined with acolyteKilled to decide inner-sanctum teleport/movement behavior.",
+        "likely_effect": "Used with acolyteKilled to choose teleport/movement to inner sanctum",
         "confidence": "medium"
       },
       {
         "name": "inDaemonScene",
-        "likely_effect": "Prevents or alters normal movement/spawn behavior when Bane or the game is in a special daemon scene.",
+        "likely_effect": "Suppresses scheduled movement and some movement/cleanup calls while inside the daemon scene",
         "confidence": "high"
       },
       {
         "name": "avatarMasterSorcerer",
-        "likely_effect": "When set, Bane may set the avatar as its target/master or modify target-assignment behavior on area entry.",
+        "likely_effect": "When true triggers Npc::setTarget in U8P_BANE::enterFastArea (direct attention/aggression)",
         "confidence": "medium"
       },
       {
         "name": "baneHasAsked",
-        "likely_effect": "Used by the dialog builder to avoid offering previously asked questions and to tailor the conversation options.",
+        "likely_effect": "Dialogue state used in U8P_BANE::func0782 to vary initial menu options (first-time vs subsequent)",
+        "confidence": "high"
+      },
+      {
+        "name": "baneGroveled",
+        "likely_effect": "Tracks whether the petition (U8P_BANE::func5614) has already been presented/answered; gates repeat prompt",
         "confidence": "high"
       }
     ],
     "writes": [
       {
         "name": "baneMad",
-        "likely_effect": "Set to 3 by BANE::cast to mark Bane as enraged; used to modify later interactions (behavioral gating in use(), others).",
+        "likely_effect": "Set by U8P_BANE::cast to mark the NPC as in aggressive/mad state before combat AI starts",
         "confidence": "high"
       },
       {
         "name": "baneWarned",
-        "likely_effect": "Incremented/updated by AvatarStoleSomething to track number of warnings given to the thief and drive escalation.",
+        "likely_effect": "Incremented by U8P_BANE::AvatarStoleSomething to track warnings given to the Avatar before escalation",
+        "confidence": "high"
+      },
+      {
+        "name": "baneGroveled",
+        "likely_effect": "Set by U8P_BANE::func5614 after the petition flow to record that the petition occurred",
         "confidence": "high"
       }
     ]
@@ -257,11 +329,11 @@
     "guard"
   ],
   "quick_facts": {
-    "main_function": "BANE::cast (Func_80, Event 11)",
-    "behavior_summary_one_liner": "Controls the NPC Bane's interactive gameplay behavior: dialog/look text, area-trigger reactions, theft response escalation, scheduled positioning, 'use' interactions, and a cast action that marks Bane as enraged and delegates actual spell/combat work to a combat spell handler.",
-    "external_call_count": 12,
+    "main_function": "U8P_BANE::cast",
+    "behavior_summary_one_liner": "This script implements the NPC 'Bane' behavior: combat casting entry, theft response, conversation/dialogue, scheduled movement, and fast-area item cleanup.",
+    "external_call_count": 22,
     "flag_read_count": 11,
-    "flag_write_count": 2
+    "flag_write_count": 3
   },
   "hypotheses": {
     "parameters_and_data_flow": [],

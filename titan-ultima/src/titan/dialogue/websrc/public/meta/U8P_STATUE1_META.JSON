@@ -3,29 +3,24 @@
   "source_of_truth": "dialogue/json/U8P_STATUE1.json",
   "file": "U8P_STATUE1",
   "behavior_summary": [
-    "STATUE1::look is a short process handler that runs when an actor examines the statue object.",
-    "The handler sets object info/state and excludes the process from further processing (prepares/marks the statue for inspection).",
-    "It invokes Item::bark to emit the literal inspection text \"statue \" directed at the examining actor/process.",
-    "The return value from Item::bark is captured and combined with an 'implies' operation before suspending and returning; this likely influences script continuation or a boolean result but does not change any observed global flags."
+    "U8P_STATUE1::look is a simple examine/U8P_STATUE1::look handler for the STATUE1 object. When the player examines the statue it displays the short text 'statue ' and then executes a suspend instruction.",
+    "No branching, global flags, parameters, locals, or calls to other game logic are present in this excerpt; the behavior is limited to presenting the short description and yielding/ending the U8P_STATUE1::look process."
   ],
   "notable_control_flow": [
-    "Entry is event-driven (U8P_STATUE1::look/examine).",
-    "Script sets object info and then applies a process-exclude action to the statue (state change/cleanup for the object).",
-    "An external call to Item::bark is made; its return is used with an 'implies' opcode which then leads to suspend/return — the implies usage suggests conditional or boolean chaining affecting the immediate return value or continuation.",
-    "No global flags are read or written by the observed snippet."
+    "Linear: display a single bark line then suspend. There are no conditions or menu interactions.",
+    "The presence of a suspend node indicates the U8P_STATUE1::look process yields or terminates immediately after showing the message."
   ],
   "open_questions": [
-    "Exact semantic effect of the 'implies' opcode with the bark return value: does it change control flow, produce a boolean, or affect higher-level script scheduling?",
-    "Precise meaning of the info id set by 'set info' and the scope of 'process exclude' (is the statue permanently excluded or temporarily flagged?).",
-    "Whether the bark return value can carry error/diagnostic info that higher-level code relies upon.",
-    "Whether any other event handlers in the same process rely on the info/ exclusion state set here (not visible in this snippet)."
+    "What exact runtime effect does the suspend node produce here (pause the process, terminate it, or return control to engine)? — confidence: medium.",
+    "The shown text contains a trailing space ('statue '). Is that deliberate (formatting/punctuation expectation) or an artifact of the source data? — confidence: low.",
+    "Are there other triggers (e.g., enterFastArea/leaveFastArea) for this object beyond the explicit U8P_STATUE1::look handler shown here? The available excerpt only contains U8P_STATUE1::look. — confidence: low"
   ],
   "main_function": {
     "name": "U8P_STATUE1::look",
     "execution_form": "process",
-    "purpose": "Respond to an actor examining the statue by marking the object state and emitting a short descriptive string ('statue ') to the examiner.",
+    "purpose": "Provide the short description when the player examines the STATUE1 object and then yield/terminate the U8P_STATUE1::look process.",
     "entry_conditions": [
-      "Event 0 (U8P_STATUE1::look) — triggered when an actor looks at/examines the statue"
+      "Triggered by the player performing the 'U8P_STATUE1::look' or examine action on the STATUE1 object (object U8P_STATUE1::look handler)."
     ],
     "confidence": "high"
   },
@@ -33,13 +28,7 @@
     {
       "name": "U8P_STATUE1::look",
       "kind": "main",
-      "role": "Process handler for the statue object's 'U8P_STATUE1::look' (examine) event.",
-      "confidence": "high"
-    },
-    {
-      "name": "Item::bark",
-      "kind": "extern",
-      "role": "Engine/item method used to emit/display a short message (bark) to a target process/player.",
+      "role": "Handle the object's examine/U8P_STATUE1::look action: present a brief description (bark) then suspend the process.",
       "confidence": "high"
     }
   ],
@@ -48,9 +37,15 @@
     "external_calls": [
       {
         "caller": "U8P_STATUE1::look",
-        "callee": "Item::bark",
-        "purpose": "Have the statue process emit the inspection text 'statue ' to the viewing actor/process (display a short description/bark).",
+        "callee": "Bark",
+        "purpose": "Engine/UI primitive to present the player-facing short description text ('statue ').",
         "confidence": "high"
+      },
+      {
+        "caller": "U8P_STATUE1::look",
+        "callee": "suspend",
+        "purpose": "Engine/process primitive to yield or end the U8P_STATUE1::look process after presenting the bark.",
+        "confidence": "medium"
       }
     ]
   },
@@ -59,14 +54,12 @@
     "writes": []
   },
   "ui_tags": [
-    "trigger",
-    "description",
-    "state-change"
+    "trigger"
   ],
   "quick_facts": {
-    "main_function": "STATUE1::look",
-    "behavior_summary_one_liner": "STATUE1::look is a short process handler that runs when an actor examines the statue object.",
-    "external_call_count": 1,
+    "main_function": "U8P_STATUE1::look",
+    "behavior_summary_one_liner": "U8P_STATUE1::look is a simple examine/U8P_STATUE1::look handler for the STATUE1 object. When the player examines the statue it displays the short text 'statue ' and then executes a suspend instruction.",
+    "external_call_count": 2,
     "flag_read_count": 0,
     "flag_write_count": 0
   },
