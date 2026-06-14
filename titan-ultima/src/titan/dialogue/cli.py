@@ -7,6 +7,7 @@ import socketserver
 import webbrowser
 import csv
 import json
+import shutil
 from http.server import SimpleHTTPRequestHandler
 from pathlib import Path
 from types import SimpleNamespace
@@ -26,11 +27,29 @@ from titan.dialogue.pipeline.run_fold import FoldRunError, get_effective_fold_pa
 
 dialogue_app = typer.Typer(
     name="dialogue",
-    help="Prepare, validate, and launch the Ultima 8 dialogue web viewer.",
+    help="Prepare, copy, validate, and launch the Ultima 8 dialogue web viewer.",
     no_args_is_help=True,
     rich_markup_mode=None,
     pretty_exceptions_enable=False,
 )
+
+
+NON_NPC_DIALOGUE_COPY_CLASSES = frozenset({
+    # Player/system and base helper classes.
+    "AVATAR",
+    "FREE",
+    "METHOD",
+    # Interactive objects that use dialogue-menu machinery.
+    "BEDEW",
+    "BEDNS",
+    "BEDROLL",
+    "LOGBOOK",
+    "LOGBOOK3",
+    "RECALL",
+    # Scene/spawn helpers that contain player-facing lines but are not NPC classes.
+    "DAEMSCEN",
+    "SORCHAT",
+})
 
 
 def _dialogue_root() -> Path:
@@ -270,6 +289,108 @@ def _has_prepared_artifacts(runtime_root: Path) -> bool:
         and any(dirs.json.glob("U8P_*.json"))
         and (dirs.web_data / "manifest.json").is_file()
     )
+
+
+def _discover_copy_npc_names(data_dir: Path) -> list[str]:
+    manifest_path = data_dir / "manifest.json"
+    if not manifest_path.is_file():
+        raise typer.BadParameter(
+            f"Prepared dialogue manifest missing: {manifest_path}. Run `titan dialogue prepare` first."
+        )
+
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise typer.BadParameter(f"Prepared dialogue manifest is not valid JSON: {manifest_path} ({exc})") from exc
+
+    if not isinstance(manifest, list):
+        raise typer.BadParameter(f"Prepared dialogue manifest is not a JSON array: {manifest_path}")
+
+    npc_names: list[str] = []
+    for entry in manifest:
+        if not isinstance(entry, str) or not entry.startswith("U8P_") or not entry.endswith(".json"):
+            continue
+
+        json_path = data_dir / entry
+        try:
+            payload = json.loads(json_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            raise typer.BadParameter(f"Prepared dialogue JSON is not valid: {json_path} ({exc})") from exc
+
+        if not isinstance(payload, dict):
+            raise typer.BadParameter(f"Prepared dialogue JSON is not an object: {json_path}")
+
+        npc_name = payload.get("npc")
+        if (
+            payload.get("hasDialogue") is True
+            and isinstance(npc_name, str)
+            and npc_name not in NON_NPC_DIALOGUE_COPY_CLASSES
+        ):
+            npc_names.append(npc_name)
+
+    npc_names = sorted(set(npc_names))
+    if not npc_names:
+        raise typer.BadParameter(f"No NPC dialogue classes found in prepared data: {data_dir}")
+    return npc_names
+
+
+def _copy_dialogue_npc_files(runtime_root: Path, destination: Path) -> int:
+    dirs = _runtime_dirs(runtime_root)
+    data_dir = dirs.web_data
+    meta_dir = _dialogue_root() / "websrc" / "public" / "meta"
+
+    def _ok(message: str) -> None:
+        typer.secho(f"[v] {message}", fg=typer.colors.GREEN)
+
+    def _bad(message: str) -> None:
+        typer.secho(f"[x] {message}", fg=typer.colors.RED, err=True)
+
+    typer.secho("Dialogue NPC copy", fg=typer.colors.BRIGHT_BLUE, bold=True)
+    typer.echo(f"Runtime root: {runtime_root}")
+    typer.echo(f"Destination: {destination}")
+
+    if not data_dir.is_dir():
+        _bad(f"Prepared dialogue data directory missing: {data_dir}")
+        _bad("Run `titan dialogue prepare` before `titan dialogue copy`.")
+        return 1
+    if not meta_dir.is_dir():
+        _bad(f"Bundled NPC meta directory missing: {meta_dir}")
+        return 1
+    if destination.exists() and not destination.is_dir():
+        _bad(f"Destination exists but is not a directory: {destination}")
+        return 1
+
+    try:
+        npc_names = _discover_copy_npc_names(data_dir)
+    except typer.BadParameter as exc:
+        _bad(str(exc))
+        return 1
+
+    missing: list[Path] = []
+    copy_pairs: list[tuple[Path, Path]] = []
+    for npc_name in npc_names:
+        json_path = data_dir / f"U8P_{npc_name}.json"
+        meta_path = meta_dir / f"U8P_{npc_name}_META.JSON"
+        if not json_path.is_file():
+            missing.append(json_path)
+        if not meta_path.is_file():
+            missing.append(meta_path)
+        copy_pairs.append((json_path, destination / json_path.name))
+        copy_pairs.append((meta_path, destination / meta_path.name))
+
+    if missing:
+        _bad(f"Cannot copy NPC files; {len(missing)} required file(s) are missing:")
+        for path in missing:
+            typer.echo(f"  {path}", err=True)
+        return 1
+
+    destination.mkdir(parents=True, exist_ok=True)
+    for source, target in copy_pairs:
+        shutil.copy2(source, target)
+
+    _ok(f"Identified NPC/actor classes: {', '.join(npc_names)}")
+    _ok(f"Copied {len(npc_names)} NPC JSON files and {len(npc_names)} NPC META JSON files.")
+    return 0
 
 
 def _validate_pipeline_outputs(runtime_root: Path, expected_classes: int, run_content_lint: bool) -> int:
@@ -669,6 +790,26 @@ def prepare_cmd(
         force=force,
     )
     raise SystemExit(rc)
+
+
+@dialogue_app.command("copy")
+def copy_cmd(
+    workdir: Optional[Path] = typer.Option(None, "--workdir", help="Runtime output directory"),
+    destination: Optional[Path] = typer.Option(
+        None,
+        "--dest",
+        "--destination",
+        "-o",
+        help="Destination directory for NPC JSON and NPC META JSON files",
+    ),
+) -> None:
+    """Copy the generated NPC JSON files and bundled META sidecars to a destination folder."""
+    runtime_root = (workdir or _default_runtime_root()).resolve()
+    if destination is None:
+        destination_text = typer.prompt("Destination directory for NPC JSON and META JSON files")
+        destination = Path(destination_text)
+    destination_path = destination.expanduser().resolve()
+    raise SystemExit(_copy_dialogue_npc_files(runtime_root, destination_path))
 
 
 @dialogue_app.command("validate")

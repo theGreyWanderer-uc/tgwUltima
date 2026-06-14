@@ -793,8 +793,8 @@ titan u8 unkcoff-dump UNKCOFF.DAT -o unkcoff/
 
 ## Dialogue commands (`titan dialogue`)
 
-Use these commands to generate dialogue runtime artifacts and launch the
-local web viewer.
+Use these commands to generate dialogue runtime artifacts, optionally export
+NPC JSON/META files, and launch the local web viewer.
 
 ---
 
@@ -821,6 +821,29 @@ titan dialogue prepare
 
 # Advanced override
 titan dialogue prepare --usecode /path/to/EUSECODE.FLX --force
+```
+
+---
+
+#### `dialogue copy`
+
+Copy in-game NPC/actor JSON files from prepared runtime data and their bundled
+META JSON sidecars into a destination folder. This is optional and is intended
+to run after `dialogue prepare`.
+
+```
+titan dialogue copy [--workdir DIR] [--dest DIR]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `--workdir DIR` | Runtime output directory |
+| `--dest DIR`, `--destination DIR`, `-o DIR` | Destination directory. If omitted, TITAN prompts for it. |
+
+**Examples**
+```bash
+titan dialogue copy
+titan dialogue copy --dest ./npc-dialogue-export
 ```
 
 ---
@@ -2261,6 +2284,7 @@ A value on the command line always wins.
 | `u7 container-browse` | Browse container contents from IREG with full nesting support |
 | `u7 egg-query` | Query egg trigger objects from IREG — type, usecode function, location |
 | `dialogue prepare` | Generate dialogue runtime artifacts |
+| `dialogue copy` | Optionally copy NPC JSON files and META sidecars to a destination folder |
 | `dialogue validate` | Validate dialogue runtime artifacts (`--content-lint` is unfinished) |
 | `dialogue launch` | Launch local dialogue web viewer (`--host/--port` optional advanced overrides) |
 | `setup` | First-time setup wizard — creates `titan.toml` |

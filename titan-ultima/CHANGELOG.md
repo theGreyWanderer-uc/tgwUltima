@@ -10,6 +10,16 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ---
 
+## [0.6.6]
+
+### Added
+
+- Added `titan dialogue copy` as an optional post-prepare step that prompts
+  for a destination and copies NPC JSON files plus their bundled META JSON
+  sidecars.
+
+---
+
 ## [0.6.5]
 
 ### Added
