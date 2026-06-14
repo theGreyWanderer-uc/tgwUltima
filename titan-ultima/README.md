@@ -48,6 +48,8 @@ titan u8 map-render -m 5
 
 # U8 dialogue web viewer
 titan dialogue prepare
+# Optional: export NPC JSON files and META sidecars
+titan dialogue copy
 titan dialogue validate
 titan dialogue launch
 
@@ -74,7 +76,7 @@ place for command options, longer examples, and format notes.
 | Palettes | Export U8 VGA palette | Export 12 U7 palettes from `PALETTES.FLX` | `titan u7 palette-export PALETTES.FLX -o palettes/` | [U7 palette commands](cli_reference.md#u7-palette-commands) |
 | Music | XMIDI to MIDI from `MUSIC.FLX` | MIDI export from `ADLIBMUS.DAT`, `MT32MUS.DAT`, `ENDSCORE.XMI`; optional GM rewrite | `titan u7 music-export MT32MUS.DAT --target gm -o music_gm/` | [U8 music commands](cli_reference.md#music-commands), [U7 music commands](cli_reference.md#u7-music-commands) |
 | Sound and speech | Sonarc sound effects and speech FLX archives | Creative Voice `.voc` decode and `U7SPEECH.SPC` export | `titan u7 speech-export U7SPEECH.SPC -o speech_wav/` | [Sound commands](cli_reference.md#sound-commands), [U7 voice commands](cli_reference.md#u7-voice--speech-commands) |
-| Dialogue web | Prepare, validate, and launch the U8 dialogue web machine | Not applicable | `titan dialogue launch` | [Dialogue CLI](cli_reference.md#dialogue-commands-titan-dialogue), [Dialogue README](src/titan/dialogue/websrc/READMEd.md) |
+| Dialogue web | Prepare, optionally copy NPC JSON/META files, validate, and launch the U8 dialogue web machine | Not applicable | `titan dialogue launch` | [Dialogue CLI](cli_reference.md#dialogue-commands-titan-dialogue), [Dialogue README](src/titan/dialogue/websrc/READMEd.md) |
 | Maps | Render U8 isometric/top-down maps from `FIXED.DAT`, GLOBs, shapes, saves | Render U7 maps from `U7MAP`, `U7CHUNKS`, `U7IFIX*`, `SHAPES.VGA`, optional `u7ireg*` | `titan u7 map-render STATIC/ --full -o u7_world.png` | [U8 map commands](cli_reference.md#u8-map-commands), [U7 map commands](cli_reference.md#u7-map-commands) |
 | Type data | Decode U8 `TYPEFLAG.DAT` | Decode U7 `TFA.DAT`, `SHPDIMS.DAT`, `WGTVOL.DAT` | `titan u7 typeflag-dump STATIC/ -f csv -o tfa_data.csv` | [U8 data commands](cli_reference.md#u8-data-inspection-commands), [U7 type flag commands](cli_reference.md#u7-type-flag-commands) |
 | Saves and runtime data | List/extract U8 save archives | Read Exult `.sav`; inspect loose `gamedat/`; dump NPCs, schedules, flags | `titan u7 save-info exult00bg.sav` | [U8 save commands](cli_reference.md#u8-save-archive-commands), [U7 save commands](cli_reference.md#u7-save-commands) |
@@ -92,6 +94,8 @@ place for command options, longer examples, and format notes.
 
 ```bash
 titan dialogue prepare
+# Optional NPC export step
+titan dialogue copy
 titan dialogue validate
 titan dialogue launch
 ```
