@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="Moongate.SettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <ScrollViewer Background="{ThemeResource MoongateAppBackgroundBrush}">
+        <Grid
+            MaxWidth="900"
+            Padding="28"
+            RowSpacing="22">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <StackPanel Spacing="4">
+                <TextBlock
+                    FontSize="28"
+                    FontWeight="SemiBold"
+                    Foreground="{ThemeResource MoongateTextBrush}"
+                    Text="Settings" />
+                <TextBlock
+                    Foreground="{ThemeResource MoongateMutedTextBrush}"
+                    Text="App appearance and diagnostics" />
+            </StackPanel>
+
+            <Border
+                Grid.Row="1"
+                Padding="18"
+                Background="{ThemeResource MoongatePanelBackgroundBrush}"
+                BorderBrush="{ThemeResource MoongatePanelBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="6">
+                <Grid ColumnSpacing="18">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="260" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Spacing="3">
+                        <TextBlock
+                            FontSize="18"
+                            FontWeight="SemiBold"
+                            Foreground="{ThemeResource MoongateTextBrush}"
+                            Text="Theme" />
+                        <TextBlock
+                            Foreground="{ThemeResource MoongateMutedTextBrush}"
+                            Text="Choose the active Moongate palette." />
+                    </StackPanel>
+
+                    <ComboBox
+                        x:Name="ThemeSelector"
+                        Grid.Column="1"
+                        MinWidth="240"
+                        HorizontalAlignment="Right"
+                        SelectionChanged="ThemeSelector_SelectionChanged" />
+                </Grid>
+            </Border>
+
+            <Border
+                Grid.Row="2"
+                Padding="18"
+                Background="{ThemeResource MoongatePanelBackgroundBrush}"
+                BorderBrush="{ThemeResource MoongatePanelBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="6">
+                <Grid ColumnSpacing="18">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Spacing="3">
+                        <TextBlock
+                            FontSize="18"
+                            FontWeight="SemiBold"
+                            Foreground="{ThemeResource MoongateTextBrush}"
+                            Text="Diagnostics" />
+                        <TextBlock
+                            x:Name="LogPathText"
+                            Foreground="{ThemeResource MoongateMutedTextBrush}"
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <ToggleSwitch
+                        x:Name="DebugLoggingSwitch"
+                        Grid.Column="1"
+                        Foreground="{ThemeResource MoongateTextBrush}"
+                        Header="Debug logging"
+                        OffContent="Off"
+                        OnContent="On"
+                        Toggled="DebugLoggingSwitch_Toggled" />
+                </Grid>
+            </Border>
+        </Grid>
+    </ScrollViewer>
+</Page>

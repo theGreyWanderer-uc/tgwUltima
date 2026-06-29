@@ -1,0 +1,237 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Application
+    x:Class="Moongate.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Moongate">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <SolidColorBrush x:Key="MoongateAppBackgroundBrush" Color="#FFF2EAD6" />
+            <SolidColorBrush x:Key="MoongatePanelBackgroundBrush" Color="#FFFAF5EB" />
+            <SolidColorBrush x:Key="MoongatePanelBorderBrush" Color="#FFD4C4A8" />
+            <SolidColorBrush x:Key="MoongateTextBrush" Color="#FF4A403A" />
+            <SolidColorBrush x:Key="MoongateMutedTextBrush" Color="#FF8A7D6F" />
+            <SolidColorBrush x:Key="MoongateAccentBrush" Color="#FFF4A900" />
+            <SolidColorBrush x:Key="MoongateAccentLightBrush" Color="#FFF8CB5C" />
+            <SolidColorBrush x:Key="MoongateActiveBrush" Color="#FF6A9E4A" />
+            <SolidColorBrush x:Key="MoongateDangerBrush" Color="#FFC1666B" />
+            <SolidColorBrush x:Key="MoongateInverseTextBrush" Color="#FFFFFFFF" />
+            <SolidColorBrush x:Key="MoongateCommandTextBrush" Color="#FF4A403A" />
+            <SolidColorBrush x:Key="MoongateCommandIconBrush" Color="#FF4A403A" />
+            <SolidColorBrush x:Key="MoongateNavigationTextBrush" Color="#FF4A403A" />
+            <SolidColorBrush x:Key="MoongateNavigationIconBrush" Color="#FF4A403A" />
+            <SolidColorBrush x:Key="MoongateNavigationHoverTextBrush" Color="#FFF8CB5C" />
+            <SolidColorBrush x:Key="MoongateNavigationHoverIconBrush" Color="#FFF8CB5C" />
+            <SolidColorBrush x:Key="MoongateNavigationHoverBackgroundBrush" Color="#FFFFE7AA" />
+            <SolidColorBrush x:Key="MoongateNavigationPaneBackgroundBrush" Color="#FFFAF5EB" />
+            <SolidColorBrush x:Key="MoongateInputBackgroundBrush" Color="#FFFAF5EB" />
+            <SolidColorBrush x:Key="MoongateInputHoverBackgroundBrush" Color="#FFFFE7AA" />
+            <SolidColorBrush x:Key="MoongateInputTextBrush" Color="#FF4A403A" />
+            <SolidColorBrush x:Key="MoongateInputMutedTextBrush" Color="#FF8A7D6F" />
+            <SolidColorBrush x:Key="MoongateInputBorderBrush" Color="#FFD4C4A8" />
+            <SolidColorBrush x:Key="MoongateOverlayBackgroundBrush" Color="#FFFAF5EB" />
+            <SolidColorBrush x:Key="MoongateOverlayHoverBackgroundBrush" Color="#FFFFE7AA" />
+            <SolidColorBrush x:Key="MoongateOverlaySelectedBackgroundBrush" Color="#FFFFE7AA" />
+            <SolidColorBrush x:Key="MoongateCalendarSurfaceBrush" Color="#FFFAF5EB" />
+            <SolidColorBrush x:Key="MoongateCalendarHeaderBrush" Color="#FFF5EFE0" />
+            <SolidColorBrush x:Key="MoongateCalendarOutOfMonthBrush" Color="#FFF0E8D4" />
+            <SolidColorBrush x:Key="MoongateCalendarSelectedBrush" Color="#FFFFE7AA" />
+            <SolidColorBrush x:Key="MoongateCalendarTodayBrush" Color="#FFC1666B" />
+            <SolidColorBrush x:Key="MoongateCalendarSundayBrush" Color="#FF9E5147" />
+            <SolidColorBrush x:Key="MoongateCalendarEventBrush" Color="#FF6A9E4A" />
+
+            <StaticResource x:Key="NavigationViewItemForeground" ResourceKey="MoongateNavigationTextBrush" />
+            <StaticResource x:Key="NavigationViewItemForegroundChecked" ResourceKey="MoongateNavigationTextBrush" />
+            <StaticResource x:Key="NavigationViewItemForegroundSelected" ResourceKey="MoongateNavigationTextBrush" />
+            <StaticResource x:Key="NavigationViewItemForegroundPointerOver" ResourceKey="MoongateNavigationHoverIconBrush" />
+            <StaticResource x:Key="NavigationViewItemForegroundPressed" ResourceKey="MoongateNavigationHoverIconBrush" />
+            <StaticResource x:Key="NavigationViewItemForegroundCheckedPointerOver" ResourceKey="MoongateNavigationHoverIconBrush" />
+            <StaticResource x:Key="NavigationViewItemForegroundCheckedPressed" ResourceKey="MoongateNavigationHoverIconBrush" />
+            <StaticResource x:Key="NavigationViewItemForegroundSelectedPointerOver" ResourceKey="MoongateNavigationHoverIconBrush" />
+            <StaticResource x:Key="NavigationViewItemForegroundSelectedPressed" ResourceKey="MoongateNavigationHoverIconBrush" />
+            <StaticResource x:Key="NavigationViewItemBackground" ResourceKey="MoongateNavigationPaneBackgroundBrush" />
+            <StaticResource x:Key="NavigationViewItemBackgroundPointerOver" ResourceKey="MoongateNavigationHoverBackgroundBrush" />
+            <StaticResource x:Key="NavigationViewItemBackgroundPressed" ResourceKey="MoongateNavigationHoverBackgroundBrush" />
+            <StaticResource x:Key="NavigationViewItemBackgroundChecked" ResourceKey="MoongateNavigationPaneBackgroundBrush" />
+            <StaticResource x:Key="NavigationViewItemBackgroundCheckedPointerOver" ResourceKey="MoongateNavigationHoverBackgroundBrush" />
+            <StaticResource x:Key="NavigationViewItemBackgroundCheckedPressed" ResourceKey="MoongateNavigationHoverBackgroundBrush" />
+            <StaticResource x:Key="NavigationViewItemBackgroundSelected" ResourceKey="MoongateNavigationHoverBackgroundBrush" />
+            <StaticResource x:Key="NavigationViewItemBackgroundSelectedPointerOver" ResourceKey="MoongateNavigationHoverBackgroundBrush" />
+            <StaticResource x:Key="NavigationViewItemBackgroundSelectedPressed" ResourceKey="MoongateNavigationHoverBackgroundBrush" />
+            <StaticResource x:Key="NavigationViewDefaultPaneBackground" ResourceKey="MoongateNavigationPaneBackgroundBrush" />
+            <StaticResource x:Key="NavigationViewExpandedPaneBackground" ResourceKey="MoongateNavigationPaneBackgroundBrush" />
+            <StaticResource x:Key="NavigationViewTopPaneBackground" ResourceKey="MoongateNavigationPaneBackgroundBrush" />
+            <StaticResource x:Key="NavigationViewContentBackground" ResourceKey="MoongateAppBackgroundBrush" />
+            <StaticResource x:Key="NavigationViewButtonBackgroundPointerOver" ResourceKey="MoongateNavigationHoverBackgroundBrush" />
+            <StaticResource x:Key="NavigationViewButtonBackgroundPressed" ResourceKey="MoongateNavigationHoverBackgroundBrush" />
+            <StaticResource x:Key="TitleBarPaneToggleButtonForeground" ResourceKey="MoongateNavigationIconBrush" />
+            <StaticResource x:Key="TitleBarPaneToggleButtonForegroundPointerOver" ResourceKey="MoongateNavigationHoverIconBrush" />
+            <StaticResource x:Key="TitleBarPaneToggleButtonForegroundPressed" ResourceKey="MoongateNavigationHoverIconBrush" />
+            <StaticResource x:Key="TitleBarPaneToggleButtonBackground" ResourceKey="MoongateNavigationPaneBackgroundBrush" />
+            <StaticResource x:Key="TitleBarPaneToggleButtonBackgroundPointerOver" ResourceKey="MoongateNavigationHoverBackgroundBrush" />
+            <StaticResource x:Key="TitleBarPaneToggleButtonBackgroundPressed" ResourceKey="MoongateNavigationHoverBackgroundBrush" />
+            <StaticResource x:Key="TitleBarForegroundBrush" ResourceKey="MoongateTextBrush" />
+            <StaticResource x:Key="TitleBarDeactivatedForegroundBrush" ResourceKey="MoongateMutedTextBrush" />
+            <StaticResource x:Key="TitleBarSubtitleForegroundBrush" ResourceKey="MoongateMutedTextBrush" />
+            <StaticResource x:Key="TitleBarSubtitleDeactivatedForegroundBrush" ResourceKey="MoongateMutedTextBrush" />
+            <StaticResource x:Key="TitleBarBackButtonForeground" ResourceKey="MoongateNavigationIconBrush" />
+            <StaticResource x:Key="TitleBarBackButtonForegroundPointerOver" ResourceKey="MoongateNavigationHoverIconBrush" />
+            <StaticResource x:Key="TitleBarBackButtonForegroundPressed" ResourceKey="MoongateNavigationHoverIconBrush" />
+            <StaticResource x:Key="TitleBarBackButtonBackground" ResourceKey="MoongateNavigationPaneBackgroundBrush" />
+            <StaticResource x:Key="TitleBarBackButtonBackgroundPointerOver" ResourceKey="MoongateNavigationHoverBackgroundBrush" />
+            <StaticResource x:Key="TitleBarBackButtonBackgroundPressed" ResourceKey="MoongateNavigationHoverBackgroundBrush" />
+            <StaticResource x:Key="ToggleSwitchHeaderForeground" ResourceKey="MoongateTextBrush" />
+            <StaticResource x:Key="ToggleSwitchContentForeground" ResourceKey="MoongateTextBrush" />
+            <StaticResource x:Key="ToggleSwitchHeaderForegroundDisabled" ResourceKey="MoongateMutedTextBrush" />
+            <StaticResource x:Key="ToggleSwitchContentForegroundDisabled" ResourceKey="MoongateMutedTextBrush" />
+            <StaticResource x:Key="ButtonForeground" ResourceKey="MoongateCommandTextBrush" />
+            <StaticResource x:Key="ButtonForegroundPointerOver" ResourceKey="MoongateCommandTextBrush" />
+            <StaticResource x:Key="ButtonForegroundPressed" ResourceKey="MoongateCommandTextBrush" />
+            <StaticResource x:Key="ButtonBackground" ResourceKey="MoongatePanelBackgroundBrush" />
+            <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="MoongateInputHoverBackgroundBrush" />
+            <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="MoongateInputHoverBackgroundBrush" />
+            <StaticResource x:Key="ButtonBorderBrush" ResourceKey="MoongatePanelBorderBrush" />
+            <StaticResource x:Key="ButtonBorderBrushPointerOver" ResourceKey="MoongateAccentLightBrush" />
+            <StaticResource x:Key="ButtonBorderBrushPressed" ResourceKey="MoongateAccentBrush" />
+            <StaticResource x:Key="TextControlForeground" ResourceKey="MoongateInputTextBrush" />
+            <StaticResource x:Key="TextControlForegroundPointerOver" ResourceKey="MoongateInputTextBrush" />
+            <StaticResource x:Key="TextControlForegroundFocused" ResourceKey="MoongateInputTextBrush" />
+            <StaticResource x:Key="TextControlBackground" ResourceKey="MoongateInputBackgroundBrush" />
+            <StaticResource x:Key="TextControlBackgroundPointerOver" ResourceKey="MoongateInputHoverBackgroundBrush" />
+            <StaticResource x:Key="TextControlBackgroundFocused" ResourceKey="MoongateInputBackgroundBrush" />
+            <StaticResource x:Key="TextControlBorderBrush" ResourceKey="MoongateInputBorderBrush" />
+            <StaticResource x:Key="TextControlBorderBrushPointerOver" ResourceKey="MoongateAccentLightBrush" />
+            <StaticResource x:Key="TextControlBorderBrushFocused" ResourceKey="MoongateAccentBrush" />
+            <StaticResource x:Key="TextControlPlaceholderForeground" ResourceKey="MoongateInputMutedTextBrush" />
+            <StaticResource x:Key="TextControlPlaceholderForegroundPointerOver" ResourceKey="MoongateInputMutedTextBrush" />
+            <StaticResource x:Key="TextControlPlaceholderForegroundFocused" ResourceKey="MoongateInputMutedTextBrush" />
+            <StaticResource x:Key="TextControlHeaderForeground" ResourceKey="MoongateTextBrush" />
+            <StaticResource x:Key="TextControlButtonForeground" ResourceKey="MoongateInputMutedTextBrush" />
+            <StaticResource x:Key="TextControlButtonForegroundPointerOver" ResourceKey="MoongateInputTextBrush" />
+            <StaticResource x:Key="TextControlButtonForegroundPressed" ResourceKey="MoongateInputTextBrush" />
+            <StaticResource x:Key="TextControlButtonBackgroundPointerOver" ResourceKey="MoongateInputHoverBackgroundBrush" />
+            <StaticResource x:Key="TextControlButtonBackgroundPressed" ResourceKey="MoongateInputHoverBackgroundBrush" />
+            <StaticResource x:Key="ComboBoxBackground" ResourceKey="MoongateInputBackgroundBrush" />
+            <StaticResource x:Key="ComboBoxBackgroundPointerOver" ResourceKey="MoongateInputHoverBackgroundBrush" />
+            <StaticResource x:Key="ComboBoxBackgroundPressed" ResourceKey="MoongateInputHoverBackgroundBrush" />
+            <StaticResource x:Key="ComboBoxBackgroundFocused" ResourceKey="MoongateInputBackgroundBrush" />
+            <StaticResource x:Key="ComboBoxBackgroundUnfocused" ResourceKey="MoongateInputBackgroundBrush" />
+            <StaticResource x:Key="ComboBoxForeground" ResourceKey="MoongateInputTextBrush" />
+            <StaticResource x:Key="ComboBoxForegroundPointerOver" ResourceKey="MoongateInputTextBrush" />
+            <StaticResource x:Key="ComboBoxForegroundPressed" ResourceKey="MoongateInputTextBrush" />
+            <StaticResource x:Key="ComboBoxForegroundFocused" ResourceKey="MoongateInputTextBrush" />
+            <StaticResource x:Key="ComboBoxBorderBrush" ResourceKey="MoongateInputBorderBrush" />
+            <StaticResource x:Key="ComboBoxBorderBrushPointerOver" ResourceKey="MoongateAccentLightBrush" />
+            <StaticResource x:Key="ComboBoxBorderBrushPressed" ResourceKey="MoongateAccentBrush" />
+            <StaticResource x:Key="ComboBoxBackgroundBorderBrushFocused" ResourceKey="MoongateAccentBrush" />
+            <StaticResource x:Key="ComboBoxBackgroundBorderBrushUnfocused" ResourceKey="MoongateInputBorderBrush" />
+            <StaticResource x:Key="ComboBoxHeaderForeground" ResourceKey="MoongateTextBrush" />
+            <StaticResource x:Key="ComboBoxPlaceHolderForeground" ResourceKey="MoongateInputMutedTextBrush" />
+            <StaticResource x:Key="ComboBoxPlaceHolderForegroundPointerOver" ResourceKey="MoongateInputMutedTextBrush" />
+            <StaticResource x:Key="ComboBoxPlaceHolderForegroundPressed" ResourceKey="MoongateInputMutedTextBrush" />
+            <StaticResource x:Key="ComboBoxPlaceHolderForegroundFocused" ResourceKey="MoongateInputMutedTextBrush" />
+            <StaticResource x:Key="ComboBoxDropDownBackground" ResourceKey="MoongateOverlayBackgroundBrush" />
+            <StaticResource x:Key="ComboBoxDropDownForeground" ResourceKey="MoongateTextBrush" />
+            <StaticResource x:Key="ComboBoxDropDownBorderBrush" ResourceKey="MoongatePanelBorderBrush" />
+            <StaticResource x:Key="ComboBoxDropDownBackgroundPointerOver" ResourceKey="MoongateOverlayHoverBackgroundBrush" />
+            <StaticResource x:Key="ComboBoxDropDownBackgroundPointerPressed" ResourceKey="MoongateOverlaySelectedBackgroundBrush" />
+            <StaticResource x:Key="ComboBoxDropDownGlyphForeground" ResourceKey="MoongateInputMutedTextBrush" />
+            <StaticResource x:Key="ComboBoxDropDownGlyphForegroundFocused" ResourceKey="MoongateInputTextBrush" />
+            <StaticResource x:Key="ComboBoxDropDownGlyphForegroundFocusedPressed" ResourceKey="MoongateInputTextBrush" />
+            <StaticResource x:Key="ComboBoxItemForeground" ResourceKey="MoongateTextBrush" />
+            <StaticResource x:Key="ComboBoxItemForegroundPointerOver" ResourceKey="MoongateTextBrush" />
+            <StaticResource x:Key="ComboBoxItemForegroundPressed" ResourceKey="MoongateTextBrush" />
+            <StaticResource x:Key="ComboBoxItemForegroundSelected" ResourceKey="MoongateTextBrush" />
+            <StaticResource x:Key="ComboBoxItemForegroundSelectedUnfocused" ResourceKey="MoongateTextBrush" />
+            <StaticResource x:Key="ComboBoxItemForegroundSelectedPointerOver" ResourceKey="MoongateTextBrush" />
+            <StaticResource x:Key="ComboBoxItemForegroundSelectedPressed" ResourceKey="MoongateTextBrush" />
+            <StaticResource x:Key="ComboBoxItemBackground" ResourceKey="MoongateOverlayBackgroundBrush" />
+            <StaticResource x:Key="ComboBoxItemBackgroundPointerOver" ResourceKey="MoongateOverlayHoverBackgroundBrush" />
+            <StaticResource x:Key="ComboBoxItemBackgroundPressed" ResourceKey="MoongateOverlaySelectedBackgroundBrush" />
+            <StaticResource x:Key="ComboBoxItemBackgroundSelected" ResourceKey="MoongateOverlaySelectedBackgroundBrush" />
+            <StaticResource x:Key="ComboBoxItemBackgroundSelectedUnfocused" ResourceKey="MoongateOverlaySelectedBackgroundBrush" />
+            <StaticResource x:Key="ComboBoxItemBackgroundSelectedPointerOver" ResourceKey="MoongateOverlaySelectedBackgroundBrush" />
+            <StaticResource x:Key="ComboBoxItemBackgroundSelectedPressed" ResourceKey="MoongateOverlaySelectedBackgroundBrush" />
+            <StaticResource x:Key="ComboBoxItemBorderBrush" ResourceKey="MoongateOverlayBackgroundBrush" />
+            <StaticResource x:Key="ComboBoxItemBorderBrushPointerOver" ResourceKey="MoongateAccentLightBrush" />
+            <StaticResource x:Key="ComboBoxItemBorderBrushPressed" ResourceKey="MoongateAccentBrush" />
+            <StaticResource x:Key="ComboBoxItemBorderBrushSelected" ResourceKey="MoongateAccentBrush" />
+            <StaticResource x:Key="ComboBoxItemBorderBrushSelectedPointerOver" ResourceKey="MoongateAccentLightBrush" />
+            <StaticResource x:Key="ContentDialogForeground" ResourceKey="MoongateTextBrush" />
+            <StaticResource x:Key="ContentDialogBackground" ResourceKey="MoongatePanelBackgroundBrush" />
+            <StaticResource x:Key="ContentDialogBorderBrush" ResourceKey="MoongatePanelBorderBrush" />
+            <StaticResource x:Key="ContentDialogSeparatorBorderBrush" ResourceKey="MoongatePanelBorderBrush" />
+            <StaticResource x:Key="ContentDialogTopOverlay" ResourceKey="MoongatePanelBackgroundBrush" />
+            <StaticResource x:Key="DatePickerHeaderForeground" ResourceKey="MoongateTextBrush" />
+            <StaticResource x:Key="DatePickerButtonBackground" ResourceKey="MoongateInputBackgroundBrush" />
+            <StaticResource x:Key="DatePickerButtonBackgroundPointerOver" ResourceKey="MoongateInputHoverBackgroundBrush" />
+            <StaticResource x:Key="DatePickerButtonBackgroundPressed" ResourceKey="MoongateInputHoverBackgroundBrush" />
+            <StaticResource x:Key="DatePickerButtonBackgroundFocused" ResourceKey="MoongateInputBackgroundBrush" />
+            <StaticResource x:Key="DatePickerButtonBorderBrush" ResourceKey="MoongateInputBorderBrush" />
+            <StaticResource x:Key="DatePickerButtonBorderBrushPointerOver" ResourceKey="MoongateAccentLightBrush" />
+            <StaticResource x:Key="DatePickerButtonBorderBrushPressed" ResourceKey="MoongateAccentBrush" />
+            <StaticResource x:Key="DatePickerButtonForeground" ResourceKey="MoongateInputTextBrush" />
+            <StaticResource x:Key="DatePickerButtonForegroundPointerOver" ResourceKey="MoongateInputTextBrush" />
+            <StaticResource x:Key="DatePickerButtonForegroundPressed" ResourceKey="MoongateInputTextBrush" />
+            <StaticResource x:Key="DatePickerButtonForegroundFocused" ResourceKey="MoongateInputTextBrush" />
+            <StaticResource x:Key="DatePickerButtonForegroundDefault" ResourceKey="MoongateInputMutedTextBrush" />
+            <StaticResource x:Key="DatePickerFlyoutPresenterBackground" ResourceKey="MoongateOverlayBackgroundBrush" />
+            <StaticResource x:Key="DatePickerFlyoutPresenterBorderBrush" ResourceKey="MoongatePanelBorderBrush" />
+            <StaticResource x:Key="DatePickerFlyoutPresenterSpacerFill" ResourceKey="MoongatePanelBorderBrush" />
+            <StaticResource x:Key="DatePickerFlyoutPresenterHighlightFill" ResourceKey="MoongateOverlaySelectedBackgroundBrush" />
+            <StaticResource x:Key="TimePickerHeaderForeground" ResourceKey="MoongateTextBrush" />
+            <StaticResource x:Key="TimePickerButtonBackground" ResourceKey="MoongateInputBackgroundBrush" />
+            <StaticResource x:Key="TimePickerButtonBackgroundPointerOver" ResourceKey="MoongateInputHoverBackgroundBrush" />
+            <StaticResource x:Key="TimePickerButtonBackgroundPressed" ResourceKey="MoongateInputHoverBackgroundBrush" />
+            <StaticResource x:Key="TimePickerButtonBackgroundFocused" ResourceKey="MoongateInputBackgroundBrush" />
+            <StaticResource x:Key="TimePickerButtonBorderBrush" ResourceKey="MoongateInputBorderBrush" />
+            <StaticResource x:Key="TimePickerButtonBorderBrushPointerOver" ResourceKey="MoongateAccentLightBrush" />
+            <StaticResource x:Key="TimePickerButtonBorderBrushPressed" ResourceKey="MoongateAccentBrush" />
+            <StaticResource x:Key="TimePickerButtonForeground" ResourceKey="MoongateInputTextBrush" />
+            <StaticResource x:Key="TimePickerButtonForegroundPointerOver" ResourceKey="MoongateInputTextBrush" />
+            <StaticResource x:Key="TimePickerButtonForegroundPressed" ResourceKey="MoongateInputTextBrush" />
+            <StaticResource x:Key="TimePickerButtonForegroundFocused" ResourceKey="MoongateInputTextBrush" />
+            <StaticResource x:Key="TimePickerButtonForegroundDefault" ResourceKey="MoongateInputMutedTextBrush" />
+            <StaticResource x:Key="TimePickerFlyoutPresenterBackground" ResourceKey="MoongateOverlayBackgroundBrush" />
+            <StaticResource x:Key="TimePickerFlyoutPresenterBorderBrush" ResourceKey="MoongatePanelBorderBrush" />
+            <StaticResource x:Key="TimePickerFlyoutPresenterSpacerFill" ResourceKey="MoongatePanelBorderBrush" />
+            <StaticResource x:Key="TimePickerFlyoutPresenterHighlightFill" ResourceKey="MoongateOverlaySelectedBackgroundBrush" />
+            <StaticResource x:Key="DateTimePickerFlyoutButtonBackground" ResourceKey="MoongateOverlayBackgroundBrush" />
+            <StaticResource x:Key="DateTimePickerFlyoutButtonBackgroundPointerOver" ResourceKey="MoongateOverlayHoverBackgroundBrush" />
+            <StaticResource x:Key="DateTimePickerFlyoutButtonBackgroundPressed" ResourceKey="MoongateOverlaySelectedBackgroundBrush" />
+            <StaticResource x:Key="DateTimePickerFlyoutButtonBorderBrush" ResourceKey="MoongatePanelBorderBrush" />
+            <StaticResource x:Key="DateTimePickerFlyoutButtonBorderBrushPointerOver" ResourceKey="MoongateAccentLightBrush" />
+            <StaticResource x:Key="DateTimePickerFlyoutButtonBorderBrushPressed" ResourceKey="MoongateAccentBrush" />
+            <StaticResource x:Key="DateTimePickerFlyoutButtonForegroundPointerOver" ResourceKey="MoongateTextBrush" />
+            <StaticResource x:Key="DateTimePickerFlyoutButtonForegroundPressed" ResourceKey="MoongateTextBrush" />
+            <StaticResource x:Key="ListViewItemForeground" ResourceKey="MoongateTextBrush" />
+            <StaticResource x:Key="ListViewItemForegroundPointerOver" ResourceKey="MoongateTextBrush" />
+            <StaticResource x:Key="ListViewItemForegroundPressed" ResourceKey="MoongateTextBrush" />
+            <StaticResource x:Key="ListViewItemForegroundSelected" ResourceKey="MoongateTextBrush" />
+            <StaticResource x:Key="ListViewItemForegroundSelectedPointerOver" ResourceKey="MoongateTextBrush" />
+            <StaticResource x:Key="ListViewItemForegroundSelectedPressed" ResourceKey="MoongateTextBrush" />
+            <StaticResource x:Key="ListViewItemBackground" ResourceKey="MoongateAppBackgroundBrush" />
+            <StaticResource x:Key="ListViewItemBackgroundPointerOver" ResourceKey="MoongateOverlayHoverBackgroundBrush" />
+            <StaticResource x:Key="ListViewItemBackgroundPressed" ResourceKey="MoongateOverlaySelectedBackgroundBrush" />
+            <StaticResource x:Key="ListViewItemBackgroundSelected" ResourceKey="MoongateOverlaySelectedBackgroundBrush" />
+            <StaticResource x:Key="ListViewItemBackgroundSelectedPointerOver" ResourceKey="MoongateOverlaySelectedBackgroundBrush" />
+            <StaticResource x:Key="ListViewItemBackgroundSelectedPressed" ResourceKey="MoongateOverlaySelectedBackgroundBrush" />
+
+            <Style TargetType="Button">
+                <Setter Property="Background" Value="{ThemeResource MoongatePanelBackgroundBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource MoongatePanelBorderBrush}" />
+                <Setter Property="Foreground" Value="{ThemeResource MoongateCommandTextBrush}" />
+            </Style>
+
+            <Style TargetType="ComboBox">
+                <Setter Property="Background" Value="{ThemeResource MoongatePanelBackgroundBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource MoongatePanelBorderBrush}" />
+                <Setter Property="Foreground" Value="{ThemeResource MoongateTextBrush}" />
+            </Style>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "Moongate (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "Moongate (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
