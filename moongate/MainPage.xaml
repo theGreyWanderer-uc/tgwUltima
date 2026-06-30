@@ -38,7 +38,8 @@
             <Button
                 Grid.Column="1"
                 HorizontalAlignment="Right"
-                Click="TodayButton_Click">
+                Click="TodayButton_Click"
+                ToolTipService.ToolTip="Today (Ctrl+T)">
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <SymbolIcon
                         Foreground="{ThemeResource MoongateCommandIconBrush}"
@@ -79,7 +80,8 @@
                 <Button
                     Grid.Row="1"
                     HorizontalAlignment="Left"
-                    Click="AddEventButton_Click">
+                    Click="AddEventButton_Click"
+                    ToolTipService.ToolTip="Add event (Ctrl+N)">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <SymbolIcon
                             Foreground="{ThemeResource MoongateCommandIconBrush}"
@@ -155,7 +157,7 @@
 
                     <Button
                         Click="PreviousMonthButton_Click"
-                        ToolTipService.ToolTip="Previous month">
+                        ToolTipService.ToolTip="Previous month (Alt+Left)">
                         <SymbolIcon
                             Foreground="{ThemeResource MoongateCommandIconBrush}"
                             Symbol="Back" />
@@ -173,7 +175,7 @@
                     <Button
                         Grid.Column="2"
                         Click="NextMonthButton_Click"
-                        ToolTipService.ToolTip="Next month">
+                        ToolTipService.ToolTip="Next month (Alt+Right)">
                         <SymbolIcon
                             Foreground="{ThemeResource MoongateCommandIconBrush}"
                             Symbol="Forward" />

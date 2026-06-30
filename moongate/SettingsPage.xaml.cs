@@ -27,8 +27,39 @@ public sealed partial class SettingsPage : Page
 
         DebugLoggingSwitch.IsOn = AppLogger.IsEnabled;
         LogPathText.Text = $"Logs are written to {AppLogger.LogDirectory}";
+        SettingsCategoryList.SelectedIndex = 0;
+        SelectSettingsCategory("general");
 
         _isLoading = false;
+    }
+
+    private void SettingsCategoryList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (SettingsCategoryList.SelectedItem is ListViewItem item &&
+            item.Tag is string category)
+        {
+            SelectSettingsCategory(category);
+        }
+    }
+
+    private void SelectSettingsCategory(string category)
+    {
+        GeneralSettingsPanel.Visibility = category == "general"
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        AppearanceSettingsPanel.Visibility = category == "appearance"
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        ConfigurationSettingsPanel.Visibility = category == "configuration"
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+        (SettingsSectionTitle.Text, SettingsSectionSubtitle.Text) = category switch
+        {
+            "appearance" => ("Appearance", "Theme and visual preferences"),
+            "configuration" => ("Configuration", "Diagnostics and local runtime details"),
+            _ => ("General", "Calendar defaults")
+        };
     }
 
     private void ThemeSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)

@@ -29,6 +29,12 @@ public sealed partial class ShellPage : Page
         }
     }
 
+    public void NavigateToSettings()
+    {
+        NavigateTo("settings");
+        RootNavigation.SelectedItem = SettingsNavigationItem;
+    }
+
     private void NavigateTo(string tag)
     {
         Type pageType = tag switch

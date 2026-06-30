@@ -3,6 +3,7 @@ using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Moongate.Commands;
 using Moongate.Models;
 using Moongate.Rendering;
 using Moongate.Services;
@@ -13,11 +14,14 @@ namespace Moongate;
 
 public sealed partial class MainPage : Page
 {
+    private readonly AppCommandRegistry _commands = AppServices.CommandRegistry;
     private readonly MonthCalendarRenderer _calendarRenderer = new();
     private readonly ICalendarEventRepository _eventRepository = AppServices.EventRepository;
     private readonly ThemeService _themeService = AppServices.ThemeService;
+    private readonly List<IDisposable> _commandRegistrations = [];
     private DateTimeOffset _displayMonth;
     private List<CalendarEvent> _events = [];
+    private bool _isEventEditorOpen;
     private DateTimeOffset _selectedDate;
 
     public ObservableCollection<CalendarEvent> VisibleEvents { get; } = [];
@@ -37,6 +41,8 @@ public sealed partial class MainPage : Page
 
     private async void MainPage_Loaded(object sender, RoutedEventArgs e)
     {
+        RegisterCommandHandlers();
+
         if (!await _eventRepository.ExistsAsync())
         {
             _events = CreateStarterEvents(DateTimeOffset.Now.Date);
@@ -55,28 +61,24 @@ public sealed partial class MainPage : Page
         CalendarCanvas.Invalidate();
     }
 
-    private void TodayButton_Click(object sender, RoutedEventArgs e)
+    private async void TodayButton_Click(object sender, RoutedEventArgs e)
     {
-        SelectDate(DateTimeOffset.Now.Date, updateDisplayMonth: true);
+        await _commands.ExecuteAsync(AppCommandIds.GoToToday, sender);
     }
 
-    private void PreviousMonthButton_Click(object sender, RoutedEventArgs e)
+    private async void PreviousMonthButton_Click(object sender, RoutedEventArgs e)
     {
-        _displayMonth = _displayMonth.AddMonths(-1);
-        UpdateMonthTitle();
-        CalendarCanvas.Invalidate();
+        await _commands.ExecuteAsync(AppCommandIds.PreviousMonth, sender);
     }
 
-    private void NextMonthButton_Click(object sender, RoutedEventArgs e)
+    private async void NextMonthButton_Click(object sender, RoutedEventArgs e)
     {
-        _displayMonth = _displayMonth.AddMonths(1);
-        UpdateMonthTitle();
-        CalendarCanvas.Invalidate();
+        await _commands.ExecuteAsync(AppCommandIds.NextMonth, sender);
     }
 
     private async void AddEventButton_Click(object sender, RoutedEventArgs e)
     {
-        await ShowEventEditorAsync(existingEvent: null);
+        await _commands.ExecuteAsync(AppCommandIds.NewEvent, sender);
     }
 
     private async void AgendaList_ItemClick(object sender, ItemClickEventArgs e)
@@ -268,6 +270,62 @@ public sealed partial class MainPage : Page
         return !string.IsNullOrWhiteSpace(title) && end > start;
     }
 
+    private void RegisterCommandHandlers()
+    {
+        if (_commandRegistrations.Count > 0)
+        {
+            return;
+        }
+
+        _commandRegistrations.Add(_commands.RegisterHandler(AppCommandIds.GoToToday, GoToTodayAsync));
+        _commandRegistrations.Add(_commands.RegisterHandler(AppCommandIds.PreviousMonth, PreviousMonthAsync));
+        _commandRegistrations.Add(_commands.RegisterHandler(AppCommandIds.NextMonth, NextMonthAsync));
+        _commandRegistrations.Add(_commands.RegisterHandler(AppCommandIds.NewEvent, NewEventAsync));
+    }
+
+    private Task GoToTodayAsync(AppCommandContext context)
+    {
+        SelectDate(DateTimeOffset.Now.Date, updateDisplayMonth: true);
+        return Task.CompletedTask;
+    }
+
+    private Task PreviousMonthAsync(AppCommandContext context)
+    {
+        MoveDisplayMonth(-1);
+        return Task.CompletedTask;
+    }
+
+    private Task NextMonthAsync(AppCommandContext context)
+    {
+        MoveDisplayMonth(1);
+        return Task.CompletedTask;
+    }
+
+    private async Task NewEventAsync(AppCommandContext context)
+    {
+        if (_isEventEditorOpen)
+        {
+            return;
+        }
+
+        try
+        {
+            _isEventEditorOpen = true;
+            await ShowEventEditorAsync(existingEvent: null);
+        }
+        finally
+        {
+            _isEventEditorOpen = false;
+        }
+    }
+
+    private void MoveDisplayMonth(int monthOffset)
+    {
+        _displayMonth = _displayMonth.AddMonths(monthOffset);
+        UpdateMonthTitle();
+        CalendarCanvas.Invalidate();
+    }
+
     private void CalendarCanvas_PointerPressed(object sender, PointerRoutedEventArgs e)
     {
         Point point = e.GetCurrentPoint(CalendarCanvas).Position;
@@ -275,7 +333,7 @@ public sealed partial class MainPage : Page
 
         if (date is not null)
         {
-            SelectDate(date.Value, updateDisplayMonth: date.Value.Month != _displayMonth.Month);
+            SelectDate(date.Value, updateDisplayMonth: false);
             e.Handled = true;
         }
     }
@@ -329,9 +387,20 @@ public sealed partial class MainPage : Page
 
     private void Page_Unloaded(object sender, RoutedEventArgs e)
     {
+        DisposeCommandHandlers();
         _themeService.ThemeChanged -= ThemeService_ThemeChanged;
         CalendarCanvas.RemoveFromVisualTree();
         CalendarCanvas = null!;
+    }
+
+    private void DisposeCommandHandlers()
+    {
+        foreach (IDisposable registration in _commandRegistrations)
+        {
+            registration.Dispose();
+        }
+
+        _commandRegistrations.Clear();
     }
 
     private static DateTimeOffset GetMonthStart(DateTimeOffset date)

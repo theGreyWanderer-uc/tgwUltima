@@ -20,6 +20,20 @@ The project includes `Microsoft.Graphics.Win2D` from the start so future dense c
 
 `ShellPage` hosts the main `NavigationView`. `MainPage` is the month calendar and day-detail surface, `AgendaPage` shows the upcoming 30-day projection, and `SettingsPage` owns app-level configuration such as themes and diagnostics.
 
+## Commands
+
+App actions are defined in `Commands\AppCommandRegistry` and exposed through `AppServices.CommandRegistry`. Pages register handlers while active, so buttons, keyboard shortcuts, and future menu/command-palette surfaces can all invoke the same command IDs.
+
+Current shortcuts:
+
+| Command | Shortcut |
+| --- | --- |
+| Open settings | `Ctrl+,` |
+| New event | `Ctrl+N` |
+| Go to today | `Ctrl+T` |
+| Previous month | `Alt+Left` |
+| Next month | `Alt+Right` |
+
 ## Event Storage
 
 Events are accessed through `ICalendarEventRepository`. The current implementation is `JsonCalendarEventRepository`, which stores indented JSON in the app's local data folder as `events.json`. This keeps the first model easy to inspect and migrate; SQLite is the likely next backing store once recurrence, full-text search, account sync, and heavier range queries become central.
