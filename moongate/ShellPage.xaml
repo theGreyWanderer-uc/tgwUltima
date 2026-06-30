@@ -22,13 +22,6 @@
                     <SymbolIcon Symbol="Calendar" />
                 </NavigationViewItem.Icon>
             </NavigationViewItem>
-            <NavigationViewItem
-                Content="Agenda"
-                Tag="agenda">
-                <NavigationViewItem.Icon>
-                    <SymbolIcon Symbol="List" />
-                </NavigationViewItem.Icon>
-            </NavigationViewItem>
         </NavigationView.MenuItems>
         <NavigationView.FooterMenuItems>
             <NavigationViewItem

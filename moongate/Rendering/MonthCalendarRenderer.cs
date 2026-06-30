@@ -12,10 +12,23 @@ public sealed class MonthCalendarRenderer
 {
     private const int CalendarColumns = 7;
     private const int CalendarRows = 6;
+    public const int VisibleDayCount = CalendarColumns * CalendarRows;
     private const float WeekdayHeaderHeight = 38;
     private readonly List<MonthCalendarCell> _cells = [];
 
     public IReadOnlyList<MonthCalendarCell> Cells => _cells;
+
+    public static DateTimeOffset GetFirstVisibleDate(DateTimeOffset displayMonth)
+    {
+        DateTimeOffset monthStart = new(displayMonth.Year, displayMonth.Month, 1, 0, 0, 0, displayMonth.Offset);
+        return monthStart.AddDays(-(int)monthStart.DayOfWeek);
+    }
+
+    public static (DateTimeOffset Start, DateTimeOffset End) GetVisibleRange(DateTimeOffset displayMonth)
+    {
+        DateTimeOffset start = GetFirstVisibleDate(displayMonth);
+        return (start, start.AddDays(VisibleDayCount));
+    }
 
     public DateTimeOffset? HitTest(Point point)
     {
@@ -60,7 +73,7 @@ public sealed class MonthCalendarRenderer
         string[] weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
         float cellWidth = width / CalendarColumns;
         float cellHeight = (height - WeekdayHeaderHeight) / CalendarRows;
-        DateTimeOffset firstVisibleDate = displayMonth.AddDays(-(int)displayMonth.DayOfWeek);
+        DateTimeOffset firstVisibleDate = GetFirstVisibleDate(displayMonth);
         CalendarRenderTheme theme = CalendarRenderTheme.FromResources();
 
         CanvasTextFormat weekdayFormat = new()

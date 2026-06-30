@@ -18,7 +18,7 @@ The project includes `Microsoft.Graphics.Win2D` from the start so future dense c
 
 ## App Shape
 
-`ShellPage` hosts the main `NavigationView`. `MainPage` is the month calendar and day-detail surface, `AgendaPage` shows the upcoming 30-day projection, and `SettingsPage` owns app-level configuration such as themes and diagnostics.
+`ShellPage` hosts the main `NavigationView`. `MainPage` is the month calendar and integrated timeline rail surface, and `SettingsPage` owns app-level configuration such as themes and diagnostics.
 
 ## Commands
 
@@ -42,7 +42,7 @@ The event editor supports add, edit, delete, date/time selection, category color
 
 ## Rendering
 
-The month grid is drawn by `MonthCalendarRenderer` on a Win2D `CanvasControl`. XAML remains responsible for shell chrome, dialogs, settings, and day/agenda lists.
+The month grid is drawn by `MonthCalendarRenderer` on a Win2D `CanvasControl`. The main month surface is paired with a left-side timeline pane: a Win2D rail plus alternating XAML event cards in a rolling seven-day window centered on the selected date or event time. On startup, the calendar opens on today and the rail seeks to the next event whose end time has not passed. Calendar day clicks prefer the first event on that day when one exists, selected dots draw larger than normal markers, and rail scrolling moves by event targets inside the next/previous week when events exist, otherwise jumping by one week. Blank rail clicks do not move the timeline; wheel input is the rail navigation gesture for now. Event cards use the same date-to-vertical-position mapping as the rail indicators, then apply per-side spacing only where needed to stay readable. Single-clicking a rail event card selects and seeks to it; double-clicking does the same and opens the event editor. The main rail uses `CompositionTarget.Rendering` only while it is moving, so short animations are frame-synchronized without keeping a permanent animation loop alive. Event card controls are reused during animation and only their position/content/style is updated, reducing per-frame XAML allocation and layout work. XAML remains responsible for shell chrome, dialogs, settings, and event-card interaction.
 
 ## Themes
 

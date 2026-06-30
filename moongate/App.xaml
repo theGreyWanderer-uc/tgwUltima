@@ -88,6 +88,48 @@
             <StaticResource x:Key="ToggleSwitchContentForeground" ResourceKey="MoongateTextBrush" />
             <StaticResource x:Key="ToggleSwitchHeaderForegroundDisabled" ResourceKey="MoongateMutedTextBrush" />
             <StaticResource x:Key="ToggleSwitchContentForegroundDisabled" ResourceKey="MoongateMutedTextBrush" />
+            <StaticResource x:Key="RadioButtonsHeaderForeground" ResourceKey="MoongateTextBrush" />
+            <StaticResource x:Key="RadioButtonsHeaderForegroundDisabled" ResourceKey="MoongateMutedTextBrush" />
+            <StaticResource x:Key="RadioButtonForeground" ResourceKey="MoongateCommandTextBrush" />
+            <StaticResource x:Key="RadioButtonForegroundPointerOver" ResourceKey="MoongateCommandTextBrush" />
+            <StaticResource x:Key="RadioButtonForegroundPressed" ResourceKey="MoongateCommandTextBrush" />
+            <StaticResource x:Key="RadioButtonForegroundDisabled" ResourceKey="MoongateMutedTextBrush" />
+            <StaticResource x:Key="RadioButtonBackground" ResourceKey="MoongateOverlayBackgroundBrush" />
+            <StaticResource x:Key="RadioButtonBackgroundPointerOver" ResourceKey="MoongateOverlayHoverBackgroundBrush" />
+            <StaticResource x:Key="RadioButtonBackgroundPressed" ResourceKey="MoongateOverlaySelectedBackgroundBrush" />
+            <StaticResource x:Key="RadioButtonBackgroundDisabled" ResourceKey="MoongatePanelBackgroundBrush" />
+            <StaticResource x:Key="RadioButtonBorderBrush" ResourceKey="MoongatePanelBorderBrush" />
+            <StaticResource x:Key="RadioButtonBorderBrushPointerOver" ResourceKey="MoongateAccentLightBrush" />
+            <StaticResource x:Key="RadioButtonBorderBrushPressed" ResourceKey="MoongateAccentBrush" />
+            <StaticResource x:Key="RadioButtonBorderBrushDisabled" ResourceKey="MoongatePanelBorderBrush" />
+            <StaticResource x:Key="RadioButtonOuterEllipseStroke" ResourceKey="MoongateCommandIconBrush" />
+            <StaticResource x:Key="RadioButtonOuterEllipseStrokePointerOver" ResourceKey="MoongateAccentLightBrush" />
+            <StaticResource x:Key="RadioButtonOuterEllipseStrokePressed" ResourceKey="MoongateAccentBrush" />
+            <StaticResource x:Key="RadioButtonOuterEllipseStrokeDisabled" ResourceKey="MoongateMutedTextBrush" />
+            <StaticResource x:Key="RadioButtonOuterEllipseFill" ResourceKey="MoongatePanelBackgroundBrush" />
+            <StaticResource x:Key="RadioButtonOuterEllipseFillPointerOver" ResourceKey="MoongateOverlayHoverBackgroundBrush" />
+            <StaticResource x:Key="RadioButtonOuterEllipseFillPressed" ResourceKey="MoongateOverlaySelectedBackgroundBrush" />
+            <StaticResource x:Key="RadioButtonOuterEllipseFillDisabled" ResourceKey="MoongatePanelBackgroundBrush" />
+            <StaticResource x:Key="RadioButtonOuterEllipseCheckedStroke" ResourceKey="MoongateAccentBrush" />
+            <StaticResource x:Key="RadioButtonOuterEllipseCheckedStrokePointerOver" ResourceKey="MoongateAccentLightBrush" />
+            <StaticResource x:Key="RadioButtonOuterEllipseCheckedStrokePressed" ResourceKey="MoongateAccentBrush" />
+            <StaticResource x:Key="RadioButtonOuterEllipseCheckedStrokeDisabled" ResourceKey="MoongateMutedTextBrush" />
+            <StaticResource x:Key="RadioButtonOuterEllipseCheckedFill" ResourceKey="MoongateAccentBrush" />
+            <StaticResource x:Key="RadioButtonOuterEllipseCheckedFillPointerOver" ResourceKey="MoongateAccentLightBrush" />
+            <StaticResource x:Key="RadioButtonOuterEllipseCheckedFillPressed" ResourceKey="MoongateAccentBrush" />
+            <StaticResource x:Key="RadioButtonOuterEllipseCheckedFillDisabled" ResourceKey="MoongateMutedTextBrush" />
+            <StaticResource x:Key="RadioButtonCheckGlyphFill" ResourceKey="MoongateInverseTextBrush" />
+            <StaticResource x:Key="RadioButtonCheckGlyphFillPointerOver" ResourceKey="MoongateInverseTextBrush" />
+            <StaticResource x:Key="RadioButtonCheckGlyphFillPressed" ResourceKey="MoongateInverseTextBrush" />
+            <StaticResource x:Key="RadioButtonCheckGlyphFillDisabled" ResourceKey="MoongatePanelBackgroundBrush" />
+            <StaticResource x:Key="RadioButtonCheckGlyphStroke" ResourceKey="MoongatePanelBorderBrush" />
+            <StaticResource x:Key="RadioButtonCheckGlyphStrokePointerOver" ResourceKey="MoongatePanelBorderBrush" />
+            <StaticResource x:Key="RadioButtonCheckGlyphStrokePressed" ResourceKey="MoongatePanelBorderBrush" />
+            <StaticResource x:Key="RadioButtonCheckGlyphStrokeDisabled" ResourceKey="MoongatePanelBorderBrush" />
+            <StaticResource x:Key="RadioButtonCheckGlyphStrokeChecked" ResourceKey="MoongatePanelBorderBrush" />
+            <StaticResource x:Key="RadioButtonCheckGlyphStrokeCheckedPointerOver" ResourceKey="MoongatePanelBorderBrush" />
+            <StaticResource x:Key="RadioButtonCheckGlyphStrokeCheckedPressed" ResourceKey="MoongatePanelBorderBrush" />
+            <StaticResource x:Key="RadioButtonCheckGlyphStrokeCheckedDisabled" ResourceKey="MoongatePanelBorderBrush" />
             <StaticResource x:Key="ButtonForeground" ResourceKey="MoongateCommandTextBrush" />
             <StaticResource x:Key="ButtonForegroundPointerOver" ResourceKey="MoongateCommandTextBrush" />
             <StaticResource x:Key="ButtonForegroundPressed" ResourceKey="MoongateCommandTextBrush" />

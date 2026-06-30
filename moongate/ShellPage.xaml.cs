@@ -39,7 +39,6 @@ public sealed partial class ShellPage : Page
     {
         Type pageType = tag switch
         {
-            "agenda" => typeof(AgendaPage),
             "settings" => typeof(SettingsPage),
             _ => typeof(MainPage)
         };
