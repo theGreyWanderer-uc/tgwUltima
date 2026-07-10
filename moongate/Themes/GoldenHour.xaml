@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <SolidColorBrush x:Key="MoongateAppBackgroundBrush" Color="#FFF2EAD6" />
+    <SolidColorBrush x:Key="MoongatePanelBackgroundBrush" Color="#FFFAF5EB" />
+    <SolidColorBrush x:Key="MoongatePanelBorderBrush" Color="#FFD4C4A8" />
+    <SolidColorBrush x:Key="MoongateTextBrush" Color="#FF4A403A" />
+    <SolidColorBrush x:Key="MoongateMutedTextBrush" Color="#FF8A7D6F" />
+    <SolidColorBrush x:Key="MoongateAccentBrush" Color="#FFF4A900" />
+    <SolidColorBrush x:Key="MoongateAccentLightBrush" Color="#FFF8CB5C" />
+    <SolidColorBrush x:Key="MoongateActiveBrush" Color="#FF6A9E4A" />
+    <SolidColorBrush x:Key="MoongateDangerBrush" Color="#FFC1666B" />
+    <SolidColorBrush x:Key="MoongateInverseTextBrush" Color="#FFFFFFFF" />
+
+    <SolidColorBrush x:Key="MoongateCalendarSurfaceBrush" Color="#FFFAF5EB" />
+    <SolidColorBrush x:Key="MoongateCalendarHeaderBrush" Color="#FFF5EFE0" />
+    <SolidColorBrush x:Key="MoongateCalendarOutOfMonthBrush" Color="#FFF0E8D4" />
+    <SolidColorBrush x:Key="MoongateCalendarSelectedBrush" Color="#FFFFE7AA" />
+    <SolidColorBrush x:Key="MoongateCalendarTodayBrush" Color="#FFC1666B" />
+    <SolidColorBrush x:Key="MoongateCalendarSundayBrush" Color="#FF9E5147" />
+    <SolidColorBrush x:Key="MoongateCalendarEventBrush" Color="#FF6A9E4A" />
+</ResourceDictionary>
