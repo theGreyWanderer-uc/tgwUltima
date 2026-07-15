@@ -21,6 +21,15 @@ DISPATCH_RE = re.compile(r"->(\w+)::(\w+)\(")
 BOOK_READ_RE = re.compile(r'Book::read\((?:str_to_ptr|strptr)\("(.*?)"\)', re.DOTALL)
 
 
+# BASEBOOK contains two 0x66 use branches. The first incorrectly repeats the
+# Intervention dispatch used by 0x65; the later branch matches the Resurrection
+# title and text. Keep this correction explicit instead of relying on branch
+# order, which can change when Fold output is regenerated.
+DISPATCH_OVERRIDES: dict[int, tuple[str, str]] = {
+    0x66: ("SGBOOK", "func1D26"),
+}
+
+
 def _json_load(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as f:
         payload = json.load(f)
@@ -127,6 +136,7 @@ def parse_use_dispatch(basebook: dict[str, Any]) -> dict[int, tuple[str, str]]:
         target = _first_dispatch(body)
         if target and quality not in dispatch:
             dispatch[quality] = target
+    dispatch.update(DISPATCH_OVERRIDES)
     return dispatch
 
 

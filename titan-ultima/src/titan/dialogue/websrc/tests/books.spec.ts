@@ -1,4 +1,15 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
+
+async function openLibrary(page: Page) {
+  await page.locator('.btn-filter', { hasText: 'Objects' }).click();
+  await page.locator('.npc-row', { hasText: 'BASEBOOK' }).click();
+  await page.locator('button', { hasText: 'Read Books' }).click();
+
+  const dialog = page.locator('.book-dialog[open]');
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator('.book-list-item').first()).toBeVisible({ timeout: 10000 });
+  return dialog;
+}
 
 test.describe('Book panel', () => {
   test.beforeEach(async ({ page }) => {
@@ -7,17 +18,58 @@ test.describe('Book panel', () => {
   });
 
   test('Read Books opens modal and shows book list entries', async ({ page }) => {
-    await page.locator('.btn-filter', { hasText: 'Objects' }).click();
-    await page.locator('.npc-row', { hasText: 'BASEBOOK' }).click();
+    const dialog = await openLibrary(page);
+    await expect(dialog.locator('.book-list-item')).not.toHaveCount(0);
+  });
 
-    await page.locator('button', { hasText: 'Read Books' }).click();
+  test('spell catalog exposes all schools, slots, and mana costs', async ({ page }) => {
+    const dialog = await openLibrary(page);
+    await dialog.getByRole('tab', { name: /Spell Catalog/ }).click();
 
-    const bookDialog = page.locator('.book-dialog[open]');
-    await expect(bookDialog).toBeVisible();
+    await expect(dialog.locator('.book-count')).toHaveText('36 of 36 spell catalog');
+    await expect(dialog.locator('.book-count')).not.toContainText('readable text');
+    await expect(dialog.locator('.book-list-item')).toHaveCount(36);
 
-    await page.waitForSelector('.book-list-item', { timeout: 10000 });
-    const bookItems = page.locator('.book-list-item');
-    const count = await bookItems.count();
-    expect(count).toBeGreaterThan(0);
+    const schoolCounts: Record<string, number> = {
+      Necromancy: 9,
+      Sorcery: 12,
+      Thaumaturgy: 6,
+      Theurgy: 9,
+    };
+    for (const [school, count] of Object.entries(schoolCounts)) {
+      await dialog.locator('.book-category-select').selectOption({ label: school });
+      await expect(dialog.locator('.book-list-item')).toHaveCount(count);
+    }
+
+    await dialog.locator('.book-category-select').selectOption({ label: 'Sorcery' });
+    await dialog.getByRole('button', { name: /Flame Bolt/ }).click();
+
+    const reader = dialog.locator('.book-reader');
+    await expect(reader.locator('.book-reader-quality')).toHaveText('Slot: 3');
+    await expect(reader.locator('.book-reader-quality')).not.toContainText('Quality');
+
+    const detailValue = (label: string) => reader
+      .getByText(label, { exact: true })
+      .locator('xpath=following-sibling::dd');
+    await expect(detailValue('mana Cost')).toHaveText('8–10');
+    await expect(detailValue('mana Cost Context')).toHaveText('When enchanting a focus');
+    await expect(detailValue('incantation')).toHaveText('In Ort Flam');
+  });
+
+  test('Resurrection book uses its own text and is not a castable spell', async ({ page }) => {
+    const dialog = await openLibrary(page);
+    await dialog.locator('.book-search').fill('Resurrection');
+    await expect(dialog.locator('.book-list-item')).toHaveCount(1);
+    await dialog.getByRole('button', { name: /Resurrection/ }).click();
+
+    const content = dialog.locator('.book-reader-content');
+    await expect(content).toContainText('The Spell of Resurrection');
+    await expect(content).toContainText('no focus or words of power');
+    await expect(content).not.toContainText('The spell of Intervention');
+
+    await dialog.locator('button[title="Back to list"]').click();
+    await dialog.getByRole('tab', { name: /Spell Catalog/ }).click();
+    await dialog.locator('.book-search').fill('Resurrection');
+    await expect(dialog.locator('.book-list-item')).toHaveCount(0);
   });
 });

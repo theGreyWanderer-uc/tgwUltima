@@ -8,10 +8,11 @@ import json
 import os
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from titan.dialogue.pipeline.extract_books import build_books, format_book_text
+from titan.dialogue.pipeline.extract_books import build_books
 
 
 QUALITY_RE = re.compile(r"\b(?:Item::getQuality\(this\)|local\d+)\s*==\s*(0x[\dA-Fa-f]+)h")
@@ -24,62 +25,430 @@ PLAQUE_READ_RE = re.compile(
 )
 
 
-NECROMANCY = [
-    ("Death Speak", "Kal Wis Corp", "Blood, Bone", "EARTHMAG::func0080"),
-    ("Mask of Death", "Quas Corp", "Wood, Executioner's Hood", "NEC1::use"),
-    ("Rock Flesh", "Rel Sanct Ylem", "Wood, Dirt", "NEC1::use"),
-    ("Summon Undead", "Kal Corp Xen", "Blood, Bone, Wood", "NEC1::use"),
-    ("Open Ground", "Des Por Ylem", "Blood, Blackmoor", "EARTHMAG::func0080"),
-    ("Create Golem", "In Ort Ylem Xen", "Blood, Bone, Wood, Dirt, Blackmoor", "NEC1::use"),
-    ("Withstand Death", "Vas An Corp", "Wood, Dirt, Blackmoor", "NEC1::use"),
-    ("Grant Peace", "In Vas Corp", "Executioner's Hood, Blackmoor", "NEC1::use"),
-    ("Call Quake", "Kal Vas Ylem Por", "Bone, Wood, Dirt, Blackmoor", "SCROLL1::func156D"),
-]
+@dataclass(frozen=True)
+class SpellDefinition:
+    """Canonical spell metadata used to generate and validate library.json."""
 
-SORCERY = [
-    ("Ignite", "In Flam", "Ash, Pumice", "symbol, wand, rod, staff"),
-    ("Extinguish", "An Flam", "Pumice", "symbol, wand, rod, staff"),
-    ("Flash", "Flam Por", "Ash, Pumice", "symbol, wand, rod, staff"),
-    ("Flame Bolt", "In Ort Flam", "Ash, Pumice, Pig Iron", "symbol, wand, rod, staff"),
-    ("Endure Heat", "Sanct Flam", "Obsidian, Pig Iron", "symbol, rod, staff"),
-    ("Fire Shield", "In Flam An Por", "Ash, Obsidian, Pig Iron", "symbol, rod, staff"),
-    ("Armor of Flames", "Vas Sanct Flam", "Ash, Obsidian, Pig Iron, Brimstone", "symbol, rod, staff"),
-    ("Create Fire", "In Flam Ylem", "Ash, Pumice, Obsidian", "symbol, staff"),
-    ("Explosion", "Vas Ort Flam", "Ash, Pumice, Pig Iron, Brimstone", "symbol, staff"),
-    ("Summon Daemon", "Kal Flam Corp Xen", "Ash, Pumice, Obsidian, Daemon Bone", "symbol, talisman"),
-    ("Banish Daemon", "An Flam Corp Xen", "Ash, Pumice, Pig Iron, Daemon Bone", "symbol, talisman"),
-    (
+    school: str
+    slot: int
+    title: str
+    incantation: str
+    mana_cost: int | str
+    mana_cost_context: str
+    source: str
+    reagents: str | None = None
+    focus: str | None = None
+    focus_key: str = "focus"
+
+    def details(self) -> dict[str, str | int]:
+        details: dict[str, str | int] = {
+            "incantation": self.incantation,
+            "manaCost": self.mana_cost,
+            "manaCostContext": self.mana_cost_context,
+        }
+        if self.reagents:
+            details["reagents"] = self.reagents
+        if self.focus:
+            details[self.focus_key] = self.focus
+        details["source"] = self.source
+        return details
+
+
+# Mana use occurs at cast time for Necromancy and Theurgy, while Sorcery and
+# Thaumaturgy spend mana when their reusable focus or spellbook is enchanted.
+# Sorcery costs are randomized by the original usecode and are shown as ranges.
+SPELL_CATALOG = (
+    SpellDefinition(
+        "Necromancy",
+        0,
+        "Death Speak",
+        "Kal Wis Corp",
+        1,
+        "Per cast",
+        "EARTHMAG::func0080",
+        "Blood, Bone",
+    ),
+    SpellDefinition(
+        "Necromancy",
+        1,
+        "Mask of Death",
+        "Quas Corp",
+        1,
+        "Per cast",
+        "NEC1::use",
+        "Wood, Executioner's Hood",
+    ),
+    SpellDefinition(
+        "Necromancy",
+        2,
+        "Rock Flesh",
+        "Rel Sanct Ylem",
+        2,
+        "Per cast",
+        "NEC1::use",
+        "Wood, Dirt",
+    ),
+    SpellDefinition(
+        "Necromancy",
+        3,
+        "Summon Undead",
+        "Kal Corp Xen",
+        2,
+        "Per cast",
+        "NEC1::use",
+        "Blood, Bone, Wood",
+    ),
+    SpellDefinition(
+        "Necromancy",
+        4,
+        "Open Ground",
+        "Des Por Ylem",
+        3,
+        "Per cast",
+        "EARTHMAG::func0080",
+        "Blood, Blackmoor",
+    ),
+    SpellDefinition(
+        "Necromancy",
+        5,
+        "Create Golem",
+        "In Ort Ylem Xen",
+        3,
+        "Per cast",
+        "NEC1::use",
+        "Blood, Bone, Wood, Dirt, Blackmoor",
+    ),
+    SpellDefinition(
+        "Necromancy",
+        6,
+        "Withstand Death",
+        "Vas An Corp",
+        4,
+        "Per cast",
+        "NEC1::use",
+        "Wood, Dirt, Blackmoor",
+    ),
+    SpellDefinition(
+        "Necromancy",
+        7,
+        "Grant Peace",
+        "In Vas Corp",
+        5,
+        "Per cast",
+        "NEC1::use",
+        "Executioner's Hood, Blackmoor",
+    ),
+    SpellDefinition(
+        "Necromancy",
+        8,
+        "Call Quake",
+        "Kal Vas Ylem Por",
+        5,
+        "Per cast",
+        "SCROLL1::func156D",
+        "Bone, Wood, Dirt, Blackmoor",
+    ),
+    SpellDefinition(
+        "Sorcery",
+        0,
+        "Ignite",
+        "In Flam",
+        "3–4",
+        "When enchanting a focus",
+        "PENT",
+        "Ash, Pumice",
+        "symbol, wand, rod, staff",
+        "foci",
+    ),
+    SpellDefinition(
+        "Sorcery",
+        1,
+        "Extinguish",
+        "An Flam",
+        "4–5",
+        "When enchanting a focus",
+        "PENT",
+        "Pumice",
+        "symbol, wand, rod, staff",
+        "foci",
+    ),
+    SpellDefinition(
+        "Sorcery",
+        2,
+        "Flash",
+        "Flam Por",
+        "6–8",
+        "When enchanting a focus",
+        "PENT",
+        "Ash, Pumice",
+        "symbol, wand, rod, staff",
+        "foci",
+    ),
+    SpellDefinition(
+        "Sorcery",
+        3,
+        "Flame Bolt",
+        "In Ort Flam",
+        "8–10",
+        "When enchanting a focus",
+        "PENT",
+        "Ash, Pumice, Pig Iron",
+        "symbol, wand, rod, staff",
+        "foci",
+    ),
+    SpellDefinition(
+        "Sorcery",
+        4,
+        "Endure Heat",
+        "Sanct Flam",
+        "8–10",
+        "When enchanting a focus",
+        "PENT",
+        "Obsidian, Pig Iron",
+        "symbol, rod, staff",
+        "foci",
+    ),
+    SpellDefinition(
+        "Sorcery",
+        5,
+        "Fire Shield",
+        "In Flam An Por",
+        "10–12",
+        "When enchanting a focus",
+        "PENT",
+        "Ash, Obsidian, Pig Iron",
+        "symbol, rod, staff",
+        "foci",
+    ),
+    SpellDefinition(
+        "Sorcery",
+        6,
+        "Armor of Flames",
+        "Vas Sanct Flam",
+        "12–15",
+        "When enchanting a focus",
+        "PENT",
+        "Ash, Obsidian, Pig Iron, Brimstone",
+        "symbol, rod, staff",
+        "foci",
+    ),
+    SpellDefinition(
+        "Sorcery",
+        7,
+        "Create Fire",
+        "In Flam Ylem",
+        "14–17",
+        "When enchanting a focus",
+        "PENT",
+        "Ash, Pumice, Obsidian",
+        "symbol, staff",
+        "foci",
+    ),
+    SpellDefinition(
+        "Sorcery",
+        8,
+        "Explosion",
+        "Vas Ort Flam",
+        "16–19",
+        "When enchanting a focus",
+        "PENT",
+        "Ash, Pumice, Pig Iron, Brimstone",
+        "symbol, staff",
+        "foci",
+    ),
+    SpellDefinition(
+        "Sorcery",
+        9,
+        "Summon Daemon",
+        "Kal Flam Corp Xen",
+        "18–23",
+        "When enchanting a focus",
+        "PENT",
+        "Ash, Pumice, Obsidian, Daemon Bone",
+        "symbol, talisman",
+        "foci",
+    ),
+    SpellDefinition(
+        "Sorcery",
+        10,
+        "Banish Daemon",
+        "An Flam Corp Xen",
+        "19–24",
+        "When enchanting a focus",
+        "PENT",
+        "Ash, Pumice, Pig Iron, Daemon Bone",
+        "symbol, talisman",
+        "foci",
+    ),
+    SpellDefinition(
+        "Sorcery",
+        11,
         "Conflagration",
         "Kal Vas Flam Corp Xen",
+        "22–27",
+        "When enchanting a focus",
+        "PENT",
         "Ash, Pumice, Obsidian, Pig Iron, Brimstone, Daemon Bone",
         "symbol, talisman",
+        "foci",
     ),
-]
-
-THAUMATURGY = [
-    ("Confusion Blast", "In Quas Wis", "Eye of Newt, Bat Wing, Serpent Scale, Obsidian, Brimstone"),
-    ("Meteor Shower", "Kal Des Flam Ylem", "Ash, Dirt, Serpent Scale, Brimstone, Blackmoor"),
-    ("Summon Creature", "Kal Xen", "Bat Wing, Pumice, Obsidian, Bone"),
-    ("Call Destruction", "Kal Vas Grav Corp", "Serpent Scale, Dragon Blood, Ash, Pig Iron, Executioner's Hood"),
-    (
+    SpellDefinition(
+        "Thaumaturgy",
+        0,
+        "Confusion Blast",
+        "In Quas Wis",
+        3,
+        "When enchanting the spellbook",
+        "BOOK1",
+        "Eye of Newt, Bat Wing, Serpent Scale, Obsidian, Brimstone",
+        "spellbook",
+    ),
+    SpellDefinition(
+        "Thaumaturgy",
+        1,
+        "Meteor Shower",
+        "Kal Des Flam Ylem",
+        3,
+        "When enchanting the spellbook",
+        "BOOK1",
+        "Ash, Dirt, Serpent Scale, Brimstone, Blackmoor",
+        "spellbook",
+    ),
+    SpellDefinition(
+        "Thaumaturgy",
+        2,
+        "Summon Creature",
+        "Kal Xen",
+        3,
+        "When enchanting the spellbook",
+        "BOOK1",
+        "Bat Wing, Pumice, Obsidian, Bone",
+        "spellbook",
+    ),
+    SpellDefinition(
+        "Thaumaturgy",
+        3,
+        "Call Destruction",
+        "Kal Vas Grav Corp",
+        3,
+        "When enchanting the spellbook",
+        "BOOK1",
+        "Serpent Scale, Dragon Blood, Ash, Pig Iron, Executioner's Hood",
+        "spellbook",
+    ),
+    SpellDefinition(
+        "Thaumaturgy",
+        4,
         "Devastation",
         "In Vas Ort Corp",
+        3,
+        "When enchanting the spellbook",
+        "BOOK1",
         "Bat Wing, Serpent Scale, Dragon Blood, Pig Iron, Executioner's Hood, Blackmoor, Brimstone",
+        "spellbook",
     ),
-    ("Ethereal Travel", "Ort Grav Por", "5 pieces of broken Blackrock from the Obelisk of Pagan"),
-]
-
-THEURGY = [
-    ("Divination", "In Wis", "Sextant"),
-    ("Healing Touch", "In Mani", "Pointing Hand"),
-    ("Aerial Servant", "Kal Ort Xen", "Arm Band"),
-    ("Reveal", "Ort Lor", "Open Eye"),
-    ("Restoration", "Vas In Mani", "Open Hand"),
-    ("Fade from Sight", "Quas An Lor", "Closed Eye"),
-    ("Air Walk", "Vas Hur Por", "Wings"),
-    ("Hear Truth", "An Quas Lor", "Chain"),
-    ("Intervention", "In Sanct An Jux", "Fist"),
-]
+    SpellDefinition(
+        "Thaumaturgy",
+        5,
+        "Ethereal Travel",
+        "Ort Grav Por",
+        3,
+        "When enchanting the spellbook",
+        "BOOK1",
+        "5 pieces of broken Blackrock from the Obelisk of Pagan",
+        "spellbook",
+    ),
+    SpellDefinition(
+        "Theurgy",
+        0,
+        "Divination",
+        "In Wis",
+        3,
+        "Per cast",
+        "AIRSPEL/SGBOOK",
+        focus="Sextant",
+    ),
+    SpellDefinition(
+        "Theurgy",
+        1,
+        "Healing Touch",
+        "In Mani",
+        5,
+        "Per cast",
+        "AIRSPEL/SGBOOK",
+        focus="Pointing Hand",
+    ),
+    SpellDefinition(
+        "Theurgy",
+        2,
+        "Aerial Servant",
+        "Kal Ort Xen",
+        5,
+        "Per cast",
+        "AIRSPEL/SGBOOK",
+        focus="Arm Band",
+    ),
+    SpellDefinition(
+        "Theurgy",
+        3,
+        "Reveal",
+        "Ort Lor",
+        5,
+        "Per cast",
+        "AIRSPEL/SGBOOK",
+        focus="Open Eye",
+    ),
+    SpellDefinition(
+        "Theurgy",
+        4,
+        "Restoration",
+        "Vas In Mani",
+        15,
+        "Per cast",
+        "AIRSPEL/SGBOOK",
+        focus="Open Hand",
+    ),
+    SpellDefinition(
+        "Theurgy",
+        5,
+        "Fade from Sight",
+        "Quas An Lor",
+        5,
+        "Per cast",
+        "AIRSPEL/SGBOOK",
+        focus="Closed Eye",
+    ),
+    SpellDefinition(
+        "Theurgy",
+        6,
+        "Air Walk",
+        "Vas Hur Por",
+        15,
+        "Per cast",
+        "AIRSPEL/SGBOOK",
+        focus="Wings",
+    ),
+    SpellDefinition(
+        "Theurgy",
+        7,
+        "Hear Truth",
+        "An Quas Lor",
+        3,
+        "Per cast",
+        "AIRSPEL/SGBOOK",
+        focus="Chain",
+    ),
+    SpellDefinition(
+        "Theurgy",
+        8,
+        "Intervention",
+        "In Sanct An Jux",
+        15,
+        "Per cast",
+        "AIRSPEL/SGBOOK",
+        focus="Fist",
+    ),
+)
 
 
 def _json_load(path: Path) -> dict[str, Any]:
@@ -228,6 +597,7 @@ def _section(
         "itemClass": item_class,
         "totalItems": len(items),
         "itemsWithText": sum(1 for item in items if isinstance(item.get("text"), str) and item["text"]),
+        "itemsWithContent": sum(1 for item in items if item.get("text") or item.get("details")),
         "items": items,
     }
 
@@ -383,30 +753,21 @@ def build_direct_read_section(
 
 
 def build_spell_section() -> dict[str, Any]:
-    items: list[dict[str, Any]] = []
-
-    def add_spell(school: str, slot: int, name: str, incantation: str, details: dict[str, Any]) -> None:
-        payload = {
-            "id": f"spell-{school.lower()}-{slot:02d}",
+    items = []
+    for spell in SPELL_CATALOG:
+        payload: dict[str, Any] = {
+            "id": f"spell-{spell.school.lower()}-{spell.slot:02d}",
             "kind": "spell",
-            "quality": slot,
-            "qualityHex": f"slot {slot}",
-            "title": name,
-            "category": school,
-            "school": school,
+            "quality": spell.slot,
+            "qualityHex": f"slot {spell.slot}",
+            "slot": spell.slot,
+            "title": spell.title,
+            "category": spell.school,
+            "school": spell.school,
             "text": None,
-            "details": {"incantation": incantation, **details},
+            "details": spell.details(),
         }
         items.append(payload)
-
-    for slot, (name, words, reagents, source) in enumerate(NECROMANCY):
-        add_spell("Necromancy", slot, name, words, {"reagents": reagents, "source": source})
-    for slot, (name, words, reagents, foci) in enumerate(SORCERY):
-        add_spell("Sorcery", slot, name, words, {"reagents": reagents, "foci": foci, "source": "PENT"})
-    for slot, (name, words, reagents) in enumerate(THAUMATURGY):
-        add_spell("Thaumaturgy", slot, name, words, {"reagents": reagents, "focus": "spellbook", "source": "BOOK1"})
-    for slot, (name, words, focus) in enumerate(THEURGY):
-        add_spell("Theurgy", slot, name, words, {"focus": focus, "source": "AIRSPEL/SGBOOK"})
 
     return _section(
         "spells",
@@ -447,7 +808,7 @@ def build_library(json_dir: Path) -> dict[str, Any]:
         build_spell_section(),
     ]
     return {
-        "schemaVersion": "1.0",
+        "schemaVersion": "1.1",
         "description": "Readable library records for the Ultima VIII dialogue web viewer.",
         "totalSections": len(sections),
         "totalItems": sum(section["totalItems"] for section in sections),

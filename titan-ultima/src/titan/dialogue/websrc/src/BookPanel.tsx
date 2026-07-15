@@ -5,6 +5,7 @@ interface LibraryItem {
   kind: string;
   quality: number | null;
   qualityHex: string;
+  slot?: number;
   title: string;
   category: string;
   text: string | null;
@@ -22,6 +23,7 @@ interface LibrarySection {
   itemClass: string;
   totalItems: number;
   itemsWithText: number;
+  itemsWithContent?: number;
   items: LibraryItem[];
 }
 
@@ -88,6 +90,7 @@ async function loadLibrary(): Promise<LibraryData> {
       itemClass: books.itemClass,
       totalItems: books.totalBooks,
       itemsWithText: books.booksWithText,
+      itemsWithContent: books.booksWithText,
       items,
     }],
   };
@@ -109,6 +112,16 @@ function stringifyDetail(value: string | number | string[] | null): string {
   if (Array.isArray(value)) return value.join(', ');
   if (value === null) return '';
   return String(value);
+}
+
+function itemPosition(item: LibraryItem): string {
+  if (item.kind === 'spell') return `Slot: ${item.slot ?? item.quality}`;
+  return `Quality: ${item.qualityHex}`;
+}
+
+function itemPositionShort(item: LibraryItem): string {
+  if (item.kind === 'spell') return `Slot ${item.slot ?? item.quality}`;
+  return item.qualityHex;
 }
 
 export function BookPanel({ npcName, open, onClose }: BookPanelProps) {
@@ -205,6 +218,8 @@ export function BookPanel({ npcName, open, onClose }: BookPanelProps) {
     return list;
   }, [activeSection, filterCategory, search]);
 
+  const itemsWithContent = activeSection?.itemsWithContent ?? activeSection?.itemsWithText ?? 0;
+
   const selectSection = (sectionId: string) => {
     setActiveSectionId(sectionId);
     setSelectedItem(null);
@@ -282,8 +297,8 @@ export function BookPanel({ npcName, open, onClose }: BookPanelProps) {
 
               <div className="book-count">
                 {filteredItems.length} of {activeSection.totalItems} {activeSection.title.toLowerCase()}
-                {activeSection.itemsWithText < activeSection.totalItems &&
-                  ` (${activeSection.itemsWithText} with readable text)`}
+                {itemsWithContent < activeSection.totalItems &&
+                  ` (${itemsWithContent} with content)`}
               </div>
 
               <div className="book-list">
@@ -301,7 +316,7 @@ export function BookPanel({ npcName, open, onClose }: BookPanelProps) {
                     </span>
                     <span className="book-list-meta">
                       <span className="book-list-category">{item.category}</span>
-                      <span className="book-list-quality">{item.qualityHex}</span>
+                      <span className="book-list-quality">{itemPositionShort(item)}</span>
                     </span>
                   </button>
                 ))}
@@ -323,7 +338,7 @@ function LibraryReader({ item }: { item: LibraryItem }) {
     <div className="book-reader">
       <div className="book-reader-meta">
         <span className="book-reader-category">{item.category}</span>
-        <span className="book-reader-quality">Quality: {item.qualityHex}</span>
+        <span className="book-reader-quality">{itemPosition(item)}</span>
         {item.school && <span className="book-reader-source">{item.school}</span>}
         {item.source && <span className="book-reader-source">{item.source}</span>}
       </div>
