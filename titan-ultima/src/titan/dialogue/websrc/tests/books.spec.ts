@@ -17,6 +17,28 @@ test.describe('Book panel', () => {
     await page.waitForSelector('.npc-row');
   });
 
+  test('BASEBOOK is the sole book entry and library launcher', async ({ page }) => {
+    await page.locator('.btn-filter', { hasText: 'Objects' }).click();
+
+    const objectRows = page.locator('.npc-list .npc-row');
+    const basebook = objectRows.filter({ hasText: 'BASEBOOK' });
+    await expect(objectRows.first().locator('.npc-name')).toContainText('BASEBOOK');
+    await expect(basebook.locator('.npc-leading-icon')).toHaveText('📖');
+
+    const librarySources = ['BASEBOOK', 'BASESCRL', 'GRAVE_NS', 'PLAQUENS', 'KEYONEC', 'PENT', 'NEC1', 'SCROLL1', 'EARTHMAG'];
+    for (const className of librarySources) {
+      const row = objectRows.filter({ hasText: className });
+      await expect(row.locator('.tag', { hasText: 'library' })).toHaveCount(1);
+      await expect(row.locator('.npc-leading-icon')).toHaveCount(className === 'BASEBOOK' ? 1 : 0);
+    }
+
+    await basebook.click();
+    await expect(page.getByRole('button', { name: /Read Books/ })).toBeVisible();
+
+    await objectRows.filter({ hasText: 'BASESCRL' }).click();
+    await expect(page.getByRole('button', { name: /Read Books|Open Library/ })).toHaveCount(0);
+  });
+
   test('Read Books opens modal and shows book list entries', async ({ page }) => {
     const dialog = await openLibrary(page);
     await expect(dialog.locator('.book-list-item')).not.toHaveCount(0);

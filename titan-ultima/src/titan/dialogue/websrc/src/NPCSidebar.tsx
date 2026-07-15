@@ -5,6 +5,7 @@ import type { NPCFile } from './types';
 const LIBRARY_CLASS_ORDER = ['BASEBOOK', 'BASESCRL', 'GRAVE_NS', 'PLAQUENS', 'KEYONEC', 'PENT', 'NEC1', 'SCROLL1', 'EARTHMAG'];
 const LIBRARY_CLASSES = new Set(LIBRARY_CLASS_ORDER);
 const LIBRARY_CLASS_RANK = new Map(LIBRARY_CLASS_ORDER.map((name, index) => [name, index]));
+const BOOK_CLASS = 'BASEBOOK';
 
 export function NPCSidebar() {
   const { interactiveNpcs, selectedNpc, npcSearchQuery, viewFilter, setNpcSearch, setViewFilter, selectNpc } = useWorldState();
@@ -123,6 +124,7 @@ function NPCRow({
   const hasBehavior = Object.values(npc.functions).some(f => f.type === 'behavior');
   const hasUtility = Object.values(npc.functions).some(f => f.type === 'utility');
   const isLibrarySource = LIBRARY_CLASSES.has(npc.npc);
+  const isBook = npc.npc === BOOK_CLASS;
 
   const tags: string[] = [];
   if (hasTalk) tags.push('talk');
@@ -134,11 +136,11 @@ function NPCRow({
 
   return (
     <button
-      className={`npc-row ${selected ? 'selected' : ''} ${isLibrarySource ? 'npc-row-book' : ''}`}
+      className={`npc-row ${selected ? 'selected' : ''} ${isBook ? 'npc-row-book' : ''}`}
       onClick={() => onSelect(npc)}
     >
       <span className="npc-name">
-        {isLibrarySource && <span className="npc-leading-icon" aria-hidden="true">📖</span>}
+        {isBook && <span className="npc-leading-icon" aria-hidden="true">📖</span>}
         {npc.npc}
       </span>
       <span className="npc-tags">
