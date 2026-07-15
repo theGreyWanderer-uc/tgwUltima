@@ -8,6 +8,7 @@ import webbrowser
 import csv
 import json
 import shutil
+from collections import Counter
 from http.server import SimpleHTTPRequestHandler
 from pathlib import Path
 from types import SimpleNamespace
@@ -20,6 +21,10 @@ from titan._config import get_config
 from titan.dialogue.pipeline.build_data import build_data
 from titan.dialogue.pipeline.extract_ast import main as extract_ast_main
 from titan.dialogue.pipeline.extract_books import main as extract_books_main
+from titan.dialogue.pipeline.extract_library import (
+    NON_READABLE_SCROLL_CLASSES,
+    build_spell_section,
+)
 from titan.dialogue.pipeline.extract_library import main as extract_library_main
 from titan.dialogue.pipeline.lint_json import run_lint
 from titan.dialogue.pipeline.run_fold import FoldRunError, get_effective_fold_path, run_fold
@@ -436,6 +441,7 @@ def _validate_pipeline_outputs(runtime_root: Path, expected_classes: int, run_co
         seen_qualities: set[int] = set()
         readable = 0
         bad_entries = 0
+        resurrection_entry: dict | None = None
         for index, entry in enumerate(books):
             if not isinstance(entry, dict):
                 bad_entries += 1
@@ -454,6 +460,8 @@ def _validate_pipeline_outputs(runtime_root: Path, expected_classes: int, run_co
             if quality in seen_qualities:
                 _bad(f"{label} duplicate book quality 0x{quality:02X} in {path}")
             seen_qualities.add(quality)
+            if quality == 0x66:
+                resurrection_entry = entry
 
             expected_hex = f"0x{quality:02X}"
             if quality_hex != expected_hex:
@@ -476,6 +484,22 @@ def _validate_pipeline_outputs(runtime_root: Path, expected_classes: int, run_co
         if bad_entries:
             _bad(f"{label} books data contains {bad_entries} malformed entries in {path}")
 
+        if resurrection_entry is None:
+            _bad(f"{label} books data is missing Resurrection quality 0x66 in {path}")
+        else:
+            resurrection_text = resurrection_entry.get("text")
+            if resurrection_entry.get("title") != "Resurrection":
+                _bad(f"{label} book 0x66 title is not Resurrection in {path}")
+            if resurrection_entry.get("source") != "SGBOOK::func1D26":
+                _bad(f"{label} Resurrection dispatch is not SGBOOK::func1D26 in {path}")
+            if (
+                not isinstance(resurrection_text, str)
+                or "The Spell of Resurrection" not in resurrection_text
+            ):
+                _bad(f"{label} Resurrection book has incorrect text in {path}")
+            elif "no focus or words of power" not in resurrection_text:
+                _bad(f"{label} Resurrection book text is incomplete in {path}")
+
         books_with_text = payload.get("booksWithText")
         if books_with_text != readable:
             _bad(
@@ -495,6 +519,12 @@ def _validate_pipeline_outputs(runtime_root: Path, expected_classes: int, run_co
         if not isinstance(payload, dict):
             _bad(f"{label} library data is not a JSON object: {path}")
             return
+
+        if payload.get("schemaVersion") != "1.1":
+            _bad(
+                f"{label} library schemaVersion mismatch: expected 1.1, "
+                f"found {payload.get('schemaVersion')!r} in {path}"
+            )
 
         sections = payload.get("sections")
         if not isinstance(sections, list) or not sections:
@@ -526,6 +556,28 @@ def _validate_pipeline_outputs(runtime_root: Path, expected_classes: int, run_co
                     f"{label} library section {section.get('id')!r} totalItems mismatch: "
                     f"declared {section.get('totalItems')}, actual {len(items)} in {path}"
                 )
+            items_with_text = sum(
+                1
+                for item in items
+                if isinstance(item, dict)
+                and isinstance(item.get("text"), str)
+                and item["text"]
+            )
+            if section.get("itemsWithText") != items_with_text:
+                _bad(
+                    f"{label} library section {section.get('id')!r} itemsWithText mismatch: "
+                    f"declared {section.get('itemsWithText')}, actual {items_with_text} in {path}"
+                )
+            items_with_content = sum(
+                1
+                for item in items
+                if isinstance(item, dict) and (item.get("text") or item.get("details"))
+            )
+            if section.get("itemsWithContent") != items_with_content:
+                _bad(
+                    f"{label} library section {section.get('id')!r} itemsWithContent mismatch: "
+                    f"declared {section.get('itemsWithContent')}, actual {items_with_content} in {path}"
+                )
             total_items += len(items)
             for item in items:
                 if not isinstance(item, dict):
@@ -539,6 +591,110 @@ def _validate_pipeline_outputs(runtime_root: Path, expected_classes: int, run_co
                     malformed += 1
                 if not isinstance(item.get("category"), str) or not item.get("category"):
                     malformed += 1
+
+        spell_sections = [
+            section
+            for section in sections
+            if isinstance(section, dict) and section.get("id") == "spells"
+        ]
+        scroll_sections = [
+            section
+            for section in sections
+            if isinstance(section, dict) and section.get("id") == "scrolls"
+        ]
+        if len(scroll_sections) == 1:
+            scroll_items = scroll_sections[0].get("items")
+            if isinstance(scroll_items, list):
+                non_readable_sources = [
+                    item.get("source")
+                    for item in scroll_items
+                    if isinstance(item, dict)
+                    and isinstance(item.get("source"), str)
+                    and item["source"].partition("::")[0] in NON_READABLE_SCROLL_CLASSES
+                ]
+                if non_readable_sources:
+                    _bad(
+                        f"{label} readable scroll catalog contains non-readable sources "
+                        f"{non_readable_sources} in {path}"
+                    )
+        if len(spell_sections) != 1:
+            _bad(f"{label} library must contain exactly one spell section in {path}")
+        else:
+            spell_items = spell_sections[0].get("items")
+            expected_spell_items = build_spell_section()["items"]
+            if not isinstance(spell_items, list):
+                _bad(f"{label} spell catalog items are malformed in {path}")
+            else:
+                if len(spell_items) != len(expected_spell_items):
+                    _bad(
+                        f"{label} spell count mismatch: expected {len(expected_spell_items)}, "
+                        f"found {len(spell_items)} in {path}"
+                    )
+
+                expected_school_counts = Counter(
+                    item["school"] for item in expected_spell_items
+                )
+                actual_school_counts = Counter(
+                    item.get("school") for item in spell_items if isinstance(item, dict)
+                )
+                if actual_school_counts != expected_school_counts:
+                    _bad(
+                        f"{label} spell school counts mismatch: expected "
+                        f"{dict(expected_school_counts)}, found {dict(actual_school_counts)} in {path}"
+                    )
+
+                actual_by_id = {
+                    item.get("id"): item
+                    for item in spell_items
+                    if isinstance(item, dict) and isinstance(item.get("id"), str)
+                }
+                if len(actual_by_id) != len(spell_items):
+                    _bad(
+                        f"{label} spell catalog contains duplicate or invalid IDs in {path}"
+                    )
+
+                core_fields = (
+                    "kind",
+                    "quality",
+                    "qualityHex",
+                    "slot",
+                    "title",
+                    "category",
+                    "school",
+                    "text",
+                )
+                for expected_spell in expected_spell_items:
+                    spell_id = expected_spell["id"]
+                    actual_spell = actual_by_id.get(spell_id)
+                    if actual_spell is None:
+                        _bad(f"{label} spell catalog is missing {spell_id} in {path}")
+                        continue
+                    for field in core_fields:
+                        if actual_spell.get(field) != expected_spell.get(field):
+                            _bad(
+                                f"{label} spell {spell_id} {field} mismatch: expected "
+                                f"{expected_spell.get(field)!r}, found {actual_spell.get(field)!r} in {path}"
+                            )
+
+                    actual_details = actual_spell.get("details")
+                    expected_details = expected_spell["details"]
+                    if not isinstance(actual_details, dict):
+                        _bad(
+                            f"{label} spell {spell_id} has no details object in {path}"
+                        )
+                        continue
+                    for key, expected_value in expected_details.items():
+                        if actual_details.get(key) != expected_value:
+                            _bad(
+                                f"{label} spell {spell_id} detail {key} mismatch: expected "
+                                f"{expected_value!r}, found {actual_details.get(key)!r} in {path}"
+                            )
+                    unexpected_details = set(actual_details) - set(expected_details)
+                    if unexpected_details:
+                        _bad(
+                            f"{label} spell {spell_id} has unexpected details "
+                            f"{sorted(unexpected_details)} in {path}"
+                        )
 
         if payload.get("totalItems") != total_items:
             _bad(

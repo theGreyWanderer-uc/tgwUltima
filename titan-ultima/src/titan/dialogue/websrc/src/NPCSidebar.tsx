@@ -1,45 +1,35 @@
 import { useWorldState } from './store';
 import { findTalkFunction, findLookFunction, findShopFunction } from './engine';
+import {
+  BOOK_CLASS,
+  compareObjectEntries,
+  isLibrarySource,
+  isNpcEntry,
+  isObjectEntry,
+  isUtilEntry,
+} from './npcClassification';
 import type { NPCFile } from './types';
-
-const LIBRARY_CLASS_ORDER = ['BASEBOOK', 'BASESCRL', 'GRAVE_NS', 'PLAQUENS', 'KEYONEC', 'PENT', 'NEC1', 'SCROLL1', 'EARTHMAG'];
-const LIBRARY_CLASSES = new Set(LIBRARY_CLASS_ORDER);
-const LIBRARY_CLASS_RANK = new Map(LIBRARY_CLASS_ORDER.map((name, index) => [name, index]));
 
 export function NPCSidebar() {
   const { interactiveNpcs, selectedNpc, npcSearchQuery, viewFilter, setNpcSearch, setViewFilter, selectNpc } = useWorldState();
-  const isLibrarySource = (n: NPCFile) => LIBRARY_CLASSES.has(n.npc);
-
-  const isNpc = (n: NPCFile) => n.hasDialogue;
-  const isObject = (n: NPCFile) => !n.hasDialogue && (isLibrarySource(n) || Object.values(n.functions).some(f => f.type === 'look' || f.type === 'shop'));
-  const isUtil = (n: NPCFile) => !n.hasDialogue && !isObject(n) && (Object.values(n.functions).some(f => f.type === 'behavior' || f.type === 'utility'));
 
   const byCategory = viewFilter === 'npc'
-    ? interactiveNpcs.filter(isNpc)
+    ? interactiveNpcs.filter(isNpcEntry)
     : viewFilter === 'object'
-      ? interactiveNpcs.filter(isObject)
-      : interactiveNpcs.filter(isUtil);
+      ? interactiveNpcs.filter(isObjectEntry)
+      : interactiveNpcs.filter(isUtilEntry);
 
   const filtered = npcSearchQuery
     ? byCategory.filter(n => n.npc.toLowerCase().includes(npcSearchQuery.toLowerCase()))
     : byCategory;
 
   const sortedFiltered = viewFilter === 'object'
-    ? [...filtered].sort((a, b) => {
-      const aRank = LIBRARY_CLASS_RANK.get(a.npc);
-      const bRank = LIBRARY_CLASS_RANK.get(b.npc);
-      if (aRank !== undefined || bRank !== undefined) {
-        if (aRank === undefined) return 1;
-        if (bRank === undefined) return -1;
-        return aRank - bRank;
-      }
-      return a.npc.localeCompare(b.npc);
-    })
+    ? [...filtered].sort(compareObjectEntries)
     : filtered;
 
-  const npcCount = interactiveNpcs.filter(isNpc).length;
-  const objCount = interactiveNpcs.filter(isObject).length;
-  const utilCount = interactiveNpcs.filter(isUtil).length;
+  const npcCount = interactiveNpcs.filter(isNpcEntry).length;
+  const objCount = interactiveNpcs.filter(isObjectEntry).length;
+  const utilCount = interactiveNpcs.filter(isUtilEntry).length;
 
   const viewLabel = viewFilter === 'npc' ? 'NPCs' : viewFilter === 'object' ? 'Objects' : 'Util';
 
@@ -122,23 +112,24 @@ function NPCRow({
   const hasShop = !!findShopFunction(npc);
   const hasBehavior = Object.values(npc.functions).some(f => f.type === 'behavior');
   const hasUtility = Object.values(npc.functions).some(f => f.type === 'utility');
-  const isLibrarySource = LIBRARY_CLASSES.has(npc.npc);
+  const hasLibraryTag = isLibrarySource(npc);
+  const isBook = npc.npc === BOOK_CLASS;
 
   const tags: string[] = [];
   if (hasTalk) tags.push('talk');
   if (hasLook) tags.push('look');
   if (hasShop) tags.push('shop');
-  if (isLibrarySource) tags.push('library');
+  if (hasLibraryTag) tags.push('library');
   if (viewFilter === 'util' && hasBehavior) tags.push('behavior');
   if (viewFilter === 'util' && hasUtility) tags.push('utility');
 
   return (
     <button
-      className={`npc-row ${selected ? 'selected' : ''} ${isLibrarySource ? 'npc-row-book' : ''}`}
+      className={`npc-row ${selected ? 'selected' : ''} ${isBook ? 'npc-row-book' : ''}`}
       onClick={() => onSelect(npc)}
     >
       <span className="npc-name">
-        {isLibrarySource && <span className="npc-leading-icon" aria-hidden="true">📖</span>}
+        {isBook && <span className="npc-leading-icon" aria-hidden="true">📖</span>}
         {npc.npc}
       </span>
       <span className="npc-tags">

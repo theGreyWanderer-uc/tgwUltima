@@ -4,6 +4,7 @@ import { loadAllNpcs, loadFlagMetadata } from './data';
 import { NPCSidebar } from './NPCSidebar';
 import { DialoguePlayer } from './DialoguePlayer';
 import { FlagInspector } from './FlagInspector';
+import { isNpcEntry, isObjectEntry, isUtilEntry } from './npcClassification';
 
 type ThemeId =
   | 'ocean-depths'
@@ -93,13 +94,9 @@ export function App() {
     );
   }
 
-  const npcCount = interactiveNpcs.filter(n => n.hasDialogue).length;
-  const objCount = interactiveNpcs.filter(
-    n => !n.hasDialogue && Object.values(n.functions).some(f => f.type === 'look' || f.type === 'shop')
-  ).length;
-  const utilCount = interactiveNpcs.filter(
-    n => !n.hasDialogue && !Object.values(n.functions).some(f => f.type === 'look' || f.type === 'shop')
-  ).length;
+  const npcCount = interactiveNpcs.filter(isNpcEntry).length;
+  const objCount = interactiveNpcs.filter(isObjectEntry).length;
+  const utilCount = interactiveNpcs.filter(isUtilEntry).length;
 
   return (
     <div className="app">
