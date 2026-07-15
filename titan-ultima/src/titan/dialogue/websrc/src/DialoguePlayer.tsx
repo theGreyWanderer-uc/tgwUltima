@@ -7,10 +7,10 @@ import { BookPanel } from './BookPanel';
 import { UtilPanel } from './UtilPanel';
 import { FEATURE_DIALOGUE_WALKER_EXPORT_BUTTON } from './featureFlags';
 import { downloadDialogueWalkMarkdown } from './exportDialogueWalker';
+import { BOOK_CLASS } from './npcClassification';
 import type { DialogueMessage, NPCFile, DialogueNode, VariableHint } from './types';
 
 const OPEN_GLOBAL_FLAGS_EVENT = 'open-global-flags';
-const LIBRARY_CLASSES = new Set(['BASEBOOK', 'BASESCRL', 'GRAVE_NS', 'PLAQUENS', 'KEYONEC', 'PENT', 'NEC1', 'SCROLL1', 'EARTHMAG']);
 
 export function DialoguePlayer() {
   const {
@@ -83,7 +83,7 @@ export function DialoguePlayer() {
   const hasLook = !!findLookFunction(selectedNpc);
   const hasShop = !!findShopFunction(selectedNpc);
   const canUndo = undoStack.length > 0;
-  const hasLibrary = LIBRARY_CLASSES.has(selectedNpc.npc);
+  const canReadBooks = selectedNpc.npc === BOOK_CLASS;
   const hasUtil = !hasTalk
     && !hasLook
     && !hasShop
@@ -130,9 +130,9 @@ export function DialoguePlayer() {
         )}
         <div className="dialogue-body">
           <div className="action-buttons">
-            {hasLibrary && (
+            {canReadBooks && (
               <button className="btn" onClick={() => setBookOpen(true)}>
-                📖 {selectedNpc.npc === 'BASEBOOK' ? 'Read Books' : 'Open Library'}
+                📖 Read Books
               </button>
             )}
             {hasTalk && (
@@ -167,7 +167,7 @@ export function DialoguePlayer() {
               </button>
             )}
           </div>
-          {!hasTalk && !hasLook && !hasShop && !hasLibrary && !hasUtil && (
+          {!hasTalk && !hasLook && !hasShop && !canReadBooks && !hasUtil && (
             <div className="empty-state">
               <p>No interactive functions available.</p>
             </div>
@@ -191,7 +191,7 @@ export function DialoguePlayer() {
             onClose={() => setShopOpen(false)}
           />
         )}
-        {hasLibrary && (
+        {canReadBooks && (
           <BookPanel
             npcName={selectedNpc.npc}
             open={bookOpen}

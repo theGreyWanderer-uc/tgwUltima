@@ -10,6 +10,44 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ---
 
+## [0.6.7]
+
+### Added
+
+- Completed the U8 Spell Catalog with all 36 castable spells across
+  Necromancy, Sorcery, Thaumaturgy, and Theurgy, including mana costs and
+  their usage context, incantations, reagents, focuses, and source references.
+- Expanded dialogue-library validation to verify the schema, section totals,
+  content totals, canonical spell metadata and school counts, Resurrection's
+  source text, and the exclusion of non-readable scroll handlers.
+- Added browser coverage for the Spell Catalog, mana and slot presentation,
+  Resurrection, library navigation and fallback behavior, object
+  classification, and the BASEBOOK library flow.
+
+### Changed
+
+- Made BASEBOOK the sole book-icon entry and library launcher in the Objects
+  list, kept its related classes tagged as library sources, and pinned BASEBOOK
+  above the alphabetically sorted object entries.
+- Improved the library interface with content-aware counts, spell-specific
+  Slot labels, stricter data-schema checks, keyboard-accessible section tabs,
+  and clearer list/detail navigation.
+- Excluded SCROLL2 consumable-effect handlers from the readable Scrolls
+  catalogue; the underlying scroll objects and effects remain available in
+  the dialogue data.
+
+### Fixed
+
+- Corrected BASEBOOK quality `0x66` to use Resurrection's own
+  `SGBOOK::func1D26` text instead of Intervention's duplicate dispatch, while
+  keeping Resurrection out of the castable Spell Catalog.
+- Corrected Spell Catalog content reporting so metadata-backed spell entries
+  are no longer presented as having no readable content.
+- Centralized NPC, Object, and Util classification so sidebar and header
+  counts remain consistent.
+
+---
+
 ## [0.6.6]
 
 ### Added
