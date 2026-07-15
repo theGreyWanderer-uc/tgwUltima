@@ -7,10 +7,10 @@ import { BookPanel } from './BookPanel';
 import { UtilPanel } from './UtilPanel';
 import { FEATURE_DIALOGUE_WALKER_EXPORT_BUTTON } from './featureFlags';
 import { downloadDialogueWalkMarkdown } from './exportDialogueWalker';
+import { BOOK_CLASS } from './npcClassification';
 import type { DialogueMessage, NPCFile, DialogueNode, VariableHint } from './types';
 
 const OPEN_GLOBAL_FLAGS_EVENT = 'open-global-flags';
-const BOOK_CLASS = 'BASEBOOK';
 
 export function DialoguePlayer() {
   const {

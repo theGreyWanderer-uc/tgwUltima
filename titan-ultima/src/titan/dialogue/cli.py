@@ -21,7 +21,10 @@ from titan._config import get_config
 from titan.dialogue.pipeline.build_data import build_data
 from titan.dialogue.pipeline.extract_ast import main as extract_ast_main
 from titan.dialogue.pipeline.extract_books import main as extract_books_main
-from titan.dialogue.pipeline.extract_library import build_spell_section
+from titan.dialogue.pipeline.extract_library import (
+    NON_READABLE_SCROLL_CLASSES,
+    build_spell_section,
+)
 from titan.dialogue.pipeline.extract_library import main as extract_library_main
 from titan.dialogue.pipeline.lint_json import run_lint
 from titan.dialogue.pipeline.run_fold import FoldRunError, get_effective_fold_path, run_fold
@@ -594,6 +597,26 @@ def _validate_pipeline_outputs(runtime_root: Path, expected_classes: int, run_co
             for section in sections
             if isinstance(section, dict) and section.get("id") == "spells"
         ]
+        scroll_sections = [
+            section
+            for section in sections
+            if isinstance(section, dict) and section.get("id") == "scrolls"
+        ]
+        if len(scroll_sections) == 1:
+            scroll_items = scroll_sections[0].get("items")
+            if isinstance(scroll_items, list):
+                non_readable_sources = [
+                    item.get("source")
+                    for item in scroll_items
+                    if isinstance(item, dict)
+                    and isinstance(item.get("source"), str)
+                    and item["source"].partition("::")[0] in NON_READABLE_SCROLL_CLASSES
+                ]
+                if non_readable_sources:
+                    _bad(
+                        f"{label} readable scroll catalog contains non-readable sources "
+                        f"{non_readable_sources} in {path}"
+                    )
         if len(spell_sections) != 1:
             _bad(f"{label} library must contain exactly one spell section in {path}")
         else:

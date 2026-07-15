@@ -25,6 +25,10 @@ test.describe('Book panel', () => {
     await expect(objectRows.first().locator('.npc-name')).toContainText('BASEBOOK');
     await expect(basebook.locator('.npc-leading-icon')).toHaveText('📖');
 
+    const objectNames = (await objectRows.locator('.npc-name').allTextContents())
+      .map(name => name.replace('📖', '').trim());
+    expect(objectNames.slice(1)).toEqual([...objectNames.slice(1)].sort((a, b) => a.localeCompare(b)));
+
     const librarySources = ['BASEBOOK', 'BASESCRL', 'GRAVE_NS', 'PLAQUENS', 'KEYONEC', 'PENT', 'NEC1', 'SCROLL1', 'EARTHMAG'];
     for (const className of librarySources) {
       const row = objectRows.filter({ hasText: className });
@@ -39,8 +43,46 @@ test.describe('Book panel', () => {
     await expect(page.getByRole('button', { name: /Read Books|Open Library/ })).toHaveCount(0);
   });
 
+  test('header totals match the sidebar category counts', async ({ page }) => {
+    const headerStats = page.locator('.header-stats');
+    const categoryCounts: Array<[string, string]> = [
+      ['NPCs', 'NPCs'],
+      ['Objects', 'objects'],
+      ['Util', 'util'],
+    ];
+
+    for (const [filterName, headerLabel] of categoryCounts) {
+      const filterText = await page.locator('.btn-filter', { hasText: filterName }).textContent();
+      const count = filterText?.match(/\((\d+)\)/)?.[1];
+      expect(count, `${filterName} filter should expose its count`).toBeTruthy();
+      await expect(headerStats).toContainText(`${count} ${headerLabel}`);
+    }
+  });
+
   test('Read Books opens modal and shows book list entries', async ({ page }) => {
     const dialog = await openLibrary(page);
+    await expect(dialog.locator('.book-list-item')).not.toHaveCount(0);
+    await expect(dialog.getByRole('button', { name: 'Close library' })).toBeVisible();
+    await expect(dialog.getByRole('textbox', { name: 'Search Books' })).toBeVisible();
+    await expect(dialog.getByRole('combobox', { name: 'Filter Books by category' })).toBeVisible();
+    await expect(dialog.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', 'book-section-tab-books');
+
+    const booksTab = dialog.getByRole('tab', { name: /Books/ });
+    await booksTab.focus();
+    await booksTab.press('ArrowRight');
+    await expect(dialog.getByRole('tab', { name: /Scrolls/ })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  test('invalid library data falls back to legacy books data', async ({ page }) => {
+    await page.route('**/data/library.json', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ schemaVersion: 'broken', sections: [] }),
+    }));
+
+    const dialog = await openLibrary(page);
+    await expect(dialog.getByRole('tab')).toHaveCount(1);
+    await expect(dialog.getByRole('tab', { name: /Books/ })).toBeVisible();
     await expect(dialog.locator('.book-list-item')).not.toHaveCount(0);
   });
 
@@ -73,9 +115,9 @@ test.describe('Book panel', () => {
     const detailValue = (label: string) => reader
       .getByText(label, { exact: true })
       .locator('xpath=following-sibling::dd');
-    await expect(detailValue('mana Cost')).toHaveText('8–10');
-    await expect(detailValue('mana Cost Context')).toHaveText('When enchanting a focus');
-    await expect(detailValue('incantation')).toHaveText('In Ort Flam');
+    await expect(detailValue('Mana Cost')).toHaveText('8–10');
+    await expect(detailValue('Mana Cost Context')).toHaveText('When enchanting a focus');
+    await expect(detailValue('Incantation')).toHaveText('In Ort Flam');
   });
 
   test('Resurrection book uses its own text and is not a castable spell', async ({ page }) => {

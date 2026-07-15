@@ -18,6 +18,7 @@ from titan.dialogue.pipeline.extract_books import build_books
 QUALITY_RE = re.compile(r"\b(?:Item::getQuality\(this\)|local\d+)\s*==\s*(0x[\dA-Fa-f]+)h")
 DISPATCH_RE = re.compile(r"->(\w+)::(\w+)\(")
 SCROLL_READ_RE = re.compile(r'Scroll::read\((?:str_to_ptr|strptr)\("(.*?)"\)', re.DOTALL)
+NON_READABLE_SCROLL_CLASSES = frozenset({"SCROLL2"})
 GRAVE_READ_RE = re.compile(r'Grave::read\((?:str_to_ptr|strptr)\("(.*?)"\)', re.DOTALL)
 PLAQUE_READ_RE = re.compile(
     r'Plaque::read\((?:str_to_ptr|strptr)\("(.*?)"\),\s*(0x[\dA-Fa-f]+)h',
@@ -637,7 +638,7 @@ def build_scroll_section(json_dir: Path) -> dict[str, Any]:
     dispatch: dict[int, tuple[str, str]] = {}
     for quality, body in _quality_branches(use):
         target = _first_dispatch(body)
-        if target:
+        if target and target[0] not in NON_READABLE_SCROLL_CLASSES:
             dispatch[quality] = target
 
     class_names = {cls for cls, _ in dispatch.values()}
