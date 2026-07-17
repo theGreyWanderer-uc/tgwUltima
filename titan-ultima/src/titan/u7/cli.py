@@ -228,6 +228,7 @@ def _load_container_shapes(
         static_dir = fallback_static
     if static_dir:
         from titan.u7.typeflag import U7TypeFlags
+
         tfa = U7TypeFlags.from_dir(static_dir)
         container_shapes = {
             entry.shape_num for entry in tfa.entries if entry.shape_class == 6
@@ -242,6 +243,7 @@ def _load_container_shapes(
 # ============================================================================
 # CMD_* IMPLEMENTATION FUNCTIONS — PALETTE
 # ============================================================================
+
 
 def cmd_palette_export(args: SimpleNamespace) -> int:
     """Export palette(s) from PALETTES.FLX or a .pal file."""
@@ -259,8 +261,11 @@ def cmd_palette_export(args: SimpleNamespace) -> int:
     indices: list[int]
     if args.index is not None:
         if args.index < 0 or args.index >= count:
-            print(f"ERROR: Palette index {args.index} out of range "
-                  f"(file has {count} palettes)", file=sys.stderr)
+            print(
+                f"ERROR: Palette index {args.index} out of range "
+                f"(file has {count} palettes)",
+                file=sys.stderr,
+            )
             return 1
         indices = [args.index]
     else:
@@ -292,6 +297,7 @@ def cmd_palette_export(args: SimpleNamespace) -> int:
 # CMD_* IMPLEMENTATION FUNCTIONS — SHAPE
 # ============================================================================
 
+
 def cmd_shape_export(args: SimpleNamespace) -> int:
     """Export frames from a U7 shape to PNG."""
     from titan.u7.shape import U7Shape
@@ -314,21 +320,28 @@ def cmd_shape_export(args: SimpleNamespace) -> int:
 
     if is_flex:
         if args.shape is None:
-            print("ERROR: --shape N is required when the input is a VGA "
-                  "Flex archive (e.g. SHAPES.VGA).", file=sys.stderr)
+            print(
+                "ERROR: --shape N is required when the input is a VGA "
+                "Flex archive (e.g. SHAPES.VGA).",
+                file=sys.stderr,
+            )
             return 1
         archive = U7FlexArchive.from_file(filepath)
         shape_idx = args.shape
         num_records = len(archive.records)
         if shape_idx < 0 or shape_idx >= num_records:
-            print(f"ERROR: Shape index {shape_idx} out of range "
-                  f"(archive has {num_records} records)", file=sys.stderr)
+            print(
+                f"ERROR: Shape index {shape_idx} out of range "
+                f"(archive has {num_records} records)",
+                file=sys.stderr,
+            )
             return 1
         rec = archive.get_record(shape_idx)
         if not rec:
             print(f"ERROR: Shape {shape_idx} is empty", file=sys.stderr)
             return 1
         from titan.u7.shape import FIRST_OBJ_SHAPE
+
         shape = U7Shape.from_data(rec, is_tile=(shape_idx < FIRST_OBJ_SHAPE))
         name = f"shape_{shape_idx:04d}"
     else:
@@ -344,8 +357,11 @@ def cmd_shape_export(args: SimpleNamespace) -> int:
 
     if args.frame is not None:
         if args.frame < 0 or args.frame >= len(shape.frames):
-            print(f"ERROR: Frame {args.frame} out of range "
-                  f"(shape has {len(shape.frames)} frames)", file=sys.stderr)
+            print(
+                f"ERROR: Frame {args.frame} out of range "
+                f"(shape has {len(shape.frames)} frames)",
+                file=sys.stderr,
+            )
             return 1
         frames_to_export = [(args.frame, shape.frames[args.frame])]
     else:
@@ -358,8 +374,7 @@ def cmd_shape_export(args: SimpleNamespace) -> int:
         out_path = os.path.join(outdir, f"{name}_f{idx:04d}.png")
         img.save(out_path)
 
-    print(f"Exported {len(frames_to_export)} frame(s) from {name} "
-          f"to {outdir}/")
+    print(f"Exported {len(frames_to_export)} frame(s) from {name} to {outdir}/")
     return 0
 
 
@@ -413,14 +428,14 @@ def cmd_shape_batch(args: SimpleNamespace) -> int:
         total_shapes += 1
         total_frames += len(images)
 
-    print(f"Exported {total_frames} frame(s) from {total_shapes} shape(s) "
-          f"to {outdir}/")
+    print(f"Exported {total_frames} frame(s) from {total_shapes} shape(s) to {outdir}/")
     return 0
 
 
 # ============================================================================
 # CMD_* IMPLEMENTATION FUNCTIONS — MUSIC
 # ============================================================================
+
 
 def cmd_music_export(args: SimpleNamespace) -> int:
     """Extract music tracks from a U7 music Flex archive to MIDI."""
@@ -461,6 +476,7 @@ def cmd_music_export(args: SimpleNamespace) -> int:
 # CMD_* IMPLEMENTATION FUNCTIONS — VOC / SPEECH
 # ============================================================================
 
+
 def cmd_voc_export(args: SimpleNamespace) -> int:
     """Decode a Creative Voice (.voc) file to WAV."""
     from titan.u7.sound import VocDecoder
@@ -483,8 +499,9 @@ def cmd_voc_export(args: SimpleNamespace) -> int:
     duration = len(pcm) / rate if rate else 0
 
     print(f"Decoded VOC to WAV: {out_path}")
-    print(f"  Sample rate: {rate} Hz, duration: {duration:.1f}s, "
-          f"size: {len(pcm):,} bytes")
+    print(
+        f"  Sample rate: {rate} Hz, duration: {duration:.1f}s, size: {len(pcm):,} bytes"
+    )
     return 0
 
 
@@ -552,10 +569,7 @@ def _looks_like_text(data: bytes) -> bool:
         return False
     # Check first 64 bytes for printable ASCII
     sample = data[:64]
-    return all(
-        (0x20 <= b <= 0x7E) or b in (0x0A, 0x0D, 0x09)
-        for b in sample
-    )
+    return all((0x20 <= b <= 0x7E) or b in (0x0A, 0x0D, 0x09) for b in sample)
 
 
 # ============================================================================
@@ -564,10 +578,12 @@ def _looks_like_text(data: bytes) -> bool:
 
 # ---- palette ---------------------------------------------------------------
 
+
 @u7_app.command("palette-export")
 def palette_export_cmd(
-    file: Annotated[str, typer.Argument(
-        help="Path to PALETTES.FLX or a standalone .pal file")],
+    file: Annotated[
+        str, typer.Argument(help="Path to PALETTES.FLX or a standalone .pal file")
+    ],
     output: Annotated[
         Optional[str],
         typer.Option("-o", "--output", help="Output directory"),
@@ -578,19 +594,26 @@ def palette_export_cmd(
     ] = None,
 ) -> None:
     """Export palettes from PALETTES.FLX as PNG colour swatches and text dumps."""
-    raise SystemExit(cmd_palette_export(SimpleNamespace(
-        file=file, output=output, index=index,
-    )))
+    raise SystemExit(
+        cmd_palette_export(
+            SimpleNamespace(
+                file=file,
+                output=output,
+                index=index,
+            )
+        )
+    )
 
 
 @u7_app.command("shape-export")
 def shape_export_cmd(
-    file: Annotated[str, typer.Argument(
-        help="Path to .shp file or VGA Flex archive (e.g. SHAPES.VGA)")],
+    file: Annotated[
+        str,
+        typer.Argument(help="Path to .shp file or VGA Flex archive (e.g. SHAPES.VGA)"),
+    ],
     palette: Annotated[
         Optional[str],
-        typer.Option("-p", "--palette",
-                     help="Path to PALETTES.FLX or .pal file"),
+        typer.Option("-p", "--palette", help="Path to PALETTES.FLX or .pal file"),
     ] = None,
     output: Annotated[
         Optional[str],
@@ -598,8 +621,7 @@ def shape_export_cmd(
     ] = None,
     shape: Annotated[
         Optional[int],
-        typer.Option("--shape",
-                     help="Shape index (required when input is a VGA Flex)"),
+        typer.Option("--shape", help="Shape index (required when input is a VGA Flex)"),
     ] = None,
     frame: Annotated[
         Optional[int],
@@ -607,19 +629,28 @@ def shape_export_cmd(
     ] = None,
 ) -> None:
     """Export frames from a U7 shape file to PNG."""
-    raise SystemExit(cmd_shape_export(SimpleNamespace(
-        file=file, palette=palette, output=output, shape=shape, frame=frame,
-    )))
+    raise SystemExit(
+        cmd_shape_export(
+            SimpleNamespace(
+                file=file,
+                palette=palette,
+                output=output,
+                shape=shape,
+                frame=frame,
+            )
+        )
+    )
 
 
 @u7_app.command("shape-batch")
 def shape_batch_cmd(
-    file: Annotated[str, typer.Argument(
-        help="Path to a VGA Flex archive (e.g. SHAPES.VGA, FACES.VGA)")],
+    file: Annotated[
+        str,
+        typer.Argument(help="Path to a VGA Flex archive (e.g. SHAPES.VGA, FACES.VGA)"),
+    ],
     palette: Annotated[
         Optional[str],
-        typer.Option("-p", "--palette",
-                     help="Path to PALETTES.FLX or .pal file"),
+        typer.Option("-p", "--palette", help="Path to PALETTES.FLX or .pal file"),
     ] = None,
     output: Annotated[
         Optional[str],
@@ -627,35 +658,45 @@ def shape_batch_cmd(
     ] = None,
     range_start: Annotated[
         Optional[int],
-        typer.Option("--range-start",
-                     help="First shape index to export (default: 0)"),
+        typer.Option("--range-start", help="First shape index to export (default: 0)"),
     ] = None,
     range_end: Annotated[
         Optional[int],
-        typer.Option("--range-end",
-                     help="Last shape index (exclusive; default: all)"),
+        typer.Option("--range-end", help="Last shape index (exclusive; default: all)"),
     ] = None,
 ) -> None:
     """Batch-export shapes from a VGA Flex archive to PNG."""
-    raise SystemExit(cmd_shape_batch(SimpleNamespace(
-        file=file, palette=palette, output=output,
-        range_start=range_start, range_end=range_end,
-    )))
+    raise SystemExit(
+        cmd_shape_batch(
+            SimpleNamespace(
+                file=file,
+                palette=palette,
+                output=output,
+                range_start=range_start,
+                range_end=range_end,
+            )
+        )
+    )
 
 
 # ---- music -----------------------------------------------------------------
 
+
 @u7_app.command("music-export")
 def music_export_cmd(
-    file: Annotated[str, typer.Argument(
-        help="Path to a U7 music archive (ADLIBMUS.DAT, MT32MUS.DAT) "
-             "or standalone XMIDI file (ENDSCORE.XMI)")],
+    file: Annotated[
+        str,
+        typer.Argument(
+            help="Path to a U7 music archive (ADLIBMUS.DAT, MT32MUS.DAT) "
+            "or standalone XMIDI file (ENDSCORE.XMI)"
+        ),
+    ],
     target: Annotated[
         Literal["mt32", "gm"],
         typer.Option(
             "--target",
-              help="Export target: original MT-32 MIDI (.MID) or "
-                  "General MIDI rewrite (.MID)",
+            help="Export target: original MT-32 MIDI (.MID) or "
+            "General MIDI rewrite (.MID)",
             case_sensitive=False,
         ),
     ] = "mt32",
@@ -665,47 +706,70 @@ def music_export_cmd(
     ] = None,
 ) -> None:
     """Extract U7 music tracks from a Flex archive to MIDI files."""
-    raise SystemExit(cmd_music_export(SimpleNamespace(
-        file=file, output=output, target=target,
-    )))
+    raise SystemExit(
+        cmd_music_export(
+            SimpleNamespace(
+                file=file,
+                output=output,
+                target=target,
+            )
+        )
+    )
 
 
 # ---- voc / speech ----------------------------------------------------------
 
+
 @u7_app.command("voc-export")
 def voc_export_cmd(
-    file: Annotated[str, typer.Argument(
-        help="Path to a Creative Voice (.voc) file (e.g. INTROSND.DAT)")],
+    file: Annotated[
+        str,
+        typer.Argument(help="Path to a Creative Voice (.voc) file (e.g. INTROSND.DAT)"),
+    ],
     output: Annotated[
         Optional[str],
         typer.Option("-o", "--output", help="Output directory"),
     ] = None,
 ) -> None:
     """Decode a Creative Voice (.voc) file to WAV."""
-    raise SystemExit(cmd_voc_export(SimpleNamespace(
-        file=file, output=output,
-    )))
+    raise SystemExit(
+        cmd_voc_export(
+            SimpleNamespace(
+                file=file,
+                output=output,
+            )
+        )
+    )
 
 
 @u7_app.command("speech-export")
 def speech_export_cmd(
-    file: Annotated[str, typer.Argument(
-        help="Path to U7SPEECH.SPC (Flex of VOC records) or a single "
-             "VOC file")],
+    file: Annotated[
+        str,
+        typer.Argument(
+            help="Path to U7SPEECH.SPC (Flex of VOC records) or a single VOC file"
+        ),
+    ],
     output: Annotated[
         Optional[str],
         typer.Option("-o", "--output", help="Output directory"),
     ] = None,
 ) -> None:
     """Extract and decode U7 speech from a Flex archive of VOC files to WAV."""
-    raise SystemExit(cmd_speech_export(SimpleNamespace(
-        file=file, output=output,
-    )))
+    raise SystemExit(
+        cmd_speech_export(
+            SimpleNamespace(
+                file=file,
+                output=output,
+            )
+        )
+    )
 
 
 # ============================================================================
 # CMD_* IMPLEMENTATION FUNCTIONS — MAP
 # ============================================================================
+
 
 def _parse_hex_rgba(color: str) -> tuple[int, int, int, int]:
     """Parse #RRGGBB or #RRGGBBAA into RGBA tuple."""
@@ -714,8 +778,7 @@ def _parse_hex_rgba(color: str) -> tuple[int, int, int, int]:
         txt = txt[1:]
 
     if len(txt) not in (6, 8):
-        raise ValueError(
-            f"Color '{color}' must be #RRGGBB or #RRGGBBAA.")
+        raise ValueError(f"Color '{color}' must be #RRGGBB or #RRGGBBAA.")
 
     try:
         r = int(txt[0:2], 16)
@@ -723,8 +786,7 @@ def _parse_hex_rgba(color: str) -> tuple[int, int, int, int]:
         b = int(txt[4:6], 16)
         a = int(txt[6:8], 16) if len(txt) == 8 else 255
     except ValueError as exc:
-        raise ValueError(
-            f"Color '{color}' is not valid hex.") from exc
+        raise ValueError(f"Color '{color}' is not valid hex.") from exc
 
     return (r, g, b, a)
 
@@ -735,9 +797,7 @@ def _parse_highlight_tile_rect(
     """Parse tx0,ty0,tx1,ty1,#RRGGBB[AA][,label] into a typed tuple."""
     parts = [p.strip() for p in value.split(",", 5)]
     if len(parts) not in (5, 6):
-        raise ValueError(
-            "Expected 'tx0,ty0,tx1,ty1,#RRGGBB[,label]' "
-            "(or #RRGGBBAA).")
+        raise ValueError("Expected 'tx0,ty0,tx1,ty1,#RRGGBB[,label]' (or #RRGGBBAA).")
 
     try:
         tx0 = int(parts[0], 10)
@@ -745,26 +805,24 @@ def _parse_highlight_tile_rect(
         tx1 = int(parts[2], 10)
         ty1 = int(parts[3], 10)
     except ValueError as exc:
-        raise ValueError(
-            f"Tile coordinates must be integers in '{value}'.") from exc
+        raise ValueError(f"Tile coordinates must be integers in '{value}'.") from exc
 
     rgba = _parse_hex_rgba(parts[4])
     default_label = f"{tx0},{ty0},{tx1},{ty1}"
     label = parts[5] if len(parts) == 6 and parts[5] else default_label
     return (tx0, ty0, tx1, ty1, rgba, label)
 
+
 def cmd_map_render(args: SimpleNamespace) -> int:
     """Render a U7 map region (superchunk, chunk range, or full world) to PNG."""
     from titan.u7.map import U7MapRenderer, U7TileRectOverlay
     from titan.u7.palette import U7Palette
-    from titan.u7.typeflag import U7TypeFlags
 
     static_dir = args.static
     if not static_dir:
         static_dir, _ = _resolve_u7_paths(getattr(args, "game", "bg"))
     if not os.path.isdir(static_dir):
-        print(f"ERROR: STATIC directory not found: {static_dir}",
-              file=sys.stderr)
+        print(f"ERROR: STATIC directory not found: {static_dir}", file=sys.stderr)
         return 1
 
     shapes_path = os.path.join(static_dir, "SHAPES.VGA")
@@ -787,9 +845,11 @@ def cmd_map_render(args: SimpleNamespace) -> int:
 
     view = args.view or "classic"
     if view not in U7MapRenderer.PROJECTIONS:
-        print(f"ERROR: Unknown view '{view}'. "
-              f"Available: {', '.join(U7MapRenderer.PROJECTIONS.keys())}",
-              file=sys.stderr)
+        print(
+            f"ERROR: Unknown view '{view}'. "
+            f"Available: {', '.join(U7MapRenderer.PROJECTIONS.keys())}",
+            file=sys.stderr,
+        )
         return 1
 
     # Build exclude set
@@ -801,8 +861,10 @@ def cmd_map_render(args: SimpleNamespace) -> int:
             exclude_kw[flag_name] = True
         exclude = tfa.build_exclude_set(**exclude_kw)
         active_names = [k for k in exclude_kw if exclude_kw[k]]
-        print(f"Typeflag filter: {', '.join(active_names)} -> "
-              f"{len(exclude)} shapes excluded")
+        print(
+            f"Typeflag filter: {', '.join(active_names)} -> "
+            f"{len(exclude)} shapes excluded"
+        )
 
     gamedat = getattr(args, "gamedat", None)
     if gamedat and map_num > 0:
@@ -824,24 +886,27 @@ def cmd_map_render(args: SimpleNamespace) -> int:
     highlight_width = max(1, int(getattr(args, "highlight_width", 3) or 3))
     highlight_lift = int(getattr(args, "highlight_lift", 0) or 0)
     highlight_fill_alpha = max(
-        0, min(255, int(getattr(args, "highlight_fill_alpha", 128) or 128)))
+        0, min(255, int(getattr(args, "highlight_fill_alpha", 128) or 128))
+    )
     highlight_labels = bool(getattr(args, "highlight_labels", True))
     ml = getattr(args, "max_lift", None)
 
     if args.superchunk is not None:
         sc = args.superchunk
         if sc < 0 or sc > 143:
-            print(f"ERROR: Superchunk must be 0–143 (got {sc})",
-                  file=sys.stderr)
+            print(f"ERROR: Superchunk must be 0–143 (got {sc})", file=sys.stderr)
             return 1
 
         scx = sc % 12
         scy = sc // 12
-        print(f"Rendering superchunk {sc} (0x{sc:02X}) at grid ({scx}, {scy}) "
-              f"view={view} ...")
+        print(
+            f"Rendering superchunk {sc} (0x{sc:02X}) at grid ({scx}, {scy}) "
+            f"view={view} ..."
+        )
 
         img = renderer.render_superchunk(
-            sc, pal,
+            sc,
+            pal,
             view=view,
             include_ireg=gamedat,
             exclude_shapes=exclude,
@@ -862,11 +927,14 @@ def cmd_map_render(args: SimpleNamespace) -> int:
         cx1 = args.chunk_x1 if args.chunk_x1 is not None else cx0 + 15
         cy1 = args.chunk_y1 if args.chunk_y1 is not None else cy0 + 15
 
-        print(f"Rendering chunks ({cx0},{cy0}) to ({cx1},{cy1}) "
-              f"view={view} ...")
+        print(f"Rendering chunks ({cx0},{cy0}) to ({cx1},{cy1}) view={view} ...")
 
         img = renderer.render_region(
-            cx0, cy0, cx1, cy1, pal,
+            cx0,
+            cy0,
+            cx1,
+            cy1,
+            pal,
             view=view,
             gamedat_dir=gamedat,
             exclude_shapes=exclude,
@@ -897,8 +965,7 @@ def cmd_map_sample(args: SimpleNamespace) -> int:
     if not static_dir:
         static_dir, _ = _resolve_u7_paths(getattr(args, "game", "bg"))
     if not os.path.isdir(static_dir):
-        print(f"ERROR: STATIC directory not found: {static_dir}",
-              file=sys.stderr)
+        print(f"ERROR: STATIC directory not found: {static_dir}", file=sys.stderr)
         return 1
 
     palette_path = args.palette
@@ -934,7 +1001,8 @@ def cmd_map_sample(args: SimpleNamespace) -> int:
     print(f"Sampling minimap at scale {scale} tiles/pixel ...")
 
     img = U7MapSampler.sample_map(
-        renderer, pal,
+        renderer,
+        pal,
         schunks=schunks,
         scale=scale,
         grid=grid,
@@ -957,8 +1025,7 @@ def cmd_typeflag_dump(args: SimpleNamespace) -> int:
     if not static_dir:
         static_dir, _ = _resolve_u7_paths(getattr(args, "game", "bg"))
     if not os.path.isdir(static_dir):
-        print(f"ERROR: STATIC directory not found: {static_dir}",
-              file=sys.stderr)
+        print(f"ERROR: STATIC directory not found: {static_dir}", file=sys.stderr)
         return 1
 
     tfa = U7TypeFlags.from_dir(static_dir)
@@ -997,6 +1064,7 @@ def cmd_typeflag_dump(args: SimpleNamespace) -> int:
 # CMD_* IMPLEMENTATION FUNCTIONS — LOOSE GAMEDAT FILES
 # ============================================================================
 
+
 def cmd_npc_dump(args: SimpleNamespace) -> int:
     """Dump NPC data from loose npc.dat, GAMEDAT, or INITGAME.DAT."""
     from titan.u7.flex import U7FlexArchive
@@ -1004,12 +1072,9 @@ def cmd_npc_dump(args: SimpleNamespace) -> int:
 
     input_path = Path(args.file)
     looks_like_initgame = (
-        input_path.is_file()
-        and input_path.name.lower() == "initgame.dat"
+        input_path.is_file() and input_path.name.lower() == "initgame.dat"
     )
-    initgame_source = looks_like_initgame and U7FlexArchive.is_u7_flex(
-        str(input_path)
-    )
+    initgame_source = looks_like_initgame and U7FlexArchive.is_u7_flex(str(input_path))
     archive_source = False
     archive: Optional[U7Save] = None
     if looks_like_initgame and not initgame_source:
@@ -1025,9 +1090,13 @@ def cmd_npc_dump(args: SimpleNamespace) -> int:
                 file=sys.stderr,
             )
             return 1
-    filepath = str(input_path) if initgame_source else _resolve_loose_data_file(
-        args.file,
-        "npc.dat",
+    filepath = (
+        str(input_path)
+        if initgame_source
+        else _resolve_loose_data_file(
+            args.file,
+            "npc.dat",
+        )
     )
     if not archive_source and not os.path.isfile(filepath):
         print(
@@ -1115,7 +1184,11 @@ def cmd_schedule_dump(args: SimpleNamespace) -> int:
     npc_save: Optional[U7Save] = None
     if npc_file_arg:
         npc_path = Path(npc_file_arg)
-        if npc_path.is_file() and npc_path.suffix.lower() == ".dat" and npc_path.name.lower() != "npc.dat":
+        if (
+            npc_path.is_file()
+            and npc_path.suffix.lower() == ".dat"
+            and npc_path.name.lower() != "npc.dat"
+        ):
             try:
                 npc_save = U7Save.from_file(str(npc_path))
                 if not npc_save.has_entry("npc.dat"):
@@ -1132,10 +1205,18 @@ def cmd_schedule_dump(args: SimpleNamespace) -> int:
         try:
             container_shapes = _load_container_shapes(args, fallback_static=None)
             if npc_save is not None:
-                npc_data = U7NPCData.from_save(npc_save, container_shapes=container_shapes)
-                print(f"Names:  {len(npc_data.npcs)} NPC names loaded from {npc_file_arg}")
+                npc_data = U7NPCData.from_save(
+                    npc_save, container_shapes=container_shapes
+                )
+                print(
+                    f"Names:  {len(npc_data.npcs)} NPC names loaded from {npc_file_arg}"
+                )
             else:
-                npc_data = U7NPCData.from_file(npc_file, container_shapes=container_shapes)
+                if npc_file is None:
+                    raise ValueError("npc.dat path could not be resolved")
+                npc_data = U7NPCData.from_file(
+                    npc_file, container_shapes=container_shapes
+                )
                 print(f"Names:  {len(npc_data.npcs)} NPC names loaded from {npc_file}")
             npc_names = npc_data.name_map()
         except (OSError, ValueError) as exc:
@@ -1163,15 +1244,21 @@ def cmd_schedule_dump(args: SimpleNamespace) -> int:
     return 0
 
 
-
-
 def cmd_gamedat_info(args: SimpleNamespace) -> int:
     """Inspect a loose Exult GAMEDAT directory or Exult archive."""
     from titan.u7.flex import U7FlexArchive
     from titan.u7.map import U7MapRenderer
     from titan.u7.save import (
-        U7FrameFlags, U7GameState, U7GlobalFlags, U7Identity, U7Keyring,
-        U7NPCData, U7Save, U7SaveInfo, U7Schedules, U7UsecodeData,
+        U7FrameFlags,
+        U7GameState,
+        U7GlobalFlags,
+        U7Identity,
+        U7Keyring,
+        U7NPCData,
+        U7Save,
+        U7SaveInfo,
+        U7Schedules,
+        U7UsecodeData,
         U7UsecodeVars,
     )
     from titan.u7.shape import U7Shape
@@ -1198,8 +1285,7 @@ def cmd_gamedat_info(args: SimpleNamespace) -> int:
     initgame_entries: dict[str, bytes] = {}
     if root.is_file():
         initgame_flex_source = (
-            root.name.lower() == "initgame.dat"
-            and U7FlexArchive.is_u7_flex(str(root))
+            root.name.lower() == "initgame.dat" and U7FlexArchive.is_u7_flex(str(root))
         )
         if initgame_flex_source:
             initgame = U7FlexArchive.from_file(str(root))
@@ -1218,7 +1304,10 @@ def cmd_gamedat_info(args: SimpleNamespace) -> int:
             try:
                 archive = U7Save.from_file(str(root))
             except ValueError as exc:
-                print(f"ERROR: GAMEDAT source is not a directory or Exult archive: {exc}", file=sys.stderr)
+                print(
+                    f"ERROR: GAMEDAT source is not a directory or Exult archive: {exc}",
+                    file=sys.stderr,
+                )
                 return 1
     elif not root.is_dir():
         print(f"ERROR: GAMEDAT source not found: {root}", file=sys.stderr)
@@ -1252,7 +1341,8 @@ def cmd_gamedat_info(args: SimpleNamespace) -> int:
     container_shapes = _load_container_shapes(
         args,
         fallback_static=(
-            None if archive is not None
+            None
+            if archive is not None
             else _infer_static_dir_for_data_file(str(root / "npc.dat"))
         ),
     )
@@ -1291,9 +1381,7 @@ def cmd_gamedat_info(args: SimpleNamespace) -> int:
         npcs = U7NPCData.from_bytes(
             npc_data,
             container_shapes=container_shapes,
-            npc_flavor=(
-                "original-new-game" if initgame_flex_source else "runtime"
-            ),
+            npc_flavor=("original-new-game" if initgame_flex_source else "runtime"),
         )
         npc_names = npcs.name_map()
         lines.append(npcs.dump_summary())
@@ -1322,8 +1410,7 @@ def cmd_gamedat_info(args: SimpleNamespace) -> int:
             container_shapes=container_shapes,
         )
         lines.append(
-            f"Monster NPCs: {len(monsters.npcs)} parsed "
-            f"({monsters.num_npcs1} declared)"
+            f"Monster NPCs: {len(monsters.npcs)} parsed ({monsters.num_npcs1} declared)"
         )
         add_row("monsnpcs.dat", "parsed", f"{len(monsters.npcs)} monsters")
 
@@ -1409,7 +1496,8 @@ def cmd_gamedat_info(args: SimpleNamespace) -> int:
                 add_row("scrnshot.shp", "parsed", "0 frames")
 
     ireg_names = [
-        name for name in entry_names()
+        name
+        for name in entry_names()
         if name.startswith("u7ireg") and len(Path(name).name) == 8
     ]
     if ireg_names:
@@ -1449,7 +1537,7 @@ def cmd_gamedat_info(args: SimpleNamespace) -> int:
     fmt = getattr(args, "format", "summary") or "summary"
     if fmt == "csv":
         buf = io.StringIO()
-        writer = csv.writer(buf, lineterminator='\n')
+        writer = csv.writer(buf, lineterminator="\n")
         writer.writerow(["file", "size", "status", "note"])
         writer.writerows(rows)
         content = buf.getvalue()
@@ -1474,8 +1562,124 @@ def cmd_gamedat_info(args: SimpleNamespace) -> int:
 
 
 # ============================================================================
+# CMD_* IMPLEMENTATION FUNCTIONS — MONSTERS
+# ============================================================================
+
+
+def cmd_monster_defs(args: SimpleNamespace) -> int:
+    """Dump static U7 MONSTERS.DAT monster definitions."""
+    from titan.u7.monster import U7MonsterDefinitions
+
+    source = Path(args.file)
+    if source.is_dir():
+        defs = U7MonsterDefinitions.from_dir(str(source), game=args.game)
+    else:
+        defs = U7MonsterDefinitions.from_file(str(source), game=args.game)
+
+    mod_file = getattr(args, "mod_file", None)
+    if mod_file:
+        mod_defs = U7MonsterDefinitions.from_file(mod_file, game=args.game)
+        defs = U7MonsterDefinitions.merge(defs, mod_defs)
+
+    fmt = getattr(args, "format", "summary") or "summary"
+    content = defs.dump_csv() if fmt == "csv" else defs.dump_summary()
+
+    if args.output:
+        with open(args.output, "w", encoding="utf-8", newline="") as f:
+            f.write(content)
+        print(f"Monster definitions written to: {args.output}")
+    else:
+        print(content)
+    return 0
+
+
+def cmd_monster_dump(args: SimpleNamespace) -> int:
+    """Dump live monster actors from monsnpcs.dat, GAMEDAT, or save archive."""
+    from titan.u7.monster import live_monsters_csv, live_monsters_from_source
+
+    input_path = Path(args.file)
+    container_shapes = _load_container_shapes(
+        args,
+        fallback_static=(
+            _infer_static_dir_for_data_file(str(input_path / "monsnpcs.dat"))
+            if input_path.is_dir()
+            else None
+        ),
+    )
+    monsters, source_file = live_monsters_from_source(
+        args.file,
+        container_shapes=container_shapes,
+    )
+    fmt = getattr(args, "format", "summary") or "summary"
+    if fmt == "csv":
+        content = live_monsters_csv(monsters, source_file)
+    else:
+        lines = [
+            f"Source: {source_file}",
+            f"Live monsters: {len(monsters.npcs)} parsed",
+        ]
+        for idx, monster in enumerate(monsters.npcs[:30]):
+            lines.append(
+                f"  {idx:3d} shape={monster.shape:4d} "
+                f"tile=({monster.tile_x},{monster.tile_y},{monster.lift}) "
+                f"HP={monster.health:3d} sched={monster.schedule_name}"
+            )
+        if len(monsters.npcs) > 30:
+            lines.append(f"  ... {len(monsters.npcs) - 30} more")
+        content = "\n".join(lines)
+
+    if args.output:
+        with open(args.output, "w", encoding="utf-8", newline="") as f:
+            f.write(content)
+        print(f"Live monster dump written to: {args.output}")
+    else:
+        print(content)
+    return 0
+
+
+def cmd_monster_report(args: SimpleNamespace) -> int:
+    """Write joined monster definitions, live actors, eggs, and placements."""
+    from titan.u7.monster import monster_report
+
+    static = getattr(args, "static", None)
+    if not static:
+        static, _ = _resolve_u7_paths(getattr(args, "game", "bg"))
+    if not static:
+        print("ERROR: STATIC directory not supplied or configured.", file=sys.stderr)
+        return 1
+
+    gamedat = getattr(args, "gamedat", None)
+    if not gamedat:
+        gamedat = _resolve_u7_mod_gamedat(
+            getattr(args, "game", "bg"),
+            getattr(args, "mod", None),
+        )
+    if not gamedat:
+        gamedat = _resolve_u7_gamedat(getattr(args, "game", "bg"))
+
+    live_source = getattr(args, "live_source", None) or gamedat
+    out_dir = getattr(args, "output_dir", None)
+    outputs = monster_report(
+        static_dir=static,
+        gamedat_dir=gamedat,
+        live_source=live_source,
+        game=getattr(args, "game", "bg"),
+        mod_monsters=getattr(args, "mod_monsters", None),
+        output_dir=out_dir,
+    )
+    if out_dir:
+        print(f"Monster report written to: {out_dir}")
+        for name in sorted(outputs):
+            print(f"  {name}")
+    else:
+        print(outputs["manifest.txt"])
+    return 0
+
+
+# ============================================================================
 # CMD_* IMPLEMENTATION FUNCTIONS — SAVE
 # ============================================================================
+
 
 def cmd_save_list(args: SimpleNamespace) -> int:
     """List contents of an Exult U7 savegame file."""
@@ -1520,7 +1724,7 @@ def cmd_save_extract(args: SimpleNamespace) -> int:
     outdir = args.output or Path(filepath).stem
     os.makedirs(outdir, exist_ok=True)
 
-    entry_filter = getattr(args, 'entry', None)
+    entry_filter = getattr(args, "entry", None)
     extracted = 0
     for name, size in entries:
         if entry_filter and name.lower() != entry_filter.lower():
@@ -1539,8 +1743,7 @@ def cmd_save_extract(args: SimpleNamespace) -> int:
         extracted += 1
 
     if entry_filter and extracted == 0:
-        print(f"ERROR: Entry '{entry_filter}' not found in archive",
-              file=sys.stderr)
+        print(f"ERROR: Entry '{entry_filter}' not found in archive", file=sys.stderr)
         return 1
 
     print(f"\nExtracted {extracted} file(s) -> {outdir.rstrip(os.sep)}/")
@@ -1604,7 +1807,11 @@ def cmd_gflag_dump(args: SimpleNamespace) -> int:
 def cmd_save_info(args: SimpleNamespace) -> int:
     """Show identity, save metadata, party roster, and game state."""
     from titan.u7.save import (
-        U7Save, U7Identity, U7SaveInfo, U7GameState, U7Schedules,
+        U7Save,
+        U7Identity,
+        U7SaveInfo,
+        U7GameState,
+        U7Schedules,
     )
 
     filepath = args.file
@@ -1614,7 +1821,7 @@ def cmd_save_info(args: SimpleNamespace) -> int:
 
     save = U7Save.from_file(filepath)
     lines: list[str] = []
-    lines.append(f"=== U7 Save Info ===")
+    lines.append("=== U7 Save Info ===")
     lines.append(f"File:    {filepath}")
     lines.append(f"Title:   {save.title}")
     lines.append(f"Format:  {save.container_format.upper()}")
@@ -1751,26 +1958,41 @@ def cmd_save_schedules(args: SimpleNamespace) -> int:
 
 # Common exclude flag names (matches U7TypeFlags.build_exclude_set kwargs)
 _EXCLUDE_FLAG_CHOICES = [
-    "no_solid", "no_water", "no_animated", "no_sfx",
-    "no_transparent", "no_translucent", "no_door",
-    "no_barge", "no_light", "no_poisonous",
-    "no_strange_movement", "no_building",
+    "no_solid",
+    "no_water",
+    "no_animated",
+    "no_sfx",
+    "no_transparent",
+    "no_translucent",
+    "no_door",
+    "no_barge",
+    "no_light",
+    "no_poisonous",
+    "no_strange_movement",
+    "no_building",
 ]
 
 
 @u7_app.command("map-render")
 def map_render_cmd(
-    static: Annotated[Optional[str], typer.Argument(
-        help="Path to STATIC directory containing U7MAP, U7CHUNKS, "
-             "SHAPES.VGA, etc. (default: from titan.toml u7bg/u7si)")] = None,
+    static: Annotated[
+        Optional[str],
+        typer.Argument(
+            help="Path to STATIC directory containing U7MAP, U7CHUNKS, "
+            "SHAPES.VGA, etc. (default: from titan.toml u7bg/u7si)"
+        ),
+    ] = None,
     game: Annotated[
         Literal["bg", "si"],
         typer.Option("--game", help="Use config section for BG or SI defaults"),
     ] = "bg",
     superchunk: Annotated[
         Optional[str],
-        typer.Option("--superchunk", "--sc",
-                     help="Superchunk number 0–143 (decimal or hex, e.g. 85 or 0x55)"),
+        typer.Option(
+            "--superchunk",
+            "--sc",
+            help="Superchunk number 0–143 (decimal or hex, e.g. 85 or 0x55)",
+        ),
     ] = None,
     chunk_x0: Annotated[
         Optional[int],
@@ -1790,8 +2012,11 @@ def map_render_cmd(
     ] = None,
     palette: Annotated[
         Optional[str],
-        typer.Option("-p", "--palette",
-                     help="Path to PALETTES.FLX (default: STATIC/PALETTES.FLX)"),
+        typer.Option(
+            "-p",
+            "--palette",
+            help="Path to PALETTES.FLX (default: STATIC/PALETTES.FLX)",
+        ),
     ] = None,
     output: Annotated[
         Optional[str],
@@ -1799,19 +2024,21 @@ def map_render_cmd(
     ] = None,
     view: Annotated[
         Optional[str],
-        typer.Option("--view",
-                     help="Projection view: classic, flat, steep"),
+        typer.Option("--view", help="Projection view: classic, flat, steep"),
     ] = None,
     gamedat: Annotated[
         Optional[str],
-        typer.Option("--gamedat",
-                     help="Path to gamedat/ directory for IREG dynamic objects"),
+        typer.Option(
+            "--gamedat", help="Path to gamedat/ directory for IREG dynamic objects"
+        ),
     ] = None,
     grid: Annotated[
         bool,
-        typer.Option("--grid/--no-grid",
-                     help="Overlay chunk grid (blue) and superchunk "
-                          "borders (red) with coordinate labels"),
+        typer.Option(
+            "--grid/--no-grid",
+            help="Overlay chunk grid (blue) and superchunk "
+            "borders (red) with coordinate labels",
+        ),
     ] = False,
     grid_size: Annotated[
         int,
@@ -1819,21 +2046,27 @@ def map_render_cmd(
     ] = 1,
     full: Annotated[
         bool,
-        typer.Option("--full",
-                     help="Render the entire world map (shorthand for "
-                          "--cx0 0 --cy0 0 --cx1 191 --cy1 191)"),
+        typer.Option(
+            "--full",
+            help="Render the entire world map (shorthand for "
+            "--cx0 0 --cy0 0 --cx1 191 --cy1 191)",
+        ),
     ] = False,
     exclude: Annotated[
         Optional[list[str]],
-        typer.Option("--exclude",
-                     help=f"Exclude shapes by TFA flag. "
-                          f"Repeatable. Choices: {', '.join(_EXCLUDE_FLAG_CHOICES)}"),
+        typer.Option(
+            "--exclude",
+            help=f"Exclude shapes by TFA flag. "
+            f"Repeatable. Choices: {', '.join(_EXCLUDE_FLAG_CHOICES)}",
+        ),
     ] = None,
     max_lift: Annotated[
         Optional[int],
-        typer.Option("--max-lift",
-                     help="Maximum object lift (tz) to render (0-15). "
-                          "Objects above this lift are hidden."),
+        typer.Option(
+            "--max-lift",
+            help="Maximum object lift (tz) to render (0-15). "
+            "Objects above this lift are hidden.",
+        ),
     ] = None,
     highlight_tile_rect: Annotated[
         Optional[list[str]],
@@ -1919,8 +2152,10 @@ def map_render_cmd(
     if full:
         chunk_x0, chunk_y0, chunk_x1, chunk_y1 = 0, 0, 191, 191
     if superchunk is None and chunk_x0 is None:
-        print("ERROR: Specify --superchunk N, --full, or --cx0/--cy0 chunk range.",
-              file=sys.stderr)
+        print(
+            "ERROR: Specify --superchunk N, --full, or --cx0/--cy0 chunk range.",
+            file=sys.stderr,
+        )
         raise SystemExit(1)
 
     sc_int: int | None = None
@@ -1928,23 +2163,25 @@ def map_render_cmd(
         try:
             sc_int = int(superchunk, 0)
         except ValueError:
-            print(f"ERROR: --superchunk '{superchunk}' is not a valid integer.",
-                  file=sys.stderr)
+            print(
+                f"ERROR: --superchunk '{superchunk}' is not a valid integer.",
+                file=sys.stderr,
+            )
             raise SystemExit(1)
 
-    parsed_highlights: list[tuple[int, int, int, int, tuple[int, int, int, int], str]] = []
+    parsed_highlights: list[
+        tuple[int, int, int, int, tuple[int, int, int, int], str]
+    ] = []
     if highlight_tile_rect:
         for raw in highlight_tile_rect:
             try:
                 parsed_highlights.append(_parse_highlight_tile_rect(raw))
             except ValueError as exc:
-                print(f"ERROR: --highlight-tile-rect '{raw}': {exc}",
-                      file=sys.stderr)
+                print(f"ERROR: --highlight-tile-rect '{raw}': {exc}", file=sys.stderr)
                 raise SystemExit(1)
 
     if zone_profile is None and (zone_id or all_zones):
-        print("ERROR: --zone-id/--all-zones requires --zone-profile.",
-              file=sys.stderr)
+        print("ERROR: --zone-id/--all-zones requires --zone-profile.", file=sys.stderr)
         raise SystemExit(1)
 
     if zone_profile:
@@ -1966,35 +2203,54 @@ def map_render_cmd(
         parsed_highlights.extend(profile_rects)
         print(f"Zone profile '{zone_profile}' -> {len(profile_rects)} rectangle(s)")
 
-    raise SystemExit(cmd_map_render(SimpleNamespace(
-        game=game,
-        static=static, superchunk=sc_int,
-        chunk_x0=chunk_x0 or 0, chunk_y0=chunk_y0 or 0,
-        chunk_x1=chunk_x1, chunk_y1=chunk_y1,
-        palette=palette, output=output, view=view,
-        gamedat=gamedat, grid=grid, grid_size=grid_size,
-        exclude_flags=exclude, max_lift=max_lift,
-        map_num=map_num,
-        highlight_rects=parsed_highlights,
-        highlight_width=highlight_width,
-        highlight_lift=highlight_lift,
-        highlight_fill_alpha=highlight_fill_alpha,
-        highlight_labels=highlight_labels,
-    )))
+    raise SystemExit(
+        cmd_map_render(
+            SimpleNamespace(
+                game=game,
+                static=static,
+                superchunk=sc_int,
+                chunk_x0=chunk_x0 or 0,
+                chunk_y0=chunk_y0 or 0,
+                chunk_x1=chunk_x1,
+                chunk_y1=chunk_y1,
+                palette=palette,
+                output=output,
+                view=view,
+                gamedat=gamedat,
+                grid=grid,
+                grid_size=grid_size,
+                exclude_flags=exclude,
+                max_lift=max_lift,
+                map_num=map_num,
+                highlight_rects=parsed_highlights,
+                highlight_width=highlight_width,
+                highlight_lift=highlight_lift,
+                highlight_fill_alpha=highlight_fill_alpha,
+                highlight_labels=highlight_labels,
+            )
+        )
+    )
 
 
 @u7_app.command("map-sample")
 def map_sample_cmd(
-    static: Annotated[Optional[str], typer.Argument(
-        help="Path to STATIC directory (default: from titan.toml u7bg/u7si)")] = None,
+    static: Annotated[
+        Optional[str],
+        typer.Argument(
+            help="Path to STATIC directory (default: from titan.toml u7bg/u7si)"
+        ),
+    ] = None,
     game: Annotated[
         Literal["bg", "si"],
         typer.Option("--game", help="Use config section for BG or SI defaults"),
     ] = "bg",
     palette: Annotated[
         Optional[str],
-        typer.Option("-p", "--palette",
-                     help="Path to PALETTES.FLX (default: STATIC/PALETTES.FLX)"),
+        typer.Option(
+            "-p",
+            "--palette",
+            help="Path to PALETTES.FLX (default: STATIC/PALETTES.FLX)",
+        ),
     ] = None,
     output: Annotated[
         Optional[str],
@@ -2002,14 +2258,17 @@ def map_sample_cmd(
     ] = None,
     scale: Annotated[
         int,
-        typer.Option("--scale",
-                     help="Tiles per output pixel (1=full, 4=768px, 8=384px)"),
+        typer.Option(
+            "--scale", help="Tiles per output pixel (1=full, 4=768px, 8=384px)"
+        ),
     ] = 4,
     grid: Annotated[
         bool,
-        typer.Option("--grid/--no-grid",
-                     help="Overlay chunk grid (blue, scale<=2) and "
-                          "superchunk grid (red) with coordinate labels"),
+        typer.Option(
+            "--grid/--no-grid",
+            help="Overlay chunk grid (blue, scale<=2) and "
+            "superchunk grid (red) with coordinate labels",
+        ),
     ] = False,
     grid_size: Annotated[
         int,
@@ -2017,62 +2276,86 @@ def map_sample_cmd(
     ] = 1,
     superchunks: Annotated[
         Optional[list[int]],
-        typer.Option("--sc",
-                     help="Only sample these superchunks (repeatable)"),
+        typer.Option("--sc", help="Only sample these superchunks (repeatable)"),
     ] = None,
     exclude: Annotated[
         Optional[list[str]],
-        typer.Option("--exclude",
-                     help="Exclude shapes by TFA flag (repeatable)"),
+        typer.Option("--exclude", help="Exclude shapes by TFA flag (repeatable)"),
     ] = None,
 ) -> None:
     """Render a colour-sampled U7 world minimap to PNG."""
-    raise SystemExit(cmd_map_sample(SimpleNamespace(
-        game=game,
-        static=static, palette=palette, output=output,
-        scale=scale, grid=grid, grid_size=grid_size,
-        superchunks=superchunks, exclude_flags=exclude,
-    )))
+    raise SystemExit(
+        cmd_map_sample(
+            SimpleNamespace(
+                game=game,
+                static=static,
+                palette=palette,
+                output=output,
+                scale=scale,
+                grid=grid,
+                grid_size=grid_size,
+                superchunks=superchunks,
+                exclude_flags=exclude,
+            )
+        )
+    )
 
 
 @u7_app.command("typeflag-dump")
 def typeflag_dump_cmd(
-    static: Annotated[Optional[str], typer.Argument(
-        help="Path to STATIC directory containing TFA.DAT (default: from titan.toml u7bg/u7si)")] = None,
+    static: Annotated[
+        Optional[str],
+        typer.Argument(
+            help="Path to STATIC directory containing TFA.DAT (default: from titan.toml u7bg/u7si)"
+        ),
+    ] = None,
     game: Annotated[
         Literal["bg", "si"],
         typer.Option("--game", help="Use config section for BG or SI defaults"),
     ] = "bg",
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output",
-                     help="Write dump to this file"),
+        typer.Option("-o", "--output", help="Write dump to this file"),
     ] = None,
     format: Annotated[
         Optional[str],
-        typer.Option("-f", "--format",
-                     help="Output format: summary (default), detail, csv"),
+        typer.Option(
+            "-f", "--format", help="Output format: summary (default), detail, csv"
+        ),
     ] = None,
 ) -> None:
     """Dump U7 type flag data (TFA.DAT, SHPDIMS.DAT, WGTVOL.DAT, OCCLUDE.DAT)."""
-    raise SystemExit(cmd_typeflag_dump(SimpleNamespace(
-        game=game,
-        static=static, output=output, format=format,
-    )))
+    raise SystemExit(
+        cmd_typeflag_dump(
+            SimpleNamespace(
+                game=game,
+                static=static,
+                output=output,
+                format=format,
+            )
+        )
+    )
 
 
 # ============================================================================
 # TYPER COMMAND WRAPPERS — SAVE
 # ============================================================================
 
+
 @u7_app.command("npc-dump")
 def npc_dump_cmd(
-    file: Annotated[str, typer.Argument(
-        help="Path to npc.dat, a GAMEDAT directory, or STATIC/INITGAME.DAT")],
+    file: Annotated[
+        str,
+        typer.Argument(
+            help="Path to npc.dat, a GAMEDAT directory, or STATIC/INITGAME.DAT"
+        ),
+    ],
     static: Annotated[
         Optional[str],
-        typer.Option("--static",
-                     help="Path to STATIC directory (default: from titan.toml u7bg/u7si)"),
+        typer.Option(
+            "--static",
+            help="Path to STATIC directory (default: from titan.toml u7bg/u7si)",
+        ),
     ] = None,
     game: Annotated[
         Literal["bg", "si"],
@@ -2080,34 +2363,48 @@ def npc_dump_cmd(
     ] = "bg",
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output",
-                     help="Write dump to this file"),
+        typer.Option("-o", "--output", help="Write dump to this file"),
     ] = None,
     format: Annotated[
         Optional[str],
-        typer.Option("-f", "--format",
-                     help="Output format: summary (default), detail, csv"),
+        typer.Option(
+            "-f", "--format", help="Output format: summary (default), detail, csv"
+        ),
     ] = None,
 ) -> None:
     """Dump NPC data from loose Exult GAMEDAT npc.dat or INITGAME.DAT."""
-    raise SystemExit(cmd_npc_dump(SimpleNamespace(
-        file=file, game=game, static=static, output=output, format=format,
-    )))
+    raise SystemExit(
+        cmd_npc_dump(
+            SimpleNamespace(
+                file=file,
+                game=game,
+                static=static,
+                output=output,
+                format=format,
+            )
+        )
+    )
 
 
 @u7_app.command("schedule-dump")
 def schedule_dump_cmd(
-    file: Annotated[str, typer.Argument(
-        help="Path to schedule.dat or a directory containing schedule.dat")],
+    file: Annotated[
+        str,
+        typer.Argument(
+            help="Path to schedule.dat or a directory containing schedule.dat"
+        ),
+    ],
     npc_file: Annotated[
         Optional[str],
-        typer.Option("--npc-file",
-                     help="Optional npc.dat file or directory for NPC names"),
+        typer.Option(
+            "--npc-file", help="Optional npc.dat file or directory for NPC names"
+        ),
     ] = None,
     static: Annotated[
         Optional[str],
-        typer.Option("--static",
-                     help="Path to STATIC directory for npc.dat inventory parsing"),
+        typer.Option(
+            "--static", help="Path to STATIC directory for npc.dat inventory parsing"
+        ),
     ] = None,
     game: Annotated[
         Literal["bg", "si"],
@@ -2115,30 +2412,43 @@ def schedule_dump_cmd(
     ] = "bg",
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output",
-                     help="Write dump to this file"),
+        typer.Option("-o", "--output", help="Write dump to this file"),
     ] = None,
     format: Annotated[
         Optional[str],
-        typer.Option("-f", "--format",
-                     help="Output format: summary (default), detail, csv"),
+        typer.Option(
+            "-f", "--format", help="Output format: summary (default), detail, csv"
+        ),
     ] = None,
 ) -> None:
     """Dump NPC schedules from loose Exult schedule.dat."""
-    raise SystemExit(cmd_schedule_dump(SimpleNamespace(
-        file=file, npc_file=npc_file, game=game, static=static,
-        output=output, format=format,
-    )))
+    raise SystemExit(
+        cmd_schedule_dump(
+            SimpleNamespace(
+                file=file,
+                npc_file=npc_file,
+                game=game,
+                static=static,
+                output=output,
+                format=format,
+            )
+        )
+    )
 
 
 @u7_app.command("gamedat-info")
 def gamedat_info_cmd(
-    directory: Annotated[Optional[str], typer.Argument(
-        help="Path to a loose Exult GAMEDAT directory or archive (default: titan.toml/user profile)")] = None,
+    directory: Annotated[
+        Optional[str],
+        typer.Argument(
+            help="Path to a loose Exult GAMEDAT directory or archive (default: titan.toml/user profile)"
+        ),
+    ] = None,
     static: Annotated[
         Optional[str],
-        typer.Option("--static",
-                     help="Path to STATIC directory for npc.dat inventory parsing"),
+        typer.Option(
+            "--static", help="Path to STATIC directory for npc.dat inventory parsing"
+        ),
     ] = None,
     game: Annotated[
         Literal["bg", "si"],
@@ -2146,30 +2456,163 @@ def gamedat_info_cmd(
     ] = "bg",
     mod: Annotated[
         Optional[str],
-        typer.Option("--mod", help="Resolve user-profile Exult runtime GAMEDAT for this mod"),
+        typer.Option(
+            "--mod", help="Resolve user-profile Exult runtime GAMEDAT for this mod"
+        ),
     ] = None,
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output",
-                     help="Write dump to this file"),
+        typer.Option("-o", "--output", help="Write dump to this file"),
     ] = None,
     format: Annotated[
         Optional[str],
-        typer.Option("-f", "--format",
-                     help="Output format: summary (default), detail, csv"),
+        typer.Option(
+            "-f", "--format", help="Output format: summary (default), detail, csv"
+        ),
     ] = None,
 ) -> None:
     """Inspect loose Exult GAMEDAT files or archives."""
-    raise SystemExit(cmd_gamedat_info(SimpleNamespace(
-        directory=directory, game=game, mod=mod, static=static, output=output,
-        format=format,
-    )))
+    raise SystemExit(
+        cmd_gamedat_info(
+            SimpleNamespace(
+                directory=directory,
+                game=game,
+                mod=mod,
+                static=static,
+                output=output,
+                format=format,
+            )
+        )
+    )
+
+
+@u7_app.command("monster-defs")
+def monster_defs_cmd(
+    file: Annotated[
+        str, typer.Argument(help="Path to MONSTERS.DAT or STATIC directory")
+    ],
+    game: Annotated[
+        Literal["bg", "si"],
+        typer.Option("--game", help="Use BG or SI decoding rules"),
+    ] = "bg",
+    mod_file: Annotated[
+        Optional[str],
+        typer.Option("--mod-file", help="Optional mod MONSTERS.DAT to merge over base"),
+    ] = None,
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Write dump to this file"),
+    ] = None,
+    format: Annotated[
+        Optional[str],
+        typer.Option("-f", "--format", help="Output format: summary (default), csv"),
+    ] = None,
+) -> None:
+    """Dump decoded MONSTERS.DAT monster definitions."""
+    raise SystemExit(
+        cmd_monster_defs(
+            SimpleNamespace(
+                file=file,
+                game=game,
+                mod_file=mod_file,
+                output=output,
+                format=format,
+            )
+        )
+    )
+
+
+@u7_app.command("monster-dump")
+def monster_dump_cmd(
+    file: Annotated[
+        str,
+        typer.Argument(
+            help="Path to monsnpcs.dat, GAMEDAT directory, or Exult save archive"
+        ),
+    ],
+    static: Annotated[
+        Optional[str],
+        typer.Option("--static", help="Path to STATIC directory for inventory parsing"),
+    ] = None,
+    game: Annotated[
+        Literal["bg", "si"],
+        typer.Option("--game", help="Use BG or SI defaults"),
+    ] = "bg",
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Write dump to this file"),
+    ] = None,
+    format: Annotated[
+        Optional[str],
+        typer.Option("-f", "--format", help="Output format: summary (default), csv"),
+    ] = None,
+) -> None:
+    """Dump live monster actors from Exult monsnpcs.dat."""
+    raise SystemExit(
+        cmd_monster_dump(
+            SimpleNamespace(
+                file=file,
+                game=game,
+                static=static,
+                output=output,
+                format=format,
+            )
+        )
+    )
+
+
+@u7_app.command("monster-report")
+def monster_report_cmd(
+    static: Annotated[
+        Optional[str],
+        typer.Argument(help="Path to STATIC directory (default: titan.toml)"),
+    ] = None,
+    gamedat: Annotated[
+        Optional[str],
+        typer.Option("--gamedat", help="Path to Exult GAMEDAT directory"),
+    ] = None,
+    live_source: Annotated[
+        Optional[str],
+        typer.Option("--live-source", help="monsnpcs.dat, GAMEDAT, or save archive"),
+    ] = None,
+    mod_monsters: Annotated[
+        Optional[str],
+        typer.Option("--mod-monsters", help="Optional mod MONSTERS.DAT override file"),
+    ] = None,
+    mod: Annotated[
+        Optional[str],
+        typer.Option(
+            "--mod", help="Resolve user-profile Exult runtime GAMEDAT for this mod"
+        ),
+    ] = None,
+    game: Annotated[
+        Literal["bg", "si"],
+        typer.Option("--game", help="Use config section for BG or SI"),
+    ] = "bg",
+    output_dir: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output-dir", help="Directory for joined CSV report"),
+    ] = None,
+) -> None:
+    """Export monster definitions, live actors, spawn eggs, and placements."""
+    raise SystemExit(
+        cmd_monster_report(
+            SimpleNamespace(
+                static=static,
+                gamedat=gamedat,
+                live_source=live_source,
+                mod_monsters=mod_monsters,
+                mod=mod,
+                game=game,
+                output_dir=output_dir,
+            )
+        )
+    )
 
 
 @u7_app.command("save-list")
 def save_list_cmd(
-    file: Annotated[str, typer.Argument(
-        help="Path to Exult .sav file")],
+    file: Annotated[str, typer.Argument(help="Path to Exult .sav file")],
 ) -> None:
     """List contents of an Exult U7 savegame file (ZIP or FLEX)."""
     raise SystemExit(cmd_save_list(SimpleNamespace(file=file)))
@@ -2177,70 +2620,84 @@ def save_list_cmd(
 
 @u7_app.command("save-extract")
 def save_extract_cmd(
-    file: Annotated[str, typer.Argument(
-        help="Path to Exult .sav file")],
+    file: Annotated[str, typer.Argument(help="Path to Exult .sav file")],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output",
-                     help="Output directory (default: save filename stem)"),
+        typer.Option(
+            "-o", "--output", help="Output directory (default: save filename stem)"
+        ),
     ] = None,
     entry: Annotated[
         Optional[str],
-        typer.Option("-e", "--entry",
-                     help="Extract only this named entry"),
+        typer.Option("-e", "--entry", help="Extract only this named entry"),
     ] = None,
 ) -> None:
     """Extract files from an Exult U7 savegame archive."""
-    raise SystemExit(cmd_save_extract(SimpleNamespace(
-        file=file, output=output, entry=entry,
-    )))
+    raise SystemExit(
+        cmd_save_extract(
+            SimpleNamespace(
+                file=file,
+                output=output,
+                entry=entry,
+            )
+        )
+    )
 
 
 @u7_app.command("gflag-dump")
 def gflag_dump_cmd(
-    file: Annotated[str, typer.Argument(
-        help="Exult .sav file or loose flaginit file")],
+    file: Annotated[str, typer.Argument(help="Exult .sav file or loose flaginit file")],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output",
-                     help="Write dump to this file"),
+        typer.Option("-o", "--output", help="Write dump to this file"),
     ] = None,
     format: Annotated[
         Optional[str],
-        typer.Option("-f", "--format",
-                     help="Output format: summary (default), detail, csv"),
+        typer.Option(
+            "-f", "--format", help="Output format: summary (default), detail, csv"
+        ),
     ] = None,
 ) -> None:
     """Dump global flags from a U7 savegame or flaginit file."""
-    raise SystemExit(cmd_gflag_dump(SimpleNamespace(
-        file=file, output=output, format=format,
-    )))
+    raise SystemExit(
+        cmd_gflag_dump(
+            SimpleNamespace(
+                file=file,
+                output=output,
+                format=format,
+            )
+        )
+    )
 
 
 @u7_app.command("save-info")
 def save_info_cmd(
-    file: Annotated[str, typer.Argument(
-        help="Path to Exult .sav file")],
+    file: Annotated[str, typer.Argument(help="Path to Exult .sav file")],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output",
-                     help="Write output to this file"),
+        typer.Option("-o", "--output", help="Write output to this file"),
     ] = None,
 ) -> None:
     """Show save metadata: identity, timestamp, party, game state."""
-    raise SystemExit(cmd_save_info(SimpleNamespace(
-        file=file, output=output,
-    )))
+    raise SystemExit(
+        cmd_save_info(
+            SimpleNamespace(
+                file=file,
+                output=output,
+            )
+        )
+    )
 
 
 @u7_app.command("save-npcs")
 def save_npcs_cmd(
-    file: Annotated[str, typer.Argument(
-        help="Path to Exult .sav file")],
+    file: Annotated[str, typer.Argument(help="Path to Exult .sav file")],
     static: Annotated[
         Optional[str],
-        typer.Option("--static",
-                     help="Path to STATIC directory (default: from titan.toml u7bg/u7si)"),
+        typer.Option(
+            "--static",
+            help="Path to STATIC directory (default: from titan.toml u7bg/u7si)",
+        ),
     ] = None,
     game: Annotated[
         Literal["bg", "si"],
@@ -2248,29 +2705,37 @@ def save_npcs_cmd(
     ] = "bg",
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output",
-                     help="Write dump to this file"),
+        typer.Option("-o", "--output", help="Write dump to this file"),
     ] = None,
     format: Annotated[
         Optional[str],
-        typer.Option("-f", "--format",
-                     help="Output format: summary (default), detail, csv"),
+        typer.Option(
+            "-f", "--format", help="Output format: summary (default), detail, csv"
+        ),
     ] = None,
 ) -> None:
     """Dump NPC data from an Exult U7 savegame."""
-    raise SystemExit(cmd_save_npcs(SimpleNamespace(
-        file=file, game=game, static=static, output=output, format=format,
-    )))
+    raise SystemExit(
+        cmd_save_npcs(
+            SimpleNamespace(
+                file=file,
+                game=game,
+                static=static,
+                output=output,
+                format=format,
+            )
+        )
+    )
 
 
 @u7_app.command("save-schedules")
 def save_schedules_cmd(
-    file: Annotated[str, typer.Argument(
-        help="Path to Exult .sav file")],
+    file: Annotated[str, typer.Argument(help="Path to Exult .sav file")],
     static: Annotated[
         Optional[str],
-        typer.Option("--static",
-                     help="Path to STATIC directory for npc.dat inventory parsing"),
+        typer.Option(
+            "--static", help="Path to STATIC directory for npc.dat inventory parsing"
+        ),
     ] = None,
     game: Annotated[
         Literal["bg", "si"],
@@ -2278,24 +2743,33 @@ def save_schedules_cmd(
     ] = "bg",
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output",
-                     help="Write dump to this file"),
+        typer.Option("-o", "--output", help="Write dump to this file"),
     ] = None,
     format: Annotated[
         Optional[str],
-        typer.Option("-f", "--format",
-                     help="Output format: summary (default), detail, csv"),
+        typer.Option(
+            "-f", "--format", help="Output format: summary (default), detail, csv"
+        ),
     ] = None,
 ) -> None:
     """Dump NPC schedules from an Exult U7 savegame."""
-    raise SystemExit(cmd_save_schedules(SimpleNamespace(
-        file=file, game=game, static=static, output=output, format=format,
-    )))
+    raise SystemExit(
+        cmd_save_schedules(
+            SimpleNamespace(
+                file=file,
+                game=game,
+                static=static,
+                output=output,
+                format=format,
+            )
+        )
+    )
 
 
 # ============================================================================
 # CMD_* IMPLEMENTATION FUNCTIONS — FONT CREATE
 # ============================================================================
+
 
 def cmd_font_create(args: SimpleNamespace) -> int:
     """Create a U7 font shape from a TrueType font."""
@@ -2310,13 +2784,13 @@ def cmd_font_create(args: SimpleNamespace) -> int:
 def font_create_cmd(
     config: Annotated[
         Optional[str],
-        typer.Option("--config", "-c",
-                     help="TOML config file (skip interactive prompts)"),
+        typer.Option(
+            "--config", "-c", help="TOML config file (skip interactive prompts)"
+        ),
     ] = None,
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output",
-                     help="Output file path"),
+        typer.Option("-o", "--output", help="Output file path"),
     ] = None,
 ) -> None:
     """Interactive wizard for creating U7 font shapes from TrueType fonts.
@@ -2328,14 +2802,20 @@ def font_create_cmd(
     With --config, reads all parameters from a TOML recipe file and
     generates the shape non-interactively.
     """
-    raise SystemExit(cmd_font_create(SimpleNamespace(
-        config=config, output=output,
-    )))
+    raise SystemExit(
+        cmd_font_create(
+            SimpleNamespace(
+                config=config,
+                output=output,
+            )
+        )
+    )
 
 
 # ============================================================================
 # TYPER COMMAND WRAPPERS — WORLD QUERY
 # ============================================================================
+
 
 @u7_app.command("world-query")
 def world_query_cmd(
@@ -2351,7 +2831,9 @@ def world_query_cmd(
     ] = "bg",
     gamedat: Annotated[
         Optional[str],
-        typer.Option("--gamedat", help="Path to gamedat/ directory for IREG dynamic objects"),
+        typer.Option(
+            "--gamedat", help="Path to gamedat/ directory for IREG dynamic objects"
+        ),
     ] = None,
     text: Annotated[
         Optional[str],
@@ -2360,11 +2842,17 @@ def world_query_cmd(
     # ── Non-interactive filters ──────────────────────────────────────────────
     shape_class: Annotated[
         Optional[list[str]],
-        typer.Option("--class", help="Shape class filter (repeatable): container, human, monster, …"),
+        typer.Option(
+            "--class",
+            help="Shape class filter (repeatable): container, human, monster, …",
+        ),
     ] = None,
     shape_num: Annotated[
         Optional[list[str]],
-        typer.Option("--shape", help="Shape number filter, hex or decimal (repeatable): 522, 0x20A"),
+        typer.Option(
+            "--shape",
+            help="Shape number filter, hex or decimal (repeatable): 522, 0x20A",
+        ),
     ] = None,
     name: Annotated[
         Optional[str],
@@ -2372,7 +2860,9 @@ def world_query_cmd(
     ] = None,
     flag: Annotated[
         Optional[list[str]],
-        typer.Option("--flag", help="TFA flag filter (repeatable): solid, animated, door, …"),
+        typer.Option(
+            "--flag", help="TFA flag filter (repeatable): solid, animated, door, …"
+        ),
     ] = None,
     tile_rect: Annotated[
         Optional[str],
@@ -2380,19 +2870,28 @@ def world_query_cmd(
     ] = None,
     sc: Annotated[
         Optional[list[str]],
-        typer.Option("--sc", help="Superchunk number filter, hex or decimal (repeatable): 0x55"),
+        typer.Option(
+            "--sc", help="Superchunk number filter, hex or decimal (repeatable): 0x55"
+        ),
     ] = None,
     ireg: Annotated[
         bool,
-        typer.Option("--ireg/--no-ireg", help="Include IREG dynamic objects (default: auto)"),
+        typer.Option(
+            "--ireg/--no-ireg", help="Include IREG dynamic objects (default: auto)"
+        ),
     ] = False,
     map_num: Annotated[
         int,
-        typer.Option("--map-num", help="Map number: 0 = default world map, 1+ = mapNN/ subdirectory inside STATIC and gamedat (default: 0)"),
+        typer.Option(
+            "--map-num",
+            help="Map number: 0 = default world map, 1+ = mapNN/ subdirectory inside STATIC and gamedat (default: 0)",
+        ),
     ] = 0,
     format: Annotated[
         Optional[str],
-        typer.Option("-f", "--format", help="Output format: summary (default), full_text, csv"),
+        typer.Option(
+            "-f", "--format", help="Output format: summary (default), full_text, csv"
+        ),
     ] = None,
     output: Annotated[
         Optional[str],
@@ -2410,7 +2909,12 @@ def world_query_cmd(
       titan u7 world-query STATIC/ --name "locked chest" --ireg --gamedat gamedat/ -f csv -o out.csv
       titan u7 world-query STATIC/ --shape 522 --ireg --gamedat gamedat/ -f full_text
     """
-    from titan.u7.world import run_wizard as _world_wizard, WorldQueryParams, run_query, format_result
+    from titan.u7.world import (
+        run_wizard as _world_wizard,
+        WorldQueryParams,
+        run_query,
+        format_result,
+    )
     from titan.u7.typeflag import U7TypeFlags
 
     static_dir = static
@@ -2425,14 +2929,18 @@ def world_query_cmd(
     text_flx = text or _resolve_u7_text_flx(game, static_dir)
 
     # Non-interactive mode when any filter flag is supplied
-    _non_interactive = any([shape_class, shape_num, name, flag, tile_rect, sc, format, output, ireg])
+    _non_interactive = any(
+        [shape_class, shape_num, name, flag, tile_rect, sc, format, output, ireg]
+    )
 
     if not _non_interactive:
-        raise SystemExit(_world_wizard(
-            static_dir=static_dir,
-            gamedat_dir=gamedat_dir,
-            text_flx=text_flx,
-        ))
+        raise SystemExit(
+            _world_wizard(
+                static_dir=static_dir,
+                gamedat_dir=gamedat_dir,
+                text_flx=text_flx,
+            )
+        )
 
     # ── Parse CLI filters ────────────────────────────────────────────────────
     shape_class_ids: list[int] = []
@@ -2443,7 +2951,10 @@ def world_query_cmd(
             if cid is not None:
                 shape_class_ids.append(cid)
             else:
-                typer.echo(f"Unknown shape class: {cls_name!r}. Valid: {', '.join(_class_map)}", err=True)
+                typer.echo(
+                    f"Unknown shape class: {cls_name!r}. Valid: {', '.join(_class_map)}",
+                    err=True,
+                )
                 raise SystemExit(1)
 
     shape_nums: list[int] = []
@@ -2477,9 +2988,9 @@ def world_query_cmd(
             typer.echo("--tile-rect values must be integers", err=True)
             raise SystemExit(1)
 
-    use_ireg = ireg or bool(gamedat_dir and any([
-        cls in (6, 7, 12, 13) for cls in shape_class_ids
-    ]))
+    use_ireg = ireg or bool(
+        gamedat_dir and any([cls in (6, 7, 12, 13) for cls in shape_class_ids])
+    )
 
     params = WorldQueryParams(
         static_dir=static_dir or "",
@@ -2503,6 +3014,7 @@ def world_query_cmd(
 
     if output:
         from pathlib import Path as _Path
+
         _Path(output).write_text(out, encoding="utf-8")
         typer.echo(f"Wrote {result.count} result(s) to {output}")
     else:
@@ -2523,7 +3035,9 @@ def container_browse_cmd(
     ] = "bg",
     gamedat: Annotated[
         Optional[str],
-        typer.Option("--gamedat", help="Path to gamedat/ directory (required for IREG)"),
+        typer.Option(
+            "--gamedat", help="Path to gamedat/ directory (required for IREG)"
+        ),
     ] = None,
     text: Annotated[
         Optional[str],
@@ -2531,33 +3045,54 @@ def container_browse_cmd(
     ] = None,
     exult_flx: Annotated[
         Optional[str],
-        typer.Option("--exult-flx", help="Path to exult_bg.flx (or exult_si.flx) for per-frame item names"),
+        typer.Option(
+            "--exult-flx",
+            help="Path to exult_bg.flx (or exult_si.flx) for per-frame item names",
+        ),
     ] = None,
     mod_data: Annotated[
         Optional[str],
-        typer.Option("--mod-data", help="Path to mod patch/data directory (textmsg.txt + shape_info.txt for mod-specific names)"),
+        typer.Option(
+            "--mod-data",
+            help="Path to mod patch/data directory (textmsg.txt + shape_info.txt for mod-specific names)",
+        ),
     ] = None,
     map_num: Annotated[
         int,
-        typer.Option("--map-num", help="Map number to query: 0 = default world map, 1+ = mod map subdirectory (mapNN/)"),
+        typer.Option(
+            "--map-num",
+            help="Map number to query: 0 = default world map, 1+ = mod map subdirectory (mapNN/)",
+        ),
     ] = 0,
     # ── Container identity filters ───────────────────────────────────────────
     container_shape: Annotated[
         Optional[list[str]],
-        typer.Option("--container-shape", help="Container shape number(s), hex or decimal (repeatable)"),
+        typer.Option(
+            "--container-shape",
+            help="Container shape number(s), hex or decimal (repeatable)",
+        ),
     ] = None,
     container_name: Annotated[
         Optional[str],
-        typer.Option("--container-name", help="Container name substring filter (case-insensitive)"),
+        typer.Option(
+            "--container-name",
+            help="Container name substring filter (case-insensitive)",
+        ),
     ] = None,
     # ── Contents filters ─────────────────────────────────────────────────────
     contains_shape: Annotated[
         Optional[list[str]],
-        typer.Option("--contains-shape", help="Only show containers holding item with this shape (repeatable)"),
+        typer.Option(
+            "--contains-shape",
+            help="Only show containers holding item with this shape (repeatable)",
+        ),
     ] = None,
     contains_name: Annotated[
         Optional[str],
-        typer.Option("--contains-name", help="Only show containers holding item matching name substring"),
+        typer.Option(
+            "--contains-name",
+            help="Only show containers holding item matching name substring",
+        ),
     ] = None,
     # ── Area filters ─────────────────────────────────────────────────────────
     tile_rect: Annotated[
@@ -2566,7 +3101,9 @@ def container_browse_cmd(
     ] = None,
     sc: Annotated[
         Optional[list[str]],
-        typer.Option("--sc", help="Superchunk number filter, hex or decimal (repeatable)"),
+        typer.Option(
+            "--sc", help="Superchunk number filter, hex or decimal (repeatable)"
+        ),
     ] = None,
     # ── Output ───────────────────────────────────────────────────────────────
     format: Annotated[
@@ -2611,22 +3148,32 @@ def container_browse_cmd(
 
     text_flx = text or _resolve_u7_text_flx(game, static_dir)
 
-    _non_interactive = any([
-        container_shape, container_name, contains_shape, contains_name,
-        tile_rect, sc, format, output,
-    ])
+    _non_interactive = any(
+        [
+            container_shape,
+            container_name,
+            contains_shape,
+            contains_name,
+            tile_rect,
+            sc,
+            format,
+            output,
+        ]
+    )
 
     _exult_flx = exult_flx or exult_cfg(f"{game}_flx") or None
 
     if not _non_interactive:
-        raise SystemExit(_container_wizard(
-            static_dir=static_dir,
-            gamedat_dir=gamedat_dir,
-            text_flx=text_flx,
-            exult_flx_path=_exult_flx,
-            mod_data_dir=mod_data,
-            map_num=map_num,
-        ))
+        raise SystemExit(
+            _container_wizard(
+                static_dir=static_dir,
+                gamedat_dir=gamedat_dir,
+                text_flx=text_flx,
+                exult_flx_path=_exult_flx,
+                mod_data_dir=mod_data,
+                map_num=map_num,
+            )
+        )
 
     # ── Parse filters ────────────────────────────────────────────────────────
     container_shape_nums: list[int] = []
@@ -2670,7 +3217,10 @@ def container_browse_cmd(
             raise SystemExit(1)
 
     if not gamedat_dir:
-        typer.echo("Error: --gamedat is required for container-browse (containers live in IREG)", err=True)
+        typer.echo(
+            "Error: --gamedat is required for container-browse (containers live in IREG)",
+            err=True,
+        )
         raise SystemExit(1)
 
     names: Optional[U7ShapeNames] = None
@@ -2693,7 +3243,10 @@ def container_browse_cmd(
     if mod_data and Path(mod_data).is_dir():
         names = U7ShapeNames.from_mod_dir(mod_data, base=names) or names
         if text_flx:
-            frame_names = U7FrameNames.from_mod_dir(mod_data, text_flx, base=frame_names) or frame_names
+            frame_names = (
+                U7FrameNames.from_mod_dir(mod_data, text_flx, base=frame_names)
+                or frame_names
+            )
 
     params = ContainerQueryParams(
         static_dir=static_dir or "",
@@ -2716,6 +3269,7 @@ def container_browse_cmd(
 
     if output:
         from pathlib import Path as _Path
+
         _Path(output).write_text(out, encoding="utf-8")
         typer.echo(f"Wrote {len(results)} container(s) to {output}")
     else:
@@ -2740,11 +3294,15 @@ def egg_query_cmd(
     ] = None,
     egg_type: Annotated[
         Optional[list[str]],
-        typer.Option("--type", help="Egg type filter (repeatable): usecode, monster, teleport, …"),
+        typer.Option(
+            "--type", help="Egg type filter (repeatable): usecode, monster, teleport, …"
+        ),
     ] = None,
     fn: Annotated[
         Optional[str],
-        typer.Option("--fn", help="Usecode function number filter, hex or decimal: 0x06BC"),
+        typer.Option(
+            "--fn", help="Usecode function number filter, hex or decimal: 0x06BC"
+        ),
     ] = None,
     tile_rect: Annotated[
         Optional[str],
@@ -2752,7 +3310,9 @@ def egg_query_cmd(
     ] = None,
     sc: Annotated[
         Optional[list[str]],
-        typer.Option("--sc", help="Superchunk number filter, hex or decimal (repeatable)"),
+        typer.Option(
+            "--sc", help="Superchunk number filter, hex or decimal (repeatable)"
+        ),
     ] = None,
     format: Annotated[
         Optional[str],
@@ -2795,17 +3355,23 @@ def egg_query_cmd(
     _non_interactive = any([egg_type, fn, tile_rect, sc, format, output])
 
     if not _non_interactive:
-        raise SystemExit(_egg_wizard(
-            static_dir=static_dir,
-            gamedat_dir=gamedat_dir,
-        ))
+        raise SystemExit(
+            _egg_wizard(
+                static_dir=static_dir,
+                gamedat_dir=gamedat_dir,
+            )
+        )
 
     # ── Validate --type values ───────────────────────────────────────────────
     from titan.u7.map import EGG_TYPE_NAMES as _ETN
+
     _valid_types = set(_ETN.values())
-    for t in (egg_type or []):
+    for t in egg_type or []:
         if t not in _valid_types:
-            typer.echo(f"Unknown egg type: {t!r}. Valid: {', '.join(sorted(_valid_types))}", err=True)
+            typer.echo(
+                f"Unknown egg type: {t!r}. Valid: {', '.join(sorted(_valid_types))}",
+                err=True,
+            )
             raise SystemExit(1)
 
     # ── Parse --fn ───────────────────────────────────────────────────────────
@@ -2842,7 +3408,9 @@ def egg_query_cmd(
             raise SystemExit(1)
 
     if not gamedat_dir:
-        typer.echo("Error: --gamedat is required for egg-query (eggs live in IREG)", err=True)
+        typer.echo(
+            "Error: --gamedat is required for egg-query (eggs live in IREG)", err=True
+        )
         raise SystemExit(1)
 
     params = EggQueryParams(
@@ -2861,6 +3429,7 @@ def egg_query_cmd(
 
     if output:
         from pathlib import Path as _Path
+
         _Path(output).write_text(out, encoding="utf-8")
         typer.echo(f"Wrote {len(results)} egg(s) to {output}")
     else:

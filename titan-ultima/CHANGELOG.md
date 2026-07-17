@@ -12,6 +12,20 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ## [0.6.8]
 
+### Added
+
+- Added U7 `MONSTERS.DAT` parser support for base and mod monster definition
+  files, including decoded stats, movement flags, immunities, vulnerabilities,
+  attack mode, equipment offset, SFX, raw bytes, and merged base/mod output.
+- Added U7 monster inspection commands:
+  - `titan u7 monster-defs` for decoded monster definition dumps.
+  - `titan u7 monster-dump` for live Exult `monsnpcs.dat` monster actors from
+    loose files, GAMEDAT directories, or save archives.
+  - `titan u7 monster-report` for joined monster exports covering definitions,
+    live monsters, monster eggs, and placed monster-class world objects.
+- Expanded U7 egg CSV export for monster eggs with decoded monster shape,
+  frame, spawn count, schedule, and alignment fields.
+
 ### Fixed
 
 - Cleaned U7 `build_exclude_set(no_building=True)` control flow so building
