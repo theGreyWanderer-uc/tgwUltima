@@ -5,6 +5,9 @@ from __future__ import annotations
 __all__ = [
     "U7MonsterDefinition",
     "U7MonsterDefinitions",
+    "U7MonsterEquipment",
+    "monster_equipment_csv",
+    "monster_equipment_summary",
     "monster_definitions_csv",
     "live_monsters_csv",
     "monster_report",
@@ -17,7 +20,9 @@ from pathlib import Path
 from typing import Iterable, Optional
 
 from titan.u7.eggs import EggQueryParams, format_csv as eggs_csv, query_eggs
+from titan.u7.names import U7ShapeNames
 from titan.u7.save import U7NPC, U7NPCData, U7Save
+from titan.u7.typeflag import U7TypeFlags
 from titan.u7.world import WorldQueryParams, _format_csv as world_csv, run_query
 
 
@@ -62,6 +67,8 @@ DAMAGE_BITS = (
 )
 
 _MONSTERS_ENTRY_SIZE = 25
+_EQUIP_ELEMENT_SIZE = 6
+_EQUIP_ELEMENTS_PER_RECORD = 10
 
 
 def _bit_names(value: int, table: Iterable[tuple[int, str]]) -> str:
@@ -358,6 +365,123 @@ class U7MonsterDefinitions:
         return U7MonsterDefinitions([merged[key] for key in sorted(merged)])
 
 
+@dataclass
+class U7MonsterEquipElement:
+    """One possible item entry in a monster equipment record."""
+
+    record_index: int
+    element_index: int
+    shape: int
+    probability: int
+    quantity: int
+
+    @property
+    def equip_offset(self) -> int:
+        return self.record_index + 1
+
+    def as_row(self) -> dict[str, object]:
+        return {
+            "equip_offset": self.equip_offset,
+            "record_index": self.record_index,
+            "element_index": self.element_index,
+            "shape": self.shape,
+            "shape_hex": f"0x{self.shape:04X}",
+            "probability": self.probability,
+            "quantity": self.quantity,
+        }
+
+
+class U7MonsterEquipment:
+    """Decoded monster ``equip.dat`` records."""
+
+    def __init__(
+        self,
+        records: list[list[U7MonsterEquipElement]],
+        source_file: str = "",
+    ) -> None:
+        self.records = records
+        self.source_file = source_file
+
+    @classmethod
+    def from_file(cls, filepath: str) -> "U7MonsterEquipment":
+        data = Path(filepath).read_bytes()
+        records = cls.from_bytes(data, source_file=filepath)
+        return records
+
+    @classmethod
+    def from_dir(cls, data_dir: str) -> "U7MonsterEquipment":
+        for name in ("equip.dat", "EQUIP.DAT"):
+            path = Path(data_dir) / name
+            if path.is_file():
+                return cls.from_file(str(path))
+        return cls([], source_file="")
+
+    @classmethod
+    def from_bytes(
+        cls,
+        data: bytes,
+        source_file: str = "",
+    ) -> "U7MonsterEquipment":
+        if not data:
+            return cls([], source_file=source_file)
+        pos = 0
+        count = data[pos]
+        pos += 1
+        if count == 255:
+            if pos + 2 > len(data):
+                return cls([], source_file=source_file)
+            count = int.from_bytes(data[pos : pos + 2], "little")
+            pos += 2
+
+        records: list[list[U7MonsterEquipElement]] = []
+        record_size = _EQUIP_ELEMENT_SIZE * _EQUIP_ELEMENTS_PER_RECORD
+        for record_index in range(count):
+            if pos + record_size > len(data):
+                break
+            elements: list[U7MonsterEquipElement] = []
+            for element_index in range(_EQUIP_ELEMENTS_PER_RECORD):
+                shape = int.from_bytes(data[pos : pos + 2], "little")
+                probability = data[pos + 2]
+                quantity = data[pos + 3]
+                pos += _EQUIP_ELEMENT_SIZE
+                elements.append(
+                    U7MonsterEquipElement(
+                        record_index=record_index,
+                        element_index=element_index,
+                        shape=shape,
+                        probability=probability,
+                        quantity=quantity,
+                    )
+                )
+            records.append(elements)
+        return cls(records, source_file=source_file)
+
+    def by_offset(self, equip_offset: int) -> list[U7MonsterEquipElement]:
+        if equip_offset <= 0 or equip_offset > len(self.records):
+            return []
+        return self.records[equip_offset - 1]
+
+    def dump_csv(self) -> str:
+        return _rows_to_csv(
+            [
+                {
+                    "source_file": self.source_file,
+                    **element.as_row(),
+                }
+                for record in self.records
+                for element in record
+            ]
+        )
+
+    def summary_for_offset(self, equip_offset: int) -> str:
+        parts = []
+        for element in self.by_offset(equip_offset):
+            if element.shape <= 0 or element.probability <= 0 or element.quantity <= 0:
+                continue
+            parts.append(f"{element.shape}x{element.quantity}@{element.probability}%")
+        return "|".join(parts)
+
+
 def _rows_to_csv(rows: list[dict[str, object]]) -> str:
     buf = io.StringIO()
     keys: list[str] = []
@@ -455,24 +579,233 @@ def monster_definitions_csv(
     )
 
 
+def _monster_spawn_report_csv(
+    eggs: list,
+    definitions: U7MonsterDefinitions,
+    equipment: U7MonsterEquipment,
+) -> str:
+    defs_by_shape = definitions.by_shape()
+    rows: list[dict[str, object]] = []
+    for egg in eggs:
+        meta = egg.meta
+        monster_shape = meta.monster_shape
+        definition = (
+            defs_by_shape.get(monster_shape) if monster_shape is not None else None
+        )
+        equip_offset = definition.equip_offset if definition else 0
+        row: dict[str, object] = {
+            "sc": f"0x{egg.superchunk:02X}",
+            "tx": egg.obj.tx,
+            "ty": egg.obj.ty,
+            "tz": egg.obj.tz,
+            "monster_shape": "" if monster_shape is None else monster_shape,
+            "monster_frame": "" if meta.monster_frame is None else meta.monster_frame,
+            "monster_count": "" if meta.monster_count is None else meta.monster_count,
+            "monster_schedule": (
+                "" if meta.monster_schedule is None else meta.monster_schedule
+            ),
+            "monster_alignment": (
+                "" if meta.monster_alignment is None else meta.monster_alignment
+            ),
+            "probability": meta.probability,
+            "distance": meta.distance,
+            "criteria": meta.criteria,
+            "criteria_name": meta.criteria_name,
+            "once": int(meta.once),
+            "nocturnal": int(meta.nocturnal),
+            "auto_reset": int(meta.auto_reset),
+            "hatched": int(meta.hatched),
+            "definition_found": int(definition is not None),
+            "equip_offset": equip_offset,
+            "equipment_summary": equipment.summary_for_offset(equip_offset),
+        }
+        if definition is not None:
+            for key, value in definition.as_row().items():
+                if key in {"shape", "shape_hex", "source_file", "offset", "raw_hex"}:
+                    continue
+                row[f"def_{key}"] = value
+        rows.append(row)
+    return _rows_to_csv(rows)
+
+
+def _pick_mod_equip(mod_monsters: str | None) -> str | None:
+    if not mod_monsters:
+        return None
+    path = Path(mod_monsters).parent
+    for name in ("equip.dat", "EQUIP.DAT"):
+        candidate = path / name
+        if candidate.is_file():
+            return str(candidate)
+    return None
+
+
+def _load_monster_equipment_inputs(
+    static_dir: str,
+    game: str,
+    mod_monsters: str | None,
+    equip_file: str | None,
+) -> tuple[U7MonsterDefinitions, U7MonsterEquipment, U7ShapeNames, U7TypeFlags]:
+    base_defs = U7MonsterDefinitions.from_dir(static_dir, game=game)
+    mod_defs = (
+        U7MonsterDefinitions.from_file(mod_monsters, game=game)
+        if mod_monsters and Path(mod_monsters).is_file()
+        else None
+    )
+    definitions = U7MonsterDefinitions.merge(base_defs, mod_defs)
+    resolved_equip = equip_file or _pick_mod_equip(mod_monsters)
+    equipment = (
+        U7MonsterEquipment.from_file(resolved_equip)
+        if resolved_equip and Path(resolved_equip).is_file()
+        else U7MonsterEquipment.from_dir(static_dir)
+    )
+    names = U7ShapeNames.from_static_dir(static_dir)
+    tfa = U7TypeFlags.from_dir(static_dir)
+    return definitions, equipment, names, tfa
+
+
+def monster_equipment_rows(
+    static_dir: str,
+    game: str = "bg",
+    mod_monsters: str | None = None,
+    equip_file: str | None = None,
+    monster_shapes: set[int] | None = None,
+) -> list[dict[str, object]]:
+    """Calculate possible monster equipment rows from definitions + equip.dat."""
+    definitions, equipment, names, tfa = _load_monster_equipment_inputs(
+        static_dir,
+        game,
+        mod_monsters,
+        equip_file,
+    )
+    rows: list[dict[str, object]] = []
+    for definition in definitions.active_records():
+        if monster_shapes and definition.shape not in monster_shapes:
+            continue
+        if definition.equip_offset <= 0:
+            continue
+        elements = equipment.by_offset(definition.equip_offset)
+        for element in elements:
+            if element.shape <= 0 or element.probability <= 0 or element.quantity <= 0:
+                continue
+            shape_entry = tfa.get(element.shape)
+            is_quantity = (
+                shape_entry is not None
+                and shape_entry.shape_class == U7TypeFlags.SHAPE_CLASS_QUANTITY
+            )
+            min_quantity = 1 if is_quantity else element.quantity
+            max_quantity = element.quantity
+            avg_on_create = (
+                (1 + element.quantity) / 2 if is_quantity else float(element.quantity)
+            )
+            expected_quantity = avg_on_create * (element.probability / 100)
+            rows.append(
+                {
+                    "monster_shape": definition.shape,
+                    "monster_shape_hex": definition.shape_hex,
+                    "monster_name": names.get(definition.shape),
+                    "equip_offset": definition.equip_offset,
+                    "element_index": element.element_index,
+                    "item_shape": element.shape,
+                    "item_shape_hex": f"0x{element.shape:04X}",
+                    "item_name": names.get(element.shape),
+                    "probability": element.probability,
+                    "quantity": element.quantity,
+                    "quantity_mode": "random_1_to_quantity"
+                    if is_quantity
+                    else "exact_quantity",
+                    "min_quantity_if_created": min_quantity,
+                    "max_quantity_if_created": max_quantity,
+                    "average_quantity_if_created": f"{avg_on_create:.2f}",
+                    "expected_quantity_per_spawn": f"{expected_quantity:.2f}",
+                    "note": (
+                        "Exult may add ammo for ammo-using weapons at runtime; "
+                        "not included here."
+                    ),
+                }
+            )
+    return rows
+
+
+def monster_equipment_csv(
+    static_dir: str,
+    game: str = "bg",
+    mod_monsters: str | None = None,
+    equip_file: str | None = None,
+    monster_shapes: set[int] | None = None,
+) -> str:
+    return _rows_to_csv(
+        monster_equipment_rows(
+            static_dir,
+            game,
+            mod_monsters,
+            equip_file,
+            monster_shapes,
+        )
+    )
+
+
+def monster_equipment_summary(
+    static_dir: str,
+    game: str = "bg",
+    mod_monsters: str | None = None,
+    equip_file: str | None = None,
+    monster_shapes: set[int] | None = None,
+) -> str:
+    rows = monster_equipment_rows(
+        static_dir,
+        game,
+        mod_monsters,
+        equip_file,
+        monster_shapes,
+    )
+    lines = [f"Monster equipment: {len(rows)} possible item row(s)."]
+    by_monster: dict[tuple[int, str], list[dict[str, object]]] = {}
+    for row in rows:
+        key = (int(row["monster_shape"]), str(row["monster_name"]))
+        by_monster.setdefault(key, []).append(row)
+    for (shape, name), monster_rows in sorted(by_monster.items())[:40]:
+        label = f"{shape} ({name})" if name else str(shape)
+        parts = [
+            f"{row['item_shape']}:{row['item_name']} x{row['quantity']}"
+            f" @{row['probability']}%"
+            for row in monster_rows
+        ]
+        lines.append(f"  {label}: " + "; ".join(parts))
+    if len(by_monster) > 40:
+        lines.append(f"  ... {len(by_monster) - 40} more monster(s)")
+    return "\n".join(lines)
+
+
 def monster_report(
     static_dir: str,
     gamedat_dir: str | None,
     live_source: str | None,
     game: str = "bg",
     mod_monsters: str | None = None,
+    mod_equip: str | None = None,
     output_dir: str | None = None,
 ) -> dict[str, str]:
     """Build a joined monster report and optionally write CSV files."""
-    base_csv, mod_csv, merged_csv = monster_definitions_csv(
-        static_dir,
-        game=game,
-        mod_file=mod_monsters,
+    base_defs = U7MonsterDefinitions.from_dir(static_dir, game=game)
+    mod_defs = (
+        U7MonsterDefinitions.from_file(mod_monsters, game=game)
+        if mod_monsters and Path(mod_monsters).is_file()
+        else None
+    )
+    merged_defs = U7MonsterDefinitions.merge(base_defs, mod_defs)
+    equipment_path = mod_equip or _pick_mod_equip(mod_monsters)
+    equipment = (
+        U7MonsterEquipment.from_file(equipment_path)
+        if equipment_path and Path(equipment_path).is_file()
+        else U7MonsterEquipment.from_dir(static_dir)
     )
     outputs: dict[str, str] = {
-        "monster_definitions_base.csv": base_csv,
-        "monster_definitions_mod.csv": mod_csv,
-        "monster_definitions_merged.csv": merged_csv,
+        "monster_definitions_base.csv": base_defs.dump_csv(),
+        "monster_definitions_mod.csv": mod_defs.dump_csv()
+        if mod_defs
+        else _rows_to_csv([]),
+        "monster_definitions_merged.csv": merged_defs.dump_csv(),
+        "monster_equipment.csv": equipment.dump_csv(),
     }
 
     if live_source:
@@ -491,6 +824,11 @@ def monster_report(
             )
         )
         outputs["monster_eggs.csv"] = eggs_csv(eggs)
+        outputs["monster_spawn_report.csv"] = _monster_spawn_report_csv(
+            eggs,
+            merged_defs,
+            equipment,
+        )
         world = run_query(
             WorldQueryParams(
                 static_dir=static_dir,
@@ -504,6 +842,7 @@ def monster_report(
         outputs["monster_world_objects.csv"] = world_csv(world)
     else:
         outputs["monster_eggs.csv"] = _rows_to_csv([])
+        outputs["monster_spawn_report.csv"] = _rows_to_csv([])
         outputs["monster_world_objects.csv"] = _rows_to_csv([])
 
     outputs["manifest.txt"] = "\n".join(
@@ -514,6 +853,7 @@ def monster_report(
             f"gamedat_dir={gamedat_dir or ''}",
             f"live_source={live_source or ''}",
             f"mod_monsters={mod_monsters or ''}",
+            f"mod_equip={equipment_path or ''}",
             "",
             "Files:",
             *sorted(name for name in outputs if name != "manifest.txt"),

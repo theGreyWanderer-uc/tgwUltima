@@ -240,6 +240,28 @@ def _load_container_shapes(
     return None
 
 
+def _load_shape_count(
+    args: SimpleNamespace,
+    fallback_static: str | None = None,
+) -> int | None:
+    """Load SHAPES.VGA record count for filtering non-shape pseudo IDs."""
+    static_dir = getattr(args, "static", None)
+    if not static_dir:
+        static_dir, _ = _resolve_u7_paths(getattr(args, "game", "bg"))
+    if not static_dir:
+        static_dir = fallback_static
+    if not static_dir:
+        return None
+
+    from titan.u7.flex import U7FlexArchive
+
+    for name in ("SHAPES.VGA", "shapes.vga"):
+        path = Path(static_dir) / name
+        if path.is_file():
+            return len(U7FlexArchive.from_file(str(path)).records)
+    return None
+
+
 # ============================================================================
 # CMD_* IMPLEMENTATION FUNCTIONS — PALETTE
 # ============================================================================
@@ -1121,22 +1143,33 @@ def cmd_npc_dump(args: SimpleNamespace) -> int:
             else _infer_static_dir_for_data_file(filepath)
         ),
     )
+    valid_shape_count = _load_shape_count(
+        args,
+        fallback_static=(
+            str(Path(filepath).resolve().parent)
+            if initgame_source
+            else _infer_static_dir_for_data_file(filepath)
+        ),
+    )
     if initgame_source:
         print("Sex:    decoded from original new-game data (raw bit 9 inverted)")
         npcs = U7NPCData.from_initgame_file(
             filepath,
             container_shapes=container_shapes,
+            valid_shape_count=valid_shape_count,
         )
     elif archive_source and archive is not None:
         print("Sex:    decoded from Exult runtime type_flags bit 9")
         npcs = U7NPCData.from_save(
             archive,
             container_shapes=container_shapes,
+            valid_shape_count=valid_shape_count,
         )
     else:
         npcs = U7NPCData.from_file(
             filepath,
             container_shapes=container_shapes,
+            valid_shape_count=valid_shape_count,
             npc_flavor="auto",
         )
         if npcs.npc_flavor == "original-new-game":
@@ -1204,9 +1237,12 @@ def cmd_schedule_dump(args: SimpleNamespace) -> int:
     if npc_save is not None or npc_file:
         try:
             container_shapes = _load_container_shapes(args, fallback_static=None)
+            valid_shape_count = _load_shape_count(args, fallback_static=None)
             if npc_save is not None:
                 npc_data = U7NPCData.from_save(
-                    npc_save, container_shapes=container_shapes
+                    npc_save,
+                    container_shapes=container_shapes,
+                    valid_shape_count=valid_shape_count,
                 )
                 print(
                     f"Names:  {len(npc_data.npcs)} NPC names loaded from {npc_file_arg}"
@@ -1215,7 +1251,9 @@ def cmd_schedule_dump(args: SimpleNamespace) -> int:
                 if npc_file is None:
                     raise ValueError("npc.dat path could not be resolved")
                 npc_data = U7NPCData.from_file(
-                    npc_file, container_shapes=container_shapes
+                    npc_file,
+                    container_shapes=container_shapes,
+                    valid_shape_count=valid_shape_count,
                 )
                 print(f"Names:  {len(npc_data.npcs)} NPC names loaded from {npc_file}")
             npc_names = npc_data.name_map()
@@ -1346,6 +1384,14 @@ def cmd_gamedat_info(args: SimpleNamespace) -> int:
             else _infer_static_dir_for_data_file(str(root / "npc.dat"))
         ),
     )
+    valid_shape_count = _load_shape_count(
+        args,
+        fallback_static=(
+            None
+            if archive is not None
+            else _infer_static_dir_for_data_file(str(root / "npc.dat"))
+        ),
+    )
 
     rows: list[tuple[str, int, str, str]] = []
 
@@ -1381,6 +1427,7 @@ def cmd_gamedat_info(args: SimpleNamespace) -> int:
         npcs = U7NPCData.from_bytes(
             npc_data,
             container_shapes=container_shapes,
+            valid_shape_count=valid_shape_count,
             npc_flavor=("original-new-game" if initgame_flex_source else "runtime"),
         )
         npc_names = npcs.name_map()
@@ -1637,6 +1684,56 @@ def cmd_monster_dump(args: SimpleNamespace) -> int:
     return 0
 
 
+def _parse_int_list(value: str | None) -> set[int]:
+    if not value:
+        return set()
+    parsed: set[int] = set()
+    for token in value.split(","):
+        token = token.strip()
+        if token:
+            parsed.add(int(token, 0))
+    return parsed
+
+
+def cmd_monster_equipment(args: SimpleNamespace) -> int:
+    """Calculate possible monster equipment from MONSTERS.DAT + equip.dat."""
+    from titan.u7.monster import monster_equipment_csv, monster_equipment_summary
+
+    static = getattr(args, "static", None)
+    if not static:
+        static, _ = _resolve_u7_paths(getattr(args, "game", "bg"))
+    if not static:
+        print("ERROR: STATIC directory not supplied or configured.", file=sys.stderr)
+        return 1
+
+    monster_shapes = _parse_int_list(getattr(args, "monster_shape", None))
+    fmt = getattr(args, "format", "summary") or "summary"
+    if fmt == "csv":
+        content = monster_equipment_csv(
+            static,
+            game=getattr(args, "game", "bg"),
+            mod_monsters=getattr(args, "mod_monsters", None),
+            equip_file=getattr(args, "equip_file", None),
+            monster_shapes=monster_shapes or None,
+        )
+    else:
+        content = monster_equipment_summary(
+            static,
+            game=getattr(args, "game", "bg"),
+            mod_monsters=getattr(args, "mod_monsters", None),
+            equip_file=getattr(args, "equip_file", None),
+            monster_shapes=monster_shapes or None,
+        )
+
+    if args.output:
+        with open(args.output, "w", encoding="utf-8", newline="") as f:
+            f.write(content)
+        print(f"Monster equipment calculation written to: {args.output}")
+    else:
+        print(content)
+    return 0
+
+
 def cmd_monster_report(args: SimpleNamespace) -> int:
     """Write joined monster definitions, live actors, eggs, and placements."""
     from titan.u7.monster import monster_report
@@ -1665,6 +1762,7 @@ def cmd_monster_report(args: SimpleNamespace) -> int:
         live_source=live_source,
         game=getattr(args, "game", "bg"),
         mod_monsters=getattr(args, "mod_monsters", None),
+        mod_equip=getattr(args, "mod_equip", None),
         output_dir=out_dir,
     )
     if out_dir:
@@ -1673,6 +1771,58 @@ def cmd_monster_report(args: SimpleNamespace) -> int:
             print(f"  {name}")
     else:
         print(outputs["manifest.txt"])
+    return 0
+
+
+def cmd_npc_equipment(args: SimpleNamespace) -> int:
+    """Dump actual NPC inventory/equipment from save, GAMEDAT, or npc.dat."""
+    from titan.u7.names import U7ShapeNames
+    from titan.u7.save import U7NPCData, U7Save
+
+    source = Path(args.file)
+    static = getattr(args, "static", None)
+    if not static:
+        static, _ = _resolve_u7_paths(getattr(args, "game", "bg"))
+    if not static:
+        static = (
+            _infer_static_dir_for_data_file(str(source / "npc.dat"))
+            if source.is_dir()
+            else _infer_static_dir_for_data_file(str(source))
+        )
+    if not static:
+        print("ERROR: STATIC directory not supplied or inferred.", file=sys.stderr)
+        return 1
+
+    container_shapes = _load_container_shapes(args, fallback_static=static)
+    valid_shape_count = _load_shape_count(args, fallback_static=static)
+    if source.is_dir() or source.name.lower() == "npc.dat":
+        npc_file = _resolve_loose_data_file(str(source), "npc.dat")
+        npcs = U7NPCData.from_file(
+            npc_file,
+            container_shapes=container_shapes,
+            valid_shape_count=valid_shape_count,
+            npc_flavor="auto",
+        )
+        print(f"Source: {npc_file} (loose npc.dat)")
+    else:
+        save = U7Save.from_file(str(source))
+        npcs = U7NPCData.from_save(
+            save,
+            container_shapes=container_shapes,
+            valid_shape_count=valid_shape_count,
+        )
+        print(f"Source: {source} ({save.container_format.upper()} save)")
+
+    names = U7ShapeNames.from_static_dir(static)
+    npc_nums = _parse_int_list(getattr(args, "npc", None))
+    content = npcs.dump_inventory_csv(names, npc_nums or None)
+
+    if args.output:
+        with open(args.output, "w", encoding="utf-8", newline="") as f:
+            f.write(content)
+        print(f"NPC equipment dump written to: {args.output}")
+    else:
+        print(content)
     return 0
 
 
@@ -1886,7 +2036,12 @@ def cmd_save_npcs(args: SimpleNamespace) -> int:
     print(f"Title:  {save.title}")
 
     container_shapes = _load_container_shapes(args)
-    npcs = U7NPCData.from_save(save, container_shapes=container_shapes)
+    valid_shape_count = _load_shape_count(args)
+    npcs = U7NPCData.from_save(
+        save,
+        container_shapes=container_shapes,
+        valid_shape_count=valid_shape_count,
+    )
 
     fmt = getattr(args, "format", "summary") or "summary"
 
@@ -1925,9 +2080,11 @@ def cmd_save_schedules(args: SimpleNamespace) -> int:
     npc_names: dict[int, str] | None = None
     try:
         container_shapes = _load_container_shapes(args)
+        valid_shape_count = _load_shape_count(args)
         npc_names = U7NPCData.npc_name_map(
             save,
             container_shapes=container_shapes,
+            valid_shape_count=valid_shape_count,
         )
     except (ValueError, KeyError):
         pass
@@ -2561,6 +2718,56 @@ def monster_dump_cmd(
     )
 
 
+@u7_app.command("monster-equipment")
+def monster_equipment_cmd(
+    static: Annotated[
+        Optional[str],
+        typer.Argument(help="Path to STATIC directory (default: titan.toml)"),
+    ] = None,
+    monster_shape: Annotated[
+        Optional[str],
+        typer.Option(
+            "--monster-shape",
+            help="Monster shape filter, comma-separated; accepts decimal or 0xHEX",
+        ),
+    ] = None,
+    mod_monsters: Annotated[
+        Optional[str],
+        typer.Option("--mod-monsters", help="Optional mod MONSTERS.DAT override file"),
+    ] = None,
+    equip_file: Annotated[
+        Optional[str],
+        typer.Option("--equip-file", help="Optional equip.dat file"),
+    ] = None,
+    game: Annotated[
+        Literal["bg", "si"],
+        typer.Option("--game", help="Use BG or SI decoding rules"),
+    ] = "bg",
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Write dump to this file"),
+    ] = None,
+    format: Annotated[
+        Optional[str],
+        typer.Option("-f", "--format", help="Output format: summary (default), csv"),
+    ] = None,
+) -> None:
+    """Calculate possible monster equipment from MONSTERS.DAT + equip.dat."""
+    raise SystemExit(
+        cmd_monster_equipment(
+            SimpleNamespace(
+                static=static,
+                monster_shape=monster_shape,
+                mod_monsters=mod_monsters,
+                equip_file=equip_file,
+                game=game,
+                output=output,
+                format=format,
+            )
+        )
+    )
+
+
 @u7_app.command("monster-report")
 def monster_report_cmd(
     static: Annotated[
@@ -2578,6 +2785,10 @@ def monster_report_cmd(
     mod_monsters: Annotated[
         Optional[str],
         typer.Option("--mod-monsters", help="Optional mod MONSTERS.DAT override file"),
+    ] = None,
+    mod_equip: Annotated[
+        Optional[str],
+        typer.Option("--mod-equip", help="Optional mod equip.dat override file"),
     ] = None,
     mod: Annotated[
         Optional[str],
@@ -2602,9 +2813,55 @@ def monster_report_cmd(
                 gamedat=gamedat,
                 live_source=live_source,
                 mod_monsters=mod_monsters,
+                mod_equip=mod_equip,
                 mod=mod,
                 game=game,
                 output_dir=output_dir,
+            )
+        )
+    )
+
+
+@u7_app.command("npc-equipment")
+def npc_equipment_cmd(
+    file: Annotated[
+        str,
+        typer.Argument(help="Path to save archive, GAMEDAT directory, or npc.dat"),
+    ],
+    static: Annotated[
+        Optional[str],
+        typer.Option("--static", help="Path to STATIC directory"),
+    ] = None,
+    npc: Annotated[
+        Optional[str],
+        typer.Option(
+            "--npc",
+            help="NPC number filter, comma-separated; accepts decimal or 0xHEX",
+        ),
+    ] = None,
+    game: Annotated[
+        Literal["bg", "si"],
+        typer.Option("--game", help="Use BG or SI defaults"),
+    ] = "bg",
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Write dump to this file"),
+    ] = None,
+    format: Annotated[
+        Optional[str],
+        typer.Option("-f", "--format", help="Output format: csv"),
+    ] = "csv",
+) -> None:
+    """Dump actual NPC inventory/equipment with readied/backpack location split."""
+    raise SystemExit(
+        cmd_npc_equipment(
+            SimpleNamespace(
+                file=file,
+                static=static,
+                npc=npc,
+                game=game,
+                output=output,
+                format=format,
             )
         )
     )

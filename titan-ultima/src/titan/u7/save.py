@@ -47,6 +47,7 @@ __all__ = [
     "U7ScheduleEntry",
     "U7NPCData",
     "U7NPC",
+    "U7NPCInventoryItem",
 ]
 
 import csv
@@ -1123,6 +1124,124 @@ def _clean_ascii_text(value: str) -> str:
 # ============================================================================
 
 
+@dataclass
+class U7NPCInventoryItem:
+    """One item parsed from an NPC or monster inventory IREG block."""
+
+    shape: int
+    frame: int
+    x: int
+    y: int
+    lift: int
+    quality: int
+    depth: int
+    path: str = ""
+
+
+def _read_ireg_inventory(
+    data: bytes,
+    pos: int,
+    container_shapes: Union[set, None] = None,
+    valid_shape_count: int | None = None,
+    depth: int = 0,
+    path: str = "",
+) -> tuple[list[U7NPCInventoryItem], int]:
+    """Read one NPC inventory IREG section starting at *pos*."""
+    items: list[U7NPCInventoryItem] = []
+    while pos < len(data):
+        entry_len = data[pos]
+        pos += 1
+
+        if entry_len == 0 or entry_len == 1:
+            return items, pos
+
+        if entry_len == 2:
+            pos += 2
+            continue
+
+        extended = 0
+        if entry_len in (0xFD, 0xFE):
+            if entry_len == 0xFE:
+                extended = 1
+            if pos >= len(data):
+                break
+            entry_len = data[pos]
+            pos += 1
+        elif entry_len == 0xFF:
+            if pos >= len(data):
+                break
+            sp_type = data[pos]
+            pos += 1
+            if sp_type == 2:
+                return items, pos
+            if pos + 2 > len(data):
+                break
+            sp_len = struct.unpack_from("<H", data, pos)[0]
+            pos += 2 + sp_len
+            continue
+
+        entry_start = pos
+        pos += entry_len
+        if pos > len(data):
+            break
+
+        testlen = entry_len - extended
+        if testlen not in (6, 10, 12, 13, 14, 18):
+            continue
+
+        ed = data[entry_start : entry_start + entry_len]
+        if len(ed) < 6 + extended:
+            continue
+
+        if extended:
+            shape = ed[2] + 256 * ed[3]
+            frame = ed[4]
+        else:
+            shape = ed[2] + 256 * (ed[3] & 3)
+            frame = (ed[3] >> 2) & 0x3F
+
+        valid_shape = valid_shape_count is None or shape < valid_shape_count
+        lift = (ed[4 + extended] >> 4) & 0x0F if len(ed) > 4 + extended else 0
+        quality = ed[5 + extended] if len(ed) > 5 + extended else 0
+        item_path = f"{path}/{shape}:{frame}" if path else f"{shape}:{frame}"
+        if valid_shape:
+            items.append(
+                U7NPCInventoryItem(
+                    shape=shape,
+                    frame=frame,
+                    x=ed[0],
+                    y=ed[1],
+                    lift=lift,
+                    quality=quality,
+                    depth=depth,
+                    path=item_path,
+                )
+            )
+
+        if valid_shape and testlen in (12, 13) and len(ed) >= 6 + extended:
+            type_off = 4 + extended
+            type_val = (
+                ed[type_off] + 256 * ed[type_off + 1] if len(ed) > type_off + 1 else 0
+            )
+            is_container = False
+            if type_val != 0:
+                if container_shapes is not None:
+                    is_container = shape in container_shapes
+                else:
+                    is_container = True
+            if is_container:
+                child_items, pos = _read_ireg_inventory(
+                    data,
+                    pos,
+                    container_shapes,
+                    valid_shape_count,
+                    depth + 1,
+                    item_path,
+                )
+                items.extend(child_items)
+    return items, pos
+
+
 def _skip_ireg_inventory(
     data: bytes,
     pos: int,
@@ -1266,6 +1385,7 @@ class U7NPC:
     in_party: bool = False
     is_female: bool | None = False
     has_inventory: bool = False
+    inventory: list[U7NPCInventoryItem] = field(default_factory=list)
     unused: bool = False
 
     @property
@@ -1315,6 +1435,7 @@ class U7NPCData:
         cls,
         data: bytes,
         container_shapes: Union[set, None] = None,
+        valid_shape_count: int | None = None,
         sex_unknown: bool = False,
         original_new_game: bool = False,
         npc_flavor: str | None = None,
@@ -1340,13 +1461,14 @@ class U7NPCData:
                 original_new_game = False
                 sex_unknown = True
             elif flavor == "auto":
-                return cls.from_bytes_auto(data, container_shapes)
+                return cls.from_bytes_auto(data, container_shapes, valid_shape_count)
             else:
                 raise ValueError(f"Unknown npc.dat flavor: {npc_flavor}")
 
         return cls._from_bytes_core(
             data,
             container_shapes,
+            valid_shape_count,
             sex_unknown=sex_unknown,
             original_new_game=original_new_game,
             npc_flavor=(
@@ -1361,6 +1483,7 @@ class U7NPCData:
         cls,
         data: bytes,
         container_shapes: Union[set, None] = None,
+        valid_shape_count: int | None = None,
     ) -> "U7NPCData":
         """Auto-detect runtime vs original new-game ``npc.dat`` where possible.
 
@@ -1372,6 +1495,7 @@ class U7NPCData:
         runtime = cls._from_bytes_core(
             data,
             container_shapes,
+            valid_shape_count,
             sex_unknown=False,
             original_new_game=False,
             npc_flavor="runtime",
@@ -1379,6 +1503,7 @@ class U7NPCData:
         original = cls._from_bytes_core(
             data,
             container_shapes,
+            valid_shape_count,
             sex_unknown=False,
             original_new_game=True,
             npc_flavor="original-new-game",
@@ -1393,6 +1518,7 @@ class U7NPCData:
         return cls._from_bytes_core(
             data,
             container_shapes,
+            valid_shape_count,
             sex_unknown=True,
             original_new_game=False,
             npc_flavor="unknown",
@@ -1403,6 +1529,7 @@ class U7NPCData:
         cls,
         data: bytes,
         container_shapes: Union[set, None],
+        valid_shape_count: int | None,
         sex_unknown: bool,
         original_new_game: bool,
         npc_flavor: str,
@@ -1422,6 +1549,7 @@ class U7NPCData:
                     pos,
                     npc_idx,
                     container_shapes,
+                    valid_shape_count,
                     sex_unknown,
                     original_new_game,
                 )
@@ -1460,11 +1588,17 @@ class U7NPCData:
         cls,
         save: U7Save,
         container_shapes: Union[set, None] = None,
+        valid_shape_count: int | None = None,
     ) -> "U7NPCData":
         data = save.get_data("npc.dat")
         if data is None:
             raise ValueError("Save does not contain 'npc.dat'")
-        return cls.from_bytes(data, container_shapes, npc_flavor="runtime")
+        return cls.from_bytes(
+            data,
+            container_shapes,
+            valid_shape_count,
+            npc_flavor="runtime",
+        )
 
     @classmethod
     def from_file(
@@ -1474,12 +1608,14 @@ class U7NPCData:
         sex_unknown: bool = False,
         original_new_game: bool = False,
         npc_flavor: str | None = None,
+        valid_shape_count: int | None = None,
     ) -> "U7NPCData":
         """Read a loose ``npc.dat`` file from disk."""
         with open(filepath, "rb") as f:
             return cls.from_bytes(
                 f.read(),
                 container_shapes,
+                valid_shape_count,
                 sex_unknown,
                 original_new_game,
                 npc_flavor=npc_flavor,
@@ -1490,6 +1626,7 @@ class U7NPCData:
         cls,
         filepath: str,
         container_shapes: Union[set, None] = None,
+        valid_shape_count: int | None = None,
     ) -> "U7NPCData":
         """Read original new-game NPC data from ``STATIC/INITGAME.DAT``.
 
@@ -1515,6 +1652,7 @@ class U7NPCData:
                 return cls.from_bytes(
                     record[13:],
                     container_shapes=container_shapes,
+                    valid_shape_count=valid_shape_count,
                     npc_flavor="original-new-game",
                 )
         raise ValueError(f"INITGAME.DAT does not contain npc.dat: {filepath}")
@@ -1524,6 +1662,7 @@ class U7NPCData:
         cls,
         data: bytes,
         container_shapes: Union[set, None] = None,
+        valid_shape_count: int | None = None,
     ) -> "U7NPCData":
         """Read Exult ``monsnpcs.dat`` monster actors.
 
@@ -1536,26 +1675,34 @@ class U7NPCData:
             raise ValueError("monsnpcs.dat too short")
         count = struct.unpack_from("<H", data, 0)[0]
         npc_like = struct.pack("<HH", count, 0) + data[2:]
-        return cls.from_bytes(npc_like, container_shapes=container_shapes)
+        return cls.from_bytes(
+            npc_like,
+            container_shapes=container_shapes,
+            valid_shape_count=valid_shape_count,
+        )
 
     @classmethod
     def from_monsnpcs_file(
         cls,
         filepath: str,
         container_shapes: Union[set, None] = None,
+        valid_shape_count: int | None = None,
     ) -> "U7NPCData":
         """Read a loose Exult ``monsnpcs.dat`` file from disk."""
         with open(filepath, "rb") as f:
-            return cls.from_monsnpcs_bytes(f.read(), container_shapes)
+            return cls.from_monsnpcs_bytes(
+                f.read(), container_shapes, valid_shape_count
+            )
 
     @classmethod
     def npc_name_map(
         cls,
         save: U7Save,
         container_shapes: Union[set, None] = None,
+        valid_shape_count: int | None = None,
     ) -> dict[int, str]:
         """Extract ``{npc_index: name}`` from ``npc.dat`` in a save."""
-        npc_data = cls.from_save(save, container_shapes)
+        npc_data = cls.from_save(save, container_shapes, valid_shape_count)
         return npc_data.name_map()
 
     def name_map(self) -> dict[int, str]:
@@ -1571,6 +1718,7 @@ class U7NPCData:
         pos: int,
         npc_idx: int,
         container_shapes: Union[set, None],
+        valid_shape_count: int | None,
         sex_unknown: bool,
         original_new_game: bool,
     ) -> tuple:
@@ -1717,7 +1865,12 @@ class U7NPCData:
 
         # -- skip inventory / scheduled usecode ----------------------------
         if has_contents:
-            p = _skip_ireg_inventory(data, p, container_shapes)
+            npc.inventory, p = _read_ireg_inventory(
+                data,
+                p,
+                container_shapes,
+                valid_shape_count,
+            )
         if has_sched_usecode:
             p = _skip_special_ireg(data, p)
 
@@ -1796,6 +1949,7 @@ class U7NPCData:
                 "in_party",
                 "female",
                 "has_inventory",
+                "inventory_count",
                 "dead",
                 "unused",
             ]
@@ -1832,8 +1986,90 @@ class U7NPCData:
                     n.in_party,
                     female,
                     n.has_inventory,
+                    len(n.inventory),
                     n.is_dead,
                     n.unused,
                 ]
             )
         return buf.getvalue()
+
+    def dump_inventory_csv(
+        self,
+        shape_names: object | None = None,
+        npc_nums: set[int] | None = None,
+    ) -> str:
+        buf = io.StringIO()
+        writer = csv.writer(buf, lineterminator="\n")
+        writer.writerow(
+            [
+                "npc_num",
+                "npc_name",
+                "item_index",
+                "shape",
+                "shape_hex",
+                "item_name",
+                "frame",
+                "x",
+                "y",
+                "lift",
+                "quality",
+                "depth",
+                "location",
+                "path",
+                "path_names",
+            ]
+        )
+        for n in self.npcs:
+            if npc_nums is not None and n.npc_num not in npc_nums:
+                continue
+            for index, item in enumerate(n.inventory):
+                item_name = shape_names.get(item.shape) if shape_names else ""
+                writer.writerow(
+                    [
+                        n.npc_num,
+                        n.name,
+                        index,
+                        item.shape,
+                        f"0x{item.shape:04X}",
+                        item_name,
+                        item.frame,
+                        item.x,
+                        item.y,
+                        item.lift,
+                        item.quality,
+                        item.depth,
+                        _inventory_location(item),
+                        item.path,
+                        _inventory_path_names(item.path, shape_names),
+                    ]
+                )
+        return buf.getvalue()
+
+
+def _inventory_location(item: U7NPCInventoryItem) -> str:
+    if item.depth > 0 and item.path.startswith("801:"):
+        return "backpack"
+    if item.depth > 0:
+        return "nested_container"
+    if item.shape == 801:
+        return "backpack_container"
+    return "readied_or_actor_top"
+
+
+def _inventory_path_names(path: str, shape_names: object | None) -> str:
+    if not path or shape_names is None:
+        return ""
+    parts: list[str] = []
+    for token in path.split("/"):
+        shape_text, _, frame_text = token.partition(":")
+        try:
+            shape = int(shape_text)
+        except ValueError:
+            parts.append(token)
+            continue
+        name = shape_names.get(shape)
+        label = f"{shape}:{frame_text}"
+        if name:
+            label = f"{label} ({name})"
+        parts.append(label)
+    return "/".join(parts)

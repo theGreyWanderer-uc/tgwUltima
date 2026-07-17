@@ -16,7 +16,13 @@ Canonical imports::
 from titan.u7.flex import U7FlexArchive
 from titan.u7.map import U7MapRenderer, U7MapSampler
 from titan.u7.music import convert_xmidi_file, extract_music
-from titan.u7.monster import U7MonsterDefinition, U7MonsterDefinitions
+from titan.u7.monster import (
+    U7MonsterDefinition,
+    U7MonsterDefinitions,
+    U7MonsterEquipment,
+    monster_equipment_csv,
+    monster_equipment_summary,
+)
 from titan.u7.palette import U7Palette
 from titan.u7.save import (
     U7GlobalFlags,
@@ -34,6 +40,7 @@ from titan.u7.save import (
     U7ScheduleEntry,
     U7NPCData,
     U7NPC,
+    U7NPCInventoryItem,
 )
 from titan.u7.shape import U7Shape
 from titan.u7.sound import VocDecoder
@@ -51,6 +58,9 @@ __all__ = [
     "U7MapSampler",
     "U7MonsterDefinition",
     "U7MonsterDefinitions",
+    "U7MonsterEquipment",
+    "monster_equipment_csv",
+    "monster_equipment_summary",
     "U7Save",
     "U7GlobalFlags",
     "U7Identity",
@@ -66,4 +76,5 @@ __all__ = [
     "U7ScheduleEntry",
     "U7NPCData",
     "U7NPC",
+    "U7NPCInventoryItem",
 ]

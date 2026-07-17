@@ -25,6 +25,15 @@ This project uses [Semantic Versioning](https://semver.org/):
     live monsters, monster eggs, and placed monster-class world objects.
 - Expanded U7 egg CSV export for monster eggs with decoded monster shape,
   frame, spawn count, schedule, and alignment fields.
+- Added U7 NPC inventory item export from parsed `npc.dat` inventory blocks.
+- Added U7 monster `equip.dat` parsing and monster spawn reports that join
+  monster eggs to resolved `MONSTERS.DAT` definitions and equipment rows.
+- Added `titan u7 monster-equipment` to calculate possible monster equipment
+  from `MONSTERS.DAT` plus `equip.dat`, including probability, random quantity
+  handling, and expected quantity per spawn.
+- Added `titan u7 npc-equipment` to export actual saved NPC inventory/equipment
+  with `readied_or_actor_top`, `backpack_container`, `backpack`, and
+  `nested_container` location labels.
 
 ### Fixed
 
@@ -37,6 +46,8 @@ This project uses [Semantic Versioning](https://semver.org/):
   Exult runtime vs original new-game data where possible, ambiguous loose files
   report unknown sex, and `gamedat-info` decodes original `INITGAME.DAT` NPC sex
   with the correct inverted bit-9 rule.
+- Filtered NPC inventory exports against the real `SHAPES.VGA` record count so
+  Exult text-message combat bark IDs are not reported as carried items.
 
 ---
 
