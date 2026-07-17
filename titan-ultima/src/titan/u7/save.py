@@ -1254,10 +1254,12 @@ class U7NPCData:
         npcs: list,
         num_npcs1: int = 0,
         num_npcs2: int = 0,
+        npc_flavor: str = "runtime",
     ):
         self.npcs: list[U7NPC] = npcs
         self.num_npcs1 = num_npcs1
         self.num_npcs2 = num_npcs2
+        self.npc_flavor = npc_flavor
 
     # ---- factory ----------------------------------------------------------
 
@@ -1268,10 +1270,96 @@ class U7NPCData:
         container_shapes: Union[set, None] = None,
         sex_unknown: bool = False,
         original_new_game: bool = False,
+        npc_flavor: str | None = None,
     ) -> "U7NPCData":
+        """Read ``npc.dat`` bytes.
+
+        ``npc_flavor`` may be ``"runtime"``, ``"original"``, ``"unknown"``,
+        or ``"auto"``.  The older ``original_new_game`` and ``sex_unknown``
+        booleans are still honored for callers that already know provenance.
+        """
         if len(data) < 4:
             raise ValueError("npc.dat too short")
 
+        if npc_flavor:
+            flavor = npc_flavor.lower().replace("_", "-")
+            if flavor in {"original", "original-new-game", "initgame"}:
+                original_new_game = True
+                sex_unknown = False
+            elif flavor in {"runtime", "exult", "exult-runtime"}:
+                original_new_game = False
+                sex_unknown = False
+            elif flavor == "unknown":
+                original_new_game = False
+                sex_unknown = True
+            elif flavor == "auto":
+                return cls.from_bytes_auto(data, container_shapes)
+            else:
+                raise ValueError(f"Unknown npc.dat flavor: {npc_flavor}")
+
+        return cls._from_bytes_core(
+            data,
+            container_shapes,
+            sex_unknown=sex_unknown,
+            original_new_game=original_new_game,
+            npc_flavor=(
+                "unknown"
+                if sex_unknown
+                else ("original-new-game" if original_new_game else "runtime")
+            ),
+        )
+
+    @classmethod
+    def from_bytes_auto(
+        cls,
+        data: bytes,
+        container_shapes: Union[set, None] = None,
+    ) -> "U7NPCData":
+        """Auto-detect runtime vs original new-game ``npc.dat`` where possible.
+
+        A loose ``npc.dat`` has no explicit magic.  Titan scores both parses
+        structurally.  When both forms look equally plausible, it preserves all
+        parsed fields but marks sex as unknown rather than choosing the wrong
+        bit-9 interpretation.
+        """
+        runtime = cls._from_bytes_core(
+            data,
+            container_shapes,
+            sex_unknown=False,
+            original_new_game=False,
+            npc_flavor="runtime",
+        )
+        original = cls._from_bytes_core(
+            data,
+            container_shapes,
+            sex_unknown=False,
+            original_new_game=True,
+            npc_flavor="original-new-game",
+        )
+        runtime_score = cls._score_npc_parse(runtime, data)
+        original_score = cls._score_npc_parse(original, data)
+
+        if original_score >= runtime_score + 5:
+            return original
+        if runtime_score >= original_score + 5:
+            return runtime
+        return cls._from_bytes_core(
+            data,
+            container_shapes,
+            sex_unknown=True,
+            original_new_game=False,
+            npc_flavor="unknown",
+        )
+
+    @classmethod
+    def _from_bytes_core(
+        cls,
+        data: bytes,
+        container_shapes: Union[set, None],
+        sex_unknown: bool,
+        original_new_game: bool,
+        npc_flavor: str,
+    ) -> "U7NPCData":
         num1 = struct.unpack_from("<H", data, 0)[0]
         num2 = struct.unpack_from("<H", data, 2)[0]
         pos = 4
@@ -1293,7 +1381,34 @@ class U7NPCData:
                 npcs.append(npc)
             except (struct.error, IndexError, ValueError):
                 break
-        return cls(npcs=npcs, num_npcs1=num1, num_npcs2=num2)
+        result = cls(
+            npcs=npcs,
+            num_npcs1=num1,
+            num_npcs2=num2,
+            npc_flavor=npc_flavor,
+        )
+        result._parsed_bytes = pos
+        return result
+
+    @staticmethod
+    def _score_npc_parse(parsed: "U7NPCData", data: bytes) -> int:
+        declared = parsed.num_npcs1 + parsed.num_npcs2
+        score = len(parsed.npcs) * 10
+        score -= max(0, declared - len(parsed.npcs)) * 20
+        score += sum(2 for npc in parsed.npcs if npc.name)
+        score += sum(
+            1
+            for npc in parsed.npcs
+            if 0 <= npc.shape <= 1023 and 0 <= npc.frame <= 63
+        )
+        consumed = getattr(parsed, "_parsed_bytes", 0)
+        if consumed == len(data):
+            score += 20
+        elif consumed < len(data):
+            score -= min(20, len(data) - consumed)
+        else:
+            score -= 40
+        return score
 
     @classmethod
     def from_save(
@@ -1304,7 +1419,7 @@ class U7NPCData:
         data = save.get_data("npc.dat")
         if data is None:
             raise ValueError("Save does not contain 'npc.dat'")
-        return cls.from_bytes(data, container_shapes)
+        return cls.from_bytes(data, container_shapes, npc_flavor="runtime")
 
     @classmethod
     def from_file(
@@ -1313,6 +1428,7 @@ class U7NPCData:
         container_shapes: Union[set, None] = None,
         sex_unknown: bool = False,
         original_new_game: bool = False,
+        npc_flavor: str | None = None,
     ) -> "U7NPCData":
         """Read a loose ``npc.dat`` file from disk."""
         with open(filepath, "rb") as f:
@@ -1321,6 +1437,7 @@ class U7NPCData:
                 container_shapes,
                 sex_unknown,
                 original_new_game,
+                npc_flavor=npc_flavor,
             )
 
     @classmethod
@@ -1353,7 +1470,7 @@ class U7NPCData:
                 return cls.from_bytes(
                     record[13:],
                     container_shapes=container_shapes,
-                    original_new_game=True,
+                    npc_flavor="original-new-game",
                 )
         raise ValueError(f"INITGAME.DAT does not contain npc.dat: {filepath}")
 

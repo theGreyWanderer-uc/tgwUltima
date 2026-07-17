@@ -19,6 +19,10 @@ This project uses [Semantic Versioning](https://semver.org/):
 - Cleaned U7 typeflag statistics so the flag section counts only actual
   TFA/occlusion/obstacle flags, while shape classes and animation types remain
   separate.
+- Added U7 `npc.dat` flavor handling so loose NPC files are auto-scored as
+  Exult runtime vs original new-game data where possible, ambiguous loose files
+  report unknown sex, and `gamedat-info` decodes original `INITGAME.DAT` NPC sex
+  with the correct inverted bit-9 rule.
 
 ---
 

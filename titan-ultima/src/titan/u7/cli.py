@@ -1065,11 +1065,17 @@ def cmd_npc_dump(args: SimpleNamespace) -> int:
             container_shapes=container_shapes,
         )
     else:
-        print("Sex:    decoded from Exult runtime type_flags bit 9")
         npcs = U7NPCData.from_file(
             filepath,
             container_shapes=container_shapes,
+            npc_flavor="auto",
         )
+        if npcs.npc_flavor == "original-new-game":
+            print("Sex:    auto-detected original new-game data (raw bit 9 inverted)")
+        elif npcs.npc_flavor == "runtime":
+            print("Sex:    auto-detected Exult runtime type_flags bit 9")
+        else:
+            print("Sex:    unknown; loose npc.dat has no reliable flavor marker")
 
     fmt = getattr(args, "format", "summary") or "summary"
 
@@ -1161,6 +1167,7 @@ def cmd_schedule_dump(args: SimpleNamespace) -> int:
 
 def cmd_gamedat_info(args: SimpleNamespace) -> int:
     """Inspect a loose Exult GAMEDAT directory or Exult archive."""
+    from titan.u7.flex import U7FlexArchive
     from titan.u7.map import U7MapRenderer
     from titan.u7.save import (
         U7FrameFlags, U7GameState, U7GlobalFlags, U7Identity, U7Keyring,
@@ -1187,23 +1194,48 @@ def cmd_gamedat_info(args: SimpleNamespace) -> int:
 
     root = Path(source)
     archive: Optional[U7Save] = None
+    initgame_flex_source = False
+    initgame_entries: dict[str, bytes] = {}
     if root.is_file():
-        try:
-            archive = U7Save.from_file(str(root))
-        except ValueError as exc:
-            print(f"ERROR: GAMEDAT source is not a directory or Exult archive: {exc}", file=sys.stderr)
-            return 1
+        initgame_flex_source = (
+            root.name.lower() == "initgame.dat"
+            and U7FlexArchive.is_u7_flex(str(root))
+        )
+        if initgame_flex_source:
+            initgame = U7FlexArchive.from_file(str(root))
+            for record in initgame.records:
+                if len(record) <= 13:
+                    continue
+                entry = (
+                    record[:13]
+                    .split(b"\x00", 1)[0]
+                    .decode("ascii", errors="replace")
+                    .rstrip(".")
+                    .lower()
+                )
+                initgame_entries[entry] = record[13:]
+        if not initgame_flex_source:
+            try:
+                archive = U7Save.from_file(str(root))
+            except ValueError as exc:
+                print(f"ERROR: GAMEDAT source is not a directory or Exult archive: {exc}", file=sys.stderr)
+                return 1
     elif not root.is_dir():
         print(f"ERROR: GAMEDAT source not found: {root}", file=sys.stderr)
         return 1
 
     def data_for(name: str) -> Optional[bytes]:
+        if initgame_flex_source:
+            return initgame_entries.get(name.lower())
         if archive is not None:
             return archive.get_data(name)
         path = root / name
         return path.read_bytes() if path.is_file() else None
 
     def source_size(name: str) -> int:
+        if initgame_flex_source:
+            data = data_for(name)
+            return len(data) if data is not None else 0
         if archive is not None:
             data = archive.get_data(name)
             return len(data) if data is not None else 0
@@ -1211,6 +1243,8 @@ def cmd_gamedat_info(args: SimpleNamespace) -> int:
         return path.stat().st_size if path.exists() else 0
 
     def entry_names() -> list[str]:
+        if initgame_flex_source:
+            return sorted(initgame_entries)
         if archive is not None:
             return sorted(name for name, _ in archive.list_entries())
         return sorted(path.name for path in root.iterdir() if path.is_file())
@@ -1228,7 +1262,11 @@ def cmd_gamedat_info(args: SimpleNamespace) -> int:
     def add_row(name: str, status: str, note: str = "") -> None:
         rows.append((name, source_size(name), status, note))
 
-    source_kind = f"{archive.container_format.upper()} archive" if archive else "directory"
+    source_kind = (
+        "INITGAME.DAT Flex archive"
+        if initgame_flex_source
+        else (f"{archive.container_format.upper()} archive" if archive else "directory")
+    )
     lines: list[str] = [
         "=== Loose GAMEDAT Info ===",
         f"Source: {root} ({source_kind})",
@@ -1253,15 +1291,24 @@ def cmd_gamedat_info(args: SimpleNamespace) -> int:
         npcs = U7NPCData.from_bytes(
             npc_data,
             container_shapes=container_shapes,
+            npc_flavor=(
+                "original-new-game" if initgame_flex_source else "runtime"
+            ),
         )
         npc_names = npcs.name_map()
         lines.append(npcs.dump_summary())
         female_count = sum(1 for npc in npcs.npcs if npc.is_female)
         male_count = sum(1 for npc in npcs.npcs if npc.is_female is False)
-        lines.append(
-            "NPC sex: decoded from Exult runtime type_flags bit 9 "
-            f"({female_count} female, {male_count} male)."
-        )
+        if npcs.npc_flavor == "original-new-game":
+            lines.append(
+                "NPC sex: decoded from original new-game data "
+                f"(raw bit 9 inverted; {female_count} female, {male_count} male)."
+            )
+        else:
+            lines.append(
+                "NPC sex: decoded from Exult runtime type_flags bit 9 "
+                f"({female_count} female, {male_count} male)."
+            )
         add_row(
             "npc.dat",
             "parsed",
