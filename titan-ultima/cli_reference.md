@@ -820,7 +820,7 @@ titan dialogue prepare [--usecode FILE] [--workdir DIR] [--symbols FILE] [--clas
 titan dialogue prepare
 
 # Advanced override
-titan dialogue prepare --usecode /path/to/EUSECODE.FLX --force
+titan dialogue prepare --usecode <EUSECODE.FLX> --force
 ```
 
 ---
@@ -1289,9 +1289,9 @@ Three output formats:
 - **detail** — comprehensive reference with raw TFA hex, shape class names, animation types, statistics
 - **csv** — machine-readable CSV with every decoded field as a column
 
-> **BG vs SI:** Black Gate and Serpent Isle use the same TFA.DAT binary
-> format (3 bytes × 1024 shapes + 512 animation nibbles).  The structure
-> is identical — only the per-shape flag values differ between games.
+> **BG vs SI:** Black Gate and Serpent Isle use the same TFA.DAT structure
+> (3 bytes × 1024 shapes + 512 animation nibbles), but not the same binary.
+> Static BG and SI TFA values differ.
 > Run `typeflag-dump` on each game's `STATIC/` to compare.
 >
 > **Format note:** TITAN follows Exult's interpretation of the static metadata
@@ -1326,8 +1326,8 @@ titan u7 typeflag-dump STATIC/ -f detail -o tfa_reference.txt
 titan u7 typeflag-dump STATIC/ -f csv -o tfa_data.csv
 
 # Compare Black Gate vs Serpent Isle
-titan u7 typeflag-dump "C:/GOG Games/Ultima VII/ULTIMA7/STATIC" -f csv -o tfa_bg.csv
-titan u7 typeflag-dump "C:/GOG Games/Ultima VII/SERPENT/STATIC" -f csv -o tfa_si.csv
+titan u7 typeflag-dump "<Black Gate install>/ULTIMA7/STATIC" -f csv -o tfa_bg.csv
+titan u7 typeflag-dump "<Serpent Isle install>/SERPENT/STATIC" -f csv -o tfa_si.csv
 
 # Use config defaults for SI
 titan u7 typeflag-dump --game si -f csv -o tfa_si.csv
@@ -1445,9 +1445,9 @@ titan u7 gamedat-info [GAMEDAT_DIR|ARCHIVE] [--game bg|si] [--mod NAME] [--stati
 
 | Argument | Description |
 |----------|-------------|
-| `GAMEDAT_DIR|ARCHIVE` | Directory containing loose Exult runtime files, or an Exult ZIP/FLEX archive containing GAMEDAT entries. Optional when config or AppData discovery can resolve a source |
+| `GAMEDAT_DIR|ARCHIVE` | Directory containing loose Exult runtime files, or an Exult ZIP/FLEX archive containing GAMEDAT entries. Optional when config or user-profile discovery can resolve a source |
 | `--game bg|si` | Select config section for default GAMEDAT/STATIC lookup (`bg` default) |
-| `--mod NAME` | Resolve a configured or AppData mod source such as `serpentisle/mods/NAME/gamedat`, falling back to `[u7si.mods."NAME".paths].archive` |
+| `--mod NAME` | Resolve a configured or user-profile mod source such as `serpentisle/mods/NAME/gamedat`, falling back to `[u7si.mods."NAME".paths].archive` |
 | `--static DIR` | Override STATIC directory for TFA container detection |
 | `-o FILE`, `--output FILE` | Write report to this file |
 | `-f FORMAT`, `--format FORMAT` | Output format: `summary` (default), `detail`, `csv` |
@@ -1600,7 +1600,7 @@ titan u7 save-npcs <file> [--game bg|si] [--static DIR] [-o FILE] [-f FORMAT]
 titan u7 save-npcs exult00bg.sav --game bg
 
 titan u7 save-npcs exult00bg.sav
-titan u7 save-npcs exult00bg.sav --static "C:/U7BG/STATIC" -f detail
+titan u7 save-npcs exult00bg.sav --static "<Black Gate install>/ULTIMA7/STATIC" -f detail
 titan u7 save-npcs exult00bg.sav -f csv -o bg_npcs.csv
 
 # Use SI config default STATIC
@@ -1751,7 +1751,7 @@ path = "./my_font.shp"
 When `format = "flex"` or `"both"`, the wizard resolves the target font
 archive by parsing Exult's `exult.cfg`:
 
-1. Auto-discovers `exult.cfg` at `%LOCALAPPDATA%\Exult\exult.cfg` (Windows)
+1. Auto-discovers `exult.cfg` in the user profile Exult folder (Windows)
    or `~/.exult.cfg` (Linux/macOS)
 2. Reads the game base path (`config/disk/game/{blackgate,serpentisle}/path`)
 3. Reads the font config (`config/gameplay/fonts`) — defaults to `"original"`
@@ -1763,7 +1763,7 @@ archive by parsing Exult's `exult.cfg`:
    directory instead, or enter a custom path
 
 For mods, enter the mod's patch directory (e.g.
-`C:\Ultima\ultima7si\SERPENT\mods\PaganExulted\patch`) and the wizard
+`<Serpent Isle install>/SERPENT/mods/<mod-name>/patch`) and the wizard
 appends the correct font filename automatically.
 
 The archive is auto-extended if the target slot exceeds the current record
@@ -1981,17 +1981,17 @@ titan u7 container-browse --game bg
 
 # Per-frame item names from an Exult installation (base game, no mod).
 titan u7 container-browse STATIC/ --gamedat gamedat/ --container-name desk \
-  --exult-flx "C:/Program Files/Exult/data/exult_bg.flx"
+  --exult-flx "<Exult install>/data/exult_bg.flx"
 
 # Mod query — map 0 (default world) with mod-specific names overlaid.
 # --exult-flx provides base frame mappings; --mod-data overlays the mod's additions.
 titan u7 container-browse STATIC/ --gamedat mods/MyMod/gamedat \
-  --exult-flx "C:/Program Files/Exult/data/exult_si.flx" \
+  --exult-flx "<Exult install>/data/exult_si.flx" \
   --mod-data "mods/MyMod/patch" --game si
 
 # Mod query — alternate map (map 1) inside the same mod gamedat.
 titan u7 container-browse STATIC/ --gamedat mods/MyMod/gamedat \
-  --exult-flx "C:/Program Files/Exult/data/exult_si.flx" \
+  --exult-flx "<Exult install>/data/exult_si.flx" \
   --mod-data "mods/MyMod/patch" --game si --map-num 1
 ```
 
@@ -2165,7 +2165,7 @@ The new multi-game format uses `[u8.*]`, `[u7bg.*]`, `[u7si.*]` sections.
 
 ```toml
 [game]
-base     = "C:/Program Files (x86)/GOG Galaxy/Games/Ultima 8"  # GOG Galaxy default
+base     = "<Ultima 8 install>"
 language = "ENGLISH"      # language sub-folder; "" for flat mode
 
 [paths]
@@ -2181,7 +2181,7 @@ nonfixed  = "U8SAVE.000"
 
 ```toml
 [u8.game]
-base     = "C:/Program Files (x86)/GOG Galaxy/Games/Ultima 8"
+base     = "<Ultima 8 install>"
 language = "ENGLISH"
 
 [u8.paths]
@@ -2193,7 +2193,7 @@ globs     = "globs/"
 nonfixed  = "U8SAVE.000"
 
 [u7bg.game]
-base     = "C:/GOG Games/Ultima VII/ULTIMA7"
+base     = "<Black Gate install>/ULTIMA7"
 variant  = "blackgate"
 
 [u7bg.paths]
@@ -2203,7 +2203,7 @@ palette  = "STATIC/PALETTES.FLX"
 gamedat  = "gamedat/"
 
 [u7si.game]
-base     = "C:/GOG Games/Ultima VII/SERPENT"
+base     = "<Serpent Isle install>/SERPENT"
 variant  = "serpentisle"
 
 [u7si.paths]
@@ -2221,7 +2221,7 @@ TITAN looks for a config file in this order, using the first one found:
 2. `~/.config/titan/config.toml` (Linux / macOS)
 3. `%APPDATA%\titan\config.toml` (Windows)
 
-Override with `titan --config /path/to/other.toml <command>`.
+Override with `titan --config <other config.toml> <command>`.
 
 ### Path expansion rules
 

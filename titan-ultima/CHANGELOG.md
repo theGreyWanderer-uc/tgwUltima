@@ -74,7 +74,7 @@ This project uses [Semantic Versioning](https://semver.org/):
   - Per-frame names from Exult FLX data.
   - Optional mod overrides from `textmsg.txt` and `shape_info.txt`.
 - Added stronger Exult-aware setup and config discovery:
-  - Detects runtime `gamedat` paths in `%LOCALAPPDATA%` profile folders.
+  - Detects runtime `gamedat` paths in user-profile Exult folders.
   - Discovers mod roots, saves, and archive/initgame sources.
   - Writes Exult paths into config when available.
 - Added multi-map mod support for `world-query` and `map-render` via
@@ -107,7 +107,7 @@ This project uses [Semantic Versioning](https://semver.org/):
 - **U7 Exult runtime source discovery** — `titan setup` now records live
   Exult profile `GAMEDAT` paths when initialized, detects mod
   `patch/initgame.dat` archives, and `u7 gamedat-info --mod NAME` can inspect
-  configured/AppData mod sources.
+  configured/user-profile mod sources.
 
 ### Fixed
 

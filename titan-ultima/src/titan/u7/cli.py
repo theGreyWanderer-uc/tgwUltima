@@ -2087,7 +2087,7 @@ def schedule_dump_cmd(
 @u7_app.command("gamedat-info")
 def gamedat_info_cmd(
     directory: Annotated[Optional[str], typer.Argument(
-        help="Path to a loose Exult GAMEDAT directory or archive (default: titan.toml/AppData)")] = None,
+        help="Path to a loose Exult GAMEDAT directory or archive (default: titan.toml/user profile)")] = None,
     static: Annotated[
         Optional[str],
         typer.Option("--static",
@@ -2099,7 +2099,7 @@ def gamedat_info_cmd(
     ] = "bg",
     mod: Annotated[
         Optional[str],
-        typer.Option("--mod", help="Resolve AppData Exult runtime GAMEDAT for this mod"),
+        typer.Option("--mod", help="Resolve user-profile Exult runtime GAMEDAT for this mod"),
     ] = None,
     output: Annotated[
         Optional[str],
