@@ -10,6 +10,18 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ---
 
+## [0.6.8]
+
+### Fixed
+
+- Cleaned U7 `build_exclude_set(no_building=True)` control flow so building
+  exclusion uses the same decision path as bit-flag filters.
+- Cleaned U7 typeflag statistics so the flag section counts only actual
+  TFA/occlusion/obstacle flags, while shape classes and animation types remain
+  separate.
+
+---
+
 ## [0.6.7]
 
 ### Added
