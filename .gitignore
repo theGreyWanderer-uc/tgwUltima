@@ -31,6 +31,7 @@ exult/
 
 # Reference
 .github/reference/
+titan-ultima/reference/
 
 # Local game/runtime data
 u6data/

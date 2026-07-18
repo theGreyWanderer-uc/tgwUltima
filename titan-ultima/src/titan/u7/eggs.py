@@ -36,12 +36,12 @@ from titan.u7.map import (
     U7MapObject,
     EggMeta,
     EGG_TYPE_NAMES,
-    EGG_CRITERIA_NAMES,
     _EGG_SHAPE,
     C_NUM_SCHUNKS,
     C_CHUNKS_PER_SCHUNK,
     C_TILES_PER_CHUNK,
 )
+from titan.u7.save import ALIGNMENT_NAMES, SCHEDULE_TYPE_NAMES
 from titan.u7.typeflag import U7TypeFlags
 from titan.u7.world import _superchunks_for_rect
 
@@ -49,6 +49,7 @@ from titan.u7.world import _superchunks_for_rect
 # ---------------------------------------------------------------------------
 # Query parameters
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class EggQueryParams:
@@ -58,13 +59,13 @@ class EggQueryParams:
     gamedat_dir: str
 
     # Filters
-    egg_types: list[str] = field(default_factory=list)   # e.g. ["usecode", "monster"]
-    fn_filter: Optional[int] = None                       # usecode function number
+    egg_types: list[str] = field(default_factory=list)  # e.g. ["usecode", "monster"]
+    fn_filter: Optional[int] = None  # usecode function number
     superchunks: list[int] = field(default_factory=list)
     tile_rect: Optional[tuple[int, int, int, int]] = None
 
     # Output
-    output_format: str = "table"   # "table" or "csv"
+    output_format: str = "table"  # "table" or "csv"
     output_path: Optional[str] = None
 
 
@@ -72,9 +73,11 @@ class EggQueryParams:
 # Result type
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class EggResult:
     """A single egg with its decoded metadata."""
+
     obj: U7MapObject
     superchunk: int
 
@@ -86,6 +89,7 @@ class EggResult:
 # ---------------------------------------------------------------------------
 # Core scanner
 # ---------------------------------------------------------------------------
+
 
 def query_eggs(params: EggQueryParams) -> list[EggResult]:
     """Scan IREG and return matching egg objects."""
@@ -150,6 +154,7 @@ def query_eggs(params: EggQueryParams) -> list[EggResult]:
 # Formatters
 # ---------------------------------------------------------------------------
 
+
 def format_table(results: list[EggResult]) -> str:
     lines: list[str] = [f"Egg query: {len(results)} egg(s) found.", ""]
 
@@ -166,6 +171,12 @@ def format_table(results: list[EggResult]) -> str:
     for res in results:
         m = res.meta
         fn_str = f"0x{m.data2:04X}" if m.egg_type == 5 else ""
+        monster = ""
+        if m.egg_type == 1:
+            monster = (
+                f"shape={m.monster_shape} frame={m.monster_frame} "
+                f"count={m.monster_count}"
+            )
         flags = []
         if m.once:
             flags.append("once")
@@ -180,7 +191,8 @@ def format_table(results: list[EggResult]) -> str:
             f"  0x{res.superchunk:02X}  "
             f"{res.obj.tx:<6}  {res.obj.ty:<6}  {res.obj.tz:<4}  "
             f"{m.type_name:<12}  {fn_str:<8}  {m.probability:>4}%  "
-            f"{m.distance:>4}  {m.criteria_name:<16}  {'  '.join(flags)}"
+            f"{m.distance:>4}  {m.criteria_name:<16}  "
+            f"{monster:<30}  {'  '.join(flags)}"
         )
 
     return "\n".join(lines) + "\n"
@@ -188,28 +200,77 @@ def format_table(results: list[EggResult]) -> str:
 
 def format_csv(results: list[EggResult]) -> str:
     buf = io.StringIO()
-    writer = csv.writer(buf, lineterminator='\n')
-    writer.writerow([
-        "sc", "tx", "ty", "tz",
-        "egg_type", "egg_type_name",
-        "fn",
-        "probability", "distance",
-        "criteria", "criteria_name",
-        "once", "nocturnal", "auto_reset", "hatched",
-        "data1", "data2",
-    ])
+    writer = csv.writer(buf, lineterminator="\n")
+    writer.writerow(
+        [
+            "sc",
+            "tx",
+            "ty",
+            "tz",
+            "egg_type",
+            "egg_type_name",
+            "fn",
+            "probability",
+            "distance",
+            "criteria",
+            "criteria_name",
+            "monster_shape",
+            "monster_frame",
+            "monster_count",
+            "monster_schedule",
+            "monster_schedule_name",
+            "monster_alignment",
+            "monster_alignment_name",
+            "once",
+            "nocturnal",
+            "auto_reset",
+            "hatched",
+            "data1",
+            "data2",
+        ]
+    )
     for res in results:
         m = res.meta
-        writer.writerow([
-            f"0x{res.superchunk:02X}",
-            res.obj.tx, res.obj.ty, res.obj.tz,
-            m.egg_type, m.type_name,
-            f"0x{m.data2:04X}" if m.egg_type == 5 else "",
-            m.probability, m.distance,
-            m.criteria, m.criteria_name,
-            int(m.once), int(m.nocturnal), int(m.auto_reset), int(m.hatched),
-            m.data1, m.data2,
-        ])
+        writer.writerow(
+            [
+                f"0x{res.superchunk:02X}",
+                res.obj.tx,
+                res.obj.ty,
+                res.obj.tz,
+                m.egg_type,
+                m.type_name,
+                f"0x{m.data2:04X}" if m.egg_type == 5 else "",
+                m.probability,
+                m.distance,
+                m.criteria,
+                m.criteria_name,
+                "" if m.monster_shape is None else m.monster_shape,
+                "" if m.monster_frame is None else m.monster_frame,
+                "" if m.monster_count is None else m.monster_count,
+                "" if m.monster_schedule is None else m.monster_schedule,
+                (
+                    ""
+                    if m.monster_schedule is None
+                    else SCHEDULE_TYPE_NAMES.get(
+                        m.monster_schedule, f"?{m.monster_schedule}"
+                    )
+                ),
+                "" if m.monster_alignment is None else m.monster_alignment,
+                (
+                    ""
+                    if m.monster_alignment is None
+                    else ALIGNMENT_NAMES.get(
+                        m.monster_alignment, f"?{m.monster_alignment}"
+                    )
+                ),
+                int(m.once),
+                int(m.nocturnal),
+                int(m.auto_reset),
+                int(m.hatched),
+                m.data1,
+                m.data2,
+            ]
+        )
     return buf.getvalue()
 
 
@@ -222,6 +283,7 @@ def format_results(results: list[EggResult], params: EggQueryParams) -> str:
 # ---------------------------------------------------------------------------
 # Interactive wizard
 # ---------------------------------------------------------------------------
+
 
 def run_wizard(
     static_dir: Optional[str] = None,
@@ -247,7 +309,9 @@ def run_wizard(
             return 0
 
     if not gamedat_dir:
-        gamedat_dir = questionary.path("GAMEDAT directory:", only_directories=True).ask()
+        gamedat_dir = questionary.path(
+            "GAMEDAT directory:", only_directories=True
+        ).ask()
         if not gamedat_dir:
             return 0
 
@@ -255,10 +319,13 @@ def run_wizard(
     print()
     print(f"  {_SEP}")
     type_choices = [v for k, v in sorted(EGG_TYPE_NAMES.items()) if k < 128]
-    selected_types: list[str] = questionary.checkbox(
-        "Filter by egg type? (space to toggle, leave blank for all)",
-        choices=type_choices,
-    ).ask() or []
+    selected_types: list[str] = (
+        questionary.checkbox(
+            "Filter by egg type? (space to toggle, leave blank for all)",
+            choices=type_choices,
+        ).ask()
+        or []
+    )
     if selected_types is None:
         return 0
 

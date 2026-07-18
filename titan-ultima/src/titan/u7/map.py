@@ -64,17 +64,17 @@ from titan.u7.typeflag import U7TypeFlags
 # ---------------------------------------------------------------------------
 # Constants (from exult_constants.h)
 # ---------------------------------------------------------------------------
-C_TILE_SIZE = 8                 # pixels per tile
-C_TILES_PER_CHUNK = 16          # tiles per chunk dimension
-C_CHUNKS_PER_SCHUNK = 16        # chunks per superchunk dimension
-C_NUM_SCHUNKS = 12              # superchunks per dimension
+C_TILE_SIZE = 8  # pixels per tile
+C_TILES_PER_CHUNK = 16  # tiles per chunk dimension
+C_CHUNKS_PER_SCHUNK = 16  # chunks per superchunk dimension
+C_NUM_SCHUNKS = 12  # superchunks per dimension
 C_NUM_CHUNKS = C_NUM_SCHUNKS * C_CHUNKS_PER_SCHUNK  # 192
-C_NUM_TILES = C_TILES_PER_CHUNK * C_NUM_CHUNKS       # 3072
+C_NUM_TILES = C_TILES_PER_CHUNK * C_NUM_CHUNKS  # 3072
 C_CHUNK_BYTES_V1 = C_TILES_PER_CHUNK * C_TILES_PER_CHUNK * 2  # 512
 C_CHUNK_BYTES_V2 = C_TILES_PER_CHUNK * C_TILES_PER_CHUNK * 3  # 768
 
 # Exult V2 extended chunks header (10 bytes)
-_V2_CHUNKS_MAGIC = b"\xFF\xFF\xFF\xFF" b"exlt" b"\x00\x00"
+_V2_CHUNKS_MAGIC = b"\xff\xff\xff\xffexlt\x00\x00"
 _V2_CHUNKS_HDR_SIZE = 10
 
 # ---------------------------------------------------------------------------
@@ -83,12 +83,23 @@ _V2_CHUNKS_HDR_SIZE = 10
 # 17 blend definitions: (R, G, B, alpha).  R/G/B are divided by 4 before use
 # in Exult's create_trans_table; alpha is the blend factor (0-255).
 _HARD_BLENDS = [
-    (208, 216, 224, 192), (136, 44, 148, 198), (248, 252, 80, 211),
-    (144, 148, 252, 247), (64, 216, 64, 201),  (204, 60, 84, 140),
-    (144, 40, 192, 128),  (96, 40, 16, 128),   (100, 108, 116, 192),
-    (68, 132, 28, 128),   (255, 208, 48, 64),  (28, 52, 255, 128),
-    (8, 68, 0, 128),      (255, 8, 8, 118),    (255, 244, 248, 128),
-    (56, 40, 32, 128),    (228, 224, 214, 82),
+    (208, 216, 224, 192),
+    (136, 44, 148, 198),
+    (248, 252, 80, 211),
+    (144, 148, 252, 247),
+    (64, 216, 64, 201),
+    (204, 60, 84, 140),
+    (144, 40, 192, 128),
+    (96, 40, 16, 128),
+    (100, 108, 116, 192),
+    (68, 132, 28, 128),
+    (255, 208, 48, 64),
+    (28, 52, 255, 128),
+    (8, 68, 0, 128),
+    (255, 8, 8, 118),
+    (255, 244, 248, 128),
+    (56, 40, 32, 128),
+    (228, 224, 214, 82),
 ]
 # Pre-compute RGBA blend colors (R/4, G/4, B/4, alpha)
 _BLEND_RGBA = [(r >> 2, g >> 2, b >> 2, a) for r, g, b, a in _HARD_BLENDS]
@@ -178,6 +189,7 @@ EGG_CRITERIA_NAMES: dict[int, str] = {
 @dataclass
 class EggMeta:
     """Decoded egg-specific fields from an IREG entry."""
+
     egg_type: int
     criteria: int
     probability: int
@@ -187,7 +199,7 @@ class EggMeta:
     hatched: bool
     auto_reset: bool
     data1: int
-    data2: int    # usecode function number when egg_type == 5
+    data2: int  # usecode function number when egg_type == 5
 
     @property
     def type_name(self) -> str:
@@ -197,10 +209,33 @@ class EggMeta:
     def criteria_name(self) -> str:
         return EGG_CRITERIA_NAMES.get(self.criteria, f"criteria_{self.criteria}")
 
+    @property
+    def monster_schedule(self) -> int | None:
+        return self.data1 >> 8 if self.egg_type == 1 else None
+
+    @property
+    def monster_alignment(self) -> int | None:
+        return self.data1 & 3 if self.egg_type == 1 else None
+
+    @property
+    def monster_count(self) -> int | None:
+        return (self.data1 & 0xFF) >> 2 if self.egg_type == 1 else None
+
+    @property
+    def monster_shape(self) -> int | None:
+        return self.data2 & 0x3FF if self.egg_type == 1 else None
+
+    @property
+    def monster_frame(self) -> int | None:
+        return (self.data2 >> 10) & 0x3F if self.egg_type == 1 else None
+
     def summary(self) -> str:
         """Short human-readable string for display."""
         parts = [f"type={self.type_name}"]
-        if self.egg_type == 5:            # usecode
+        if self.egg_type == 1:  # monster
+            parts.append(f"monster={self.monster_shape}")
+            parts.append(f"count={self.monster_count}")
+        if self.egg_type == 5:  # usecode
             parts.append(f"fn=0x{self.data2:04X}")
         parts.append(f"prob={self.probability}%")
         if self.distance:
@@ -220,11 +255,11 @@ class EggMeta:
 class U7MapObject:
     """A world object with absolute tile coordinates."""
 
-    tx: int       # absolute tile X (0–3071)
-    ty: int       # absolute tile Y (0–3071)
-    tz: int       # lift / Z level (0–15)
-    shape: int    # shape number
-    frame: int    # frame number
+    tx: int  # absolute tile X (0–3071)
+    ty: int  # absolute tile Y (0–3071)
+    tz: int  # lift / Z level (0–15)
+    shape: int  # shape number
+    frame: int  # frame number
     quality: int = 0
 
     # Screen coordinates (set during projection)
@@ -398,8 +433,10 @@ class U7MapRenderer:
             data = f.read()
 
         # Detect Exult V2 extended format
-        is_v2 = (len(data) >= _V2_CHUNKS_HDR_SIZE
-                 and data[:_V2_CHUNKS_HDR_SIZE] == _V2_CHUNKS_MAGIC)
+        is_v2 = (
+            len(data) >= _V2_CHUNKS_HDR_SIZE
+            and data[:_V2_CHUNKS_HDR_SIZE] == _V2_CHUNKS_MAGIC
+        )
 
         if is_v2:
             payload = data[_V2_CHUNKS_HDR_SIZE:]
@@ -423,12 +460,12 @@ class U7MapRenderer:
                     continue
                 if is_v2:
                     shnum = payload[off] + 256 * payload[off + 1]  # 16-bit shape
-                    frnum = payload[off + 2]                        # 8-bit frame
+                    frnum = payload[off + 2]  # 8-bit frame
                 else:
                     b0 = payload[off]
                     b1 = payload[off + 1]
                     shnum = b0 + 256 * (b1 & 0x03)  # 10-bit shape
-                    frnum = (b1 >> 2) & 0x1F          # 5-bit frame
+                    frnum = (b1 >> 2) & 0x1F  # 5-bit frame
                 tiles.append((shnum, frnum))
             terrains.append(tiles)
 
@@ -486,7 +523,7 @@ class U7MapRenderer:
                     break
 
                 if entry_size == 4:
-                    b0, b1, b2, b3 = rec[off], rec[off+1], rec[off+2], rec[off+3]
+                    b0, b1, b2, b3 = rec[off], rec[off + 1], rec[off + 2], rec[off + 3]
                     local_tx = (b0 >> 4) & 0x0F
                     local_ty = b0 & 0x0F
                     lift = b1 & 0x0F
@@ -504,10 +541,15 @@ class U7MapRenderer:
                 abs_tx = abs_cx * C_TILES_PER_CHUNK + local_tx
                 abs_ty = abs_cy * C_TILES_PER_CHUNK + local_ty
 
-                objects.append(U7MapObject(
-                    tx=abs_tx, ty=abs_ty, tz=lift,
-                    shape=shnum, frame=frnum,
-                ))
+                objects.append(
+                    U7MapObject(
+                        tx=abs_tx,
+                        ty=abs_ty,
+                        tz=lift,
+                        shape=shnum,
+                        frame=frnum,
+                    )
+                )
 
         return objects
 
@@ -585,7 +627,7 @@ class U7MapRenderer:
             if pos + entlen > dlen:
                 break
 
-            payload = data[pos:pos + entlen]
+            payload = data[pos : pos + entlen]
             pos += entlen
 
             if entlen < 6:
@@ -599,8 +641,8 @@ class U7MapRenderer:
             b4 = payload[4]
             b5 = payload[5]
 
-            chunk_cx = (b0 >> 4) & 0x0F    # chunk X within superchunk
-            tile_x = b0 & 0x0F              # tile X within chunk
+            chunk_cx = (b0 >> 4) & 0x0F  # chunk X within superchunk
+            tile_x = b0 & 0x0F  # tile X within chunk
             chunk_cy = (b1 >> 4) & 0x0F
             tile_y = b1 & 0x0F
 
@@ -615,10 +657,16 @@ class U7MapRenderer:
             abs_tx = (scx + chunk_cx) * C_TILES_PER_CHUNK + tile_x
             abs_ty = (scy + chunk_cy) * C_TILES_PER_CHUNK + tile_y
 
-            objects.append(U7MapObject(
-                tx=abs_tx, ty=abs_ty, tz=lift,
-                shape=shnum, frame=frnum, quality=quality,
-            ))
+            objects.append(
+                U7MapObject(
+                    tx=abs_tx,
+                    ty=abs_ty,
+                    tz=lift,
+                    shape=shnum,
+                    frame=frnum,
+                    quality=quality,
+                )
+            )
 
         return objects
 
@@ -660,7 +708,7 @@ class U7MapRenderer:
             if pos[0] + 3 > dlen:
                 pos[0] = dlen
                 return
-            pos[0] += 1                              # type byte
+            pos[0] += 1  # type byte
             slen = data[pos[0]] + data[pos[0] + 1] * 256
             pos[0] += 2 + slen
 
@@ -673,20 +721,20 @@ class U7MapRenderer:
 
                 if entlen == 0 or entlen == 1:
                     if in_container:
-                        break           # 0x01 = end-of-container
-                    continue            # 0x00 = padding at top level
+                        break  # 0x01 = end-of-container
+                    continue  # 0x00 = padding at top level
 
-                if entlen == 2:         # 2-byte index ID
+                if entlen == 2:  # 2-byte index ID
                     pos[0] += 2
                     continue
 
-                if entlen == 0xFF:      # special entry (usecode/attribs/string)
+                if entlen == 0xFF:  # special entry (usecode/attribs/string)
                     _skip_special()
                     continue
 
                 extended = False
-                if entlen in (0xFE, 0xFD):   # extended shape / extended lift
-                    extended = (entlen == 0xFE)
+                if entlen in (0xFE, 0xFD):  # extended shape / extended lift
+                    extended = entlen == 0xFE
                     if pos[0] >= dlen:
                         break
                     entlen = data[pos[0]]
@@ -695,7 +743,7 @@ class U7MapRenderer:
                 if pos[0] + entlen > dlen:
                     break
 
-                payload = data[pos[0]:pos[0] + entlen]
+                payload = data[pos[0] : pos[0] + entlen]
                 pos[0] += entlen
 
                 testlen = entlen - (1 if extended else 0)
@@ -711,7 +759,7 @@ class U7MapRenderer:
                         continue
                     shnum = payload[2] + payload[3] * 256
                     frnum = payload[4]
-                    adj = 1           # ++entry shift in Exult
+                    adj = 1  # ++entry shift in Exult
                 else:
                     shnum = payload[2] + (payload[3] & 0x03) * 256
                     frnum = (payload[3] >> 2) & 0x3F
@@ -724,19 +772,23 @@ class U7MapRenderer:
                     abs_ty = payload[1]
                 else:
                     chunk_cx = (payload[0] >> 4) & 0x0F
-                    tile_x   = payload[0] & 0x0F
+                    tile_x = payload[0] & 0x0F
                     chunk_cy = (payload[1] >> 4) & 0x0F
-                    tile_y   = payload[1] & 0x0F
-                    abs_tx   = (scx + chunk_cx) * C_TILES_PER_CHUNK + tile_x
-                    abs_ty   = (scy + chunk_cy) * C_TILES_PER_CHUNK + tile_y
+                    tile_y = payload[1] & 0x0F
+                    abs_tx = (scx + chunk_cx) * C_TILES_PER_CHUNK + tile_x
+                    abs_ty = (scy + chunk_cy) * C_TILES_PER_CHUNK + tile_y
 
                 # ── Lift and quality (simple objects) ────────────────────
-                lift    = (payload[4 + adj] >> 4) & 0x0F if len(payload) > 4 + adj else 0
+                lift = (payload[4 + adj] >> 4) & 0x0F if len(payload) > 4 + adj else 0
                 quality = payload[5 + adj] if len(payload) > 5 + adj else 0
 
                 obj = U7MapObject(
-                    tx=abs_tx, ty=abs_ty, tz=lift,
-                    shape=shnum, frame=frnum, quality=quality,
+                    tx=abs_tx,
+                    ty=abs_ty,
+                    tz=lift,
+                    shape=shnum,
+                    frame=frnum,
+                    quality=quality,
                     source="ireg",
                 )
 
@@ -747,9 +799,13 @@ class U7MapRenderer:
                 # Treating them as containers causes subsequent top-level IREG
                 # entries to be incorrectly consumed as the egg's children.
                 has_children_field = False
-                if shnum != _EGG_SHAPE and testlen in (12, 13, 14) and len(payload) >= 6 + adj:
+                if (
+                    shnum != _EGG_SHAPE
+                    and testlen in (12, 13, 14)
+                    and len(payload) >= 6 + adj
+                ):
                     type_word = payload[4 + adj] + payload[5 + adj] * 256
-                    has_children_field = (type_word != 0)
+                    has_children_field = type_word != 0
 
                     if testlen == 12:
                         # Override lift/quality from correct container offsets
@@ -757,7 +813,7 @@ class U7MapRenderer:
                             lift = (payload[9 + adj] >> 4) & 0x0F
                         if len(payload) > 7 + adj:
                             quality = payload[7 + adj]
-                        obj.tz      = lift
+                        obj.tz = lift
                         obj.quality = quality
 
                 if has_children_field:
@@ -765,21 +821,33 @@ class U7MapRenderer:
 
                 # ── Egg-specific metadata (shape 275 at root level) ──────────
                 if shnum == _EGG_SHAPE and not in_container and testlen in (12, 14):
-                    tword = payload[4 + adj] + payload[5 + adj] * 256 if len(payload) > 5 + adj else 0
-                    prob  = payload[6 + adj] if len(payload) > 6 + adj else 100
-                    d1    = (payload[7 + adj] + payload[8 + adj] * 256) if len(payload) > 8 + adj else 0
-                    d2    = (payload[10 + adj] + payload[11 + adj] * 256) if len(payload) > 11 + adj else 0
+                    tword = (
+                        payload[4 + adj] + payload[5 + adj] * 256
+                        if len(payload) > 5 + adj
+                        else 0
+                    )
+                    prob = payload[6 + adj] if len(payload) > 6 + adj else 100
+                    d1 = (
+                        (payload[7 + adj] + payload[8 + adj] * 256)
+                        if len(payload) > 8 + adj
+                        else 0
+                    )
+                    d2 = (
+                        (payload[10 + adj] + payload[11 + adj] * 256)
+                        if len(payload) > 11 + adj
+                        else 0
+                    )
                     obj.egg_meta = EggMeta(
-                        egg_type   = tword & 0xF,
-                        criteria   = (tword >> 4) & 0x7,
-                        probability= prob,
-                        distance   = (tword >> 10) & 0x1F,
-                        nocturnal  = bool((tword >> 7) & 1),
-                        once       = bool((tword >> 8) & 1),
-                        hatched    = bool((tword >> 9) & 1),
-                        auto_reset = bool((tword >> 15) & 1),
-                        data1      = d1,
-                        data2      = d2,
+                        egg_type=tword & 0xF,
+                        criteria=(tword >> 4) & 0x7,
+                        probability=prob,
+                        distance=(tword >> 10) & 0x1F,
+                        nocturnal=bool((tword >> 7) & 1),
+                        once=bool((tword >> 8) & 1),
+                        hatched=bool((tword >> 9) & 1),
+                        auto_reset=bool((tword >> 15) & 1),
+                        data1=d1,
+                        data2=d2,
                     )
 
                 objects.append(obj)
@@ -808,6 +876,7 @@ class U7MapRenderer:
         immediate neighbours first, then whole chunk.  Skips shape 12
         frame 0 (palette-cycling void tile) and RLE shapes.
         """
+
         # Check if a shape is a flat tile (non-RLE)
         def _is_flat(shnum: int) -> bool:
             return shnum < FIRST_OBJ_SHAPE
@@ -993,8 +1062,10 @@ class U7MapRenderer:
                 coord_bbox = draw.textbbox((coord_x, coord_y), coord_label, font=font)
                 if coord_bbox is not None:
                     draw.rectangle(
-                        [(coord_bbox[0] - 4, coord_bbox[1] - 2),
-                         (coord_bbox[2] + 4, coord_bbox[3] + 2)],
+                        [
+                            (coord_bbox[0] - 4, coord_bbox[1] - 2),
+                            (coord_bbox[2] + 4, coord_bbox[3] + 2),
+                        ],
                         fill=(0, 0, 0, 180),
                     )
                 draw.text((coord_x, coord_y), coord_label, fill=rect.color, font=font)
@@ -1059,14 +1130,14 @@ class U7MapRenderer:
         axleft = ax - axs + 1
         ayleft = ay - ays + 1
         aztop = az + azs
-        a_flat = (azs == 0)
+        a_flat = azs == 0
         if a_flat:
             aztop = az  # flat objects: ztop = tz
 
         bxleft = bx - bxs + 1
         byleft = by - bys + 1
         bztop = bz + bzs
-        b_flat = (bzs == 0)
+        b_flat = bzs == 0
         if b_flat:
             bztop = bz
 
@@ -1218,12 +1289,16 @@ class U7MapRenderer:
                 return frame_cache[key]
 
             if shnum not in shape_cache:
-                rec = (self.shapes_vga.get_record(shnum)
-                       if shnum < len(self.shapes_vga.records) else None)
+                rec = (
+                    self.shapes_vga.get_record(shnum)
+                    if shnum < len(self.shapes_vga.records)
+                    else None
+                )
                 if rec:
                     try:
                         shape_cache[shnum] = U7Shape.from_data(
-                            rec, is_tile=(shnum < FIRST_OBJ_SHAPE))
+                            rec, is_tile=(shnum < FIRST_OBJ_SHAPE)
+                        )
                     except Exception:
                         shape_cache[shnum] = None
                 else:
@@ -1366,15 +1441,18 @@ class U7MapRenderer:
                     tilex = abs_tx % C_TILES_PER_CHUNK
                     tiley = abs_ty % C_TILES_PER_CHUNK
                     flat = self._find_nearby_flat(
-                        self.terrains[terrain_idx], tilex, tiley)
+                        self.terrains[terrain_idx], tilex, tiley
+                    )
                     if flat:
                         flat_entry = _get_frame(flat[0], flat[1])
-                        if flat_entry and (flat_entry[0].width == C_TILE_SIZE
-                                           and flat_entry[0].height == C_TILE_SIZE):
+                        if flat_entry and (
+                            flat_entry[0].width == C_TILE_SIZE
+                            and flat_entry[0].height == C_TILE_SIZE
+                        ):
                             canvas.alpha_composite(flat_entry[0], dest=(px, py))
-                rle_terrain_objs.append(U7MapObject(
-                    tx=abs_tx, ty=abs_ty, tz=0,
-                    shape=shnum, frame=frnum))
+                rle_terrain_objs.append(
+                    U7MapObject(tx=abs_tx, ty=abs_ty, tz=0, shape=shnum, frame=frnum)
+                )
 
         # --- 2. Depth-sort and paint objects ---
         for obj in objects:
@@ -1401,11 +1479,14 @@ class U7MapRenderer:
                 dx = e.dims_x if e else 1
                 dy = e.dims_y if e else 1
                 dz = e.dims_z if e else 0
-                sprite_sboxes.append((
-                    obj.screen_x - dx * C_TILE_SIZE,
-                    obj.screen_x + C_TILE_SIZE,
-                    obj.screen_y - dy * C_TILE_SIZE - dz * 4,
-                    obj.screen_y + C_TILE_SIZE))
+                sprite_sboxes.append(
+                    (
+                        obj.screen_x - dx * C_TILE_SIZE,
+                        obj.screen_x + C_TILE_SIZE,
+                        obj.screen_y - dy * C_TILE_SIZE - dz * 4,
+                        obj.screen_y + C_TILE_SIZE,
+                    )
+                )
 
         sorted_objects = self._dag_sort(all_objects, tfa, sboxes=sprite_sboxes)
 
@@ -1417,8 +1498,12 @@ class U7MapRenderer:
             # +7: anchor at SE pixel of tile (Exult convention)
             px = obj.screen_x - origin_sx + pad + 7 - xoff
             py = obj.screen_y - origin_sy + pad + 7 - yoff
-            if (px + img.width <= 0 or py + img.height <= 0 or
-                    px >= canvas_w or py >= canvas_h):
+            if (
+                px + img.width <= 0
+                or py + img.height <= 0
+                or px >= canvas_w
+                or py >= canvas_h
+            ):
                 continue
             canvas.alpha_composite(img, dest=(px, py))
 
@@ -1435,11 +1520,17 @@ class U7MapRenderer:
             chunk_px = C_TILES_PER_CHUNK * C_TILE_SIZE  # 128
             for i in range(C_CHUNKS_PER_SCHUNK + 1):
                 x = i * chunk_px + pad
-                draw.line([(x, pad), (x, ntiles * C_TILE_SIZE + pad)],
-                          fill=chunk_rgba, width=grid_size)
+                draw.line(
+                    [(x, pad), (x, ntiles * C_TILE_SIZE + pad)],
+                    fill=chunk_rgba,
+                    width=grid_size,
+                )
                 y = i * chunk_px + pad
-                draw.line([(pad, y), (ntiles * C_TILE_SIZE + pad, y)],
-                          fill=chunk_rgba, width=grid_size)
+                draw.line(
+                    [(pad, y), (ntiles * C_TILE_SIZE + pad, y)],
+                    fill=chunk_rgba,
+                    width=grid_size,
+                )
 
             # Chunk coordinate labels
             for cy_i in range(C_CHUNKS_PER_SCHUNK):
@@ -1448,8 +1539,9 @@ class U7MapRenderer:
                     abs_cy = scy + cy_i
                     lx = cx_i * chunk_px + pad + 2
                     ly = cy_i * chunk_px + pad + 1
-                    draw.text((lx, ly), f"{abs_cx},{abs_cy}",
-                              fill=chunk_rgba, font=font)
+                    draw.text(
+                        (lx, ly), f"{abs_cx},{abs_cy}", fill=chunk_rgba, font=font
+                    )
 
             # Superchunk border (red) with label
             sx0 = pad
@@ -1467,12 +1559,11 @@ class U7MapRenderer:
                 sc_font = ImageFont.truetype("arial.ttf", 18)
             except OSError:
                 sc_font = ImageFont.load_default()
-            draw.text((sx0 + 4, sy0 + 14), f"SC {schunk}",
-                      fill=sc_rgba, font=sc_font)
+            draw.text((sx0 + 4, sy0 + 14), f"SC {schunk}", fill=sc_rgba, font=sc_font)
 
         if highlight_rects:
             self._draw_tile_rect_overlays(
-            canvas,
+                canvas,
                 highlight_rects,
                 sx_fn=sx_fn,
                 sy_fn=sy_fn,
@@ -1620,14 +1711,17 @@ class U7MapRenderer:
                             flat = self._find_nearby_flat(terrain, tilex, tiley)
                             if flat:
                                 flat_entry = _get_frame(flat[0], flat[1])
-                                if (flat_entry
-                                        and flat_entry[0].width == C_TILE_SIZE
-                                        and flat_entry[0].height == C_TILE_SIZE):
-                                    canvas.alpha_composite(
-                                        flat_entry[0], dest=(px, py))
-                            rle_terrain_objs.append(U7MapObject(
-                                tx=abs_tx, ty=abs_ty, tz=0,
-                                shape=shnum, frame=frnum))
+                                if (
+                                    flat_entry
+                                    and flat_entry[0].width == C_TILE_SIZE
+                                    and flat_entry[0].height == C_TILE_SIZE
+                                ):
+                                    canvas.alpha_composite(flat_entry[0], dest=(px, py))
+                            rle_terrain_objs.append(
+                                U7MapObject(
+                                    tx=abs_tx, ty=abs_ty, tz=0, shape=shnum, frame=frnum
+                                )
+                            )
 
         # --- 2. Collect ALL objects, sort globally, and paint ---
         # Sorting all objects together (rather than per-superchunk) ensures
@@ -1640,7 +1734,9 @@ class U7MapRenderer:
             self.project(obj, view)
         all_objects.extend(rle_terrain_objs)
 
-        _lift_ok = (lambda tz: True) if max_lift is None else (lambda tz: tz <= max_lift)
+        _lift_ok = (
+            (lambda tz: True) if max_lift is None else (lambda tz: tz <= max_lift)
+        )
 
         for sc in sorted(needed_schunks):
             ifix_name = f"U7IFIX{sc:02X}"
@@ -1649,10 +1745,12 @@ class U7MapRenderer:
             for obj in ifix_objs:
                 obj_cx = obj.tx // C_TILES_PER_CHUNK
                 obj_cy = obj.ty // C_TILES_PER_CHUNK
-                if (chunk_x0 <= obj_cx <= chunk_x1 and
-                        chunk_y0 <= obj_cy <= chunk_y1 and
-                        obj.shape not in exclude and
-                        _lift_ok(obj.tz)):
+                if (
+                    chunk_x0 <= obj_cx <= chunk_x1
+                    and chunk_y0 <= obj_cy <= chunk_y1
+                    and obj.shape not in exclude
+                    and _lift_ok(obj.tz)
+                ):
                     self.project(obj, view)
                     all_objects.append(obj)
 
@@ -1663,10 +1761,12 @@ class U7MapRenderer:
                 for obj in ireg_objs:
                     obj_cx = obj.tx // C_TILES_PER_CHUNK
                     obj_cy = obj.ty // C_TILES_PER_CHUNK
-                    if (chunk_x0 <= obj_cx <= chunk_x1 and
-                            chunk_y0 <= obj_cy <= chunk_y1 and
-                            obj.shape not in exclude and
-                            _lift_ok(obj.tz)):
+                    if (
+                        chunk_x0 <= obj_cx <= chunk_x1
+                        and chunk_y0 <= obj_cy <= chunk_y1
+                        and obj.shape not in exclude
+                        and _lift_ok(obj.tz)
+                    ):
                         self.project(obj, view)
                         all_objects.append(obj)
 
@@ -1679,21 +1779,22 @@ class U7MapRenderer:
                     img, xoff, yoff = entry
                     ax = obj.screen_x + 7 - xoff
                     ay = obj.screen_y + 7 - yoff
-                    sprite_sboxes.append(
-                        (ax, ax + img.width, ay, ay + img.height))
+                    sprite_sboxes.append((ax, ax + img.width, ay, ay + img.height))
                 else:
                     e = tfa.get(obj.shape)
                     dx = e.dims_x if e else 1
                     dy = e.dims_y if e else 1
                     dz = e.dims_z if e else 0
-                    sprite_sboxes.append((
-                        obj.screen_x - dx * C_TILE_SIZE,
-                        obj.screen_x + C_TILE_SIZE,
-                        obj.screen_y - dy * C_TILE_SIZE - dz * 4,
-                        obj.screen_y + C_TILE_SIZE))
+                    sprite_sboxes.append(
+                        (
+                            obj.screen_x - dx * C_TILE_SIZE,
+                            obj.screen_x + C_TILE_SIZE,
+                            obj.screen_y - dy * C_TILE_SIZE - dz * 4,
+                            obj.screen_y + C_TILE_SIZE,
+                        )
+                    )
 
-            sorted_objects = self._dag_sort(
-                all_objects, tfa, sboxes=sprite_sboxes)
+            sorted_objects = self._dag_sort(all_objects, tfa, sboxes=sprite_sboxes)
 
             # Paint objects with +7 SE anchor offset
             for obj in sorted_objects:
@@ -1703,8 +1804,12 @@ class U7MapRenderer:
                 img, xoff, yoff = entry
                 px = obj.screen_x - origin_sx + pad + 7 - xoff
                 py = obj.screen_y - origin_sy + pad + 7 - yoff
-                if (px + img.width <= 0 or py + img.height <= 0 or
-                        px >= canvas_w or py >= canvas_h):
+                if (
+                    px + img.width <= 0
+                    or py + img.height <= 0
+                    or px >= canvas_w
+                    or py >= canvas_h
+                ):
                     continue
                 canvas.alpha_composite(img, dest=(px, py))
 
@@ -1723,12 +1828,18 @@ class U7MapRenderer:
             # Chunk grid lines (blue)
             for i in range(chunk_x1 - chunk_x0 + 2):
                 x = i * chunk_px + pad
-                draw.line([(x, pad), (x, h_tiles * C_TILE_SIZE + pad)],
-                          fill=chunk_rgba, width=grid_size)
+                draw.line(
+                    [(x, pad), (x, h_tiles * C_TILE_SIZE + pad)],
+                    fill=chunk_rgba,
+                    width=grid_size,
+                )
             for i in range(chunk_y1 - chunk_y0 + 2):
                 y = i * chunk_px + pad
-                draw.line([(pad, y), (w_tiles * C_TILE_SIZE + pad, y)],
-                          fill=chunk_rgba, width=grid_size)
+                draw.line(
+                    [(pad, y), (w_tiles * C_TILE_SIZE + pad, y)],
+                    fill=chunk_rgba,
+                    width=grid_size,
+                )
 
             # Chunk coordinate labels (blue)
             for cy_i in range(chunk_y1 - chunk_y0 + 1):
@@ -1737,8 +1848,9 @@ class U7MapRenderer:
                     abs_cy = chunk_y0 + cy_i
                     lx = cx_i * chunk_px + pad + 2
                     ly = cy_i * chunk_px + pad + 1
-                    draw.text((lx, ly), f"{abs_cx},{abs_cy}",
-                              fill=chunk_rgba, font=font)
+                    draw.text(
+                        (lx, ly), f"{abs_cx},{abs_cy}", fill=chunk_rgba, font=font
+                    )
 
             # Superchunk grid lines (red) with labels
             try:
@@ -1759,16 +1871,22 @@ class U7MapRenderer:
                 if cx < chunk_x0 or cx > chunk_x1 + 1:
                     continue
                 x = (cx - chunk_x0) * chunk_px + pad
-                draw.line([(x, pad), (x, h_tiles * C_TILE_SIZE + pad)],
-                          fill=sc_rgba, width=sc_line_w)
+                draw.line(
+                    [(x, pad), (x, h_tiles * C_TILE_SIZE + pad)],
+                    fill=sc_rgba,
+                    width=sc_line_w,
+                )
             # Horizontal superchunk boundaries
             for scy in range(sc_y0, sc_y1 + 2):
                 cy = scy * C_CHUNKS_PER_SCHUNK
                 if cy < chunk_y0 or cy > chunk_y1 + 1:
                     continue
                 y = (cy - chunk_y0) * chunk_px + pad
-                draw.line([(pad, y), (w_tiles * C_TILE_SIZE + pad, y)],
-                          fill=sc_rgba, width=sc_line_w)
+                draw.line(
+                    [(pad, y), (w_tiles * C_TILE_SIZE + pad, y)],
+                    fill=sc_rgba,
+                    width=sc_line_w,
+                )
 
             # Superchunk number labels (red)
             for scy in range(sc_y0, sc_y1 + 1):
@@ -1780,12 +1898,11 @@ class U7MapRenderer:
                     # Position relative to the rendered region
                     lx = (max(sc_cx, chunk_x0) - chunk_x0) * chunk_px + pad + 4
                     ly = (max(sc_cy, chunk_y0) - chunk_y0) * chunk_px + pad + 14
-                    draw.text((lx, ly), f"SC {sc_num}",
-                              fill=sc_rgba, font=sc_font)
+                    draw.text((lx, ly), f"SC {sc_num}", fill=sc_rgba, font=sc_font)
 
         if highlight_rects:
             self._draw_tile_rect_overlays(
-            canvas,
+                canvas,
                 highlight_rects,
                 sx_fn=sx_fn,
                 sy_fn=sy_fn,
@@ -1899,7 +2016,11 @@ class U7MapSampler:
             if key in tile_color_cache:
                 return tile_color_cache[key]
 
-            rec = shapes_vga.get_record(shnum) if shnum < len(shapes_vga.records) else None
+            rec = (
+                shapes_vga.get_record(shnum)
+                if shnum < len(shapes_vga.records)
+                else None
+            )
             if not rec:
                 tile_color_cache[key] = None
                 return None
@@ -1934,9 +2055,11 @@ class U7MapSampler:
                 tile_color_cache[key] = None
                 return None
 
-            color = (int(pal_flat[pidx, 0]),
-                     int(pal_flat[pidx, 1]),
-                     int(pal_flat[pidx, 2]))
+            color = (
+                int(pal_flat[pidx, 0]),
+                int(pal_flat[pidx, 1]),
+                int(pal_flat[pidx, 2]),
+            )
             tile_color_cache[key] = color
             return color
 
@@ -1963,8 +2086,7 @@ class U7MapSampler:
 
                     for tiley in range(C_TILES_PER_CHUNK):
                         for tilex in range(C_TILES_PER_CHUNK):
-                            shnum, frnum = terrain[
-                                tiley * C_TILES_PER_CHUNK + tilex]
+                            shnum, frnum = terrain[tiley * C_TILES_PER_CHUNK + tilex]
                             if shnum in exclude:
                                 continue
 
@@ -1981,10 +2103,8 @@ class U7MapSampler:
                             # Shape 12/0 is a palette-cycling void used as
                             # filler under mountain sprites; its static
                             # sample is a misleading blue.
-                            if shnum >= FIRST_OBJ_SHAPE or (
-                                    shnum == 12 and frnum == 0):
-                                flat = renderer._find_nearby_flat(
-                                    terrain, tilex, tiley)
+                            if shnum >= FIRST_OBJ_SHAPE or (shnum == 12 and frnum == 0):
+                                flat = renderer._find_nearby_flat(terrain, tilex, tiley)
                                 if flat:
                                     color = _tile_color(flat[0], flat[1])
                                     if color is not None:
@@ -2025,11 +2145,17 @@ class U7MapSampler:
                 for i in range(C_NUM_CHUNKS + 1):
                     pos = i * chunk_px
                     if 0 <= pos < img.width:
-                        draw.line([(pos, 0), (pos, img.height - 1)],
-                                  fill=chunk_rgb, width=grid_size)
+                        draw.line(
+                            [(pos, 0), (pos, img.height - 1)],
+                            fill=chunk_rgb,
+                            width=grid_size,
+                        )
                     if 0 <= pos < img.height:
-                        draw.line([(0, pos), (img.width - 1, pos)],
-                                  fill=chunk_rgb, width=grid_size)
+                        draw.line(
+                            [(0, pos), (img.width - 1, pos)],
+                            fill=chunk_rgb,
+                            width=grid_size,
+                        )
 
                 # Chunk coordinate labels
                 if chunk_px >= 12:
@@ -2038,8 +2164,12 @@ class U7MapSampler:
                             lx = cx_i * chunk_px + 1
                             ly = cy_i * chunk_px + 1
                             if lx < img.width and ly < img.height:
-                                draw.text((lx, ly), f"{cx_i},{cy_i}",
-                                          fill=chunk_rgb, font=chunk_font)
+                                draw.text(
+                                    (lx, ly),
+                                    f"{cx_i},{cy_i}",
+                                    fill=chunk_rgb,
+                                    font=chunk_font,
+                                )
 
             # --- Superchunk grid (red) ---
             try:
@@ -2052,11 +2182,13 @@ class U7MapSampler:
             for i in range(C_NUM_SCHUNKS + 1):
                 pos = i * schunk_px
                 if 0 <= pos < img.width:
-                    draw.line([(pos, 0), (pos, img.height - 1)],
-                              fill=sc_rgb, width=sc_line_w)
+                    draw.line(
+                        [(pos, 0), (pos, img.height - 1)], fill=sc_rgb, width=sc_line_w
+                    )
                 if 0 <= pos < img.height:
-                    draw.line([(0, pos), (img.width - 1, pos)],
-                              fill=sc_rgb, width=sc_line_w)
+                    draw.line(
+                        [(0, pos), (img.width - 1, pos)], fill=sc_rgb, width=sc_line_w
+                    )
 
             # Superchunk number labels
             for scy_i in range(C_NUM_SCHUNKS):
@@ -2065,7 +2197,6 @@ class U7MapSampler:
                     lx = scx_i * schunk_px + 2
                     ly = scy_i * schunk_px + 2
                     if lx < img.width and ly < img.height:
-                        draw.text((lx, ly), f"SC {sc_num}",
-                                  fill=sc_rgb, font=sc_font)
+                        draw.text((lx, ly), f"SC {sc_num}", fill=sc_rgb, font=sc_font)
 
         return img

@@ -541,6 +541,16 @@ def cmd_setup(args: SimpleNamespace) -> int:
             path / "SERPENT" / "STATIC",
         ]
         return any(static.is_dir() for static in static_candidates)
+
+    def _u7_variant_from_root(path: Path) -> str:
+        lowered = path.name.lower()
+        if (path / "SERPENT" / "STATIC").is_dir() or path.name.upper() == "SERPENT":
+            return "si"
+        if (path / "ULTIMA7" / "STATIC").is_dir() or path.name.upper() == "ULTIMA7":
+            return "bg"
+        if "serpent" in lowered or lowered.endswith("si") or "ultima7si" in lowered:
+            return "si"
+        return "bg"
     # Windows: GOG Galaxy client (most common current install)
     for drive in "CDEFG":
         _add_candidate(Path(f"{drive}:\\Program Files (x86)\\GOG Galaxy\\Games\\Ultima 8"))
@@ -589,6 +599,10 @@ def cmd_setup(args: SimpleNamespace) -> int:
         for path in [
             Path(f"{drive}:\\GOG Games\\Ultima VII"),
             Path(f"{drive}:\\GOG Games\\Ultima VII - Complete"),
+            Path(f"{drive}:\\Ultima\\ultima7bg"),
+            Path(f"{drive}:\\Ultima\\ultima7si"),
+            Path(f"{drive}:\\Ultima\\ultima7bg_no_exult"),
+            Path(f"{drive}:\\Ultima\\ultima7si_no_exult"),
             Path(f"{drive}:\\ULTIMA7"),
             Path(f"{drive}:\\SERPENT"),
         ]:
@@ -658,8 +672,8 @@ def cmd_setup(args: SimpleNamespace) -> int:
     for u7_base in u7_candidates:
         if not u7_base.exists() or not _looks_like_u7_root(u7_base):
             continue
-        lowered = u7_base.name.lower()
-        if "serpent" in lowered:
+        variant = _u7_variant_from_root(u7_base)
+        if variant == "si":
             if detected_u7si is None:
                 detected_u7si = u7_base
                 print(f"  Found Serpent Isle: {u7_base}")
