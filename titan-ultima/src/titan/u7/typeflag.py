@@ -518,13 +518,14 @@ class U7TypeFlags:
             return exclude_set
 
         for entry in self.entries:
-            if want_no_building and entry.is_building:
+            excluded = want_no_building and entry.is_building
+            if not excluded:
+                for _name, (byte_idx, mask) in active.items():
+                    if entry.tfa[byte_idx] & mask:
+                        excluded = True
+                        break
+            if excluded:
                 exclude_set.add(entry.shape_num)
-                continue
-            for _name, (byte_idx, mask) in active.items():
-                if entry.tfa[byte_idx] & mask:
-                    exclude_set.add(entry.shape_num)
-                    break
 
         return exclude_set
 
@@ -666,8 +667,21 @@ class U7TypeFlags:
         n_animated_nibble = 0
 
         for entry in self.entries:
-            for name in entry.flag_names():
-                flag_counts[name] = flag_counts.get(name, 0) + 1
+            for bit, name in self.BYTE0_FLAG_NAMES.items():
+                if entry.tfa[0] & bit:
+                    flag_counts[name] = flag_counts.get(name, 0) + 1
+            for bit, name in self.BYTE1_FLAG_NAMES.items():
+                if entry.tfa[1] & bit:
+                    flag_counts[name] = flag_counts.get(name, 0) + 1
+            for bit, name in self.BYTE2_FLAG_NAMES.items():
+                if entry.tfa[2] & bit:
+                    flag_counts[name] = flag_counts.get(name, 0) + 1
+            if entry.occludes:
+                flag_counts["occludes"] = flag_counts.get("occludes", 0) + 1
+            if entry.is_x_obstacle:
+                flag_counts["x_obstacle"] = flag_counts.get("x_obstacle", 0) + 1
+            if entry.is_y_obstacle:
+                flag_counts["y_obstacle"] = flag_counts.get("y_obstacle", 0) + 1
             if entry.shape_class != 0:
                 cn = entry.shape_class_name
                 class_counts[cn] = class_counts.get(cn, 0) + 1

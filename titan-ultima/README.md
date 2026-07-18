@@ -78,7 +78,7 @@ place for command options, longer examples, and format notes.
 | Sound and speech | Sonarc sound effects and speech FLX archives | Creative Voice `.voc` decode and `U7SPEECH.SPC` export | `titan u7 speech-export U7SPEECH.SPC -o speech_wav/` | [Sound commands](cli_reference.md#sound-commands), [U7 voice commands](cli_reference.md#u7-voice--speech-commands) |
 | Dialogue web | Prepare, optionally copy NPC JSON/META files, validate, and launch the U8 dialogue web machine | Not applicable | `titan dialogue launch` | [Dialogue CLI](cli_reference.md#dialogue-commands-titan-dialogue), [Dialogue README](src/titan/dialogue/websrc/READMEd.md) |
 | Maps | Render U8 isometric/top-down maps from `FIXED.DAT`, GLOBs, shapes, saves | Render U7 maps from `U7MAP`, `U7CHUNKS`, `U7IFIX*`, `SHAPES.VGA`, optional `u7ireg*` | `titan u7 map-render STATIC/ --full -o u7_world.png` | [U8 map commands](cli_reference.md#u8-map-commands), [U7 map commands](cli_reference.md#u7-map-commands) |
-| Type data | Decode U8 `TYPEFLAG.DAT` | Decode U7 `TFA.DAT`, `SHPDIMS.DAT`, `WGTVOL.DAT` | `titan u7 typeflag-dump STATIC/ -f csv -o tfa_data.csv` | [U8 data commands](cli_reference.md#u8-data-inspection-commands), [U7 type flag commands](cli_reference.md#u7-type-flag-commands) |
+| Type data | Decode U8 `TYPEFLAG.DAT` | Decode U7 `TFA.DAT`, `SHPDIMS.DAT`, `WGTVOL.DAT`, `OCCLUDE.DAT` | `titan u7 typeflag-dump STATIC/ -f csv -o tfa_data.csv` | [U8 data commands](cli_reference.md#u8-data-inspection-commands), [U7 type flag commands](cli_reference.md#u7-type-flag-commands) |
 | Saves and runtime data | List/extract U8 save archives | Read Exult `.sav`; inspect loose `gamedat/`; dump NPCs, schedules, flags | `titan u7 save-info exult00bg.sav` | [U8 save commands](cli_reference.md#u8-save-archive-commands), [U7 save commands](cli_reference.md#u7-save-commands) |
 | Fonts | U8 font archives can be extracted as Flex data | U7 `font-create` wizard for Exult-compatible font shapes | `titan u7 font-create` | [U7 font-create](cli_reference.md#u7-font-create) |
 | World query | Not applicable | Interactive wizard to filter IFIX/IREG object placements by shape class, number, TFA flags, and area | `titan u7 world-query --game bg` | [U7 world-query](cli_reference.md#u7-world-query) |
@@ -142,7 +142,7 @@ titan u7 world-query --game bg
 titan u7 world-query STATIC/ --gamedat gamedat/
 
 # Pre-set STATIC from config, add a runtime GAMEDAT for IREG objects.
-titan u7 world-query --game si --gamedat /path/to/serpentisle/gamedat
+titan u7 world-query --game si --gamedat Exult/serpentisle/gamedat
 ```
 
 The wizard prompts for shape-class checkboxes, optional shape numbers, TFA flag
@@ -163,7 +163,7 @@ titan u7 container-browse STATIC/ --gamedat gamedat/ --contains-name sword
 
 # Export to CSV with per-frame item names (requires Exult installation).
 titan u7 container-browse STATIC/ --gamedat gamedat/ -f csv -o containers.csv \
-  --exult-flx "C:/Program Files/Exult/data/exult_bg.flx"
+  --exult-flx "<Exult install>/data/exult_bg.flx"
 
 # Configured paths with per-frame names from titan.toml [exult.paths].
 titan u7 container-browse --game bg --container-name desk
@@ -204,15 +204,15 @@ Config search order:
 
 1. `./titan.toml`
 2. `~/.config/titan/config.toml`
-3. `%APPDATA%\titan\config.toml`
+3. User profile folder `titan\config.toml`
 
-Use `titan --config /other/path.toml <command>` to override.
+Use `titan --config <other config.toml> <command>` to override.
 
 Minimal multi-game shape:
 
 ```toml
 [u8.game]
-base     = "C:/Path/To/Ultima8"
+base     = "<Ultima 8 install>"
 language = "ENGLISH"
 
 [u8.paths]
@@ -224,7 +224,7 @@ globs    = "globs/"
 nonfixed = "U8SAVE.000"
 
 [u7bg.game]
-base    = "C:/Path/To/Ultima7/ULTIMA7"
+base    = "<Black Gate install>/ULTIMA7"
 variant = "blackgate"
 
 [u7bg.paths]
@@ -234,7 +234,7 @@ palette = "STATIC/PALETTES.FLX"
 gamedat = "gamedat/"
 
 [u7si.game]
-base    = "C:/Path/To/Ultima7/SERPENT"
+base    = "<Serpent Isle install>/SERPENT"
 variant = "serpentisle"
 
 [u7si.paths]
@@ -244,14 +244,14 @@ palette = "STATIC/PALETTES.FLX"
 gamedat = "gamedat/"
 
 [u7si.mods."<mod-name>".paths]
-root    = "C:/Users/<you>/AppData/Local/Exult/serpentisle/mods/<mod-name>"
-saves   = "C:/Users/<you>/AppData/Local/Exult/serpentisle/mods/<mod-name>/saves"
-gamedat = "C:/Users/<you>/AppData/Local/Exult/serpentisle/mods/<mod-name>/gamedat"
-archive = "C:/Path/To/Ultima7/SERPENT/mods/<mod-name>/patch/initgame.dat"
+root    = "<User profile>/Exult/serpentisle/mods/<mod-name>"
+saves   = "<User profile>/Exult/serpentisle/mods/<mod-name>/saves"
+gamedat = "<User profile>/Exult/serpentisle/mods/<mod-name>/gamedat"
+archive = "<Serpent Isle install>/SERPENT/mods/<mod-name>/patch/initgame.dat"
 
 [exult.paths]
-bg_flx  = "C:/Program Files/Exult/data/exult_bg.flx"
-si_flx  = "C:/Program Files/Exult/data/exult_si.flx"
+bg_flx  = "<Exult install>/data/exult_bg.flx"
+si_flx  = "<Exult install>/data/exult_si.flx"
 ```
 
 Notes:
@@ -305,7 +305,7 @@ shape.to_pngs(palette)[0].save("shape_150_frame0.png")
 | Palettes | `U8PAL.PAL`, `XFORMPAL.DAT` | `PALETTES.FLX` |
 | Audio | `SOUND.FLX`, `MUSIC.FLX`, `E*.FLX` / `G*.FLX` | `ADLIBMUS.DAT`, `MT32MUS.DAT`, `ENDSCORE.XMI`, `INTROSND.DAT`, `U7SPEECH.SPC` |
 | Maps | `FIXED.DAT`, `GLOB.FLX`, `NONFIXED.DAT`, `U8SAVE.000` | `U7MAP`, `U7CHUNKS`, `U7IFIX*`, `SHAPES.VGA`, `gamedat/u7ireg*` |
-| Type and object data | `TYPEFLAG.DAT`, `GUMPAGE.DAT` | `TFA.DAT`, `SHPDIMS.DAT`, `WGTVOL.DAT`, `npc.dat`, `schedule.dat`, `flaginit` |
+| Type and object data | `TYPEFLAG.DAT`, `GUMPAGE.DAT` | `TFA.DAT`, `SHPDIMS.DAT`, `WGTVOL.DAT`, `OCCLUDE.DAT`, `npc.dat`, `schedule.dat`, `flaginit` |
 | Text | `ECREDITS.DAT`, `QUOTES.DAT` | Selected Exult save/runtime metadata |
 
 ---
@@ -316,12 +316,9 @@ TITAN requires the original game files. You must own a legitimate copy of the
 games. `titan setup` checks common GOG, EA/Origin, manual, Pentagram, ScummVM,
 and Exult paths.
 
-Common Windows paths include:
-
-- Ultima 8 GOG Galaxy: `C:\Program Files (x86)\GOG Galaxy\Games\Ultima 8`
-- Ultima 8 GOG offline: `C:\GOG Games\Ultima 8`
-- Ultima 7 Black Gate: `C:\GOG Games\Ultima VII\ULTIMA7`
-- Ultima 7 Serpent Isle: `C:\GOG Games\Ultima VII\SERPENT`
+Typical GOG, EA/Origin, manual, ScummVM/Pentagram, and Exult folders are
+auto-detected where possible. If setup cannot find a game, enter the game's
+base folder manually when prompted.
 
 ---
 
