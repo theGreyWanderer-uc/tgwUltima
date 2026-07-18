@@ -48,10 +48,12 @@ __all__ = [
     "U7NPCData",
     "U7NPC",
     "U7NPCInventoryItem",
+    "U7ReadyTypes",
 ]
 
 import csv
 import io
+from pathlib import Path
 import struct
 import zipfile
 from dataclasses import dataclass, field
@@ -1138,6 +1140,138 @@ class U7NPCInventoryItem:
     path: str = ""
 
 
+_READY_SLOT_NAMES = {
+    0x00: "head",
+    0x01: "backpack",
+    0x02: "belt",
+    0x03: "left_hand",
+    0x04: "left_finger",
+    0x05: "legs",
+    0x06: "feet",
+    0x07: "right_finger",
+    0x08: "right_hand",
+    0x09: "torso",
+    0x0A: "amulet",
+    0x0B: "quiver",
+    0x0C: "back_two_handed",
+    0x0D: "back_shield",
+    0x0E: "earrings",
+    0x0F: "cloak",
+    0x10: "gloves",
+    0x11: "usecode_container",
+    0x12: "both_hands",
+    0x13: "gloves_and_ring",
+    0x14: "neck",
+    0x15: "scabbard",
+    0x16: "triple_bolts",
+    0xFF: "invalid",
+}
+
+_READY_BG_TO_EXULT = {
+    0x00: 0x01,
+    0x01: 0x03,
+    0x02: 0x08,
+    0x03: 0x02,
+    0x04: 0x14,
+    0x05: 0x09,
+    0x06: 0x04,
+    0x07: 0x07,
+    0x08: 0x0B,
+    0x09: 0x00,
+    0x0A: 0x05,
+    0x0B: 0x06,
+    0x0C: 0x11,
+    0x0D: 0x0F,
+    0x0E: 0x10,
+    0x0F: 0x16,
+    0x10: 0x0E,
+    0x11: 0x0D,
+    0x12: 0x03,
+    0x13: 0x0C,
+    0x14: 0x12,
+    0x15: 0x13,
+    0x16: 0x0A,
+    0x17: 0x15,
+}
+
+_READY_SI_TO_EXULT = {
+    0x00: 0x08,
+    0x01: 0x03,
+    0x02: 0x0F,
+    0x03: 0x0A,
+    0x04: 0x00,
+    0x05: 0x10,
+    0x06: 0x11,
+    0x07: 0x07,
+    0x08: 0x04,
+    0x09: 0x0E,
+    0x0A: 0x0B,
+    0x0B: 0x02,
+    0x0C: 0x09,
+    0x0D: 0x06,
+    0x0E: 0x05,
+    0x0F: 0x01,
+    0x10: 0x0D,
+    0x11: 0x0C,
+    0x12: 0x16,
+    0x14: 0x12,
+    0x15: 0x13,
+    0x16: 0x14,
+    0x17: 0x15,
+}
+
+
+class U7ReadyTypes:
+    """Decoded `ready.dat` ready-slot preferences."""
+
+    def __init__(self, slots: dict[int, int]) -> None:
+        self.slots = slots
+
+    @classmethod
+    def from_dir(cls, static_dir: str, game: str = "bg") -> "U7ReadyTypes":
+        for name in ("ready.dat", "READY.DAT"):
+            path = Path(static_dir) / name
+            if path.is_file():
+                return cls.from_file(str(path), game=game)
+        return cls({})
+
+    @classmethod
+    def from_file(cls, filepath: str, game: str = "bg") -> "U7ReadyTypes":
+        return cls.from_bytes(Path(filepath).read_bytes(), game=game)
+
+    @classmethod
+    def from_bytes(cls, data: bytes, game: str = "bg") -> "U7ReadyTypes":
+        if not data:
+            return cls({})
+        pos = 0
+        count = data[pos]
+        pos += 1
+        if count == 255:
+            if pos + 2 > len(data):
+                return cls({})
+            count = int.from_bytes(data[pos : pos + 2], "little")
+            pos += 2
+        mapping = _READY_BG_TO_EXULT if game.lower() == "bg" else _READY_SI_TO_EXULT
+        slots: dict[int, int] = {}
+        for _ in range(count):
+            if pos + 9 > len(data):
+                break
+            shape = int.from_bytes(data[pos : pos + 2], "little")
+            raw_ready = data[pos + 2] >> 3
+            pos += 9
+            slots[shape] = mapping.get(raw_ready, 0xFF)
+        return cls(slots)
+
+    def slot_for_shape(self, shape: int) -> int | None:
+        return self.slots.get(shape)
+
+    def slot_name_for_shape(self, shape: int) -> str:
+        slot = self.slot_for_shape(shape)
+        if slot is None or slot == 0xFF:
+            return ""
+        return _READY_SLOT_NAMES.get(slot, f"ready_{slot}")
+
+
 def _read_ireg_inventory(
     data: bytes,
     pos: int,
@@ -1996,6 +2130,7 @@ class U7NPCData:
     def dump_inventory_csv(
         self,
         shape_names: object | None = None,
+        ready_types: U7ReadyTypes | None = None,
         npc_nums: set[int] | None = None,
     ) -> str:
         buf = io.StringIO()
@@ -2015,6 +2150,7 @@ class U7NPCData:
                 "quality",
                 "depth",
                 "location",
+                "ready_slot",
                 "path",
                 "path_names",
             ]
@@ -2023,7 +2159,7 @@ class U7NPCData:
             if npc_nums is not None and n.npc_num not in npc_nums:
                 continue
             for index, item in enumerate(n.inventory):
-                item_name = shape_names.get(item.shape) if shape_names else ""
+                item_name = _shape_name(shape_names, item.shape)
                 writer.writerow(
                     [
                         n.npc_num,
@@ -2038,7 +2174,10 @@ class U7NPCData:
                         item.lift,
                         item.quality,
                         item.depth,
-                        _inventory_location(item),
+                        _inventory_location(item, ready_types),
+                        ready_types.slot_name_for_shape(item.shape)
+                        if ready_types
+                        else "",
                         item.path,
                         _inventory_path_names(item.path, shape_names),
                     ]
@@ -2046,13 +2185,19 @@ class U7NPCData:
         return buf.getvalue()
 
 
-def _inventory_location(item: U7NPCInventoryItem) -> str:
+def _inventory_location(
+    item: U7NPCInventoryItem,
+    ready_types: U7ReadyTypes | None = None,
+) -> str:
     if item.depth > 0 and item.path.startswith("801:"):
         return "backpack"
     if item.depth > 0:
         return "nested_container"
     if item.shape == 801:
         return "backpack_container"
+    ready_slot = ready_types.slot_name_for_shape(item.shape) if ready_types else ""
+    if ready_slot:
+        return f"readied:{ready_slot}"
     return "readied_or_actor_top"
 
 
@@ -2067,9 +2212,19 @@ def _inventory_path_names(path: str, shape_names: object | None) -> str:
         except ValueError:
             parts.append(token)
             continue
-        name = shape_names.get(shape)
+        name = _shape_name(shape_names, shape)
         label = f"{shape}:{frame_text}"
         if name:
             label = f"{label} ({name})"
         parts.append(label)
     return "/".join(parts)
+
+
+def _shape_name(shape_names: object | None, shape: int) -> str:
+    if shape_names is None:
+        return ""
+    get_name = getattr(shape_names, "get", None)
+    if not callable(get_name):
+        return ""
+    value = get_name(shape)
+    return str(value) if value else ""

@@ -1777,7 +1777,7 @@ def cmd_monster_report(args: SimpleNamespace) -> int:
 def cmd_npc_equipment(args: SimpleNamespace) -> int:
     """Dump actual NPC inventory/equipment from save, GAMEDAT, or npc.dat."""
     from titan.u7.names import U7ShapeNames
-    from titan.u7.save import U7NPCData, U7Save
+    from titan.u7.save import U7NPCData, U7ReadyTypes, U7Save
 
     source = Path(args.file)
     static = getattr(args, "static", None)
@@ -1814,8 +1814,9 @@ def cmd_npc_equipment(args: SimpleNamespace) -> int:
         print(f"Source: {source} ({save.container_format.upper()} save)")
 
     names = U7ShapeNames.from_static_dir(static)
+    ready_types = U7ReadyTypes.from_dir(static, game=getattr(args, "game", "bg"))
     npc_nums = _parse_int_list(getattr(args, "npc", None))
-    content = npcs.dump_inventory_csv(names, npc_nums or None)
+    content = npcs.dump_inventory_csv(names, ready_types, npc_nums or None)
 
     if args.output:
         with open(args.output, "w", encoding="utf-8", newline="") as f:

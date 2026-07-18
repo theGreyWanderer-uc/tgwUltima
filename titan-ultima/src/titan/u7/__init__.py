@@ -41,6 +41,7 @@ from titan.u7.save import (
     U7NPCData,
     U7NPC,
     U7NPCInventoryItem,
+    U7ReadyTypes,
 )
 from titan.u7.shape import U7Shape
 from titan.u7.sound import VocDecoder
@@ -77,4 +78,5 @@ __all__ = [
     "U7NPCData",
     "U7NPC",
     "U7NPCInventoryItem",
+    "U7ReadyTypes",
 ]

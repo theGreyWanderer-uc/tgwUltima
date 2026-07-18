@@ -34,6 +34,9 @@ This project uses [Semantic Versioning](https://semver.org/):
 - Added `titan u7 npc-equipment` to export actual saved NPC inventory/equipment
   with `readied_or_actor_top`, `backpack_container`, `backpack`, and
   `nested_container` location labels.
+- Expanded `npc-equipment` location labels with `ready.dat` preferred ready
+  slots, and expanded `monster-equipment` with Exult runtime ammo rows for
+  ammo-using monster weapons.
 
 ### Fixed
 

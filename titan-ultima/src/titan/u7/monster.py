@@ -69,6 +69,7 @@ DAMAGE_BITS = (
 _MONSTERS_ENTRY_SIZE = 25
 _EQUIP_ELEMENT_SIZE = 6
 _EQUIP_ELEMENTS_PER_RECORD = 10
+_WEAPON_ENTRY_PAYLOAD_SIZE = 19
 
 
 def _bit_names(value: int, table: Iterable[tuple[int, str]]) -> str:
@@ -482,6 +483,65 @@ class U7MonsterEquipment:
         return "|".join(parts)
 
 
+@dataclass
+class U7WeaponInfo:
+    """Small subset of `weapons.dat` needed for monster ammo expansion."""
+
+    shape: int
+    ammo: int
+
+
+class U7WeaponInfos:
+    """Decoded `weapons.dat` ammo references by weapon shape."""
+
+    def __init__(self, records: dict[int, U7WeaponInfo]) -> None:
+        self.records = records
+
+    @classmethod
+    def from_dir(cls, data_dir: str, game: str = "bg") -> "U7WeaponInfos":
+        del game
+        for name in ("weapons.dat", "WEAPONS.DAT"):
+            path = Path(data_dir) / name
+            if path.is_file():
+                return cls.from_file(str(path))
+        return cls({})
+
+    @classmethod
+    def from_file(cls, filepath: str) -> "U7WeaponInfos":
+        return cls.from_bytes(Path(filepath).read_bytes())
+
+    @classmethod
+    def from_bytes(cls, data: bytes) -> "U7WeaponInfos":
+        if not data:
+            return cls({})
+        pos = 0
+        count = data[pos]
+        pos += 1
+        if count == 255:
+            if pos + 2 > len(data):
+                return cls({})
+            count = int.from_bytes(data[pos : pos + 2], "little")
+            pos += 2
+        records: dict[int, U7WeaponInfo] = {}
+        for _ in range(count):
+            if pos + 2 + _WEAPON_ENTRY_PAYLOAD_SIZE > len(data):
+                break
+            shape = int.from_bytes(data[pos : pos + 2], "little")
+            pos += 2
+            payload = data[pos : pos + _WEAPON_ENTRY_PAYLOAD_SIZE]
+            pos += _WEAPON_ENTRY_PAYLOAD_SIZE
+            if payload[-1] == 0xFF:
+                records.pop(shape, None)
+                continue
+            ammo = int.from_bytes(payload[0:2], "little", signed=True)
+            records[shape] = U7WeaponInfo(shape=shape, ammo=ammo)
+        return cls(records)
+
+    def ammo_for_weapon(self, shape: int) -> int | None:
+        info = self.records.get(shape)
+        return info.ammo if info else None
+
+
 def _rows_to_csv(rows: list[dict[str, object]]) -> str:
     buf = io.StringIO()
     keys: list[str] = []
@@ -644,7 +704,13 @@ def _load_monster_equipment_inputs(
     game: str,
     mod_monsters: str | None,
     equip_file: str | None,
-) -> tuple[U7MonsterDefinitions, U7MonsterEquipment, U7ShapeNames, U7TypeFlags]:
+) -> tuple[
+    U7MonsterDefinitions,
+    U7MonsterEquipment,
+    U7WeaponInfos,
+    U7ShapeNames,
+    U7TypeFlags,
+]:
     base_defs = U7MonsterDefinitions.from_dir(static_dir, game=game)
     mod_defs = (
         U7MonsterDefinitions.from_file(mod_monsters, game=game)
@@ -658,9 +724,19 @@ def _load_monster_equipment_inputs(
         if resolved_equip and Path(resolved_equip).is_file()
         else U7MonsterEquipment.from_dir(static_dir)
     )
-    names = U7ShapeNames.from_static_dir(static_dir)
+    weapon_dir = (
+        Path(resolved_equip).parent
+        if resolved_equip
+        else Path(mod_monsters).parent
+        if mod_monsters
+        else Path(static_dir)
+    )
+    weapons = U7WeaponInfos.from_dir(str(weapon_dir), game=game)
+    if not weapons.records and weapon_dir != Path(static_dir):
+        weapons = U7WeaponInfos.from_dir(static_dir, game=game)
+    names = U7ShapeNames.from_static_dir(static_dir) or U7ShapeNames([])
     tfa = U7TypeFlags.from_dir(static_dir)
-    return definitions, equipment, names, tfa
+    return definitions, equipment, weapons, names, tfa
 
 
 def monster_equipment_rows(
@@ -671,7 +747,7 @@ def monster_equipment_rows(
     monster_shapes: set[int] | None = None,
 ) -> list[dict[str, object]]:
     """Calculate possible monster equipment rows from definitions + equip.dat."""
-    definitions, equipment, names, tfa = _load_monster_equipment_inputs(
+    definitions, equipment, weapons, names, tfa = _load_monster_equipment_inputs(
         static_dir,
         game,
         mod_monsters,
@@ -698,31 +774,49 @@ def monster_equipment_rows(
                 (1 + element.quantity) / 2 if is_quantity else float(element.quantity)
             )
             expected_quantity = avg_on_create * (element.probability / 100)
-            rows.append(
-                {
-                    "monster_shape": definition.shape,
-                    "monster_shape_hex": definition.shape_hex,
-                    "monster_name": names.get(definition.shape),
-                    "equip_offset": definition.equip_offset,
-                    "element_index": element.element_index,
-                    "item_shape": element.shape,
-                    "item_shape_hex": f"0x{element.shape:04X}",
-                    "item_name": names.get(element.shape),
-                    "probability": element.probability,
-                    "quantity": element.quantity,
-                    "quantity_mode": "random_1_to_quantity"
-                    if is_quantity
-                    else "exact_quantity",
-                    "min_quantity_if_created": min_quantity,
-                    "max_quantity_if_created": max_quantity,
-                    "average_quantity_if_created": f"{avg_on_create:.2f}",
-                    "expected_quantity_per_spawn": f"{expected_quantity:.2f}",
-                    "note": (
-                        "Exult may add ammo for ammo-using weapons at runtime; "
-                        "not included here."
-                    ),
-                }
-            )
+            base_row = {
+                "monster_shape": definition.shape,
+                "monster_shape_hex": definition.shape_hex,
+                "monster_name": names.get(definition.shape),
+                "equip_offset": definition.equip_offset,
+                "element_index": element.element_index,
+                "generated": 0,
+                "generated_from_item_shape": "",
+                "item_shape": element.shape,
+                "item_shape_hex": f"0x{element.shape:04X}",
+                "item_name": names.get(element.shape),
+                "probability": element.probability,
+                "quantity": element.quantity,
+                "quantity_mode": "random_1_to_quantity"
+                if is_quantity
+                else "exact_quantity",
+                "min_quantity_if_created": min_quantity,
+                "max_quantity_if_created": max_quantity,
+                "average_quantity_if_created": f"{avg_on_create:.2f}",
+                "expected_quantity_per_spawn": f"{expected_quantity:.2f}",
+                "note": "",
+            }
+            rows.append(base_row)
+            ammo_shape = weapons.ammo_for_weapon(element.shape)
+            if ammo_shape is not None and ammo_shape >= 0:
+                avg_ammo = 11.0
+                rows.append(
+                    {
+                        **base_row,
+                        "generated": 1,
+                        "generated_from_item_shape": element.shape,
+                        "item_shape": ammo_shape,
+                        "item_shape_hex": f"0x{ammo_shape:04X}",
+                        "item_name": names.get(ammo_shape),
+                        "quantity": "2d10",
+                        "quantity_mode": "exult_random_2d10_ammo",
+                        "min_quantity_if_created": 2,
+                        "max_quantity_if_created": 20,
+                        "average_quantity_if_created": f"{avg_ammo:.2f}",
+                        "expected_quantity_per_spawn": f"{avg_ammo * (element.probability / 100):.2f}",
+                        "note": "Generated by Exult when monster equipment creates an ammo-using weapon.",
+                    }
+                )
     return rows
 
 
@@ -761,7 +855,10 @@ def monster_equipment_summary(
     lines = [f"Monster equipment: {len(rows)} possible item row(s)."]
     by_monster: dict[tuple[int, str], list[dict[str, object]]] = {}
     for row in rows:
-        key = (int(row["monster_shape"]), str(row["monster_name"]))
+        monster_shape = row["monster_shape"]
+        if not isinstance(monster_shape, int):
+            continue
+        key = (monster_shape, str(row["monster_name"]))
         by_monster.setdefault(key, []).append(row)
     for (shape, name), monster_rows in sorted(by_monster.items())[:40]:
         label = f"{shape} ({name})" if name else str(shape)
