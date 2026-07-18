@@ -14,43 +14,65 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Added
 
-- Added U7 `MONSTERS.DAT` parser support for base and mod monster definition
-  files, including decoded stats, movement flags, immunities, vulnerabilities,
-  attack mode, equipment offset, SFX, raw bytes, and merged base/mod output.
-- Added U7 monster inspection commands:
+- Added U7 monster definition and spawn-data support:
+  - `MONSTERS.DAT` parser support for base and mod monster definition files,
+    including decoded stats, movement flags, immunities, vulnerabilities,
+    attack mode, equipment offset, SFX, raw bytes, and merged base/mod output.
+  - Monster `equip.dat` parsing and monster spawn reports that join monster
+    eggs to resolved `MONSTERS.DAT` definitions and equipment rows.
   - `titan u7 monster-defs` for decoded monster definition dumps.
-  - `titan u7 monster-dump` for live Exult `monsnpcs.dat` monster actors from
-    loose files, GAMEDAT directories, or save archives.
+  - `titan u7 monster-dump` for live `monsnpcs.dat` monster actors from
+    loose Exult-format runtime files, GAMEDAT directories, or save archives.
   - `titan u7 monster-report` for joined monster exports covering definitions,
     live monsters, monster eggs, and placed monster-class world objects.
-- Expanded U7 egg CSV export for monster eggs with decoded monster shape,
-  frame, spawn count, schedule, and alignment fields.
-- Added U7 NPC inventory item export from parsed `npc.dat` inventory blocks.
-- Added U7 monster `equip.dat` parsing and monster spawn reports that join
-  monster eggs to resolved `MONSTERS.DAT` definitions and equipment rows.
 - Added `titan u7 monster-equipment` to calculate possible monster equipment
   from `MONSTERS.DAT` plus `equip.dat`, including probability, random quantity
   handling, and expected quantity per spawn.
-- Added `titan u7 npc-equipment` to export actual saved NPC inventory/equipment
-  with `readied_or_actor_top`, `backpack_container`, `backpack`, and
-  `nested_container` location labels.
+- Added U7 NPC inventory/equipment export support:
+  - NPC inventory item export from parsed `npc.dat` inventory blocks.
+  - `titan u7 npc-equipment` to export actual saved NPC inventory/equipment
+    with `readied_or_actor_top`, `backpack_container`, `backpack`, and
+    `nested_container` location labels.
+- Added U7 static metadata parser support:
+  - `WIHH.DAT` parser and `titan u7 wihh-dump` for actor weapon-in-hand frame
+    offsets.
+  - `titan u7 static-data-dump` for `weapons.dat`, `ammo.dat`, `armor.dat`,
+    `container.dat`, `xform.tbl`, `blends.dat`, and `usecode` function-index
+    metadata.
+  - BG/SI Exult-format bundled-data support for `static-data-dump`: when loose
+    `container.dat` or `blends.dat` files are absent, Titan can read the
+    corresponding records from an installed `exult_bg.flx` / `exult_si.flx`
+    data bundle. Blend exports also fall back to the documented 17-entry U7
+    translucency table when no loose or bundled source is available.
+- Added U7 `USECODE` parser and raw analysis commands:
+  - `titan u7 usecode-scan-intrinsic` finds `CALLI` / `CALLIS` references to a
+    target intrinsic and reports function id, file offset, relative offset,
+    argument count, return/no-return opcode flavor, and raw bytes.
+  - `titan u7 usecode-disasm` emits conservative assembly-style bytecode for a
+    single function or every function in a `USECODE` file without claiming
+    high-level decompilation.
+
+### Changed
+
+- Expanded U7 egg CSV export for monster eggs with decoded monster shape,
+  frame, spawn count, schedule, and alignment fields.
 - Expanded `npc-equipment` location labels with `ready.dat` preferred ready
-  slots, and expanded `monster-equipment` with Exult runtime ammo rows for
-  ammo-using monster weapons.
-
-### Fixed
-
+  slots, and expanded `monster-equipment` with runtime-generated ammo rows for
+  ammo-using monster weapons in Exult-format data.
 - Cleaned U7 `build_exclude_set(no_building=True)` control flow so building
   exclusion uses the same decision path as bit-flag filters.
 - Cleaned U7 typeflag statistics so the flag section counts only actual
   TFA/occlusion/obstacle flags, while shape classes and animation types remain
   separate.
+
+### Fixed
+
 - Added U7 `npc.dat` flavor handling so loose NPC files are auto-scored as
-  Exult runtime vs original new-game data where possible, ambiguous loose files
-  report unknown sex, and `gamedat-info` decodes original `INITGAME.DAT` NPC sex
-  with the correct inverted bit-9 rule.
+  Exult-format runtime vs original new-game data where possible, ambiguous
+  loose files report unknown sex, and `gamedat-info` decodes original
+  `INITGAME.DAT` NPC sex with the correct inverted bit-9 rule.
 - Filtered NPC inventory exports against the real `SHAPES.VGA` record count so
-  Exult text-message combat bark IDs are not reported as carried items.
+  Exult-format text-message combat bark IDs are not reported as carried items.
 
 ---
 

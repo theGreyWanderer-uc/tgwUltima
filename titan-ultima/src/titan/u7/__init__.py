@@ -44,8 +44,25 @@ from titan.u7.save import (
     U7ReadyTypes,
 )
 from titan.u7.shape import U7Shape
+from titan.u7.shapeinfo import (
+    U7Ammos,
+    U7Armors,
+    U7Blends,
+    U7Containers,
+    U7UsecodeIndex,
+    U7Weapons,
+    U7Xforms,
+)
 from titan.u7.sound import VocDecoder
 from titan.u7.typeflag import U7TypeFlags
+from titan.u7.usecode import (
+    U7UsecodeCallSite,
+    U7UsecodeFile,
+    U7UsecodeFunctionRecord,
+    U7UsecodeInstruction,
+    load_u7_intrinsic_names,
+)
+from titan.u7.wihh import U7WeaponInHandOffsets, U7WeaponOffsetFrame
 
 __all__ = [
     "U7FlexArchive",
@@ -79,4 +96,18 @@ __all__ = [
     "U7NPC",
     "U7NPCInventoryItem",
     "U7ReadyTypes",
+    "U7WeaponInHandOffsets",
+    "U7WeaponOffsetFrame",
+    "U7Weapons",
+    "U7Ammos",
+    "U7Armors",
+    "U7Containers",
+    "U7Xforms",
+    "U7Blends",
+    "U7UsecodeIndex",
+    "U7UsecodeFile",
+    "U7UsecodeFunctionRecord",
+    "U7UsecodeInstruction",
+    "U7UsecodeCallSite",
+    "load_u7_intrinsic_names",
 ]

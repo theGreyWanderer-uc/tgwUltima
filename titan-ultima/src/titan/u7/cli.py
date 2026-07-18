@@ -120,6 +120,62 @@ def _resolve_u7_gamedat(game: str) -> Optional[str]:
     return None
 
 
+def _resolve_u7_exult_flx(game: str) -> Optional[str]:
+    """Resolve installed Exult per-game FLX bundle path."""
+    from titan._config import exult_cfg
+
+    game_key = "bg" if game.lower() == "bg" else "si"
+    configured = exult_cfg(f"{game_key}_flx")
+    if configured and Path(configured).is_file():
+        return configured
+
+    flx_name = f"exult_{game_key}.flx"
+    candidates: list[Path] = []
+    for drive in ("C", "D"):
+        candidates.extend(
+            [
+                Path(f"{drive}:\\Program Files\\Exult\\data") / flx_name,
+                Path(f"{drive}:\\Program Files (x86)\\Exult\\data") / flx_name,
+                Path(f"{drive}:\\Program Files\\Exult") / flx_name,
+                Path(f"{drive}:\\Program Files (x86)\\Exult") / flx_name,
+            ]
+        )
+    candidates.extend(
+        [
+            Path("/usr/share/exult") / flx_name,
+            Path("/usr/local/share/exult") / flx_name,
+            Path("/opt/exult") / flx_name,
+        ]
+    )
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+    return None
+
+
+def _resolve_ucxt_intrinsics_data(
+    game: str,
+    intrinsics_data: str | None = None,
+) -> Optional[str]:
+    """Resolve optional UCXT intrinsic-name table for U7 raw usecode output."""
+    if intrinsics_data and Path(intrinsics_data).is_file():
+        return intrinsics_data
+    game_key = game.lower()
+    filename = "u7bgintrinsics.data" if game_key == "bg" else "u7siintrinsics.data"
+    candidates: list[Path] = []
+    for drive in ("C", "D"):
+        candidates.extend(
+            [
+                Path(f"{drive}:\\Program Files\\Exult\\Tools\\data") / filename,
+                Path(f"{drive}:\\Program Files (x86)\\Exult\\Tools\\data") / filename,
+            ]
+        )
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+    return None
+
+
 def _exult_profile_root() -> Optional[Path]:
     """Return the standard per-user Exult profile root, if it exists."""
     local_appdata = os.getenv("LOCALAPPDATA")
@@ -1079,6 +1135,230 @@ def cmd_typeflag_dump(args: SimpleNamespace) -> int:
             else:
                 print(f"  {label:30s}: {count:5d}")
 
+    return 0
+
+
+def cmd_wihh_dump(args: SimpleNamespace) -> int:
+    """Dump U7 weapon-in-hand offsets from WIHH.DAT."""
+    from titan.u7.names import U7ShapeNames
+    from titan.u7.wihh import U7WeaponInHandOffsets
+
+    static_dir = args.static
+    if not static_dir:
+        static_dir, _ = _resolve_u7_paths(getattr(args, "game", "bg"))
+    if not static_dir or not os.path.isdir(static_dir):
+        print(f"ERROR: STATIC directory not found: {static_dir}", file=sys.stderr)
+        return 1
+
+    shape_count = _load_shape_count(args, fallback_static=static_dir)
+    wihh = U7WeaponInHandOffsets.from_dir(static_dir, shape_count=shape_count)
+    fmt = getattr(args, "format", "summary") or "summary"
+
+    if fmt == "csv":
+        names = U7ShapeNames.from_static_dir(static_dir)
+        content = wihh.dump_csv(
+            names,
+            include_empty=getattr(args, "include_empty", False),
+        )
+    else:
+        content = wihh.dump_summary()
+
+    if args.output:
+        with open(args.output, "w", encoding="utf-8", newline="") as f:
+            f.write(content)
+        print(f"WIHH dump written to: {args.output}")
+    else:
+        print(content)
+    return 0
+
+
+def cmd_static_data_dump(args: SimpleNamespace) -> int:
+    """Dump U7 static metadata tables."""
+    from titan.u7.names import U7ShapeNames
+    from titan.u7.shapeinfo import (
+        U7Ammos,
+        U7Armors,
+        U7Blends,
+        U7Containers,
+        U7UsecodeIndex,
+        U7Weapons,
+        U7Xforms,
+    )
+
+    static_dir = args.static
+    if not static_dir:
+        static_dir, _ = _resolve_u7_paths(getattr(args, "game", "bg"))
+    if not static_dir or not os.path.isdir(static_dir):
+        print(f"ERROR: STATIC directory not found: {static_dir}", file=sys.stderr)
+        return 1
+
+    kind = args.kind.lower()
+    names = U7ShapeNames.from_static_dir(static_dir)
+    game = getattr(args, "game", "bg")
+    exult_flx_path = getattr(args, "exult_flx", None) or _resolve_u7_exult_flx(game)
+    if kind in ("weapons", "weapon"):
+        weapons = U7Weapons.from_dir(static_dir, game=game)
+        content = weapons.dump_csv(names)
+        label = f"{len(weapons.records)} weapon row(s)"
+    elif kind in ("ammo", "ammos"):
+        ammos = U7Ammos.from_dir(static_dir)
+        content = ammos.dump_csv(names)
+        label = f"{len(ammos.records)} ammo row(s)"
+    elif kind in ("armor", "armors"):
+        armors = U7Armors.from_dir(static_dir)
+        content = armors.dump_csv(names)
+        label = f"{len(armors.records)} armor row(s)"
+    elif kind in ("container", "containers"):
+        containers = U7Containers.from_dir(
+            static_dir,
+            game=game,
+            exult_flx_path=exult_flx_path,
+        )
+        content = containers.dump_csv(names)
+        label = f"{len(containers.records)} container row(s)"
+    elif kind in ("xform", "xforms"):
+        xforms = U7Xforms.from_dir(static_dir)
+        content = xforms.dump_csv()
+        label = f"{len(xforms.tables)} xform table(s)"
+    elif kind in ("blend", "blends"):
+        blends = U7Blends.from_dir(
+            static_dir,
+            game=game,
+            exult_flx_path=exult_flx_path,
+        )
+        content = blends.dump_csv()
+        label = f"{len(blends.records)} blend row(s)"
+    elif kind in ("usecode",):
+        path = Path(static_dir) / "usecode"
+        if not path.is_file():
+            path = Path(static_dir) / "USECODE"
+        if not path.is_file():
+            print(f"ERROR: usecode file not found in {static_dir}", file=sys.stderr)
+            return 1
+        usecode = U7UsecodeIndex.from_file(str(path))
+        content = usecode.dump_csv()
+        label = f"{len(usecode.functions)} usecode function row(s)"
+    else:
+        print(
+            "ERROR: kind must be weapons, ammo, armor, container, xforms, blends, or usecode",
+            file=sys.stderr,
+        )
+        return 1
+
+    if args.output:
+        with open(args.output, "w", encoding="utf-8", newline="") as f:
+            f.write(content)
+        print(f"{kind} dump written to: {args.output} ({label})")
+    else:
+        if content:
+            print(content, end="" if content.endswith("\n") else "\n")
+        else:
+            print(f"No data parsed ({label}).")
+    return 0
+
+
+def _load_u7_intrinsic_names_for_cli(args: SimpleNamespace) -> dict[int, str]:
+    from titan.u7.usecode import load_u7_intrinsic_names
+
+    path = _resolve_ucxt_intrinsics_data(
+        getattr(args, "game", "bg"),
+        getattr(args, "intrinsics_data", None),
+    )
+    if not path:
+        return {}
+    try:
+        return load_u7_intrinsic_names(path)
+    except (OSError, ValueError):
+        return {}
+
+
+def cmd_usecode_scan_intrinsic(args: SimpleNamespace) -> int:
+    """Scan a U7 USECODE file for intrinsic call sites."""
+    from titan.u7.usecode import U7UsecodeFile
+
+    if not os.path.isfile(args.file):
+        print(f"ERROR: USECODE file not found: {args.file}", file=sys.stderr)
+        return 1
+    try:
+        intrinsic_id = int(str(args.intrinsic), 0)
+    except ValueError:
+        print(f"ERROR: invalid intrinsic id: {args.intrinsic}", file=sys.stderr)
+        return 1
+
+    names = _load_u7_intrinsic_names_for_cli(args)
+    usecode = U7UsecodeFile.from_file(args.file)
+    fmt = (getattr(args, "format", None) or "table").lower()
+    if fmt == "csv":
+        content = usecode.scan_intrinsic_csv(intrinsic_id, names)
+    else:
+        calls = usecode.scan_intrinsic(intrinsic_id, names)
+        lines = [
+            f"Intrinsic 0x{intrinsic_id:04X}: {names.get(intrinsic_id, '')}",
+            f"Matches: {len(calls)}",
+        ]
+        for call in calls:
+            op = "callis" if call.returns_value else "calli"
+            lines.append(
+                f"0x{call.function_id:04X} "
+                f"func@0x{call.function_offset:08X} "
+                f"file@0x{call.file_offset:08X} "
+                f"rel@0x{call.relative_offset:04X} "
+                f"code@0x{call.code_offset:04X} "
+                f"{op}@{call.arg_count:02d} "
+                f"{call.raw.hex(' ').upper()}"
+            )
+        content = "\n".join(lines)
+
+    if args.output:
+        with open(args.output, "w", encoding="utf-8", newline="") as f:
+            f.write(content)
+            if content and not content.endswith("\n"):
+                f.write("\n")
+        print(f"usecode intrinsic scan written to: {args.output}")
+    else:
+        print(content if content else "No matches.")
+    return 0
+
+
+def cmd_usecode_disasm(args: SimpleNamespace) -> int:
+    """Raw-disassemble a single U7 USECODE function."""
+    from titan.u7.usecode import U7UsecodeFile
+
+    if not os.path.isfile(args.file):
+        print(f"ERROR: USECODE file not found: {args.file}", file=sys.stderr)
+        return 1
+    disasm_all = bool(getattr(args, "all_functions", False))
+    if disasm_all and args.function is not None:
+        print("ERROR: use either FUNCTION or --all, not both", file=sys.stderr)
+        return 1
+    if not disasm_all and args.function is None:
+        print("ERROR: provide FUNCTION or --all", file=sys.stderr)
+        return 1
+
+    names = _load_u7_intrinsic_names_for_cli(args)
+    usecode = U7UsecodeFile.from_file(args.file)
+    if disasm_all:
+        content = usecode.disassemble_all(names)
+    else:
+        try:
+            func_id = int(str(args.function), 0)
+        except ValueError:
+            print(f"ERROR: invalid function id: {args.function}", file=sys.stderr)
+            return 1
+        try:
+            content = usecode.disassemble(func_id, names)
+        except KeyError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
+
+    if args.output:
+        with open(args.output, "w", encoding="utf-8", newline="") as f:
+            f.write(content)
+            if content and not content.endswith("\n"):
+                f.write("\n")
+        print(f"usecode disassembly written to: {args.output}")
+    else:
+        print(content)
     return 0
 
 
@@ -2490,6 +2770,176 @@ def typeflag_dump_cmd(
                 static=static,
                 output=output,
                 format=format,
+            )
+        )
+    )
+
+
+@u7_app.command("wihh-dump")
+def wihh_dump_cmd(
+    static: Annotated[
+        Optional[str],
+        typer.Argument(
+            help="Path to STATIC directory containing WIHH.DAT (default: from titan.toml u7bg/u7si)"
+        ),
+    ] = None,
+    game: Annotated[
+        Literal["bg", "si"],
+        typer.Option("--game", help="Use config section for BG or SI defaults"),
+    ] = "bg",
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Write dump to this file"),
+    ] = None,
+    format: Annotated[
+        Optional[str],
+        typer.Option("-f", "--format", help="Output format: summary (default), csv"),
+    ] = None,
+    include_empty: Annotated[
+        bool,
+        typer.Option(
+            "--include-empty",
+            help="Include shapes with no WIHH record in CSV output",
+        ),
+    ] = False,
+) -> None:
+    """Dump U7 WIHH.DAT weapon-in-hand actor offsets."""
+    raise SystemExit(
+        cmd_wihh_dump(
+            SimpleNamespace(
+                game=game,
+                static=static,
+                output=output,
+                format=format,
+                include_empty=include_empty,
+            )
+        )
+    )
+
+
+@u7_app.command("static-data-dump")
+def static_data_dump_cmd(
+    kind: Annotated[
+        str,
+        typer.Argument(
+            help="Table to dump: weapons, ammo, armor, container, xforms, blends, usecode"
+        ),
+    ],
+    static: Annotated[
+        Optional[str],
+        typer.Argument(
+            help="Path to STATIC directory (default: from titan.toml u7bg/u7si)"
+        ),
+    ] = None,
+    game: Annotated[
+        Literal["bg", "si"],
+        typer.Option("--game", help="Use config section for BG or SI defaults"),
+    ] = "bg",
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Write CSV dump to this file"),
+    ] = None,
+    exult_flx: Annotated[
+        Optional[str],
+        typer.Option(
+            "--exult-flx",
+            help="Path to exult_bg.flx/exult_si.flx for Exult bundled fallbacks",
+        ),
+    ] = None,
+) -> None:
+    """Dump U7 static metadata tables as CSV."""
+    raise SystemExit(
+        cmd_static_data_dump(
+            SimpleNamespace(
+                kind=kind,
+                game=game,
+                static=static,
+                output=output,
+                exult_flx=exult_flx,
+            )
+        )
+    )
+
+
+@u7_app.command("usecode-scan-intrinsic")
+def usecode_scan_intrinsic_cmd(
+    file: Annotated[str, typer.Argument(help="Path to U7 USECODE file")],
+    intrinsic: Annotated[
+        str,
+        typer.Argument(help="Intrinsic id to scan for, hex or decimal"),
+    ],
+    game: Annotated[
+        Literal["bg", "si"],
+        typer.Option("--game", help="Use BG or SI intrinsic-name table"),
+    ] = "bg",
+    format: Annotated[
+        Optional[str],
+        typer.Option("-f", "--format", help="Output format: table (default), csv"),
+    ] = None,
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Write scan output to this file"),
+    ] = None,
+    intrinsics_data: Annotated[
+        Optional[str],
+        typer.Option(
+            "--intrinsics-data",
+            help="Optional UCXT-style intrinsic-name table",
+        ),
+    ] = None,
+) -> None:
+    """Scan raw U7 USECODE for CALLI/CALLIS references to one intrinsic."""
+    raise SystemExit(
+        cmd_usecode_scan_intrinsic(
+            SimpleNamespace(
+                file=file,
+                intrinsic=intrinsic,
+                game=game,
+                format=format,
+                output=output,
+                intrinsics_data=intrinsics_data,
+            )
+        )
+    )
+
+
+@u7_app.command("usecode-disasm")
+def usecode_disasm_cmd(
+    file: Annotated[str, typer.Argument(help="Path to U7 USECODE file")],
+    function: Annotated[
+        Optional[str],
+        typer.Argument(help="Function id to disassemble, hex or decimal"),
+    ] = None,
+    game: Annotated[
+        Literal["bg", "si"],
+        typer.Option("--game", help="Use BG or SI intrinsic-name table"),
+    ] = "bg",
+    all_functions: Annotated[
+        bool,
+        typer.Option("--all", help="Disassemble every function in the USECODE file"),
+    ] = False,
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Write raw disassembly to this file"),
+    ] = None,
+    intrinsics_data: Annotated[
+        Optional[str],
+        typer.Option(
+            "--intrinsics-data",
+            help="Optional UCXT-style intrinsic-name table",
+        ),
+    ] = None,
+) -> None:
+    """Raw-disassemble one U7 USECODE function, or all functions with --all."""
+    raise SystemExit(
+        cmd_usecode_disasm(
+            SimpleNamespace(
+                file=file,
+                function=function,
+                game=game,
+                all_functions=all_functions,
+                output=output,
+                intrinsics_data=intrinsics_data,
             )
         )
     )
