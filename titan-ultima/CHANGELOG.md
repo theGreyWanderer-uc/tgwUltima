@@ -10,6 +10,35 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ---
 
+## [0.6.9]
+
+### Added
+
+- Added `titan u7 palette-info` for palette slot occupancy, semantic names,
+  encoding, and colour-cycling range inspection.
+- Added real U7 colour-cycling and translucency compositing support, plus
+  `--indexed`, `--cycle-phase`, `--translucent`, and `--translucent-bg`
+  options on `u7 shape-export`/`shape-batch` for exact-index and
+  translucency-aware exports.
+- Added interleaved "double" palette support and an explicit `--encoding`
+  override for ambiguous 6-bit/8-bit palettes.
+
+### Changed
+
+- Hardened `PALETTES.FLX` slot parsing to distinguish empty from
+  invalid/truncated/overlapping records, and to preserve original palette
+  bytes losslessly.
+- `titan u7 map-render` translucency now sources real per-game
+  `XFORM.TBL`/`BLENDS.DAT` data instead of a hardcoded approximation (same
+  default output).
+
+### Fixed
+
+- Fixed `titan u7 palette-export` crashing with an unhandled traceback on real
+  `PALETTES.FLX` archives that contain unallocated palette slots.
+
+---
+
 ## [0.6.8]
 
 ### Added

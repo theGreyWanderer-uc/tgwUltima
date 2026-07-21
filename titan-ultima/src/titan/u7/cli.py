@@ -11,6 +11,7 @@ __all__ = ["u7_app"]
 
 import csv
 import io
+import json
 import os
 import sys
 from pathlib import Path
@@ -335,24 +336,36 @@ def cmd_palette_export(args: SimpleNamespace) -> int:
     outdir = args.output or "palettes"
     os.makedirs(outdir, exist_ok=True)
 
-    count = U7Palette.palette_count(filepath)
-    indices: list[int]
+    slots = U7Palette.enumerate_slots(filepath)
+    count = len(slots)
+    encoding = getattr(args, "encoding", None) or "auto"
+
     if args.index is not None:
         if args.index < 0 or args.index >= count:
             print(
                 f"ERROR: Palette index {args.index} out of range "
-                f"(file has {count} palettes)",
+                f"(file has {count} slots)",
                 file=sys.stderr,
             )
             return 1
         indices = [args.index]
     else:
-        indices = list(range(count))
+        for s in slots:
+            if s.is_empty:
+                print(f"  Skipping palette {s.index}: empty slot")
+            elif not s.is_valid:
+                print(f"  Skipping palette {s.index}: {s.error}")
+        indices = [s.index for s in slots if not s.is_empty and s.is_valid]
 
     base = Path(filepath).stem
+    exported = 0
 
     for idx in indices:
-        pal = U7Palette.from_file(filepath, palette_index=idx)
+        try:
+            pal = U7Palette.from_file(filepath, palette_index=idx, encoding=encoding)
+        except ValueError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
 
         tag = f"{base}_pal{idx:02d}" if count > 1 else base
 
@@ -366,14 +379,138 @@ def cmd_palette_export(args: SimpleNamespace) -> int:
             f.write(pal.to_text())
             f.write("\n")
         print(f"  Text saved: {txt_path}")
+        exported += 1
 
-    print(f"Exported {len(indices)} palette(s) to {outdir}/")
+    print(f"Exported {exported} palette(s) to {outdir}/")
+    return 0
+
+
+def _palette_inspection_rows(filepath: str) -> list[dict]:
+    """One row per Flex slot: occupancy, validity, semantic name, and
+    (for populated/valid slots) decoded encoding."""
+    from titan.u7.palette import U7Palette
+    from titan.u7.palette_semantics import palette_slot_name
+
+    rows: list[dict] = []
+    for slot in U7Palette.enumerate_slots(filepath):
+        row = {
+            "index": slot.index,
+            "offset": slot.offset,
+            "length": slot.length,
+            "is_empty": slot.is_empty,
+            "is_valid": slot.is_valid,
+            "error": slot.error or "",
+            "name": palette_slot_name(slot.index) or "",
+            "encoding": "",
+        }
+        if not slot.is_empty and slot.is_valid:
+            try:
+                pal = U7Palette.from_file(filepath, palette_index=slot.index)
+                row["encoding"] = pal.encoding
+            except ValueError:
+                pass
+        rows.append(row)
+    return rows
+
+
+def _palette_info_text(filepath: str, rows: list[dict], detail: bool) -> str:
+    from titan.u7.palette_semantics import CYCLE_RANGES
+
+    lines = [f"{filepath}: {len(rows)} slot(s), {sum(1 for r in rows if not r['is_empty'])} populated"]
+    for row in rows:
+        if not detail and row["is_empty"]:
+            continue
+        name = f" ({row['name']})" if row["name"] else ""
+        enc = f" [{row['encoding']}]" if row["encoding"] else ""
+        if row["is_empty"]:
+            status = "empty"
+        elif not row["is_valid"]:
+            status = f"invalid: {row['error']}"
+        else:
+            status = "ok"
+        prefix = (
+            f"  slot {row['index']:2d}: offset=0x{row['offset']:06x} length={row['length']:4d} "
+            if detail
+            else f"  {row['index']:2d}: "
+        )
+        lines.append(f"{prefix}{status}{name}{enc}")
+
+    if detail:
+        lines.append("")
+        lines.append("Colour-cycling ranges (apply to every populated palette; see titan.u7.palette_cycle):")
+        for r in CYCLE_RANGES:
+            lines.append(f"  {r.name:8s} {r.start:3d}-{r.end:3d}")
+
+    return "\n".join(lines)
+
+
+def cmd_palette_info(args: SimpleNamespace) -> int:
+    """Inspect a PALETTES.FLX archive: slot occupancy, semantic names,
+    encoding, and colour-cycling ranges."""
+    from titan.u7.palette_semantics import CYCLE_RANGES
+
+    filepath = args.file
+    if not os.path.isfile(filepath):
+        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
+        return 1
+
+    fmt = getattr(args, "format", None) or "summary"
+    rows = _palette_inspection_rows(filepath)
+
+    if fmt == "csv":
+        buf = io.StringIO()
+        writer = csv.DictWriter(buf, fieldnames=list(rows[0].keys()) if rows else [])
+        writer.writeheader()
+        writer.writerows(rows)
+        content = buf.getvalue()
+    elif fmt == "json":
+        content = json.dumps(
+            {
+                "slots": rows,
+                "cycle_ranges": [
+                    {"name": r.name, "start": r.start, "end": r.end} for r in CYCLE_RANGES
+                ],
+            },
+            indent=2,
+        )
+    else:
+        content = _palette_info_text(filepath, rows, detail=(fmt == "detail"))
+
+    if args.output:
+        with open(args.output, "w") as f:
+            f.write(content)
+            f.write("\n")
+        print(f"Palette info written to: {args.output}")
+    else:
+        print(content)
+
     return 0
 
 
 # ============================================================================
 # CMD_* IMPLEMENTATION FUNCTIONS — SHAPE
 # ============================================================================
+
+
+def _load_translucent_bg_indices(path: str, num_frames: int) -> "list | None":
+    """Load an indexed ('P' mode) PNG produced by ``--indexed`` and reuse
+    its pixel-index array as the exact-compositing background for every
+    frame.  Returns ``None`` (with a printed error) if the file isn't
+    already palette-indexed -- this command doesn't attempt to quantize
+    an arbitrary RGB image down to indices."""
+    import numpy as np
+    from PIL import Image
+
+    img = Image.open(path)
+    if img.mode != "P":
+        print(
+            f"ERROR: --translucent-bg file must be a palette-indexed ('P' "
+            f"mode) PNG, e.g. produced by --indexed; got mode {img.mode!r}",
+            file=sys.stderr,
+        )
+        return None
+    arr = np.array(img)
+    return [arr] * num_frames
 
 
 def cmd_shape_export(args: SimpleNamespace) -> int:
@@ -392,6 +529,19 @@ def cmd_shape_export(args: SimpleNamespace) -> int:
         pal = U7Palette.from_file(args.palette)
     else:
         pal = U7Palette.default_palette()
+
+    translucency = None
+    if getattr(args, "translucent", False) or getattr(args, "translucent_bg", None):
+        if not getattr(args, "static", None):
+            print(
+                "ERROR: --static DIR is required (with --translucent or "
+                "--translucent-bg) to load real XFORM.TBL/BLENDS.DAT data",
+                file=sys.stderr,
+            )
+            return 1
+        from titan.u7.translucency import U7Translucency
+
+        translucency = U7Translucency.from_dir(args.static)
 
     # Determine if file is a Flex archive (VGA) or standalone .shp.
     is_flex = U7FlexArchive.is_u7_flex(filepath)
@@ -445,7 +595,34 @@ def cmd_shape_export(args: SimpleNamespace) -> int:
     else:
         frames_to_export = list(enumerate(shape.frames))
 
-    images = shape.to_pngs(pal)
+    indexed = getattr(args, "indexed", False)
+    cycle_phase_ms = getattr(args, "cycle_phase", 0) or 0
+    is_translucent = getattr(args, "translucent", False)
+    translucent_bg_path = getattr(args, "translucent_bg", None)
+
+    exact_background = None
+    if translucent_bg_path:
+        exact_background = _load_translucent_bg_indices(translucent_bg_path, len(shape.frames))
+        if exact_background is None:
+            return 1
+        is_translucent = True
+
+    if (cycle_phase_ms or is_translucent) and not indexed:
+        print(
+            "NOTE: RGBA export flattens palette cycling/translucency state "
+            "into fixed colours; original pixel indices are not preserved. "
+            "Use --indexed to keep exact index values.",
+            file=sys.stderr,
+        )
+
+    images = shape.to_pngs(
+        pal,
+        indexed=indexed,
+        cycle_phase_ms=cycle_phase_ms,
+        has_translucency=is_translucent,
+        translucency=translucency,
+        exact_background=exact_background,
+    )
 
     for idx, _frame in frames_to_export:
         img = images[idx]
@@ -483,6 +660,16 @@ def cmd_shape_batch(args: SimpleNamespace) -> int:
     start = args.range_start if args.range_start is not None else 0
     end = args.range_end if args.range_end is not None else num_records
 
+    indexed = getattr(args, "indexed", False)
+    cycle_phase_ms = getattr(args, "cycle_phase", 0) or 0
+    if cycle_phase_ms and not indexed:
+        print(
+            "NOTE: RGBA export flattens palette cycling state into fixed "
+            "colours; original pixel indices are not preserved. Use "
+            "--indexed to keep exact index values.",
+            file=sys.stderr,
+        )
+
     total_frames = 0
     total_shapes = 0
 
@@ -495,7 +682,7 @@ def cmd_shape_batch(args: SimpleNamespace) -> int:
         if not shape.frames:
             continue
 
-        images = shape.to_pngs(pal)
+        images = shape.to_pngs(pal, indexed=indexed, cycle_phase_ms=cycle_phase_ms)
         shape_dir = os.path.join(outdir, f"{shape_idx:04d}")
         os.makedirs(shape_dir, exist_ok=True)
 
@@ -670,6 +857,13 @@ def palette_export_cmd(
         Optional[int],
         typer.Option("--index", help="Export only this palette index (default: all)"),
     ] = None,
+    encoding: Annotated[
+        Literal["auto", "6bit", "8bit"],
+        typer.Option(
+            "--encoding",
+            help="Component encoding: auto-detect (default), or force 6-bit/8-bit",
+        ),
+    ] = "auto",
 ) -> None:
     """Export palettes from PALETTES.FLX as PNG colour swatches and text dumps."""
     raise SystemExit(
@@ -678,6 +872,37 @@ def palette_export_cmd(
                 file=file,
                 output=output,
                 index=index,
+                encoding=encoding,
+            )
+        )
+    )
+
+
+@u7_app.command("palette-info")
+def palette_info_cmd(
+    file: Annotated[
+        str, typer.Argument(help="Path to PALETTES.FLX or a standalone .pal file")
+    ],
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Write info dump to this file"),
+    ] = None,
+    format: Annotated[
+        Literal["summary", "detail", "csv", "json"],
+        typer.Option(
+            "-f", "--format",
+            help="Output format: summary (default), detail, csv, json",
+        ),
+    ] = "summary",
+) -> None:
+    """Inspect a PALETTES.FLX archive: slot occupancy, semantic names,
+    raw encoding, and colour-cycling ranges -- without exporting any files."""
+    raise SystemExit(
+        cmd_palette_info(
+            SimpleNamespace(
+                file=file,
+                output=output,
+                format=format,
             )
         )
     )
@@ -705,6 +930,45 @@ def shape_export_cmd(
         Optional[int],
         typer.Option("--frame", help="Export only this frame number"),
     ] = None,
+    indexed: Annotated[
+        bool,
+        typer.Option(
+            "--indexed",
+            help="Preserve palette indices ('P'-mode PNG) instead of flattening to RGBA",
+        ),
+    ] = False,
+    cycle_phase: Annotated[
+        int,
+        typer.Option(
+            "--cycle-phase",
+            help="Preview the palette rotated to this elapsed time in milliseconds",
+        ),
+    ] = 0,
+    translucent: Annotated[
+        bool,
+        typer.Option(
+            "--translucent",
+            help="Treat this shape as TFA-translucent (shape-export has no "
+            "STATIC dir to look this up automatically -- assert it explicitly)",
+        ),
+    ] = False,
+    translucent_bg: Annotated[
+        Optional[str],
+        typer.Option(
+            "--translucent-bg",
+            help="Indexed ('P'-mode) PNG background for exact translucency "
+            "compositing (implies --translucent); without it, translucent "
+            "pixels use the approximate RGBA preview blend colour",
+        ),
+    ] = None,
+    static: Annotated[
+        Optional[str],
+        typer.Option(
+            "--static",
+            help="STATIC directory to load real XFORM.TBL/BLENDS.DAT from "
+            "(required together with --translucent or --translucent-bg)",
+        ),
+    ] = None,
 ) -> None:
     """Export frames from a U7 shape file to PNG."""
     raise SystemExit(
@@ -715,6 +979,11 @@ def shape_export_cmd(
                 output=output,
                 shape=shape,
                 frame=frame,
+                indexed=indexed,
+                cycle_phase=cycle_phase,
+                translucent=translucent,
+                translucent_bg=translucent_bg,
+                static=static,
             )
         )
     )
@@ -742,6 +1011,20 @@ def shape_batch_cmd(
         Optional[int],
         typer.Option("--range-end", help="Last shape index (exclusive; default: all)"),
     ] = None,
+    indexed: Annotated[
+        bool,
+        typer.Option(
+            "--indexed",
+            help="Preserve palette indices ('P'-mode PNG) instead of flattening to RGBA",
+        ),
+    ] = False,
+    cycle_phase: Annotated[
+        int,
+        typer.Option(
+            "--cycle-phase",
+            help="Preview the palette rotated to this elapsed time in milliseconds",
+        ),
+    ] = 0,
 ) -> None:
     """Batch-export shapes from a VGA Flex archive to PNG."""
     raise SystemExit(
@@ -752,6 +1035,8 @@ def shape_batch_cmd(
                 output=output,
                 range_start=range_start,
                 range_end=range_end,
+                indexed=indexed,
+                cycle_phase=cycle_phase,
             )
         )
     )
