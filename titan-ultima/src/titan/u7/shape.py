@@ -35,10 +35,13 @@ from __future__ import annotations
 __all__ = ["U7Shape"]
 
 import struct
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 from PIL import Image
+
+if TYPE_CHECKING:
+    from titan.u7.translucency import U7Translucency
 
 # Shapes 0..149 in SHAPES.VGA are 8×8 raw ground tiles (no RLE).
 FIRST_OBJ_SHAPE = 0x96  # 150 — matches Exult's c_first_obj_shape
@@ -483,8 +486,96 @@ class U7Shape:
     # Rendering
     # ------------------------------------------------------------------
 
-    def to_pngs(self, palette, *, transparent: bool = True
-                ) -> list[Image.Image]:
+    def _composite_translucent_rgba(
+        self,
+        pixels: np.ndarray,
+        rgba: Image.Image,
+        alpha: np.ndarray,
+        translucency: "U7Translucency",
+        colors_arr: np.ndarray,
+        background: Optional[np.ndarray],
+    ) -> Image.Image:
+        """Replace translucent-index pixels in *rgba* with either exact
+        indexed-composited colours (when *background* is given and a
+        real xform table covers the index) or the approximate RGBA
+        preview blend colour.  Mutates *alpha* in place; returns the
+        updated image."""
+        arr = np.array(rgba)
+
+        for slot in range(translucency.num_slots):
+            pixel_value = translucency.xfstart + slot
+            mask = pixels == pixel_value
+            if not np.any(mask):
+                continue
+
+            table = (
+                translucency.remap_table_for_index(pixel_value)
+                if background is not None
+                else None
+            )
+            if table is not None:
+                table_arr = np.frombuffer(table, dtype=np.uint8)
+                composited = table_arr[background[mask]]
+                rgb = colors_arr[composited]
+                arr[mask, 0] = rgb[:, 0]
+                arr[mask, 1] = rgb[:, 1]
+                arr[mask, 2] = rgb[:, 2]
+                alpha[mask] = 255
+                continue
+
+            preview = translucency.composite_rgba_preview(pixel_value)
+            if preview is None:
+                continue
+            r, g, b, a = preview
+            arr[mask, 0] = r
+            arr[mask, 1] = g
+            arr[mask, 2] = b
+            alpha[mask] = a
+
+        return Image.fromarray(arr, "RGBA")
+
+    def _render_frame_rgba(
+        self,
+        frame: "U7Shape.Frame",
+        flat_rgb: bytes,
+        tidx: int,
+        transparent: bool,
+        has_translucency: bool,
+        translucency: Optional["U7Translucency"],
+        colors_arr: Optional[np.ndarray],
+        background: Optional[np.ndarray],
+    ) -> Image.Image:
+        """Render one non-indexed frame to RGBA, applying transparency
+        and (if applicable) translucency compositing."""
+        rendered = Image.fromarray(frame.pixels, mode="P")
+        rendered.putpalette(flat_rgb)
+        rgba = rendered.convert("RGBA")
+
+        alpha = (
+            np.where(frame.pixels == tidx, 0, 255).astype(np.uint8)
+            if transparent
+            else np.full(frame.pixels.shape, 255, dtype=np.uint8)
+        )
+
+        if has_translucency and translucency is not None:
+            rgba = self._composite_translucent_rgba(
+                frame.pixels, rgba, alpha, translucency, colors_arr, background
+            )
+
+        rgba.putalpha(Image.fromarray(alpha, mode="L"))
+        return rgba
+
+    def to_pngs(
+        self,
+        palette,
+        *,
+        transparent: bool = True,
+        indexed: bool = False,
+        cycle_phase_ms: int = 0,
+        has_translucency: bool = False,
+        translucency: Optional["U7Translucency"] = None,
+        exact_background: Optional[list[Optional[np.ndarray]]] = None,
+    ) -> list[Image.Image]:
         """Render all frames to PIL Images using the given palette.
 
         Parameters
@@ -495,25 +586,64 @@ class U7Shape:
             attribute.  Both :class:`~titan.palette.U8Palette` and
             :class:`~titan.u7.palette.U7Palette` satisfy this.
         transparent:
-            If True, transparent pixels become alpha=0.
+            If True, transparent pixels become alpha=0.  Ignored when
+            *indexed* is True.
+        indexed:
+            If True, return palette-indexed ("P" mode) images holding the
+            raw decoded pixel values -- no RGBA conversion, alpha, or
+            cycle/translucency compositing.  The exact-index counterpart
+            to the (necessarily lossy) RGBA path below.
+        cycle_phase_ms:
+            If nonzero and *palette* supports ``at_cycle_phase`` (e.g.
+            :class:`~titan.u7.palette.U7Palette`), render with the
+            palette rotated to this elapsed time rather than its base
+            colours -- affects both the indexed and RGBA paths.
+        has_translucency:
+            Whether this shape is TFA-flagged translucent (see
+            ``titan.u7.typeflag.ShapeEntry.has_translucency``).  Ignored
+            when *indexed* is True.
+        translucency:
+            A :class:`~titan.u7.translucency.U7Translucency` providing
+            real per-game xform/blend data.  Required (together with
+            *has_translucency*) for translucent pixels to be composited
+            at all -- without it they render using the base palette
+            colour like any other index.
+        exact_background:
+            Per-frame palette-index arrays (each shaped like that
+            frame's ``pixels``) giving the destination content behind a
+            translucent shape, for *exact* indexed compositing via
+            :meth:`~titan.u7.translucency.U7Translucency.composite_index`.
+            Without it (or for indices its table doesn't cover),
+            translucent pixels fall back to the approximate RGBA preview
+            blend colour -- this method does not warn about that lossy
+            fallback itself; callers doing RGBA export should.
         """
         images: list[Image.Image] = []
+
+        if cycle_phase_ms and hasattr(palette, "at_cycle_phase"):
+            palette = palette.at_cycle_phase(cycle_phase_ms)
+
         flat_rgb = palette.to_flat_rgb()
         tidx = getattr(palette, "transparent_index", 255)
+        colors_arr = np.array(palette.colors, dtype=np.uint8) if has_translucency else None
 
-        for frame in self.frames:
+        for frame_idx, frame in enumerate(self.frames):
             if frame.pixels is None or frame.width <= 0 or frame.height <= 0:
                 images.append(Image.new("RGBA", (1, 1), (0, 0, 0, 0)))
                 continue
 
-            indexed = Image.fromarray(frame.pixels, mode="P")
-            indexed.putpalette(flat_rgb)
-            rgba = indexed.convert("RGBA")
+            if indexed:
+                indexed_img = Image.fromarray(frame.pixels, mode="P")
+                indexed_img.putpalette(flat_rgb)
+                images.append(indexed_img)
+                continue
 
-            if transparent:
-                alpha = np.where(frame.pixels == tidx, 0, 255).astype(np.uint8)
-                rgba.putalpha(Image.fromarray(alpha, mode="L"))
-
-            images.append(rgba)
+            bg = exact_background[frame_idx] if exact_background else None
+            images.append(
+                self._render_frame_rgba(
+                    frame, flat_rgb, tidx, transparent, has_translucency,
+                    translucency, colors_arr, bg,
+                )
+            )
 
         return images
