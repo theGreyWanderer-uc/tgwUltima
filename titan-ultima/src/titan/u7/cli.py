@@ -633,6 +633,146 @@ def cmd_shape_export(args: SimpleNamespace) -> int:
     return 0
 
 
+# LCM of the six colour-cycle range lengths (8,8,4,4,4,3) -- the number of
+# 100ms ticks for every cycling range to simultaneously return to its
+# original alignment (see titan.u7.palette_cycle).
+_CYCLE_FULL_WRAP_STEPS = 24
+
+
+def cmd_shape_animate(args: SimpleNamespace) -> int:
+    """Render a shape's animation (frame-sequence or palette-cycle) to an
+    animated GIF."""
+    from titan.u7.palette import U7Palette
+    from titan.u7.shape import U7Shape, FIRST_OBJ_SHAPE
+    from titan.u7.flex import U7FlexArchive
+    from titan.u7.shape_animation import (
+        TICK_MS,
+        default_animation_for_tfa,
+        has_cycle_pixels,
+        save_gif,
+        simulate_frame_sequence,
+    )
+
+    filepath = args.file
+    if not os.path.isfile(filepath):
+        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
+        return 1
+
+    pal = U7Palette.from_file(args.palette) if args.palette else U7Palette.default_palette()
+
+    is_flex = U7FlexArchive.is_u7_flex(filepath)
+    if is_flex:
+        if args.shape is None:
+            print(
+                "ERROR: --shape N is required when the input is a VGA "
+                "Flex archive (e.g. SHAPES.VGA).",
+                file=sys.stderr,
+            )
+            return 1
+        archive = U7FlexArchive.from_file(filepath)
+        rec = archive.get_record(args.shape)
+        if not rec:
+            print(f"ERROR: Shape {args.shape} is empty", file=sys.stderr)
+            return 1
+        shape = U7Shape.from_data(rec, is_tile=(args.shape < FIRST_OBJ_SHAPE))
+        name = f"shape_{args.shape:04d}"
+    else:
+        shape = U7Shape.from_file(filepath)
+        name = Path(filepath).stem
+
+    if not shape.frames:
+        print(f"WARNING: No frames found in {filepath}", file=sys.stderr)
+        return 1
+
+    target_frame = args.frame or 0
+    if target_frame < 0 or target_frame >= len(shape.frames):
+        print(
+            f"ERROR: Frame {target_frame} out of range "
+            f"(shape has {len(shape.frames)} frames)",
+            file=sys.stderr,
+        )
+        return 1
+
+    translucency = None
+    if args.static:
+        from titan.u7.translucency import U7Translucency
+
+        translucency = U7Translucency.from_dir(args.static)
+
+    anim = None
+    is_translucent = False
+    if args.static and args.shape is not None:
+        from titan.u7.typeflag import U7TypeFlags
+
+        tfa = U7TypeFlags.from_dir(args.static)
+        entry = tfa.get(args.shape)
+        if entry is not None:
+            anim = default_animation_for_tfa(entry.anim_type, len(shape.frames))
+            # Real per-shape TFA flag -- NOT the same thing as "this frame
+            # happens to contain pixels in the 224-254 cycle range" (checked
+            # below via has_cycle_pixels). Indices 238-254 are dual-purpose:
+            # plain colour cycling on an ordinary shape, but a translucency
+            # blend override on one flagged translucent (see
+            # titan.u7.translucency). Passing the wrong one here would make
+            # a merely-cycling shape's colours freeze at a static blend
+            # preview instead of actually animating.
+            is_translucent = entry.has_translucency
+
+    mode = args.mode or "auto"
+    if mode == "auto":
+        mode = "frames" if anim is not None else "cycle"
+
+    outpath = args.output or f"{name}.gif"
+
+    if mode == "frames":
+        if anim is None:
+            print(
+                "ERROR: --mode frames requires --static DIR and --shape N "
+                "resolving to a TFA-animated shape (see u7 typeflag-dump)",
+                file=sys.stderr,
+            )
+            return 1
+
+        images = shape.to_pngs(pal)
+        default_steps = 24 if anim.ani_type.name == "HOURLY" else anim.nframes
+        steps = args.steps or default_steps
+        frame_indices = simulate_frame_sequence(anim, 0, steps, hour_start=args.hour_start or 0)
+        gif_frames = [images[i] for i in frame_indices if 0 <= i < len(images)]
+        default_duration = 200 if anim.ani_type.name == "HOURLY" else TICK_MS * anim.frame_delay
+        duration = args.duration or default_duration
+        print(f"Animating {name}: {anim.ani_type.name.lower()} frame sequence, "
+              f"{len(gif_frames)} steps @ {duration}ms")
+    else:
+        if not has_cycle_pixels(shape.frames[target_frame].pixels):
+            print(
+                f"NOTE: frame {target_frame} has no colour-cycling pixels; "
+                "the animation will look static.",
+                file=sys.stderr,
+            )
+        steps = args.steps or _CYCLE_FULL_WRAP_STEPS
+        duration = args.duration or TICK_MS
+        gif_frames = []
+        for step in range(steps):
+            imgs = shape.to_pngs(
+                pal,
+                cycle_phase_ms=step * TICK_MS,
+                has_translucency=is_translucent,
+                translucency=translucency if is_translucent else None,
+            )
+            gif_frames.append(imgs[target_frame])
+        label = " (translucency-composited)" if is_translucent else ""
+        print(f"Animating {name} frame {target_frame}: colour-cycle preview{label}, "
+              f"{steps} steps @ {duration}ms")
+
+    if not gif_frames:
+        print("ERROR: No frames produced for animation", file=sys.stderr)
+        return 1
+
+    save_gif(gif_frames, outpath, duration_ms=duration)
+    print(f"Saved animated GIF: {outpath}")
+    return 0
+
+
 def cmd_shape_batch(args: SimpleNamespace) -> int:
     """Batch-export shapes from a VGA Flex archive to PNG."""
     from titan.u7.shape import U7Shape, FIRST_OBJ_SHAPE
@@ -984,6 +1124,81 @@ def shape_export_cmd(
                 translucent=translucent,
                 translucent_bg=translucent_bg,
                 static=static,
+            )
+        )
+    )
+
+
+@u7_app.command("shape-animate")
+def shape_animate_cmd(
+    file: Annotated[
+        str,
+        typer.Argument(help="Path to .shp file or VGA Flex archive (e.g. SHAPES.VGA)"),
+    ],
+    palette: Annotated[
+        Optional[str],
+        typer.Option("-p", "--palette", help="Path to PALETTES.FLX or .pal file"),
+    ] = None,
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Output .gif path (default: <name>.gif)"),
+    ] = None,
+    shape: Annotated[
+        Optional[int],
+        typer.Option(
+            "--shape",
+            help="Shape index (required for VGA input; also used as the TFA "
+            "shape number for --mode frames/auto when --static is given)",
+        ),
+    ] = None,
+    frame: Annotated[
+        Optional[int],
+        typer.Option("--frame", help="Frame to animate in --mode cycle (default: 0)"),
+    ] = None,
+    static: Annotated[
+        Optional[str],
+        typer.Option(
+            "--static",
+            help="STATIC directory for TFA animation-type lookup and real "
+            "XFORM.TBL/BLENDS.DAT translucency data",
+        ),
+    ] = None,
+    mode: Annotated[
+        Literal["auto", "frames", "cycle"],
+        typer.Option(
+            "--mode",
+            help="auto (default): use TFA frame-sequence animation if --static "
+            "resolves one, else colour-cycle preview. frames/cycle force one.",
+        ),
+    ] = "auto",
+    steps: Annotated[
+        Optional[int],
+        typer.Option("--steps", help="Number of animation steps (default depends on mode/type)"),
+    ] = None,
+    duration: Annotated[
+        Optional[int],
+        typer.Option("--duration", help="Milliseconds per GIF frame (default depends on mode/type)"),
+    ] = None,
+    hour_start: Annotated[
+        Optional[int],
+        typer.Option("--hour-start", help="Starting in-game hour for HOURLY-type animations"),
+    ] = None,
+) -> None:
+    """Render a shape's frame-sequence or palette-cycle animation to an
+    animated GIF."""
+    raise SystemExit(
+        cmd_shape_animate(
+            SimpleNamespace(
+                file=file,
+                palette=palette,
+                output=output,
+                shape=shape,
+                frame=frame,
+                static=static,
+                mode=mode,
+                steps=steps,
+                duration=duration,
+                hour_start=hour_start,
             )
         )
     )

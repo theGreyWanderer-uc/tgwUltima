@@ -998,6 +998,68 @@ titan u7 shape-batch SHAPES.VGA -p PALETTES.FLX --indexed -o shapes_indexed/
 
 ---
 
+#### `u7 shape-animate`
+
+Render a shape's animation to an animated GIF. U7 shapes animate two
+different ways, and this command auto-detects which applies:
+
+- **Frame-sequence animation** — the shape's TFA animation type switches
+  between different *frames* over time (e.g. a moongate cycling through
+  its 12 frames). Requires `--static` (and `--shape`, for VGA input) to
+  look up the real TFA animation type; falls back to Exult's own default
+  timing for that type when no `shape_info.txt` override applies (see
+  `titan u7 typeflag-dump` for a shape's raw animation type).
+- **Colour-cycle animation** — the shape has no TFA animation type, but
+  a single frame's pixels fall in Exult's palette-cycling ranges
+  (224–254), so it animates by rotating *colours* on one fixed frame
+  instead (e.g. a weapon's glowing "power stroke"). Renders `--frame`
+  (default 0) at a sequence of palette-cycle phases instead of switching
+  frames.
+
+```
+titan u7 shape-animate <file> [-p PAL] [-o FILE.gif] [--shape N] [--frame N]
+                       [--static DIR] [--mode auto|frames|cycle]
+                       [--steps N] [--duration MS] [--hour-start N]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `.shp` file **or** `SHAPES.VGA` Flex archive |
+| `-p FILE`, `--palette FILE` | Path to `PALETTES.FLX` or raw `.pal` (default: greyscale) |
+| `-o FILE`, `--output FILE` | Output `.gif` path (default: `<name>.gif`) |
+| `--shape N` | Shape index for VGA input (required); also used as the TFA shape number for `--mode frames`/`auto` when `--static` is given |
+| `--frame N` | Frame to animate in `--mode cycle` (default: 0) |
+| `--static DIR` | `STATIC/` directory for TFA animation-type lookup and real `XFORM.TBL`/`BLENDS.DAT` translucency data |
+| `--mode auto\|frames\|cycle` | `auto` (default) picks frame-sequence if `--static` resolves a TFA animation type, else colour-cycle. `frames`/`cycle` force one — `frames` errors clearly if no animation type resolves |
+| `--steps N` | Number of animation steps. Default: the type's real frame count (`frames` mode) or 24 — one full synchronized wrap of all six colour-cycle ranges (`cycle` mode) |
+| `--duration MS` | Milliseconds per GIF frame. Default: `100 × frame_delay` for most `frames`-mode types, 200ms for `HOURLY`, 100ms for `cycle` mode |
+| `--hour-start N` | Starting in-game hour (0–23) for `HOURLY`-type animations |
+
+If a `cycle`-mode target frame doesn't actually contain any colour-cycling
+pixels, a note is printed to stderr rather than silently producing a
+static-looking GIF. A shape's true visual cycle period can be shorter
+than the 24-step default (e.g. if it only uses one short cycle range) —
+the output still loops correctly either way, just with some repeated
+frames; pass a smaller `--steps` once you've seen the pattern if you want
+a smaller file.
+
+**Examples**
+```bash
+# Moongate: auto-detects TFA frame-sequence animation (12 frames, 100ms each)
+titan u7 shape-animate SHAPES.VGA --shape 777 -p PALETTES.FLX --static STATIC/ -o moongate.gif
+
+# Weapon glow: auto-detects colour-cycle animation on frame 0 (no TFA animation type)
+titan u7 shape-animate SHAPES.VGA --shape 557 --frame 0 -p PALETTES.FLX --static STATIC/ -o hammer.gif
+
+# Force colour-cycle mode without needing --static at all
+titan u7 shape-animate SHAPES.VGA --shape 557 --frame 0 -p PALETTES.FLX --mode cycle -o hammer.gif
+
+# Shorter, tighter loop once you know the shape's real cycle period
+titan u7 shape-animate SHAPES.VGA --shape 557 --frame 0 -p PALETTES.FLX --mode cycle --steps 3 -o hammer_tight.gif
+```
+
+---
+
 ### U7 palette commands
 
 ---
@@ -2360,6 +2422,7 @@ A value on the command line always wins.
 | `u7 container-browse` | Browse container contents from IREG with full nesting support |
 | `u7 egg-query` | Query egg trigger objects from IREG — type, usecode function, location |
 | `u7 palette-info` | Inspect `PALETTES.FLX` slot occupancy, semantic names, encoding, and colour-cycling ranges |
+| `u7 shape-animate` | Render a shape's frame-sequence or colour-cycle animation to an animated GIF |
 | `dialogue prepare` | Generate dialogue runtime artifacts |
 | `dialogue copy` | Optionally copy NPC JSON files and META sidecars to a destination folder |
 | `dialogue validate` | Validate dialogue runtime artifacts (`--content-lint` is unfinished) |
