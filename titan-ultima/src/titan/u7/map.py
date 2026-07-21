@@ -60,6 +60,7 @@ from titan.u7.flex import U7FlexArchive
 from titan.u7.shape import U7Shape, FIRST_OBJ_SHAPE
 from titan.u7.palette import U7Palette
 from titan.u7.typeflag import U7TypeFlags
+from titan.u7.translucency import U7Translucency
 
 # ---------------------------------------------------------------------------
 # Constants (from exult_constants.h)
@@ -77,48 +78,22 @@ C_CHUNK_BYTES_V2 = C_TILES_PER_CHUNK * C_TILES_PER_CHUNK * 3  # 768
 _V2_CHUNKS_MAGIC = b"\xff\xff\xff\xffexlt\x00\x00"
 _V2_CHUNKS_HDR_SIZE = 10
 
-# ---------------------------------------------------------------------------
-# Translucency — Exult xform blending (hardcoded fallback from shapeid.cc)
-# ---------------------------------------------------------------------------
-# 17 blend definitions: (R, G, B, alpha).  R/G/B are divided by 4 before use
-# in Exult's create_trans_table; alpha is the blend factor (0-255).
-_HARD_BLENDS = [
-    (208, 216, 224, 192),
-    (136, 44, 148, 198),
-    (248, 252, 80, 211),
-    (144, 148, 252, 247),
-    (64, 216, 64, 201),
-    (204, 60, 84, 140),
-    (144, 40, 192, 128),
-    (96, 40, 16, 128),
-    (100, 108, 116, 192),
-    (68, 132, 28, 128),
-    (255, 208, 48, 64),
-    (28, 52, 255, 128),
-    (8, 68, 0, 128),
-    (255, 8, 8, 118),
-    (255, 244, 248, 128),
-    (56, 40, 32, 128),
-    (228, 224, 214, 82),
-]
-# Pre-compute RGBA blend colors (R/4, G/4, B/4, alpha)
-_BLEND_RGBA = [(r >> 2, g >> 2, b >> 2, a) for r, g, b, a in _HARD_BLENDS]
-_NUM_BLENDS = len(_BLEND_RGBA)
-_XFSTART = 0xFF - _NUM_BLENDS  # 238 — first translucent pixel index
-
-
 def _frame_to_rgba(
     fr: U7Shape.Frame,
     flat_rgb: bytes | list[int],
     *,
     has_translucency: bool = False,
+    translucency: U7Translucency | None = None,
 ) -> tuple[Image.Image, int, int]:
     """Convert a decoded U7Shape.Frame to ``(RGBA Image, xoff, yoff)``.
 
     Ground tiles are rendered fully opaque (no transparent index).
     RLE sprites treat pixel value 0xFF as transparent.
-    Translucent shapes replace pixel values 238–254 with semi-transparent
-    blend colours matching Exult's xform palette.
+    Translucent shapes get their translucent pixel values replaced with
+    the approximate RGBA preview colour from *translucency* (see
+    :meth:`titan.u7.translucency.U7Translucency.composite_rgba_preview`)
+    -- an approximation of Exult's real indexed compositing, since this
+    function always produces a flattened RGBA image.
     """
     indexed = Image.fromarray(fr.pixels, mode="P")
     indexed.putpalette(flat_rgb)
@@ -131,11 +106,16 @@ def _frame_to_rgba(
         # RLE sprites: 0xFF marks pixels not covered by any span
         alpha = np.where(fr.pixels == 0xFF, 0, 255).astype(np.uint8)
 
-        if has_translucency:
+        if has_translucency and translucency is not None:
             arr = np.array(rgba)
-            for i, (r, g, b, a) in enumerate(_BLEND_RGBA):
-                mask = fr.pixels == (_XFSTART + i)
+            for slot in range(translucency.num_slots):
+                pixel_value = translucency.xfstart + slot
+                preview = translucency.composite_rgba_preview(pixel_value)
+                if preview is None:
+                    continue
+                mask = fr.pixels == pixel_value
                 if np.any(mask):
+                    r, g, b, a = preview
                     arr[mask, 0] = r
                     arr[mask, 1] = g
                     arr[mask, 2] = b
@@ -333,9 +313,18 @@ class U7MapRenderer:
     }
     DEFAULT_VIEW = "classic"
 
-    def __init__(self, static_dir: str, map_num: int = 0) -> None:
+    def __init__(
+        self,
+        static_dir: str,
+        map_num: int = 0,
+        *,
+        game: str = "bg",
+        exult_flx_path: str | None = None,
+    ) -> None:
         self.static_dir = static_dir
         self.map_num = map_num
+        self.game = game
+        self.exult_flx_path = exult_flx_path
         # For map_num > 0, U7MAP and IFIX live in a mapNN/ subdir.
         self._map_data_dir: str = (
             os.path.join(static_dir, f"map{map_num:02x}") if map_num > 0 else static_dir
@@ -344,6 +333,7 @@ class U7MapRenderer:
         self._terrains: list[list[tuple[int, int]]] | None = None  # terrain shapes
         self._tfa: U7TypeFlags | None = None
         self._shapes_vga: U7FlexArchive | None = None
+        self._translucency: U7Translucency | None = None
 
     # ------------------------------------------------------------------
     # Lazy loaders
@@ -369,6 +359,16 @@ class U7MapRenderer:
         if self._tfa is None:
             self._tfa = U7TypeFlags.from_dir(self.static_dir)
         return self._tfa
+
+    @property
+    def translucency(self) -> U7Translucency:
+        """Real per-game translucency data (XFORM.TBL/BLENDS.DAT, with
+        Exult-bundle/hardcoded fallback)."""
+        if self._translucency is None:
+            self._translucency = U7Translucency.from_dir(
+                self.static_dir, game=self.game, exult_flx_path=self.exult_flx_path
+            )
+        return self._translucency
 
     @property
     def shapes_vga(self) -> U7FlexArchive:
@@ -1316,7 +1316,9 @@ class U7MapRenderer:
 
             tfa_entry = self.tfa.get(shnum)
             has_trans = tfa_entry.has_translucency if tfa_entry else False
-            frame_cache[key] = _frame_to_rgba(fr, flat_rgb, has_translucency=has_trans)
+            frame_cache[key] = _frame_to_rgba(
+                fr, flat_rgb, has_translucency=has_trans, translucency=self.translucency
+            )
             return frame_cache[key]
 
         return _get_frame

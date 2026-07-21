@@ -154,6 +154,14 @@ jobs:
       - name: Verify bundled shell
         run: test -f titan-ultima/src/titan/dialogue/webbundle/index.html
 
+      - name: Install Titan (editable) for tests
+        working-directory: titan-ultima
+        run: pip install -e .
+
+      - name: Run Titan tests
+        working-directory: titan-ultima
+        run: python -m unittest discover -s tests -v
+
       - name: Install build tools
         run: pip install build
 

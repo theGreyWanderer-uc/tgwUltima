@@ -922,6 +922,8 @@ RLE-compressed sprites.
 
 ```
 titan u7 shape-export <file> [-p PAL] [-o DIR] [--shape N] [--frame N]
+                      [--indexed] [--cycle-phase MS]
+                      [--translucent | --translucent-bg FILE] [--static DIR]
 ```
 
 | Argument | Description |
@@ -931,6 +933,15 @@ titan u7 shape-export <file> [-p PAL] [-o DIR] [--shape N] [--frame N]
 | `-o DIR`, `--output DIR` | Output directory (default: `./<name>/`) |
 | `--shape N` | Shape index to export when `file` is a VGA Flex (e.g. `SHAPES.VGA`). Required for Flex input |
 | `--frame N` | Single frame number to export (default: all frames) |
+| `--indexed` | Export palette-indexed (`P`-mode) PNGs instead of flattening to RGBA — preserves the exact original pixel indices, including cycling/translucency-range values |
+| `--cycle-phase MS` | Preview the palette rotated to this elapsed time in milliseconds (Exult's six colour-cycling ranges) instead of its base colours |
+| `--translucent` | Treat this shape as TFA-translucent for the RGBA preview (shape-export has no STATIC dir to look this up automatically — assert it explicitly). Requires `--static` |
+| `--translucent-bg FILE` | Indexed (`P`-mode) PNG background — e.g. produced by `--indexed` — for *exact* translucency compositing through the real xform table, rather than the approximate RGBA preview blend colour. Implies `--translucent`. Requires `--static` |
+| `--static DIR` | `STATIC/` directory to load real `XFORM.TBL`/`BLENDS.DAT` from (required together with `--translucent` or `--translucent-bg`) |
+
+Exporting with `--cycle-phase` or `--translucent`/`--translucent-bg` but
+without `--indexed` prints a note to stderr: RGBA export flattens that
+dynamic state into fixed colours and cannot reproduce it losslessly.
 
 **Examples**
 ```bash
@@ -939,6 +950,19 @@ titan u7 shape-export POINTERS.SHP -p PALETTES.FLX -o pointers/
 
 # Export shape 150 (first non-ground object) from SHAPES.VGA
 titan u7 shape-export SHAPES.VGA --shape 150 -p PALETTES.FLX -o shape_150/
+
+# Preserve exact palette indices instead of flattening to RGBA
+titan u7 shape-export SHAPES.VGA --shape 177 -p PALETTES.FLX --indexed -o shape_177_indexed/
+
+# Preview the palette rotated 500ms into its colour-cycling animation
+titan u7 shape-export SHAPES.VGA --shape 177 -p PALETTES.FLX --cycle-phase 500 -o shape_177_cycled/
+
+# Approximate RGBA preview of a translucent shape (real XFORM.TBL/BLENDS.DAT via --static)
+titan u7 shape-export SHAPES.VGA --shape 177 -p PALETTES.FLX --translucent --static STATIC/ -o shape_177_trans/
+
+# Exact indexed translucency compositing against a background exported with --indexed
+titan u7 shape-export SHAPES.VGA --shape 177 -p PALETTES.FLX \
+  --translucent-bg shape_177_indexed/shape_0177_f0000.png --static STATIC/ -o shape_177_exact/
 ```
 
 ---
@@ -949,6 +973,7 @@ Batch-export shapes from a VGA Flex archive to PNG.
 
 ```
 titan u7 shape-batch <file> [-p PAL] [-o DIR] [--range START END]
+                     [--indexed] [--cycle-phase MS]
 ```
 
 | Argument | Description |
@@ -957,11 +982,18 @@ titan u7 shape-batch <file> [-p PAL] [-o DIR] [--range START END]
 | `-p FILE`, `--palette FILE` | Path to `PALETTES.FLX` or raw `.pal` (default: greyscale) |
 | `-o DIR`, `--output DIR` | Output directory (default: `<name>_png/`) |
 | `--range START END` | Shape index range to export (default: all) |
+| `--indexed` | Export palette-indexed (`P`-mode) PNGs instead of flattening to RGBA |
+| `--cycle-phase MS` | Preview the palette rotated to this elapsed time in milliseconds |
+
+Per-shape translucency compositing (`--translucent`/`--translucent-bg`) is
+only available on `shape-export`, not `shape-batch` — a single background
+doesn't generalize across a batch of unrelated shapes.
 
 **Examples**
 ```bash
 titan u7 shape-batch SHAPES.VGA -p PALETTES.FLX -o shapes_png/
 titan u7 shape-batch FACES.VGA -p PALETTES.FLX -o faces_png/ --range 0 50
+titan u7 shape-batch SHAPES.VGA -p PALETTES.FLX --indexed -o shapes_indexed/
 ```
 
 ---
@@ -975,25 +1007,69 @@ titan u7 shape-batch FACES.VGA -p PALETTES.FLX -o faces_png/ --range 0 50
 Export palettes from `PALETTES.FLX` as PNG colour swatches and text dumps.
 
 ```
-titan u7 palette-export <file> [-o DIR] [--index N]
+titan u7 palette-export <file> [-o DIR] [--index N] [--encoding auto|6bit|8bit]
 ```
 
 | Argument | Description |
 |----------|-------------|
 | `file` | Path to `PALETTES.FLX` or a standalone `.pal` file |
 | `-o DIR`, `--output DIR` | Output directory (default: `./palettes/`) |
-| `--index N` | Export only palette N (default: all palettes in the archive) |
+| `--index N` | Export only palette N (default: every populated slot in the archive) |
+| `--encoding auto\|6bit\|8bit` | Component encoding (default: `auto`-detect). Force `6bit`/`8bit` instead of guessing from byte values — useful for standalone files where auto-detection is ambiguous (e.g. a uniformly dark palette) |
 
-`PALETTES.FLX` typically contains 12 palettes. Palette 0 is the main
-daytime palette used by most graphics.
+`PALETTES.FLX` typically declares 16 slots but only populates 12 (Black
+Gate) or 13 (Serpent Isle) of them — empty slots are skipped automatically
+with a note; requesting an empty slot explicitly via `--index` is a clean
+error, not a crash. See `u7 palette-info` below to inspect slot occupancy
+without exporting anything. Palette 0 is the main daytime palette used by
+most graphics.
 
 **Examples**
 ```bash
-# Export all 12 palettes
+# Export every populated palette (skips empty slots automatically)
 titan u7 palette-export PALETTES.FLX -o palettes/
 
 # Export only the main daytime palette
 titan u7 palette-export PALETTES.FLX --index 0 -o palettes/
+
+# Force 8-bit interpretation of an ambiguous standalone .pal file
+titan u7 palette-export mystery.pal --encoding 8bit -o palettes/
+```
+
+---
+
+#### `u7 palette-info`
+
+Inspect a `PALETTES.FLX` archive without exporting any files: slot
+occupancy (populated/empty/invalid), semantic slot names, raw 6-bit/8-bit
+encoding, and Exult's six colour-cycling ranges.
+
+```
+titan u7 palette-info <file> [-o FILE] [-f FORMAT]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `PALETTES.FLX` or a standalone `.pal` file |
+| `-o FILE`, `--output FILE` | Write the info dump to this file |
+| `-f FORMAT`, `--format FORMAT` | Output format: `summary` (default), `detail`, `csv`, `json` |
+
+Named slots (`day`, `night`, `invisible`, etc.) come from Exult's own
+`palette.h` constants; unnamed/custom slots are reported without a name
+rather than being treated as invalid. `detail` format additionally lists
+the six cycling ranges (`magic`, `fire`, `green`, `magenta`, `yellow`,
+`ryb`) that apply to every populated palette.
+
+**Examples**
+```bash
+# Quick occupancy + semantic name summary
+titan u7 palette-info PALETTES.FLX
+
+# Full per-slot detail plus colour-cycling ranges
+titan u7 palette-info PALETTES.FLX -f detail
+
+# Machine-readable dump
+titan u7 palette-info PALETTES.FLX -f json -o palette_info.json
 ```
 
 ---
@@ -2283,6 +2359,7 @@ A value on the command line always wins.
 | `u7 world-query` | Interactive wizard to filter IFIX/IREG world object placements |
 | `u7 container-browse` | Browse container contents from IREG with full nesting support |
 | `u7 egg-query` | Query egg trigger objects from IREG — type, usecode function, location |
+| `u7 palette-info` | Inspect `PALETTES.FLX` slot occupancy, semantic names, encoding, and colour-cycling ranges |
 | `dialogue prepare` | Generate dialogue runtime artifacts |
 | `dialogue copy` | Optionally copy NPC JSON files and META sidecars to a destination folder |
 | `dialogue validate` | Validate dialogue runtime artifacts (`--content-lint` is unfinished) |
