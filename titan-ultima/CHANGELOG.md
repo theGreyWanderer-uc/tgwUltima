@@ -10,6 +10,17 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ---
 
+## [0.6.9.1]
+
+### Added
+
+- Added `titan u7 shape-animate` to render a shape's animation to a GIF,
+  auto-detecting whether it uses TFA frame-sequence animation(a
+  moongate cycling frames) or palette colour-cycling on a single fixed
+  frame(a weapon's glowing power stroke), with real per-type timing.
+
+---
+
 ## [0.6.9]
 
 ### Added
