@@ -97,5 +97,73 @@ class AnimTypeDefaultingTests(unittest.TestCase):
         self.assertEqual(tfa.get(5).anim_type, 3)
 
 
+def _make_tfa_bytes_full(byte012_by_shape: dict) -> bytes:
+    """Like ``_make_tfa_bytes`` but sets all three raw TFA bytes per shape."""
+    base = bytearray(3 * 1024)
+    for shnum, (b0, b1, b2) in byte012_by_shape.items():
+        base[shnum * 3] = b0
+        base[shnum * 3 + 1] = b1
+        base[shnum * 3 + 2] = b2
+    return bytes(base) + bytes(512)
+
+
+class ContactEffectAliasTests(unittest.TestCase):
+    def test_has_contact_effect_is_tfa1_bit4(self):
+        tfa_bytes = _make_tfa_bytes_full({756: (0x00, 0x15, 0x00)})  # class=5, bit4 set
+        entry = U7TypeFlags.parse(tfa_bytes).get(756)
+        self.assertTrue(entry.has_contact_effect)
+        self.assertEqual(entry.shape_class, 5)
+
+    def test_is_poisonous_and_is_field_alias_has_contact_effect(self):
+        tfa_bytes = _make_tfa_bytes_full({10: (0x00, 0x10, 0x00)})
+        entry = U7TypeFlags.parse(tfa_bytes).get(10)
+        self.assertTrue(entry.has_contact_effect)
+        self.assertTrue(entry.is_poisonous)
+        self.assertTrue(entry.is_field)
+
+    def test_contact_effect_false_when_bit_unset(self):
+        tfa_bytes = _make_tfa_bytes_full({11: (0x00, 0x05, 0x00)})  # class=5, bit4 clear
+        entry = U7TypeFlags.parse(tfa_bytes).get(11)
+        self.assertFalse(entry.has_contact_effect)
+        self.assertFalse(entry.is_poisonous)
+        self.assertFalse(entry.is_field)
+
+
+class ShapeClassHelperTests(unittest.TestCase):
+    CASES = [
+        (U7TypeFlags.SHAPE_CLASS_QUALITY, "has_quality"),
+        (U7TypeFlags.SHAPE_CLASS_QUANTITY, "has_quantity"),
+        (U7TypeFlags.SHAPE_CLASS_HAS_HP, "has_hp"),
+        (U7TypeFlags.SHAPE_CLASS_QUALITY_FLAGS, "has_quality_flags"),
+        (U7TypeFlags.SHAPE_CLASS_CONTAINER, "is_container"),
+        (U7TypeFlags.SHAPE_CLASS_EGG, "is_hatchable"),
+        (U7TypeFlags.SHAPE_CLASS_SPELLBOOK, "is_spellbook"),
+        (U7TypeFlags.SHAPE_CLASS_BARGE, "is_barge"),
+        (U7TypeFlags.SHAPE_CLASS_VIRTUE_STONE, "is_virtue_stone"),
+        (U7TypeFlags.SHAPE_CLASS_MONSTER, "is_monster"),
+        (U7TypeFlags.SHAPE_CLASS_HUMAN, "is_human"),
+        (U7TypeFlags.SHAPE_CLASS_BUILDING, "is_building"),
+    ]
+
+    def test_each_shape_class_sets_only_its_own_helper(self):
+        all_props = [name for _, name in self.CASES]
+        for shape_class, prop_name in self.CASES:
+            with self.subTest(prop=prop_name):
+                tfa_bytes = _make_tfa_bytes_full({20: (0x00, shape_class, 0x00)})
+                entry = U7TypeFlags.parse(tfa_bytes).get(20)
+                for other_prop in all_props:
+                    expected = other_prop == prop_name
+                    self.assertEqual(
+                        getattr(entry, other_prop), expected,
+                        f"{other_prop} for shape_class={shape_class}",
+                    )
+
+    def test_unusable_class_sets_no_helper(self):
+        tfa_bytes = _make_tfa_bytes_full({21: (0x00, 0x00, 0x00)})
+        entry = U7TypeFlags.parse(tfa_bytes).get(21)
+        for _, prop_name in self.CASES:
+            self.assertFalse(getattr(entry, prop_name))
+
+
 if __name__ == "__main__":
     unittest.main()

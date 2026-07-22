@@ -19,8 +19,24 @@ This project uses [Semantic Versioning](https://semver.org/):
   content, exporting indexed frames plus a JSON/CSV descriptor for every
   affected shape. The descriptor reports flat-tile vs RLE-sprite per
   shape (index 255's transparency meaning depends on which) and the
-  fully resolved animation parameters — type, frame count, recycle,
-  freeze chance, frame delay — not just a yes/no animated flag.
+  fully resolved animation parameters (type, frame count, recycle,
+  freeze chance, frame delay), not just a yes/no animated flag.
+- Added `has_contact_effect` (with `is_poisonous`/`is_field` kept as
+  compatibility aliases) and shape-class helper properties
+  (`has_quality`, `has_quantity`, `is_container`, etc.) to
+  `U7TypeFlags.ShapeEntry`.
+- Added a shape "Extra" metadata model (`titan.u7.shape_extra`) for
+  non-TFA `Shape_info` data sourced from Exult's `shape_info.txt`
+  (`field_type`, `barge_type`, `mountain_top`), plus a combined
+  `U7ShapeInfo` facade exposing `becomes_field_object` (contact-effect
+  bit + a typed field, matching Exult's own field-object condition).
+- Added a shared per-instance IREG object-flags model
+  (`titan.u7.ireg.U7ObjectFlags`: invisible / okay_to_take / temporary),
+  replacing three divergent, partial IREG decoders in `map.py`, `save.py`,
+  and `container.py` with one implementation ported directly from
+  Exult's `Game_map::read_ireg_objects`. `world-query` and
+  `container-browse` now show real `quality_raw`/`quality`/`flags`
+  instead of a bare, sometimes-wrong quality integer.
 
 ### Changed
 
@@ -35,6 +51,15 @@ This project uses [Semantic Versioning](https://semver.org/):
   palette-cycling pixels with TFA-translucency pixels in the indices
   they share (238–254); which one applies is now determined by the
   shape's own translucency flag, not the pixel value alone.
+- Fixed container/body IREG records (12/13/14-byte) reading their
+  quality and lift bytes from the wrong offsets: they were being
+  decoded as if they were plain 6-byte objects, silently corrupting
+  container quality/lift and reading invisible/okay_to_take flags from
+  the wrong byte entirely.
+- Fixed `container-browse` showing a `×N` quantity suffix on every item
+  with `quality > 1`, regardless of shape class; it's now only shown
+  for actual quantity-class items (a container's own unrelated quality
+  byte, like a chest's lock difficulty, is not a count).
 
 ---
 

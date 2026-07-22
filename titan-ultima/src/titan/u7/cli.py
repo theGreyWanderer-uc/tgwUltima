@@ -4524,6 +4524,7 @@ def container_browse_cmd(
         run_wizard as _container_wizard,
     )
     from titan.u7.names import U7ShapeNames, U7FrameNames
+    from titan.u7.typeflag import U7TypeFlags
     from titan._config import exult_cfg
 
     static_dir = static
@@ -4653,8 +4654,14 @@ def container_browse_cmd(
         output_path=output,
     )
 
+    tfa: Optional[U7TypeFlags] = None
+    try:
+        tfa = U7TypeFlags.from_dir(static_dir) if static_dir else None
+    except (FileNotFoundError, OSError):
+        pass
+
     results = browse_containers(params)
-    out = format_results(results, params, names, frame_names)
+    out = format_results(results, params, names, frame_names, tfa)
 
     if output:
         from pathlib import Path as _Path
