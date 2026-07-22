@@ -473,7 +473,21 @@ class U7TypeFlags:
                     if e is not None:
                         e.anim_type = hi_nibble
 
+        cls._apply_default_animated_type(obj.entries)
         return obj
+
+    @staticmethod
+    def _apply_default_animated_type(entries: list["U7TypeFlags.ShapeEntry"]) -> None:
+        """Exult treats a shape flagged ``is_animated`` with no explicit
+        nonzero animation nibble as animation type 0 (TIMESYNCHED) by
+        default, not "no animation" -- ``Shape_info::get_animation_info_safe``
+        (``shapes/shapeinf.cc:217-223``) falls back to
+        ``Animation_info::create_from_tfa(0, nframes)`` whenever no override
+        was parsed, and is only ever invoked for shapes already gated by
+        ``is_animated()`` (``objs/animate.cc:273, 334``)."""
+        for entry in entries:
+            if entry.is_animated and entry.anim_type == -1:
+                entry.anim_type = 0
 
     # ------------------------------------------------------------------
     # Exclusion / filtering

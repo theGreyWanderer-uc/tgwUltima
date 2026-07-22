@@ -10,6 +10,34 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ---
 
+## [0.7.0]
+
+### Added
+
+- Added `titan u7 shape-cycle-scan` to inventory a whole `SHAPES.VGA`
+  archive for colour-cycling, translucency, and TFA frame-animation
+  content, exporting indexed frames plus a JSON/CSV descriptor for every
+  affected shape. The descriptor reports flat-tile vs RLE-sprite per
+  shape (index 255's transparency meaning depends on which) and the
+  fully resolved animation parameters — type, frame count, recycle,
+  freeze chance, frame delay — not just a yes/no animated flag.
+
+### Changed
+
+- Corrected U7 TFA animation-type inference: a shape flagged
+  `is_animated` with no explicit nonzero animation nibble now correctly
+  defaults to type 0 (time-synchronized), matching Exult's own fallback,
+  instead of being reported as having no animation.
+
+### Fixed
+
+- Fixed shape/frame colour-cycle scanning conflating ordinary
+  palette-cycling pixels with TFA-translucency pixels in the indices
+  they share (238–254); which one applies is now determined by the
+  shape's own translucency flag, not the pixel value alone.
+
+---
+
 ## [0.6.9.1]
 
 ### Added

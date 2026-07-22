@@ -837,6 +837,134 @@ def cmd_shape_batch(args: SimpleNamespace) -> int:
     return 0
 
 
+def _resolved_animation_fields(anim) -> dict:
+    """Descriptor columns for a shape's resolved animation parameters
+    (type, frame count used, recycle, freeze chance, frame delay) --
+    not just a boolean, so a client can reproduce the actual timing.
+    Empty/None fields when the shape isn't actually frame-animated."""
+    if anim is None:
+        return {
+            "resolved_ani_type": None,
+            "resolved_nframes": None,
+            "recycle": None,
+            "freeze_first_chance": None,
+            "frame_delay": None,
+        }
+    return {
+        "resolved_ani_type": anim.ani_type.name.lower(),
+        "resolved_nframes": anim.nframes,
+        "recycle": anim.recycle,
+        "freeze_first_chance": anim.freeze_first_chance,
+        "frame_delay": anim.frame_delay,
+    }
+
+
+def cmd_shape_cycle_scan(args: SimpleNamespace) -> int:
+    """Scan a VGA archive for colour-cycling/translucency/frame-animation
+    content; export indexed frames and a descriptor for every affected
+    shape."""
+    from titan.u7.flex import U7FlexArchive
+    from titan.u7.names import U7ShapeNames
+    from titan.u7.palette import U7Palette
+    from titan.u7.shape import U7Shape, FIRST_OBJ_SHAPE
+    from titan.u7.shape_cycle_scan import scan_shape
+    from titan.u7.translucency import U7Translucency
+    from titan.u7.typeflag import U7TypeFlags
+
+    filepath = args.file
+    if not os.path.isfile(filepath):
+        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
+        return 1
+    if not args.static:
+        print(
+            "ERROR: --static DIR is required for TFA animation-type and "
+            "translucency lookup",
+            file=sys.stderr,
+        )
+        return 1
+
+    archive = U7FlexArchive.from_file(filepath)
+    tfa = U7TypeFlags.from_dir(args.static)
+    translucency = U7Translucency.from_dir(args.static)
+    xfstart = translucency.xfstart if translucency.num_slots else 238
+    names = U7ShapeNames.from_static_dir(args.static)
+
+    pal = U7Palette.from_file(args.palette) if args.palette else U7Palette.default_palette()
+
+    outdir = args.output or "shape_cycle_scan"
+    os.makedirs(outdir, exist_ok=True)
+
+    num_records = len(archive.records)
+    start = args.range_start if args.range_start is not None else 0
+    end = args.range_end if args.range_end is not None else num_records
+
+    reports = []
+    for shnum in range(start, min(end, num_records)):
+        rec = archive.get_record(shnum)
+        if not rec:
+            continue
+        shape = U7Shape.from_data(rec, is_tile=(shnum < FIRST_OBJ_SHAPE))
+        if not shape.frames:
+            continue
+
+        name = names.get(shnum) if names else ""
+        report = scan_shape(shape, shnum, tfa, xfstart=xfstart, name=name)
+        if not report.is_affected:
+            continue
+        reports.append(report)
+
+        shape_dir = os.path.join(outdir, f"{shnum:04d}")
+        os.makedirs(shape_dir, exist_ok=True)
+        for fi, img in enumerate(shape.to_pngs(pal, indexed=True)):
+            img.save(os.path.join(shape_dir, f"{shnum:04d}_f{fi:04d}.png"))
+
+    rows = [
+        {
+            "shape": r.shape_num,
+            "name": r.name,
+            "frame_count": r.frame_count,
+            "is_tile_shape": r.is_tile_shape,
+            "is_animated": r.is_animated,
+            "anim_type": r.anim_type,
+            "anim_type_name": r.anim_type_name,
+            **_resolved_animation_fields(r.resolved_animation),
+            "is_translucent": r.is_translucent,
+            "has_any_cycle": r.has_any_cycle,
+            "has_any_translucency": r.has_any_translucency,
+            "cycle_frame_indices": sorted(r.cycle_frame_indices),
+            "translucent_frame_indices": sorted(r.translucent_frame_indices),
+            "cycle_indices": sorted(r.all_cycle_indices),
+            "translucent_indices": sorted(r.all_translucent_indices),
+            "index_255_frame_indices": sorted(r.index_255_frame_indices),
+        }
+        for r in reports
+    ]
+
+    fmt = args.format or "json"
+    desc_path = os.path.join(outdir, f"descriptor.{fmt}")
+    if fmt == "csv":
+        buf = io.StringIO()
+        writer = csv.DictWriter(buf, fieldnames=list(rows[0].keys()) if rows else [])
+        writer.writeheader()
+        writer.writerows(rows)
+        with open(desc_path, "w", newline="") as f:
+            f.write(buf.getvalue())
+    else:
+        with open(desc_path, "w") as f:
+            json.dump(rows, f, indent=2)
+
+    translucent_n = sum(1 for r in reports if r.is_translucent)
+    animated_n = sum(1 for r in reports if r.has_frame_animation)
+    cycle_n = sum(1 for r in reports if r.has_any_cycle and not r.is_translucent)
+    print(
+        f"Scanned {min(end, num_records) - start} shape(s): {len(reports)} affected "
+        f"({translucent_n} translucent, {animated_n} frame-animated, "
+        f"{cycle_n} colour-cycling non-translucent)"
+    )
+    print(f"Indexed frames + {desc_path} written to {outdir}/")
+    return 0
+
+
 # ============================================================================
 # CMD_* IMPLEMENTATION FUNCTIONS — MUSIC
 # ============================================================================
@@ -1252,6 +1380,59 @@ def shape_batch_cmd(
                 range_end=range_end,
                 indexed=indexed,
                 cycle_phase=cycle_phase,
+            )
+        )
+    )
+
+
+@u7_app.command("shape-cycle-scan")
+def shape_cycle_scan_cmd(
+    file: Annotated[
+        str,
+        typer.Argument(help="Path to a VGA Flex archive (e.g. SHAPES.VGA)"),
+    ],
+    static: Annotated[
+        str,
+        typer.Option(
+            "--static",
+            help="STATIC directory for TFA animation-type and real "
+            "XFORM.TBL/BLENDS.DAT translucency lookup (required)",
+        ),
+    ],
+    palette: Annotated[
+        Optional[str],
+        typer.Option("-p", "--palette", help="Path to PALETTES.FLX or .pal file"),
+    ] = None,
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Output directory (default: shape_cycle_scan/)"),
+    ] = None,
+    range_start: Annotated[
+        Optional[int],
+        typer.Option("--range-start", help="First shape index to scan (default: 0)"),
+    ] = None,
+    range_end: Annotated[
+        Optional[int],
+        typer.Option("--range-end", help="Last shape index (exclusive; default: all)"),
+    ] = None,
+    format: Annotated[
+        Literal["json", "csv"],
+        typer.Option("-f", "--format", help="Descriptor format: json (default) or csv"),
+    ] = "json",
+) -> None:
+    """Scan a VGA archive for colour-cycling, translucency, and TFA
+    frame-animation content, exporting indexed frames plus a descriptor
+    for every affected shape."""
+    raise SystemExit(
+        cmd_shape_cycle_scan(
+            SimpleNamespace(
+                file=file,
+                static=static,
+                palette=palette,
+                output=output,
+                range_start=range_start,
+                range_end=range_end,
+                format=format,
             )
         )
     )
