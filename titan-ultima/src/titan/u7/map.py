@@ -61,6 +61,7 @@ from titan.u7.shape import U7Shape, FIRST_OBJ_SHAPE
 from titan.u7.palette import U7Palette
 from titan.u7.typeflag import U7TypeFlags
 from titan.u7.translucency import U7Translucency
+from titan.u7.ireg import U7ObjectFlags, decode_ireg_payload
 
 # ---------------------------------------------------------------------------
 # Constants (from exult_constants.h)
@@ -240,7 +241,7 @@ class U7MapObject:
     tz: int  # lift / Z level (0–15)
     shape: int  # shape number
     frame: int  # frame number
-    quality: int = 0
+    quality: int = 0  # normalized quality (0 for quality_flags-class objects)
 
     # Screen coordinates (set during projection)
     screen_x: int = 0
@@ -252,6 +253,26 @@ class U7MapObject:
     children: list["U7MapObject"] = field(default_factory=list)
     # Egg-specific metadata (only set for shape 275 root-level objects)
     egg_meta: "EggMeta | None" = None
+
+    # Per-instance IREG object state (titan.u7.ireg). IFIX objects and
+    # egg entries don't carry these -- they stay at their defaults.
+    raw_quality: int = 0
+    object_flags: U7ObjectFlags = U7ObjectFlags.NONE
+    raw_flag_byte: int | None = None
+    record_length: int = 0
+    is_extended: bool = False
+
+    @property
+    def is_invisible(self) -> bool:
+        return bool(self.object_flags & U7ObjectFlags.INVISIBLE)
+
+    @property
+    def is_okay_to_take(self) -> bool:
+        return bool(self.object_flags & U7ObjectFlags.OKAY_TO_TAKE)
+
+    @property
+    def is_temporary(self) -> bool:
+        return bool(self.object_flags & U7ObjectFlags.TEMPORARY)
 
 
 @dataclass(frozen=True)
@@ -561,114 +582,21 @@ class U7MapRenderer:
     def parse_ireg(
         ireg_path: str,
         schunk_num: int,
+        tfa: "U7TypeFlags | None" = None,
     ) -> list[U7MapObject]:
         """
-        Parse a u7iregNN file into absolute-tile MapObjects.
+        Parse a u7iregNN file into top-level absolute-tile MapObjects.
 
-        IREG files contain variable-length entries for dynamic objects.
-        We parse the standard 6-byte entries (simple objects) and skip
-        containers/eggs for now.
+        Thin, non-recursive alias for :meth:`parse_ireg_deep`: returns only
+        top-level objects (container/body contents are still parsed
+        correctly and attached to ``.children``, just not flattened into
+        the returned list). Kept for callers that only need top-level
+        placements; previously had its own partial implementation that
+        only decoded plain 6-byte entries and misread container/body
+        quality bytes -- now shares the same decoder as every other IREG
+        consumer, so quality/flags are correct for every entry it returns.
         """
-        if not os.path.isfile(ireg_path):
-            return []
-
-        with open(ireg_path, "rb") as f:
-            data = f.read()
-
-        scx = C_CHUNKS_PER_SCHUNK * (schunk_num % C_NUM_SCHUNKS)
-        scy = C_CHUNKS_PER_SCHUNK * (schunk_num // C_NUM_SCHUNKS)
-
-        objects: list[U7MapObject] = []
-        pos = 0
-        dlen = len(data)
-
-        while pos < dlen:
-            if pos >= dlen:
-                break
-
-            entlen = data[pos]
-            pos += 1
-
-            if entlen == 0 or entlen == 1:
-                # End-of-container / padding
-                continue
-
-            if entlen == 2:
-                # 2-byte index ID — skip
-                pos += 2
-                continue
-
-            # Special markers
-            if entlen in (253, 254, 255):
-                # Extended entries — skip for now (complex parsing)
-                # We try to skip safely by reading remaining bytes
-                if entlen == 255:
-                    # IREG_SPECIAL: next byte tells sub-type
-                    if pos < dlen:
-                        pos += 1  # sub-type byte
-                    continue
-                if entlen == 254:
-                    # IREG_EXTENDED: 2-byte shape numbers, read entlen byte
-                    if pos < dlen:
-                        actual_len = data[pos]
-                        pos += 1
-                        pos += actual_len
-                    continue
-                if entlen == 253:
-                    # IREG_EXTENDED2: extended lift
-                    if pos < dlen:
-                        actual_len = data[pos]
-                        pos += 1
-                        pos += actual_len
-                    continue
-                continue
-
-            # Standard entry: entlen bytes of payload
-            if pos + entlen > dlen:
-                break
-
-            payload = data[pos : pos + entlen]
-            pos += entlen
-
-            if entlen < 6:
-                continue
-
-            # Parse standard 6-byte object entry
-            b0 = payload[0]
-            b1 = payload[1]
-            b2 = payload[2]
-            b3 = payload[3]
-            b4 = payload[4]
-            b5 = payload[5]
-
-            chunk_cx = (b0 >> 4) & 0x0F  # chunk X within superchunk
-            tile_x = b0 & 0x0F  # tile X within chunk
-            chunk_cy = (b1 >> 4) & 0x0F
-            tile_y = b1 & 0x0F
-
-            shnum = b2 + 256 * (b3 & 0x03)
-            frnum = b3 >> 2
-
-            # Lift: the byte has nibbles swapped in old format
-            lift = b4 & 0x0F
-
-            quality = b5
-
-            abs_tx = (scx + chunk_cx) * C_TILES_PER_CHUNK + tile_x
-            abs_ty = (scy + chunk_cy) * C_TILES_PER_CHUNK + tile_y
-
-            objects.append(
-                U7MapObject(
-                    tx=abs_tx,
-                    ty=abs_ty,
-                    tz=lift,
-                    shape=shnum,
-                    frame=frnum,
-                    quality=quality,
-                )
-            )
-
-        return objects
+        return U7MapRenderer.parse_ireg_deep(ireg_path, schunk_num, tfa)
 
     # ------------------------------------------------------------------
     # Deep IREG parser — full recursive container traversal
@@ -712,7 +640,10 @@ class U7MapRenderer:
             slen = data[pos[0]] + data[pos[0] + 1] * 256
             pos[0] += 2 + slen
 
-        def _parse_entries(in_container: bool) -> "list[U7MapObject]":
+        def _parse_entries(
+            in_container: bool,
+            inherited_flags: U7ObjectFlags = U7ObjectFlags.NONE,
+        ) -> "list[U7MapObject]":
             objects: list[U7MapObject] = []
 
             while pos[0] < dlen:
@@ -733,8 +664,10 @@ class U7MapRenderer:
                     continue
 
                 extended = False
+                extended_lift = False
                 if entlen in (0xFE, 0xFD):  # extended shape / extended lift
                     extended = entlen == 0xFE
+                    extended_lift = True
                     if pos[0] >= dlen:
                         break
                     entlen = data[pos[0]]
@@ -778,46 +711,51 @@ class U7MapRenderer:
                     abs_tx = (scx + chunk_cx) * C_TILES_PER_CHUNK + tile_x
                     abs_ty = (scy + chunk_cy) * C_TILES_PER_CHUNK + tile_y
 
-                # ── Lift and quality (simple objects) ────────────────────
-                lift = (payload[4 + adj] >> 4) & 0x0F if len(payload) > 4 + adj else 0
-                quality = payload[5 + adj] if len(payload) > 5 + adj else 0
-
-                obj = U7MapObject(
-                    tx=abs_tx,
-                    ty=abs_ty,
-                    tz=lift,
-                    shape=shnum,
-                    frame=frnum,
-                    quality=quality,
-                    source="ireg",
-                )
-
-                # ── Container / body with nested contents ────────────────
-                # testlen 12 = container; 13/14 = body (also can have children)
-                # Eggs (shape 275) also have testlen==12 but are NOT containers —
-                # bytes 4-5 hold the egg type word, not a has_children field.
-                # Treating them as containers causes subsequent top-level IREG
-                # entries to be incorrectly consumed as the egg's children.
+                # Eggs (shape 275) share testlen==12/14 with containers/bodies
+                # but bytes 4+ hold egg-specific fields, not a quality/flag
+                # byte -- decoding them as a container would both corrupt
+                # their fields and wrongly consume following IREG entries as
+                # "children". Keep the pre-existing simple byte4/5 read for
+                # eggs; route every other shape through the shared decoder.
+                is_egg = shnum == _EGG_SHAPE
                 has_children_field = False
-                if (
-                    shnum != _EGG_SHAPE
-                    and testlen in (12, 13, 14)
-                    and len(payload) >= 6 + adj
-                ):
-                    type_word = payload[4 + adj] + payload[5 + adj] * 256
-                    has_children_field = type_word != 0
 
-                    if testlen == 12:
-                        # Override lift/quality from correct container offsets
-                        if len(payload) > 9 + adj:
-                            lift = (payload[9 + adj] >> 4) & 0x0F
-                        if len(payload) > 7 + adj:
-                            quality = payload[7 + adj]
-                        obj.tz = lift
-                        obj.quality = quality
+                if is_egg:
+                    lift = (payload[4 + adj] >> 4) & 0x0F if len(payload) > 4 + adj else 0
+                    quality = payload[5 + adj] if len(payload) > 5 + adj else 0
+                    obj = U7MapObject(
+                        tx=abs_tx, ty=abs_ty, tz=lift,
+                        shape=shnum, frame=frnum, quality=quality,
+                        source="ireg",
+                    )
+                else:
+                    shape_class = tfa.get(shnum).shape_class if tfa else None
+                    decoded = decode_ireg_payload(
+                        payload,
+                        entlen=entlen,
+                        extended=extended,
+                        extended_lift=extended_lift,
+                        inherited_flags=inherited_flags,
+                        shape_class=shape_class,
+                    )
+                    if decoded is None:
+                        continue
+                    has_children_field = decoded.has_children_marker
+                    obj = U7MapObject(
+                        tx=abs_tx, ty=abs_ty, tz=decoded.lift,
+                        shape=shnum, frame=frnum, quality=decoded.quality,
+                        source="ireg",
+                        raw_quality=decoded.raw_quality,
+                        object_flags=decoded.object_flags,
+                        raw_flag_byte=decoded.raw_flag_byte,
+                        record_length=decoded.record_length,
+                        is_extended=decoded.is_extended,
+                    )
 
                 if has_children_field:
-                    obj.children = _parse_entries(in_container=True)
+                    obj.children = _parse_entries(
+                        in_container=True, inherited_flags=decoded.child_inherit_flags
+                    )
 
                 # ── Egg-specific metadata (shape 275 at root level) ──────────
                 if shnum == _EGG_SHAPE and not in_container and testlen in (12, 14):
@@ -972,7 +910,7 @@ class U7MapRenderer:
         if include_ireg:
             ireg_name = f"u7ireg{schunk:02x}"
             ireg_path = os.path.join(include_ireg, ireg_name)
-            ireg_objs = self.parse_ireg(ireg_path, schunk)
+            ireg_objs = self.parse_ireg(ireg_path, schunk, self.tfa)
             for obj in ireg_objs:
                 if obj.shape not in exclude:
                     objects.append(obj)
@@ -1759,7 +1697,7 @@ class U7MapRenderer:
             if gamedat_dir:
                 ireg_name = f"u7ireg{sc:02x}"
                 ireg_path = os.path.join(gamedat_dir, ireg_name)
-                ireg_objs = self.parse_ireg(ireg_path, sc)
+                ireg_objs = self.parse_ireg(ireg_path, sc, self.tfa)
                 for obj in ireg_objs:
                     obj_cx = obj.tx // C_TILES_PER_CHUNK
                     obj_cy = obj.ty // C_TILES_PER_CHUNK

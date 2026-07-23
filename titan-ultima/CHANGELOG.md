@@ -10,6 +10,69 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ---
 
+## [0.7.0]
+
+### Added
+
+- Added `titan u7 shape-cycle-scan` to inventory a whole `SHAPES.VGA`
+  archive for colour-cycling, translucency, and TFA frame-animation
+  content, exporting indexed frames plus a JSON/CSV descriptor per
+  shape. Each entry reports flat-tile vs RLE-sprite (index 255's
+  transparency meaning depends on which) and the fully resolved
+  animation parameters (type, frame count, recycle, freeze chance,
+  frame delay), not just a yes/no animated flag.
+- Added the TFA/Extra/Object shape metadata model:
+  - `has_contact_effect` on `U7TypeFlags.ShapeEntry` (`is_poisonous`/
+    `is_field` kept as compatibility aliases), plus shape-class helper
+    properties (`has_quality`, `has_quantity`, `is_container`, etc.).
+  - Extra model (`titan.u7.shape_extra`) for non-TFA `Shape_info` data
+    from Exult's `shape_info.txt` (`field_type`, `barge_type`,
+    `mountain_top`), plus a `U7ShapeInfo` facade exposing
+    `becomes_field_object` (contact-effect bit plus a typed field).
+  - Object model (`titan.u7.ireg.U7ObjectFlags`: invisible,
+    okay_to_take, temporary), replacing three divergent, partial IREG
+    decoders in `map.py`, `save.py`, and `container.py` with one
+    implementation.
+    `world-query` and `container-browse` now show real
+    `quality_raw`/`quality`/`flags` instead of a bare, sometimes-wrong
+    quality integer.
+
+### Changed
+
+- Corrected U7 TFA animation-type inference: a shape flagged
+  `is_animated` with no explicit nonzero animation nibble now correctly
+  defaults to type 0 (time-synchronized), instead of being reported as having no animation.
+
+### Fixed
+
+- Fixed shape/frame colour-cycle scanning conflating ordinary
+  palette-cycling pixels with TFA-translucency pixels in the indices
+  they share (238-254); which one applies is now determined by the
+  shape's own translucency flag, not the pixel value alone.
+- Fixed container/body IREG records (12/13/14-byte) reading their
+  quality and lift bytes from the wrong offsets, decoding them as if
+  they were plain 6-byte objects; this corrupted container quality/lift
+  and read invisible/okay_to_take flags from the wrong byte entirely.
+- Fixed `container-browse` showing a `xN` quantity suffix on every item
+  with `quality > 1`, regardless of shape class; it now only shows for
+  actual quantity-class items (a container's own unrelated quality
+  byte, like a chest's lock difficulty, is not a count).
+- Fixed a set of translucency rendering bugs found while chasing down
+  a shape that stayed gold instead of grey in real gameplay (shape 177):
+  - `shape-animate`'s frame-sequence mode (real TFA multi-frame
+    animation) ignored `--static`'s translucency data entirely; only
+    its colour-cycle preview mode applied it.
+  - `shape-export` never auto-detected TFA translucency even with
+    `--shape N` and `--static` both given, requiring a separate
+    `--translucent` flag; it now auto-detects, keeping `--translucent`/
+    `--translucent-bg` as an explicit override for standalone `.shp`
+    input with no shape number to look up.
+  - `save_gif` snapped translucent pixels straight to fully opaque with
+    no blending, since GIF has no partial-alpha support; it now
+    pre-composites them onto a solid background first, then flattens.
+
+---
+
 ## [0.6.9.1]
 
 ### Added

@@ -40,6 +40,7 @@ from titan.u7.map import (
 from titan.u7.typeflag import U7TypeFlags
 from titan.u7.names import U7ShapeNames, U7FrameNames
 from titan.u7.world import _superchunks_for_rect
+from titan.u7.ireg import object_flag_names
 
 
 # ---------------------------------------------------------------------------
@@ -328,37 +329,57 @@ def _item_label(
     return f"{obj.shape} ({shape_name})" if shape_name else str(obj.shape)
 
 
+def _root_location(res: "ContainerResult", names: Optional[U7ShapeNames]) -> str:
+    location = f"@ ({res.world_tx},{res.world_ty})  lift={res.world_tz}"
+    if not res.is_nested:
+        return location
+    root_lbl = _obj_label(res.root_obj, names) if names else str(res.root_obj.shape)
+    via = " > ".join(res.parent_path) if res.parent_path else root_lbl
+    egg_info = ""
+    if res.root_obj and res.root_obj.egg_meta:
+        egg_info = "  " + res.root_obj.egg_meta.summary()
+    return location + f"  [inside {via}{egg_info}]"
+
+
 def format_tree(
     results: list[ContainerResult],
     names: Optional[U7ShapeNames],
     frame_names: Optional[U7FrameNames] = None,
+    tfa: Optional[U7TypeFlags] = None,
 ) -> str:
     lines: list[str] = []
     lines.append(f"Container browse: {len(results)} container(s) found.")
     lines.append("")
 
     for res in results:
-        sc = res.superchunk
         total = res.item_count_recursive()
         depth = res.max_depth()
-        location = f"@ ({res.world_tx},{res.world_ty})  lift={res.world_tz}"
-        if res.is_nested:
-            root_lbl = _obj_label(res.root_obj, names) if names else str(res.root_obj.shape)
-            via = " > ".join(res.parent_path) if res.parent_path else root_lbl
-            egg_info = ""
-            if res.root_obj and res.root_obj.egg_meta:
-                egg_info = "  " + res.root_obj.egg_meta.summary()
-            location += f"  [inside {via}{egg_info}]"
         lines.append(
             f"  {res.label():<30}  0x{res.obj.shape:04X}  "
-            f"{location}  sc=0x{sc:02X}  [{total} item(s), depth={depth}]"
+            f"{_root_location(res, names)}  sc=0x{res.superchunk:02X}  "
+            f"[{total} item(s), depth={depth}]"
         )
         if res.obj.egg_meta and not res.is_nested:
             lines.append(f"    egg: {res.obj.egg_meta.summary()}")
-        _append_children(lines, res.obj.children, names, frame_names, indent="    ", last_flags=[])
+        obj_flag_names = object_flag_names(res.obj.object_flags)
+        if obj_flag_names:
+            lines.append(f"    flags: {', '.join(obj_flag_names)}")
+        _append_children(lines, res.obj.children, names, frame_names, tfa, indent="    ")
         lines.append("")
 
     return "\n".join(lines)
+
+
+def _child_suffix(child: U7MapObject, tfa: Optional[U7TypeFlags]) -> str:
+    """Build the ' ×N  [flags]' display suffix for one container child."""
+    qty_str = ""
+    entry = tfa.get(child.shape) if tfa else None
+    if entry is not None and entry.has_quantity and child.quality > 1:
+        qty_str = f"  ×{child.quality}"
+
+    child_flag_names = object_flag_names(child.object_flags)
+    flags_str = f"  [{', '.join(child_flag_names)}]" if child_flag_names else ""
+    return qty_str + flags_str
 
 
 def _append_children(
@@ -366,27 +387,22 @@ def _append_children(
     children: list[U7MapObject],
     names: Optional[U7ShapeNames],
     frame_names: Optional[U7FrameNames],
+    tfa: Optional[U7TypeFlags],
     indent: str,
-    last_flags: list[bool],
 ) -> None:
     for i, child in enumerate(children):
         is_last = (i == len(children) - 1)
         branch = "└─ " if is_last else "├─ "
         label = _item_label(child, names, frame_names)
+        suffix = _child_suffix(child, tfa)
 
-        qty_str = ""
-        if child.quality > 1:
-            qty_str = f"  ×{child.quality}"
+        child_count = f"  [{len(child.children)} item(s)]" if child.children else ""
 
-        child_count = ""
-        if child.children:
-            child_count = f"  [{len(child.children)} item(s)]"
-
-        lines.append(f"{indent}{branch}{label}{qty_str}{child_count}")
+        lines.append(f"{indent}{branch}{label}{suffix}{child_count}")
 
         if child.children:
             child_indent = indent + ("    " if is_last else "│   ")
-            _append_children(lines, child.children, names, frame_names, child_indent, last_flags + [is_last])
+            _append_children(lines, child.children, names, frame_names, tfa, child_indent)
 
 
 def format_csv(
@@ -400,6 +416,7 @@ def format_csv(
         "sc", "container_shape", "container_hex", "container_name",
         "tx", "ty", "tz",
         "depth", "item_shape", "item_hex", "item_name", "item_frame", "item_quality",
+        "item_quality_raw", "item_object_flags",
         "path",
     ])
 
@@ -454,6 +471,8 @@ def _write_children_csv(
             child_name,
             child.frame,
             child.quality,
+            f"0x{child.raw_quality:02X}",
+            "|".join(object_flag_names(child.object_flags)),
             path,
         ])
 
@@ -470,10 +489,11 @@ def format_results(
     params: ContainerQueryParams,
     names: Optional[U7ShapeNames],
     frame_names: Optional[U7FrameNames] = None,
+    tfa: Optional[U7TypeFlags] = None,
 ) -> str:
     if params.output_format == "csv":
         return format_csv(results, names, frame_names)
-    return format_tree(results, names, frame_names)
+    return format_tree(results, names, frame_names, tfa)
 
 
 # ---------------------------------------------------------------------------

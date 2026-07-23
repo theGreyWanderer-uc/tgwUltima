@@ -41,6 +41,7 @@ from titan.u7.map import (
 )
 from titan.u7.typeflag import U7TypeFlags
 from titan.u7.names import U7ShapeNames
+from titan.u7.ireg import object_flag_names
 
 
 # ---------------------------------------------------------------------------
@@ -132,6 +133,13 @@ class PlacementRecord:
     flags: list[str]
     shape_name: str = ""
 
+    # Per-instance IREG object state (titan.u7.ireg): quality_raw is the
+    # undecoded byte, quality is the normalized value (0 for quality_flags
+    # class), object_flags names invisible/okay_to_take/temporary -- kept
+    # separate from `flags` above, which are shared TFA shape flags.
+    quality_raw: int = 0
+    object_flags: list[str] = field(default_factory=list)
+
     def shape_label(self) -> str:
         """Return '522 (locked chest)' or just '522' if unnamed."""
         if self.shape_name:
@@ -214,7 +222,7 @@ def run_query(params: WorldQueryParams) -> WorldResult:
                 if not ireg_path.exists():
                     ireg_path = gamedat / "map00" / ireg_name
             if ireg_path.exists():
-                for obj in U7MapRenderer.parse_ireg(str(ireg_path), sc):
+                for obj in U7MapRenderer.parse_ireg(str(ireg_path), sc, tfa):
                     obj.source = "ireg"
                     objects.append(obj)
 
@@ -239,6 +247,8 @@ def run_query(params: WorldQueryParams) -> WorldResult:
                 shape_class_name=sc_name_str,
                 flags=flags,
                 shape_name=name,
+                quality_raw=obj.raw_quality,
+                object_flags=object_flag_names(obj.object_flags),
             ))
 
     return result
@@ -345,6 +355,12 @@ def _format_full_text(result: WorldResult) -> str:
         )
         if flags_str != "—":
             lines.append(f"         flags: {flags_str}")
+        if rec.source == "ireg":
+            lines.append(
+                f"         quality_raw=0x{rec.quality_raw:02X}  "
+                f"quality={rec.quality}  "
+                f"flags={'|'.join(rec.object_flags) if rec.object_flags else '-'}"
+            )
 
     return "\n".join(lines)
 
@@ -354,6 +370,7 @@ def _format_csv(result: WorldResult) -> str:
     writer = csv.writer(buf, lineterminator='\n')
     writer.writerow([
         "source", "shape", "shape_hex", "shape_name", "frame", "quality",
+        "quality_raw", "object_flags",
         "tx", "ty", "tz", "shape_class", "shape_class_name", "flags",
     ])
     for rec in result.records:
@@ -364,6 +381,8 @@ def _format_csv(result: WorldResult) -> str:
             rec.shape_name,
             rec.frame,
             rec.quality,
+            f"0x{rec.quality_raw:02X}",
+            "|".join(rec.object_flags),
             rec.tx,
             rec.ty,
             rec.tz,

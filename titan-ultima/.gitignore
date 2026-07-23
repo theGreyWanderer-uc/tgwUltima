@@ -10,9 +10,11 @@ shapes/
 globs/
 map_renders/
 test_output/
+u6data/
 u7data/
 u8data/
 u8data/scripts/
+u9data/
 fonttests/
 src/titan/dialogue/websrc/public/data/
 src/titan/dialogue/webbundle/

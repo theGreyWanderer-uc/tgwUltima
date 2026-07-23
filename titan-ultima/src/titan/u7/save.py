@@ -59,6 +59,8 @@ import zipfile
 from dataclasses import dataclass, field
 from typing import Optional, Union
 
+from titan.u7.ireg import U7ObjectFlags, decode_ireg_payload
+
 
 # ---------------------------------------------------------------------------
 # FLEX magic constants (from Exult Flex.h)
@@ -1139,6 +1141,18 @@ class U7NPCInventoryItem:
     depth: int
     path: str = ""
 
+    # Per-instance IREG object state (titan.u7.ireg), decoded the same way
+    # as titan.u7.map's U7MapObject. Simple (6/10-byte) entries always
+    # decode with shape_class=None here (no TFA lookup threaded through
+    # NPC inventory parsing), so their okay_to_take/invisible reinterpretation
+    # for quantity/quality_flags classes is not applied -- only the
+    # container(12)/body(13/14) quality+lift+flag-byte offsets benefit.
+    raw_quality: int = 0
+    object_flags: U7ObjectFlags = U7ObjectFlags.NONE
+    raw_flag_byte: int | None = None
+    record_length: int = 0
+    is_extended: bool = False
+
 
 _READY_SLOT_NAMES = {
     0x00: "head",
@@ -1279,8 +1293,18 @@ def _read_ireg_inventory(
     valid_shape_count: int | None = None,
     depth: int = 0,
     path: str = "",
+    inherited_flags: U7ObjectFlags = U7ObjectFlags.NONE,
 ) -> tuple[list[U7NPCInventoryItem], int]:
-    """Read one NPC inventory IREG section starting at *pos*."""
+    """Read one NPC inventory IREG section starting at *pos*.
+
+    Quality/lift/flag-byte offsets and invisible/okay_to_take/temporary
+    decoding are shared with :mod:`titan.u7.map` via
+    :func:`titan.u7.ireg.decode_ireg_payload`. No TFA shape-class lookup is
+    threaded through NPC inventory parsing, so simple (6/10-byte) entries
+    always decode with ``shape_class=None`` -- quantity/quality_flags
+    reinterpretation only applies to container/body entries, whose byte
+    offsets don't depend on shape_class.
+    """
     items: list[U7NPCInventoryItem] = []
     while pos < len(data):
         entry_len = data[pos]
@@ -1293,10 +1317,12 @@ def _read_ireg_inventory(
             pos += 2
             continue
 
-        extended = 0
+        extended = False
+        extended_lift = False
         if entry_len in (0xFD, 0xFE):
             if entry_len == 0xFE:
-                extended = 1
+                extended = True
+            extended_lift = True
             if pos >= len(data):
                 break
             entry_len = data[pos]
@@ -1319,24 +1345,25 @@ def _read_ireg_inventory(
         if pos > len(data):
             break
 
-        testlen = entry_len - extended
+        testlen = entry_len - (1 if extended else 0)
         if testlen not in (6, 10, 12, 13, 14, 18):
             continue
 
         ed = data[entry_start : entry_start + entry_len]
-        if len(ed) < 6 + extended:
+        decoded = decode_ireg_payload(
+            ed,
+            entlen=entry_len,
+            extended=extended,
+            extended_lift=extended_lift,
+            inherited_flags=inherited_flags,
+            shape_class=None,
+        )
+        if decoded is None:
             continue
 
-        if extended:
-            shape = ed[2] + 256 * ed[3]
-            frame = ed[4]
-        else:
-            shape = ed[2] + 256 * (ed[3] & 3)
-            frame = (ed[3] >> 2) & 0x3F
-
+        shape = decoded.shape
+        frame = decoded.frame
         valid_shape = valid_shape_count is None or shape < valid_shape_count
-        lift = (ed[4 + extended] >> 4) & 0x0F if len(ed) > 4 + extended else 0
-        quality = ed[5 + extended] if len(ed) > 5 + extended else 0
         item_path = f"{path}/{shape}:{frame}" if path else f"{shape}:{frame}"
         if valid_shape:
             items.append(
@@ -1345,24 +1372,22 @@ def _read_ireg_inventory(
                     frame=frame,
                     x=ed[0],
                     y=ed[1],
-                    lift=lift,
-                    quality=quality,
+                    lift=decoded.lift,
+                    quality=decoded.quality,
                     depth=depth,
                     path=item_path,
+                    raw_quality=decoded.raw_quality,
+                    object_flags=decoded.object_flags,
+                    raw_flag_byte=decoded.raw_flag_byte,
+                    record_length=decoded.record_length,
+                    is_extended=decoded.is_extended,
                 )
             )
 
-        if valid_shape and testlen in (12, 13) and len(ed) >= 6 + extended:
-            type_off = 4 + extended
-            type_val = (
-                ed[type_off] + 256 * ed[type_off + 1] if len(ed) > type_off + 1 else 0
+        if valid_shape and decoded.has_children_marker:
+            is_container = (
+                shape in container_shapes if container_shapes is not None else True
             )
-            is_container = False
-            if type_val != 0:
-                if container_shapes is not None:
-                    is_container = shape in container_shapes
-                else:
-                    is_container = True
             if is_container:
                 child_items, pos = _read_ireg_inventory(
                     data,
@@ -1371,6 +1396,7 @@ def _read_ireg_inventory(
                     valid_shape_count,
                     depth + 1,
                     item_path,
+                    inherited_flags=decoded.child_inherit_flags,
                 )
                 items.extend(child_items)
     return items, pos
@@ -1429,9 +1455,10 @@ def _skip_ireg_inventory(
         if pos > len(data):
             break
 
-        # Check for container nesting (testlen 12 or 13)
+        # Check for container/body nesting (testlen 12, 13, or 14 -- see
+        # decode_ireg_payload's has_children_marker for the full decode).
         testlen = entry_len - extended
-        if testlen in (12, 13) and entry_start + 6 + extended <= len(data):
+        if testlen in (12, 13, 14) and entry_start + 6 + extended <= len(data):
             ed = data[entry_start : entry_start + entry_len]
             if extended:
                 shape = ed[2] + 256 * ed[3]

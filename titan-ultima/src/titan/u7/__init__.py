@@ -11,9 +11,20 @@ Canonical imports::
     from titan.u7.music import extract_music
     from titan.u7.typeflag import U7TypeFlags
     from titan.u7.map import U7MapRenderer, U7MapSampler
+    from titan.u7.ireg import U7ObjectFlags, decode_ireg_payload
+    from titan.u7.shape_extra import U7FieldType, U7ShapeExtraTable, U7ShapeInfo
 """
 
 from titan.u7.flex import U7FlexArchive
+from titan.u7.ireg import (
+    IregDecodedEntry,
+    U7ObjectFlags,
+    decode_ireg_payload,
+    get_quality_flags,
+    nibble_swap,
+    object_flag_names,
+    read_lift,
+)
 from titan.u7.map import U7MapRenderer, U7MapSampler
 from titan.u7.music import convert_xmidi_file, extract_music
 from titan.u7.monster import (
@@ -44,6 +55,12 @@ from titan.u7.save import (
     U7ReadyTypes,
 )
 from titan.u7.shape import U7Shape
+from titan.u7.shape_extra import (
+    U7FieldType,
+    U7ShapeExtra,
+    U7ShapeExtraTable,
+    U7ShapeInfo,
+)
 from titan.u7.shapeinfo import (
     U7Ammos,
     U7Armors,
@@ -110,4 +127,15 @@ __all__ = [
     "U7UsecodeInstruction",
     "U7UsecodeCallSite",
     "load_u7_intrinsic_names",
+    "U7ObjectFlags",
+    "IregDecodedEntry",
+    "decode_ireg_payload",
+    "get_quality_flags",
+    "object_flag_names",
+    "nibble_swap",
+    "read_lift",
+    "U7FieldType",
+    "U7ShapeExtra",
+    "U7ShapeExtraTable",
+    "U7ShapeInfo",
 ]

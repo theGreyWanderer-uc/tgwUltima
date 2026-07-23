@@ -234,8 +234,63 @@ class U7TypeFlags:
             return self.shape_class == U7TypeFlags.SHAPE_CLASS_BUILDING
 
         @property
-        def is_poisonous(self) -> bool:
+        def has_contact_effect(self) -> bool:
+            """TFA[1] bit 4. Exult's ``Shape_info::has_contact_effect()``."""
             return bool(self.tfa[1] & 0x10)
+
+        @property
+        def is_poisonous(self) -> bool:
+            """Legacy terrain-facing alias for :attr:`has_contact_effect`."""
+            return self.has_contact_effect
+
+        @property
+        def is_field(self) -> bool:
+            """Legacy object-facing alias for :attr:`has_contact_effect`."""
+            return self.has_contact_effect
+
+        @property
+        def has_quality(self) -> bool:
+            return self.shape_class == U7TypeFlags.SHAPE_CLASS_QUALITY
+
+        @property
+        def has_quantity(self) -> bool:
+            return self.shape_class == U7TypeFlags.SHAPE_CLASS_QUANTITY
+
+        @property
+        def has_hp(self) -> bool:
+            return self.shape_class == U7TypeFlags.SHAPE_CLASS_HAS_HP
+
+        @property
+        def has_quality_flags(self) -> bool:
+            return self.shape_class == U7TypeFlags.SHAPE_CLASS_QUALITY_FLAGS
+
+        @property
+        def is_container(self) -> bool:
+            return self.shape_class == U7TypeFlags.SHAPE_CLASS_CONTAINER
+
+        @property
+        def is_hatchable(self) -> bool:
+            return self.shape_class == U7TypeFlags.SHAPE_CLASS_EGG
+
+        @property
+        def is_spellbook(self) -> bool:
+            return self.shape_class == U7TypeFlags.SHAPE_CLASS_SPELLBOOK
+
+        @property
+        def is_barge(self) -> bool:
+            return self.shape_class == U7TypeFlags.SHAPE_CLASS_BARGE
+
+        @property
+        def is_virtue_stone(self) -> bool:
+            return self.shape_class == U7TypeFlags.SHAPE_CLASS_VIRTUE_STONE
+
+        @property
+        def is_monster(self) -> bool:
+            return self.shape_class == U7TypeFlags.SHAPE_CLASS_MONSTER
+
+        @property
+        def is_human(self) -> bool:
+            return self.shape_class == U7TypeFlags.SHAPE_CLASS_HUMAN
 
         @property
         def is_door(self) -> bool:
@@ -473,7 +528,21 @@ class U7TypeFlags:
                     if e is not None:
                         e.anim_type = hi_nibble
 
+        cls._apply_default_animated_type(obj.entries)
         return obj
+
+    @staticmethod
+    def _apply_default_animated_type(entries: list["U7TypeFlags.ShapeEntry"]) -> None:
+        """Exult treats a shape flagged ``is_animated`` with no explicit
+        nonzero animation nibble as animation type 0 (TIMESYNCHED) by
+        default, not "no animation" -- ``Shape_info::get_animation_info_safe``
+        (``shapes/shapeinf.cc:217-223``) falls back to
+        ``Animation_info::create_from_tfa(0, nframes)`` whenever no override
+        was parsed, and is only ever invoked for shapes already gated by
+        ``is_animated()`` (``objs/animate.cc:273, 334``)."""
+        for entry in entries:
+            if entry.is_animated and entry.anim_type == -1:
+                entry.anim_type = 0
 
     # ------------------------------------------------------------------
     # Exclusion / filtering

@@ -114,11 +114,21 @@ class U7Translucency:
         self, translucent_index: int
     ) -> Optional[Tuple[int, int, int, int]]:
         """Approximate ``(r, g, b, alpha)`` preview colour for a
-        translucent pixel, matching the pre-shift convention Titan's map
-        renderer already used (``r/g/b >> 2``, alpha as-is) -- explicitly
-        an approximation of the real indexed compositing in
-        :meth:`composite_index`, not the exact operation."""
+        translucent pixel: the raw ``BLENDS.DAT`` bytes, used directly as
+        straight-alpha RGBA -- matching Exult's own ``translucency_argb``
+        table (``shapeid.cc:350-368``, "the ARGB translucency table used
+        by overlay layers... so a layer can reproduce it with real
+        texture alpha"). Explicitly an approximation of the real indexed
+        compositing in :meth:`composite_index`, not the exact operation.
+
+        Note: this is *not* the same scaling Exult uses when it builds
+        the indexed remap table via ``create_trans_table`` (``blends[i]
+        / 4``, ``shapeid.cc:343-344``) -- that division only exists
+        because ``create_trans_table`` expects 6-bit VGA-range input for
+        the palette's native colour space; the ARGB overlay path (this
+        one) uses the full undivided 0-255 bytes.
+        """
         blend = self.blend_for_index(translucent_index)
         if blend is None:
             return None
-        return (blend.r >> 2, blend.g >> 2, blend.b >> 2, blend.alpha)
+        return (blend.r, blend.g, blend.b, blend.alpha)

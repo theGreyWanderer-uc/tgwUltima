@@ -1060,6 +1060,71 @@ titan u7 shape-animate SHAPES.VGA --shape 557 --frame 0 -p PALETTES.FLX --mode c
 
 ---
 
+#### `u7 shape-cycle-scan`
+
+Inventory an entire VGA archive for colour-cycling, translucency, and TFA
+frame-animation content in one pass. For every *affected* shape (any
+frame-sequence animation, ordinary colour-cycling pixels, or
+translucency-blend pixels), exports palette-indexed PNGs for every frame
+plus a combined descriptor listing what was found — the same underlying
+classification used by `shape-animate`'s auto-detection, run in bulk
+across a whole archive instead of one shape at a time.
+
+```
+titan u7 shape-cycle-scan <file> --static DIR [-p PAL] [-o DIR]
+                          [--range-start N] [--range-end N] [-f json|csv]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to a VGA Flex archive (e.g. `SHAPES.VGA`) |
+| `--static DIR` | `STATIC/` directory for TFA animation-type and real `XFORM.TBL`/`BLENDS.DAT` translucency lookup (**required**) |
+| `-p FILE`, `--palette FILE` | Path to `PALETTES.FLX` or raw `.pal` (default: greyscale) — only affects the exported indexed PNGs' attached palette, not which pixel values are exported |
+| `-o DIR`, `--output DIR` | Output directory (default: `shape_cycle_scan/`) |
+| `--range-start N` | First shape index to scan (default: 0) |
+| `--range-end N` | Last shape index (exclusive; default: all) |
+| `-f json\|csv`, `--format json\|csv` | Descriptor format (default: `json`) |
+
+Each affected shape gets its own `<outdir>/<NNNN>/` subdirectory of
+indexed frame PNGs (`<NNNN>_f<FFFF>.png`), plus one combined
+`<outdir>/descriptor.json` (or `.csv`) with one row per affected shape:
+
+| Field | Description |
+|-------|-------------|
+| `shape`, `name` | Shape index and name (resolved from `TEXT.FLX` when present under `--static`) |
+| `frame_count` | Total frames in this shape |
+| `is_tile_shape` | Flat ground tile (`true`) vs RLE sprite (`false`) — determines whether an index-255 pixel means transparent (RLE only) or an ordinary opaque colour (tiles never have transparency) |
+| `is_animated`, `anim_type`, `anim_type_name` | Raw TFA animation flag/nibble, as-is (see below for why a nonzero `anim_type` doesn't always mean the shape actually animates) |
+| `resolved_ani_type`, `resolved_nframes`, `recycle`, `freeze_first_chance`, `frame_delay` | The *resolved* animation parameters actually used to render this shape's motion (ported from Exult's `Animation_info::create_from_tfa`) — all `null` when the shape isn't really frame-animated. `resolved_nframes` can differ from `frame_count` for one animation type that only cycles a subset of frames |
+| `is_translucent` | TFA translucency flag |
+| `has_any_cycle`, `has_any_translucency` | Whether any frame has ordinary colour-cycling / translucency-blend pixels, respectively (never both for the same pixel — see the module note above) |
+| `cycle_frame_indices`, `translucent_frame_indices` | Which frame indices contain each kind of pixel |
+| `cycle_indices`, `translucent_indices` | The actual palette index values used, unioned across all frames |
+| `index_255_frame_indices` | Which frame indices contain palette index 255 at all — combine with `is_tile_shape` to know whether those pixels are transparent |
+
+A shape's raw `anim_type` can be nonzero while `resolved_ani_type` is
+`null`: a handful of real Black Gate shapes carry a leftover animation
+nibble despite the TFA `is_animated` flag being false, and Exult's
+`Frame_animator` bails out immediately for those, never consulting the
+nibble — so Titan reports the raw value for transparency but does not
+resolve or act on it.
+
+A shape flagged TFA-translucent but whose frames contain no pixels at all
+in the cycle/translucency range (224–254) is *not* considered affected —
+its translucency flag has no visible effect since there's nothing there
+to composite or cycle.
+
+**Examples**
+```bash
+# Full-archive inventory (Black Gate: ~241 affected shapes out of 1024)
+titan u7 shape-cycle-scan SHAPES.VGA --static STATIC/ -p PALETTES.FLX -o cycle_scan/
+
+# Just the object-shape range (skip ground tiles 0-149), CSV descriptor
+titan u7 shape-cycle-scan SHAPES.VGA --static STATIC/ --range-start 150 -f csv -o cycle_scan_objects/
+```
+
+---
+
 ### U7 palette commands
 
 ---
@@ -2423,6 +2488,7 @@ A value on the command line always wins.
 | `u7 egg-query` | Query egg trigger objects from IREG — type, usecode function, location |
 | `u7 palette-info` | Inspect `PALETTES.FLX` slot occupancy, semantic names, encoding, and colour-cycling ranges |
 | `u7 shape-animate` | Render a shape's frame-sequence or colour-cycle animation to an animated GIF |
+| `u7 shape-cycle-scan` | Inventory a VGA archive for colour-cycling/translucency/animation content; export indexed frames + descriptor |
 | `dialogue prepare` | Generate dialogue runtime artifacts |
 | `dialogue copy` | Optionally copy NPC JSON files and META sidecars to a destination folder |
 | `dialogue validate` | Validate dialogue runtime artifacts (`--content-lint` is unfinished) |
