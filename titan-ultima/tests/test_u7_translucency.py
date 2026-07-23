@@ -77,11 +77,14 @@ class CompositeIndexTests(unittest.TestCase):
 
 
 class RgbaPreviewTests(unittest.TestCase):
-    def test_preview_uses_shifted_blend_colors(self):
+    def test_preview_uses_raw_undivided_blend_colors(self):
+        # Matches Exult's translucency_argb overlay table (shapeid.cc:364-368),
+        # which uses the full 0-255 BLENDS.DAT bytes directly -- NOT the /4
+        # scaling create_trans_table applies for the indexed remap path.
         t = _make_translucency(num_slots=1)
         preview = t.composite_rgba_preview(t.xfstart)
         blend = t.blends.records[0]
-        self.assertEqual(preview, (blend.r >> 2, blend.g >> 2, blend.b >> 2, blend.alpha))
+        self.assertEqual(preview, (blend.r, blend.g, blend.b, blend.alpha))
 
     def test_non_translucent_index_returns_none(self):
         t = _make_translucency(num_slots=1)

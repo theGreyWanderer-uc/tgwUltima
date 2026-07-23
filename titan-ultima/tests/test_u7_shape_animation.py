@@ -179,6 +179,33 @@ class SaveGifTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             save_gif([], os.path.join(self.tmpdir, "empty.gif"), duration_ms=100)
 
+    def test_partial_alpha_blended_toward_background_not_left_dark(self):
+        # GIF has no partial-alpha support: a translucency-preview pixel
+        # (real alpha strictly between 0 and 255, e.g. from
+        # composite_rgba_preview) must be pre-blended toward the chosen
+        # background and promoted to fully opaque, not merely snapped to
+        # opaque with its raw (unblended, too-dark) foreground colour.
+        frame = Image.new("RGBA", (1, 1), (0, 0, 0, 128))  # 50% black
+        path = os.path.join(self.tmpdir, "partial.gif")
+        save_gif([frame], path, duration_ms=100, background=(200, 200, 200))
+        with Image.open(path) as img:
+            r, g, b, a = img.convert("RGBA").getpixel((0, 0))
+        self.assertEqual(a, 255)
+        # Blended halfway between black (fg) and light grey (bg) -- much
+        # closer to the background than the raw, un-blended black would be.
+        self.assertGreater(r, 80)
+
+    def test_fully_opaque_and_fully_transparent_pixels_unaffected(self):
+        frame = Image.new("RGBA", (2, 1))
+        frame.putpixel((0, 0), (10, 20, 30, 255))  # ordinary opaque
+        frame.putpixel((1, 0), (10, 20, 30, 0))  # ordinary transparent
+        path = os.path.join(self.tmpdir, "binary_alpha.gif")
+        save_gif([frame], path, duration_ms=100, background=(200, 200, 200))
+        with Image.open(path) as img:
+            rgba = img.convert("RGBA")
+            self.assertEqual(rgba.getpixel((0, 0)), (10, 20, 30, 255))
+            self.assertEqual(rgba.getpixel((1, 0))[3], 0)
+
 
 if __name__ == "__main__":
     unittest.main()

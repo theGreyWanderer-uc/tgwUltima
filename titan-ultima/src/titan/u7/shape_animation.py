@@ -42,14 +42,12 @@ __all__ = [
 
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import TYPE_CHECKING, Optional, Sequence
+from typing import Optional, Sequence
 
 import numpy as np
+from PIL import Image
 
 from titan.u7.palette_semantics import CYCLE_RANGES
-
-if TYPE_CHECKING:
-    from PIL import Image
 
 # Exult's Frame_animator fires once every `100 * frame_delay` ms
 # (objs/animate.cc:436-440).
@@ -170,19 +168,59 @@ def has_cycle_pixels(pixels: np.ndarray) -> bool:
     return False
 
 
-def save_gif(frames: Sequence["Image.Image"], path: str, *, duration_ms: int, loop: int = 0) -> None:
+def _flatten_partial_alpha(img: "Image.Image", background: tuple[int, int, int]) -> "Image.Image":
+    """Pre-composite genuinely translucent pixels (0 < alpha < 255) onto a
+    solid background, then mark them fully opaque.
+
+    GIF has no partial-alpha support -- a pixel's alpha channel is either
+    fully transparent or fully opaque, nothing in between. Truly-outside-
+    the-sprite pixels (alpha == 0) and ordinary opaque pixels (alpha ==
+    255) round-trip through GIF correctly as-is; a genuinely translucent
+    preview pixel (e.g. from ``composite_rgba_preview``, alpha in
+    between) does not -- Pillow's GIF writer just snaps it to fully
+    opaque *without* blending it toward anything, showing the raw
+    foreground tint at full strength. That's darker/more saturated than
+    the real blend, which is only ever seen partially blended with
+    whatever's behind it. This is only needed for GIF export -- PNG
+    preserves real alpha, so nothing needs flattening there.
+    """
+    arr = np.array(img.convert("RGBA")).astype(np.int16)
+    alpha = arr[..., 3]
+    partial = (alpha > 0) & (alpha < 255)
+    if not np.any(partial):
+        return img
+    bg = np.array(background, dtype=np.int16)
+    a = alpha[partial].astype(np.float32) / 255.0
+    for c in range(3):
+        fg = arr[..., c][partial].astype(np.float32)
+        arr[..., c][partial] = np.round(fg * a + bg[c] * (1 - a)).astype(np.int16)
+    arr[..., 3][partial] = 255
+    return Image.fromarray(arr.astype(np.uint8), "RGBA")
+
+
+def save_gif(
+    frames: Sequence["Image.Image"],
+    path: str,
+    *,
+    duration_ms: int,
+    loop: int = 0,
+    background: tuple[int, int, int] = (128, 128, 128),
+) -> None:
     """Save a sequence of rendered frames as an animated GIF.
 
     U7 renders never exceed 256 colours, so GIF's palette is a natural
-    fit here -- unlike a general RGBA source, nothing needs
-    requantizing. GIF transparency is binary (no partial alpha), which
-    matches how Exult itself displays these frames (palette-swap based,
-    not alpha-blended) closely enough for a preview/export tool.
+    fit here -- unlike a general RGBA source, nothing needs requantizing.
+    Genuinely translucent pixels (real partial alpha, from translucency
+    compositing) are pre-flattened onto *background* first, since GIF
+    itself has no partial-alpha representation -- see
+    :func:`_flatten_partial_alpha`. Ordinary sprite transparency (alpha
+    0 or 255) is unaffected and round-trips through GIF as normal.
     """
     if not frames:
         raise ValueError("save_gif requires at least one frame")
 
-    first, *rest = [f.convert("RGBA") for f in frames]
+    flattened = [_flatten_partial_alpha(f, background) for f in frames]
+    first, *rest = flattened
     first.save(
         path,
         save_all=True,
