@@ -530,21 +530,9 @@ def cmd_shape_export(args: SimpleNamespace) -> int:
     else:
         pal = U7Palette.default_palette()
 
-    translucency = None
-    if getattr(args, "translucent", False) or getattr(args, "translucent_bg", None):
-        if not getattr(args, "static", None):
-            print(
-                "ERROR: --static DIR is required (with --translucent or "
-                "--translucent-bg) to load real XFORM.TBL/BLENDS.DAT data",
-                file=sys.stderr,
-            )
-            return 1
-        from titan.u7.translucency import U7Translucency
-
-        translucency = U7Translucency.from_dir(args.static)
-
     # Determine if file is a Flex archive (VGA) or standalone .shp.
     is_flex = U7FlexArchive.is_u7_flex(filepath)
+    shape_idx: Optional[int] = None
 
     if is_flex:
         if args.shape is None:
@@ -599,6 +587,33 @@ def cmd_shape_export(args: SimpleNamespace) -> int:
     cycle_phase_ms = getattr(args, "cycle_phase", 0) or 0
     is_translucent = getattr(args, "translucent", False)
     translucent_bg_path = getattr(args, "translucent_bg", None)
+    static_dir = getattr(args, "static", None)
+
+    # Auto-detect translucency from TFA when we know the exact shape number
+    # (VGA archive mode) and a STATIC dir was given, unless the user already
+    # forced it explicitly -- mirrors shape-animate's existing auto-detection
+    # instead of silently exporting flat/wrong colours for translucent shapes.
+    auto_detected = False
+    if not is_translucent and not translucent_bg_path and static_dir and shape_idx is not None:
+        from titan.u7.typeflag import U7TypeFlags
+
+        tfa_entry = U7TypeFlags.from_dir(static_dir).get(shape_idx)
+        if tfa_entry is not None and tfa_entry.has_translucency:
+            is_translucent = True
+            auto_detected = True
+
+    translucency = None
+    if is_translucent or translucent_bg_path:
+        if not static_dir:
+            print(
+                "ERROR: --static DIR is required (with --translucent or "
+                "--translucent-bg) to load real XFORM.TBL/BLENDS.DAT data",
+                file=sys.stderr,
+            )
+            return 1
+        from titan.u7.translucency import U7Translucency
+
+        translucency = U7Translucency.from_dir(static_dir)
 
     exact_background = None
     if translucent_bg_path:
@@ -606,6 +621,13 @@ def cmd_shape_export(args: SimpleNamespace) -> int:
         if exact_background is None:
             return 1
         is_translucent = True
+
+    if auto_detected:
+        print(
+            f"NOTE: shape {shape_idx} is TFA-flagged translucent; "
+            "auto-applying real BLENDS.DAT compositing.",
+            file=sys.stderr,
+        )
 
     if (cycle_phase_ms or is_translucent) and not indexed:
         print(
@@ -733,14 +755,19 @@ def cmd_shape_animate(args: SimpleNamespace) -> int:
             )
             return 1
 
-        images = shape.to_pngs(pal)
+        images = shape.to_pngs(
+            pal,
+            has_translucency=is_translucent,
+            translucency=translucency if is_translucent else None,
+        )
         default_steps = 24 if anim.ani_type.name == "HOURLY" else anim.nframes
         steps = args.steps or default_steps
         frame_indices = simulate_frame_sequence(anim, 0, steps, hour_start=args.hour_start or 0)
         gif_frames = [images[i] for i in frame_indices if 0 <= i < len(images)]
         default_duration = 200 if anim.ani_type.name == "HOURLY" else TICK_MS * anim.frame_delay
         duration = args.duration or default_duration
-        print(f"Animating {name}: {anim.ani_type.name.lower()} frame sequence, "
+        label = " (translucency-composited)" if is_translucent else ""
+        print(f"Animating {name}: {anim.ani_type.name.lower()} frame sequence{label}, "
               f"{len(gif_frames)} steps @ {duration}ms")
     else:
         if not has_cycle_pixels(shape.frames[target_frame].pixels):
@@ -1216,8 +1243,11 @@ def shape_export_cmd(
         bool,
         typer.Option(
             "--translucent",
-            help="Treat this shape as TFA-translucent (shape-export has no "
-            "STATIC dir to look this up automatically -- assert it explicitly)",
+            help="Force this shape as TFA-translucent. Not needed for VGA "
+            "archive input when --static is given -- translucency is then "
+            "auto-detected from TFA.DAT for the given --shape; use this to "
+            "assert it explicitly for a standalone .shp (no shape number "
+            "to look up) or to override the auto-detected value",
         ),
     ] = False,
     translucent_bg: Annotated[
@@ -1233,8 +1263,9 @@ def shape_export_cmd(
         Optional[str],
         typer.Option(
             "--static",
-            help="STATIC directory to load real XFORM.TBL/BLENDS.DAT from "
-            "(required together with --translucent or --translucent-bg)",
+            help="STATIC directory to load real XFORM.TBL/BLENDS.DAT from, "
+            "and to auto-detect translucency from TFA.DAT for --shape N "
+            "(VGA archive input only)",
         ),
     ] = None,
 ) -> None:

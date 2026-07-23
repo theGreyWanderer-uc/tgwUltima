@@ -60,6 +60,42 @@ This project uses [Semantic Versioning](https://semver.org/):
   with `quality > 1`, regardless of shape class; it's now only shown
   for actual quantity-class items (a container's own unrelated quality
   byte, like a chest's lock difficulty, is not a count).
+- Fixed `shape-animate`'s frame-sequence mode (real TFA multi-frame
+  animation, as opposed to single-frame colour-cycle preview) silently
+  ignoring `--static`'s translucency data entirely, exporting shapes
+  that are both animated and translucent (e.g. shape 177) with raw,
+  unblended palette colours instead of the real blend composite. Only
+  the colour-cycle preview mode was applying it correctly.
+- `shape-export` now auto-detects TFA translucency from `--static` when
+  `--shape N` resolves a real shape, instead of requiring a separate
+  `--translucent` flag the caller had to already know to pass; the same
+  silent-wrong-colour issue as the `shape-animate` fix above, for the
+  same underlying reason (translucency reinterprets particular palette
+  indices, so exporting them unblended just shows the wrong colour
+  instead of erroring). `--translucent`/`--translucent-bg` still work
+  as an explicit override for standalone `.shp` input with no shape
+  number to look up.
+- Fixed `shape-animate` GIF export showing translucent pixels darker and
+  more saturated than the real game: GIF has no partial-alpha support,
+  so a translucency-preview pixel's real alpha (e.g. 128 or 82 out of
+  255) was being snapped straight to fully opaque without blending it
+  toward anything first, leaving the raw, un-blended foreground tint at
+  full strength. `save_gif` now pre-composites genuinely translucent
+  pixels onto a solid background (default neutral mid-grey, matching
+  what a PNG export blends toward when displayed over a light
+  background) before flattening to GIF's binary transparency; ordinary
+  opaque/transparent pixels are unaffected.
+- Fixed `U7Translucency.composite_rgba_preview` quartering the brightness
+  of every translucent preview colour (`r >> 2, g >> 2, b >> 2`). That
+  scaling only belongs to Exult's *indexed* remap table build
+  (`create_trans_table`, which needs 6-bit VGA-range input); the RGBA
+  overlay path this method mirrors (`translucency_argb`, `shapeid.cc:
+  350-368`, "so a layer can reproduce it with real texture alpha") uses
+  the full, undivided 0-255 `BLENDS.DAT` bytes. The wrong shift was
+  inherited from `map.py`'s original pre-overhaul hardcoded renderer and
+  had been silently darkening every translucency preview since (shape
+  export, shape-animate, and map rendering) to about a quarter of its
+  real brightness.
 
 ---
 
