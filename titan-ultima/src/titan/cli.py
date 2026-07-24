@@ -8,6 +8,7 @@ Root commands (game-agnostic):
 Sub-apps:
     u8  — Ultima 8: Pagan commands (shape, map, sound, save, etc.)
     u7  — Ultima 7 commands (placeholder — coming soon)
+    u6  — Ultima 6: The False Prophet commands (tile, map, library, data)
 
 Old root-level U8 commands (e.g. ``titan shape-export``) are still
 accepted as hidden deprecated aliases that forward to ``titan u8 …``.
@@ -1201,10 +1202,12 @@ def config_cmd(
 
 from titan.u8.cli import u8_app  # noqa: E402
 from titan.u7.cli import u7_app  # noqa: E402
+from titan.u6.cli import u6_app  # noqa: E402
 from titan.dialogue.cli import dialogue_app  # noqa: E402
 
 app.add_typer(u8_app)
 app.add_typer(u7_app)
+app.add_typer(u6_app)
 app.add_typer(dialogue_app)
 
 

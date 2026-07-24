@@ -36,6 +36,34 @@ This project uses [Semantic Versioning](https://semver.org/):
     `world-query` and `container-browse` now show real
     `quality_raw`/`quality`/`flags` instead of a bare, sometimes-wrong
     quality integer.
+- Added the `titan.u6` subpackage: format-reading (and limited
+  save-editing) support for Ultima 6: The False Prophet.
+  - **Graphics & world**: LZW decompression; `lib_16`/`lib_32` library
+    reader; tile graphics (plain/transparent/pixel-block); palettes;
+    `TILEFLAG` terrain/object metadata; `MAP`/`CHUNKS` world renderer
+    with animated-tile support and correct multi-tile ("double-size")
+    object compositing (beds, banners, barrels, etc. now render as
+    complete sprites instead of a single truncated tile).
+  - **World objects & actors**: object placement (`LZOBJBLK`/
+    `LZDNGBLK`) with container/inventory resolution; egg (object
+    spawner) decoding, including spawn probability and target; the
+    256-actor identity table (position, stats, alignment, talk flags);
+    loading world/actor state directly from a real save's `SAVEGAME/`
+    folder.
+  - **Story & save state**: party roster, player state, game clock, and
+    weather; a read/compare/write tool for per-NPC talk flags and
+    global quest state, including writing changes back to a save.
+  - **Dialogue**: a CONVERSE.A/B bytecode disassembler, with known
+    global variables (karma, Gargish knowledge, party size, etc.)
+    annotated by name instead of raw numbers.
+  - **Text & reference data**: fonts (English + runic/gargoyle); object
+    names; books/signs; NPC daily schedules.
+  - `titan u6` CLI: `lzw-decompress`, `lib-list`, `lib-extract`,
+    `lib-extract-all`, `tileflag-dump`, `palette-export`, `tile-export`,
+    `tile-export-all`, `map-render` (`--objects`, `--tick`),
+    `object-list`, `egg-list`, `actor-list`, `gamestate-dump`,
+    `flags-dump`, `flags-compare`, `flags-set`, `converse-dump`,
+    `font-export`, `look-dump`, `book-dump`, `schedule-dump`.
 
 ### Changed
 
