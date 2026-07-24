@@ -2,5 +2,5 @@
 
 __all__ = ["TITAN_VERSION", "__version__"]
 
-__version__ = "0.6.9.1"
+__version__ = "0.7.0"
 TITAN_VERSION = __version__
