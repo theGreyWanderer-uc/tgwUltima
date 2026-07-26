@@ -10,6 +10,36 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ---
 
+## [0.7.1]
+
+### Fixed
+
+- Fixed a wide category of z-order/compositing bugs in `u6 map-render
+  --objects`, where an object sharing a map coordinate with another was
+  incorrectly hiding it (or getting hidden by it) instead of both
+  rendering correctly:
+  - A signpost was completely erasing its own directional plaque at 26+
+    map coordinates instead of merely peeking through its transparent
+    corners; the 2 spots pairing two plaques on one post needed a
+    further coordinate-specific fix so the losing plaque doesn't
+    independently repaint a second, unwanted plank next to the correct
+    one.
+  - A cookfire's logs, a basket's contents, a wall-mounted weapon, a
+    doorway's door, and carpet/secret-door floor tiles were each
+    winning or losing file-order coin-flip ties against the wrong
+    object.
+  - Ground clutter in dungeon loot piles (a dead body vs. a pile of
+    bones, a club vs. a dead gargoyle, small items vs. a dropped piece
+    of armor, blood vs. a cleaver/knife, a magic bow vs. a map
+    fragment) was hidden by same-tier objects it should visually sit on
+    top of.
+- Fixed several of the above by promoting the confirmed *winning* tile
+  to the foreground tier rather than demoting the loser, after an
+  earlier attempt at the latter regressed unrelated matchups (a
+  demoted "loser" losing to supporting furniture it should still beat).
+
+---
+
 ## [0.7.0]
 
 ### Added

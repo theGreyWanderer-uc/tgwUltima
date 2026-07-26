@@ -417,7 +417,148 @@ def cmd_map_render(args: SimpleNamespace) -> int:
         ox, oy = (region[0], region[1]) if region else (0, 0)
         rh, rw = grid.shape[:2] if region is None else (region[3], region[2])
 
+        # Carpet's own TILEFLAG data only marks 2 of its 18 frames (the
+        # heavily-repeated fill piece) is_background -- the many border/
+        # corner frames aren't flagged at all, even though they're the same
+        # floor-covering object. Found from a room where a table+candle
+        # pair anchored on an unflagged corner/edge carpet frame was still
+        # getting covered by it. Since every carpet frame is unambiguously
+        # floor, not furniture, obj_n is a more reliable background signal
+        # here than the per-tile flag alone.
+        CARPET_OBJ_N = 303
+
+        # A secret door (obj_n=334) is drawn 100% opaque and wall-colored
+        # by design -- its whole purpose is to be indistinguishable from a
+        # normal wall segment -- but TILEFLAG never marks it is_background.
+        # Found from a "picture" object anchored on the exact same tile as
+        # a secret door (a picture hung to visually mark/disguise the door,
+        # a common decorating trick): both plain-tier anchors tied, and the
+        # fully-opaque secret door always won, making the picture
+        # completely invisible.
+        SECRET_DOOR_OBJ_N = 334
+
+        # A doorway (obj_n=301) is the threshold frame that a door,
+        # portcullis, or other fixture sits inside -- it's is_foreground
+        # like whatever fills it, so the two tie and file order decides,
+        # arbitrarily, which one wins. A 1990s U6 level-design reference
+        # (it-he.org's "List of Useful Objects") gives the authoritative
+        # order directly: "Place the doorway first, and then put the door
+        # on top." A whole-map audit for same-tier ties found 30+ doorways
+        # winning that coin flip instead, each nearly erasing its own door
+        # (12-30% opaque door losing to a 74-97% opaque doorway).
+        DOORWAY_OBJ_N = 301
+        BACKGROUND_OBJ_NS = {CARPET_OBJ_N, SECRET_DOOR_OBJ_N, DOORWAY_OBJ_N}
+
+        # A wall mount (obj_n=140) is a rack that a decorative sword or
+        # shield hangs on, the same "things get placed on top of this"
+        # role as is_supporting furniture, but TILEFLAG doesn't flag it.
+        # Found from a decorative sword anchored on the exact same tile as
+        # its wall mount, tied at the plain tier and losing to it.
+        WALL_MOUNT_OBJ_N = 140
+        SUPPORTING_OBJ_NS = {WALL_MOUNT_OBJ_N}
+
+        # A basket (obj_n=191, frame 0 = tile 758 specifically -- the same
+        # obj_n's other frames are "open crate"/"crate"/"small jug"/"milk
+        # bottle", so this can't be an obj_n-wide rule) is a container: its
+        # contents should show on top of it, the same "things get placed on
+        # top of this" role as is_supporting furniture. Confirmed against a
+        # real screenshot showing baskets (yellow) and a bunch of grapes
+        # (purple) as distinct, both-visible objects -- not the grapes
+        # nested invisibly inside the basket, which is what six placements
+        # sharing a basket's coordinate with a grapes anchor were rendering.
+        MISFLAGGED_SUPPORTING_TILES = {758}
+
+        # Sign plaque tile 1243 ("north") appears at 11 coordinates on the map; at 9 of them
+        # it's the only plaque on its post and must beat the post like any other (handled by
+        # the natural plain tier beating the post's natural plain tier... except it doesn't --
+        # see below). At exactly 2 of them (294,407 and 284,410) it's paired with a *second*,
+        # winning plaque ("south", tile 1241, in MISFLAGGED_FOREGROUND_TILES above) sharing
+        # the same post. Demoting tile 1243 globally would fix those 2 but break the other 9,
+        # so this is a (world_x, world_y) coordinate override, not a tile-number one: verified
+        # from the raw LZOBJBLK object order that 1243 has a *higher* seq than the post at
+        # these exact 2 spots, so it was independently beating the post and painting its own
+        # full-height plank, indistinguishable in size from 1241's, producing an unwanted
+        # double-wide plank (confirmed against a real screenshot: the game shows one plank
+        # with the post visible only in the gaps around it, not two side-by-side planks).
+        SIGN_NORTH_LOSES_TO_POST_AT = {(294, 407), (284, 410)}
+
+        # Ground clutter found in a dungeon loot pile, none of it flagged
+        # anything at all (TILEFLAG is entirely False on every one of these
+        # tiles), so ties there are decided by file-order coincidence.
+        # First attempt demoted the *losing* side (pile of bones, dead
+        # gargoyle, blood, armor) to background/tier 0. That's wrong: a
+        # dead body must still win over blood *and* a pile of bones, a club
+        # must win over a dead gargoyle, and small items (mug, mushroom,
+        # candle) must win over a dropped piece of armor -- but those same
+        # "loser" tiles also need to win over supporting furniture they're
+        # sitting on/in (confirmed: a leather armor piece hidden under a
+        # table, and a pile of bones hidden under an altar's overflow cell,
+        # both regressed by that demotion, since table/altar's own
+        # is_supporting tier is *also* 0). Promoting the *winning* side to
+        # foreground instead avoids that: it beats its specific plain-tier
+        # rival while leaving the loser at its natural plain tier, which
+        # already beats is_supporting furniture on its own.
+        #
+        # obj_n=339 is "dead body" for frames 0-8 (tiles 1262-1270, listed
+        # in full since obj_n=338 also aliases the same tiles for its own
+        # frames 3-5) and "pile of bones" only for frame 9 (tile 1271, left
+        # unlisted -- it now stays at its natural plain tier). obj_n=341 is
+        # "dead gargoyle" for frames 0-3 (tiles 1276-1279, left unlisted)
+        # but "giant rat" for frames 4-5 -- its confirmed rival is a club
+        # (tile 545), listed instead. obj_n=17/18 (cloth/leather armour,
+        # tiles 528/529, left unlisted) are LOOK.LZD's first frame in each
+        # range; their confirmed rivals are a mug (645), a nightshade
+        # mushroom (581), and a candle (647), listed instead.
+        MISFLAGGED_FOREGROUND_TILES = {
+            1126, 1127, 1132, 1133,  # cookfire
+            1262, 1263, 1264, 1265, 1266, 1267, 1268, 1269, 1270,  # dead body
+            545,  # club
+            645, 581, 647,  # mug, nightshade mushroom, candle
+            637, 638, 639,  # cleaver, knife (confirmed rival: blood, tile 1259-1261)
+            565,  # magic bow (confirmed rival: part of a map, tile 1757, dungeon2 loot pile)
+            # obj_n=332's directional sign plaques need to beat their own signpost (frame 6,
+            # tile 1246, also unflagged) -- 26 placements on the map share a plaque+post
+            # coordinate, and the post was winning file order, completely erasing the plaque
+            # instead of the post merely peeking through the plaque's transparent corners.
+            # First attempt demoted the post to supporting instead, which fixed the 24
+            # single-plaque placements but broke the 2 that pair TWO plaques on one post
+            # (294,407 and 284,410) even worse than before: with the post no longer competing
+            # at all, the *losing* plaque (1243, "north") was left free to independently beat
+            # the post (it already did, per its actual seq order -- see
+            # SIGN_NORTH_LOSES_TO_POST_AT below) and paint its own full-height plank next to
+            # 1241's, producing an unwanted double-wide plank (confirmed against a real
+            # screenshot: the game shows one plank with the post visible only in the gaps
+            # around it, not two side-by-side planks). Promoting only the 4 plaque frames that
+            # are never a same-post "loser" (1240, 1241, 1242, and 1247 -- obj_n=332 frame 7,
+            # a plain-horizontal variant used at 4 more real coordinates, found the same way:
+            # its seq is lower than the post's at all 4) leaves the post's tier alone -- each
+            # of those beats it on its own regardless.
+            1240, 1241, 1242, 1247,
+        }
+
+        def is_background(obj_n: int, cell_tnum: int) -> bool:
+            if obj_n in BACKGROUND_OBJ_NS:
+                return True
+            return cell_tnum < len(tileflags) and tileflags[cell_tnum].is_background
+
+        def layer(obj_n: int, cell_tnum: int) -> int:
+            """0 = supporting furniture, a heat/light source, or a background fill (drawn first, e.g. a table, a forge fire, or a rug's floor tile), 1 = plain, 2 = foreground/toptile (drawn last, e.g. a curtain)."""
+            if is_background(obj_n, cell_tnum):
+                return 0
+            if cell_tnum in MISFLAGGED_FOREGROUND_TILES:
+                return 2
+            if cell_tnum >= len(tileflags):
+                return 1
+            tf = tileflags[cell_tnum]
+            if tf.is_foreground:
+                return 2
+            if tf.is_supporting or tf.is_warm or obj_n in SUPPORTING_OBJ_NS or cell_tnum in MISFLAGGED_SUPPORTING_TILES:
+                return 0
+            return 1
+
         drawn = 0
+        seq = 0
+        draws: list[tuple[int, bool, int, int, int, int]] = []
         for obj in obj_iter:
             if not obj.is_on_map:
                 continue
@@ -430,11 +571,96 @@ def cmd_map_render(args: SimpleNamespace) -> int:
             for dx, dy, cell_tnum in footprint:
                 if cell_tnum < 0 or cell_tnum >= tiles.num_tiles:
                     continue
-                sprite = tiles.to_pil_image(cell_tnum, pal, transparent=True)
+                # Object cells can themselves be animated placeholders (a
+                # drawbridge crank/chain, or a clock's second frame), the
+                # same mechanism already used for terrain -- found from a
+                # crank and chain that rendered as fully transparent
+                # because ANIMDATA lists them as placeholders (tiles 1009
+                # and 1020) whose real content lives at a different,
+                # tick-selected tile.
+                cell_tnum = anim.resolve_tile(cell_tnum, args.tick)
+                if cell_tnum < 0 or cell_tnum >= tiles.num_tiles:
+                    continue
                 px = (obj.x + dx - ox) * 16
                 py = (obj.y + dy - oy) * 16
-                img.alpha_composite(sprite, (px, py))
+                draws.append((seq, dx == 0 and dy == 0, px, py, cell_tnum, obj.obj_n))
+                seq += 1
             drawn += 1
+
+        # Objects placed at the same coordinate, or whose footprints
+        # overflow onto one, can claim overlapping cells. Two rules settle
+        # who wins, cheapest/strongest first:
+        #
+        # 1. Any object's own anchor cell (its real (x, y) placement) beats
+        #    every *other* object's mere secondary/overflow cell landing on
+        #    the same spot, regardless of flags -- confirmed against a real
+        #    screenshot where a hammer (anchored on its own tile) stayed
+        #    visible under a forge hood's overhanging secondary cell, even
+        #    though that cell is flagged is_foreground. This pass doesn't
+        #    apply to an anchor that's background (a rug's floor tile,
+        #    individually anchored per carpet piece): a background tile
+        #    shouldn't out-rank a neighbor's overflow just for being
+        #    "anchored" there, since being background already means it's
+        #    meant to sit under everything nearby, not claim priority over
+        #    it -- found from a bed whose is_foreground curtain-fabric
+        #    overflow cells were getting swallowed by an underlying
+        #    carpet's individually-anchored floor tiles.
+        # 2. Within each of those two bands (the overflow cells competing
+        #    among themselves, and the anchor cells competing among
+        #    themselves -- e.g. two objects double-sized from the identical
+        #    anchor coordinate, like a bed and its curtain), TILEFLAG's own
+        #    flags settle it the same way: is_supporting furniture (a
+        #    table, per its docstring -- "other objects can be placed on
+        #    top of this one"), is_warm (a heat/light source, e.g. a
+        #    forge's fire), or background (a rug's floor tile) sits under
+        #    whatever's placed on/near it, and is_foreground ("toptile")
+        #    sits over everything else. Applying rule 2 *within* the
+        #    overflow band too (not just collapsing it to a single flat
+        #    tier) matters here: a forge hood's overflow cell is_foreground
+        #    and must still stay above the fire's overflow cell beneath it,
+        #    even though a hammer's anchor beats them both. The is_warm
+        #    half of this rule was found from two other forges where a
+        #    fire and a pair of pliers are anchored at the *identical*
+        #    coordinate (not an overflow at all): with neither flagged
+        #    supporting/foreground, both fell into the plain tier, and the
+        #    fire (92% opaque) happened to win the file-order tiebreak and
+        #    completely hid the pliers (21% opaque) underneath it.
+        #
+        # A stable sort by (band, sub-tier, original file order) applies
+        # both rules per pixel position while preserving file order within
+        # a tier.
+        #
+        # Independently corroborated after the fact by a 1990s U6 level-
+        # design reference (it-he.org's "List of Useful Objects"): a canopy
+        # bed's curtain piece is catalogued as a "4 Poster overlay" meant to
+        # be placed on top of a plain bed, and its door-building instructions
+        # say to place the doorway first and "put the door on top" -- both
+        # match the layering this code already produces.
+        by_pos: dict[tuple[int, int], list[tuple[int, bool, int, int, int, int]]] = {}
+        for d in draws:
+            by_pos.setdefault((d[2], d[3]), []).append(d)
+
+        tiered: list[tuple[int, int, int, int, int]] = []
+        for group in by_pos.values():
+            def real_anchor(entry: tuple[int, bool, int, int, int, int]) -> bool:
+                _, is_anchor, _, _, cell_tnum, obj_n = entry
+                return is_anchor and not is_background(obj_n, cell_tnum)
+
+            has_real_anchor = any(real_anchor(d) for d in group)
+            for entry in group:
+                seqn, _is_anchor, px, py, cell_tnum, obj_n = entry
+                band = 0 if (has_real_anchor and not real_anchor(entry)) else 1
+                world_xy = (px // 16 + ox, py // 16 + oy)
+                if cell_tnum == 1243 and world_xy in SIGN_NORTH_LOSES_TO_POST_AT:
+                    tier = 0
+                else:
+                    tier = band * 3 + layer(obj_n, cell_tnum)
+                tiered.append((tier, seqn, px, py, cell_tnum))
+
+        tiered.sort(key=lambda d: (d[0], d[1]))
+        for _tier, _seq, px, py, cell_tnum in tiered:
+            sprite = tiles.to_pil_image(cell_tnum, pal, transparent=True)
+            img.alpha_composite(sprite, (px, py))
         print(f"  overlaid {drawn} object(s)")
 
     out_path = args.output or default_name
