@@ -3205,6 +3205,82 @@ titan u9 model-export-all static/sappear.flx -t static/bitmap16.flx -p static/an
 
 ---
 
+#### `u9 icon-list`
+
+List candidate 2D UI icon entries in a texture archive: entries **not**
+referenced by any 3D model material in `sappear.flx` (see
+`titan.u9.icon`'s module docstring for how this split works and its
+known limitation -- it's a solid subset of the real icon art, not a
+provably exhaustive one). Kept logically separate from the mesh/texture
+commands above: its own module, its own `icon-*` command group, its
+own default output directory.
+
+```
+titan u9 icon-list <file> <textures> [--limit N]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/sappear.flx` |
+| `textures` | Path to a texture archive, e.g. `bitmap16.flx` or `bitmapsh.flx` |
+| `--limit N` | Max rows to print, `0` = unlimited (default: `200`) |
+
+**Example**
+```bash
+titan u9 icon-list static/sappear.flx static/bitmapsh.flx --limit 50
+```
+
+---
+
+#### `u9 icon-export`
+
+Export one texture archive entry to PNG, regardless of whether any 3D
+model references it -- a low-level, single-entry tool (unlike
+`model-export`, this needs no `sappear.flx`).
+
+```
+titan u9 icon-export <textures> <entry_id> [--frame N] [-p PALETTE] [-o DIR]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `textures` | Path to a texture archive, e.g. `bitmap16.flx` or `bitmapsh.flx` |
+| `entry_id` | Entry ID (0-7999) to export |
+| `--frame N` | Frame index within the entry (default: `0`) |
+| `-p FILE`, `--palette FILE` | Path to `static/ankh.pal` -- colors 8-bit textures (default: flat grayscale) |
+| `-o DIR`, `--output DIR` | Output directory (default: current directory) |
+
+**Example**
+```bash
+titan u9 icon-export static/bitmapsh.flx 568 -p static/ankh.pal -o icon_568/
+```
+
+---
+
+#### `u9 icon-export-all`
+
+Batch-export every candidate 2D UI icon (see `icon-list` above) to
+PNG, one file per entry (`icon_<id>.png`), into its own output
+directory -- separate from `model-export-all`'s `model_export/`.
+
+```
+titan u9 icon-export-all <file> <textures> [-p PALETTE] [-o DIR]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/sappear.flx` |
+| `textures` | Path to a texture archive, e.g. `bitmap16.flx` or `bitmapsh.flx` |
+| `-p FILE`, `--palette FILE` | Path to `static/ankh.pal` -- colors 8-bit textures (default: flat grayscale) |
+| `-o DIR`, `--output DIR` | Output directory (default: `icon_export/`) |
+
+**Example**
+```bash
+titan u9 icon-export-all static/sappear.flx static/bitmapsh.flx -p static/ankh.pal -o icon_export/
+```
+
+---
+
 ## Configuration (titan.toml)
 
 ### File format
@@ -3384,5 +3460,8 @@ A value on the command line always wins.
 | `u9 model-info` | Print a model's limb/LOD/material/texture summary |
 | `u9 model-export` | Export one model to OBJ+MTL(+PNG textures) and/or STL |
 | `u9 model-export-all` | Batch version of `model-export`, over every used model in a `sappear.flx` |
+| `u9 icon-list` | List candidate 2D UI icon entries not referenced by any 3D model |
+| `u9 icon-export` | Export one texture archive entry to PNG, regardless of mesh usage |
+| `u9 icon-export-all` | Batch-export every candidate 2D UI icon to PNG |
 | `setup` | First-time setup wizard — creates `titan.toml` |
 | `config` | Show or edit active `titan.toml` |

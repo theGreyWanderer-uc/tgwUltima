@@ -10,6 +10,32 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ---
 
+## [0.7.2]
+
+### Added
+
+- Added `titan u9` 2D UI icon discovery and export (`titan.u9.icon`):
+  the texture archives already used for 3D model surface materials
+  (`bitmap16.flx`/`bitmapC.flx`/`bitmapsh.flx`) also hold a large set
+  of standalone 2D UI icons (spell-rune sigils, item icons, ...) mixed
+  into the same index space, with no format-level flag distinguishing
+  them from material textures. The one reliable signal found: every
+  entry a 3D model material actually references is a real surface
+  texture, so the complement -- entries no model ever references -- is
+  a solid (if not provably exhaustive) set of icon candidates. Real
+  data: 5,044 distinct texture_ids are claimed by `sappear.flx`
+  models, leaving 1,553 of `bitmapsh.flx`'s 6,597 used entries as icon
+  candidates, including a confirmed spell-rune-sigil cluster
+  (entries 568-641). Kept logically separate from existing mesh/texture
+  commands: its own module (`titan.u9.icon`), its own `icon-*` CLI
+  command group, and its own default output directory
+  (`icon_export/`, vs. `model_export/`).
+  - `titan u9` CLI: `icon-list` (candidate icons with dimensions),
+    `icon-export` (any single texture archive entry, mesh-referenced
+    or not), `icon-export-all` (batch-export every candidate icon).
+
+---
+
 ## [0.7.1]
 
 ### Added
