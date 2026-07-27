@@ -3,12 +3,15 @@
 **TITAN** - Tool for Interpreting and Transforming Archival Nodes.
 
 TITAN is a Python CLI and library for working with proprietary data formats
-from *Ultima 8: Pagan* and *Ultima 7: The Black Gate / Serpent Isle*. It reads,
-extracts, converts, inspects, and reconstructs archives, shapes, palettes,
-music, speech, maps, saves, and Exult runtime data.
+from *Ultima 8: Pagan*, *Ultima 7: The Black Gate / Serpent Isle*, and
+*Ultima 6: The False Prophet*. It reads, extracts, converts, inspects, and
+reconstructs archives, shapes/tiles, palettes, music, speech, maps, world
+objects, saves, dialogue, and Exult runtime data. Early *Ultima 9: Ascension*
+support (FLX archives, `TYPENAME.FLX`, and `sound/*.flx` decoding) is also
+available under `titan u9`.
 
-Run `titan --help`, `titan u8 --help`, `titan u7 --help`, or see the full
-[CLI reference](cli_reference.md).
+Run `titan --help`, `titan u8 --help`, `titan u7 --help`, `titan u6 --help`,
+`titan u9 --help`, or see the full [CLI reference](cli_reference.md).
 
 ---
 
@@ -26,6 +29,13 @@ Requirements:
 - Typer >= 0.15
 - questionary >= 2.0
 - tomli >= 2.0 on Python < 3.11, for `titan.toml` support
+
+Optional:
+
+- `pyvista` (`pip install pyvista`) — only for `titan u9 model-export`'s
+  auto-generated `preview.png`/`preview_front.png` renders. Without it,
+  `model-export` still works; the preview step is skipped with a
+  one-line note.
 
 ---
 
@@ -59,6 +69,14 @@ titan u7 typeflag-dump --game si -f csv -o tfa_si.csv
 titan u7 gamedat-info --game si -f detail -o gamedat_info.txt
 ```
 
+`titan setup` doesn't detect Ultima 6 installs yet — add `[u6.game]
+base = "<Ultima 6 install>"` to `titan.toml` yourself, or pass
+`-g`/`--gamedir` explicitly on every U6 command:
+
+```bash
+titan u6 map-render -g "C:/Ultima6" --full -o u6_world.png
+```
+
 The detailed dialogue web documentation lives in
 [src/titan/dialogue/websrc/READMEd.md](src/titan/dialogue/websrc/READMEd.md).
 
@@ -85,6 +103,42 @@ place for command options, longer examples, and format notes.
 | Container data | Not applicable | Browse IREG container contents with full nesting; filter by container name, item name, or tile area; optional per-frame item names via Exult FLX | `titan u7 container-browse --game bg --container-name chest` | [U7 container-browse](cli_reference.md#u7-container-browse) |
 | Egg data | Not applicable | Query IREG egg trigger objects — type, usecode function, probability, location | `titan u7 egg-query --game bg --type usecode` | [U7 egg-query](cli_reference.md#u7-egg-query) |
 | Text and misc data | Gump layout, XOR credits, quotes, transform palettes | Global flags and selected runtime metadata | `titan u8 credits-decrypt ECREDITS.DAT` | [U8 data commands](cli_reference.md#u8-data-inspection-commands) |
+
+### Ultima 6
+
+U6 support covers reading (and limited save-editing of) the full game: tiles,
+world/dungeon maps, world objects and eggs, actors, party/game state, story
+flags, dialogue, and text/reference data.
+
+| Area | Coverage | Quick example |
+|---|---|---|
+| Archives | LZW decompression; `lib_16`/`lib_32` library files (`CONVERSE.A/B`, etc.) | `titan u6 lib-list CONVERSE.A` |
+| Graphics | Tiles (plain/transparent/pixel-block), palette, `TILEFLAG` terrain/object metadata | `titan u6 tile-export-all -g "<install>" -o tiles_png/` |
+| Maps | Surface world and dungeon-level rendering, animated tiles, correct multi-tile object compositing, optional world-object overlay | `titan u6 map-render -g "<install>" --full -o u6_world.png` |
+| World objects | Object placement with container/inventory resolution; eggs (spawn probability/target); the 256-actor identity table | `titan u6 object-list -g "<install>" --block 5` |
+| Story and saves | Party roster, player state, clock/weather; read/compare/write per-NPC talk flags and global quest state, including writing changes back to a save | `titan u6 gamestate-dump -g "<install>/SAVEGAME"` |
+| Dialogue | `CONVERSE.A/B` bytecode disassembler, with known global variables annotated by name | `titan u6 converse-dump CONVERSE.A --item 5` |
+| Text and reference data | Fonts (English + runic/gargoyle); object names; books/signs; NPC daily schedules | `titan u6 book-dump BOOK.DAT --book 0` |
+
+See the [U6 commands reference](cli_reference.md#ultima-6-commands-titan-u6)
+for the full command list.
+
+### Ultima 9 (early)
+
+U9 support is newer and narrower in scope than U8/U7 so far — FLX archives,
+`TYPENAME.FLX`, `sound/*.flx` (`Speech.flx`, `sfx.flx`, `music.flx`) decoding
+(EA-XA ADPCM, mono and stereo, and EA MicroTalk speech), and 3D model +
+texture export from `static/sappear.flx`.
+
+| Area | Coverage | Quick example |
+|---|---|---|
+| Archives | List/extract any U9 `.flx`/`.FLX` archive | `titan u9 flx-list sound/Speech.flx` |
+| Metadata | Decode `TYPENAME.FLX` type-ID → name pairs | `titan u9 typename-dump static/TYPENAME.FLX` |
+| Sound and speech | Decode `Speech.flx`/`sfx.flx`/`music.flx` to WAV (PCM, mono/stereo ADPCM, EA MicroTalk) | `titan u9 sound-extract sound/Speech.flx -o speech_wav/` |
+| 3D models and textures | Export `sappear.flx` models (limb hierarchy, LODs, materials) to textured OBJ+MTL+PNG or geometry-only STL, with real palette colors for 8-bit textures, optional naming via `TYPES.DAT`/`TYPENAME.FLX` (e.g. `model_01805_lord-british`), and two auto-generated preview renders, front and back (needs the optional `pyvista` package) | `titan u9 model-export static/sappear.flx 2 -t static/bitmap16.flx -o model_2/` |
+
+See the [U9 commands reference](cli_reference.md#ultima-9-commands-titan-u9)
+for the full command list.
 
 ---
 
@@ -193,6 +247,50 @@ titan u8 map-render -m 0 --no-roof
 titan u8 map-render-all --maps 0 5 39 --views iso_classic iso_high
 ```
 
+### U6 World Rendering
+
+```bash
+# One surface superchunk, with world objects (furniture, items, etc.) overlaid.
+titan u6 map-render -g "C:/Ultima6" --region 0,0,64,64 --objects -o chunk0.png
+
+# A dungeon level.
+titan u6 map-render -g "C:/Ultima6" --dungeon 0 --objects -o dungeon0.png
+
+# The entire surface world.
+titan u6 map-render -g "C:/Ultima6" --full -o u6_world.png
+```
+
+### U9 Sound Extraction
+
+```bash
+# List an archive's decoded entry headers first.
+titan u9 sound-list sound/Speech.flx
+
+# Decode every supported entry to WAV (PCM, mono/stereo ADPCM, EA MicroTalk).
+titan u9 sound-extract sound/Speech.flx -o speech_wav/
+titan u9 sound-extract sound/sfx.flx -o sfx_wav/
+titan u9 sound-extract sound/music.flx -o music_wav/
+```
+
+### U9 3D Model Export
+
+```bash
+# Inspect a model's limb/LOD/material/texture summary first.
+titan u9 model-info static/sappear.flx 2
+
+# Export a textured OBJ (+ MTL + PNG textures) -- bitmap16.flx covers every
+# real texture referenced by any model in this project's test copy of the game.
+# preview.png (back-ish) + preview_front.png (rotated 180 degrees) are rendered
+# alongside it automatically (needs `pip install pyvista`).
+titan u9 model-export static/sappear.flx 2 -t static/bitmap16.flx -o model_2/
+
+# Add real palette colors for any 8-bit textures instead of flat grayscale.
+titan u9 model-export static/sappear.flx 2 -t static/bitmapsh.flx -p static/ankh.pal -o model_2/
+
+# Geometry-only STL, no textures or preview needed.
+titan u9 model-export static/sappear.flx 2 -f stl --no-preview -o model_2_stl/
+```
+
 ---
 
 ## Configuration
@@ -280,8 +378,9 @@ titan config --edit
 ## Library Use
 
 TITAN can also be imported as a Python library. U8 modules live under
-`titan.u8`; U7 modules live under `titan.u7`. Backward-compatible imports such
-as `from titan.shape import U8Shape` are still supported.
+`titan.u8`; U7 modules live under `titan.u7`; U6 modules live under
+`titan.u6`; early U9 modules live under `titan.u9`. Backward-compatible
+imports such as `from titan.shape import U8Shape` are still supported.
 
 ```python
 from titan.u7.flex import U7FlexArchive

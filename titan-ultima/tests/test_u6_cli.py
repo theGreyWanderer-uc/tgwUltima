@@ -42,6 +42,7 @@ from titan.u6.cli import (
     cmd_lib_list,
     cmd_look_dump,
     cmd_lzw_decompress,
+    cmd_map_audit_zorder,
     cmd_map_render,
     cmd_object_list,
     cmd_palette_export,
@@ -338,6 +339,67 @@ class MapRenderCliTests(unittest.TestCase):
         os.remove(os.path.join(self.tmpdir.name, "TILEFLAG"))
         rc = cmd_map_render(self._args(region="0,0,4,4", objects=True))
         self.assertEqual(rc, 1)
+
+
+class MapAuditZorderCliTests(unittest.TestCase):
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        _make_synthetic_gamedir(self.tmpdir.name)
+
+        # BASETILE[10] -> tnum 20 ("apple"), BASETILE[11] -> tnum 21 ("banana"):
+        # both plain/opaque MAPTILES-range tiles (MASKTYPE all-zero "plain"
+        # format, TILEFLAG all-zero -> neither background/foreground/
+        # supporting, so both land in the same "plain" layer tier).
+        basetile = bytearray(2048)
+        struct.pack_into("<H", basetile, 10 * 2, 20)
+        struct.pack_into("<H", basetile, 11 * 2, 21)
+        with open(os.path.join(self.tmpdir.name, "BASETILE"), "wb") as f:
+            f.write(bytes(basetile))
+        with open(os.path.join(self.tmpdir.name, "LOOK.LZD"), "wb") as f:
+            f.write(struct.pack("<H", 20) + b"apple\x00" + struct.pack("<H", 21) + b"banana\x00")
+
+        # Two distinct objects (obj_n=10, obj_n=11) at the identical position
+        # (5,5,0) -- a genuine same-tier tie, replacing the base fixture's
+        # single obj_n=3 object.
+        rec_a = struct.pack("<BBBBBBBB", 0x00, *pack_position(5, 5, 0), 10, 0, 1, 0)
+        rec_b = struct.pack("<BBBBBBBB", 0x00, *pack_position(5, 5, 0), 11, 0, 1, 0)
+        block0 = struct.pack("<H", 2) + rec_a + rec_b
+        with open(os.path.join(self.tmpdir.name, "LZOBJBLK"), "wb") as f:
+            f.write(block0 + bytes(2) * (SURFACE_SUPERCHUNKS - 1))
+
+    def tearDown(self):
+        self.tmpdir.cleanup()
+
+    def _args(self, **overrides):
+        base = dict(
+            gamedir=self.tmpdir.name, min_winner_opacity=0.60, min_loser_opacity=0.10,
+            limit=200, dungeons=False,
+        )
+        base.update(overrides)
+        return SimpleNamespace(**base)
+
+    def test_missing_gamedir_errors(self):
+        with self.assertRaises(SystemExit):
+            cmd_map_audit_zorder(self._args(gamedir=None))
+
+    def test_missing_look_lzd_errors(self):
+        os.remove(os.path.join(self.tmpdir.name, "LOOK.LZD"))
+        rc = cmd_map_audit_zorder(self._args())
+        self.assertEqual(rc, 1)
+
+    def test_detects_the_seeded_tie(self):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = cmd_map_audit_zorder(self._args())
+        self.assertEqual(rc, 0)
+        output = buf.getvalue()
+        self.assertIn("total true-tie candidates: 1", output)
+        self.assertIn("apple", output)
+        self.assertIn("banana", output)
+
+    def test_dungeons_flag_does_not_crash(self):
+        rc = cmd_map_audit_zorder(self._args(dungeons=True))
+        self.assertEqual(rc, 0)
 
 
 class DoubleSizeObjectRenderTests(unittest.TestCase):
