@@ -31,6 +31,8 @@ titan <shared-command>          # Flex archives, XMIDI music, config/setup
 titan dialogue <command>        # U8 dialogue web pipeline + local viewer
 titan u8 <command>              # Ultima 8: Pagan
 titan u7 <command>              # Ultima 7: The Black Gate / Serpent Isle
+titan u6 <command>              # Ultima 6: The False Prophet
+titan u9 <command>              # Ultima 9: Ascension
 ```
 
 > **Backward compatibility:** The old root-level U8 commands (e.g.
@@ -52,6 +54,10 @@ Config-aware arguments: `--fixed`, `--shapes`, `--globs`, `--palette`,
 CLI flags always win over config values. If a required path is missing from
 both the command line and the config, TITAN prints an error pointing to
 `titan setup`.
+
+U6 commands that accept `-g`/`--gamedir` are config-aware the same way,
+falling back to `[u6.game] base` (set manually -- `titan setup` doesn't
+detect U6 installs yet).
 
 See [Configuration (titan.toml)](#configuration-titantoml) below.
 
@@ -2357,12 +2363,858 @@ titan --config /other/titan.toml config  # inspect a specific config
 
 ---
 
+## Ultima 6 commands (`titan u6`)
+
+All commands below are invoked as `titan u6 <command>`. Most accept
+`-g`/`--gamedir` (a directory containing the standard, fixed U6
+filenames -- `MASKTYPE.VGA`, `MAPTILES.VGA`, `OBJTILES.VGA`, `U6PAL`,
+`ANIMDATA`, `MAP`, `CHUNKS`) instead of per-file paths, since a real U6
+install has no path variability to account for. Omit `--gamedir` to
+fall back to `[u6.game] base` in `titan.toml`; unlike U7/U8, `titan
+setup` does not yet auto-detect U6 installs, so set that key manually
+(see [Configuration (titan.toml)](#configuration-titantoml)).
+
+### Archive and library commands
+
+---
+
+#### `u6 lzw-decompress`
+
+Decompress a single U6 LZW-compressed file to raw bytes.
+
+```
+titan u6 lzw-decompress <file> [-o DIR]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to a U6 LZW-compressed file |
+| `-o DIR`, `--output DIR` | Output directory |
+
+**Example**
+```bash
+titan u6 lzw-decompress CHUNKS -o out/
+```
+
+---
+
+#### `u6 lib-list`
+
+List a U6 library file's items (index, offset, length, used/empty).
+
+```
+titan u6 lib-list <file> [--entry-size N] [--size-header]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to a U6 library file (e.g. `CONVERSE.A`) |
+| `--entry-size N` | `2` for lib_16, `4` for lib_32 (default: `4`) |
+| `--size-header` | File has a leading 4-byte size header (MD/SE) |
+
+**Example**
+```bash
+titan u6 lib-list CONVERSE.A
+```
+
+---
+
+#### `u6 lib-extract`
+
+Extract one item from a U6 library file.
+
+```
+titan u6 lib-extract <file> <item> [--entry-size N] [--size-header] [-o DIR]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to a U6 library file |
+| `item` | Item index to extract |
+| `--entry-size N` | `2` for lib_16, `4` for lib_32 (default: `4`) |
+| `--size-header` | File has a leading 4-byte size header |
+| `-o DIR`, `--output DIR` | Output directory |
+
+**Example**
+```bash
+titan u6 lib-extract CONVERSE.A 42 -o out/
+```
+
+---
+
+#### `u6 lib-extract-all`
+
+Extract every non-empty item from a U6 library file.
+
+```
+titan u6 lib-extract-all <file> [--entry-size N] [--size-header] [-o DIR]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to a U6 library file |
+| `--entry-size N` | `2` for lib_16, `4` for lib_32 (default: `4`) |
+| `--size-header` | File has a leading 4-byte size header |
+| `-o DIR`, `--output DIR` | Output directory (default: `<file>_items/`) |
+
+**Example**
+```bash
+titan u6 lib-extract-all CONVERSE.A -o converse_items/
+```
+
+---
+
+### Graphics commands
+
+---
+
+#### `u6 tileflag-dump`
+
+Parse `TILEFLAG` and dump all entries as a readable table.
+
+```
+titan u6 tileflag-dump <file> [-o DIR]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `TILEFLAG` |
+| `-o DIR`, `--output DIR` | Output directory |
+
+**Example**
+```bash
+titan u6 tileflag-dump TILEFLAG -o out/
+```
+
+---
+
+#### `u6 palette-export`
+
+Export `U6PAL` as a PNG colour swatch plus a text dump.
+
+```
+titan u6 palette-export <file> [-o DIR]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `U6PAL` |
+| `-o DIR`, `--output DIR` | Output directory |
+
+**Example**
+```bash
+titan u6 palette-export U6PAL -o palette/
+```
+
+---
+
+#### `u6 tile-export`
+
+Export one U6 tile to PNG.
+
+```
+titan u6 tile-export <tile_num> [-g DIR] [-p FILE] [-o DIR]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `tile_num` | Tile number, decimal or `0x`-hex (`0`-`0x7FF`) |
+| `-g DIR`, `--gamedir DIR` | U6 game directory |
+| `-p FILE`, `--palette FILE` | Path to `U6PAL` |
+| `-o DIR`, `--output DIR` | Output directory |
+
+**Example**
+```bash
+titan u6 tile-export 0x100 -g "C:/Ultima6" -o tiles/
+```
+
+---
+
+#### `u6 tile-export-all`
+
+Batch-export a range of U6 tiles to PNG.
+
+```
+titan u6 tile-export-all [-g DIR] [-p FILE] [--start N] [--end N] [-o DIR]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `-g DIR`, `--gamedir DIR` | U6 game directory |
+| `-p FILE`, `--palette FILE` | Path to `U6PAL` |
+| `--start N` | First tile number, inclusive (default: `0`) |
+| `--end N` | Last tile number, inclusive (default: the last tile) |
+| `-o DIR`, `--output DIR` | Output directory (default: `tiles_png/`) |
+
+**Example**
+```bash
+titan u6 tile-export-all -g "C:/Ultima6" -o tiles_png/
+```
+
+---
+
+### Map commands
+
+---
+
+#### `u6 map-render`
+
+Render the U6 surface world or a dungeon level to PNG, with animated
+tiles and optional world-object overlay.
+
+```
+titan u6 map-render [-g DIR] [-p FILE] [--region x,y,w,h] [--dungeon N]
+                     [--full] [--tick N] [--objects] [-o FILE]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `-g DIR`, `--gamedir DIR` | U6 game directory |
+| `-p FILE`, `--palette FILE` | Path to `U6PAL` |
+| `--region x,y,w,h` | Crop to a tile-coordinate rectangle |
+| `--dungeon N` | Render dungeon level 0-4 instead of the surface |
+| `--full` | Render the entire surface (very large image) |
+| `--tick N` | Animation tick, for water/animated tiles (default: `0`) |
+| `--objects` | Overlay world objects (furniture, items, etc.) from `LZOBJBLK`/`LZDNGBLK` |
+| `-o FILE`, `--output FILE` | Output PNG path |
+
+**Examples**
+```bash
+# One surface superchunk, with object overlay.
+titan u6 map-render -g "C:/Ultima6" --region 0,0,64,64 --objects -o chunk0.png
+
+# A dungeon level.
+titan u6 map-render -g "C:/Ultima6" --dungeon 0 --objects -o dungeon0.png
+
+# The entire surface world.
+titan u6 map-render -g "C:/Ultima6" --full -o u6_world.png
+```
+
+---
+
+#### `u6 map-audit-zorder`
+
+Whole-map audit for unresolved object z-order ties in `map-render
+--objects`. Reproduces that command's own anchor/overflow/layer-tier
+rules and flags every world coordinate where two or more objects land
+on the exact same final tier -- a coin-flip decided by file order, not
+a deliberate hierarchy. A reported pair is a *candidate*, not a
+confirmed bug -- cross-check against a real screenshot before trusting
+one.
+
+```
+titan u6 map-audit-zorder [-g DIR] [--min-winner-opacity F] [--min-loser-opacity F]
+                           [--limit N] [--dungeons]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `-g DIR`, `--gamedir DIR` | U6 game directory |
+| `--min-winner-opacity F` | Min opacity for a tied tile to count as a plausible occluding "winner" (default: `0.60`) |
+| `--min-loser-opacity F` | Min opacity for a tied tile to count as a real, hideable "loser" (default: `0.10`) |
+| `--limit N` | Max rows to print, `0` = unlimited (default: `200`) |
+| `--dungeons` | Also scan all 5 dungeon levels |
+
+**Examples**
+```bash
+# Surface only, default thresholds.
+titan u6 map-audit-zorder -g "C:/Ultima6"
+
+# Include dungeons, print everything.
+titan u6 map-audit-zorder -g "C:/Ultima6" --dungeons --limit 0
+```
+
+---
+
+### World object and actor commands
+
+---
+
+#### `u6 object-list`
+
+List world objects in a surface block or dungeon level.
+
+```
+titan u6 object-list [-g DIR] [--block N] [--dungeon N] [--limit N]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `-g DIR`, `--gamedir DIR` | U6 game directory |
+| `--block N` | Surface superchunk block number (0-63) |
+| `--dungeon N` | Dungeon level (0-4) instead of a surface block |
+| `--limit N` | Max rows to print (default: `200`) |
+
+**Example**
+```bash
+titan u6 object-list -g "C:/Ultima6" --block 5
+```
+
+---
+
+#### `u6 egg-list`
+
+List every egg (object spawner) in a surface block or dungeon level,
+with what it spawns.
+
+```
+titan u6 egg-list [-g DIR] [--block N] [--dungeon N] [--limit N]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `-g DIR`, `--gamedir DIR` | U6 game directory |
+| `--block N` | Surface superchunk block number (0-63) |
+| `--dungeon N` | Dungeon level (0-4) instead of a surface block |
+| `--limit N` | Max rows to print (default: `200`) |
+
+**Example**
+```bash
+titan u6 egg-list -g "C:/Ultima6" --dungeon 2
+```
+
+---
+
+#### `u6 actor-list`
+
+List the NPC/actor identity table (position, appearance, stats).
+
+```
+titan u6 actor-list [-g DIR] [--all]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `-g DIR`, `--gamedir DIR` | U6 game directory |
+| `--all` | Show all 256 actor slots, including inactive/unused ones |
+
+**Example**
+```bash
+titan u6 actor-list -g "C:/Ultima6"
+```
+
+---
+
+### Story and save state commands
+
+---
+
+#### `u6 gamestate-dump`
+
+Show party roster, player state, and game clock/weather from `objlist`.
+
+```
+titan u6 gamestate-dump [-g DIR]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `-g DIR`, `--gamedir DIR` | U6 game directory |
+
+**Example**
+```bash
+titan u6 gamestate-dump -g "C:/Ultima6/SAVEGAME"
+```
+
+---
+
+#### `u6 flags-dump`
+
+Dump every actor's `talk_flags` plus `quest_flag`/`knows_gargish`.
+
+```
+titan u6 flags-dump <source> [--all]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `source` | A gamedir (`LZDNGBLK`) or a save's `SAVEGAME` folder (`OBJLIST`) |
+| `--all` | Show every actor, including all-zero `talk_flags` |
+
+**Example**
+```bash
+titan u6 flags-dump "C:/Ultima6/SAVEGAME"
+```
+
+---
+
+#### `u6 flags-compare`
+
+Diff story-flag state (`talk_flags`, `quest_flag`, `knows_gargish`)
+between two sources.
+
+```
+titan u6 flags-compare <source_a> <source_b>
+```
+
+| Argument | Description |
+|----------|-------------|
+| `source_a` | First gamedir or `SAVEGAME` folder |
+| `source_b` | Second gamedir or `SAVEGAME` folder |
+
+**Example**
+```bash
+titan u6 flags-compare "C:/Ultima6" "C:/Ultima6/SAVEGAME"
+```
+
+---
+
+#### `u6 flags-set`
+
+Set/clear one actor's talk flag, or the quest/gargish global flag, in
+a save's `OBJLIST`.
+
+```
+titan u6 flags-set <savegame> [--actor N] [--flag N] [--value 0|1]
+                    [--quest-flag N] [--gargish 0|1] [-o FILE] [--in-place]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `savegame` | A save's `SAVEGAME` folder (containing `OBJLIST`) |
+| `--actor N` | Actor ID (0-255) whose talk flag to set |
+| `--flag N` | Talk-flag bit index (0-7); requires `--actor` |
+| `--value 0\|1` | `0` to clear, `1` to set; requires `--actor`/`--flag` |
+| `--quest-flag N` | Set the global `quest_flag` byte |
+| `--gargish 0\|1` | Set whether the player knows Gargish |
+| `-o FILE`, `--output FILE` | Write the modified `OBJLIST` here instead of alongside the original |
+| `--in-place` | Overwrite the save's own `OBJLIST` (backed up to `OBJLIST.bak` first) |
+
+**Examples**
+```bash
+# Set talk flag bit 3 for actor 42, writing a new file.
+titan u6 flags-set "C:/Ultima6/SAVEGAME" --actor 42 --flag 3 --value 1 -o OBJLIST.new
+
+# Clear the quest flag in place (backs up OBJLIST.bak first).
+titan u6 flags-set "C:/Ultima6/SAVEGAME" --quest-flag 0 --in-place
+```
+
+---
+
+### Dialogue commands
+
+---
+
+#### `u6 converse-dump`
+
+Disassemble one or all scripts from a `CONVERSE.A`/`CONVERSE.B` library file.
+
+```
+titan u6 converse-dump <file> [--item N] [--entry-size N] [--size-header] [-o DIR]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to a U6 conversation library file (`CONVERSE.A` or `CONVERSE.B`) |
+| `--item N` | Single item index to disassemble (default: every non-empty item) |
+| `--entry-size N` | `2` for lib_16, `4` for lib_32 (default: `4`) |
+| `--size-header` | File has a leading 4-byte size header |
+| `-o DIR`, `--output DIR` | Output directory; omit to print to stdout |
+
+**Example**
+```bash
+titan u6 converse-dump CONVERSE.A --item 5
+```
+
+---
+
+### Text and reference data commands
+
+---
+
+#### `u6 font-export`
+
+Export the English and runic/gargoyle fonts from `U6.CH` as contact sheets.
+
+```
+titan u6 font-export <file> [--text STR] [--scale N] [-o DIR]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `U6.CH` |
+| `--text STR` | Also render this text in both fonts, for comparison |
+| `--scale N` | Pixel scale factor for the exported images (default: `3`) |
+| `-o DIR`, `--output DIR` | Output directory |
+
+**Example**
+```bash
+titan u6 font-export U6.CH --text "Lord British" -o fonts/
+```
+
+---
+
+#### `u6 look-dump`
+
+Dump `LOOK.LZD`'s tile-number -> object-name table.
+
+```
+titan u6 look-dump <file> [-o DIR]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `LOOK.LZD` |
+| `-o DIR`, `--output DIR` | Output directory |
+
+**Example**
+```bash
+titan u6 look-dump LOOK.LZD -o out/
+```
+
+---
+
+#### `u6 book-dump`
+
+Dump one or all book/sign texts from `BOOK.DAT`.
+
+```
+titan u6 book-dump <file> [--book N] [-o DIR]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `BOOK.DAT` |
+| `--book N` | Single book/sign index to print (default: dump every text) |
+| `-o DIR`, `--output DIR` | Output directory |
+
+**Example**
+```bash
+titan u6 book-dump BOOK.DAT --book 0
+```
+
+---
+
+#### `u6 schedule-dump`
+
+Dump one or all actors' schedules from `SCHEDULE`.
+
+```
+titan u6 schedule-dump <file> [--actor N] [-o DIR]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `SCHEDULE` |
+| `--actor N` | Single actor ID (0-255) (default: every actor with a schedule) |
+| `-o DIR`, `--output DIR` | Output directory; omit to print to stdout |
+
+**Example**
+```bash
+titan u6 schedule-dump SCHEDULE --actor 0
+```
+
+---
+
+## Ultima 9 commands (`titan u9`)
+
+All commands below are invoked as `titan u9 <command>`. Ultima 9's file
+formats are still an early work in progress compared to U7/U8 -- FLX
+archive reading, `TYPENAME.FLX`, and `sound/*.flx` (Speech/sfx/music)
+decoding are supported so far.
+
+### FLX archive commands
+
+---
+
+#### `u9 flx-list`
+
+List an Ultima 9 FLX archive's directory entries (offset, length, used/empty).
+
+```
+titan u9 flx-list <file>
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to a U9 `.flx`/`.FLX` file |
+
+**Example**
+```bash
+titan u9 flx-list sound/Speech.flx
+```
+
+---
+
+#### `u9 flx-extract`
+
+Extract one entry from an Ultima 9 FLX archive as a raw `.bin` file.
+
+```
+titan u9 flx-extract <file> <index> [-o DIR]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to a U9 `.flx`/`.FLX` file |
+| `index` | Entry index to extract |
+| `-o DIR`, `--output DIR` | Output directory (default: `.`) |
+
+**Example**
+```bash
+titan u9 flx-extract sound/sfx.flx 42 -o out/
+```
+
+---
+
+#### `u9 flx-extract-all`
+
+Extract every used entry from an Ultima 9 FLX archive as raw `.bin` files.
+
+```
+titan u9 flx-extract-all <file> [-o DIR]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to a U9 `.flx`/`.FLX` file |
+| `-o DIR`, `--output DIR` | Output directory (default: `<file>_entries/`) |
+
+**Example**
+```bash
+titan u9 flx-extract-all sound/sfx.flx -o sfx_entries/
+```
+
+---
+
+### Metadata commands
+
+---
+
+#### `u9 typename-dump`
+
+Dump type-ID -> display-name pairs from `static/TYPENAME.FLX`.
+
+```
+titan u9 typename-dump <file>
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/TYPENAME.FLX` |
+
+**Example**
+```bash
+titan u9 typename-dump static/TYPENAME.FLX
+```
+
+---
+
+### Sound commands
+
+---
+
+#### `u9 sound-list`
+
+List sound record headers (id, description, format, encoding) in a
+`sound/*.flx` archive.
+
+```
+titan u9 sound-list <file>
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to a U9 `sound/*.flx` file (`Speech.flx`, `sfx.flx`, `music.flx`) |
+
+**Example**
+```bash
+titan u9 sound-list sound/sfx.flx
+```
+
+---
+
+#### `u9 sound-extract-pcm`
+
+Extract every PCM-encoded entry in a `sound/*.flx` archive as a playable WAV.
+
+```
+titan u9 sound-extract-pcm <file> [-o DIR]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to a U9 `sound/*.flx` file |
+| `-o DIR`, `--output DIR` | Output directory (default: `<file>_wav/`) |
+
+**Example**
+```bash
+titan u9 sound-extract-pcm sound/sfx.flx -o sfx_pcm_wav/
+```
+
+---
+
+#### `u9 sound-extract`
+
+Extract every entry this project can decode -- PCM, mono/stereo ADPCM
+(EA-XA), and mono EA MicroTalk (speech) -- as a playable WAV. This is
+the recommended command for `Speech.flx`/`sfx.flx`/`music.flx`; it
+decodes every entry type currently supported and reports a per-reason
+count of anything skipped.
+
+```
+titan u9 sound-extract <file> [-o DIR]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to a U9 `sound/*.flx` file |
+| `-o DIR`, `--output DIR` | Output directory (default: `<file>_wav/`) |
+
+**Examples**
+```bash
+# All 7,010 Speech.flx entries decode (EA MicroTalk)
+titan u9 sound-extract sound/Speech.flx -o speech_wav/
+
+# All 1,750 sfx.flx entries decode (PCM + mono/stereo ADPCM)
+titan u9 sound-extract sound/sfx.flx -o sfx_wav/
+
+# All 40 music.flx entries decode (stereo ADPCM)
+titan u9 sound-extract sound/music.flx -o music_wav/
+```
+
+---
+
+### 3D model commands
+
+---
+
+#### `u9 model-info`
+
+Print a model's limb/LOD/material/texture summary: header bounds,
+sphere, LOD thresholds, and a per-limb table (parent, root, position,
+plus each LOD's triangle/vertex/material counts and texture IDs). With
+`--types`/`--typenames` both given, also prints any possible name(s)
+for the model (see `titan.u9.model_naming`'s module docstring for why
+there can be zero, one, or several).
+
+```
+titan u9 model-info <file> <model_id> [--types TYPES] [--typenames TYPENAMES]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/sappear.flx` |
+| `model_id` | Model ID (0-7999) to inspect |
+| `--types FILE` | Path to `static/TYPES.DAT` (with `--typenames`, shows possible name(s)) |
+| `--typenames FILE` | Path to `static/TYPENAME.FLX` (with `--types`, shows possible name(s)) |
+
+**Example**
+```bash
+titan u9 model-info static/sappear.flx 2 --types static/TYPES.DAT --typenames static/TYPENAME.FLX
+```
+
+---
+
+#### `u9 model-export`
+
+Export one model to OBJ+MTL(+PNG textures) and/or binary STL, then
+(by default) render two preview images: `preview.png` at PyVista's
+default isometric angle, and `preview_front.png` at that same angle
+rotated 180 degrees. There's no way to know a model's actual "front"
+direction from the exported data alone, but the default angle
+consistently turned out to be a rear-ish view on the humanoid models
+checked, so the rotated shot reliably ends up front-ish instead --
+hence the naming. The limb hierarchy is flattened to one shared world
+space (OBJ/STL have no node/parent concept); winding is reversed by
+default to match real stored face normals (see
+`titan.u9.mesh_export`'s module docstring). STL is geometry-only by
+format limitation -- pass `--textures` for a textured OBJ+MTL+PNG
+result.
+
+There is no file that names a `sappear.flx` model directly -- with
+`--types`/`--typenames` both given, the output folder/file stem is
+named via the indirect `TYPES.DAT`/`TYPENAME.FLX` link (e.g.
+`model_01805_lord-british`) wherever a name can be found (about 45% of
+models in this project's test copy of the game); otherwise it falls
+back to the bare numeric ID, same as without those options.
+
+Preview rendering (`--preview`, on by default) requires the optional
+`pyvista` package (`pip install pyvista`) -- if it isn't installed,
+`model-export` still succeeds and just prints a one-line note that the
+preview was skipped, rather than failing.
+
+```
+titan u9 model-export <file> <model_id> [-t TEXTURES] [-p PALETTE] [--types TYPES] [--typenames TYPENAMES] [--lod N] [-f FORMAT] [-o DIR] [--preview/--no-preview]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/sappear.flx` |
+| `model_id` | Model ID (0-7999) to export |
+| `-t FILE`, `--textures FILE` | Path to a texture archive -- prefer `bitmap16.flx` or `bitmapsh.flx` (`bitmapC.flx` is mostly an unsupported compressed format) |
+| `-p FILE`, `--palette FILE` | Path to `static/ankh.pal` -- colors 8-bit textures (default: flat grayscale) |
+| `--types FILE` | Path to `static/TYPES.DAT` (with `--typenames`, names the output folder/files) |
+| `--typenames FILE` | Path to `static/TYPENAME.FLX` (with `--types`, names the output folder/files) |
+| `--lod N` | LOD level to export (default: `0`, highest detail) |
+| `-f FORMAT`, `--format FORMAT` | `obj`, `stl`, or `both` (default: `obj`) |
+| `-o DIR`, `--output DIR` | Output directory (default: `model_<id>[_<name>]/`) |
+| `--preview` / `--no-preview` | Also render `preview.png` + `preview_front.png` (default: `--preview`; needs `pyvista`) |
+
+**Examples**
+```bash
+# Textured OBJ (+ MTL + PNG textures) + preview.png/preview_front.png for a humanoid NPC model.
+titan u9 model-export static/sappear.flx 2 -t static/bitmap16.flx -o model_2/
+
+# Also color 8-bit textures with the real palette instead of grayscale.
+titan u9 model-export static/sappear.flx 2 -t static/bitmapsh.flx -p static/ankh.pal -o model_2/
+
+# Same, but with a human-readable name in the output folder/file names
+# (e.g. model_01805_lord-british.obj) wherever TYPES.DAT/TYPENAME.FLX has one.
+titan u9 model-export static/sappear.flx 1805 -t static/bitmap16.flx \
+  --types static/TYPES.DAT --typenames static/TYPENAME.FLX
+
+# Both OBJ and STL, LOD 1.
+titan u9 model-export static/sappear.flx 2 -t static/bitmap16.flx --lod 1 -f both -o model_2_lod1/
+
+# Geometry-only STL, no textures needed, skip the preview render.
+titan u9 model-export static/sappear.flx 2 -f stl -o model_2_stl/ --no-preview
+```
+
+---
+
+#### `u9 model-export-all`
+
+Batch version of `model-export`: exports every used model in a
+`sappear.flx` archive, one subfolder each, with the exact same options
+(textures, palette, naming, LOD, format, preview). Prints periodic
+progress and a final summary (parse failures, no-geometry models,
+exported/named counts, preview stats).
+
+```
+titan u9 model-export-all <file> [-t TEXTURES] [-p PALETTE] [--types TYPES] [--typenames TYPENAMES] [--lod N] [-f FORMAT] [-o DIR] [--preview/--no-preview]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/sappear.flx` |
+| `-t FILE`, `--textures FILE` | Path to a texture archive -- prefer `bitmap16.flx` or `bitmapsh.flx` (`bitmapC.flx` is mostly an unsupported compressed format) |
+| `-p FILE`, `--palette FILE` | Path to `static/ankh.pal` -- colors 8-bit textures (default: flat grayscale) |
+| `--types FILE` | Path to `static/TYPES.DAT` (with `--typenames`, names each output folder/files) |
+| `--typenames FILE` | Path to `static/TYPENAME.FLX` (with `--types`, names each output folder/files) |
+| `--lod N` | LOD level to export (default: `0`, highest detail) |
+| `-f FORMAT`, `--format FORMAT` | `obj`, `stl`, or `both` (default: `obj`) |
+| `-o DIR`, `--output DIR` | Output directory (default: `model_export/`) |
+| `--preview` / `--no-preview` | Also render a preview for each model (default: `--preview`; needs `pyvista`) |
+
+**Example**
+```bash
+titan u9 model-export-all static/sappear.flx -t static/bitmap16.flx -p static/ankh.pal \
+  --types static/TYPES.DAT --typenames static/TYPENAME.FLX -o model_export/
+```
+
+---
+
 ## Configuration (titan.toml)
 
 ### File format
 
 The legacy flat format is still supported (treated as Ultima 8 config).
-The new multi-game format uses `[u8.*]`, `[u7bg.*]`, `[u7si.*]` sections.
+The new multi-game format uses `[u8.*]`, `[u7bg.*]`, `[u7si.*]`, and
+`[u6.*]` sections. `titan setup` currently detects and writes U8/U7
+sections only -- `[u6.game] base` must be added manually (see below).
+Ultima 9 commands take explicit file paths and have no `titan.toml`
+integration yet.
 
 #### Legacy format (Ultima 8 only)
 
@@ -2414,7 +3266,14 @@ static   = "STATIC/"
 shapes   = "STATIC/SHAPES.VGA"
 palette  = "STATIC/PALETTES.FLX"
 gamedat  = "gamedat/"
+
+[u6.game]
+base     = "<Ultima 6 install>"
 ```
+
+U6 has just the one `base` key (unlike U7/U8, a real U6 install has no
+path variability -- all commands look for the standard fixed filenames
+directly under `base`).
 
 ### Search order
 
@@ -2493,5 +3352,37 @@ A value on the command line always wins.
 | `dialogue copy` | Optionally copy NPC JSON files and META sidecars to a destination folder |
 | `dialogue validate` | Validate dialogue runtime artifacts (`--content-lint` is unfinished) |
 | `dialogue launch` | Launch local dialogue web viewer (`--host/--port` optional advanced overrides) |
+| `u6 lzw-decompress` | Decompress a single U6 LZW file to raw bytes |
+| `u6 lib-list` | List a U6 library file's items |
+| `u6 lib-extract` | Extract one item from a U6 library file |
+| `u6 lib-extract-all` | Extract every non-empty item from a U6 library file |
+| `u6 tileflag-dump` | Parse `TILEFLAG` and dump all entries as a readable table |
+| `u6 palette-export` | Export `U6PAL` as a PNG swatch + text dump |
+| `u6 tile-export` | Export one U6 tile to PNG |
+| `u6 tile-export-all` | Batch-export a range of U6 tiles to PNG |
+| `u6 map-render` | Render the U6 surface world or a dungeon level to PNG |
+| `u6 map-audit-zorder` | Flag candidate object z-order ties in `map-render --objects` |
+| `u6 object-list` | List world objects in a surface block or dungeon level |
+| `u6 egg-list` | List every egg (object spawner) in a surface block or dungeon level |
+| `u6 actor-list` | List the NPC/actor identity table |
+| `u6 gamestate-dump` | Show party roster, player state, and game clock/weather |
+| `u6 flags-dump` | Dump every actor's talk flags plus quest/gargish state |
+| `u6 flags-compare` | Diff story-flag state between two sources |
+| `u6 flags-set` | Set/clear an actor's talk flag or the quest/gargish global flag in a save |
+| `u6 converse-dump` | Disassemble scripts from a `CONVERSE.A`/`CONVERSE.B` library file |
+| `u6 font-export` | Export the English and runic/gargoyle fonts from `U6.CH` |
+| `u6 look-dump` | Dump `LOOK.LZD`'s tile-number → object-name table |
+| `u6 book-dump` | Dump book/sign texts from `BOOK.DAT` |
+| `u6 schedule-dump` | Dump actor schedules from `SCHEDULE` |
+| `u9 flx-list` | List an Ultima 9 FLX archive's directory entries |
+| `u9 flx-extract` | Extract one entry from a U9 FLX archive |
+| `u9 flx-extract-all` | Extract every used entry from a U9 FLX archive |
+| `u9 typename-dump` | Dump type-ID → display-name pairs from `TYPENAME.FLX` |
+| `u9 sound-list` | List sound record headers in a `sound/*.flx` archive |
+| `u9 sound-extract-pcm` | Extract PCM-encoded entries from a `sound/*.flx` archive as WAV |
+| `u9 sound-extract` | Extract every decodable entry (PCM/ADPCM/EA MicroTalk) as WAV |
+| `u9 model-info` | Print a model's limb/LOD/material/texture summary |
+| `u9 model-export` | Export one model to OBJ+MTL(+PNG textures) and/or STL |
+| `u9 model-export-all` | Batch version of `model-export`, over every used model in a `sappear.flx` |
 | `setup` | First-time setup wizard — creates `titan.toml` |
 | `config` | Show or edit active `titan.toml` |

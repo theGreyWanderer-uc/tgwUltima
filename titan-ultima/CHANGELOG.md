@@ -10,6 +10,111 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ---
 
+## [0.7.1]
+
+### Added
+
+- Added the `titan.u9` subpackage: initial format-reading support for
+  Ultima 9: Ascension.
+  - **Archives & metadata**: FLX archive directory reading (used by
+    `sound/*.flx`, `static/TYPENAME.FLX`, and other U9 containers);
+    `TYPENAME.FLX` type-ID-to-display-name decoding.
+  - **Sound**: a shared 0x3C-byte sound-record header reader covering
+    `Speech.flx`, `sfx.flx`, and `music.flx` alike (id, description,
+    frequency, bit depth, channels, encoding type); PCM repackaging;
+    stereo ADPCM decode (EA-XA, `music.flx`); mono ADPCM decode (EA-XA,
+    some `sfx.flx` entries, a distinct 15-byte block shape from the
+    stereo path); EA MicroTalk speech decode (`Speech.flx`, a multipulse
+    CELP/RELP codec ported from vgmstream's open-source reference
+    decoder). All four decode paths were validated against real game
+    archives (cross-checked against independent decodes where a
+    reference was available) before being wired up, and every
+    `sfx.flx`/`music.flx`/`Speech.flx` entry in this project's test
+    copy of the game now decodes to a playable WAV.
+  - **3D models & textures**: a `static/sappear.flx` mesh reader,
+    limb hierarchies (rigid body-part transforms, not vertex skinning),
+    per-limb LODs, per-corner vertex/UV/normal data, and materials. A bitmap-archive texture reader
+    (`bitmap16.flx`/`bitmapC.flx`/`bitmapsh.flx`: 8-bit paletted and
+    16-bit 565/5551 pixel formats) and OBJ+MTL+PNG / binary-STL
+    exporters that flatten the limb hierarchy to world space (STL is
+    geometry-only by format limitation; OBJ carries full materials and
+    textures). Checked against every real entry in this project's test
+    copy of the game: 3,748/3,764 models parse (16 are genuinely
+    corrupt upstream data, matching a model the reference importer's
+    own author already flags as broken); of those, 3,657 export
+    successfully and the remaining 91 have no visible geometry to
+    export (e.g. collision-only placeholders). All 5,044 distinct
+    textures referenced across every model resolved successfully from
+    `bitmap16.flx` alone. OBJ UVs are flipped (`1.0 - v`) to match
+    OBJ/OpenGL's texture-space convention, the opposite of the source
+    data's own.
+  - **Real palette colors for 8-bit textures**: `static/ankh.pal`
+    (confirmed real: 256 RGB entries, cross-validated by decoding the
+    same placeholder texture through both the 16-bit and 8-bit texture
+    sets and matching color families) recovers true colors for 8-bit
+    textures instead of the previous flat-grayscale fallback (kept as
+    the default when no palette is given). Every real 8-bit texture
+    checked across all three bitmap archives decoded to a valid,
+    in-range palette index.
+  - **Model naming**: since no file names a `sappear.flx` model
+    directly, `model-info`/`model-export` can optionally derive a
+    best-effort label via the indirect `TYPES.DAT` (`type_id` ->
+    `default_model_id`) -> `TYPENAME.FLX` (`type_id` -> display name)
+    link, e.g. naming model 1805's export `model_01805_lord-british`.
+    This mapping is inherently partial (about 45% of models in this
+    project's test copy of the game resolve to at least one name) and
+    not unique (several named types commonly share one generic body
+    mesh) -- both are reported honestly rather than papered over.
+  - **Preview rendering**: `model-export` can also render two preview
+    images (`preview.png` + `preview_front.png`, the latter the same
+    angle rotated 180 degrees) as part of the same export (on by
+    default; skips cleanly with a note if the optional `pyvista`
+    dependency isn't installed). Textured multi-material models are
+    rendered via VTK's full scene importer (`vtkOBJImporter`), not a
+    naive single-texture OBJ load, confirmed the naive approach
+    silently renders every material but one as flat gray on a real
+    16-material export, while the scene importer renders all of them
+    correctly. The second, rotated render was added after noticing the
+    default angle consistently showed the back of humanoid models.
+    Textures render with mipmapping, interpolation, and 8x anisotropic
+    filtering to avoid moire noise on high-frequency detail (e.g. fur).
+  - `titan u9` CLI: `flx-list`, `flx-extract`, `flx-extract-all`,
+    `typename-dump`, `sound-list`, `sound-extract-pcm`, `sound-extract`,
+    `model-info`, `model-export`, `model-export-all` (same options as
+    `model-export`, batched over every used model in a `sappear.flx`).
+- Added `titan u6 map-audit-zorder`: reproduces `map-render --objects`'s
+  own anchor/overflow/layer-tier rules to flag candidate same-tier
+  object ties (the pattern behind every hidden-object bug fixed below)
+  for manual review, rather than needing to spot them by eye.
+
+### Fixed
+
+- Fixed a wide category of z-order/compositing bugs in `u6 map-render
+  --objects`, where an object sharing a map coordinate with another was
+  incorrectly hiding it (or getting hidden by it) instead of both
+  rendering correctly:
+  - A signpost was completely erasing its own directional plaque at 26+
+    map coordinates instead of merely peeking through its transparent
+    corners; the 2 spots pairing two plaques on one post needed a
+    further coordinate-specific fix so the losing plaque doesn't
+    independently repaint a second, unwanted plank next to the correct
+    one.
+  - A cookfire's logs, a basket's contents, a wall-mounted weapon, a
+    doorway's door, and carpet/secret-door floor tiles were each
+    winning or losing file-order coin-flip ties against the wrong
+    object.
+  - Ground clutter in dungeon loot piles (a dead body vs. a pile of
+    bones, a club vs. a dead gargoyle, small items vs. a dropped piece
+    of armor, blood vs. a cleaver/knife, a magic bow vs. a map
+    fragment) was hidden by same-tier objects it should visually sit on
+    top of.
+- Fixed several of the above by promoting the confirmed *winning* tile
+  to the foreground tier rather than demoting the loser, after an
+  earlier attempt at the latter regressed unrelated matchups (a
+  demoted "loser" losing to supporting furniture it should still beat).
+
+---
+
 ## [0.7.0]
 
 ### Added
