@@ -276,6 +276,80 @@ titan u8 shape-import edited_frames/ --original shapes/0001.shp -p U8PAL.PAL -o 
 
 ---
 
+#### `u8 shape-convert-u7`
+
+Convert a U8 static/scenery shape into a U7/Exult-compatible shape, for
+porting U8 art into a U7 de-make (see `titan.u8.u7_shape_convert`'s
+module docstring for the full reasoning). Both engines share the same
+2:1 dimetric projection and 8-direction sprite convention, so this is a
+**resize + palette requantize + hotspot-convention shift** (U8's
+bottom-center hotspot -> U7's bottom-right corner), not a geometric
+reprojection. Target size is footprint-calibrated against a real U7
+`STATIC` directory's own `SHAPES.VGA`/`TFA.DAT` (matched by tile
+footprint, then applied as one uniform scale factor -- not a forced
+absolute width/height, which real testing showed distorts shapes whose
+aspect ratio doesn't match the "typical" object at that footprint).
+Static/scenery shapes only (furniture, items, decor) -- not actor/NPC
+animation sets, a distinct frame-semantics problem. **Known
+limitation**: multi-orientation objects (e.g. a desk with separate U8
+shapes per facing) don't reliably map onto U7's compass convention --
+confirmed both mathematically and visually, and confirmed *not*
+fixable by a per-pixel rotate/skew (produces a garbled result; see the
+module docstring for the full investigation). Visually verify facing
+when placing converted multi-orientation objects.
+
+```
+titan u8 shape-convert-u7 <file> <shape_num> --typeflag FILE --u7-static DIR [--u8-palette FILE] [--u7-palette FILE] [-o FILE]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to the U8 `.shp` file to convert |
+| `shape_num` | This shape's number in `TYPEFLAG.DAT`/`U8SHAPES.FLX` (for footprint lookup) |
+| `--typeflag FILE` | Path to U8's `TYPEFLAG.DAT` |
+| `--u7-static DIR` | Path to a real U7/Exult `STATIC` directory (`SHAPES.VGA` + `TFA.DAT`) |
+| `--u8-palette FILE` | Path to `U8PAL.PAL` |
+| `--u7-palette FILE` | Path to U7's `PALETTES.FLX` (default: `<u7-static>/PALETTES.FLX`) |
+| `-o FILE`, `--output FILE` | Output `.shp` path (default: `<name>_u7.shp`) |
+
+**Example**
+```bash
+titan u8 shape-convert-u7 shapes/0078.shp 78 --typeflag STATIC/TYPEFLAG.DAT \
+  --u7-static /path/to/ultima7/STATIC --u8-palette STATIC/U8PAL.PAL -o 0078_u7.shp
+```
+
+---
+
+#### `u8 shape-convert-u7-all`
+
+Batch version of `shape-convert-u7`: converts every used shape in a
+`U8SHAPES.FLX` archive, one `.shp` file each (named `<shape_num>.shp`),
+with the exact same options. The U7 footprint size calibration table
+is built once and reused for the whole batch. Real-data run (BG
+`U8SHAPES.FLX`, 2048 slots): 855 shapes converted (21,450 total
+frames), 1,193 empty slots skipped, 0 failures.
+
+```
+titan u8 shape-convert-u7-all <file> --typeflag FILE --u7-static DIR [--u8-palette FILE] [--u7-palette FILE] [-o DIR]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `U8SHAPES.FLX` |
+| `--typeflag FILE` | Path to U8's `TYPEFLAG.DAT` |
+| `--u7-static DIR` | Path to a real U7/Exult `STATIC` directory (`SHAPES.VGA` + `TFA.DAT`) |
+| `--u8-palette FILE` | Path to `U8PAL.PAL` |
+| `--u7-palette FILE` | Path to U7's `PALETTES.FLX` (default: `<u7-static>/PALETTES.FLX`) |
+| `-o DIR`, `--output DIR` | Output directory (default: `u7_converted/`) |
+
+**Example**
+```bash
+titan u8 shape-convert-u7-all STATIC/U8SHAPES.FLX --typeflag STATIC/TYPEFLAG.DAT \
+  --u7-static /path/to/ultima7/STATIC --u8-palette STATIC/U8PAL.PAL -o u7_shapes/
+```
+
+---
+
 ### Palette commands
 
 ---
@@ -975,19 +1049,26 @@ titan u7 shape-export SHAPES.VGA --shape 177 -p PALETTES.FLX \
 
 #### `u7 shape-batch`
 
-Batch-export shapes from a VGA Flex archive to PNG.
+Batch-export shapes from a VGA Flex archive, **or standalone `.shp`
+files from a directory** (e.g. `titan u8 shape-convert-u7-all`'s own
+output -- one file per shape rather than one combined archive), to
+PNG. Auto-detected from whether `file` is a directory or a file;
+directory input skips VGA-only options (`--range-start`/`--range-end`)
+and auto-detects ground-tile vs. RLE-sprite framing per file (no VGA
+shape-index context needed there).
 
 ```
-titan u7 shape-batch <file> [-p PAL] [-o DIR] [--range START END]
+titan u7 shape-batch <file-or-dir> [-p PAL] [-o DIR] [--range-start N] [--range-end N]
                      [--indexed] [--cycle-phase MS]
 ```
 
 | Argument | Description |
 |----------|-------------|
-| `file` | Path to a VGA Flex archive (e.g. `SHAPES.VGA`, `FACES.VGA`) |
+| `file` | Path to a VGA Flex archive (e.g. `SHAPES.VGA`, `FACES.VGA`), or a directory of standalone `.shp` files |
 | `-p FILE`, `--palette FILE` | Path to `PALETTES.FLX` or raw `.pal` (default: greyscale) |
 | `-o DIR`, `--output DIR` | Output directory (default: `<name>_png/`) |
-| `--range START END` | Shape index range to export (default: all) |
+| `--range-start N` | First shape index to export (VGA archive input only; default: 0) |
+| `--range-end N` | Last shape index, exclusive (VGA archive input only; default: all) |
 | `--indexed` | Export palette-indexed (`P`-mode) PNGs instead of flattening to RGBA |
 | `--cycle-phase MS` | Preview the palette rotated to this elapsed time in milliseconds |
 
@@ -998,8 +1079,11 @@ doesn't generalize across a batch of unrelated shapes.
 **Examples**
 ```bash
 titan u7 shape-batch SHAPES.VGA -p PALETTES.FLX -o shapes_png/
-titan u7 shape-batch FACES.VGA -p PALETTES.FLX -o faces_png/ --range 0 50
+titan u7 shape-batch FACES.VGA -p PALETTES.FLX -o faces_png/ --range-start 0 --range-end 50
 titan u7 shape-batch SHAPES.VGA -p PALETTES.FLX --indexed -o shapes_indexed/
+
+# Directory of standalone .shp files (e.g. converted from U8).
+titan u7 shape-batch u7_converted/ -p PALETTES.FLX -o u7_converted_png/
 ```
 
 ---
@@ -3393,6 +3477,8 @@ A value on the command line always wins.
 | `shape-export` | Export `.shp` frames to PNG |
 | `shape-batch` | Batch export all shapes to PNG |
 | `shape-import` | Import PNGs back into a shape file |
+| `shape-convert-u7` | Convert a U8 shape into a U7/Exult-compatible shape |
+| `shape-convert-u7-all` | Batch version of `shape-convert-u7`, over every used shape |
 | `sound-export` | Decode one Sonarc `.raw` to WAV |
 | `sound-batch` | Batch decode Sonarc `.raw` files to WAV |
 | `music-export` | Convert one XMIDI `.xmi` to MIDI |

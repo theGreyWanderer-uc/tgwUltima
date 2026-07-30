@@ -800,15 +800,75 @@ def cmd_shape_animate(args: SimpleNamespace) -> int:
     return 0
 
 
+def cmd_shape_batch_dir(args: SimpleNamespace) -> int:
+    """Batch-export every standalone .shp file in a directory to PNG.
+
+    Companion to the VGA-archive path in :func:`cmd_shape_batch` -- for
+    a directory of individually-saved shapes (e.g. `titan u8
+    shape-convert-u7-all`'s output: one `<num>.shp` per shape, not one
+    combined archive). Each file is parsed with :meth:`U7Shape.from_file`,
+    which auto-detects ground-tile vs. RLE-sprite framing on its own
+    (no VGA shape-index context needed, unlike the archive path).
+    """
+    from titan.u7.shape import U7Shape
+    from titan.u7.palette import U7Palette
+
+    srcdir = args.file
+    if args.palette:
+        pal = U7Palette.from_file(args.palette)
+    else:
+        pal = U7Palette.default_palette()
+
+    outdir = args.output or f"{Path(srcdir.rstrip('/\\')).name}_png"
+    os.makedirs(outdir, exist_ok=True)
+
+    indexed = getattr(args, "indexed", False)
+    cycle_phase_ms = getattr(args, "cycle_phase", 0) or 0
+
+    shp_files = sorted(f for f in os.listdir(srcdir) if f.lower().endswith(".shp"))
+    if not shp_files:
+        print(f"No .shp files found in {srcdir}")
+        return 0
+
+    total_frames = 0
+    total_shapes = 0
+
+    for shp_file in shp_files:
+        shp_path = os.path.join(srcdir, shp_file)
+        try:
+            shape = U7Shape.from_file(shp_path)
+        except Exception as e:
+            print(f"  WARNING: Failed {shp_file}: {e}", file=sys.stderr)
+            continue
+        if not shape.frames:
+            continue
+
+        images = shape.to_pngs(pal, indexed=indexed, cycle_phase_ms=cycle_phase_ms)
+        base = Path(shp_file).stem
+        shape_dir = os.path.join(outdir, base)
+        os.makedirs(shape_dir, exist_ok=True)
+
+        for fi, img in enumerate(images):
+            img.save(os.path.join(shape_dir, f"{base}_f{fi:04d}.png"))
+
+        total_shapes += 1
+        total_frames += len(images)
+
+    print(f"Exported {total_frames} frame(s) from {total_shapes} shape(s) to {outdir}/")
+    return 0
+
+
 def cmd_shape_batch(args: SimpleNamespace) -> int:
-    """Batch-export shapes from a VGA Flex archive to PNG."""
+    """Batch-export shapes from a VGA Flex archive, or standalone .shp files from a directory, to PNG."""
     from titan.u7.shape import U7Shape, FIRST_OBJ_SHAPE
     from titan.u7.palette import U7Palette
     from titan.u7.flex import U7FlexArchive
 
     filepath = args.file
+    if os.path.isdir(filepath):
+        return cmd_shape_batch_dir(args)
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
+        print(f"ERROR: File or directory not found: {filepath}", file=sys.stderr)
         return 1
 
     # Load palette
@@ -1367,7 +1427,10 @@ def shape_animate_cmd(
 def shape_batch_cmd(
     file: Annotated[
         str,
-        typer.Argument(help="Path to a VGA Flex archive (e.g. SHAPES.VGA, FACES.VGA)"),
+        typer.Argument(
+            help="Path to a VGA Flex archive (e.g. SHAPES.VGA, FACES.VGA), "
+            "or a directory of standalone .shp files"
+        ),
     ],
     palette: Annotated[
         Optional[str],
@@ -1379,11 +1442,11 @@ def shape_batch_cmd(
     ] = None,
     range_start: Annotated[
         Optional[int],
-        typer.Option("--range-start", help="First shape index to export (default: 0)"),
+        typer.Option("--range-start", help="First shape index to export (default: 0; VGA archive input only)"),
     ] = None,
     range_end: Annotated[
         Optional[int],
-        typer.Option("--range-end", help="Last shape index (exclusive; default: all)"),
+        typer.Option("--range-end", help="Last shape index (exclusive; default: all; VGA archive input only)"),
     ] = None,
     indexed: Annotated[
         bool,
@@ -1400,7 +1463,7 @@ def shape_batch_cmd(
         ),
     ] = 0,
 ) -> None:
-    """Batch-export shapes from a VGA Flex archive to PNG."""
+    """Batch-export shapes from a VGA Flex archive, or standalone .shp files from a directory, to PNG."""
     raise SystemExit(
         cmd_shape_batch(
             SimpleNamespace(

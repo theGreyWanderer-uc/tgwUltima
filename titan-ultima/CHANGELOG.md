@@ -33,6 +33,59 @@ This project uses [Semantic Versioning](https://semver.org/):
   - `titan u9` CLI: `icon-list` (candidate icons with dimensions),
     `icon-export` (any single texture archive entry, mesh-referenced
     or not), `icon-export-all` (batch-export every candidate icon).
+- Added `titan u8 shape-convert-u7` (`titan.u8.u7_shape_convert`): converts
+  a U8 static/scenery shape into a U7/Exult-compatible shape, for
+  porting U8 art into a U7 de-make. Researched directly against the
+  Pentagram and Exult source: both engines turned out to share the
+  same 2:1 dimetric projection and 8-direction sprite convention, so
+  conversion is resize + palette requantize + hotspot-convention shift
+  (U8's bottom-center hotspot -> U7's bottom-right), not a geometric
+  reprojection -- neither engine's source records Origin's original 3D
+  authoring camera, so there's no ground truth to re-derive a
+  "corrected" perspective from anyway. Target size is footprint-
+  calibrated: an empirical (tile footprint -> real pixel size) table
+  built from a real U7 STATIC directory's own `SHAPES.VGA`/`TFA.DAT`,
+  used to derive one *uniform* scale factor by matching pixel area --
+  real-data testing found that forcing an absolute width/height from
+  footprint alone distorts shapes whose aspect ratio doesn't match the
+  "typical" object at that footprint (e.g. a thin support post vs. a
+  squat chest sharing a footprint). Static/scenery scope only (not
+  actor/NPC animation sets, a distinct frame-semantics problem). Scale
+  is derived from a shape's *largest* frame, not its first -- a real
+  U8 shape (580, an animated growth/VFX effect) has frames ranging
+  1x1 up to 119x62 within the same shape, and using the 1x1 first
+  frame as the reference computed a huge scale factor that blew up
+  every sibling frame (one hit a ~41GB allocation during palette
+  requantization during a full-archive batch run). Output dimensions
+  are also hard-clamped to 64px per side either way, matching the
+  real practical U7 shape-size ceiling.
+  - `titan u8` CLI: `shape-convert-u7-all` batch-converts every used
+    shape in a `U8SHAPES.FLX` archive with the same options as
+    `shape-convert-u7`. Real-data run (BG `U8SHAPES.FLX`): 855 shapes
+    converted (21,450 total frames), 0 failures.
+  - Known limitation, investigated in depth: multi-orientation objects
+    (e.g. a desk with separate U8 shapes for different facings) don't
+    have a reliable "same compass direction" mapping onto U7's
+    convention, and this is *not* fixable by a per-pixel transform.
+    The two engines' projections share the same 2:1 scale but disagree
+    on camera azimuth (U7 "East" = pure horizontal screen motion; U8
+    "East" = diagonal) -- solving for the exact relating transform
+    gives precisely a 45-degree rotation plus a 2:1 anisotropic scale,
+    confirmed both mathematically and by direct visual comparison
+    against real `u7examples` art. But applying that transform to an
+    actual rendered U8 sprite (tested, not just derived) produces a
+    garbled result, not a correctly-reangled object -- a flat rendered
+    sprite already bakes in one camera angle's face visibility/
+    occlusion, which a 2D pixel warp can't correctly re-derive for a
+    different angle. See `titan.u8.u7_shape_convert`'s module
+    docstring for the full account. No code change from this --
+    documented as a limitation to visually check for when placing
+    converted multi-orientation objects.
+- `titan u7 shape-batch` now also accepts a directory of standalone
+  `.shp` files (e.g. `shape-convert-u7-all`'s own output), not just a
+  single VGA Flex archive -- auto-detected from whether the argument
+  is a directory or a file. Matches the directory-input convention
+  `titan u8 shape-batch` already had; U7 was missing the equivalent.
 
 ---
 
