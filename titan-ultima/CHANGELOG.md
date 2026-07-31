@@ -4,9 +4,63 @@ All notable changes to **titan-ultima** are documented here.
 
 This project uses [Semantic Versioning](https://semver.org/):
 
-- **MAJOR** (1.0, 2.0, …) — breaking API or CLI changes
-- **MINOR** (0.5, 0.6, …) — new features, new commands, new format support
-- **PATCH** (0.4.1, 0.4.2, …) — bug fixes, docs, internal improvements
+- **MAJOR** (1.0, 2.0, ...): breaking API or CLI changes
+- **MINOR** (0.5, 0.6, ...): new features, new commands, new format support
+- **PATCH** (0.4.1, 0.4.2, ...): bug fixes, docs, internal improvements
+
+---
+
+## [0.7.2]
+
+### Added
+
+- Added `titan uo` for Ultima Online Classic Client extraction and metadata
+  review. The new commands export 2D assets and supporting data from UOP and
+  MUL/IDX client files: art/statics, gumps, textures, lights, hues, radar
+  colors, fonts, sounds, multis, tiledata, `animdata.mul`, `art.def`, all
+  supported `.def` redirect files, localization/speech/skills/system text, and
+  legacy animation frames. Animation exports include body/action/direction
+  resolution metadata using client DEF files, `mobtypes.txt`,
+  `AnimationSequence.uop`, and a packaged body-name metadata cache. UO commands
+  accept an optional client path and can fall back to `[uo.game] base` in
+  `titan.toml`; `titan setup` can detect/prompt for that UO base.
+- Added `titan u9` 2D UI icon discovery and export (`titan.u9.icon`):
+  the texture archives already used for 3D model surface materials
+  (`bitmap16.flx`/`bitmapC.flx`/`bitmapsh.flx`) also hold a large set
+  of standalone 2D UI icons (spell-rune sigils, item icons, ...) mixed
+  into the same index space, with no format-level flag distinguishing
+  them from material textures. The one reliable signal found: every
+  entry a 3D model material actually references is a real surface
+  texture, so the complement, entries no model ever references, is
+  a solid (if not provably exhaustive) set of icon candidates. Real
+  data: 5,044 distinct texture_ids are claimed by `sappear.flx`
+  models, leaving 1,553 of `bitmapsh.flx`'s 6,597 used entries as icon
+  candidates, including a confirmed spell-rune-sigil cluster
+  (entries 568-641). Kept logically separate from existing mesh/texture
+  commands: its own module (`titan.u9.icon`), its own `icon-*` CLI
+  command group, and its own default output directory
+  (`icon_export/`, vs. `model_export/`).
+  - `titan u9` CLI: `icon-list` (candidate icons with dimensions),
+    `icon-export` (any single texture archive entry, mesh-referenced
+    or not), `icon-export-all` (batch-export every candidate icon).
+- Added `titan u8 shape-convert-u7` (`titan.u8.u7_shape_convert`) for
+  converting U8 static/scenery shapes into U7/Exult-compatible shapes.
+  Conversion uses resize, palette requantization, and hotspot adjustment
+  from U8 bottom-center to U7 bottom-right. Output size is calibrated from
+  real U7 shape footprints, based on the largest frame in each U8 shape,
+  and clamped to 64 pixels per side. Actor/NPC animation conversion is out
+  of scope.
+  - Added `shape-convert-u7-all` to batch-convert every used shape in a
+    `U8SHAPES.FLX` archive. A real Black Gate test converted 855 shapes
+    and 21,450 frames with no failures.
+  - Documented the known limitation for multi-orientation objects: changing
+    compass direction cannot be solved with a per-pixel transform because
+    the rendered sprite already bakes in one camera angle.
+- `titan u7 shape-batch` now also accepts a directory of standalone
+  `.shp` files, such as `shape-convert-u7-all` output, not just a
+  single VGA Flex archive. Titan auto-detects whether the argument is a
+  directory or a file. Matches the directory-input convention
+  `titan u8 shape-batch` already had; U7 was missing the equivalent.
 
 ---
 
@@ -43,7 +97,7 @@ This project uses [Semantic Versioning](https://semver.org/):
     corrupt upstream data, matching a model the reference importer's
     own author already flags as broken); of those, 3,657 export
     successfully and the remaining 91 have no visible geometry to
-    export (e.g. collision-only placeholders). All 5,044 distinct
+    export, for example collision-only placeholders. All 5,044 distinct
     textures referenced across every model resolved successfully from
     `bitmap16.flx` alone. OBJ UVs are flipped (`1.0 - v`) to match
     OBJ/OpenGL's texture-space convention, the opposite of the source
@@ -58,13 +112,14 @@ This project uses [Semantic Versioning](https://semver.org/):
     in-range palette index.
   - **Model naming**: since no file names a `sappear.flx` model
     directly, `model-info`/`model-export` can optionally derive a
-    best-effort label via the indirect `TYPES.DAT` (`type_id` ->
-    `default_model_id`) -> `TYPENAME.FLX` (`type_id` -> display name)
-    link, e.g. naming model 1805's export `model_01805_lord-british`.
+    best-effort label through the indirect `TYPES.DAT` mapping
+    (`type_id` to `default_model_id`) and `TYPENAME.FLX` mapping
+    (`type_id` to display name), for example naming model 1805's export
+    `model_01805_lord-british`.
     This mapping is inherently partial (about 45% of models in this
     project's test copy of the game resolve to at least one name) and
     not unique (several named types commonly share one generic body
-    mesh) -- both are reported honestly rather than papered over.
+    mesh); both are reported honestly rather than papered over.
   - **Preview rendering**: `model-export` can also render two preview
     images (`preview.png` + `preview_front.png`, the latter the same
     angle rotated 180 degrees) as part of the same export (on by
@@ -77,7 +132,7 @@ This project uses [Semantic Versioning](https://semver.org/):
     correctly. The second, rotated render was added after noticing the
     default angle consistently showed the back of humanoid models.
     Textures render with mipmapping, interpolation, and 8x anisotropic
-    filtering to avoid moire noise on high-frequency detail (e.g. fur).
+    filtering to avoid moire noise on high-frequency detail such as fur.
   - `titan u9` CLI: `flx-list`, `flx-extract`, `flx-extract-all`,
     `typename-dump`, `sound-list`, `sound-extract-pcm`, `sound-extract`,
     `model-info`, `model-export`, `model-export-all` (same options as
@@ -399,14 +454,14 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Added
 
-- **U7 loose NPC schedule exports** — added `titan u7 npc-dump` for loose
+- **U7 loose NPC schedule exports:** added `titan u7 npc-dump` for loose
   `npc.dat` / `GAMEDAT` data and `titan u7 schedule-dump` for loose
   `schedule.dat`, including automatic sibling `npc.dat` name resolution.
-- **U7 TFA reference output and notes** — added
+- **U7 TFA reference output and notes:** added
   `u7 typeflag-dump --format detail` output plus source-checked parser notes
   for `TFA.DAT`, `SHPDIMS.DAT`, `WGTVOL.DAT`, `OCCLUDE.DAT`, shape classes,
   and BG/SI animation nibbles.
-- **U7 Exult runtime source discovery** — `titan setup` now records live
+- **U7 Exult runtime source discovery:** `titan setup` now records live
   Exult profile `GAMEDAT` paths when initialized, detects mod
   `patch/initgame.dat` archives, and `u7 gamedat-info --mod NAME` can inspect
   configured/user-profile mod sources.
@@ -446,16 +501,16 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Added
 
-- **Expanded `titan setup` wizard** — setup now detects and configures
+- **Expanded `titan setup` wizard:** setup now detects and configures
   Ultima 8 plus Ultima 7 (Black Gate and Serpent Isle) in one pass,
   prints a consolidated path summary, supports confirmation before write,
   and writes multi-game config sections (`[u8.*]`, `[u7bg.*]`, `[u7si.*]`).
-- **New `titan dialogue` command group** — added end-to-end U8 dialogue web
+- **New `titan dialogue` command group:** added end-to-end U8 dialogue web
   workflow commands:
   - `titan dialogue prepare` to generate runtime dialogue artifacts
   - `titan dialogue validate` to verify required outputs
   - `titan dialogue launch` to start the local dialogue web viewer
-- **Dialogue web theme system updates** — added runtime theme switching with
+- **Dialogue web theme system updates:** added runtime theme switching with
   Palettes, preview swatches, tokenized CSS theme
   contract improvements (`--bg-main`, `--font-heading`, `--text-soft`), and
   readability/UX polish for Look/Book surfaces (including clearer book-first
@@ -467,36 +522,36 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Added
 
-- **`u7 map-render` tile-rectangle highlights** — new repeatable
+- **`u7 map-render` tile-rectangle highlights:** new repeatable
   `--highlight-tile-rect tx0,ty0,tx1,ty1,#RRGGBB[AA]` option overlays
   world-tile rectangle bounds on rendered maps. Each rectangle can have
   its own colour code, with optional alpha channel (`#RRGGBBAA`).
-- **Highlight stroke control** — new `--highlight-width` option controls
+- **Highlight stroke control:** new `--highlight-width` option controls
   rectangle outline thickness in pixels.
-- **Highlight visibility controls** — `--highlight-fill-alpha` adds a
+- **Highlight visibility controls:** `--highlight-fill-alpha` adds a
   configurable semi-transparent fill, `--highlight-lift` applies projected
   lift to overlays, and `--highlight-labels` draws per-rectangle coordinate
   labels (`tx0,ty0,tx1,ty1`) for easier map annotation.
-- **Custom highlight labels** — `--highlight-tile-rect` now accepts optional
+- **Custom highlight labels:** `--highlight-tile-rect` now accepts optional
   custom label text (`...,#RRGGBB,label`). Highlight text is centered in each
   rectangle both horizontally and vertically.
-- **Default highlight fill** — fill defaults to `128` (50% opacity), so
+- **Default highlight fill:** fill defaults to `128` (50% opacity), so
   underlying terrain and objects remain visible.
-- **RGBA composited highlight fill** — rectangle fill is rendered through an
+- **RGBA composited highlight fill:** rectangle fill is rendered through an
   overlay layer and composited onto the map for proper translucent blending.
-- **Larger overlay text** — highlight coordinate/custom label text size is
+- **Larger overlay text:** highlight coordinate/custom label text size is
   now tripled for readability on full-world renders.
-- **Zone profiles for `u7 map-render`** — new `--zone-profile` option loads
+- **Zone profiles for `u7 map-render`:** new `--zone-profile` option loads
   canonical rectangle sets from packaged JSON data (`si_zones`,
   `bg_zones`) and renders them through the existing highlight path.
-- **Zone ID filtering** — new repeatable `--zone-id` option selects specific
+- **Zone ID filtering:** new repeatable `--zone-id` option selects specific
   zones from a profile; `--all-zones` includes every zone.
-- **Overlay composition retained** — profile-based zones and manual
+- **Overlay composition retained:** profile-based zones and manual
   `--highlight-tile-rect` overlays can be used together in the same render.
 
 ### Fixed
 
-- **U7 music export sound compatibility** — added a dedicated General MIDI
+- **U7 music export sound compatibility:** added a dedicated General MIDI
   conversion mode to `u7 music-export` (`--target gm`) to address SC-55/
   SC-88 playback issues from MT-32-oriented track data. The conversion path
   now applies GM-friendly patch remapping while preserving MIDI timing.
@@ -507,80 +562,80 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Fixed
 
-- **`map-sample` RLE terrain** — colour-sampled minimap now uses nearby-flat
+- **`map-sample` RLE terrain:** colour-sampled minimap now uses nearby-flat
   fill for RLE terrain shapes, matching the classic renderer. Eliminates
   misleading centre-pixel colours from large sprites.
-- **`map-sample` IFIX overlay removed** — fixed stray coloured specs and
+- **`map-sample` IFIX overlay removed:** fixed stray coloured specs and
   lavender/purple dots caused by sampling single pixels from mountain wall
   and small IFIX object sprites.
-- **`map-sample` void tile halo** — shape 12 frame 0 (palette-cycling void)
+- **`map-sample` void tile halo:** shape 12 frame 0 (palette-cycling void)
   no longer bleeds bright blue around mountains and buildings; also fixed
   `_find_nearby_flat()` whole-chunk fallback to skip the void tile.
-- **`map-sample` fortress floor** — remap shape 18 frame 16 (near-black
+- **`map-sample` fortress floor:** remap shape 18 frame 16 (near-black
   indoor floor) to frame 0 (stone grey) so castle interiors are visible.
-- **`map-sample` grid overlay** — dual-tier grid: blue chunk grid (scale ≤ 2)
+- **`map-sample` grid overlay:** dual-tier grid: blue chunk grid (scale <= 2)
   with coordinate labels + red superchunk grid with SC number labels.
-- **CLI help** — `--grid` descriptions for `map-render` and `map-sample` now
+- **CLI help:** `--grid` descriptions for `map-render` and `map-sample` now
   correctly describe chunk vs superchunk grid behaviour.
 
 ---
 
 ## [0.6.0]
 
-### Added — Ultima 7 support
+### Added: Ultima 7 support
 
-- **Multi-game architecture** — game-specific commands live under `titan u8`
+- **Multi-game architecture:** game-specific commands live under `titan u8`
   and `titan u7` sub-apps; shared commands remain at root.
-- **U7 shapes** — read/write U7 RLE shapes and VGA Flex archives
+- **U7 shapes:** read/write U7 RLE shapes and VGA Flex archives
   (`SHAPES.VGA`, `FACES.VGA`, etc.). `U7Shape.to_bytes()` / `.save()` for
   round-trip encoding. New commands: `shape-export`, `shape-batch`.
-- **U7 palettes** — 12-palette `PALETTES.FLX` support. New: `palette-export`.
-- **U7 music** — Flex-based XMIDI extraction (`ADLIBMUS.DAT`, `MT32MUS.DAT`,
+- **U7 palettes:** 12-palette `PALETTES.FLX` support. New: `palette-export`.
+- **U7 music:** Flex-based XMIDI extraction (`ADLIBMUS.DAT`, `MT32MUS.DAT`,
   etc.) and standalone `.xmi` conversion. Multi-track XMIDI now produces
   MIDI Format 1. New: `u7 music-export`, `u8 music-export`.
-- **U7 sound** — Creative Voice (.voc) decoder with ADPCM support; batch
+- **U7 sound:** Creative Voice (.voc) decoder with ADPCM support; batch
   speech export from `U7SPEECH.SPC`. New: `voc-export`, `speech-export`,
   `u8 sound-export-all`.
-- **U7 map rendering** — parallel oblique projection (classic / flat / steep),
+- **U7 map rendering:** parallel oblique projection (classic / flat / steep),
   IFIX + optional IREG objects, dependency-DAG depth sorting, TFA flag
   filtering, `--full` world render, colour-sampled minimap.
   New: `map-render`, `map-sample`.
-- **U7 type flags** — `TFA.DAT`, `SHPDIMS.DAT`, `WGTVOL.DAT`, `OCCLUDE.DAT`
+- **U7 type flags:** `TFA.DAT`, `SHPDIMS.DAT`, `WGTVOL.DAT`, `OCCLUDE.DAT`
   parser with animation nibbles, shape class enum, and `build_exclude_set()`.
   New: `typeflag-dump` (summary / detail / csv).
-- **U7 savegame reader** — Exult `.sav` (ZIP & FLEX), global flags, save
+- **U7 savegame reader:** Exult `.sav` (ZIP & FLEX), global flags, save
   metadata, NPC stats, schedules. New: `save-list`, `save-extract`,
   `gflag-dump`, `save-info`, `save-npcs`, `save-schedules`.
-- **Multi-game config** — `titan.toml` now supports `[u7bg.*]` / `[u7si.*]`
+- **Multi-game config:** `titan.toml` now supports `[u7bg.*]` / `[u7si.*]`
   sections alongside the existing `[u8.*]` / legacy `[game]` format.
-- **Enhanced grid overlays** — chunk coordinate labels and superchunk
+- **Enhanced grid overlays:** chunk coordinate labels and superchunk
   boundary lines for both U7 and U8 map commands.
 
-### Added — U7 font creation
+### Added: U7 font creation
 
-- **Font wizard** — new `titan u7 font-create` interactive wizard builds
+- **Font wizard:** new `titan u7 font-create` interactive wizard builds
   Exult-compatible font shapes from TrueType sources. Steps: game/archive
   selection, slot picking (11 BG/SI stock presets), TTF source, render
   method, dimensions, palette, preview, and output (`.shp` or Flex patch).
   Non-interactive batch mode via `--config recipe.toml`.
-- **Font rendering pipeline** — `titan.fonts` package: FreeType mono/grayscale
+- **Font rendering pipeline:** `titan.fonts` package: FreeType mono/grayscale
   renderer, palette LUT mapper (7 built-in LUTs), glyph-to-shape encoder.
-- **Hollow gradient rendering** — stroke outline + vertical gradient fill with
+- **Hollow gradient rendering:** stroke outline + vertical gradient fill with
   morphological erosion; 30 built-in gradient presets (from U7 palette and
   [uiGradients](https://uigradients.com)) with ANSI colour swatch display.
   Hex-to-palette resolver maps any CSS gradient to nearest game indices.
-- **Bundled TTFs** — six fonts: dosVga437-win, Ophidean Runes, Britannian
+- **Bundled TTFs:** six fonts: dosVga437-win, Ophidean Runes, Britannian
   Runes I/II/II Sans Serif, and Gargish. See [FONTS_CREDITS.md](FONTS_CREDITS.md).
-- **Exult integration** — parses `exult.cfg` for game paths and font config;
+- **Exult integration:** parses `exult.cfg` for game paths and font config;
   scans game directories for `*font*.vga` archives; shows live slot tables
   from actual Flex data; resolves mod patch directories for archive patching.
-- **Exult Studio preview** — auto-fills frame 65 (the hardcoded thumbnail
+- **Exult Studio preview:** auto-fills frame 65 (the hardcoded thumbnail
   frame) with a representative glyph for non-standard layouts (Gargish,
   Runic, Serpentine).
 
 ### Changed
 
-- **CLI restructure** — U8 commands moved under `titan u8 <cmd>` with
+- **CLI restructure:** U8 commands moved under `titan u8 <cmd>` with
   deprecated root-level aliases. Modules relocated to `titan.u8.*` with
   backward-compatible shims.
 
@@ -597,22 +652,22 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Known issues
 
-- U7 MIDI export doesn't sound 100% yet — some tracks may have timing or
+- U7 MIDI export doesn't sound 100% yet. Some tracks may have timing or
   instrument mapping differences compared to the original game playback.
 
 ---
 
-## [0.5.3] — 2026-03-22
+## [0.5.3] (2026-03-22)
 
 ### Added
 
-- **FLX name tables** — auto-detect and parse embedded name tables
+- **FLX name tables:** auto-detect and parse embedded name tables
   (`SOUND.FLX`, `MUSIC.FLX`); named file extraction (`NNNN_NAME.<ext>`);
   metadata sidecars (`.meta.txt`); `flex-list` Name column; library
   `summary()` / `record_table()` methods.
-- **Speech FLX** — per-NPC speech archives (`E44.FLX`, etc.) with dialogue
+- **Speech FLX:** per-NPC speech archives (`E44.FLX`, etc.) with dialogue
   transcript extraction and Sonarc audio at 11,111 Hz.
-- **Text content detection** — `detect_record_type()` returns `"text"` for
+- **Text content detection:** `detect_record_type()` returns `"text"` for
   plain-ASCII records.
 
 ### Changed
@@ -623,29 +678,29 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 - Name-table heuristic rejects space characters (prevents speech transcript
   false positives).
-- Sidecar extension changed `.txt` → `.meta.txt` to avoid overwriting data.
+- Sidecar extension changed from `.txt` to `.meta.txt` to avoid overwriting data.
 - `from_directory()` rebuild updated for `.meta.txt` sidecars.
 - Build: fix duplicate `.npy` LUT files in wheel (hatchling config).
 - CI: Trusted Publishers (OIDC) for PyPI; remove duplicate trigger.
 
 ---
 
-## [0.4.0] — 2026-03-20
+## [0.4.0] (2026-03-20)
 
 First public release.
 
 ### Added
 
-- **CLI** — 26 Typer-based commands covering Flex archives, shapes, palette,
+- **CLI:** 26 Typer-based commands covering Flex archives, shapes, palette,
   Sonarc audio, XMIDI music, world maps, saves, credits, type-flag data,
   gump layout, colour transforms.
-- **U8 map renderer** — isometric and bird's-eye views with dependency-graph
+- **U8 map renderer:** isometric and bird's-eye views with dependency-graph
   depth sorting, 16 TYPEFLAG filter flags, live-object merge from saves.
-- **Shape round-trip** — export RLE frames to PNG, edit, re-import.
-- **Configuration** — `titan.toml` with auto-path resolution; `titan setup`
+- **Shape round-trip:** export RLE frames to PNG, edit, re-import.
+- **Configuration:** `titan.toml` with auto-path resolution; `titan setup`
   wizard; `titan config` inspector.
-- **Library API** — all CLI capabilities as importable Python modules.
-- **PEP 561** — `py.typed` marker for type checking.
+- **Library API:** all CLI capabilities as importable Python modules.
+- **PEP 561:** `py.typed` marker for type checking.
 
 ---
 
