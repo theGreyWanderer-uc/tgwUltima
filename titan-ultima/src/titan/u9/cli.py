@@ -16,8 +16,10 @@ from types import SimpleNamespace
 from typing import Annotated, Optional
 
 import typer
+from PIL import Image
 
 from titan.u9.flx_archive import U9FlxArchive, U9FlxArchiveError
+from titan.u9.icon import icon_entry_indices
 from titan.u9.mesh_export import MeshExportError, export_obj, export_stl
 from titan.u9.model import U9Model, U9ModelError
 from titan.u9.model_naming import label_for_model, names_for_model
@@ -513,6 +515,131 @@ def cmd_model_export_all(args: SimpleNamespace) -> int:
 
 
 # ============================================================================
+# CLI COMMANDS — 2D UI ICONS (bitmap16.flx/bitmapC.flx/bitmapsh.flx entries
+# not referenced by any sappear.flx model -- see titan.u9.icon)
+# ============================================================================
+
+def cmd_icon_list(args: SimpleNamespace) -> int:
+    """List candidate 2D UI icon entries in a texture archive -- not referenced by any 3D model material."""
+    if not os.path.isfile(args.file):
+        print(f"ERROR: File not found: {args.file}", file=sys.stderr)
+        return 1
+    if not os.path.isfile(args.textures):
+        print(f"ERROR: Texture file not found: {args.textures}", file=sys.stderr)
+        return 1
+
+    try:
+        sappear = U9FlxArchive.from_file(args.file)
+        textures = U9FlxArchive.from_file(args.textures)
+    except U9FlxArchiveError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
+    icon_ids = icon_entry_indices(sappear, textures)
+    print(
+        f"{args.textures} -- {len(icon_ids)} icon candidate(s) of "
+        f"{len(textures.used_entry_indices())} used entries (not referenced by any 3D model material)"
+    )
+    print(f"{'Idx':>6}  {'Size':<10}  {'Bytes':>9}")
+    print("-" * 32)
+    for idx in icon_ids[: args.limit] if args.limit else icon_ids:
+        blob = textures.read_entry(idx)
+        try:
+            frame = decode_frame(blob, 0)
+            size = f"{frame.width}x{frame.height}"
+        except U9TextureError:
+            size = "?"
+        print(f"{idx:>6}  {size:<10}  {len(blob):>9}")
+    if args.limit and len(icon_ids) > args.limit:
+        print(f"... ({len(icon_ids) - args.limit} more; raise --limit to see more)")
+    return 0
+
+
+def cmd_icon_export(args: SimpleNamespace) -> int:
+    """Export one texture archive entry to PNG, regardless of whether any 3D model references it."""
+    if not os.path.isfile(args.textures):
+        print(f"ERROR: File not found: {args.textures}", file=sys.stderr)
+        return 1
+    if args.palette and not os.path.isfile(args.palette):
+        print(f"ERROR: Palette file not found: {args.palette}", file=sys.stderr)
+        return 1
+
+    try:
+        archive = U9FlxArchive.from_file(args.textures)
+    except U9FlxArchiveError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
+    if args.entry_id < 0 or args.entry_id >= archive.num_entries:
+        print(f"ERROR: entry_id {args.entry_id} out of range (0..{archive.num_entries - 1})", file=sys.stderr)
+        return 1
+
+    blob = archive.read_entry(args.entry_id)
+    if not blob:
+        print(f"ERROR: entry {args.entry_id} is an empty/unused archive slot", file=sys.stderr)
+        return 1
+
+    palette = U9Palette.from_file(args.palette) if args.palette else None
+    try:
+        frame = decode_frame(blob, args.frame, palette=palette)
+    except U9TextureError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
+    outdir = args.output or "."
+    os.makedirs(outdir, exist_ok=True)
+    out_path = os.path.join(outdir, f"icon_{args.entry_id:05d}.png")
+    Image.frombytes("RGBA", (frame.width, frame.height), frame.pixels_rgba).save(out_path)
+    print(f"Exported entry {args.entry_id} ({frame.width}x{frame.height}) -> {out_path}")
+    return 0
+
+
+def cmd_icon_export_all(args: SimpleNamespace) -> int:
+    """Batch-export every candidate 2D UI icon (not referenced by any 3D model) to PNG."""
+    if not os.path.isfile(args.file):
+        print(f"ERROR: File not found: {args.file}", file=sys.stderr)
+        return 1
+    if not os.path.isfile(args.textures):
+        print(f"ERROR: Texture file not found: {args.textures}", file=sys.stderr)
+        return 1
+    if args.palette and not os.path.isfile(args.palette):
+        print(f"ERROR: Palette file not found: {args.palette}", file=sys.stderr)
+        return 1
+
+    try:
+        sappear = U9FlxArchive.from_file(args.file)
+        textures = U9FlxArchive.from_file(args.textures)
+    except U9FlxArchiveError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
+    palette = U9Palette.from_file(args.palette) if args.palette else None
+    icon_ids = icon_entry_indices(sappear, textures)
+
+    outdir = args.output or "icon_export"
+    os.makedirs(outdir, exist_ok=True)
+
+    exported = 0
+    failed = 0
+    for idx in icon_ids:
+        blob = textures.read_entry(idx)
+        try:
+            frame = decode_frame(blob, 0, palette=palette)
+        except U9TextureError:
+            failed += 1
+            continue
+        Image.frombytes("RGBA", (frame.width, frame.height), frame.pixels_rgba).save(
+            os.path.join(outdir, f"icon_{idx:05d}.png")
+        )
+        exported += 1
+
+    print(f"Exported {exported}/{len(icon_ids)} candidate icons -> {outdir}/")
+    if failed:
+        print(f"  ({failed} skipped: decode failed, likely unsupported bitmapC.flx compression)")
+    return 0
+
+
+# ============================================================================
 # Typer command wrappers
 # ============================================================================
 
@@ -710,4 +837,66 @@ def model_export_all_cmd(
                 typenames=typenames, lod=lod, format=fmt, output=output, preview=preview,
             )
         )
+    )
+
+
+@u9_app.command("icon-list")
+def icon_list_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/sappear.flx")],
+    textures: Annotated[
+        str,
+        typer.Argument(help="Path to a texture archive, e.g. bitmap16.flx or bitmapsh.flx"),
+    ],
+    limit: Annotated[int, typer.Option("--limit", help="Max rows to print (0 = unlimited)")] = 200,
+) -> None:
+    """List candidate 2D UI icon entries (see titan.u9.icon) not referenced by any 3D model material."""
+    raise SystemExit(cmd_icon_list(SimpleNamespace(file=file, textures=textures, limit=limit)))
+
+
+@u9_app.command("icon-export")
+def icon_export_cmd(
+    textures: Annotated[
+        str,
+        typer.Argument(help="Path to a texture archive, e.g. bitmap16.flx or bitmapsh.flx"),
+    ],
+    entry_id: Annotated[int, typer.Argument(help="Entry ID (0-7999) to export")],
+    frame: Annotated[int, typer.Option("--frame", help="Frame index within the entry")] = 0,
+    palette: Annotated[
+        Optional[str],
+        typer.Option(
+            "-p", "--palette",
+            help="Path to static/ankh.pal -- colors 8-bit textures (default: flat grayscale)",
+        ),
+    ] = None,
+    output: Annotated[
+        Optional[str], typer.Option("-o", "--output", help="Output directory (default: current directory)"),
+    ] = None,
+) -> None:
+    """Export one texture archive entry to PNG, regardless of whether any 3D model references it."""
+    raise SystemExit(
+        cmd_icon_export(SimpleNamespace(textures=textures, entry_id=entry_id, frame=frame, palette=palette, output=output))
+    )
+
+
+@u9_app.command("icon-export-all")
+def icon_export_all_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/sappear.flx")],
+    textures: Annotated[
+        str,
+        typer.Argument(help="Path to a texture archive, e.g. bitmap16.flx or bitmapsh.flx"),
+    ],
+    palette: Annotated[
+        Optional[str],
+        typer.Option(
+            "-p", "--palette",
+            help="Path to static/ankh.pal -- colors 8-bit textures (default: flat grayscale)",
+        ),
+    ] = None,
+    output: Annotated[
+        Optional[str], typer.Option("-o", "--output", help="Output directory (default: icon_export/)"),
+    ] = None,
+) -> None:
+    """Batch-export every candidate 2D UI icon (see titan.u9.icon) not referenced by any 3D model."""
+    raise SystemExit(
+        cmd_icon_export_all(SimpleNamespace(file=file, textures=textures, palette=palette, output=output))
     )

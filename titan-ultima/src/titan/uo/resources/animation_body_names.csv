@@ -1,0 +1,2146 @@
+body,name
+1,ogre
+1,Ogre
+1,Ogre
+1,Wanderer
+1,Ogre
+1,Wanderer
+3,zombie
+3,Zombie
+3,Cursed Soul
+3,Zombie
+3,Zombie
+4,gargoyle
+4,Gargoyle
+4,Effete Putrid Gargoyle
+4,Gargoyle
+4,Gargoyle Shade
+4,Hellion
+4,Gargoyle
+5,eagle
+5,Eagle
+5,Enraged Eagle
+5,Phoenix
+5,Eagle
+5,Enraged Eagle
+5,Macaw
+5,Eagle
+5,Enraged Eagle
+5,Phoenix
+6,crow
+6,Bird
+6,Tropical Bird
+6,Bird
+6,Tropical Bird
+6,Bird
+6,Tropical Bird
+7,orc lord
+7,Orc Captain
+7,Orc Captain
+7,Orc Chopper
+7,Orc Captain
+8,corpser
+8,Corpser
+8,Whipping Vine
+8,Corpser
+8,Tangling Roots
+8,Whipping Vine
+8,Corpser
+8,Whipping Vine
+9,daemon
+9,Daemon
+9,Daemon
+9,Fire Daemon
+9,Minion Of Scelestus
+9,Daemon
+10,daemon boss
+11,Dread Spider
+11,Anlorzen
+11,Dread Spider
+11,Virulent
+11,Dread Spider
+12,dragon
+13,air elemental
+13,Air Elemental
+13,Crystal Vortex
+13,Summoned Air Elemental
+13,Air Elemental
+13,Crystal Vortex
+13,Flurry
+13,Mistral
+13,Summoned Air Elemental
+13,Tempest
+13,Air Elemental
+13,Crystal Vortex
+13,Summoned Air Elemental
+14,earth elemental
+14,Earth Elemental
+14,Plague Spawn
+14,Summoned Earth Elemental
+14,Earth Elemental
+14,Enraged Earth Elemental
+14,Plague Spawn
+14,Summoned Earth Elemental
+14,Earth Elemental
+14,Plague Spawn
+14,Summoned Earth Elemental
+15,fire elemental
+15,Fire Elemental
+15,Summoned Fire Elemental
+15,Fire Elemental
+15,Fire Elemental Renowned
+15,Summoned Fire Elemental
+15,Fire Elemental
+15,Summoned Fire Elemental
+16,water elemental
+16,Summoned Water Elemental
+16,Water Elemental
+16,Summoned Water Elemental
+16,Water Elemental
+16,Summoned Water Elemental
+16,Water Elemental
+17,orc
+17,Orc
+17,Orc
+17,Orc
+18,ettin
+18,Ettin
+18,Ettin
+18,Ettin
+20,Frost Spider
+20,Frost Spider
+20,Frost Spider
+21,giant serpent
+21,Death Adder
+21,Giant Serpent
+21,Plague Spawn
+21,Death Adder
+21,Giant Serpent
+21,Giant Serpent1
+21,Giant Serpent2
+21,Giant Serpent3
+21,Giant Serpent4
+21,Plague Spawn
+21,Death Adder
+21,Giant Serpent
+21,Plague Spawn
+22,gazer
+22,Elder Gazer
+22,Gazer
+22,Elder Gazer
+22,Gazer
+22,Elder Gazer
+22,Gazer
+23,Dire Wolf
+23,Aminia
+23,Dire Wolf
+23,Dire Wolf
+24,liche
+24,Lich
+24,Lich
+24,Lich
+26,ghost
+26,Shade
+26,Spectre
+26,Wraith
+26,Frederic
+26,Shade
+26,Spectre
+26,Wraith
+26,Shade
+26,Spectre
+26,Wraith
+28,giant spider
+28,Giant Spider
+28,Giant Spider
+28,Giant Spider
+29,gorilla
+29,Gorilla
+29,Plague Spawn
+29,Gorilla
+29,Plague Spawn
+29,Gorilla
+29,Plague Spawn
+30,harpy
+30,Harpy
+30,Harpy
+30,Harpy
+31,headless
+31,Headless One
+31,Plague Spawn
+31,Headless One
+31,Plague Spawn
+31,Headless One
+31,Plague Spawn
+33,lizardman
+35,lizardman
+36,lizardman
+38,Servant Of Semidar
+38,Servant Of Semidar
+38,Servant Of Semidar
+39,mongbat
+39,Greater Mongbat
+39,Mongbat
+39,Strong Mongbat
+39,Greater Mongbat
+39,Mongbat
+39,Strong Mongbat
+39,Greater Mongbat
+39,Mongbat
+39,Strong Mongbat
+40,Balron
+40,Arch Daemon
+40,Balron
+40,Fire Daemon Renowned
+40,Balron
+42,rat-man
+42,Ratman
+42,Clan R C
+42,Clan R S
+42,Clan S H
+42,Lenley
+42,Ratman
+42,Tikitavi Renowned
+42,Ratman
+43,Ice Fiend
+43,Ice Fiend
+43,Pit Fiend
+43,Ice Fiend
+44,rat-man
+45,rat-man
+46,Ancient Wyrm
+46,Ancient Wyrm
+46,Ancient Wyrm
+47,reaper
+47,Reaper
+47,Reaper
+47,Reaper
+48,giant scorpion
+48,Scorpion
+48,Scorpion
+48,Scorpion
+50,skeleton
+50,Szandor
+51,slime
+51,Corrosive Slime
+51,Jwilson
+51,Plague Spawn
+51,Slime
+51,Acid Slug
+51,Corrosive Slime
+51,Jwilson
+51,Korpre
+51,Plague Spawn
+51,Slime
+51,Corrosive Slime
+51,Jwilson
+51,Plague Spawn
+51,Slime
+52,small snake
+52,Ice Snake
+52,Lava Snake
+52,Snake
+52,Coral Snake
+52,Ice Snake
+52,Lava Snake
+52,Snake
+52,Ice Snake
+52,Lava Snake
+52,Snake
+53,troll
+54,troll
+55,troll
+55,Frost Troll
+55,Frost Troll
+55,Frost Troll
+56,skeleton
+57,skeleton knight
+57,Bone Knight
+57,Bone Knight
+57,Bone Knight
+58,wisp
+58,Wisp
+58,Mysterious Wisp
+58,Ortanord
+58,Wisp
+58,Wisp
+59,dragon
+59,Stone Monster
+60,drakes
+61,drakes
+62,Wyvern
+62,Wyvern
+62,Wyvern Renowned
+62,Wyvern
+63,Cougar
+63,Cougar
+63,Cougar
+66,Swamp Tentacle
+66,Swamp Tentacle
+66,Swamp Tentacle
+67,Stone Gargoyle
+67,Stone Gargoyle
+67,Stone Gargoyle
+70,Terathan Warrior
+70,Terathan Warrior
+70,Terathan Warrior
+71,Terathan Drone
+71,Terathan Drone
+71,Terathan Drone
+72,Terathan Matriarch
+72,Anlorlem
+72,Terathan Matriarch
+72,Terathan Matriarch
+73,Stone Harpy
+73,Stone Harpy
+73,Stone Harpy
+74,Imp
+74,Anzuanord
+74,Deadly Imp
+74,Imp
+74,Zeefzorpul
+74,Imp
+75,Cyclops
+75,Cyclops
+75,Cyclops
+76,Titan
+76,Titan
+76,Titan
+77,Kraken
+77,Leviathan
+77,Kraken
+77,Leviathan
+77,Kraken
+77,Leviathan
+78,Ancient Lich
+78,Dark Guardian
+78,Ancient Lich
+78,Ancient Lich Renowned
+78,Dark Guardian
+78,Ancient Lich
+78,Dark Guardian
+79,Lich Lord
+79,Lich Lord
+79,Lich Lord
+80,Giant Toad
+80,Giant Toad
+80,Giant Toad
+81,Bull Frog
+81,Bull Frog
+81,Bull Frog
+83,Ogre Lord
+83,Ogre Lord
+83,Stone Monster
+83,Ogre Lord
+85,Ophidian Archmage
+85,Ophidian Mage
+85,Ophidian Archmage
+85,Ophidian Mage
+85,Stone Monster
+85,Ophidian Archmage
+85,Ophidian Mage
+86,Ophidian Knight
+86,Ophidian Warrior
+86,Ophidian Knight
+86,Ophidian Warrior
+86,Stone Monster
+86,Ophidian Knight
+86,Ophidian Warrior
+87,Ophidian Matriarch
+87,Ophidian Matriarch
+87,Ophidian Matriarch
+88,Mountain Goat
+88,Mountain Goat
+88,Mountain Goat
+89,Ice Serpent
+89,Giant Ice Worm
+89,Ice Serpent
+89,Ice Serpent
+90,Lava Serpent
+90,Lava Serpent
+90,Lava Serpent
+92,Silver Serpent
+92,Silver Serpent
+92,Silver Serpent
+94,Frost Ooze
+94,Frost Ooze
+94,Frost Ooze
+95,Turkey
+95,Turkey
+98,Hell Hound
+98,Clan S S W
+98,Hell Hound
+98,Ice Hound
+98,Hell Hound
+99,Dark Wolf Familiar
+99,Dark Wolf Familiar
+99,Dark Wolf Familiar
+101,Centaur
+101,Twaulo
+101,Centaur
+101,Huntsman
+101,Sagittarri
+101,Twaulo
+101,Centaur
+101,Twaulo
+103,Serpentine Dragon
+103,Fierce Dragon
+103,Serpentine Dragon
+103,Serpentine Dragon
+104,Skeletal Dragon
+104,Skeletal Dragon
+104,Skeletal Dragon Renowned
+104,Skeletal Drake
+104,Skeletal Dragon
+106,Shadow Wyrm
+106,Shadow Wyrm
+106,Shadow Wyrm
+107,Agapite Elemental
+107,Agapite Elemental
+107,Agapite Elemental
+108,Bronze Elemental
+108,Bronze Elemental
+108,Bronze Elemental
+109,Copper Elemental
+109,Copper Elemental
+109,Copper Elemental
+110,Dull Copper Elemental
+110,Dull Copper Elemental
+110,Dull Copper Elemental
+111,Shadow Iron Elemental
+111,Shadow Iron Elemental
+111,Shadow Iron Elemental
+112,Valorite Elemental
+112,Valorite Elemental
+112,Valorite Elemental
+113,Verite Elemental
+113,Verite Elemental
+113,Verite Elemental
+116,Nightmare
+116,Dread Warhorse
+116,Nightmare
+116,Nightmare
+122,Despise Unicorn
+123,Crystal Lattice Seeker
+123,Ethereal Warrior
+123,Crystal Lattice Seeker
+123,Divine Guardian
+123,Ethereal Warrior
+123,Crystal Lattice Seeker
+123,Ethereal Warrior
+124,Evil Mage
+124,Evil Mage
+124,Evil Mage
+127,Predator Hell Cat
+127,Predator Hell Cat
+127,Predator Hell Cat
+128,Pixie
+128,Arielle
+128,Pixie
+128,Pixie Renowned
+128,S A Pixie
+128,Pixie
+129,Harrower Tentacles
+129,Harrower Tentacles
+129,Harrower Tentacles
+130,Fire Gargoyle
+130,Fire Gargoyle
+130,Fire Gargoyle
+131,Efreet
+131,Efreet
+131,Efreet
+135,Arctic Ogre Lord
+135,Arctic Ogre Lord
+135,Arctic Ogre Lord
+136,Naba
+138,Orcish Lord
+138,Orcish Lord
+138,Orcish Lord
+140,Orcish Mage
+140,Orcish Mage
+140,Orcish Mage
+142,Ratman Archer
+142,Clan C A
+142,Clan C T
+142,Clan S S
+142,Rakktavi Renowned
+142,Ratman Archer
+142,Ratman Archer
+143,Ratman Mage
+143,Ratman Mage
+143,Vitavi Renowned
+143,Ratman Mage
+146,Harrower
+146,Harrower
+146,Spawn Entry
+147,Skeletal Knight
+147,Drelgor
+147,Skeletal Knight
+147,Skeletrex
+147,Skeletal Knight
+148,Bone Magi
+148,Skeletal Mage
+148,Bone Magi
+148,Maabus
+148,Skeletal Mage
+148,Bone Magi
+148,Skeletal Mage
+149,Succubus
+149,Succubus
+149,Succubus
+150,sea serpent
+150,Deep Sea Serpent
+150,Sea Serpent
+150,Deep Sea Serpent
+150,Sea Serpent
+150,Deep Sea Serpent
+150,Sea Serpent
+151,dolphin
+151,Dolphin
+151,Dolphin
+151,Dolphin
+152,Terathan Avenger
+152,Anlorvaglem
+152,Terathan Avenger
+152,Terathan Avenger
+153,Bogle
+153,Ghoul
+153,Bogle
+153,Ghoul
+153,Bogle
+153,Ghoul
+154,Mummy
+154,Pestilent Bandage
+154,Mummy
+154,Pestilent Bandage
+154,Mummy
+154,Pestilent Bandage
+155,Rotting Corpse
+155,Unfrozen Mummy
+155,Rotting Corpse
+155,Unfrozen Mummy
+155,Rotting Corpse
+155,Unfrozen Mummy
+157,Giant Black Widow
+157,Giant Black Widow
+157,Sentinel Spider
+157,Giant Black Widow
+158,Acid Elemental
+158,Acid Elemental
+158,Acid Elemental Renowned
+158,Toxic Elemental
+158,Acid Elemental
+159,Blood Elemental
+159,Blood Elemental
+159,Blood Elemental
+161,Ice Elemental
+161,Ice Elemental
+161,Ice Elemental
+162,Poison Elemental
+162,Greater Poison Elemental
+162,Poison Elemental
+162,Poison Elemental
+163,Snow Elemental
+163,Snow Elemental
+163,Snow Elemental
+164,Energy Vortex
+164,Energy Vortex
+164,Energy Vortex
+165,Dark Wisp
+165,Shadow Wisp
+165,Shadow Wisp Familiar
+165,Corrupted Wisp
+165,Dark Wisp
+165,Ensorcled Wisp
+165,Shadow Wisp
+165,Shadow Wisp Familiar
+165,Dark Wisp
+165,Shadow Wisp
+165,Shadow Wisp Familiar
+166,Golden Elemental
+166,Golden Elemental
+166,Golden Elemental
+167,Brown Bear
+167,Brown Bear
+167,Brown Bear
+168,Shadow Fiend
+168,Shadow Fiend
+172,Rikktor
+172,Rikktor
+172,Rikktor
+173,Mephitis
+173,Mephitis
+173,Mephitis
+174,Semidar
+174,Semidar
+174,Semidar
+175,Lord Oaks
+175,Lord Oaks
+175,Lord Oaks
+176,Silvani
+176,Silvani
+176,Silvani
+177,Nightmare
+178,Nightmare
+178,Nightmare
+178,Nightmare
+179,Nightmare
+179,Nightmare
+179,Nightmare
+181,Orc Scout
+182,Orc Bomber
+182,Orc Bomber
+182,Orc Bomber
+183,Savage
+183,Savage Shaman
+183,Savage
+183,Savage
+183,Savage Shaman
+184,Savage
+184,Savage Shaman
+184,Savage
+184,Savage
+184,Savage Shaman
+185,Savage Rider
+185,Savage Rider
+185,Savage Rider
+186,Savage Rider
+186,Savage Shaman
+186,Savage Rider
+189,Orc Brute
+189,Orc Brute
+189,Orc Brute
+196,Kaze Kemono
+196,Kaze Kemono
+196,Kaze Kemono
+197,Order Variant
+197,Crimson Dragon
+198,Chaos Variant
+199,Rai Ju
+199,Rai Ju
+199,Rai Ju
+200,horse
+201,cat
+201,Cat
+201,Hell Cat
+201,Cat
+201,Diseased Cat
+201,Hell Cat
+201,Cat
+201,Hell Cat
+202,alligator
+202,Alligator
+202,Alligator
+202,Alligator
+203,pig
+203,Pig
+203,Pig
+203,Pig
+204,horse
+204,Darkmane
+205,rabbit
+205,Enraged Rabbit
+205,Jack Rabbit
+205,Rabbit
+205,Vorpal Bunny
+205,Enraged Rabbit
+205,Jack Rabbit
+205,Rabbit
+205,Vorpal Bunny
+205,Enraged Rabbit
+205,Jack Rabbit
+205,Rabbit
+205,Vorpal Bunny
+206,Lava Lizard
+206,Lava Lizard
+206,Thrasher
+206,Lava Lizard
+207,sheep
+207,Sheep
+207,Sheep
+207,Sheep
+208,chicken
+208,Chicken
+208,Chicken
+208,Chicken
+209,goat
+209,Goat
+209,Goat
+209,Goat
+211,black bear
+211,Black Bear
+211,Enraged Black Bear
+211,Black Bear
+211,Enraged Black Bear
+211,Black Bear
+211,Enraged Black Bear
+212,grizzly bear
+212,Grizzly Bear
+212,Raging Grizzly Bear
+212,Grizzly Bear
+212,Maul Bear
+212,Raging Grizzly Bear
+212,Ursadane
+212,Grizzly Bear
+212,Raging Grizzly Bear
+213,polar bear
+213,Polar Bear
+213,Polar Bear
+213,Polar Bear
+214,cougar
+214,Panther
+214,Panther
+214,Panther
+215,giant rat
+215,Giant Rat
+215,Giant Rat
+215,Plague Rat
+215,Giant Rat
+216,cow
+217,dog
+217,Dog
+217,Dog
+217,Dog
+220,llama
+220,Energy Vortex
+220,Llama
+220,Energy Vortex
+220,Llama
+220,Energy Vortex
+220,Llama
+221,walrus
+221,Walrus
+221,Walrus
+221,Walrus
+225,dire wolf
+225,Timber Wolf
+225,Injured Wolf
+225,Timber Wolf
+225,Timber Wolf
+226,horse
+228,horse
+231,cow
+232,bull
+233,bull
+234,big stag
+234,Enraged Hart
+234,Great Hart
+234,Bravehorn
+234,Enraged Hart
+234,Great Hart
+234,Enraged Hart
+234,Great Hart
+237,doe
+237,Enraged Hind
+237,Hind
+237,Enraged Hind
+237,Hind
+237,Enraged Hind
+237,Hind
+238,town rat
+238,Rat
+238,Sewer Rat
+238,Clan Ribbon Plague Rat
+238,Rat
+238,Sewerrat
+238,Rat
+238,Sewerrat
+240,Kappa
+240,Kappa
+240,Kappa
+241,Oni
+241,Oni
+241,Oni
+242,Deathwatch Beetle
+242,Deathwatch Beetle Hatchling
+242,Deathwatch Beetle
+242,Deathwatch Beetle Hatchling
+242,Deathwatch Beetle
+242,Deathwatch Beetle Hatchling
+244,Rune Beetle
+244,Rune Beetle
+244,Rune Beetle
+245,Yomotsu Warrior
+245,Yomotsu Warrior
+245,Yomotsu Warrior
+246,Bake Kitsune
+246,Bake Kitsune
+246,Bake Kitsune
+247,Fan Dancer
+247,Chiyo
+247,Fan Dancer
+247,Fan Dancer
+248,Gaman
+248,Gaman
+248,Gaman
+249,Serado
+249,Yamandon
+249,Serado
+249,Yamandon
+249,Serado
+249,Yamandon
+250,Tsuki Wolf
+250,Echidnite
+250,Tsuki Wolf
+250,Tsuki Wolf
+251,Revenant Lion
+251,Revenant Lion
+251,Revenant Lion
+252,Lady Of The Snow
+252,Lady Of The Snow
+252,Phantom
+252,Wight
+252,Lady Of The Snow
+253,Yomotsu Priest
+253,Yomotsu Priest
+253,Yomotsu Priest
+254,Crane
+254,Crane
+254,Crane
+255,Yomotsu Elder
+255,Yomotsu Elder
+255,Yomotsu Elder
+256,Chief Paroxysmus
+256,Chief Paroxysmus
+257,Dread Horn
+257,Dread Horn
+258,Lady M
+258,Lady Melisande
+259,Monstrous Interred Grizzle
+259,Ilhenir
+259,Interred Grizzle
+259,Ilhenir
+259,Interred Grizzle
+259,Monstrous Interred Grizzle
+259,Ilhenir
+259,Interred Grizzle
+260,Travesty
+260,Corporeal Brume
+260,Corporeal Brume
+260,Corporeal Brume
+261,Shimmering Effusion
+261,Shimmering Effusion
+262,Tormented Minotaur
+262,Tormented Minotaur
+262,Tormented Minotaur
+262,Tormented Minotaur
+263,Minotaur
+263,Meraktus
+263,Minotaur
+263,Meraktus
+263,Minotaur
+263,Meraktus
+263,Minotaur
+264,Changeling
+264,Changeling
+264,Changeling
+264,Fairy
+264,Renegade Changeling
+264,Travesty
+264,Changeling
+265,Hydra
+265,Hydra
+265,Abscess
+265,Crystal Hydra
+265,Hydra
+265,Hydra
+266,Dryad
+266,M L Dryad
+266,Forest Nymph
+266,Frightened Dryad
+266,M L Dryad
+266,M L Dryad
+267,Troglodyte
+267,Troglodyte
+267,Troglodyte
+267,Troglodyte
+269,Thorn bat
+270,Bulbous Putrification
+270,Grubber
+271,Satyr
+271,Satyr
+271,Satyr
+271,Silenii
+271,Satyr
+272,Interred Grizzle
+273,Fetid Essence
+273,Fetid Essence
+273,Mantra Effervescence
+273,Fetid Essence
+273,Mantra Effervescence
+273,Fetid Essence
+273,Mantra Effervescence
+276,Chimera
+277,Cu Sidhe
+278,Squirrel
+278,Squirrel
+278,Squirrel
+278,Squirrel
+279,Ferret
+279,Ferret
+279,Ferret
+279,Ferret
+280,Plate Armored Minotaur
+280,Minotaur Captain
+280,Minotaur Captain
+280,Minotaur General
+280,Minotaur Captain
+281,Leather Armored Minotaur
+281,Minotaur Scout
+281,Minotaur Scout
+281,Minotaur Scout
+282,Parrot
+283,Crow
+284,Mondains Steed
+285,Reaper Redux
+286,RotWorm_Juvenile
+287,BloodWorm
+287,Blood Worm
+290,big pig
+290,Boar
+290,Boar
+290,Boar
+291,pack horse
+291,Pack Horse
+291,Pack Horse
+291,Pack Horse
+292,pack llama
+292,Pack Llama
+292,Pack Llama
+292,Pack Llama
+293,Gargoyle_Pet
+293,Vollem
+300,Crystal Elemental
+300,Crystal Elemental
+300,Crystal Elemental
+301,Feral Treefellow
+301,Treefellow
+301,Dendrite
+301,Feral Treefellow
+301,Strongroot
+301,Treefellow
+301,Treefellow Guardian
+301,Ferel Treefellow
+301,Treefellow
+302,Skittering Hopper
+302,Skittering Hopper
+302,Skittering Hopper
+303,Devourer
+303,Devourer
+303,Devourer Renowned
+303,Lifestealer
+303,Devourer
+304,Flesh Golem
+304,Ballem
+304,Flesh Golem
+304,Flesh Golem
+305,Gore Fiend
+305,Gore Fiend
+305,Prometheoid
+305,Gore Fiend
+306,Impaler
+306,Impaler
+306,The Butcher
+306,Impaler
+307,Gibberling
+307,Gibberling
+307,Gibberling
+308,Bone Demon
+308,Bone Demon
+308,Bone Demon
+309,Patchwork Skeleton
+309,Patchwork Skeleton
+309,Skeletal Lich
+309,Patchwork Skeleton
+310,Wailing Banshee
+310,Stone Monster
+310,Wailing Banshee
+310,Wailing Banshee
+311,Shadow Knight
+311,Shadow Knight
+311,Shadow Knight
+312,Abysmal Horror
+312,Abysmal Horror
+312,Abyssal Abomination
+312,Abysmal Horror
+313,Darknight Creeper
+313,Darknight Creeper
+313,Darknight Creeper
+314,Ravager
+314,Ravager
+314,Ravager
+315,Flesh Renderer
+315,Flesh Renderer
+315,Flesh Renderer
+316,Wanderer Of The Void
+316,Wanderer Of The Void
+316,Wanderer Of The Void
+317,Vampire Bat
+317,Vampire Bat Familiar
+317,Vampire Bat
+317,Vampire Bat Familiar
+317,Vampire Bat
+317,Vampire Bat Familiar
+318,Demon Knight
+318,Demon Knight
+318,Usagralem Ballem
+318,Demon Knight
+319,Mound Of Maggots
+319,Mound Of Maggots
+319,Mound Of Maggots
+320,FishingPole_Gargoyle
+321,Lantern_Off_Gargoyle
+322,Lantern_On_Gargoyle
+323,Pickaxe_Gargoyle
+324,Shepards_Crook_Gargoyle
+325,Smithyhammer_Gargoyle
+326,Spellbook_BookOfArms_Gargoyle
+327,Spellbook_Bushido_Gargoyle
+328,Spellbook_Chivalry_Gargoyle
+329,Spellbook_Gargoyle
+330,Spellbook_Necromancy_Gargoyle
+331,Spellbook_Ninjutsu_Gargoyle
+332,Spellbook_SpellWeaving_Gargoyle
+333,Weapon_Wand_Gargoyle_Legacy
+334,Grey Goblin
+334,Barreraak
+334,Enslaved Goblin Keeper
+334,Enslaved Goblin Mage
+334,Enslaved Goblin Scout
+334,Enslaved Gray Goblin
+334,Enslaved Green Goblin
+335,Weapon_Shield_Leather_Medium_Gargoyle_Legacy
+336,Weapon_Shield_Leather_Small_Gargoyle_Legacy
+337,Weapon_Shield_Plate_Large_Gargoyle_Legacy
+338,Weapon_Shield_Plate_Medium_Gargoyle_Legacy
+339,Weapon_Shield_Plate_Small_Gargoyle_Legacy
+340,Weapon_Shield_Scale_Large_Gargoyle_Legacy
+341,Gargoyle Robe_Fancy
+342,Gargoyle Robe_Regular
+343,Weapon_Shield_Scale_Chaos_Gargoyle
+344,Weapon_Shield_Scale_Order_Gargoyle
+400,human male
+400,GArg F to H M
+400,Garg M to Human M
+400,Human F to M
+400,Actor
+400,Archer Guard
+400,Artist
+400,Barracoon
+400,Base Escortable
+400,Base Shield Guard
+400,Base Vendor
+400,Brigand
+400,Chaos Dragoon
+400,Chaos Dragoon Elite
+400,Cursed
+400,Evil Mage
+400,Evil Mage Lord
+400,Executioner
+400,Golem Controller
+400,Guardian
+400,Gypsy
+400,Harbor Master
+400,Hire Bard
+400,Hire Bard Archer
+400,Hire Beggar
+400,Hire Fighter
+400,Hire Mage
+400,Hire Paladin
+400,Hire Peasant
+400,Hire Ranger
+400,Hire Ranger Archer
+400,Hire Sailor
+400,Hire Thief
+400,Khaldun Summoner
+400,Khaldun Zealot
+400,Ninja
+400,Player Barkeeper
+400,Player Vendor
+400,Revenant
+400,Samurai
+400,Sculptor
+400,Town Crier
+400,Warrior Guard
+400,Actor
+400,Adrian The Glorious Lord
+400,Andros The Dread Lord
+400,Archer Guard
+400,Artist
+400,Barracoon
+400,Base Escortable
+400,Base Shield Guard
+400,Blackheart
+400,Brigand
+400,Chaos Dragoon
+400,Chaos Dragoon Elite
+400,Chyloth
+400,Claim Rewards Entry
+400,Cursed
+400,Dugan
+400,Dummy
+400,Elwood Mc Carrin
+400,Emino
+400,Enshrouded Figure
+400,Executioner
+400,Forgotten Servant
+400,Gabriel Piete
+400,Garamon
+400,Golem Controller
+400,Grimmoch Drummel
+400,Guardian
+400,Gypsy
+400,Haochi
+400,Haochis Guardsman
+400,Harbor Master
+400,Henchman
+400,Hidden Figure
+400,Hire Bard
+400,Hire Bard Archer
+400,Hire Beggar
+400,Hire Fighter
+400,Hire Mage
+400,Hire Paladin
+400,Hire Peasant
+400,Hire Ranger
+400,Hire Ranger Archer
+400,Hire Sailor
+400,Hire Thief
+400,Horus
+400,Human Brigand
+400,Impresario
+400,Khaldun Summoner
+400,Khaldun Zealot
+400,Lysander Gathenwale
+400,Mannequin
+400,Mansion Guard
+400,Mardoth
+400,Militia Canoneer
+400,Militia Fighter
+400,Morg Bergen
+400,Naturalist
+400,Ninja
+400,Paladin
+400,Player Barkeeper
+400,Player Vendor
+400,Revenant
+400,Samurai
+400,Schmendrick
+400,Sculptor
+400,Summoned Paladin
+400,Tomas O Neerlan
+400,Town Crier
+400,Uzeraan
+400,Warrior Guard
+400,Young Ninja
+400,Young Ronin
+400,Zoel
+400,Actor
+400,Archer Guard
+400,Artist
+400,Barracoon
+400,Base Escortable
+400,Base Shield Guard
+400,Brigand
+400,Bulk Order Info Entry
+400,Chaos Dragoon
+400,Chaos Dragoon Elite
+400,Cursed
+400,Dummy
+400,Executioner
+400,Golem Controller
+400,Guardian
+400,Gypsy
+400,Harbor Master
+400,Khaldun Summoner
+400,Khaldun Zealot
+400,Ninja
+400,Player Barkeeper
+400,Player Vendor
+400,Revenant
+400,Samurai
+400,Sculptor
+400,Town Crier
+400,Warrior Guard
+401,human female
+401,battle surcoat
+401,cloth ninja hood
+401,cloth ninja jacket
+401,Dragon Gauntlets M to F
+401,Dragon Helm M to F
+401,Dragon Legs M to F
+401,Dragon Pauldrons M to F
+401,Dragon Torso M to F
+401,elven plate
+401,female chain substitution
+401,Garg F to Human F
+401,GArg M to H F
+401,hakama
+401,hakama-shita
+401,Helm of swiftness M to F
+401,Human M to F
+401,kamishimo
+401,leather mogami-do
+401,leather ninja belt
+401,leather ninja hood
+401,leather ninja jacket
+401,leather ninja pants
+401,obi
+401,platemail mogami-do
+401,studded mogami-do
+401,tattsuke-hakama
+401,Actor
+401,Archer Guard
+401,Artist
+401,Base Escortable
+401,Base Shield Guard
+401,Base Vendor
+401,Brigand
+401,Executioner
+401,Guardian
+401,Gypsy
+401,Harbor Master
+401,Hire Bard
+401,Hire Bard Archer
+401,Hire Beggar
+401,Hire Fighter
+401,Hire Mage
+401,Hire Paladin
+401,Hire Peasant
+401,Hire Ranger
+401,Hire Ranger Archer
+401,Hire Sailor
+401,Hire Thief
+401,Neira
+401,Ninja
+401,Player Barkeeper
+401,Player Vendor
+401,Protector
+401,Samurai
+401,Sculptor
+401,Town Crier
+401,Warrior Guard
+401,Actor
+401,Alberta Giacco
+401,Aminia
+401,Ansella Gryen
+401,Archer Guard
+401,Artist
+401,Base Escortable
+401,Base Shield Guard
+401,Brigand
+401,Claim Rewards Entry
+401,Dryad
+401,Executioner
+401,Forgotten Servant
+401,Grizelda
+401,Guardian
+401,Gypsy
+401,Harbor Master
+401,Hidden Figure
+401,Hire Bard
+401,Hire Bard Archer
+401,Hire Beggar
+401,Hire Fighter
+401,Hire Mage
+401,Hire Paladin
+401,Hire Peasant
+401,Hire Ranger
+401,Hire Ranger Archer
+401,Hire Sailor
+401,Hire Thief
+401,Human Brigand
+401,Jedah Entille
+401,Neira
+401,Ninja
+401,Player Barkeeper
+401,Player Vendor
+401,Protector
+401,Relnia
+401,Ronin
+401,Samurai
+401,Sculptor
+401,Tavara Sewel
+401,Town Crier
+401,Victoria
+401,Warrior Guard
+401,Actor
+401,Archer Guard
+401,Artist
+401,Base Escortable
+401,Base Shield Guard
+401,Brigand
+401,Bulk Order Info Entry
+401,Executioner
+401,Guardian
+401,Gypsy
+401,Harbor Master
+401,Neira
+401,Ninja
+401,Player Barkeeper
+401,Player Vendor
+401,Protector
+401,Ronin
+401,Samurai
+401,Sculptor
+401,Town Crier
+401,Warrior Guard
+407,Tall Straw Hat
+427,Human Mysticism Spellbook
+428,Gargoyle Mysticism Spellbook
+433,Halloween Mask (Paperdoll Only)
+436,Gargoyle Bracelet - NO ANIMATION - PLACEHOLDER FOR PAPERDOLL
+437,Gargoyle Earrings - NO ANIMATION - PLACEHOLDER FOR PAPERDOLL
+438,Gargoyle Ring - NO ANIMATION - PLACEHOLDER FOR PAPERDOLL
+439,Gargoyle Necklace - NO ANIMATION - PLACEHOLDER FOR PAPERDOLL
+475,Female gargoyle horns
+483,Horns_Gargoyle_Male_Legacy
+485,Horns_Gargoyle_Male_Legacy
+499,Horns_Gargoyle_Male_Legacy
+509,Horns_Gargoyle_Male
+510,Generic necklace both HUamns and Gargs - NO ANIMATION - PLACEHOLDER FOR PAPERDOLL
+534,Horns_Gargoyle_Female_Legacy
+541,Horns_Gargoyle_Female_Legacy
+547,Clothing_Robe_Deathshroud_Gargoyle_Legacy
+574,blade spirit
+574,Blade Spirits
+574,Birling Blades
+574,Blade Spirits
+574,Blade Spirits
+585,Leather_Arms_Female
+586,Leather_Arms_Male
+587,Leather_Chest_Female
+588,Leather_Chest_Male
+589,Leather_Legs_Female
+590,Leather_Legs_Male
+591,Plate_Arms_Female
+592,Plate_Arms_Male
+593,Plate_Chest_Female
+594,Plate_Chest_Male
+595,Plate_Kilt_Female
+596,Plate_Kilt_Male
+597,Plate_Legs_Female
+598,Plate_Legs_Male
+599,Stone_Arms_Female
+600,Armor_Stone_Arms_Male
+601,Armor_Stone_Chest_Female
+602,Armor_Stone_Chest_Male
+603,Armor_Stone_Kilt_Female
+604,Armor_Stone_Kilt_Male
+605,Elf F to M
+605,elven shirt 1
+605,elven shirt 2
+605,GArg F to Elf M
+605,Garg M to Elf M
+605,hide chest
+605,light armor
+605,plate chest
+605,Elf Brigand
+605,Elf Brigand
+605,Elf Brigand
+606,battle surcoat
+606,cloth ninja jacket
+606,Dragon Gauntlets M to F
+606,Dragon Helm M to F
+606,Dragon Legs M to F
+606,Dragon Pauldrons M to F
+606,Dragon Torso M to F
+606,Elf M to F
+606,elven shirt 1
+606,elven shirt 2
+606,female chain substitution
+606,Garg F to Elf F
+606,GArg M to Elf F
+606,hakama
+606,hakama-shita
+606,Helm of Swiftness M to F
+606,hide chest
+606,kamishimo
+606,leather mogami-do
+606,leather ninja belt
+606,leather ninja jacket
+606,leather ninja pants
+606,light armor
+606,obi
+606,plate chest
+606,platemail mogami-do
+606,studded mogami-do
+606,tattsuke-hakama
+606,Elf Brigand
+606,Elf Brigand
+606,Elf Brigand
+609,Armor_Stone_Legs_Female
+610,Armor_Stone_Legs_Male
+632,Female gargoyle horns
+637,Spectral Armour
+637,Spectral Armour
+637,Spectral Armour
+647,Horns_Facial_Male
+650,Horns_Facial_Male
+652,Horns_Facial_Male
+654,Clothing_Arms_Female
+655,Clothing_Arms_Male
+656,Clothing_Chest_Female
+657,Clothing_Chest_Male
+658,Clothing_Kilt_Female
+659,Clothing_Kilt_Male
+660,Clothing_Legs_Female
+661,Clothing_Legs_Male
+662,Axe_Dual_Short
+663,Leather_Kilt_Female
+664,Leather_Kilt_Male
+665,Horns_Facial_Male
+666,Gargoyle Male
+666,Convert to Male
+666,Garg F to M
+666,Human F to GArg M
+666,Human M to GArg M
+666,Male Garge
+666,Axem
+666,Claim Rewards Entry
+666,Egwexem
+666,Gargish Noble
+666,Gargish Outcast
+666,Gargish Refugee
+666,Gargish Rouser
+666,Gargish Wandering Healer
+666,Gargish Warrior
+666,Naxatilor
+666,Sliem
+667,Gargoyle Female
+667,Convert to Female
+667,Female Garge
+667,Garg M to F
+667,Human F to GArg F
+667,Human M to GArg F
+667,Claim Rewards Entry
+667,Gargish Noble
+667,Gargish Outcast
+667,Gargish Refugee
+667,Gargish Rouser
+667,Gargish Warrior
+667,Queen Zhah
+668,Sword_Bloodblade
+669,Boomerang
+670,Sword_Broadsword
+671,Sword_Dread
+672,Glave_Cyclone
+673,Dagger
+674,Mace_Disk
+675,Spear_Dual_Pointed
+676,Staff_Glass
+677,Staff_Serpentstone
+678,Sword_Shortblade
+679,H_M_Dragon_Arms
+680,H_M_Dragon_Chest
+681,H_M_Dragon_Gauntlests
+682,H_M_Dragon_Helm
+683,H_M_Dragon_Legs
+684,H_F_Dragon_Arms
+685,H_F_Dragon_Chest
+686,H_F_Dragon_Helmet
+687,H_F_Dragon_Legs
+688,H_F_Dragon_Gauntlets
+689,Time Lord
+690,Sword_Talwar
+691,Sword_Glass
+692,AnimatedWeapon
+692,Animated Weapon
+692,Animated Weapon
+692,Animated Weapon
+693,Glave_Soul
+696,Horns_Gargoyle_Male_Legacy
+697,Horns_Gargoyle_Male_Legacy
+698,Horns_Gargoyle_Male_Legacy
+699,Horns_Gargoyle_Male_Legacy
+704,?
+705,Stone Form
+707,Female gargoyle horns
+708,Horns_Gargoyle_Female_Legacy
+713,Abyssal_Infernal
+713,Abyssal Infernal
+714,Beetle_Iron
+714,Iron Beetle
+715,Boura
+715,High Plains Boura
+715,Lowland Boura
+715,Ruddy Boura
+716,ChickenLizard
+716,Battle Chicken Lizard
+716,Chicken Lizard
+717,Clockwork_Scorpion
+717,Clockwork Scorpion
+718,Dragon_Faerie
+718,Fairy Dragon
+719,Dragon_Wolf
+719,Dragon Wolf
+720,Elemental_Lava
+720,Lava Elemental
+720,Triton
+721,Flayer
+721,Maddening Horror
+722,Gargoyle_Undead
+722,Effete Undead Gargoyle
+722,Niporailem
+722,Putrid Undead Gargoyle
+722,Putrid Undead Guardian
+722,Stone Monster
+722,Undead Gargoyle
+722,Undead Guardian
+723,Green Goblin
+723,Enslaved Green Goblin Alchemist
+723,Gray Goblin
+723,Gray Goblin Keeper
+723,Gray Goblin Mage
+723,Gray Goblin Mage Renowned
+723,Green Goblin
+723,Green Goblin Alchemist
+723,Green Goblin Alchemist Renowned
+723,Green Goblin Scout
+723,Jaacar
+723,Xenrr
+724,Gremlin
+724,Gremlin
+725,Humunculous
+726,Kepetch
+726,Kepetch
+726,Kepetch Ambusher
+727,Kepetch_Shorn
+728,Medusa
+728,Medusa
+729,Mimic
+729,Mimic
+730,Raptor
+730,Raptor
+730,Gargoyle Pet
+730,Raptor
+732,RotWorm
+732,Rotworm
+733,Skree
+733,Skree
+734,Slith
+734,Slith
+734,Stone Slith
+734,Toxic Slith
+734,Slith
+734,Stone Slith
+734,Toxic Slith
+735,Spider_Female
+735,Navrey
+736,Spider_Male
+736,Wolf Spider
+737,Spider_TrapDoor
+737,Trapdoor Spider
+738,Trapdoor_Creature
+738,Fire Ant
+739,Wolf_Leather
+739,Leather Wolf
+739,Leather Wolf Fellow
+740,Shadow Dweller
+740,Dream Wraith
+740,Shadow Dweller
+740,Void Manifestation
+741,Slasher of Veils
+741,Slasher Of Veils
+742,Tunnel Spirit Body
+743,Tunnel Spirit Tentacle
+745,battle surcoat
+745,cloth ninja hood
+745,cloth ninja jacket
+745,elven plate
+745,female chain substitution
+745,hakama
+745,hakama-shita
+745,kamishimo
+745,leather mogami-do
+745,leather ninja belt
+745,leather ninja hood
+745,leather ninja jacket
+745,leather ninja pants
+745,obi
+745,platemail mogami-do
+745,studded mogami-do
+745,tattsuke-hakama
+752,Golem
+752,Golem
+752,Golem
+753,Enslaved Gargoyle
+753,Enslaved Gargoyle
+753,Enslaved Gargoyle
+754,Gargoyle Enforcer
+754,Gargoyle Enforcer
+754,Gargoyle Enforcer
+755,Gargoyle Destroyer
+755,Gargoyle Destroyer
+755,Gargoyle Guardian
+755,Gargoyle Destroyer
+756,Exodus Overseer
+756,Exodus Overseer
+756,Relanord
+756,Exodus Overseer
+757,Exodus Minion
+757,Exodus Minion
+757,Exodus Minion
+758,Base Vendor
+758,Claim Rewards Entry
+758,Glassblower
+758,Bulk Order Info Entry
+758,Glassblower
+764,Juka Warrior
+764,Juka Warrior
+764,Juka Warrior
+765,Juka Mage
+765,Juka Mage
+765,Juka Mage
+766,Juka Lord
+766,Juka Lord
+766,Juka Lord
+767,Betrayer
+767,Betrayer
+767,Betrayer
+768,Juggernaut
+768,Juggernaut
+768,Juggernaut
+769,Horns_Gargoyle_Female_Legacy
+770,Meer Mage
+770,Meer Mage
+770,Meer Mage
+771,Meer Warrior
+771,Meer Warrior
+771,Meer Warrior
+772,Meer Eternal
+772,Meer Eternal
+772,Meer Eternal
+773,Meer Captain
+773,Meer Captain
+773,Meer Captain
+775,Plague Beast
+775,Plague Beast Lord
+775,Bulbous Putrification
+775,Plague Beast
+775,Plague Beast Lord
+775,Viscera
+775,Plague Beast
+775,Plague Beast Lord
+776,Horde Minion
+776,Horde Minion Familiar
+776,Betballem
+776,Horde Minion
+776,Horde Minion Familiar
+776,Horde Minion
+776,Horde Minion Familiar
+777,Doppleganger
+777,Doppleganger
+777,Doppleganger
+778,Gazer Larva
+778,Gazer Larva
+778,Gazer Larva
+779,Bogling
+779,Bogling
+779,Bogling
+780,Bog Thing
+780,Harrower
+780,Bog Thing
+780,Harrower
+780,Night Terror
+780,Vasanord
+780,Bog Thing
+780,Spawn Entry
+781,Red Solen Worker
+781,Red Solen Worker
+781,Red Solen Worker
+782,Red Solen Infiltrator Warrior
+782,Red Solen Warrior
+782,Red Solen Infiltrator Warrior
+782,Red Solen Warrior
+782,Red Solen Infiltrator Warrior
+782,Red Solen Warrior
+783,Red Solen Infiltrator Queen
+783,Red Solen Queen
+783,Base Ambitious Solen Queen
+783,Red Solen Infiltrator Queen
+783,Red Solen Queen
+783,Red Solen Infiltrator Queen
+783,Red Solen Queen
+784,Arcane Daemon
+784,Crystal Daemon
+784,Arcane Daemon
+784,Crystal Daemon
+784,Arcane Daemon
+784,Crystal Daemon
+785,Moloch
+785,Moloch
+785,Moloch
+787,Ant Lion
+787,Ant Lion
+787,Ant Lion
+788,Enigma
+789,Quagmire
+789,Quagmire
+789,Quagmire
+790,Sand Vortex
+790,Sand Vortex
+790,Sand Vortex
+792,Chaos Daemon
+792,Chaos Daemon
+792,Chaos Daemon
+794,Swamp Dragon
+794,Swamp Dragon
+794,Swamp Dragon
+795,Horns_Gargoyle_Female_Legacy
+799,Swamp Dragon
+799,Swamp Dragon
+799,Swamp Dragon
+805,Black Solen Worker
+805,Black Solen Worker
+805,Black Solen Worker
+806,Black Solen Infiltrator Warrior
+806,Black Solen Warrior
+806,Black Solen Infiltrator Warrior
+806,Black Solen Warrior
+806,Black Solen Infiltrator Warrior
+806,Black Solen Warrior
+807,Black Solen Infiltrator Queen
+807,Black Solen Queen
+807,Black Solen Infiltrator Queen
+807,Black Solen Queen
+807,Black Solen Infiltrator Queen
+807,Black Solen Queen
+808,Base Solen Matriarch
+809,Ninja jacket Cloth Female
+810,Ninja Jacket Leather Feamale
+811,Shirt Doublet Female
+816,Female Checkered Shirt
+826,Stygian Dragon
+826,Stygian Dragon
+829,Rising Colosus
+829,Enraged Colossus
+829,Rising Colossus
+830,Primevil Lich
+830,Primeval Lich
+831,Parrot Bird
+831,Parrot
+831,Parrot
+831,Parrot
+832,Phoenix Bird
+832,Phoenix
+843,Horns_Gargoyle_Male_Legacy
+865,HUMAN Ankh Asset - NO ANIMATION - PLACEHOLDER FOR PAPERDOLL
+866,H_M_WingedHelm
+867,H_F_WingedHelm
+868,Female Breastplate of Justice
+869,Helm of Spirituality
+870,Gorget of Honesty
+871,Male Breastplate of Justice
+872,Arms of Compassion
+873,Gauntlets of Valor
+874,Legs of Honor
+875,Sollerets of Sacrifice
+876,cloak of Humility
+877,Book 01
+878,Book 02
+879,Book 03
+880,Book 04
+881,Book 05
+882,Book 06
+883,Book 07
+884,Book 08
+885,Gargoyle Ankh Asset - NO ANIMATION - PLACEHOLDER FOR PAPERDOLL
+887,Quiver of Infinity
+888,Dupres Shield
+970,Corrupted Soul
+970,Khaldun Revenant
+970,Restless Soul
+970,Corrupted Soul
+970,Khaldun Revenant
+970,Restless Soul
+970,Corrupted Soul
+970,Khaldun Revenant
+970,Restless Soul
+1026,Uber Turkey
+1026,Giant Turkey
+1027,WEAPON_Gargoyle_Bardich_2H
+1028,WEAPON_Gargoyle_BattleAxe_2H
+1029,WEAPON_Gargoyle_BoneHarvester_1H
+1030,WEAPON_Gargoyle_ButchersKnife_1H
+1032,WEAPON_Gargoyle_Cleaver_1H
+1033,WEAPON_Gargoyle_Daisho_2H
+1034,WEAPON_Gargoyle_Katana_1H
+1035,WEAPON_Gargoyle_KrissKnife_1H
+1036,WEAPON_Gargoyle_Lance_2H
+1037,WEAPON_Gargoyle_Maul
+1038,WEAPON_Gargoyle_NewGlave01_1H
+1039,WEAPON_Gargoyle_NewGlave02_1H
+1040,WEAPON_Gargoyle_Pike_2H
+1041,WEAPON_Gargoyle_Scythe_2H
+1042,WEAPON_Gargoyle_Staff_Gnarled_2H
+1043,WEAPON_Gargoyle_Tekagi_2H
+1044,WEAPON_Gargoyle_Tessen_2H_001044
+1045,WEAPON_Gargoyle_WarFork_1H_001045
+1046,WEAPON_Gargoyle_WarHammer_2H_001046
+1047,WEAPON_Gargoyle_Axe_2H
+1048,GARGOYLE Talons Leather Female
+1049,GARGOYLE Talons Leather Male
+1050,GARGOYLE Talons Plate Female
+1051,GARGOYLE Talons Plate Male
+1053,Gargoyle Belt
+1054,Gargoyle Half Apron
+1055,Armor_Cloth_Wings_Female
+1056,Armor_Cloth_Wings_Male
+1057,Armor_Leather_Wings_Female
+1058,Armor_Leather_Wings_Male
+1062,Human Barding Spellbook
+1063,Gargoyle Female Glasses
+1064,Gargoyle Male Glasses
+1065,Gargoyle Female Sash
+1066,Gargoyle Male Sash
+1067,Gargoyle Barding Spellbook
+1068,Scalis
+1069,AncientHellHound
+1070,Werewolf
+1071,VirtueBane
+1244,Water Spirit
+1245,Water Spirit Tentacle
+1246,Pumpkin 01
+1246,Pumpkin Head
+1247,Pumpkin 02
+1248,Special Guest
+1249,Human 15 Robe Male
+1250,Human 15 Robe Female
+1251,Gargoyle 15 Robe Male
+1252,Gargoyle 15 Robe Female
+1253,LBT
+1257,Epaulets_G
+1259,Epaulets
+1261,Human Robe BG Male
+1262,Human Robe BG Female
+1263,Shield_Vice
+1265,Shield_Virtue
+1267,EQUIP_Shoes_Jester
+1269,EQUIP_Hat_Chef
+1271,EQUIP_Kilt01
+1273,EQUIP_Kilt02
+1275,EQUIP_Kilt03
+1278,EQUIP_Dress_Red
+1279,Shield_Vice_Gargoyle
+1280,Shield_Virtue_Gargoyle
+1284,EQUIP_Dress_Wed
+1285,Dino_Dimetrosaur
+1286,Dino_Gallusaurus
+1287,Dino_Archaeosaurus
+1288,Dragon_Turtle
+1289,Dino_Najasaurus
+1290,Dino_Allosaurus
+1291,Dino_Saurosaurus
+1292,Dino_Anchisaur
+1293,Dino_Myrmidex
+1294,Dragon_Turtle_Baby
+1295,EQUIP_Chest_Tiger_H_M
+1296,EQUIP_Chest_Tiger_H_F
+1297,EQUIP_Pants_Long_Tiger_H
+1298,EQUIP_Pants_Short_Tiger_H
+1299,EQUIP_Skirt_Long_Tiger_H
+1300,EQUIP_Skirt_Short_Tiger_H
+1301,EQUIP_Helm_Tiger_H
+1302,EQUIP_Collar_Tiger_H
+1303,EQUIP_Chest_Turtle_H_M
+1304,EQUIP_Chest_Turtle_H_F
+1305,EQUIP_Pants_Long_Turtle_H
+1306,EQUIP_Helm_Turtle_H
+1307,EQUIP_Bracers_Turtle_H
+1308,Gorilla_Giant
+1309,Baby_Tiger
+1400,Dino_Trex
+1401,Turanchula_Mount
+1402,Myrmidex_Drone
+1403,Myrmidex_Warrior
+1404,Myrmidex_Queen
+1405,DrSpector
+1406,Golem_Aztec
+1407,Horse_Unicorn_RB
+1408,Horse_Palimino
+1409,Dragon_Hildebrandt
+1410,Canine_Windrunner
+1411,EQUIP_Dress_Wedding
+1412,EQUIP_Hat_TopHat
+1413,EQUIP_Shirt_Tux
+1414,EQUIP_Pants_Wedding
+1415,Dino_Triceratops
+1415,Triceratops
+1416,Tiger_Sabertooth
+1416,Sabertoothed Tiger
+1417,Dragon_Small_Platinum
+1417,Platinum Drake
+1418,Dragon_Ele_Platinum
+1418,Platinum Drake
+1419,Dragon_Small_Crimson
+1419,Crimson Drake
+1420,Dragon_Ele_Crimson
+1420,Crimson Drake
+1421,Dragon_Small_Stygian
+1422,Dragon_Ele_Stygian
+1422,Stygian Drake
+1423,Fox_Small
+1423,Blood Fox
+1424,Beetle_Rhino
+1424,Frost Mite
+1425,Goat_Necromancer
+1425,Ossein Ram
+1426,Lion
+1426,Lion
+1427,Titan_Water_Tentacle
+1428,JackintheBox
+1429,Haunted_Vale
+1430,Hat_Wed_Haunted
+1431,Titan_Earth_Head
+1432,Titan_Air_Whirlwind
+1433,Titan_Fire_Demon
+1434,Dragon_Asian_Mount
+1435,EQUIP_Robe_Store_M01
+1436,EQUIP_Robe_Store_F01
+1437,EQUIP_Robe_Store_M02
+1438,EQUIP_Robe_Store_F02
+1439,EQUIP_Robe_Store_M03
+1440,Bird_Peacock_Mount
+1441,Tiger_Undead_Mount
+1442,EQUIP_Robe_Store_F03
+1443,EQUIP_Robe_Store_M04
+1444,EQUIP_Robe_Store_F04
+1445,EQUIP_Robe_Store_M05
+1446,EQUIP_Robe_Store_F05
+1447,EQUIP_Male_H_Hair
+1448,EQUIP_Male_H_Hair
+1449,EQUIP_Male_H_Hair
+1450,EQUIP_Male_H_Hair
+1451,EQUIP_Male_H_Beard
+1452,EQUIP_Male_H_Beard
+1453,EQUIP_Male_H_Beard
+1454,EQUIP_Male_H_Beard
+1455,EQUIP_Female_H_Hair
+1456,EQUIP_Female_H_Hair
+1457,EQUIP_Female_H_Hair
+1458,EQUIP_Female_H_Hair
+1459,EQUIP_Male_E_Hair
+1460,EQUIP_Male_E_Hair
+1461,EQUIP_Male_E_Hair
+1462,EQUIP_Male_E_Hair
+1463,EQUIP_Female_E_Hair
+1464,EQUIP_Female_E_Hair
+1465,EQUIP_Female_E_Hair
+1466,EQUIP_Female_E_Hair
+1467,EQUIP_Male_G_Horns
+1468,EQUIP_Male_G_Horns
+1469,EQUIP_Male_G_Horns
+1470,EQUIP_Male_G_Horns
+1471,EQUIP_Male_G_Beard_Horns
+1472,EQUIP_Male_G_Beard_Horns
+1473,EQUIP_Male_G_Beard_Horns
+1474,EQUIP_Male_G_Beard_Horns
+1475,EQUIP_Female_G_Horns
+1476,EQUIP_Female_G_Horns
+1477,EQUIP_Female_G_Horns
+1478,EQUIP_Female_G_Horns
+1479,Khal_Ankur
+1480,EQUIP_Male_H_Mask_Khal_Ankur
+1481,EQUIP_Female_H_Mask_Khal_Ankur
+1482,EQUIP_Male_G_Necklace_Khal_Ankur
+1483,EQUIP_Female_G_Necklace_Khal_Ankur
+1484,Krumpus
+1485,Krumpus Imp
+1486,EQUIP_Whip_1H_Blunt
+1488,EQUIP_Gargoyle_Whip_1H_Blunt
+1490,EQUIP_Whip_1H_Pierce
+1492,EQUIP_Gargoyle_Whip_1H_Pierce
+1494,EQUIP_Whip_1H_Slash
+1496,EQUIP_Gargoyle_Whip_1H_Slash
+1498,EQUIP_Male_Boots_Holiday
+1499,EQUIP_Female_Boots_Holiday
+1500,EQUIP_Male_Hat_Santa
+1501,EQUIP_Female_Hat_Santa
+1502,GARGOYLE_Talons_Holiday_Male
+1503,GARGOYLE_Talons_Holiday_Female
+1504,Gargoyle Earrings - NO ANIMATION - PLACEHOLDER FOR PAPERDOLL - Male - Holiday
+1505,Gargoyle Earrings - NO ANIMATION - PLACEHOLDER FOR PAPERDOLL - Female - Holiday
+1506,EQUIP_H_Male_Parrot_Epaulets
+1507,EQUIP_H_Female_Parrot_Epaulets
+1508,Gargoyle_Male_Parrot_Epaulets - NO ANIMATION - PLACEHOLDER FOR PAPERDOLL
+1509,Gargoyle_Female_Parrot_Epaulets- NO ANIMATION - PLACEHOLDER FOR PAPERDOLL
+1510,Crab_Coconut_Mount
+1511,Crab_Coconut_Small
+1511,Hungry Coconut Crab
+1512,Crab_Coconut_Large
+1513,EQUIP_Helm_Pumpkin
+1515,EQUIP_Bottle_1H
+1516,EQUIP_Neck_Mempo
+1517,EQUIP_Belt_Mace
+1518,EQUIP_Hood_Assassin
+1519,EQUIP_Belt_Sword
+1520,EQUIP_Hood_Mage
+1521,EQUIP_Belt_Dagger
+1522,EQUIP_Tabbard
+1523,EQUIP_Cloak_Quarter
+1524,EQUIP_Hat_Bake_Kitsune
+1525,EQUIP_Tabbard_Gargoyle
+1526,War_Boar_Mount
+1527,Capybara_Mount
+1528,Capybara_Baby
+1529,EQUIP_Shield_Pirate_Male_H
+1530,EQUIP_Shield_Pirate_Female_H
+1531,Equip_Shield_Pirate_Male_G
+1532,Equip_Shield_Pirate_Female_G
+1533,Equip_Sash_H_Empty NL
+1534,Equip_Sash_H_1thirdfull NL
+1535,Equip_Sash_H_2thirdfull NL
+1536,Equip_Sash_H_Full NL
+1537,Equip_Sash_G_Empty NL
+1538,Equip_Sash_G_1thirdfull NL
+1539,Equip_Sash_G_2thirdfull NL
+1540,Equip_Sash_G_Full NL
+1541,Rabbit_Doom
+1542,Rabbit_Doom_Baby
+1543,Weapon_Wand_H
+1544,EQUIP_Lantern_H_On
+1545,EQUIP_Lantern_H_Off
+1546,Dog_Newfoundland
+1547,Dog_Alaskan_Malamute
+1548,Dog_Great_Dane
+1549,Dog_Saint_Bernard
+1550,EQUIP_Orb_H
+1551,Dog_Black_Russian_terrier
+1552,Dog_Rottweiler
+1553,Manticore
+1554,WEAPON_Staff_Candycane_H
+1555,WEAPON_Staff_Candycane_G
+1556,EQUIP_Armor_Gloves_Leather_Arcane NL
+1557,EQUIP_Armor_Arms_Leather_Arcane NL
+1558,EQUIP_Armor_Legs_Leather_Arcane NL
+1559,EQUIP_Armor_Jacket_Leather_Arcane_Male NL
+1560,EQUIP_Armor_Jacket_Leather_Arcane_Female NL
+1561,EQUIP_Armor_Helmet_Ringmail NL
+1562,EQUIP_Armor_Helmet_Leather_Studded NL
+1563,EQUIP_Armor_Gloves_Chainmail NL
+1564,EQUIP_Armor_Arms_Chainmail NL
+1565,EQUIP_Belt_Demon_H
+1566,EQUIP_Belt_Demon_G
+1567,Weapon_Wand_Garg
+1568,EQUIP_Lantern_Garg_On
+1569,EQUIP_Lantern_Garg_Off
+1570,EQUIP_Orb_Garg
+1571,EQUIP_Shield_Hildebrandt_H
+1572,EQUIP_Shield_Hildebrandt_G
+1573,Manticore_L
+1574,PotatoSack
+1575,Orc_Boss
+1576,Orc_HellHound
+1577,Closed_Helmet_Air
+1578,Platemail_Gorget_Air
+1579,Platemail_Arms_Air
+1580,Platemail_Gloves_Air
+1581,Platemail_Chest_Air
+1582,Platemail_Legs_Air
+1583,Cloak_Air
+1584,Warhammer_Air
+1585,Warfork_Air
+1586,Kite_Shield_Air
+1587,Amulet_G_Air
+1588,Chest_G_Air
+1589,Legs_G_Air
+1590,Kilt_G_Air
+1591,Arms_G_Air
+1592,Closed_Helmet_Water
+1593,Platemail_Gorget_Water
+1594,Platemail_Arms_Water
+1595,Platemail_Gloves_Water
+1596,Platemail_Chest_Water
+1597,Platemail_Legs_Water
+1598,Cloak_Water
+1599,Warhammer_Water
+1600,Warfork_Water
+1601,Kite_Shield_Water
+1602,Amulet_G_Water
+1603,Chest_G_Water
+1604,Legs_G_Water
+1605,Kilt_G_Water
+1606,Arms_G_Water
+1607,Closed_Helmet_Earth
+1608,Platemail_Gorget_Earth
+1609,Platemail_Arms_Earth
+1610,Platemail_Gloves_Earth
+1611,Platemail_Chest_Earth
+1612,Platemail_Legs_Earth
+1613,Cloak_Earth
+1614,Warhammer_Earth
+1615,Warfork_Earth
+1616,Kite_Shield_Earth
+1617,Amulet_G_Earth
+1618,Chest_G_Earth
+1619,Legs_G_Earth
+1620,Kilt_G_Earth
+1621,Arms_G_Earth
+1622,Closed_Helmet_Fire
+1623,Platemail_Gorget_Fire
+1624,Platemail_Arms_Fire
+1625,Platemail_Gloves_Fire
+1626,Platemail_Chest_Fire
+1627,Platemail_Legs_Fire
+1628,Cloak_Fire
+1629,Warhammer_Fire
+1630,Warfork_Fire
+1631,Kite_Shield_Fire
+1632,Amulet_G_Fire
+1633,Chest_G_Fire
+1634,Legs_G_Fire
+1635,Kilt_G_Fire
+1636,Arms_G_Fire
+1637,Reagent_Belt
+1638,Bear_Zombie
+1639,Backpack
+1641,UOholder_Melee
+1642,UOholder_Magic
+1643,UOholder_Slug
+1644,Chula_Large
+1645,Chula_Small
+1646,Corrupted_Tree
+1647,Gargoyle_Shield_Air
+1648,Gargoyle_Shield_Water
+1649,Gargoyle_Shield_Earth
+1650,Gargoyle_Shield_Fire
+1651,Horse_Clydesdale
+1652,Horse_Elemental_Earth
+1653,Horse_Elemental_Fire
+1654,Human_Corsage- NO ANIMATION - PLACEHOLDER FOR PAPERDOLL
+1655,Garg_Corsage- NO ANIMATION - PLACEHOLDER FOR PAPERDOLL
+1656,Horse_Elemental_Water
+1657,Horse_Elemental_Air
+1659,Human_Victor Blackthorn Tabard- NO ANIMATION - PLACEHOLDER FOR PAPERDOLL
+1660,Garg_Victor Blackthorn Tabard- NO ANIMATION - PLACEHOLDER FOR PAPERDOLL
+1661,Victor Blackthorn Shield- NO ANIMATION - PLACEHOLDER FOR PAPERDOLL
+1662,Garg_Victor Blackthorn Shield- NO ANIMATION - PLACEHOLDER FOR PAPERDOLL
+1663,Holiday Sash Santa- NO ANIMATION - PLACEHOLDER FOR PAPERDOLL
+1664,Garg_Holiday Sash Santa- NO ANIMATION - PLACEHOLDER FOR PAPERDOLL
+1665,Holiday Sash Snowflake- NO ANIMATION - PLACEHOLDER FOR PAPERDOLL
+1666,Garg_Holiday Sash Snowflake- NO ANIMATION - PLACEHOLDER FOR PAPERDOLL
+1667,Holiday Sash Garland- NO ANIMATION - PLACEHOLDER FOR PAPERDOLL
+1668,Garg_Holiday Sash Garland- NO ANIMATION - PLACEHOLDER FOR PAPERDOLL
+1669,Shamrock_Medallion- NO ANIMATION - PLACEHOLDER FOR PAPERDOLL
+1670,Garg_Shamrock_Medallion- NO ANIMATION - PLACEHOLDER FOR PAPERDOLL
+1671,Robe_Dragon_H
+1672,Robe_Dragon_G
+1673,Dress_Dragon_H
+1674,Dress_Dragon_G
+1675,Dragon_Helm_H
+1676,Dragon_Chest_H
+1677,Dragon_Arms_H
+1678,Dragon_Legs_H
+1679,Dragon_Hands_H
+1680,Dragon_Neck_H
+1681,Mushroom_Hat_H
+1682,Mushroom_Earrings_G- NO ANIMATION - PLACEHOLDER FOR PAPERDOLL
+1693,Tachi- NO ANIMATION - PLACEHOLDER FOR PAPERDOLL
+1694,Escrima- NO ANIMATION - PLACEHOLDER FOR PAPERDOLL
+1695,Bo- NO ANIMATION - PLACEHOLDER FOR PAPERDOLL
+1696,Yari- NO ANIMATION - PLACEHOLDER FOR PAPERDOLL
+1697,Tanto- NO ANIMATION - PLACEHOLDER FOR PAPERDOLL
+1698,Tanto_G- NO ANIMATION - PLACEHOLDER FOR PAPERDOLL
+1699,Otsuchi_G- NO ANIMATION - PLACEHOLDER FOR PAPERDOLL
+1700,Bokuto_G- NO ANIMATION - PLACEHOLDER FOR PAPERDOLL

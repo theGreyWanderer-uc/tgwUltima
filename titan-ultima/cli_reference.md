@@ -33,6 +33,7 @@ titan u8 <command>              # Ultima 8: Pagan
 titan u7 <command>              # Ultima 7: The Black Gate / Serpent Isle
 titan u6 <command>              # Ultima 6: The False Prophet
 titan u9 <command>              # Ultima 9: Ascension
+titan uo <command>              # Ultima Online Classic Client
 ```
 
 > **Backward compatibility:** The old root-level U8 commands (e.g.
@@ -58,6 +59,9 @@ both the command line and the config, TITAN prints an error pointing to
 U6 commands that accept `-g`/`--gamedir` are config-aware the same way,
 falling back to `[u6.game] base` (set manually -- `titan setup` doesn't
 detect U6 installs yet).
+
+UO commands accept an optional `client` argument. If omitted, they fall back
+to `[uo.game] base` in `titan.toml`.
 
 See [Configuration (titan.toml)](#configuration-titantoml) below.
 
@@ -272,6 +276,80 @@ titan u8 shape-import <directory> --original FILE [-p PAL] [-o FILE]
 **Example**
 ```bash
 titan u8 shape-import edited_frames/ --original shapes/0001.shp -p U8PAL.PAL -o 0001_new.shp
+```
+
+---
+
+#### `u8 shape-convert-u7`
+
+Convert a U8 static/scenery shape into a U7/Exult-compatible shape, for
+porting U8 art into a U7 de-make (see `titan.u8.u7_shape_convert`'s
+module docstring for the full reasoning). Both engines share the same
+2:1 dimetric projection and 8-direction sprite convention, so this is a
+**resize + palette requantize + hotspot-convention shift** (U8's
+bottom-center hotspot -> U7's bottom-right corner), not a geometric
+reprojection. Target size is footprint-calibrated against a real U7
+`STATIC` directory's own `SHAPES.VGA`/`TFA.DAT` (matched by tile
+footprint, then applied as one uniform scale factor -- not a forced
+absolute width/height, which real testing showed distorts shapes whose
+aspect ratio doesn't match the "typical" object at that footprint).
+Static/scenery shapes only (furniture, items, decor) -- not actor/NPC
+animation sets, a distinct frame-semantics problem. **Known
+limitation**: multi-orientation objects (e.g. a desk with separate U8
+shapes per facing) don't reliably map onto U7's compass convention --
+confirmed both mathematically and visually, and confirmed *not*
+fixable by a per-pixel rotate/skew (produces a garbled result; see the
+module docstring for the full investigation). Visually verify facing
+when placing converted multi-orientation objects.
+
+```
+titan u8 shape-convert-u7 <file> <shape_num> --typeflag FILE --u7-static DIR [--u8-palette FILE] [--u7-palette FILE] [-o FILE]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to the U8 `.shp` file to convert |
+| `shape_num` | This shape's number in `TYPEFLAG.DAT`/`U8SHAPES.FLX` (for footprint lookup) |
+| `--typeflag FILE` | Path to U8's `TYPEFLAG.DAT` |
+| `--u7-static DIR` | Path to a real U7/Exult `STATIC` directory (`SHAPES.VGA` + `TFA.DAT`) |
+| `--u8-palette FILE` | Path to `U8PAL.PAL` |
+| `--u7-palette FILE` | Path to U7's `PALETTES.FLX` (default: `<u7-static>/PALETTES.FLX`) |
+| `-o FILE`, `--output FILE` | Output `.shp` path (default: `<name>_u7.shp`) |
+
+**Example**
+```bash
+titan u8 shape-convert-u7 shapes/0078.shp 78 --typeflag STATIC/TYPEFLAG.DAT \
+  --u7-static /path/to/ultima7/STATIC --u8-palette STATIC/U8PAL.PAL -o 0078_u7.shp
+```
+
+---
+
+#### `u8 shape-convert-u7-all`
+
+Batch version of `shape-convert-u7`: converts every used shape in a
+`U8SHAPES.FLX` archive, one `.shp` file each (named `<shape_num>.shp`),
+with the exact same options. The U7 footprint size calibration table
+is built once and reused for the whole batch. Real-data run (BG
+`U8SHAPES.FLX`, 2048 slots): 855 shapes converted (21,450 total
+frames), 1,193 empty slots skipped, 0 failures.
+
+```
+titan u8 shape-convert-u7-all <file> --typeflag FILE --u7-static DIR [--u8-palette FILE] [--u7-palette FILE] [-o DIR]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `U8SHAPES.FLX` |
+| `--typeflag FILE` | Path to U8's `TYPEFLAG.DAT` |
+| `--u7-static DIR` | Path to a real U7/Exult `STATIC` directory (`SHAPES.VGA` + `TFA.DAT`) |
+| `--u8-palette FILE` | Path to `U8PAL.PAL` |
+| `--u7-palette FILE` | Path to U7's `PALETTES.FLX` (default: `<u7-static>/PALETTES.FLX`) |
+| `-o DIR`, `--output DIR` | Output directory (default: `u7_converted/`) |
+
+**Example**
+```bash
+titan u8 shape-convert-u7-all STATIC/U8SHAPES.FLX --typeflag STATIC/TYPEFLAG.DAT \
+  --u7-static /path/to/ultima7/STATIC --u8-palette STATIC/U8PAL.PAL -o u7_shapes/
 ```
 
 ---
@@ -975,19 +1053,26 @@ titan u7 shape-export SHAPES.VGA --shape 177 -p PALETTES.FLX \
 
 #### `u7 shape-batch`
 
-Batch-export shapes from a VGA Flex archive to PNG.
+Batch-export shapes from a VGA Flex archive, **or standalone `.shp`
+files from a directory** (e.g. `titan u8 shape-convert-u7-all`'s own
+output -- one file per shape rather than one combined archive), to
+PNG. Auto-detected from whether `file` is a directory or a file;
+directory input skips VGA-only options (`--range-start`/`--range-end`)
+and auto-detects ground-tile vs. RLE-sprite framing per file (no VGA
+shape-index context needed there).
 
 ```
-titan u7 shape-batch <file> [-p PAL] [-o DIR] [--range START END]
+titan u7 shape-batch <file-or-dir> [-p PAL] [-o DIR] [--range-start N] [--range-end N]
                      [--indexed] [--cycle-phase MS]
 ```
 
 | Argument | Description |
 |----------|-------------|
-| `file` | Path to a VGA Flex archive (e.g. `SHAPES.VGA`, `FACES.VGA`) |
+| `file` | Path to a VGA Flex archive (e.g. `SHAPES.VGA`, `FACES.VGA`), or a directory of standalone `.shp` files |
 | `-p FILE`, `--palette FILE` | Path to `PALETTES.FLX` or raw `.pal` (default: greyscale) |
 | `-o DIR`, `--output DIR` | Output directory (default: `<name>_png/`) |
-| `--range START END` | Shape index range to export (default: all) |
+| `--range-start N` | First shape index to export (VGA archive input only; default: 0) |
+| `--range-end N` | Last shape index, exclusive (VGA archive input only; default: all) |
 | `--indexed` | Export palette-indexed (`P`-mode) PNGs instead of flattening to RGBA |
 | `--cycle-phase MS` | Preview the palette rotated to this elapsed time in milliseconds |
 
@@ -998,8 +1083,11 @@ doesn't generalize across a batch of unrelated shapes.
 **Examples**
 ```bash
 titan u7 shape-batch SHAPES.VGA -p PALETTES.FLX -o shapes_png/
-titan u7 shape-batch FACES.VGA -p PALETTES.FLX -o faces_png/ --range 0 50
+titan u7 shape-batch FACES.VGA -p PALETTES.FLX -o faces_png/ --range-start 0 --range-end 50
 titan u7 shape-batch SHAPES.VGA -p PALETTES.FLX --indexed -o shapes_indexed/
+
+# Directory of standalone .shp files (e.g. converted from U8).
+titan u7 shape-batch u7_converted/ -p PALETTES.FLX -o u7_converted_png/
 ```
 
 ---
@@ -3205,16 +3293,156 @@ titan u9 model-export-all static/sappear.flx -t static/bitmap16.flx -p static/an
 
 ---
 
+#### `u9 icon-list`
+
+List candidate 2D UI icon entries in a texture archive: entries **not**
+referenced by any 3D model material in `sappear.flx` (see
+`titan.u9.icon`'s module docstring for how this split works and its
+known limitation -- it's a solid subset of the real icon art, not a
+provably exhaustive one). Kept logically separate from the mesh/texture
+commands above: its own module, its own `icon-*` command group, its
+own default output directory.
+
+```
+titan u9 icon-list <file> <textures> [--limit N]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/sappear.flx` |
+| `textures` | Path to a texture archive, e.g. `bitmap16.flx` or `bitmapsh.flx` |
+| `--limit N` | Max rows to print, `0` = unlimited (default: `200`) |
+
+**Example**
+```bash
+titan u9 icon-list static/sappear.flx static/bitmapsh.flx --limit 50
+```
+
+---
+
+#### `u9 icon-export`
+
+Export one texture archive entry to PNG, regardless of whether any 3D
+model references it -- a low-level, single-entry tool (unlike
+`model-export`, this needs no `sappear.flx`).
+
+```
+titan u9 icon-export <textures> <entry_id> [--frame N] [-p PALETTE] [-o DIR]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `textures` | Path to a texture archive, e.g. `bitmap16.flx` or `bitmapsh.flx` |
+| `entry_id` | Entry ID (0-7999) to export |
+| `--frame N` | Frame index within the entry (default: `0`) |
+| `-p FILE`, `--palette FILE` | Path to `static/ankh.pal` -- colors 8-bit textures (default: flat grayscale) |
+| `-o DIR`, `--output DIR` | Output directory (default: current directory) |
+
+**Example**
+```bash
+titan u9 icon-export static/bitmapsh.flx 568 -p static/ankh.pal -o icon_568/
+```
+
+---
+
+#### `u9 icon-export-all`
+
+Batch-export every candidate 2D UI icon (see `icon-list` above) to
+PNG, one file per entry (`icon_<id>.png`), into its own output
+directory -- separate from `model-export-all`'s `model_export/`.
+
+```
+titan u9 icon-export-all <file> <textures> [-p PALETTE] [-o DIR]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/sappear.flx` |
+| `textures` | Path to a texture archive, e.g. `bitmap16.flx` or `bitmapsh.flx` |
+| `-p FILE`, `--palette FILE` | Path to `static/ankh.pal` -- colors 8-bit textures (default: flat grayscale) |
+| `-o DIR`, `--output DIR` | Output directory (default: `icon_export/`) |
+
+**Example**
+```bash
+titan u9 icon-export-all static/sappear.flx static/bitmapsh.flx -p static/ankh.pal -o icon_export/
+```
+
+---
+
+## Ultima Online Classic Client commands (`titan uo`)
+
+All commands below are invoked as `titan uo <command>`. They read an installed
+Classic Client directory and export reviewable files under `-o/--output`
+(`uodata/` by default). The `client` argument is optional when `[uo.game] base`
+is configured in `titan.toml`.
+
+```
+titan uo <command> [client] [-o DIR] [command options]
+```
+
+### Core extraction commands
+
+| Command | Output | Notes |
+|---------|--------|-------|
+| `art-export` | PNG + manifest CSV | Land and static/item art from UOP or MUL/IDX |
+| `gump-export` | PNG + manifest CSV | UI gumps from UOP or MUL/IDX |
+| `texture-export` | PNG + manifest CSV | Land textures |
+| `light-export` | PNG + manifest CSV | Light masks |
+| `font-export` | PNG atlases, optional glyph PNGs, CSV | ASCII fonts from `fonts.mul` |
+| `sound-export` | WAV + manifest CSV | Sound effects from UOP or MUL/IDX |
+| `animation-export` | PNG frames + manifest CSV | Legacy `anim*.mul/idx` frames; named/grouped/raw layouts |
+
+Common range/limit options are available on image/sound/animation exports:
+`--limit`, `--range-start`, and `--range-end`. `animation-export` also accepts
+`--set anim|anim2|anim3|anim4|anim5|anim6` and
+`--layout named|grouped|raw`.
+
+### Metadata commands
+
+| Command | Output | Notes |
+|---------|--------|-------|
+| `hue-export` | Hue ramp PNGs + CSV | `hues.mul` color ramps used for item/mobile tinting |
+| `radar-export` | Swatch PNG + CSV | `radarcol.mul`, the terrain/static color lookup used by radar/minimap rendering |
+| `tiledata-export` | CSV | Land/static tile names, flags, dimensions, weights, animation IDs |
+| `animdata-export` | CSV | Static-art animation metadata from `animdata.mul` |
+| `artdef-export` | CSV | `art.def` art redirects |
+| `def-export` | CSV | All supported `.def` redirects, including body/equipment/gump/sound/texture data |
+| `localization-export` | CSV | `Cliloc.*`, speech, skills, and system text/name files |
+| `multi-export` | CSV | Multi/component records from UOP or `multi.mul` |
+| `animation-resolution-export` | CSV | Body/action/direction resolution, DEF redirection, sequence replacements |
+| `animation-body-names-export` | CSV | Packaged body-name metadata plus client DEF comments |
+
+Animation naming uses packaged body-name clues installed with Titan and client
+metadata from `Body.def`, `Bodyconv.def`, `Corpse.def`, `Equipconv.def`,
+`mobtypes.txt`, and `AnimationSequence.uop` where present. This is enough to
+turn many raw animation folders into names such as body/category/action/
+direction, but the original client files still do not provide complete
+human-readable names for every asset.
+
+**Examples**
+
+```bash
+# With [uo.game] base configured
+titan uo gump-export -o uodata/
+titan uo animation-export --set anim --layout named --limit 20 -o uodata/
+titan uo animation-resolution-export --body-start 0 --body-end 200 -o uodata/
+
+# With an explicit client path
+titan uo hue-export "C:/Program Files (x86)/Electronic Arts/Ultima Online Classic" -o hues/
+```
+
+---
+
 ## Configuration (titan.toml)
 
 ### File format
 
 The legacy flat format is still supported (treated as Ultima 8 config).
-The new multi-game format uses `[u8.*]`, `[u7bg.*]`, `[u7si.*]`, and
-`[u6.*]` sections. `titan setup` currently detects and writes U8/U7
-sections only -- `[u6.game] base` must be added manually (see below).
-Ultima 9 commands take explicit file paths and have no `titan.toml`
-integration yet.
+The new multi-game format uses `[u8.*]`, `[u7bg.*]`, `[u7si.*]`, `[u6.*]`,
+and `[uo.*]` sections. `titan setup` currently detects and writes U8/U7/UO
+sections; `[u6.game] base` must be added manually (see below). Ultima 9
+commands take explicit file paths and have no
+`titan.toml` integration yet.
 
 #### Legacy format (Ultima 8 only)
 
@@ -3269,11 +3497,15 @@ gamedat  = "gamedat/"
 
 [u6.game]
 base     = "<Ultima 6 install>"
+
+[uo.game]
+base     = "<Ultima Online Classic Client install>"
 ```
 
 U6 has just the one `base` key (unlike U7/U8, a real U6 install has no
 path variability -- all commands look for the standard fixed filenames
-directly under `base`).
+directly under `base`). UO also uses one `base` key; every `titan uo`
+command can omit its `client` argument when this value is configured.
 
 ### Search order
 
@@ -3317,6 +3549,8 @@ A value on the command line always wins.
 | `shape-export` | Export `.shp` frames to PNG |
 | `shape-batch` | Batch export all shapes to PNG |
 | `shape-import` | Import PNGs back into a shape file |
+| `shape-convert-u7` | Convert a U8 shape into a U7/Exult-compatible shape |
+| `shape-convert-u7-all` | Batch version of `shape-convert-u7`, over every used shape |
 | `sound-export` | Decode one Sonarc `.raw` to WAV |
 | `sound-batch` | Batch decode Sonarc `.raw` files to WAV |
 | `music-export` | Convert one XMIDI `.xmi` to MIDI |
@@ -3384,5 +3618,25 @@ A value on the command line always wins.
 | `u9 model-info` | Print a model's limb/LOD/material/texture summary |
 | `u9 model-export` | Export one model to OBJ+MTL(+PNG textures) and/or STL |
 | `u9 model-export-all` | Batch version of `model-export`, over every used model in a `sappear.flx` |
+| `u9 icon-list` | List candidate 2D UI icon entries not referenced by any 3D model |
+| `u9 icon-export` | Export one texture archive entry to PNG, regardless of mesh usage |
+| `u9 icon-export-all` | Batch-export every candidate 2D UI icon to PNG |
+| `uo art-export` | Export UO land/static art to PNG |
+| `uo gump-export` | Export UO gumps to PNG |
+| `uo texture-export` | Export UO land textures to PNG |
+| `uo light-export` | Export UO light masks to PNG |
+| `uo hue-export` | Export UO hue ramps to PNG/CSV |
+| `uo radar-export` | Export UO radar/minimap color lookup data |
+| `uo tiledata-export` | Export UO land/static tile metadata |
+| `uo animdata-export` | Export UO static-art animation metadata |
+| `uo artdef-export` | Export UO `art.def` redirect metadata |
+| `uo def-export` | Export supported UO `.def` redirect metadata |
+| `uo localization-export` | Export UO cliloc, speech, skills, and system text/name metadata |
+| `uo multi-export` | Export UO multi component metadata |
+| `uo font-export` | Export UO ASCII font atlases and glyph metadata |
+| `uo sound-export` | Export UO sound effects to WAV |
+| `uo animation-export` | Export UO legacy animation frames to PNG |
+| `uo animation-resolution-export` | Export UO body/action/direction resolution metadata |
+| `uo animation-body-names-export` | Export packaged/client UO animation body-name clues |
 | `setup` | First-time setup wizard — creates `titan.toml` |
 | `config` | Show or edit active `titan.toml` |

@@ -17,12 +17,14 @@ Canonical imports::
     from titan.u9.model_naming import label_for_model
     from titan.u9.palette import U9Palette
     from titan.u9.preview import render_preview  # optional, needs `pip install pyvista`
+    from titan.u9.icon import icon_entry_indices
 """
 
 from __future__ import annotations
 
 from titan.u9.adpcm import AdpcmDecodeError, decode_mono as decode_adpcm_mono, decode_stereo
 from titan.u9.flx_archive import U9FlxArchive, U9FlxArchiveError, U9FlxDirEntry
+from titan.u9.icon import icon_entry_indices, used_texture_ids
 from titan.u9.mesh_export import MeshExportError, export_obj, export_stl
 from titan.u9.microtalk import MicroTalkDecodeError, decode_mono as decode_microtalk_mono
 from titan.u9.model import (
@@ -78,4 +80,6 @@ __all__ = [
     "render_preview",
     "PreviewError",
     "PreviewUnavailableError",
+    "icon_entry_indices",
+    "used_texture_ids",
 ]
