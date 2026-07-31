@@ -7,9 +7,10 @@ Root commands (game-agnostic):
 
 Sub-apps:
     u8  — Ultima 8: Pagan commands (shape, map, sound, save, etc.)
-    u7  — Ultima 7 commands (placeholder — coming soon)
+    u7  — Ultima 7: The Black Gate / Serpent Isle commands
     u6  — Ultima 6: The False Prophet commands (tile, map, library, data)
-    u9  — Ultima 9: Ascension commands (FLX archive, data)
+    u9  — Ultima 9: Ascension commands (FLX archive, sound, model data)
+    uo  — Ultima Online Classic Client commands (2D asset/data export)
 
 Old root-level U8 commands (e.g. ``titan shape-export``) are still
 accepted as hidden deprecated aliases that forward to ``titan u8 …``.
@@ -36,8 +37,6 @@ from titan._version import TITAN_VERSION
 from titan._config import (
     find_config,
     load_config,
-    cfg as _cfg,
-    get_config,
 )
 from titan.flex import (
     FlexArchive,
@@ -55,7 +54,7 @@ app = typer.Typer(
     name="titan",
     help=(
         "TITAN \u2013 Tool for Interpreting and Transforming Archival Nodes.\n"
-        "Work with Ultima file formats (U8, U7)."
+        "Work with Ultima file formats (U8, U7, U6, U9, UO)."
     ),
     no_args_is_help=True,
     rich_markup_mode=None,
@@ -87,6 +86,7 @@ def _global_options(
 ) -> None:
     """TITAN \u2013 Tool for Interpreting and Transforming Archival Nodes."""
     import titan._config as _config_mod
+
     _config_mod.explicit_config_path = config
     _config_mod.load_config(config)
 
@@ -94,6 +94,7 @@ def _global_options(
 # ============================================================================
 # CLI COMMANDS — FLEX
 # ============================================================================
+
 
 def cmd_flex_info(args: SimpleNamespace) -> int:
     """Show detailed information about a Flex archive."""
@@ -116,7 +117,7 @@ def cmd_flex_info(args: SimpleNamespace) -> int:
 
     print("Raw header (first 128 bytes):")
     for row_start in range(0, FLEX_HEADER_SIZE, 16):
-        row = raw_header[row_start:row_start + 16]
+        row = raw_header[row_start : row_start + 16]
         hex_part = " ".join(f"{b:02X}" for b in row)
         ascii_part = "".join(chr(b) if 32 <= b < 127 else "." for b in row)
         print(f"  {row_start:04X}: {hex_part:<48s}  {ascii_part}")
@@ -249,8 +250,9 @@ def cmd_flex_create(args: SimpleNamespace) -> int:
     return 0
 
 
-def _create_from_manifest(source_dir: str, manifest_path: str,
-                          comment_override: str = "") -> FlexArchive:
+def _create_from_manifest(
+    source_dir: str, manifest_path: str, comment_override: str = ""
+) -> FlexArchive:
     """Reconstruct a Flex archive guided by a _manifest.txt file."""
     archive = FlexArchive()
 
@@ -262,7 +264,7 @@ def _create_from_manifest(source_dir: str, manifest_path: str,
         for line in mf:
             line = line.strip()
             if line.startswith("# Comment:"):
-                original_comment = line[len("# Comment:"):].strip()
+                original_comment = line[len("# Comment:") :].strip()
             elif line.startswith("# Unknown field:"):
                 try:
                     unknown_field = int(line.split(":")[-1].strip(), 0)
@@ -278,8 +280,9 @@ def _create_from_manifest(source_dir: str, manifest_path: str,
                     fname = parts[2].strip()
                     entries.append((idx, size, fname))
 
-    archive.comment = (comment_override or original_comment
-                       or f"Rebuilt by TITAN v{TITAN_VERSION}")
+    archive.comment = (
+        comment_override or original_comment or f"Rebuilt by TITAN v{TITAN_VERSION}"
+    )
     archive.unknown_field = unknown_field
 
     if not entries:
@@ -293,14 +296,15 @@ def _create_from_manifest(source_dir: str, manifest_path: str,
             continue  # Empty record
         fpath = os.path.join(source_dir, fname)
         if not os.path.isfile(fpath):
-            print(f"  WARNING: Missing file for record {idx}: {fpath}",
-                  file=sys.stderr)
+            print(f"  WARNING: Missing file for record {idx}: {fpath}", file=sys.stderr)
             continue
         data = Path(fpath).read_bytes()
         if len(data) != expected_size:
-            print(f"  WARNING: Record {idx} size mismatch "
-                  f"(expected {expected_size}, got {len(data)})",
-                  file=sys.stderr)
+            print(
+                f"  WARNING: Record {idx} size mismatch "
+                f"(expected {expected_size}, got {len(data)})",
+                file=sys.stderr,
+            )
         archive.records[idx] = data
 
     return archive
@@ -315,8 +319,7 @@ def cmd_flex_update(args: SimpleNamespace) -> int:
 
     data_path = args.data
     if not os.path.isfile(data_path):
-        print(f"ERROR: Replacement data file not found: {data_path}",
-              file=sys.stderr)
+        print(f"ERROR: Replacement data file not found: {data_path}", file=sys.stderr)
         return 1
 
     index = args.index
@@ -327,9 +330,11 @@ def cmd_flex_update(args: SimpleNamespace) -> int:
     archive = FlexArchive.from_file(flex_path)
 
     if index >= len(archive.records):
-        print(f"ERROR: Index {index} out of range "
-              f"(archive has {len(archive.records)} records)",
-              file=sys.stderr)
+        print(
+            f"ERROR: Index {index} out of range "
+            f"(archive has {len(archive.records)} records)",
+            file=sys.stderr,
+        )
         return 1
 
     old_size = len(archive.records[index]) if archive.records[index] else 0
@@ -339,14 +344,17 @@ def cmd_flex_update(args: SimpleNamespace) -> int:
     output_path = args.output or flex_path
     archive.save(output_path)
 
-    print(f"Flex updated: record {index} replaced "
-          f"({old_size:,} -> {len(new_data):,} bytes) -> {output_path}")
+    print(
+        f"Flex updated: record {index} replaced "
+        f"({old_size:,} -> {len(new_data):,} bytes) -> {output_path}"
+    )
     return 0
 
 
 # ============================================================================
 # CLI COMMANDS — MUSIC (XMIDI)
 # ============================================================================
+
 
 def cmd_music_export(args: SimpleNamespace) -> int:
     """Convert a single XMIDI file to standard MIDI."""
@@ -385,8 +393,7 @@ def cmd_music_batch(args: SimpleNamespace) -> int:
     outdir = args.output or os.path.join(srcdir, "midi")
     os.makedirs(outdir, exist_ok=True)
 
-    xmi_files = sorted(f for f in os.listdir(srcdir)
-                       if f.lower().endswith(".xmi"))
+    xmi_files = sorted(f for f in os.listdir(srcdir) if f.lower().endswith(".xmi"))
     if not xmi_files:
         print(f"No .xmi files found in {srcdir}")
         return 0
@@ -416,14 +423,17 @@ def cmd_music_batch(args: SimpleNamespace) -> int:
             failed += 1
 
         outdir_display = outdir.rstrip("/\\") + "/"
-        print(f"Batch convert complete: {converted} MIDIs created, "
-            f"{failed} skipped -> {outdir_display}")
+        print(
+            f"Batch convert complete: {converted} MIDIs created, "
+            f"{failed} skipped -> {outdir_display}"
+        )
     return 0
 
 
 # ============================================================================
 # CONFIG COMMANDS — setup wizard + inspector
 # ============================================================================
+
 
 def cmd_config(args: SimpleNamespace) -> int:
     """Show the active titan.toml configuration (or open it for editing)."""
@@ -437,7 +447,8 @@ def cmd_config(args: SimpleNamespace) -> int:
             print("No titan.toml found. Run `titan setup` to create one.")
             return 1
         editor = (
-            os.getenv("VISUAL") or os.getenv("EDITOR")
+            os.getenv("VISUAL")
+            or os.getenv("EDITOR")
             or ("notepad" if sys.platform == "win32" else "nano")
         )
         os.system(f'{editor} "{path}"')
@@ -459,7 +470,9 @@ def cmd_config(args: SimpleNamespace) -> int:
 
     config = load_config(str(path))
 
-    def _print_kv_section(title: str, section: dict, check_exists: bool = False) -> None:
+    def _print_kv_section(
+        title: str, section: dict, check_exists: bool = False
+    ) -> None:
         if not section:
             return
         print()
@@ -477,8 +490,9 @@ def cmd_config(args: SimpleNamespace) -> int:
     u8 = config.get("u8", {})
     u7bg = config.get("u7bg", {})
     u7si = config.get("u7si", {})
+    uo = config.get("uo", {})
     exult = config.get("exult", {})
-    if any((u8, u7bg, u7si, exult)):
+    if any((u8, u7bg, u7si, uo, exult)):
         _print_kv_section("[u8.game]", u8.get("game", {}))
         _print_kv_section("[u8.paths]", u8.get("paths", {}), check_exists=True)
         _print_kv_section("[u7bg.game]", u7bg.get("game", {}))
@@ -497,6 +511,7 @@ def cmd_config(args: SimpleNamespace) -> int:
                 mod.get("paths", {}),
                 check_exists=True,
             )
+        _print_kv_section("[uo.game]", uo.get("game", {}), check_exists=True)
         _print_kv_section("[exult.paths]", exult.get("paths", {}), check_exists=True)
     else:
         game = config.get("game", {})
@@ -510,7 +525,7 @@ def cmd_setup(args: SimpleNamespace) -> int:
     """Interactive first-time setup wizard \u2014 creates titan.toml."""
     print("TITAN Setup Wizard")
     print("=" * 55)
-    print("This will create titan.toml for Ultima 8 and Ultima 7 installs.\n")
+    print("This will create titan.toml for Ultima 8, Ultima 7, and UO installs.\n")
 
     # -- Auto-detect standard install locations --------------------
     candidates: list[Path] = []
@@ -528,13 +543,18 @@ def cmd_setup(args: SimpleNamespace) -> int:
             return False
         if "ultima 7" in lowered or "ultima7" in lowered:
             return False
-        return any(token in lowered for token in ("ultima 8", "ultima8", "viii", "pagan"))
+        return any(
+            token in lowered for token in ("ultima 8", "ultima8", "viii", "pagan")
+        )
 
     def _is_u7_folder_name(name: str) -> bool:
         lowered = name.lower()
         if "ultima" not in lowered:
             return False
-        return any(token in lowered for token in ("ultima 7", "ultima7", "black gate", "serpent"))
+        return any(
+            token in lowered
+            for token in ("ultima 7", "ultima7", "black gate", "serpent")
+        )
 
     def _looks_like_u7_root(path: Path) -> bool:
         static_candidates = [
@@ -543,6 +563,17 @@ def cmd_setup(args: SimpleNamespace) -> int:
             path / "SERPENT" / "STATIC",
         ]
         return any(static.is_dir() for static in static_candidates)
+
+    def _looks_like_uo_root(path: Path) -> bool:
+        return any(
+            (path / name).is_file()
+            for name in (
+                "artLegacyMUL.uop",
+                "gumpartLegacyMUL.uop",
+                "tiledata.mul",
+                "hues.mul",
+            )
+        )
 
     def _u7_variant_from_root(path: Path) -> str:
         lowered = path.name.lower()
@@ -553,9 +584,12 @@ def cmd_setup(args: SimpleNamespace) -> int:
         if "serpent" in lowered or lowered.endswith("si") or "ultima7si" in lowered:
             return "si"
         return "bg"
+
     # Windows: GOG Galaxy client (most common current install)
     for drive in "CDEFG":
-        _add_candidate(Path(f"{drive}:\\Program Files (x86)\\GOG Galaxy\\Games\\Ultima 8"))
+        _add_candidate(
+            Path(f"{drive}:\\Program Files (x86)\\GOG Galaxy\\Games\\Ultima 8")
+        )
     # Windows: GOG Offline Installer + common manual redirects
     for drive in "CDEFG":
         for path in [
@@ -627,6 +661,23 @@ def cmd_setup(args: SimpleNamespace) -> int:
         except PermissionError:
             continue
 
+    # UO auto-detection candidates.
+    uo_candidates: list[Path] = []
+
+    def _add_uo_candidate(path: Path) -> None:
+        if path not in uo_candidates:
+            uo_candidates.append(path)
+
+    for drive in "CDEFG":
+        for path in [
+            Path(
+                f"{drive}:\\Program Files (x86)\\Electronic Arts\\Ultima Online Classic"
+            ),
+            Path(f"{drive}:\\Ultima\\UltimaOnlineClassicClient"),
+            Path(f"{drive}:\\Ultima Online Classic"),
+        ]:
+            _add_uo_candidate(path)
+
     detected_base: Optional[Path] = None
     detected_lang = "ENGLISH"
     detected_u8: list[tuple[Path, str]] = []
@@ -687,11 +738,32 @@ def cmd_setup(args: SimpleNamespace) -> int:
     bg_default = str(detected_u7bg) if detected_u7bg else ""
     si_default = str(detected_u7si) if detected_u7si else ""
 
-    u7bg_input = input(f"Ultima VII Black Gate base [{bg_default or 'optional'}]: ").strip()
-    u7si_input = input(f"Ultima VII Serpent Isle base [{si_default or 'optional'}]: ").strip()
+    u7bg_input = input(
+        f"Ultima VII Black Gate base [{bg_default or 'optional'}]: "
+    ).strip()
+    u7si_input = input(
+        f"Ultima VII Serpent Isle base [{si_default or 'optional'}]: "
+    ).strip()
 
     u7bg_base = (u7bg_input or bg_default).replace("\\", "/")
     u7si_base = (u7si_input or si_default).replace("\\", "/")
+
+    # -- UO install detection -------------------------------------
+    detected_uo: Optional[Path] = None
+    print("\nSearching for Ultima Online Classic Client installation...")
+    for uo_candidate in uo_candidates:
+        if uo_candidate.exists() and _looks_like_uo_root(uo_candidate):
+            detected_uo = uo_candidate
+            print(f"  Found UO Classic Client: {uo_candidate}")
+            break
+    if detected_uo is None:
+        print("  Not found in standard locations.")
+
+    uo_default = str(detected_uo) if detected_uo else ""
+    uo_input = input(
+        f"Ultima Online Classic Client base [{uo_default or 'optional'}]: "
+    ).strip()
+    uo_base = (uo_input or uo_default).replace("\\", "/")
 
     # -- Third-party engine save detection -------------------------
     appdata = os.getenv("APPDATA")
@@ -703,14 +775,18 @@ def cmd_setup(args: SimpleNamespace) -> int:
             engine_save_file = pent_save / "U8SAVE.000"
     # macOS: ~/Library/Application Support/Pentagram/u8-save
     if engine_save_file is None:
-        mac_save = Path.home() / "Library" / "Application Support" / "Pentagram" / "u8-save"
+        mac_save = (
+            Path.home() / "Library" / "Application Support" / "Pentagram" / "u8-save"
+        )
         if (mac_save / "U8SAVE.000").exists():
             engine_save_file = mac_save / "U8SAVE.000"
 
     nonfixed_value = "U8SAVE.000"
     if engine_save_file:
         print(f"\nThird-party engine save detected: {engine_save_file}")
-        ans = input("Use this save instead of game-folder saves? [Y/n] ").strip().lower()
+        ans = (
+            input("Use this save instead of game-folder saves? [Y/n] ").strip().lower()
+        )
         if ans not in ("n", "no"):
             nonfixed_value = str(engine_save_file).replace("\\", "/")
 
@@ -718,13 +794,15 @@ def cmd_setup(args: SimpleNamespace) -> int:
     u8_static_detected = (Path(base) / lang / "STATIC") if lang else Path(base)
     u8_usecode_detected = (
         (Path(base) / lang / "USECODE" / "EUSECODE.FLX")
-        if lang else (Path(base) / "USECODE" / "EUSECODE.FLX")
+        if lang
+        else (Path(base) / "USECODE" / "EUSECODE.FLX")
     )
     u7bg_static_detected = (Path(u7bg_base) / "STATIC") if u7bg_base else None
     u7si_static_detected = (Path(u7si_base) / "STATIC") if u7si_base else None
     exult_profile = (
         Path(os.getenv("LOCALAPPDATA", "")) / "Exult"
-        if os.getenv("LOCALAPPDATA") else None
+        if os.getenv("LOCALAPPDATA")
+        else None
     )
     if exult_profile is not None and not exult_profile.is_dir():
         exult_profile = None
@@ -770,7 +848,8 @@ def cmd_setup(args: SimpleNamespace) -> int:
             item: dict[str, str] = {"name": mod_dir.name}
             runtime_root = (
                 exult_profile / slug / "mods" / mod_dir.name
-                if exult_profile is not None else None
+                if exult_profile is not None
+                else None
             )
             if runtime_root is not None and runtime_root.is_dir():
                 item["root"] = str(runtime_root).replace("\\", "/")
@@ -856,6 +935,7 @@ def cmd_setup(args: SimpleNamespace) -> int:
     print(f"  U7 SI base:   {u7si_base or '(empty)'}")
     print(f"  U7 SI STATIC: {u7si_static_detected or '(empty)'}")
     print(f"  U7 SI GAMEDAT:{u7si_gamedat or '(empty)'}")
+    print(f"  UO base:      {uo_base or '(empty)'}")
     print(f"  Exult BG FLX: {exult_bg_flx or '(empty)'}")
     print(f"  Exult SI FLX: {exult_si_flx or '(empty)'}")
     for item in u7bg_mod_sources:
@@ -888,17 +968,33 @@ def cmd_setup(args: SimpleNamespace) -> int:
         lang = ""
         u7bg_base = ""
         u7si_base = ""
+        uo_base = ""
         u7bg_gamedat = ""
         u7si_gamedat = ""
         u7bg_mod_sources = []
         u7si_mod_sources = []
 
-        manual_u8_static = input("U8 STATIC path [optional]: ").strip().replace("\\", "/")
-        manual_u8_usecode = input("U8 EUSECODE.FLX path [optional]: ").strip().replace("\\", "/")
-        manual_u7bg_static = input("U7 BG STATIC path [optional]: ").strip().replace("\\", "/")
-        manual_u7si_static = input("U7 SI STATIC path [optional]: ").strip().replace("\\", "/")
-        exult_bg_flx = input("Exult BG FLX path [optional]: ").strip().replace("\\", "/")
-        exult_si_flx = input("Exult SI FLX path [optional]: ").strip().replace("\\", "/")
+        manual_u8_static = (
+            input("U8 STATIC path [optional]: ").strip().replace("\\", "/")
+        )
+        manual_u8_usecode = (
+            input("U8 EUSECODE.FLX path [optional]: ").strip().replace("\\", "/")
+        )
+        manual_u7bg_static = (
+            input("U7 BG STATIC path [optional]: ").strip().replace("\\", "/")
+        )
+        manual_u7si_static = (
+            input("U7 SI STATIC path [optional]: ").strip().replace("\\", "/")
+        )
+        uo_base = (
+            input("UO Classic Client base [optional]: ").strip().replace("\\", "/")
+        )
+        exult_bg_flx = (
+            input("Exult BG FLX path [optional]: ").strip().replace("\\", "/")
+        )
+        exult_si_flx = (
+            input("Exult SI FLX path [optional]: ").strip().replace("\\", "/")
+        )
 
     # -- Build and write titan.toml --------------------------------
     base_toml = base.replace("\\", "/")
@@ -908,21 +1004,35 @@ def cmd_setup(args: SimpleNamespace) -> int:
     if manual_u8_usecode:
         u8_usecode_path = manual_u8_usecode
     elif u8_static_manual_path is not None:
-        u8_usecode_path = str(u8_static_manual_path.parent / "USECODE" / "EUSECODE.FLX").replace("\\", "/")
+        u8_usecode_path = str(
+            u8_static_manual_path.parent / "USECODE" / "EUSECODE.FLX"
+        ).replace("\\", "/")
     else:
         u8_usecode_path = str(u8_usecode_detected).replace("\\", "/")
 
     if u8_static_manual_path is not None:
         u8_paths_fixed = str(u8_static_manual_path / "FIXED.DAT").replace("\\", "/")
         u8_paths_palette = str(u8_static_manual_path / "U8PAL.PAL").replace("\\", "/")
-        u8_paths_typeflag = str(u8_static_manual_path / "TYPEFLAG.DAT").replace("\\", "/")
+        u8_paths_typeflag = str(u8_static_manual_path / "TYPEFLAG.DAT").replace(
+            "\\", "/"
+        )
         u8_paths_gumpage = str(u8_static_manual_path / "GUMPAGE.DAT").replace("\\", "/")
-        u8_paths_xformpal = str(u8_static_manual_path / "XFORMPAL.DAT").replace("\\", "/")
-        u8_paths_ecredits = str(u8_static_manual_path / "ECREDITS.DAT").replace("\\", "/")
+        u8_paths_xformpal = str(u8_static_manual_path / "XFORMPAL.DAT").replace(
+            "\\", "/"
+        )
+        u8_paths_ecredits = str(u8_static_manual_path / "ECREDITS.DAT").replace(
+            "\\", "/"
+        )
         u8_paths_quotes = str(u8_static_manual_path / "QUOTES.DAT").replace("\\", "/")
-        u8_paths_shapes_flx = str(u8_static_manual_path / "U8SHAPES.FLX").replace("\\", "/")
-        u8_paths_fonts_flx = str(u8_static_manual_path / "U8FONTS.FLX").replace("\\", "/")
-        u8_paths_gumps_flx = str(u8_static_manual_path / "U8GUMPS.FLX").replace("\\", "/")
+        u8_paths_shapes_flx = str(u8_static_manual_path / "U8SHAPES.FLX").replace(
+            "\\", "/"
+        )
+        u8_paths_fonts_flx = str(u8_static_manual_path / "U8FONTS.FLX").replace(
+            "\\", "/"
+        )
+        u8_paths_gumps_flx = str(u8_static_manual_path / "U8GUMPS.FLX").replace(
+            "\\", "/"
+        )
     else:
         u8_paths_fixed = "FIXED.DAT"
         u8_paths_palette = "U8PAL.PAL"
@@ -1048,6 +1158,13 @@ def cmd_setup(args: SimpleNamespace) -> int:
             if "archive" in item:
                 lines.append(f'archive  = "{item["archive"]}"')
 
+    if uo_base:
+        lines += [
+            "",
+            "[uo.game]",
+            f'base     = "{uo_base}"',
+        ]
+
     if exult_bg_flx or exult_si_flx:
         lines += ["", "[exult.paths]"]
         if exult_bg_flx:
@@ -1065,9 +1182,7 @@ def cmd_setup(args: SimpleNamespace) -> int:
         if manual_u8_static:
             static_dir = Path(manual_u8_static)
         else:
-            static_dir = (
-                (Path(base) / lang / "STATIC") if lang else Path(base)
-            )
+            static_dir = (Path(base) / lang / "STATIC") if lang else Path(base)
         for flx, out in [("U8SHAPES.FLX", "shapes/"), ("GLOB.FLX", "globs/")]:
             src = static_dir / flx
             if src.exists():
@@ -1079,6 +1194,7 @@ def cmd_setup(args: SimpleNamespace) -> int:
 
     print("\nAll done! Try:")
     print("   titan u8 map-render -m 5")
+    print("   titan uo gump-export -o uodata/")
     print("   titan config")
     return 0
 
@@ -1109,7 +1225,9 @@ def flex_extract_cmd(
     file: Annotated[str, typer.Argument(help="Path to the .flx file")],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory (default: ./<flexname>/)"),
+        typer.Option(
+            "-o", "--output", help="Output directory (default: ./<flexname>/)"
+        ),
     ] = None,
 ) -> None:
     """Extract all objects from a Flex archive."""
@@ -1120,44 +1238,68 @@ def flex_extract_cmd(
 def flex_create_cmd(
     directory: Annotated[
         str,
-        typer.Argument(help="Source directory with numbered files (e.g., 0000.bin, 0001.shp)"),
+        typer.Argument(
+            help="Source directory with numbered files (e.g., 0000.bin, 0001.shp)"
+        ),
     ],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output .flx file path (default: <dirname>.flx)"),
+        typer.Option(
+            "-o", "--output", help="Output .flx file path (default: <dirname>.flx)"
+        ),
     ] = None,
     comment: Annotated[
         str,
-        typer.Option("-C", "--comment", help="Comment string to embed in the Flex header"),
+        typer.Option(
+            "-C", "--comment", help="Comment string to embed in the Flex header"
+        ),
     ] = "",
 ) -> None:
     """Create a Flex archive from files in a directory."""
-    raise SystemExit(cmd_flex_create(SimpleNamespace(
-        directory=directory, output=output, comment=comment,
-    )))
+    raise SystemExit(
+        cmd_flex_create(
+            SimpleNamespace(
+                directory=directory,
+                output=output,
+                comment=comment,
+            )
+        )
+    )
 
 
 @app.command("flex-update")
 def flex_update_cmd(
     file: Annotated[str, typer.Argument(help="Path to .flx archive")],
-    index: Annotated[int, typer.Option("--index", help="Record index to replace (0-based)")],
+    index: Annotated[
+        int, typer.Option("--index", help="Record index to replace (0-based)")
+    ],
     data: Annotated[str, typer.Option("--data", help="Path to the replacement file")],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output .flx path (default: overwrite input)"),
+        typer.Option(
+            "-o", "--output", help="Output .flx path (default: overwrite input)"
+        ),
     ] = None,
 ) -> None:
     """Replace a single record inside a Flex archive."""
-    raise SystemExit(cmd_flex_update(SimpleNamespace(
-        file=file, index=index, data=data, output=output,
-    )))
+    raise SystemExit(
+        cmd_flex_update(
+            SimpleNamespace(
+                file=file,
+                index=index,
+                data=data,
+                output=output,
+            )
+        )
+    )
 
 
 @app.command("music-export")
 def music_export_cmd(
     file: Annotated[str, typer.Argument(help="Path to .xmi XMIDI file")],
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output directory"),
+        Optional[str],
+        typer.Option("-o", "--output", help="Output directory"),
     ] = None,
 ) -> None:
     """Convert an XMIDI (.xmi) file to standard MIDI."""
@@ -1173,9 +1315,14 @@ def music_batch_cmd(
     ] = None,
 ) -> None:
     """Batch-convert all XMIDI .xmi files to standard MIDI."""
-    raise SystemExit(cmd_music_batch(SimpleNamespace(
-        directory=directory, output=output,
-    )))
+    raise SystemExit(
+        cmd_music_batch(
+            SimpleNamespace(
+                directory=directory,
+                output=output,
+            )
+        )
+    )
 
 
 @app.command("setup")
@@ -1187,14 +1334,21 @@ def setup_cmd() -> None:
 @app.command("config")
 def config_cmd(
     edit: Annotated[
-        bool, typer.Option("--edit", help="Open titan.toml in the system default editor"),
+        bool,
+        typer.Option("--edit", help="Open titan.toml in the system default editor"),
     ] = False,
 ) -> None:
     """Show or edit the active titan.toml settings."""
     import titan._config as _config_mod
-    raise SystemExit(cmd_config(SimpleNamespace(
-        config=_config_mod.explicit_config_path, edit=edit,
-    )))
+
+    raise SystemExit(
+        cmd_config(
+            SimpleNamespace(
+                config=_config_mod.explicit_config_path,
+                edit=edit,
+            )
+        )
+    )
 
 
 # ============================================================================
@@ -1205,12 +1359,14 @@ from titan.u8.cli import u8_app  # noqa: E402
 from titan.u7.cli import u7_app  # noqa: E402
 from titan.u6.cli import u6_app  # noqa: E402
 from titan.u9.cli import u9_app  # noqa: E402
+from titan.uo.cli import uo_app  # noqa: E402
 from titan.dialogue.cli import dialogue_app  # noqa: E402
 
 app.add_typer(u8_app)
 app.add_typer(u7_app)
 app.add_typer(u6_app)
 app.add_typer(u9_app)
+app.add_typer(uo_app)
 app.add_typer(dialogue_app)
 
 
@@ -1226,23 +1382,23 @@ app.add_typer(dialogue_app)
 from titan.u8 import cli as _u8_cli  # noqa: E402
 
 _U8_COMPAT_COMMANDS: list[tuple[str, object]] = [
-    ("palette-export",  _u8_cli.palette_export_cmd),
-    ("shape-export",    _u8_cli.shape_export_cmd),
-    ("shape-batch",     _u8_cli.shape_batch_cmd),
-    ("shape-import",    _u8_cli.shape_import_cmd),
-    ("sound-export",    _u8_cli.sound_export_cmd),
-    ("sound-batch",     _u8_cli.sound_batch_cmd),
+    ("palette-export", _u8_cli.palette_export_cmd),
+    ("shape-export", _u8_cli.shape_export_cmd),
+    ("shape-batch", _u8_cli.shape_batch_cmd),
+    ("shape-import", _u8_cli.shape_import_cmd),
+    ("sound-export", _u8_cli.sound_export_cmd),
+    ("sound-batch", _u8_cli.sound_batch_cmd),
     ("credits-decrypt", _u8_cli.credits_decrypt_cmd),
     ("xformpal-export", _u8_cli.xformpal_export_cmd),
-    ("typeflag-dump",   _u8_cli.typeflag_dump_cmd),
-    ("gumpinfo-dump",   _u8_cli.gumpinfo_dump_cmd),
-    ("save-list",       _u8_cli.save_list_cmd),
-    ("save-extract",    _u8_cli.save_extract_cmd),
-    ("unkcoff-dump",    _u8_cli.unkcoff_dump_cmd),
-    ("map-render",      _u8_cli.map_render_cmd),
-    ("map-render-all",  _u8_cli.map_render_all_cmd),
-    ("map-sample",      _u8_cli.map_sample_cmd),
-    ("map-sample-all",  _u8_cli.map_sample_all_cmd),
+    ("typeflag-dump", _u8_cli.typeflag_dump_cmd),
+    ("gumpinfo-dump", _u8_cli.gumpinfo_dump_cmd),
+    ("save-list", _u8_cli.save_list_cmd),
+    ("save-extract", _u8_cli.save_extract_cmd),
+    ("unkcoff-dump", _u8_cli.unkcoff_dump_cmd),
+    ("map-render", _u8_cli.map_render_cmd),
+    ("map-render-all", _u8_cli.map_render_all_cmd),
+    ("map-sample", _u8_cli.map_sample_cmd),
+    ("map-sample-all", _u8_cli.map_sample_all_cmd),
 ]
 
 for _compat_name, _compat_fn in _U8_COMPAT_COMMANDS:

@@ -114,3 +114,6 @@ nonfixed  = "U8SAVE.000"
 # # Mod packaged initial runtime data. Exult mods often store this as a
 # # ZIP-style initgame.dat containing npc.dat, schedule.dat, u7iregNN, etc.
 # archive  = "C:/Path/To/Ultima7/SERPENT/mods/<mod-name>/patch/initgame.dat"
+#
+# [uo.game]
+# base     = "C:/Program Files (x86)/Electronic Arts/Ultima Online Classic"

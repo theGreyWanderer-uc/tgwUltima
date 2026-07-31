@@ -3,15 +3,17 @@
 **TITAN** - Tool for Interpreting and Transforming Archival Nodes.
 
 TITAN is a Python CLI and library for working with proprietary data formats
-from *Ultima 8: Pagan*, *Ultima 7: The Black Gate / Serpent Isle*, and
-*Ultima 6: The False Prophet*. It reads, extracts, converts, inspects, and
+from *Ultima 8: Pagan*, *Ultima 7: The Black Gate / Serpent Isle*,
+*Ultima 6: The False Prophet*, and the *Ultima Online Classic Client*.
+It reads, extracts, converts, inspects, and
 reconstructs archives, shapes/tiles, palettes, music, speech, maps, world
 objects, saves, dialogue, and Exult runtime data. Early *Ultima 9: Ascension*
 support (FLX archives, `TYPENAME.FLX`, and `sound/*.flx` decoding) is also
 available under `titan u9`.
 
 Run `titan --help`, `titan u8 --help`, `titan u7 --help`, `titan u6 --help`,
-`titan u9 --help`, or see the full [CLI reference](cli_reference.md).
+`titan u9 --help`, `titan uo --help`, or see the full
+[CLI reference](cli_reference.md).
 
 ---
 
@@ -41,7 +43,7 @@ Optional:
 
 ## Quick Start
 
-Run setup once. It detects common Ultima 8 and Ultima 7 install locations,
+Run setup once. It detects common Ultima 8, Ultima 7, and UO install locations,
 detects Exult runtime folders and the Exult install directory (for
 `exult_bg.flx` / `exult_si.flx`), writes `titan.toml`, and can extract the
 U8 shape/glob data used by map rendering.
@@ -67,6 +69,10 @@ titan dialogue launch
 titan u7 map-render --game bg --sc 85 -o britain_bg.png
 titan u7 typeflag-dump --game si -f csv -o tfa_si.csv
 titan u7 gamedat-info --game si -f detail -o gamedat_info.txt
+
+# UO configured commands, if [uo.game] base is set
+titan uo gump-export -o uo_gumps/
+titan uo animation-body-names-export -o uo_metadata/
 ```
 
 `titan setup` doesn't detect Ultima 6 installs yet — add `[u6.game]
@@ -75,6 +81,13 @@ base = "<Ultima 6 install>"` to `titan.toml` yourself, or pass
 
 ```bash
 titan u6 map-render -g "C:/Ultima6" --full -o u6_world.png
+```
+
+If setup cannot find UO automatically, add it manually:
+
+```toml
+[uo.game]
+base = "C:/Program Files (x86)/Electronic Arts/Ultima Online Classic"
 ```
 
 The detailed dialogue web documentation lives in
@@ -141,6 +154,21 @@ texture export from `static/sappear.flx`.
 
 See the [U9 commands reference](cli_reference.md#ultima-9-commands-titan-u9)
 for the full command list.
+
+### Ultima Online Classic Client
+
+UO support is export-oriented: it reads the installed Classic Client data
+directly and writes reviewable PNG, WAV, and CSV outputs. The client directory
+can be passed per command or configured once as `[uo.game] base`.
+
+| Area | Coverage | Quick example |
+|---|---|---|
+| 2D art | Land/static art, gumps, textures, lights, fonts, radar colors, hues | `titan uo gump-export -o gumps/` |
+| World metadata | Tiledata, `animdata.mul`, `art.def`, all `.def` redirect files, localization/speech/skills text, multis | `titan uo def-export -o defs/` |
+| Audio and animation | Sound effects to WAV; legacy animation frames with body/action/direction naming, resolution metadata, and packaged body-name clues | `titan uo animation-export --limit 20 -o anims/` |
+
+See the [UO commands reference](cli_reference.md#ultima-online-classic-client-commands-titan-uo)
+for the concise command list.
 
 ---
 
@@ -352,6 +380,9 @@ archive = "<Serpent Isle install>/SERPENT/mods/<mod-name>/patch/initgame.dat"
 [exult.paths]
 bg_flx  = "<Exult install>/data/exult_bg.flx"
 si_flx  = "<Exult install>/data/exult_si.flx"
+
+[uo.game]
+base    = "<Ultima Online Classic Client install>"
 ```
 
 Notes:
@@ -399,15 +430,15 @@ shape.to_pngs(palette)[0].save("shape_150_frame0.png")
 
 ## Supported File Families
 
-| Family | Ultima 8 | Ultima 7 / Exult |
-|---|---|---|
-| Archives | `*.FLX`, speech FLX archives | Flex/VGA archives, Exult ZIP/FLEX saves |
-| Shapes | `U8SHAPES.FLX`, `U8FONTS.FLX`, `U8GUMPS.FLX` | `SHAPES.VGA`, `FACES.VGA`, `GUMPS.VGA`, `SPRITES.VGA`, `POINTERS.SHP`, generated font shapes |
-| Palettes | `U8PAL.PAL`, `XFORMPAL.DAT` | `PALETTES.FLX` |
-| Audio | `SOUND.FLX`, `MUSIC.FLX`, `E*.FLX` / `G*.FLX` | `ADLIBMUS.DAT`, `MT32MUS.DAT`, `ENDSCORE.XMI`, `INTROSND.DAT`, `U7SPEECH.SPC` |
-| Maps | `FIXED.DAT`, `GLOB.FLX`, `NONFIXED.DAT`, `U8SAVE.000` | `U7MAP`, `U7CHUNKS`, `U7IFIX*`, `SHAPES.VGA`, `gamedat/u7ireg*` |
-| Type and object data | `TYPEFLAG.DAT`, `GUMPAGE.DAT` | `TFA.DAT`, `SHPDIMS.DAT`, `WGTVOL.DAT`, `OCCLUDE.DAT`, `npc.dat`, `schedule.dat`, `flaginit` |
-| Text | `ECREDITS.DAT`, `QUOTES.DAT` | Selected Exult save/runtime metadata |
+| Family | Ultima 8 | Ultima 7 / Exult | Ultima Online Classic |
+|---|---|---|---|
+| Archives | `*.FLX`, speech FLX archives | Flex/VGA archives, Exult ZIP/FLEX saves | UOP plus MUL/IDX pairs where used by the Classic Client |
+| Shapes and art | `U8SHAPES.FLX`, `U8FONTS.FLX`, `U8GUMPS.FLX` | `SHAPES.VGA`, `FACES.VGA`, `GUMPS.VGA`, `SPRITES.VGA`, `POINTERS.SHP`, generated font shapes | `art*`, `gumpart*`, `texmaps`, `light`, `fonts`, legacy `anim*.mul/idx` |
+| Palettes and colors | `U8PAL.PAL`, `XFORMPAL.DAT` | `PALETTES.FLX` | `hues.mul`, `radarcol.mul` |
+| Audio | `SOUND.FLX`, `MUSIC.FLX`, `E*.FLX` / `G*.FLX` | `ADLIBMUS.DAT`, `MT32MUS.DAT`, `ENDSCORE.XMI`, `INTROSND.DAT`, `U7SPEECH.SPC` | `sound*` effects |
+| Maps | `FIXED.DAT`, `GLOB.FLX`, `NONFIXED.DAT`, `U8SAVE.000` | `U7MAP`, `U7CHUNKS`, `U7IFIX*`, `SHAPES.VGA`, `gamedat/u7ireg*` | Not yet |
+| Type and object data | `TYPEFLAG.DAT`, `GUMPAGE.DAT` | `TFA.DAT`, `SHPDIMS.DAT`, `WGTVOL.DAT`, `OCCLUDE.DAT`, `npc.dat`, `schedule.dat`, `flaginit` | `tiledata.mul`, `animdata.mul`, `.def`, multis |
+| Text | `ECREDITS.DAT`, `QUOTES.DAT` | Selected Exult save/runtime metadata | `Cliloc.*`, speech/skills/system text files |
 
 ---
 

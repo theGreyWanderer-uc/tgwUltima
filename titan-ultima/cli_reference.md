@@ -33,6 +33,7 @@ titan u8 <command>              # Ultima 8: Pagan
 titan u7 <command>              # Ultima 7: The Black Gate / Serpent Isle
 titan u6 <command>              # Ultima 6: The False Prophet
 titan u9 <command>              # Ultima 9: Ascension
+titan uo <command>              # Ultima Online Classic Client
 ```
 
 > **Backward compatibility:** The old root-level U8 commands (e.g.
@@ -58,6 +59,9 @@ both the command line and the config, TITAN prints an error pointing to
 U6 commands that accept `-g`/`--gamedir` are config-aware the same way,
 falling back to `[u6.game] base` (set manually -- `titan setup` doesn't
 detect U6 installs yet).
+
+UO commands accept an optional `client` argument. If omitted, they fall back
+to `[uo.game] base` in `titan.toml`.
 
 See [Configuration (titan.toml)](#configuration-titantoml) below.
 
@@ -3365,16 +3369,80 @@ titan u9 icon-export-all static/sappear.flx static/bitmapsh.flx -p static/ankh.p
 
 ---
 
+## Ultima Online Classic Client commands (`titan uo`)
+
+All commands below are invoked as `titan uo <command>`. They read an installed
+Classic Client directory and export reviewable files under `-o/--output`
+(`uodata/` by default). The `client` argument is optional when `[uo.game] base`
+is configured in `titan.toml`.
+
+```
+titan uo <command> [client] [-o DIR] [command options]
+```
+
+### Core extraction commands
+
+| Command | Output | Notes |
+|---------|--------|-------|
+| `art-export` | PNG + manifest CSV | Land and static/item art from UOP or MUL/IDX |
+| `gump-export` | PNG + manifest CSV | UI gumps from UOP or MUL/IDX |
+| `texture-export` | PNG + manifest CSV | Land textures |
+| `light-export` | PNG + manifest CSV | Light masks |
+| `font-export` | PNG atlases, optional glyph PNGs, CSV | ASCII fonts from `fonts.mul` |
+| `sound-export` | WAV + manifest CSV | Sound effects from UOP or MUL/IDX |
+| `animation-export` | PNG frames + manifest CSV | Legacy `anim*.mul/idx` frames; named/grouped/raw layouts |
+
+Common range/limit options are available on image/sound/animation exports:
+`--limit`, `--range-start`, and `--range-end`. `animation-export` also accepts
+`--set anim|anim2|anim3|anim4|anim5|anim6` and
+`--layout named|grouped|raw`.
+
+### Metadata commands
+
+| Command | Output | Notes |
+|---------|--------|-------|
+| `hue-export` | Hue ramp PNGs + CSV | `hues.mul` color ramps used for item/mobile tinting |
+| `radar-export` | Swatch PNG + CSV | `radarcol.mul`, the terrain/static color lookup used by radar/minimap rendering |
+| `tiledata-export` | CSV | Land/static tile names, flags, dimensions, weights, animation IDs |
+| `animdata-export` | CSV | Static-art animation metadata from `animdata.mul` |
+| `artdef-export` | CSV | `art.def` art redirects |
+| `def-export` | CSV | All supported `.def` redirects, including body/equipment/gump/sound/texture data |
+| `localization-export` | CSV | `Cliloc.*`, speech, skills, and system text/name files |
+| `multi-export` | CSV | Multi/component records from UOP or `multi.mul` |
+| `animation-resolution-export` | CSV | Body/action/direction resolution, DEF redirection, sequence replacements |
+| `animation-body-names-export` | CSV | Packaged body-name metadata plus client DEF comments |
+
+Animation naming uses packaged body-name clues installed with Titan and client
+metadata from `Body.def`, `Bodyconv.def`, `Corpse.def`, `Equipconv.def`,
+`mobtypes.txt`, and `AnimationSequence.uop` where present. This is enough to
+turn many raw animation folders into names such as body/category/action/
+direction, but the original client files still do not provide complete
+human-readable names for every asset.
+
+**Examples**
+
+```bash
+# With [uo.game] base configured
+titan uo gump-export -o uodata/
+titan uo animation-export --set anim --layout named --limit 20 -o uodata/
+titan uo animation-resolution-export --body-start 0 --body-end 200 -o uodata/
+
+# With an explicit client path
+titan uo hue-export "C:/Program Files (x86)/Electronic Arts/Ultima Online Classic" -o hues/
+```
+
+---
+
 ## Configuration (titan.toml)
 
 ### File format
 
 The legacy flat format is still supported (treated as Ultima 8 config).
-The new multi-game format uses `[u8.*]`, `[u7bg.*]`, `[u7si.*]`, and
-`[u6.*]` sections. `titan setup` currently detects and writes U8/U7
-sections only -- `[u6.game] base` must be added manually (see below).
-Ultima 9 commands take explicit file paths and have no `titan.toml`
-integration yet.
+The new multi-game format uses `[u8.*]`, `[u7bg.*]`, `[u7si.*]`, `[u6.*]`,
+and `[uo.*]` sections. `titan setup` currently detects and writes U8/U7/UO
+sections; `[u6.game] base` must be added manually (see below). Ultima 9
+commands take explicit file paths and have no
+`titan.toml` integration yet.
 
 #### Legacy format (Ultima 8 only)
 
@@ -3429,11 +3497,15 @@ gamedat  = "gamedat/"
 
 [u6.game]
 base     = "<Ultima 6 install>"
+
+[uo.game]
+base     = "<Ultima Online Classic Client install>"
 ```
 
 U6 has just the one `base` key (unlike U7/U8, a real U6 install has no
 path variability -- all commands look for the standard fixed filenames
-directly under `base`).
+directly under `base`). UO also uses one `base` key; every `titan uo`
+command can omit its `client` argument when this value is configured.
 
 ### Search order
 
@@ -3549,5 +3621,22 @@ A value on the command line always wins.
 | `u9 icon-list` | List candidate 2D UI icon entries not referenced by any 3D model |
 | `u9 icon-export` | Export one texture archive entry to PNG, regardless of mesh usage |
 | `u9 icon-export-all` | Batch-export every candidate 2D UI icon to PNG |
+| `uo art-export` | Export UO land/static art to PNG |
+| `uo gump-export` | Export UO gumps to PNG |
+| `uo texture-export` | Export UO land textures to PNG |
+| `uo light-export` | Export UO light masks to PNG |
+| `uo hue-export` | Export UO hue ramps to PNG/CSV |
+| `uo radar-export` | Export UO radar/minimap color lookup data |
+| `uo tiledata-export` | Export UO land/static tile metadata |
+| `uo animdata-export` | Export UO static-art animation metadata |
+| `uo artdef-export` | Export UO `art.def` redirect metadata |
+| `uo def-export` | Export supported UO `.def` redirect metadata |
+| `uo localization-export` | Export UO cliloc, speech, skills, and system text/name metadata |
+| `uo multi-export` | Export UO multi component metadata |
+| `uo font-export` | Export UO ASCII font atlases and glyph metadata |
+| `uo sound-export` | Export UO sound effects to WAV |
+| `uo animation-export` | Export UO legacy animation frames to PNG |
+| `uo animation-resolution-export` | Export UO body/action/direction resolution metadata |
+| `uo animation-body-names-export` | Export packaged/client UO animation body-name clues |
 | `setup` | First-time setup wizard — creates `titan.toml` |
 | `config` | Show or edit active `titan.toml` |

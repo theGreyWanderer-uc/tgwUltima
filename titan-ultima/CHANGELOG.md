@@ -14,6 +14,16 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Added
 
+- Added `titan uo` for Ultima Online Classic Client extraction and metadata
+  review. The new commands export 2D assets and supporting data from UOP and
+  MUL/IDX client files: art/statics, gumps, textures, lights, hues, radar
+  colors, fonts, sounds, multis, tiledata, `animdata.mul`, `art.def`, all
+  supported `.def` redirect files, localization/speech/skills/system text, and
+  legacy animation frames. Animation exports include body/action/direction
+  resolution metadata using client DEF files, `mobtypes.txt`,
+  `AnimationSequence.uop`, and a packaged body-name metadata cache. UO commands
+  accept an optional client path and can fall back to `[uo.game] base` in
+  `titan.toml`; `titan setup` can detect/prompt for that UO base.
 - Added `titan u9` 2D UI icon discovery and export (`titan.u9.icon`):
   the texture archives already used for 3D model surface materials
   (`bitmap16.flx`/`bitmapC.flx`/`bitmapsh.flx`) also hold a large set
