@@ -473,7 +473,10 @@ def cmd_music_export(args: SimpleNamespace) -> int:
         if rec[:4] == b"FORM":
             midi_data = XMIDIConverter.convert(rec)
             if midi_data:
-                out_path = os.path.join(outdir, f"{idx:04d}_{base}.mid")
+                name = archive.get_record_name(idx)
+                safe = FlexArchive._safe_filename(name) if name else ""
+                stem = f"{idx:04d}_{safe}" if safe else f"{idx:04d}_{base}"
+                out_path = os.path.join(outdir, f"{stem}.mid")
                 with open(out_path, "wb") as f:
                     f.write(midi_data)
                 converted += 1
@@ -518,7 +521,10 @@ def cmd_sound_export_all(args: SimpleNamespace) -> int:
 
         pcm, sample_rate = result
         wav_data = SonarcDecoder.pcm_to_wav(pcm, sample_rate)
-        out_path = os.path.join(outdir, f"{idx:04d}_{base}.wav")
+        name = archive.get_record_name(idx)
+        safe = FlexArchive._safe_filename(name) if name else ""
+        stem = f"{idx:04d}_{safe}" if safe else f"{idx:04d}_{base}"
+        out_path = os.path.join(outdir, f"{stem}.wav")
         with open(out_path, "wb") as f:
             f.write(wav_data)
         decoded += 1

@@ -401,6 +401,8 @@ titan u8 music-export <file> [-o DIR]
 
 Multi-track XMIDI files (e.g. records 258, 260) are converted to MIDI
 Format 1 with all tracks preserved.  Single-track records produce Format 0.
+When exporting from `MUSIC.FLX`, Titan uses the embedded playlist names for
+output filenames when available (for example `0001_intro.mid`).
 
 **Examples**
 ```bash
@@ -430,6 +432,10 @@ titan u8 sound-export-all <file> [-o DIR]
 |----------|-------------|
 | `file` | Path to `SOUND.FLX` (Flex archive of Sonarc audio) |
 | `-o DIR`, `--output DIR` | Output directory (default: `<name>_wav/`) |
+
+When `SOUND.FLX` contains its standard 8-byte embedded SFX name table,
+Titan uses those identifiers in the output filenames when available
+(for example `0001_GRUNT7A.wav`).
 
 **Example**
 ```bash

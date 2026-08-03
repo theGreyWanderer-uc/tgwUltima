@@ -10,6 +10,21 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ---
 
+## [0.7.3]
+
+### Fixed
+
+- **U8 embedded-name export filenames:** `titan u8 music-export` and
+  `titan u8 sound-export-all` now preserve the names Titan already parses
+  from the source archives instead of always falling back to generic archive
+  stems. `MUSIC.FLX` exports now use playlist track stems when present
+  (for example `0001_intro.mid`), and `SOUND.FLX` exports now use the
+  built-in 8-byte SFX identifiers when present (for example
+  `0001_GRUNT7A.wav`). Standalone `.xmi` and `.raw` input behavior is
+  unchanged.
+
+---
+
 ## [0.7.2]
 
 ### Added
