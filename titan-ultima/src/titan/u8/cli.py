@@ -11,6 +11,7 @@ from __future__ import annotations
 __all__ = ["u8_app"]
 
 import copy
+import csv
 import os
 import re
 import struct
@@ -54,6 +55,68 @@ u8_app = typer.Typer(
     no_args_is_help=True,
     pretty_exceptions_enable=False,
 )
+
+
+# ============================================================================
+# U8 SHAPE NAMING HELPERS
+# ============================================================================
+
+_U8_CLASS_NAME_CACHE: dict[int, str] | None = None
+
+
+def _u8_classes_resource_path() -> Path | None:
+    candidate = (
+        Path(__file__).resolve().parent.parent
+        / "dialogue"
+        / "pipeline"
+        / "resources"
+        / "usecode_classes.csv"
+    )
+    if candidate.is_file():
+        return candidate
+    return None
+
+
+def _load_u8_class_names() -> dict[int, str]:
+    global _U8_CLASS_NAME_CACHE
+    if _U8_CLASS_NAME_CACHE is not None:
+        return _U8_CLASS_NAME_CACHE
+
+    mapping: dict[int, str] = {}
+    classes_path = _u8_classes_resource_path()
+    if classes_path is not None:
+        with open(classes_path, "r", encoding="utf-8-sig") as f:
+            for row in csv.DictReader(f):
+                try:
+                    shape_num = int((row.get("ID") or "").strip())
+                except ValueError:
+                    continue
+                name = (row.get("Name") or "").strip()
+                if name:
+                    mapping[shape_num] = name
+
+    _U8_CLASS_NAME_CACHE = mapping
+    return mapping
+
+
+def _u8_shape_stem(shape_num: int, fallback: str | None = None) -> str:
+    name = _load_u8_class_names().get(shape_num)
+    if name:
+        safe = FlexArchive._safe_filename(name)
+        if safe:
+            return f"{shape_num:04d}_{safe}"
+    if fallback:
+        return fallback
+    return f"{shape_num:04d}"
+
+
+def _u8_shape_stem_from_path(path: str) -> str:
+    base = Path(path).stem
+    try:
+        shape_num = int(base, 10)
+    except ValueError:
+        return base
+    return _u8_shape_stem(shape_num, fallback=base)
 
 
 # ============================================================================
@@ -114,7 +177,7 @@ def cmd_shape_export(args: SimpleNamespace) -> int:
     outdir = args.output or "."
     os.makedirs(outdir, exist_ok=True)
 
-    base = Path(filepath).stem
+    base = _u8_shape_stem_from_path(filepath)
     images = shape.to_pngs(pal, transparent=True)
 
     saved = 0
@@ -132,10 +195,10 @@ def cmd_shape_export(args: SimpleNamespace) -> int:
 
 
 def cmd_shape_batch(args: SimpleNamespace) -> int:
-    """Batch-export all .shp files in a directory to PNG."""
-    srcdir = args.directory
-    if not os.path.isdir(srcdir):
-        print(f"ERROR: Directory not found: {srcdir}", file=sys.stderr)
+    """Batch-export all U8 shapes from a directory of .shp files or U8SHAPES.FLX."""
+    srcpath = args.directory
+    if not os.path.isdir(srcpath) and not os.path.isfile(srcpath):
+        print(f"ERROR: Path not found: {srcpath}", file=sys.stderr)
         return 1
 
     if args.palette and os.path.isfile(args.palette):
@@ -145,26 +208,64 @@ def cmd_shape_batch(args: SimpleNamespace) -> int:
               file=sys.stderr)
         pal = U8Palette.default_palette()
 
-    outdir = args.output or os.path.join(srcdir, "png")
+    if os.path.isdir(srcpath):
+        outdir = args.output or os.path.join(srcpath, "png")
+    else:
+        outdir = args.output or f"{Path(srcpath).stem}_png"
     os.makedirs(outdir, exist_ok=True)
-
-    shp_files = sorted(f for f in os.listdir(srcdir)
-                       if f.lower().endswith(".shp"))
-    if not shp_files:
-        print(f"No .shp files found in {srcdir}")
-        return 0
 
     total_frames = 0
     total_shapes = 0
+    skipped_empty = 0
+    outdir_display = outdir.rstrip("/\\") + "/"
+
+    if os.path.isfile(srcpath):
+        archive = FlexArchive.from_file(srcpath)
+        for shape_num, record in enumerate(archive.records):
+            if not record:
+                skipped_empty += 1
+                continue
+            try:
+                shape = U8Shape.from_data(record)
+                if not shape.frames:
+                    skipped_empty += 1
+                    continue
+
+                base = _u8_shape_stem(shape_num)
+                images = shape.to_pngs(pal, transparent=True)
+                saved = 0
+                for i, img in enumerate(images):
+                    if img.width <= 1 and img.height <= 1:
+                        continue
+                    out_path = os.path.join(outdir, f"{base}_f{i:04d}.png")
+                    img.save(out_path)
+                    saved += 1
+
+                if saved > 0:
+                    total_shapes += 1
+                    total_frames += saved
+            except Exception as e:
+                print(f"  WARNING: Failed shape {shape_num:04d}: {e}", file=sys.stderr)
+
+        print(f"Batch export complete: {total_frames} frames from "
+              f"{total_shapes} shapes -> {outdir_display}")
+        if skipped_empty:
+            print(f"  ({skipped_empty} empty/no-frame shape slot(s) skipped)")
+        return 0
+
+    shp_files = sorted(f for f in os.listdir(srcpath) if f.lower().endswith(".shp"))
+    if not shp_files:
+        print(f"No .shp files found in {srcpath}")
+        return 0
 
     for shp_file in shp_files:
-        shp_path = os.path.join(srcdir, shp_file)
+        shp_path = os.path.join(srcpath, shp_file)
         try:
             shape = U8Shape.from_file(shp_path)
             if not shape.frames:
                 continue
 
-            base = Path(shp_file).stem
+            base = _u8_shape_stem_from_path(shp_file)
             images = shape.to_pngs(pal, transparent=True)
             saved = 0
             for i, img in enumerate(images):
@@ -180,9 +281,8 @@ def cmd_shape_batch(args: SimpleNamespace) -> int:
         except Exception as e:
             print(f"  WARNING: Failed {shp_file}: {e}", file=sys.stderr)
 
-        outdir_display = outdir.rstrip("/\\") + "/"
-        print(f"Batch export complete: {total_frames} frames from "
-            f"{total_shapes} shapes -> {outdir_display}")
+    print(f"Batch export complete: {total_frames} frames from "
+          f"{total_shapes} shapes -> {outdir_display}")
     return 0
 
 
@@ -1625,7 +1725,10 @@ def shape_export_cmd(
 
 @u8_app.command("shape-batch")
 def shape_batch_cmd(
-    directory: Annotated[str, typer.Argument(help="Directory containing .shp files")],
+    directory: Annotated[
+        str,
+        typer.Argument(help="Directory containing .shp files, or a U8SHAPES.FLX archive"),
+    ],
     palette: Annotated[
         Optional[str],
         typer.Option("-p", "--palette", help="Path to .pal palette file"),
@@ -1635,7 +1738,7 @@ def shape_batch_cmd(
         typer.Option("-o", "--output", help="Output directory (default: <dir>/png/)"),
     ] = None,
 ) -> None:
-    """Batch-export all .shp files in a directory to PNG."""
+    """Batch-export all .shp files in a directory, or all shapes in U8SHAPES.FLX, to PNG."""
     raise SystemExit(cmd_shape_batch(SimpleNamespace(
         directory=directory, palette=palette, output=output,
     )))

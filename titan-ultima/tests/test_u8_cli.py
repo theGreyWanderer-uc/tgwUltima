@@ -9,7 +9,9 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from titan.u8.cli import cmd_music_export, cmd_sound_export_all
+from PIL import Image
+
+from titan.u8.cli import cmd_music_export, cmd_shape_batch, cmd_shape_export, cmd_sound_export_all
 
 DIR_OFFSET = 0x80
 
@@ -93,6 +95,62 @@ class U8SoundExportNamingTests(unittest.TestCase):
             rc = cmd_sound_export_all(SimpleNamespace(file=self.sound_path, output=outdir))
         self.assertEqual(rc, 0)
         self.assertEqual(sorted(os.listdir(outdir)), ["0001_GRUNT7A.wav", "0002_WHOA3A.wav"])
+
+
+class U8ShapeExportNamingTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmpdir = tempfile.TemporaryDirectory()
+
+    def tearDown(self) -> None:
+        self.tmpdir.cleanup()
+
+    def test_shape_export_uses_bundled_class_name_for_numeric_stem(self) -> None:
+        shp_path = os.path.join(self.tmpdir.name, "0068.shp")
+        with open(shp_path, "wb") as f:
+            f.write(b"dummy")
+
+        outdir = os.path.join(self.tmpdir.name, "png")
+        image = Image.new("RGBA", (2, 2), (255, 0, 0, 255))
+        fake_shape = type(
+            "FakeShape",
+            (),
+            {
+                "frames": [object()],
+                "to_pngs": lambda self, pal, transparent=True: [image],
+            },
+        )()
+
+        with patch("titan.u8.cli.U8Shape.from_file", return_value=fake_shape):
+            rc = cmd_shape_export(SimpleNamespace(file=shp_path, palette=None, output=outdir))
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(sorted(os.listdir(outdir)), ["0068_DOOR_NS_f0000.png"])
+
+    def test_shape_batch_accepts_u8shapes_flx_and_uses_class_names(self) -> None:
+        flx_path = os.path.join(self.tmpdir.name, "U8SHAPES.FLX")
+        with open(flx_path, "wb") as f:
+            f.write(b"dummy")
+
+        outdir = os.path.join(self.tmpdir.name, "png")
+        image = Image.new("RGBA", (2, 2), (0, 255, 0, 255))
+        fake_archive = type("FakeArchive", (), {"records": [b"", b"", b"", b"", b"", b"\x01"]})()
+        fake_shape = type(
+            "FakeShape",
+            (),
+            {
+                "frames": [object()],
+                "to_pngs": lambda self, pal, transparent=True: [image],
+            },
+        )()
+
+        with (
+            patch("titan.u8.cli.FlexArchive.from_file", return_value=fake_archive),
+            patch("titan.u8.cli.U8Shape.from_data", return_value=fake_shape),
+        ):
+            rc = cmd_shape_batch(SimpleNamespace(directory=flx_path, palette=None, output=outdir))
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(sorted(os.listdir(outdir)), ["0005_FLOATORS_f0000.png"])
 
 
 if __name__ == "__main__":
