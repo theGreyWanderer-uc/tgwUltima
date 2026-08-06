@@ -10,6 +10,28 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ---
 
+## [0.7.3]
+
+### Fixed
+
+- **U8 embedded-name export filenames:** `titan u8 music-export` and
+  `titan u8 sound-export-all` now preserve the names Titan already parses
+  from the source archives instead of always falling back to generic archive
+  stems. `MUSIC.FLX` exports now use playlist track stems when present
+  (for example `0001_intro.mid`), and `SOUND.FLX` exports now use the
+  built-in 8-byte SFX identifiers when present (for example
+  `0001_GRUNT7A.wav`). Standalone `.xmi` and `.raw` input behavior is
+  unchanged.
+- **U8 shape export naming and full-archive batching:** `titan u8
+  shape-export` now uses bundled `usecode_classes.csv` labels for numeric
+  U8 shape IDs when available (for example `0068_DOOR_NS_f0000.png`
+  instead of plain `0068_f0000.png`). `titan u8 shape-batch` now also
+  accepts `U8SHAPES.FLX` directly, batch-exporting every non-empty shape
+  slot to PNG frames with the same naming scheme and falling back to
+  numeric stems for shapes that have no bundled class-name mapping.
+
+---
+
 ## [0.7.2]
 
 ### Added
