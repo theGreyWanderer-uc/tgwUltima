@@ -44,3 +44,35 @@ uuw2data/
 
 # Local helper scripts
 .github/scripts/
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+
+*.pem
+*.key
+*.pfx
+*.p12
+*.jks
+*.keystore
+
+secrets.json
+secrets.yml
+secrets.yaml
+credentials.json
+credentials.yml
+credentials.yaml
+
+appsettings.Local.json
+appsettings.Development.local.json
+local.settings.json
+
+# Azure publish profiles
+*.PublishSettings
+*.pubxml.user
+
+# Local authentication and token files
+.aws/
+.azure/
+.ssh/

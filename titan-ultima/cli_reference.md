@@ -228,7 +228,10 @@ titan u8 shape-export <file> [-p PAL] [-o DIR]
 | `-p FILE`, `--palette FILE` | Path to `.pal` palette (default: greyscale) |
 | `-o DIR`, `--output DIR` | Output directory (default: `./<shapename>/`) |
 
-Frames are saved as `<shapename>_fNNNN.png`.
+Frames are saved as `<shapename>_fNNNN.png`. When the input filename stem is
+numeric (for example `0068.shp`), Titan checks its bundled
+`usecode_classes.csv` mapping and uses the matching U8 class name when
+available, producing filenames such as `0068_DOOR_NS_f0000.png`.
 
 **Example**
 ```bash
@@ -239,21 +242,31 @@ titan u8 shape-export shapes/0001.shp -p U8PAL.PAL -o out/
 
 #### `u8 shape-batch`
 
-Batch-export all `.shp` files in a directory to PNG.
+Batch-export all `.shp` files in a directory to PNG, or export every
+non-empty shape directly from `U8SHAPES.FLX`.
 
 ```
-titan u8 shape-batch <directory> [-p PAL] [-o DIR]
+titan u8 shape-batch <directory-or-u8shapes.flx> [-p PAL] [-o DIR]
 ```
 
 | Argument | Description |
 |----------|-------------|
-| `directory` | Directory containing `.shp` files |
+| `directory-or-u8shapes.flx` | Directory containing `.shp` files, or a `U8SHAPES.FLX` archive |
 | `-p FILE`, `--palette FILE` | Path to `.pal` palette (default: greyscale) |
-| `-o DIR`, `--output DIR` | Output directory (default: `<dir>/png/`) |
+| `-o DIR`, `--output DIR` | Output directory (default: `<dir>/png/` for directory input, `<name>_png/` for FLX input) |
+
+For directory input, Titan uses the same numeric-stem class-name expansion as
+`shape-export` when a `.shp` filename stem is numeric. For `U8SHAPES.FLX`
+input, each exported shape uses its slot number plus bundled class name when
+available (for example `0068_DOOR_NS_f0000.png`), with numeric fallback for
+unmapped shapes.
 
 **Example**
 ```bash
 titan u8 shape-batch shapes/ -p U8PAL.PAL -o shapes_png/
+
+# Directly from the archive
+titan u8 shape-batch STATIC/U8SHAPES.FLX -p STATIC/U8PAL.PAL -o u8shapes_png/
 ```
 
 ---
@@ -401,6 +414,8 @@ titan u8 music-export <file> [-o DIR]
 
 Multi-track XMIDI files (e.g. records 258, 260) are converted to MIDI
 Format 1 with all tracks preserved.  Single-track records produce Format 0.
+When exporting from `MUSIC.FLX`, Titan uses the embedded playlist names for
+output filenames when available (for example `0001_intro.mid`).
 
 **Examples**
 ```bash
@@ -430,6 +445,10 @@ titan u8 sound-export-all <file> [-o DIR]
 |----------|-------------|
 | `file` | Path to `SOUND.FLX` (Flex archive of Sonarc audio) |
 | `-o DIR`, `--output DIR` | Output directory (default: `<name>_wav/`) |
+
+When `SOUND.FLX` contains its standard 8-byte embedded SFX name table,
+Titan uses those identifiers in the output filenames when available
+(for example `0001_GRUNT7A.wav`).
 
 **Example**
 ```bash

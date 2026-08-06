@@ -1,0 +1,31 @@
+#!/bin/sh
+
+echo "Running Gitleaks against staged changes..."
+
+# Static path for local Windows install (Git Bash path form)
+GITLEAKS_BIN="/c/_Portable/gitleaks_8.30.1_windows_x64/gitleaks.exe"
+
+if [ ! -x "$GITLEAKS_BIN" ]; then
+    echo
+    echo "ERROR: gitleaks was not found at: $GITLEAKS_BIN"
+    echo "Install Gitleaks there or update .githooks/pre-commit with your local path."
+    echo
+    exit 1
+fi
+
+"$GITLEAKS_BIN" git --pre-commit --staged --redact --verbose
+
+RESULT=$?
+
+if [ $RESULT -ne 0 ]; then
+    echo
+    echo "COMMIT BLOCKED: Gitleaks detected a possible secret."
+    echo
+    echo "Review the finding before committing."
+    echo "Do not bypass this check unless you have confirmed it is a false positive."
+    echo
+    exit $RESULT
+fi
+
+echo "Gitleaks found no secrets."
+exit 0

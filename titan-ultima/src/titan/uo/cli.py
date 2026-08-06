@@ -1684,10 +1684,12 @@ def cmd_animation_export(args: SimpleNamespace) -> int:
         indexed = _load_animations(client, args.set_name)
         defs = _try_load_defs(client)
         resolver = _animation_resolver(client, defs)
-        body_names = load_animation_body_names(client=client)
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
+
+    # Temporarily disable body-name-based naming for animation exports.
+    body_names: UOAnimationBodyNames | None = None
 
     entries = _entry_iter(indexed, args.range_start, args.range_end)
     mobtypes = load_mobtypes(client / "mobtypes.txt")
@@ -1799,10 +1801,12 @@ def cmd_animation_resolution_export(args: SimpleNamespace) -> int:
         resolver = _animation_resolver(client, defs)
         mobtypes = load_mobtypes(client / "mobtypes.txt")
         sequence = _try_load_animation_sequence(client)
-        body_names = load_animation_body_names(client=client)
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
+
+    # Temporarily disable body-name-based naming/metadata for resolution export.
+    body_names: UOAnimationBodyNames | None = None
 
     outdir = Path(args.output) / "animation_resolution"
     outdir.mkdir(parents=True, exist_ok=True)
@@ -1905,18 +1909,6 @@ def cmd_animation_resolution_export(args: SimpleNamespace) -> int:
 
     _write_manifest(outdir / "manifest.csv", rows)
     _write_manifest(outdir / "sequence_replacements.csv", sequence_rows)
-    _write_manifest(
-        outdir / "body_names.csv",
-        [
-            {
-                "body": entry.body,
-                "name": entry.name,
-                "source": entry.source,
-                "detail": entry.detail,
-            }
-            for entry in body_names.entries
-        ],
-    )
     print(
         f"Exported {len(rows)} animation resolution row(s), {len(sequence_rows)} sequence row(s) -> {outdir}"
     )
@@ -1925,27 +1917,12 @@ def cmd_animation_resolution_export(args: SimpleNamespace) -> int:
 
 def cmd_animation_body_names_export(args: SimpleNamespace) -> int:
     """Export best-effort UO animation body-name clues."""
-    try:
-        client = _client_path(args.client)
-        body_names = load_animation_body_names(client=client)
-    except Exception as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
-
-    outdir = Path(args.output) / "animation_body_names"
-    outdir.mkdir(parents=True, exist_ok=True)
-    rows = [
-        {
-            "body": entry.body,
-            "name": entry.name,
-            "source": entry.source,
-            "detail": entry.detail,
-        }
-        for entry in body_names.entries
-    ]
-    _write_manifest(outdir / "body_names.csv", rows)
-    print(f"Exported {len(rows)} animation body-name row(s) -> {outdir}")
-    return 0
+    _ = args
+    print(
+        "ERROR: animation body-name export is temporarily disabled while body-name sources are disabled.",
+        file=sys.stderr,
+    )
+    return 1
 
 
 @uo_app.command("art-export")
