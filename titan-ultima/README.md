@@ -3,15 +3,16 @@
 **TITAN** - Tool for Interpreting and Transforming Archival Nodes.
 
 TITAN is a Python CLI and library for working with proprietary data formats
-from *Ultima 8: Pagan*, *Ultima 7: The Black Gate / Serpent Isle*,
-*Ultima 6: The False Prophet*, and the *Ultima Online Classic Client*.
+from *Ultima 8: Pagan*, *Ultima Underworld II: Labyrinth of Worlds*,
+*Ultima 7: The Black Gate / Serpent Isle*, *Ultima 6: The False Prophet*,
+and the *Ultima Online Classic Client*.
 It reads, extracts, converts, inspects, and
 reconstructs archives, shapes/tiles, palettes, music, speech, maps, world
 objects, saves, dialogue, and Exult runtime data. Early *Ultima 9: Ascension*
 support (FLX archives, `TYPENAME.FLX`, and `sound/*.flx` decoding) is also
 available under `titan u9`.
 
-Run `titan --help`, `titan u8 --help`, `titan u7 --help`, `titan u6 --help`,
+Run `titan --help`, `titan uw2 --help`, `titan u8 --help`, `titan u7 --help`, `titan u6 --help`,
 `titan u9 --help`, `titan uo --help`, or see the full
 [CLI reference](cli_reference.md).
 
@@ -83,6 +84,21 @@ base = "<Ultima 6 install>"` to `titan.toml` yourself, or pass
 titan u6 map-render -g "C:/Ultima6" --full -o u6_world.png
 ```
 
+Ultima Underworld II install detection is not in `titan setup` yet. Add its
+root manually; commands also accept `-g`/`--gamedir`:
+
+```toml
+[uw2.game]
+base = "C:/Games/Ultima Underworld 2"
+```
+
+```bash
+titan uw2 map-render --slots 0 -o castle_maps/
+titan uw2 object-info 457
+titan uw2 shape-export OBJECTS.GR 302 -o fountain/
+titan uw2 shape-export ANIMO.GR 6 -o fountain/
+```
+
 If setup cannot find UO automatically, add it manually:
 
 ```toml
@@ -117,6 +133,24 @@ place for command options, longer examples, and format notes.
 | Container data | Not applicable | Browse IREG container contents with full nesting; filter by container name, item name, or tile area; optional per-frame item names via Exult FLX | `titan u7 container-browse --game bg --container-name chest` | [U7 container-browse](cli_reference.md#u7-container-browse) |
 | Egg data | Not applicable | Query IREG egg trigger objects — type, usecode function, probability, location | `titan u7 egg-query --game bg --type usecode` | [U7 egg-query](cli_reference.md#u7-egg-query) |
 | Text and misc data | Gump layout, XOR credits, quotes, transform palettes | Global flags and selected runtime metadata | `titan u8 credits-decrypt ECREDITS.DAT` | [U8 data commands](cli_reference.md#u8-data-inspection-commands) |
+
+### Ultima Underworld II
+
+Native UU2 support covers `LEV.ARK` map extraction and U7-style cutaway map
+rendering, `PALS.DAT`, terrain and `.GR` image archives, `ALLPALS.DAT`
+auxiliary palettes, `COMOBJ.DAT` render metadata, and `OBJECTS.DAT` animation
+descriptors. Map rendering uses verified `OBJECTS.GR` icons for model-based
+furniture by default and can optionally project built-in `UW2.EXE` geometry;
+NPC animation archives remain future work.
+
+| Area | Coverage | Quick example |
+|---|---|---|
+| Maps | Render directly from `LEV.ARK`, terrain, doors, decals, `OBJECTS.GR`, animated `ANIMO.GR` overlays, and 2D furniture icons; optional `UW2.EXE` geometry and diagnostic extraction | `titan uw2 map-render --slots 0 -g "C:/UW2" -o maps/ --tick 1` |
+| Palettes | Export any 256-color VGA palette from `PALS.DAT` | `titan uw2 palette-export PALS.DAT --index 0 -o palettes/` |
+| Shapes | Inspect/export one or every non-empty image from any `.GR` archive | `titan uw2 shape-export OBJECTS.GR 302 -g "C:/UW2" -o fountain/` |
+| Object metadata | Dump sprite/NPC/model/texture render types; inspect `ANIMO.GR` frame ranges | `titan uw2 object-info 457 -g "C:/UW2"` |
+
+See [UU2 commands](cli_reference.md#ultima-underworld-ii-commands-titan-uw2).
 
 ### Ultima 6
 

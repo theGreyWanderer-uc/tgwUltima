@@ -12,6 +12,29 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ## [0.7.3]
 
+### Added
+
+- **Native Ultima Underworld II command family:** added `titan uw2` with
+  `map-extract`, `map-render`, `palette-export`, `shape-info`, `shape-export`,
+  `shape-batch`, `object-info`, and `object-dump`. The map commands migrate
+  the established `uuw2data/scripts` pipeline into Titan: `LEV.ARK` decoding,
+  level/object/automap/note/light JSON, `T64.TR` terrain, GR doors and decals,
+  and U7-style overhead cutaway rendering. `map-render` reads these sources
+  directly into memory and leaves only final PNG files by default; optional
+  `--keep-intermediates` retains diagnostic exports. It also composites normal
+  `OBJECTS.GR` sprites and `ANIMO.GR` effect frames selected through
+  `COMOBJ.DAT`/`OBJECTS.DAT`, including Castle Britannia's two-object fountain.
+  It independently decodes the supported `UW2.EXE` model-node format in memory
+  and can project common-object meshes. The U7-style renderer defaults to
+  verified `OBJECTS.GR` furniture icons instead, placing tables, chairs,
+  benches, chests, and similar items behind loose food and object sprites;
+  executable geometry remains available through `--model-style geometry`.
+  Other new library modules decode
+  `PALS.DAT`, sparse `.GR` archives and known GR bitmap encodings,
+  `ALLPALS.DAT`, `COMOBJ.DAT` render types, and `OBJECTS.DAT` animation frame
+  ranges. Commands accept `-g`/`--gamedir` or `[uw2.game] base` from
+  `titan.toml`.
+
 ### Fixed
 
 - **U7 frame-32+ object footprints:** map rendering now matches Exult's

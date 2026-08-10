@@ -29,6 +29,7 @@ TITAN organises commands into **game-specific sub-apps** and **shared
 ```
 titan <shared-command>          # Flex archives, XMIDI music, config/setup
 titan dialogue <command>        # U8 dialogue web pipeline + local viewer
+titan uw2 <command>             # Ultima Underworld II: Labyrinth of Worlds
 titan u8 <command>              # Ultima 8: Pagan
 titan u7 <command>              # Ultima 7: The Black Gate / Serpent Isle
 titan u6 <command>              # Ultima 6: The False Prophet
@@ -63,7 +64,130 @@ detect U6 installs yet).
 UO commands accept an optional `client` argument. If omitted, they fall back
 to `[uo.game] base` in `titan.toml`.
 
+UU2 commands accept `-g`/`--gamedir`. If omitted, they use `[uw2.game] base`.
+Bare names such as `OBJECTS.GR` resolve below install's `DATA` directory.
+
 See [Configuration (titan.toml)](#configuration-titantoml) below.
+
+---
+
+## Ultima Underworld II commands (`titan uw2`)
+
+Native UU2 support covers `LEV.ARK` map extraction, U7-style cutaway map
+rendering, palettes, terrain and `.GR` shape archives, common object render
+metadata, and animation frame descriptors. NPC animation archives and 3D
+models outside the built-in common-object set are not yet exposed as separate
+command groups.
+
+All commands accept `-g`/`--gamedir`; it may point at install root or its
+`DATA` directory. `[uw2.game] base` supplies same value from `titan.toml`.
+
+### `uw2 map-extract`
+
+```text
+titan uw2 map-extract -o DIR [--slots N ...] [--write-decoded-blocks] [-g DIR]
+```
+
+Decodes selected `LEV.ARK` slots (all available slots by default) into level
+JSON, including tiles, object chains, texture mappings, automap records, map
+notes, `DL.DAT` lighting, `TERRAIN.DAT`, and `SHADES.DAT`. Output matches the
+data contract used by the original `uuw2data/scripts` renderers.
+
+### `uw2 map-render`
+
+```text
+titan uw2 map-render [--slots N ...] [-o DIR] [--workdir DIR]
+    [--keep-intermediates | --reuse-workdir] [--tick N]
+    [projection and display options] [-g DIR]
+```
+
+Reads `LEV.ARK`, `T64.TR`, `DOORS.GR`, `TMFLAT.GR`, `TMOBJ.GR`, `OBJECTS.GR`,
+`ANIMO.GR`, `COMOBJ.DAT`, `OBJECTS.DAT`, and built-in geometry from `UW2.EXE`
+directly into memory, then writes
+only final U7-style cutaway PNG files. Ordinary object sprites and animated
+effect overlays plus model-based furniture render from map object chains.
+Verified `OBJECTS.GR` icons for tables, chairs, benches, chests, nightstands,
+and other early model-class items render as background sprites, so loose food
+and other objects remain above them. Slot 0 is Castle Britannia;
+its fountain combines item 302 from `OBJECTS.GR` with item 457's selected
+`ANIMO.GR` frame.
+
+```bash
+titan uw2 map-render --slots 0 -g "C:/UW2" -o castle_maps/ --name-files --tick 1
+```
+
+`--tick` selects frames within each animation range. `--no-objects` suppresses
+ordinary and animated sprites; `--object-scale` tunes their size. `--no-models`
+suppresses model-class objects. `--model-style icons` is the default;
+`--model-icon-scale` tunes those icons. `--model-style geometry` restores the
+experimental `UW2.EXE` projection, with `--model-scale` controlling its size.
+No extracted
+files remain by default. `--keep-intermediates` writes diagnostic JSON and PNG
+assets under `OUTPUT/_map_data` or `--workdir`; `--reuse-workdir` supports the
+legacy extracted renderer path. Run `titan uw2 map-render --help` for all
+projection, wall, lighting, fill, and debug-grid options.
+
+### `uw2 palette-export`
+
+```text
+titan uw2 palette-export [PALS.DAT] [--index N] [--swatch-size N] [-o DIR] [-g DIR]
+```
+
+Exports selected 256-color, 6-bit VGA palette as PNG swatch grid plus text.
+
+### `uw2 shape-info`
+
+```text
+titan uw2 shape-info ARCHIVE.GR [-a ALLPALS.DAT] [--json] [-o FILE] [-g DIR]
+```
+
+Lists declared/decoded image counts, bitmap encoding, dimensions, offsets,
+and auxiliary palette index. `--json` emits machine-readable metadata.
+
+### `uw2 shape-export`
+
+```text
+titan uw2 shape-export ARCHIVE.GR INDEX [-p PALS.DAT] [-a ALLPALS.DAT]
+    [--palette-index N] [--transparent-index N] [-o DIR] [-g DIR]
+```
+
+Exports one sparse archive index to RGBA PNG. Defaults: palette 0, transparent
+index 0, `PALS.DAT`/`ALLPALS.DAT` beside configured game data.
+
+Castle Britannia fountain proof:
+
+```bash
+titan uw2 shape-export OBJECTS.GR 302 -g "C:/UW2" -o fountain/
+titan uw2 shape-export ANIMO.GR 6 -g "C:/UW2" -o fountain/
+```
+
+### `uw2 shape-batch`
+
+```text
+titan uw2 shape-batch ARCHIVE.GR [-p PALS.DAT] [-a ALLPALS.DAT]
+    [--palette-index N] [--transparent-index N] [-o DIR] [-g DIR]
+```
+
+Exports every non-empty GR slot. Also writes `<archive>_summary.json`.
+
+### `uw2 object-info`
+
+```text
+titan uw2 object-info ITEM_ID [--comobj COMOBJ.DAT]
+    [--objects OBJECTS.DAT] [-g DIR]
+```
+
+Prints one item's decoded `COMOBJ.DAT` render fields as JSON. IDs 448..463
+also include `OBJECTS.DAT` animation start/end frames when available.
+
+### `uw2 object-dump`
+
+```text
+titan uw2 object-dump [--comobj COMOBJ.DAT] [--objects OBJECTS.DAT]
+    [-f json|csv] [-o FILE] [-g DIR]
+```
+
+Exports all 512 common-object records. Default output: `uw2_objects.json`.
 
 ---
 

@@ -79,6 +79,10 @@ nonfixed  = "U8SAVE.000"
 # globs    = "globs/"
 # nonfixed = "U8SAVE.000"
 #
+# [uw2.game]
+# # Commands resolve bare data names below <base>/DATA.
+# base = "C:/Path/To/Ultima Underworld 2"
+#
 # [u7bg.game]
 # base     = "C:/Path/To/Ultima7/ULTIMA7"
 # variant  = "blackgate"
