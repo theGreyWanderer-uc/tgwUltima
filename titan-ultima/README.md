@@ -216,6 +216,14 @@ titan u7 map-render STATIC/ --full -o u7_world.png
 titan u7 map-sample STATIC/ --scale 4 --grid -o minimap.png
 ```
 
+U7 map rendering combines each shape's TFA footprint with its real
+`SHAPES.VGA` frame count. Frame bit `0x20` swaps X/Y dimensions only for
+shapes with 32 or fewer real frames, where frames 32+ are generated
+reflections. Shapes with more than 32 real archive frames keep their stored
+dimensions. This matches current Exult behavior and fixes extended mod doors
+and other multi-frame objects without changing door-state or open-frame
+rules.
+
 ### U7 World Query
 
 ```bash

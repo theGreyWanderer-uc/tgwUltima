@@ -1471,6 +1471,17 @@ titan u7 map-render [static] [--game bg|si]
 > marked as transparent (mostly interior rooftops and windows).  Extended
 > roof metadata is only present in Exult's supplementary `shapeinf.dat`.
 
+> **Frame bit 5 and object footprints:** Titan derives map-object footprint
+> orientation from both `TFA.DAT` and the effective `SHAPES.VGA` archive.
+> For shapes with 32 or fewer real frames, frame bit 5 (`0x20`, frames 32+)
+> denotes a generated reflection and swaps the stored X/Y tile dimensions.
+> For shapes containing more than 32 real frames, bit 5 belongs to the real
+> archive frame number, so Titan does not swap X/Y. This matches Exult commit
+> [`ac51a798`](https://github.com/exult/exult/commit/ac51a7985f3a9ed65006f230fbd41e30d7176046)
+> and fixes extended mod shapes such as SI door shape 376. This rule affects
+> footprint/depth interpretation only; it does not change door state or the
+> separate `frame % 4 < 2` open-door classification.
+
 **Examples**
 ```bash
 # Use config defaults for Black Gate (no STATIC path required)
@@ -1615,6 +1626,12 @@ Three output formats:
 > 512-byte TFA animation tail at offset `3 * 1024`. Exult-only text metadata
 > such as `shape_info.txt` flags is separate; for example `on_fire` is stored
 > in Exult's `Shape_info::shape_flags`, not in `TFA.DAT`.
+>
+> **Archive-dependent dimensions:** TFA stores one base X/Y/Z footprint per
+> shape; it does not record whether frame bit 5 is reflection or a real frame
+> bit. Titan can resolve that distinction only when the effective
+> `SHAPES.VGA` frame count is available. Raw `typeflag-dump` dimensions remain
+> the stored base values; map rendering applies frame-specific orientation.
 
 ```
 titan u7 typeflag-dump [static] [--game bg|si] [-o FILE] [-f FORMAT]

@@ -294,6 +294,37 @@ class U7Shape:
         return cls._parse_rle(data)
 
     @classmethod
+    def count_frames_from_data(cls, data: bytes, *, is_tile: bool = False) -> int:
+        """Return real archive frame count without decoding frame pixels.
+
+        Exult uses this count to decide whether frame bit 5 denotes a
+        generated reflection. Shapes containing more than 32 real frames use
+        bit 5 as part of the archive frame number instead.
+        """
+        if not data:
+            return 0
+
+        if is_tile or cls._looks_like_tile(data):
+            return len(data) // NUM_TILE_BYTES
+
+        if len(data) < 8:
+            return 1
+
+        shape_size = struct.unpack_from("<I", data, 0)[0]
+        if shape_size <= 4 or shape_size > len(data):
+            return 1
+
+        first_offset = struct.unpack_from("<I", data, 4)[0]
+        if (
+            first_offset <= 4
+            or first_offset > shape_size
+            or (first_offset - 4) % 4 != 0
+        ):
+            return 0
+
+        return (first_offset - 4) // 4
+
+    @classmethod
     def from_file(cls, filepath: str) -> U7Shape:
         """Load a shape from a standalone ``.shp`` file."""
         with open(filepath, "rb") as f:

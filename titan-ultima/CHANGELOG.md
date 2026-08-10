@@ -14,6 +14,14 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Fixed
 
+- **U7 frame-32+ object footprints:** map rendering now matches Exult's
+  corrected frame-bit interpretation. Frame bit 5 (`0x20`) swaps a shape's
+  X/Y tile dimensions only when the shape has 32 or fewer real frames and
+  the bit denotes a generated reflection. Shapes with more than 32 real
+  `SHAPES.VGA` frames retain their stored TFA dimensions for frames 32+.
+  This fixes depth sorting and fallback bounds for extended mod shapes such
+  as the 40-frame Serpent Isle door shape 376. Door state persistence and
+  Exult's separate `frame % 4 < 2` open-door rule are unchanged.
 - **U8 embedded-name export filenames:** `titan u8 music-export` and
   `titan u8 sound-export-all` now preserve the names Titan already parses
   from the source archives instead of always falling back to generic archive
