@@ -10,8 +10,12 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from titan.uw2.cli import (
+    cmd_map_3d_export,
+    cmd_map_3d_render,
     cmd_map_extract,
     cmd_map_render,
+    cmd_model_export,
+    cmd_model_render,
     cmd_object_info,
     cmd_shape_export,
 )
@@ -125,6 +129,118 @@ class UW2CliTests(unittest.TestCase):
         assets_mock.assert_not_called()
         direct_render_mock.assert_called_once_with(
             self.root, output, slots=[0], tile_size=64
+        )
+
+    @patch("titan.uw2.cli.render_object_models")
+    def test_model_render_accepts_hex_item_ids(self, render_mock) -> None:
+        output = self.root / "models"
+        render_mock.return_value = [output / "table.png"]
+
+        result = cmd_model_render(
+            SimpleNamespace(
+                gamedir=str(self.root),
+                output=str(output),
+                items=["0x158", "348"],
+                flags=0,
+                size=512,
+                views=["iso"],
+            )
+        )
+
+        self.assertEqual(result, 0)
+        render_mock.assert_called_once_with(
+            self.root,
+            str(output),
+            item_ids=[0x158, 348],
+            flags=0,
+            size=512,
+            views=["iso"],
+        )
+
+    @patch("titan.uw2.cli.export_object_models")
+    def test_model_export_omits_item_filter_to_export_all(self, export_mock) -> None:
+        output = self.root / "models"
+        export_mock.return_value = [output / "table.obj"]
+
+        result = cmd_model_export(
+            SimpleNamespace(
+                gamedir=str(self.root),
+                output=str(output),
+                items=None,
+                flags=0,
+            )
+        )
+
+        self.assertEqual(result, 0)
+        export_mock.assert_called_once_with(
+            self.root,
+            str(output),
+            item_ids=None,
+            flags=0,
+        )
+
+    @patch("titan.uw2.cli.render_map_scene")
+    def test_map_3d_render_parses_region_and_views(self, render_mock) -> None:
+        output = self.root / "scene"
+        render_mock.return_value = [output / "top.png"]
+        result = cmd_map_3d_render(
+            SimpleNamespace(
+                gamedir=str(self.root),
+                output=str(output),
+                slot=0,
+                region="17,46,22,52",
+                views=["top"],
+                size=512,
+                include_ceilings=False,
+                no_sprites=False,
+                model_scale=2.0,
+                sprite_scale=1.0,
+                tick=0,
+            )
+        )
+        self.assertEqual(result, 0)
+        render_mock.assert_called_once_with(
+            self.root,
+            str(output),
+            slot=0,
+            region=(17, 46, 22, 52),
+            views=["top"],
+            size=512,
+            include_ceilings=False,
+            include_sprites=True,
+            model_scale=2.0,
+            sprite_scale=1.0,
+            tick=0,
+        )
+
+    @patch("titan.uw2.cli.export_map_scene")
+    def test_map_3d_export_preserves_sprite_option(self, export_mock) -> None:
+        output = self.root / "scene"
+        export_mock.return_value = output / "scene.glb"
+        result = cmd_map_3d_export(
+            SimpleNamespace(
+                gamedir=str(self.root),
+                output=str(output),
+                slot=0,
+                region=None,
+                include_ceilings=True,
+                no_sprites=True,
+                model_scale=2.0,
+                sprite_scale=1.0,
+                tick=3,
+            )
+        )
+        self.assertEqual(result, 0)
+        export_mock.assert_called_once_with(
+            self.root,
+            str(output),
+            slot=0,
+            region=(0, 0, 63, 63),
+            include_ceilings=True,
+            include_sprites=False,
+            model_scale=2.0,
+            sprite_scale=1.0,
+            tick=3,
         )
 
 

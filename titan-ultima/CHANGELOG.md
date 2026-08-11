@@ -34,6 +34,23 @@ This project uses [Semantic Versioning](https://semver.org/):
   `ALLPALS.DAT`, `COMOBJ.DAT` render types, and `OBJECTS.DAT` animation frame
   ranges. Commands accept `-g`/`--gamedir` or `[uw2.game] base` from
   `titan.toml`.
+- **Standalone UU2 polygon model tools:** added `titan uw2 model-render` for
+  PyVista/VTK camera renders and `titan uw2 model-export` for individual
+  OBJ/MTL/PNG/JSON assets. Both read `UW2.EXE`, `PALS.DAT`, and `TMOBJ.GR`
+  directly. Batch export covers all 21 currently mapped built-in item IDs,
+  preserves palette-colored faces, resolves item-selected bitmap textures,
+  writes one directory per item, and records the batch in `manifest.json`.
+  Special door, bridge, lever, switch, and writing rules remain future work.
+- **Textured UU2 3D map scenes:** added `titan uw2 map-3d-render` camera PNGs
+  and `map-3d-export` GLB/JSON output from one shared in-memory scene. Tile
+  geometry uses `T64.TR`; mapped furniture uses individually placed, named
+  `UW2.EXE` model parts with palette or `TMOBJ.GR` materials; loose objects
+  and ANIMO frames use alpha billboards. Inclusive tile crops allow small
+  validation scenes. Castle dining-room food records now align with table
+  tops by preserving native model Z units. Placed meshes use native scale `1`,
+  clockwise 45-degree headings, and each executable model's `0x0078` origin
+  pivot. Individual OBJ exports use the same pivot and record both origin and
+  collision half-extents in metadata.
 
 ### Fixed
 

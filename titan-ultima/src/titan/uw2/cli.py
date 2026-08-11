@@ -20,6 +20,9 @@ from titan.uw2.map_pipeline import (
     render_maps,
     render_maps_direct,
 )
+from titan.uw2.map3d import export_map_scene, render_map_scene
+from titan.uw2.model_export import UW2ModelExportError, export_object_models
+from titan.uw2.model_render import UW2ModelRenderError, render_object_models
 from titan.uw2.object_data import (
     ANIMATION_ITEM_FIRST,
     ANIMATION_ITEM_LAST,
@@ -28,6 +31,7 @@ from titan.uw2.object_data import (
     UW2ObjectDataError,
 )
 from titan.uw2.palette import UW2Palette, UW2PaletteError
+from titan.uw2.scene3d import UW2SceneError, parse_tile_region
 
 uw2_app = typer.Typer(
     name="uw2",
@@ -325,6 +329,106 @@ def cmd_map_extract(args: SimpleNamespace) -> int:
     return 0
 
 
+def cmd_model_render(args: SimpleNamespace) -> int:
+    """Render selected executable 3D objects without loading a map."""
+    game_directory = _uw2_game_directory(args.gamedir)
+    if game_directory is None:
+        typer.echo("ERROR: provide --gamedir or configure [uw2.game] base", err=True)
+        return 1
+    try:
+        item_ids = [int(value, 0) for value in args.items]
+        written = render_object_models(
+            game_directory,
+            args.output,
+            item_ids=item_ids,
+            flags=args.flags,
+            size=args.size,
+            views=args.views,
+        )
+    except (OSError, ValueError, UW2ModelRenderError) as error:
+        typer.echo(f"ERROR: {error}", err=True)
+        return 1
+    for path in written:
+        typer.echo(f"Rendered UU2 model: {path}")
+    return 0
+
+
+def cmd_model_export(args: SimpleNamespace) -> int:
+    """Export selected or all executable 3D objects as individual OBJ assets."""
+    game_directory = _uw2_game_directory(args.gamedir)
+    if game_directory is None:
+        typer.echo("ERROR: provide --gamedir or configure [uw2.game] base", err=True)
+        return 1
+    try:
+        item_ids = [int(value, 0) for value in args.items] if args.items else None
+        written = export_object_models(
+            game_directory,
+            args.output,
+            item_ids=item_ids,
+            flags=args.flags,
+        )
+    except (OSError, ValueError, UW2ModelExportError) as error:
+        typer.echo(f"ERROR: {error}", err=True)
+        return 1
+    for path in written:
+        typer.echo(f"Exported UU2 model: {path}")
+    typer.echo(f"Exported {len(written)} individual UU2 model items")
+    return 0
+
+
+def cmd_map_3d_render(args: SimpleNamespace) -> int:
+    """Render one textured map scene from camera presets."""
+    game_directory = _uw2_game_directory(args.gamedir)
+    if game_directory is None:
+        typer.echo("ERROR: provide --gamedir or configure [uw2.game] base", err=True)
+        return 1
+    try:
+        written = render_map_scene(
+            game_directory,
+            args.output,
+            slot=args.slot,
+            region=parse_tile_region(args.region),
+            views=args.views,
+            size=args.size,
+            include_ceilings=args.include_ceilings,
+            include_sprites=not args.no_sprites,
+            model_scale=args.model_scale,
+            sprite_scale=args.sprite_scale,
+            tick=args.tick,
+        )
+    except (OSError, KeyError, ValueError, UW2SceneError) as error:
+        typer.echo(f"ERROR: {error}", err=True)
+        return 1
+    for path in written:
+        typer.echo(f"Rendered UU2 3D map: {path}")
+    return 0
+
+
+def cmd_map_3d_export(args: SimpleNamespace) -> int:
+    """Export one textured map scene as GLB with individual object nodes."""
+    game_directory = _uw2_game_directory(args.gamedir)
+    if game_directory is None:
+        typer.echo("ERROR: provide --gamedir or configure [uw2.game] base", err=True)
+        return 1
+    try:
+        written = export_map_scene(
+            game_directory,
+            args.output,
+            slot=args.slot,
+            region=parse_tile_region(args.region),
+            include_ceilings=args.include_ceilings,
+            include_sprites=not args.no_sprites,
+            model_scale=args.model_scale,
+            sprite_scale=args.sprite_scale,
+            tick=args.tick,
+        )
+    except (OSError, KeyError, ValueError, UW2SceneError) as error:
+        typer.echo(f"ERROR: {error}", err=True)
+        return 1
+    typer.echo(f"Exported UU2 3D map: {written}")
+    return 0
+
+
 def cmd_map_render(args: SimpleNamespace) -> int:
     """Render directly from original archives; intermediates are optional."""
     game_directory = _uw2_game_directory(args.gamedir)
@@ -410,6 +514,56 @@ SlotsOption = Annotated[
 ]
 
 
+@uw2_app.command("model-render")
+def model_render_cmd(
+    output: Annotated[
+        str, typer.Option("-o", "--output", help="Rendered PNG directory")
+    ] = "uw2_models",
+    items: Annotated[
+        Optional[list[str]],
+        typer.Option("--item", help="Item ID in decimal or 0x hex; repeat as needed"),
+    ] = None,
+    flags: Annotated[
+        int,
+        typer.Option("--flags", help="Object flags used for dynamic texture choice"),
+    ] = 0,
+    size: Annotated[
+        int, typer.Option("--size", help="Square image size in pixels")
+    ] = 900,
+    views: Annotated[
+        Optional[list[str]],
+        typer.Option("--view", help="iso, front, side, or top; repeat as needed"),
+    ] = None,
+    gamedir: GameDirOption = None,
+) -> None:
+    """Render standalone polygon objects decoded directly from UW2.EXE."""
+    items = items or ["0x158", "0x15c", "0x169"]
+    views = views or ["iso", "front"]
+    raise SystemExit(cmd_model_render(SimpleNamespace(**locals())))
+
+
+@uw2_app.command("model-export")
+def model_export_cmd(
+    output: Annotated[
+        str, typer.Option("-o", "--output", help="Export directory")
+    ] = "uw2_model_exports",
+    items: Annotated[
+        Optional[list[str]],
+        typer.Option(
+            "--item",
+            help="Item ID in decimal or 0x hex; repeat. Omit to export all mapped items",
+        ),
+    ] = None,
+    flags: Annotated[
+        int,
+        typer.Option("--flags", help="Object flags used for dynamic texture choice"),
+    ] = 0,
+    gamedir: GameDirOption = None,
+) -> None:
+    """Export individual textured polygon objects from UW2.EXE to OBJ."""
+    raise SystemExit(cmd_model_export(SimpleNamespace(**locals())))
+
+
 @uw2_app.command("map-extract")
 def map_extract_cmd(
     output: Annotated[str, typer.Option("-o", "--output", help="Extraction directory")],
@@ -422,6 +576,54 @@ def map_extract_cmd(
 ) -> None:
     """Decode LEV.ARK maps, objects, automap data, notes, and lighting."""
     raise SystemExit(cmd_map_extract(SimpleNamespace(**locals())))
+
+
+@uw2_app.command("map-3d-render")
+def map_3d_render_cmd(
+    output: Annotated[str, typer.Option("-o", "--output")] = "uw2_maps_3d",
+    slot: Annotated[
+        int, typer.Option("--slot", help="Zero-based LEV.ARK map slot")
+    ] = 0,
+    region: Annotated[
+        Optional[str],
+        typer.Option("--region", help="Inclusive tile bounds: x1,y1,x2,y2"),
+    ] = None,
+    views: Annotated[
+        Optional[list[str]],
+        typer.Option("--view", help="iso-ne, iso-nw, iso-se, iso-sw, or top; repeat"),
+    ] = None,
+    size: Annotated[int, typer.Option("--size", help="Square PNG size")] = 1200,
+    include_ceilings: Annotated[bool, typer.Option("--include-ceilings")] = False,
+    no_sprites: Annotated[bool, typer.Option("--no-sprites")] = False,
+    model_scale: Annotated[float, typer.Option("--model-scale")] = 1.0,
+    sprite_scale: Annotated[float, typer.Option("--sprite-scale")] = 1.0,
+    tick: Annotated[int, typer.Option("--tick", help="ANIMO animation tick")] = 0,
+    gamedir: GameDirOption = None,
+) -> None:
+    """Render textured UU2 tile geometry and individually placed objects."""
+    views = views or ["iso-ne", "top"]
+    raise SystemExit(cmd_map_3d_render(SimpleNamespace(**locals())))
+
+
+@uw2_app.command("map-3d-export")
+def map_3d_export_cmd(
+    output: Annotated[str, typer.Option("-o", "--output")] = "uw2_maps_3d",
+    slot: Annotated[
+        int, typer.Option("--slot", help="Zero-based LEV.ARK map slot")
+    ] = 0,
+    region: Annotated[
+        Optional[str],
+        typer.Option("--region", help="Inclusive tile bounds: x1,y1,x2,y2"),
+    ] = None,
+    include_ceilings: Annotated[bool, typer.Option("--include-ceilings")] = False,
+    no_sprites: Annotated[bool, typer.Option("--no-sprites")] = False,
+    model_scale: Annotated[float, typer.Option("--model-scale")] = 1.0,
+    sprite_scale: Annotated[float, typer.Option("--sprite-scale")] = 1.0,
+    tick: Annotated[int, typer.Option("--tick", help="ANIMO animation tick")] = 0,
+    gamedir: GameDirOption = None,
+) -> None:
+    """Export textured UU2 map GLB; retain every placed item as named nodes."""
+    raise SystemExit(cmd_map_3d_export(SimpleNamespace(**locals())))
 
 
 @uw2_app.command("map-render")
@@ -509,7 +711,7 @@ def map_render_cmd(
             "--model-scale",
             help="Scale for executable model geometry",
         ),
-    ] = 2.0,
+    ] = 1.0,
     solid_fill: Annotated[
         str,
         typer.Option("--solid-fill", help="none, between, adjacent, interior, or bbox"),

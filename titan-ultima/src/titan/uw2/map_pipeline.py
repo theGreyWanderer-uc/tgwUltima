@@ -358,7 +358,7 @@ def _render_options(overrides: dict[str, object]) -> dict[str, object]:
         "no_models": False,
         "model_style": "icons",
         "model_icon_scale": 2.0,
-        "model_scale": 2.0,
+        "model_scale": 1.0,
         "solid_fill": "none",
         "solid_fill_texture": "wall",
         "solid_fill_brightness": 0.42,

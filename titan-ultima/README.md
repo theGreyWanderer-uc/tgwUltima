@@ -35,10 +35,10 @@ Requirements:
 
 Optional:
 
-- `pyvista` (`pip install pyvista`) — only for `titan u9 model-export`'s
-  auto-generated `preview.png`/`preview_front.png` renders. Without it,
-  `model-export` still works; the preview step is skipped with a
-  one-line note.
+- `pyvista` plus VTK (`pip install pyvista`) — used by `titan uw2
+  model-render`, `uw2 map-3d-render`, and U9 preview rendering.
+- `trimesh` (`pip install trimesh`) — used by `titan uw2 map-3d-export` to
+  write GLB. UU2 standalone `model-export` needs neither optional package.
 
 ---
 
@@ -94,6 +94,8 @@ base = "C:/Games/Ultima Underworld 2"
 
 ```bash
 titan uw2 map-render --slots 0 -o castle_maps/
+titan uw2 model-render --item 0x158 --item 0x15c -o model_renders/
+titan uw2 model-export -o model_exports/
 titan uw2 object-info 457
 titan uw2 shape-export OBJECTS.GR 302 -o fountain/
 titan uw2 shape-export ANIMO.GR 6 -o fountain/
@@ -136,16 +138,23 @@ place for command options, longer examples, and format notes.
 
 ### Ultima Underworld II
 
-Native UU2 support covers `LEV.ARK` map extraction and U7-style cutaway map
-rendering, `PALS.DAT`, terrain and `.GR` image archives, `ALLPALS.DAT`
+Native UU2 support covers `LEV.ARK` map extraction, 2D cutaway maps, textured
+3D map rendering/GLB export, standalone built-in model rendering/export, `PALS.DAT`, terrain
+and `.GR` image archives, `ALLPALS.DAT`
 auxiliary palettes, `COMOBJ.DAT` render metadata, and `OBJECTS.DAT` animation
 descriptors. Map rendering uses verified `OBJECTS.GR` icons for model-based
-furniture by default and can optionally project built-in `UW2.EXE` geometry;
-NPC animation archives remain future work.
+furniture by default and can optionally project built-in `UW2.EXE` geometry.
+Standalone model commands decode that geometry directly, apply palette
+materials and item-selected `TMOBJ.GR` textures, then render PNG views or write
+one OBJ/MTL/PNG asset set per item. Placed meshes use native scale 1, clockwise
+45-degree headings, and the `0x0078` model pivot; standalone OBJ vertices are
+also relative to that pivot. NPC animation archives remain future work.
 
 | Area | Coverage | Quick example |
 |---|---|---|
 | Maps | Render directly from `LEV.ARK`, terrain, doors, decals, `OBJECTS.GR`, animated `ANIMO.GR` overlays, and 2D furniture icons; optional `UW2.EXE` geometry and diagnostic extraction | `titan uw2 map-render --slots 0 -g "C:/UW2" -o maps/ --tick 1` |
+| 3D maps | Render selectable camera views or export GLB from textured tile geometry, placed `UW2.EXE` furniture, and sprite/ANIMO billboards; objects remain individually named | `titan uw2 map-3d-render --slot 0 --region 17,46,22,52 -g "C:/UW2" -o castle_3d/` |
+| 3D objects | Render standalone camera views or export 21 mapped built-in item IDs as individual OBJ/MTL assets; UV faces use `TMOBJ.GR`, other faces use palette materials | `titan uw2 model-export -g "C:/UW2" -o models/` |
 | Palettes | Export any 256-color VGA palette from `PALS.DAT` | `titan uw2 palette-export PALS.DAT --index 0 -o palettes/` |
 | Shapes | Inspect/export one or every non-empty image from any `.GR` archive | `titan uw2 shape-export OBJECTS.GR 302 -g "C:/UW2" -o fountain/` |
 | Object metadata | Dump sprite/NPC/model/texture render types; inspect `ANIMO.GR` frame ranges | `titan uw2 object-info 457 -g "C:/UW2"` |

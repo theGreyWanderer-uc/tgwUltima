@@ -75,9 +75,10 @@ See [Configuration (titan.toml)](#configuration-titantoml) below.
 
 Native UU2 support covers `LEV.ARK` map extraction, U7-style cutaway map
 rendering, palettes, terrain and `.GR` shape archives, common object render
-metadata, and animation frame descriptors. NPC animation archives and 3D
-models outside the built-in common-object set are not yet exposed as separate
-command groups.
+metadata, animation frame descriptors, and standalone rendering/export of
+built-in `UW2.EXE` polygon models. NPC animation archives and special model
+classes such as doors and bridges are not yet exposed by standalone 3D
+commands.
 
 All commands accept `-g`/`--gamedir`; it may point at install root or its
 `DATA` directory. `[uw2.game] base` supplies same value from `titan.toml`.
@@ -121,11 +122,116 @@ ordinary and animated sprites; `--object-scale` tunes their size. `--no-models`
 suppresses model-class objects. `--model-style icons` is the default;
 `--model-icon-scale` tunes those icons. `--model-style geometry` restores the
 experimental `UW2.EXE` projection, with `--model-scale` controlling its size.
+Native scale `1` is the default. Placed geometry uses UW2's clockwise
+45-degree headings and executable model-origin pivots.
 No extracted
 files remain by default. `--keep-intermediates` writes diagnostic JSON and PNG
 assets under `OUTPUT/_map_data` or `--workdir`; `--reuse-workdir` supports the
 legacy extracted renderer path. Run `titan uw2 map-render --help` for all
 projection, wall, lighting, fill, and debug-grid options.
+
+### `uw2 map-3d-render`
+
+```text
+titan uw2 map-3d-render --slot N [--region x1,y1,x2,y2]
+    [--view iso-ne|iso-nw|iso-se|iso-sw|top ...] [--size N]
+    [--model-scale SCALE] [-o DIR] [-g DIR]
+```
+
+Builds textured 3D tile geometry directly from original archives, places
+mapped `UW2.EXE` furniture as meshes, and places ordinary/ANIMO objects as
+camera-facing textured billboards. `--region` uses inclusive raw tile bounds;
+omitting it builds the full 64x64 level. Ceilings are omitted for external
+camera views unless `--include-ceilings` is set. Default views are `iso-ne`
+and `top`. Requires PyVista/VTK.
+
+```powershell
+titan uw2 map-3d-render -g "C:/UW2" --slot 0 --region 17,46,22,52 `
+    --view iso-ne --view top -o castle_dining_3d/
+```
+
+### `uw2 map-3d-export`
+
+```text
+titan uw2 map-3d-export --slot N [--region x1,y1,x2,y2]
+    [--include-ceilings] [--no-sprites] [--model-scale SCALE]
+    [-o DIR] [-g DIR]
+```
+
+Exports same shared scene to textured GLB plus JSON manifest. Architecture is
+grouped by terrain material. Each placed mesh or sprite retains slot/item data
+and individually named GLB nodes; multi-material models use one named part per
+material. Sprite items use crossed planes so they remain visible from external
+viewer angles. Requires `trimesh`.
+
+Castle dining-room validation crop:
+
+```powershell
+titan uw2 map-3d-export -g "C:/UW2" --slot 0 --region 17,46,22,52 `
+    -o castle_dining_3d/
+```
+
+Object Z is not guessed. Map `zpos` supplies base height. Native model Z stays
+in map-height units while model X/Y uses `--model-scale`, which defaults to
+native scale `1`. Castle table base 96, native tabletop height 10, and food at
+zpos 106 therefore coincide. Titan also applies each model's `0x0078` placement
+pivot before its clockwise heading rotation.
+
+### `uw2 model-render`
+
+```text
+titan uw2 model-render [-o DIR] [--item ID ...] [--flags N] [--size N]
+    [--view iso|front|side|top ...] [-g DIR]
+```
+
+Decodes selected polygon models directly from `UW2.EXE` and renders them
+without loading a map. Flat faces use model palette entries from the
+executable. UV-mapped faces use the item-selected image from `TMOBJ.GR`.
+Default items are table `0x158`, chair `0x15c`, and shelf `0x169`; default
+views are `iso` and `front`. Item IDs accept decimal or `0x` hexadecimal.
+This command needs optional PyVista/VTK packages.
+
+```bash
+titan uw2 model-render -g "C:/UW2" -o model_renders/ \
+    --item 0x158 --item 0x15c --view iso --view front
+```
+
+### `uw2 model-export`
+
+```text
+titan uw2 model-export [-o DIR] [--item ID ...] [--flags N] [-g DIR]
+```
+
+Exports each selected model to its own directory containing OBJ geometry, MTL
+materials, optional `TMOBJ.GR` PNG texture, and `metadata.json`. Output root
+also contains `manifest.json`. Omitting `--item` exports all 21 item IDs in
+Titan's current built-in model mapping. Repeated `--item` values select a
+subset. `--flags` selects dynamic painting, gravestone, pillar, or shelf
+texture variants where applicable.
+
+Exported vertices are relative to the executable model's `0x0078` placement
+pivot. Metadata retains the raw origin vertex, adjusted placement origin, and
+collision half-extents.
+
+OBJ UV V-coordinates are flipped to match OBJ/OpenGL image origin. Textured
+face commands `00A8`, `00B4`, `00CE`, `00A0`, and `00D2` use the selected
+object texture; the constant `6` field in `00A8`/`00A0` is not a
+`TMOBJ.GR` image index. Faces without bitmap art retain UU2 palette colors as
+MTL diffuse materials.
+
+```text
+model_exports/
+    manifest.json
+    item_344_table/
+        table_item_344_model_24.obj
+        table_item_344_model_24.mtl
+        tmobj_032.png
+        metadata.json
+```
+
+Door frames, doors, bridges, levers, switches, writing, variable ceiling
+height, and owner-controlled bed colors require special instance rules and
+remain outside this first standalone batch exporter.
 
 ### `uw2 palette-export`
 
@@ -3726,6 +3832,16 @@ A value on the command line always wins.
 | `save-list` | List entries in a U8 save archive |
 | `save-extract` | Extract entries from a U8 save archive |
 | `unkcoff-dump` | Dump `UNKCOFF.DAT` code-offset table |
+| `uw2 map-extract` | Decode UU2 map, object, automap, note, and light data |
+| `uw2 map-render` | Render UU2 maps directly from original files |
+| `uw2 model-render` | Render standalone `UW2.EXE` polygon models to PNG |
+| `uw2 model-export` | Export individual UU2 models to OBJ/MTL/PNG/JSON |
+| `uw2 palette-export` | Export one `PALS.DAT` palette |
+| `uw2 shape-info` | Inspect one UU2 `.GR` archive |
+| `uw2 shape-export` | Export one UU2 `.GR` image to PNG |
+| `uw2 shape-batch` | Export every non-empty image from a UU2 `.GR` archive |
+| `uw2 object-info` | Inspect one `COMOBJ.DAT` item record |
+| `uw2 object-dump` | Export all `COMOBJ.DAT` item records |
 | `u7 save-list` | List entries in an Exult U7 savegame |
 | `u7 save-extract` | Extract entries from an Exult U7 savegame |
 | `u7 gflag-dump` | Dump global flags from a U7 save or `flaginit` file |

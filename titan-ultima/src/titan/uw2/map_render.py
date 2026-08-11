@@ -622,7 +622,7 @@ def make_model_primitives(
 ) -> list[ModelTrianglePrimitive]:
     """Project executable model triangles into cutaway screen space."""
     primitives: list[ModelTrianglePrimitive] = []
-    model_scale = max(0.01, float(getattr(args, "model_scale", 2.0)))
+    model_scale = max(0.01, float(getattr(args, "model_scale", 1.0)))
     for obj in iter_tile_objects(tile, object_map):
         if bool(obj.get("hidden")):
             continue
@@ -630,9 +630,6 @@ def make_model_primitives(
         if model is None:
             continue
         heading = int(obj.get("heading", 0)) & 0x07
-        angle = heading * math.tau / 8.0
-        cosine = math.cos(angle)
-        sine = math.sin(angle)
         center_x = float(tile["x"]) + float(obj.get("in_tile_x", 4)) / 8.0
         center_y = float(tile["y"]) + float(obj.get("in_tile_y", 4)) / 8.0
         object_lift = round(
@@ -643,8 +640,9 @@ def make_model_primitives(
             points: list[tuple[float, float]] = []
             transformed = []
             for vertex in triangle.vertices:
-                rotated_x = (vertex.x * cosine - vertex.y * sine) * model_scale
-                rotated_y = (vertex.x * sine + vertex.y * cosine) * model_scale
+                rotated_x, rotated_y, local_z = model.oriented_position(
+                    vertex, heading, model_scale
+                )
                 raw_x = center_x + rotated_x
                 raw_y = center_y + rotated_y
                 display_x, display_y = transform_boundary_point(
@@ -660,7 +658,7 @@ def make_model_primitives(
                 vertex_z = (
                     wall_screen_height(tile, args) / (model_scale * args.tile_size)
                     if vertex.roof
-                    else vertex.z
+                    else local_z
                 )
                 height_pixels = vertex_z * model_scale * args.tile_size
                 points.append((screen_x - height_pixels, screen_y - height_pixels))

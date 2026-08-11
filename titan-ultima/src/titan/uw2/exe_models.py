@@ -7,6 +7,7 @@ palette entries from executable instead of embedding tables from other tools.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from pathlib import Path
 import struct
 
@@ -67,6 +68,7 @@ class ModelTriangle:
     vertices: tuple[ModelVertex, ModelVertex, ModelVertex]
     palette_index: int
     texture_id: int | None = None
+    textured: bool = False
 
 
 @dataclass(frozen=True)
@@ -75,12 +77,49 @@ class UW2Model:
     source_offset: int
     extents: tuple[float, float, float]
     triangles: tuple[ModelTriangle, ...]
+    origin: tuple[float, float, float] | None = None
+    collision_half_extents: tuple[float, float, float] | None = None
+
+    @property
+    def placement_origin(self) -> tuple[float, float, float]:
+        """Return the model-space pivot that belongs at the object position."""
+        if self.origin is None:
+            return (0.0, 0.0, 0.0)
+        return (
+            self.origin[0],
+            self.origin[1],
+            self.origin[2] - self.extents[1] / 2.0,
+        )
+
+    def local_position(self, vertex: ModelVertex) -> tuple[float, float, float]:
+        """Translate one decoded vertex relative to the executable model pivot."""
+        origin_x, origin_y, origin_z = self.placement_origin
+        return (
+            vertex.x - origin_x,
+            vertex.y - origin_y,
+            vertex.z - origin_z,
+        )
+
+    def oriented_position(
+        self, vertex: ModelVertex, heading: int, horizontal_scale: float = 1.0
+    ) -> tuple[float, float, float]:
+        """Apply the UW clockwise heading and optional horizontal scale."""
+        local_x, local_y, local_z = self.local_position(vertex)
+        angle = -(heading & 7) * math.tau / 8.0
+        cosine, sine = math.cos(angle), math.sin(angle)
+        return (
+            (local_x * cosine - local_y * sine) * horizontal_scale,
+            (local_x * sine + local_y * cosine) * horizontal_scale,
+            local_z,
+        )
 
 
 @dataclass
 class _ModelState:
     vertices: list[ModelVertex]
     triangles: list[ModelTriangle]
+    origin: tuple[float, float, float] | None = None
+    collision_half_extents: tuple[float, float, float] | None = None
 
 
 class UW2ModelArchive:
@@ -156,6 +195,8 @@ class UW2ModelArchive:
             source_offset=source_offset,
             extents=(extents[0], extents[1], extents[2]),
             triangles=tuple(state.triangles),
+            origin=state.origin,
+            collision_half_extents=state.collision_half_extents,
         )
         self._cache[index] = model
         return model
@@ -211,8 +252,18 @@ class _ModelParser:
                 if command == 0x0000:
                     return
                 if command == 0x0078:
-                    reader.vertex_ref()
-                    reader.skip(8)
+                    origin_vertex = self._vertex(reader.vertex_ref())
+                    self.state.origin = (
+                        origin_vertex.x,
+                        origin_vertex.y,
+                        origin_vertex.z,
+                    )
+                    self.state.collision_half_extents = (
+                        reader.fixed(),
+                        reader.fixed(),
+                        reader.fixed(),
+                    )
+                    reader.u16()
                 elif command == 0x004A:
                     tx = reader.fixed()
                     tz = reader.fixed()
@@ -299,6 +350,8 @@ class _ModelParser:
                     indices = [reader.vertex_ref() for _ in range(reader.u16())]
                     self._add_face(indices, color)
                 elif command in {0x00A8, 0x00B4, 0x00CE}:
+                    # The 00A8 field is always 6 in known data. It marks the
+                    # textured face form; the placed item selects TMOBJ.GR.
                     texture_id = reader.u16() if command == 0x00A8 else None
                     count = reader.u16()
                     vertices = []
@@ -314,7 +367,7 @@ class _ModelParser:
                                 vertex.roof,
                             )
                         )
-                    self._triangulate(vertices, color, texture_id)
+                    self._triangulate(vertices, color, texture_id, textured=True)
                 elif command in {0x00A0, 0x00D2}:
                     texture_id = reader.u16() if command == 0x00A0 else None
                     indices = [reader.u8() for _ in range(4)]
@@ -334,7 +387,7 @@ class _ModelParser:
                                 vertex.roof,
                             )
                         )
-                    self._triangulate(vertices, color, texture_id)
+                    self._triangulate(vertices, color, texture_id, textured=True)
                 elif command in {0x0006, 0x000C, 0x000E, 0x0010}:
                     reader.skip(12 if command == 0x0006 else 8)
                     left_relative = reader.u16()
@@ -410,6 +463,8 @@ class _ModelParser:
         vertices: list[ModelVertex],
         color: int,
         texture_id: int | None,
+        *,
+        textured: bool = False,
     ) -> None:
         if len(vertices) < 3:
             return
@@ -419,6 +474,7 @@ class _ModelParser:
                     vertices=(vertices[0], vertices[index], vertices[index + 1]),
                     palette_index=color,
                     texture_id=texture_id,
+                    textured=textured,
                 )
             )
 
