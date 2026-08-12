@@ -61,7 +61,7 @@ def _write_blends(static_dir: str) -> None:
 def _make_frame() -> U7Shape.Frame:
     frame = U7Shape.Frame()
     frame.width, frame.height = 4, 4
-    frame.xoff, frame.yoff = 1, 1
+    frame.set_hotspot_from_top_left(1, 1)
     pixels = np.full((4, 4), 0xFF, dtype=np.uint8)  # transparent
     pixels[1:3, 1:3] = _TRANSLUCENT_INDEX
     frame.pixels = pixels

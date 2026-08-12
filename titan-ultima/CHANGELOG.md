@@ -10,6 +10,29 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ---
 
+## [0.7.4]
+
+### Added
+
+- **Combined U7 shape frame report:** added `titan u7 shape-frame-report` to
+  export every record and frame from a U7 shape Flex archive as CSV or JSON.
+  The report keeps Exult Studio Origin X/Y, top-left-relative drawing
+  hotspots, and `WIHH.DAT` weapon attachment coordinates in distinct columns;
+  it auto-discovers a sibling `WIHH.DAT` or accepts an explicit path.
+
+### Changed
+
+- **U7 frame origin convention:** `U7Shape.Frame` now exposes
+  `origin_x`/`origin_y` using `xright`/`ybelow` convention.
+  Explicit top-left-relative drawing-anchor helpers replace the ambiguous
+  `xoff`/`yoff` fields while preserving existing SHP/VGA binary placement.
+- **U7 weapon attachment terminology:** WIHH.DAT values are now identified as
+  weapon attachment coordinates (`attachment_x`/`attachment_y`) and kept
+  clearly separate from SHP frame origins in the API, CSV output, CLI help,
+  and documentation.
+
+---
+
 ## [0.7.3]
 
 ### Added

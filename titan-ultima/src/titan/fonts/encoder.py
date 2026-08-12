@@ -166,23 +166,20 @@ def glyphs_to_shape(
                 # Pixels are already palette-indexed — use as-is
                 frame.width = bmp.shape[1]
                 frame.height = bmp.shape[0]
-                frame.xoff = 0
-                frame.yoff = yoff
+                frame.set_hotspot_from_top_left(0, yoff)
                 frame.pixels = bmp
             else:
                 gb = GlyphBitmap(code=idx, pixels=bmp, is_mono=is_mono)
                 ff = glyph_to_font_frame(gb, lut, ink_index=ink_index)
                 frame.width = ff.pixels.shape[1]
                 frame.height = ff.pixels.shape[0]
-                frame.xoff = 0
-                frame.yoff = yoff
+                frame.set_hotspot_from_top_left(0, yoff)
                 frame.pixels = ff.pixels
         elif idx == 32 and space_width > 0 and cell_height > 0:
             # Space — all-transparent frame at proper font dimensions
             frame.width = space_width
             frame.height = cell_height
-            frame.xoff = 0
-            frame.yoff = yoff
+            frame.set_hotspot_from_top_left(0, yoff)
             frame.pixels = np.full(
                 (cell_height, space_width), 0xFF, dtype=np.uint8
             )
@@ -191,8 +188,7 @@ def glyphs_to_shape(
             stub_h = cell_height if cell_height > 0 else 1
             frame.width = 1
             frame.height = stub_h
-            frame.xoff = 0
-            frame.yoff = yoff
+            frame.set_hotspot_from_top_left(0, yoff)
             frame.pixels = np.full(
                 (stub_h, 1), 0xFF, dtype=np.uint8
             )
@@ -213,8 +209,8 @@ def glyphs_to_shape(
                 dst = shape.frames[pf]
                 dst.width = src.width
                 dst.height = src.height
-                dst.xoff = src.xoff
-                dst.yoff = src.yoff
+                dst.origin_x = src.origin_x
+                dst.origin_y = src.origin_y
                 dst.pixels = src.pixels.copy()
                 preview_src = donor_cp
 

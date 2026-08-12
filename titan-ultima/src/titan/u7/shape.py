@@ -127,25 +127,50 @@ class U7Shape:
 
     Each RLE frame (at offset within shape data)::
 
-        Bytes 0-1:  uint16 LE — xright  (extent to right of hot-spot)
-        Bytes 2-3:  uint16 LE — xleft   (extent to left)
-        Bytes 4-5:  uint16 LE — yabove  (extent above)
-        Bytes 6-7:  uint16 LE — ybelow  (extent below)
+        Bytes 0-1:  int16 LE — xright  (Exult Studio "Origin X")
+        Bytes 2-3:  int16 LE — xleft   (extent left of the drawing anchor)
+        Bytes 4-5:  int16 LE — yabove  (extent above the drawing anchor)
+        Bytes 6-7:  int16 LE — ybelow  (Exult Studio "Origin Y")
         Bytes 8+:   span data (see _decode_rle_spans)
+
+    Exult Studio exposes ``xright``/``ybelow`` as frame ``Origin X/Y``.
+    Titan uses that same convention in :class:`Frame`.  The drawing anchor's
+    pixel coordinate measured from the bitmap's top-left is available through
+    ``hotspot_x_from_left``/``hotspot_y_from_top``; it is a different
+    coordinate convention and must not be confused with WIHH.DAT weapon
+    attachment offsets.
     """
 
     class Frame:
-        """A single frame within a shape."""
+        """A frame whose origin uses Exult Studio's xright/ybelow convention."""
 
-        __slots__ = ("width", "height", "xoff", "yoff", "pixels", "is_tile")
+        __slots__ = ("width", "height", "origin_x", "origin_y", "pixels", "is_tile")
 
         def __init__(self) -> None:
             self.width: int = 0
             self.height: int = 0
-            self.xoff: int = 0
-            self.yoff: int = 0
+            # These are the exact values Exult Studio labels Origin X/Y:
+            # xright and ybelow, the signed extents on the bottom-right side
+            # of the frame's drawing anchor.  They are not WIHH weapon offsets.
+            self.origin_x: int = 0
+            self.origin_y: int = 0
             self.pixels: Optional[np.ndarray] = None  # height×width uint8
             self.is_tile: bool = False
+
+        @property
+        def hotspot_x_from_left(self) -> int:
+            """Return the drawing anchor X measured from the bitmap's left edge."""
+            return self.width - self.origin_x - 1
+
+        @property
+        def hotspot_y_from_top(self) -> int:
+            """Return the drawing anchor Y measured from the bitmap's top edge."""
+            return self.height - self.origin_y - 1
+
+        def set_hotspot_from_top_left(self, x: int, y: int) -> None:
+            """Convert a top-left-relative hotspot to Exult Studio Origin X/Y."""
+            self.origin_x = self.width - x - 1
+            self.origin_y = self.height - y - 1
 
         def to_rle_bytes(self) -> bytes:
             """Encode this frame as U7 RLE binary data.
@@ -164,10 +189,12 @@ class U7Shape:
                 return self.pixels.astype(np.uint8).tobytes()
 
             pix = self.pixels
-            xleft = self.xoff
-            yabove = self.yoff
-            xright = self.width - xleft - 1
-            ybelow = self.height - yabove - 1
+            # Keep Exult Studio's xright/ybelow values as the public
+            # representation and derive the opposite extents only here.
+            xright = self.origin_x
+            ybelow = self.origin_y
+            xleft = self.hotspot_x_from_left
+            yabove = self.hotspot_y_from_top
 
             parts: list[bytes] = []
             # 8-byte extent header
@@ -363,8 +390,10 @@ class U7Shape:
             frame.is_tile = True
             frame.width = TILE_SIZE
             frame.height = TILE_SIZE
-            frame.xoff = TILE_SIZE
-            frame.yoff = TILE_SIZE
+            # Raw tiles have no RLE origin header.  These synthetic values
+            # mirror Exult's Shape_frame representation for non-RLE tiles.
+            frame.origin_x = -1
+            frame.origin_y = -1
             start = i * NUM_TILE_BYTES
             frame.pixels = np.frombuffer(
                 data[start:start + NUM_TILE_BYTES], dtype=np.uint8
@@ -433,8 +462,9 @@ class U7Shape:
 
         frame.width = xleft + xright + 1
         frame.height = yabove + ybelow + 1
-        frame.xoff = xleft
-        frame.yoff = yabove
+        # Match the Origin X/Y fields displayed and edited by Exult Studio.
+        frame.origin_x = xright
+        frame.origin_y = ybelow
 
         if frame.width <= 0 or frame.height <= 0:
             return frame
@@ -446,7 +476,6 @@ class U7Shape:
 
         # Decode spans starting after the 8-byte header.
         pos = 8
-        dv = memoryview(d)
         dlen = len(d)
 
         while pos + 2 <= dlen:

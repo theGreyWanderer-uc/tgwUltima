@@ -86,7 +86,7 @@ def _frame_to_rgba(
     has_translucency: bool = False,
     translucency: U7Translucency | None = None,
 ) -> tuple[Image.Image, int, int]:
-    """Convert a decoded U7Shape.Frame to ``(RGBA Image, xoff, yoff)``.
+    """Return RGBA pixels plus the top-left-relative drawing anchor.
 
     Ground tiles are rendered fully opaque (no transparent index).
     RLE sprites treat pixel value 0xFF as transparent.
@@ -95,6 +95,10 @@ def _frame_to_rgba(
     :meth:`titan.u7.translucency.U7Translucency.composite_rgba_preview`)
     -- an approximation of Exult's real indexed compositing, since this
     function always produces a flattened RGBA image.
+
+    ``U7Shape.Frame.origin_x/origin_y`` use Exult Studio's xright/ybelow
+    convention.  Map placement needs the opposite xleft/yabove extents, so
+    this boundary returns ``hotspot_x_from_left/hotspot_y_from_top``.
     """
     indexed = Image.fromarray(fr.pixels, mode="P")
     indexed.putpalette(flat_rgb)
@@ -125,7 +129,7 @@ def _frame_to_rgba(
 
         rgba.putalpha(Image.fromarray(alpha, mode="L"))
 
-    return (rgba, fr.xoff, fr.yoff)
+    return (rgba, fr.hotspot_x_from_left, fr.hotspot_y_from_top)
 
 
 # ---------------------------------------------------------------------------
@@ -1219,7 +1223,7 @@ class U7MapRenderer:
         self,
         flat_rgb: bytes | list[int],
     ) -> Callable[[int, int], tuple[Image.Image, int, int] | None]:
-        """Return a cached (shnum, frnum) → (RGBA image, xoff, yoff) lookup.
+        """Return cached RGBA frames with top-left-relative drawing anchors.
 
         Each call creates fresh shape/frame caches scoped to one render pass,
         so callers get per-render isolation without sharing mutable state.

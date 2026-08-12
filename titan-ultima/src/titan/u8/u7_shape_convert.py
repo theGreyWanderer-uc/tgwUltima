@@ -283,8 +283,10 @@ def convert_frame(
     frame = U7Shape.Frame()
     frame.width = target_w
     frame.height = target_h
-    frame.xoff = target_w - 1  # xleft: hotspot 1px in from the right edge
-    frame.yoff = target_h - 1  # yabove: hotspot 1px in from the bottom edge
+    # Exult Studio displays the U7 bottom-right drawing anchor as Origin
+    # X/Y = (0, 0), i.e. the stored xright/ybelow extents.
+    frame.origin_x = 0
+    frame.origin_y = 0
     frame.pixels = pixels
     frame.is_tile = False
     return frame

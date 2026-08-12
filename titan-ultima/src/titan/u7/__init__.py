@@ -55,6 +55,11 @@ from titan.u7.save import (
     U7ReadyTypes,
 )
 from titan.u7.shape import U7Shape
+from titan.u7.shape_frame_report import (
+    U7ShapeFrameReport,
+    U7ShapeFrameReportRow,
+    build_u7_shape_frame_report,
+)
 from titan.u7.shape_extra import (
     U7FieldType,
     U7ShapeExtra,
@@ -79,11 +84,14 @@ from titan.u7.usecode import (
     U7UsecodeInstruction,
     load_u7_intrinsic_names,
 )
-from titan.u7.wihh import U7WeaponInHandOffsets, U7WeaponOffsetFrame
+from titan.u7.wihh import U7WeaponAttachmentFrame, U7WeaponInHandOffsets
 
 __all__ = [
     "U7FlexArchive",
     "U7Shape",
+    "U7ShapeFrameReport",
+    "U7ShapeFrameReportRow",
+    "build_u7_shape_frame_report",
     "U7Palette",
     "VocDecoder",
     "extract_music",
@@ -114,7 +122,7 @@ __all__ = [
     "U7NPCInventoryItem",
     "U7ReadyTypes",
     "U7WeaponInHandOffsets",
-    "U7WeaponOffsetFrame",
+    "U7WeaponAttachmentFrame",
     "U7Weapons",
     "U7Ammos",
     "U7Armors",

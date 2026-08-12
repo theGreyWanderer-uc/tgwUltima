@@ -35,8 +35,7 @@ class RleRoundTripTests(unittest.TestCase):
         shape = U7Shape()
         frame = U7Shape.Frame()
         frame.height, frame.width = pixels.shape
-        frame.xoff = 0
-        frame.yoff = 0
+        frame.set_hotspot_from_top_left(0, 0)
         frame.is_tile = False
         frame.pixels = pixels
         shape.frames = [frame]

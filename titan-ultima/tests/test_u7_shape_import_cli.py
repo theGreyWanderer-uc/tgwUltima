@@ -81,7 +81,7 @@ class ShapeImportCliTests(unittest.TestCase):
             first_pixels.append(int(pixels[0, 0]))
         self.assertEqual(first_pixels, [1, 2])
 
-    def test_uses_bottom_right_hotspot_and_alpha_transparency(self) -> None:
+    def test_uses_exult_studio_zero_origin_and_alpha_transparency(self) -> None:
         image = Image.new("RGBA", (2, 3), (255, 0, 0, 255))
         image.putpixel((0, 0), (0, 0, 0, 0))
         image.save(self.frames_dir / "frame.png")
@@ -94,7 +94,10 @@ class ShapeImportCliTests(unittest.TestCase):
         if pixels is None:
             self.fail("Imported frame has no pixel data")
         self.assertEqual((frame.width, frame.height), (2, 3))
-        self.assertEqual((frame.xoff, frame.yoff), (1, 2))
+        self.assertEqual((frame.origin_x, frame.origin_y), (0, 0))
+        self.assertEqual(
+            (frame.hotspot_x_from_left, frame.hotspot_y_from_top), (1, 2)
+        )
         self.assertEqual(int(pixels[0, 0]), 0xFF)
         self.assertEqual(int(pixels[0, 1]), 1)
 
