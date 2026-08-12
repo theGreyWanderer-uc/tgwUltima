@@ -379,6 +379,14 @@ class U7MapRenderer:
         """Type Flag Array data."""
         if self._tfa is None:
             self._tfa = U7TypeFlags.from_dir(self.static_dir)
+            frame_counts = {
+                shape_num: U7Shape.count_frames_from_data(
+                    record,
+                    is_tile=shape_num < FIRST_OBJ_SHAPE,
+                )
+                for shape_num, record in enumerate(self.shapes_vga.records)
+            }
+            self._tfa.apply_shape_frame_counts(frame_counts)
         return self._tfa
 
     @property
@@ -1155,9 +1163,7 @@ class U7MapRenderer:
             sboxes = []
             for obj in objects:
                 e = tfa.get(obj.shape)
-                dx = e.dims_x if e else 1
-                dy = e.dims_y if e else 1
-                dz = e.dims_z if e else 0
+                dx, dy, dz = e.footpad_tiles(obj.frame) if e else (1, 1, 0)
                 sx_lo = obj.screen_x - dx * C_TILE_SIZE
                 sx_hi = obj.screen_x + C_TILE_SIZE
                 sy_lo = obj.screen_y - dy * C_TILE_SIZE - dz * 4
@@ -1416,9 +1422,7 @@ class U7MapRenderer:
                 sprite_sboxes.append((ax, ax + img.width, ay, ay + img.height))
             else:
                 e = tfa.get(obj.shape)
-                dx = e.dims_x if e else 1
-                dy = e.dims_y if e else 1
-                dz = e.dims_z if e else 0
+                dx, dy, dz = e.footpad_tiles(obj.frame) if e else (1, 1, 0)
                 sprite_sboxes.append(
                     (
                         obj.screen_x - dx * C_TILE_SIZE,
@@ -1722,9 +1726,7 @@ class U7MapRenderer:
                     sprite_sboxes.append((ax, ax + img.width, ay, ay + img.height))
                 else:
                     e = tfa.get(obj.shape)
-                    dx = e.dims_x if e else 1
-                    dy = e.dims_y if e else 1
-                    dz = e.dims_z if e else 0
+                    dx, dy, dz = e.footpad_tiles(obj.frame) if e else (1, 1, 0)
                     sprite_sboxes.append(
                         (
                             obj.screen_x - dx * C_TILE_SIZE,

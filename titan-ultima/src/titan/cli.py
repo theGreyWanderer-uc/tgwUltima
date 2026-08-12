@@ -6,6 +6,7 @@ Root commands (game-agnostic):
     music-export, music-batch, setup, config.
 
 Sub-apps:
+    uw2 — Ultima Underworld II commands (palette, GR shapes, object metadata)
     u8  — Ultima 8: Pagan commands (shape, map, sound, save, etc.)
     u7  — Ultima 7: The Black Gate / Serpent Isle commands
     u6  — Ultima 6: The False Prophet commands (tile, map, library, data)
@@ -54,7 +55,7 @@ app = typer.Typer(
     name="titan",
     help=(
         "TITAN \u2013 Tool for Interpreting and Transforming Archival Nodes.\n"
-        "Work with Ultima file formats (U8, U7, U6, U9, UO)."
+        "Work with Ultima file formats (UW2, U8, U7, U6, U9, UO)."
     ),
     no_args_is_help=True,
     rich_markup_mode=None,
@@ -488,13 +489,15 @@ def cmd_config(args: SimpleNamespace) -> int:
     print(f"Active config: {path.absolute()}")
 
     u8 = config.get("u8", {})
+    uw2 = config.get("uw2", {})
     u7bg = config.get("u7bg", {})
     u7si = config.get("u7si", {})
     uo = config.get("uo", {})
     exult = config.get("exult", {})
-    if any((u8, u7bg, u7si, uo, exult)):
+    if any((u8, uw2, u7bg, u7si, uo, exult)):
         _print_kv_section("[u8.game]", u8.get("game", {}))
         _print_kv_section("[u8.paths]", u8.get("paths", {}), check_exists=True)
+        _print_kv_section("[uw2.game]", uw2.get("game", {}), check_exists=True)
         _print_kv_section("[u7bg.game]", u7bg.get("game", {}))
         _print_kv_section("[u7bg.paths]", u7bg.get("paths", {}), check_exists=True)
         for mod_name, mod in u7bg.get("mods", {}).items():
@@ -1360,6 +1363,7 @@ from titan.u7.cli import u7_app  # noqa: E402
 from titan.u6.cli import u6_app  # noqa: E402
 from titan.u9.cli import u9_app  # noqa: E402
 from titan.uo.cli import uo_app  # noqa: E402
+from titan.uw2.cli import uw2_app  # noqa: E402
 from titan.dialogue.cli import dialogue_app  # noqa: E402
 
 app.add_typer(u8_app)
@@ -1367,6 +1371,7 @@ app.add_typer(u7_app)
 app.add_typer(u6_app)
 app.add_typer(u9_app)
 app.add_typer(uo_app)
+app.add_typer(uw2_app)
 app.add_typer(dialogue_app)
 
 

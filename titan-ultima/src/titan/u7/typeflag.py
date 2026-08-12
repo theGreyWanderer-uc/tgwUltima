@@ -206,6 +206,10 @@ class U7TypeFlags:
         # Animation type (from TFA.DAT animation nibbles, offset 3072)
         anim_type: int = -1  # -1 = none, 0-15 = animation type
 
+        # Archive-derived, not serialized in TFA.DAT. Exult disables frame
+        # bit-5 reflection for shapes containing more than 32 real frames.
+        uses_bit5_frame_reflection: bool = True
+
         # --- Flag accessors ---
 
         @property
@@ -362,10 +366,12 @@ class U7TypeFlags:
             """
             Tile footprint ``(X, Y, Z)``.
 
-            Frame bit 5 (reflected) swaps X and Y, matching Exult's
-            ``Shape_info::get_3d_xtiles(framenum)``.
+            Frame bit 5 swaps X and Y only when it denotes a generated
+            reflection. Shapes with more than 32 real archive frames use bit
+            5 as part of the real frame number and retain their stored
+            dimensions, matching Exult's ``Shape_info::get_3d_xtiles``.
             """
-            reflected = bool(frame & 0x20)
+            reflected = self.uses_bit5_frame_reflection and bool(frame & 0x20)
             if reflected:
                 return (self.dims_y, self.dims_x, self.dims_z)
             return (self.dims_x, self.dims_y, self.dims_z)
@@ -380,6 +386,13 @@ class U7TypeFlags:
     def get(self, shape_num: int) -> ShapeEntry | None:
         """Look up a shape entry by number."""
         return self._by_num.get(shape_num)
+
+    def apply_shape_frame_counts(self, frame_counts: dict[int, int]) -> None:
+        """Apply real SHAPES.VGA frame counts to bit-5 reflection metadata."""
+        for shape_num, frame_count in frame_counts.items():
+            entry = self._by_num.get(shape_num)
+            if entry is not None:
+                entry.uses_bit5_frame_reflection = frame_count <= 32
 
     # ------------------------------------------------------------------
     # Parsing

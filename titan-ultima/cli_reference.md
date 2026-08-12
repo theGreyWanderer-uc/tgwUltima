@@ -29,6 +29,7 @@ TITAN organises commands into **game-specific sub-apps** and **shared
 ```
 titan <shared-command>          # Flex archives, XMIDI music, config/setup
 titan dialogue <command>        # U8 dialogue web pipeline + local viewer
+titan uw2 <command>             # Ultima Underworld II: Labyrinth of Worlds
 titan u8 <command>              # Ultima 8: Pagan
 titan u7 <command>              # Ultima 7: The Black Gate / Serpent Isle
 titan u6 <command>              # Ultima 6: The False Prophet
@@ -63,7 +64,236 @@ detect U6 installs yet).
 UO commands accept an optional `client` argument. If omitted, they fall back
 to `[uo.game] base` in `titan.toml`.
 
+UU2 commands accept `-g`/`--gamedir`. If omitted, they use `[uw2.game] base`.
+Bare names such as `OBJECTS.GR` resolve below install's `DATA` directory.
+
 See [Configuration (titan.toml)](#configuration-titantoml) below.
+
+---
+
+## Ultima Underworld II commands (`titan uw2`)
+
+Native UU2 support covers `LEV.ARK` map extraction, U7-style cutaway map
+rendering, palettes, terrain and `.GR` shape archives, common object render
+metadata, animation frame descriptors, and standalone rendering/export of
+built-in `UW2.EXE` polygon models. NPC animation archives and special model
+classes such as doors and bridges are not yet exposed by standalone 3D
+commands.
+
+All commands accept `-g`/`--gamedir`; it may point at install root or its
+`DATA` directory. `[uw2.game] base` supplies same value from `titan.toml`.
+
+### `uw2 map-extract`
+
+```text
+titan uw2 map-extract -o DIR [--slots N ...] [--write-decoded-blocks] [-g DIR]
+```
+
+Decodes selected `LEV.ARK` slots (all available slots by default) into level
+JSON, including tiles, object chains, texture mappings, automap records, map
+notes, `DL.DAT` lighting, `TERRAIN.DAT`, and `SHADES.DAT`. Output matches the
+data contract used by the original `uuw2data/scripts` renderers.
+
+### `uw2 map-render`
+
+```text
+titan uw2 map-render [--slots N ...] [-o DIR] [--workdir DIR]
+    [--keep-intermediates | --reuse-workdir] [--tick N]
+    [projection and display options] [-g DIR]
+```
+
+Reads `LEV.ARK`, `T64.TR`, `DOORS.GR`, `TMFLAT.GR`, `TMOBJ.GR`, `OBJECTS.GR`,
+`ANIMO.GR`, `COMOBJ.DAT`, `OBJECTS.DAT`, and built-in geometry from `UW2.EXE`
+directly into memory, then writes
+only final U7-style cutaway PNG files. Ordinary object sprites and animated
+effect overlays plus model-based furniture render from map object chains.
+Verified `OBJECTS.GR` icons for tables, chairs, benches, chests, nightstands,
+and other early model-class items render as background sprites, so loose food
+and other objects remain above them. Slot 0 is Castle Britannia;
+its fountain combines item 302 from `OBJECTS.GR` with item 457's selected
+`ANIMO.GR` frame.
+
+```bash
+titan uw2 map-render --slots 0 -g "C:/UW2" -o castle_maps/ --name-files --tick 1
+```
+
+`--tick` selects frames within each animation range. `--no-objects` suppresses
+ordinary and animated sprites; `--object-scale` tunes their size. `--no-models`
+suppresses model-class objects. `--model-style icons` is the default;
+`--model-icon-scale` tunes those icons. `--model-style geometry` restores the
+experimental `UW2.EXE` projection, with `--model-scale` controlling its size.
+Native scale `1` is the default. Placed geometry uses UW2's clockwise
+45-degree headings and executable model-origin pivots.
+No extracted
+files remain by default. `--keep-intermediates` writes diagnostic JSON and PNG
+assets under `OUTPUT/_map_data` or `--workdir`; `--reuse-workdir` supports the
+legacy extracted renderer path. Run `titan uw2 map-render --help` for all
+projection, wall, lighting, fill, and debug-grid options.
+
+### `uw2 map-3d-render`
+
+```text
+titan uw2 map-3d-render --slot N [--region x1,y1,x2,y2]
+    [--view iso-ne|iso-nw|iso-se|iso-sw|top ...] [--size N]
+    [--model-scale SCALE] [-o DIR] [-g DIR]
+```
+
+Builds textured 3D tile geometry directly from original archives, places
+mapped `UW2.EXE` furniture as meshes, and places ordinary/ANIMO objects as
+camera-facing textured billboards. `--region` uses inclusive raw tile bounds;
+omitting it builds the full 64x64 level. Ceilings are omitted for external
+camera views unless `--include-ceilings` is set. Default views are `iso-ne`
+and `top`. Requires PyVista/VTK.
+
+```powershell
+titan uw2 map-3d-render -g "C:/UW2" --slot 0 --region 17,46,22,52 `
+    --view iso-ne --view top -o castle_dining_3d/
+```
+
+### `uw2 map-3d-export`
+
+```text
+titan uw2 map-3d-export --slot N [--region x1,y1,x2,y2]
+    [--include-ceilings] [--no-sprites] [--model-scale SCALE]
+    [-o DIR] [-g DIR]
+```
+
+Exports same shared scene to textured GLB plus JSON manifest. Architecture is
+grouped by terrain material. Each placed mesh or sprite retains slot/item data
+and individually named GLB nodes; multi-material models use one named part per
+material. Sprite items use crossed planes so they remain visible from external
+viewer angles. Requires `trimesh`.
+
+Castle dining-room validation crop:
+
+```powershell
+titan uw2 map-3d-export -g "C:/UW2" --slot 0 --region 17,46,22,52 `
+    -o castle_dining_3d/
+```
+
+Object Z is not guessed. Map `zpos` supplies base height. Native model Z stays
+in map-height units while model X/Y uses `--model-scale`, which defaults to
+native scale `1`. Castle table base 96, native tabletop height 10, and food at
+zpos 106 therefore coincide. Titan also applies each model's `0x0078` placement
+pivot before its clockwise heading rotation.
+
+### `uw2 model-render`
+
+```text
+titan uw2 model-render [-o DIR] [--item ID ...] [--flags N] [--size N]
+    [--view iso|front|side|top ...] [-g DIR]
+```
+
+Decodes selected polygon models directly from `UW2.EXE` and renders them
+without loading a map. Flat faces use model palette entries from the
+executable. UV-mapped faces use the item-selected image from `TMOBJ.GR`.
+Default items are table `0x158`, chair `0x15c`, and shelf `0x169`; default
+views are `iso` and `front`. Item IDs accept decimal or `0x` hexadecimal.
+This command needs optional PyVista/VTK packages.
+
+```bash
+titan uw2 model-render -g "C:/UW2" -o model_renders/ \
+    --item 0x158 --item 0x15c --view iso --view front
+```
+
+### `uw2 model-export`
+
+```text
+titan uw2 model-export [-o DIR] [--item ID ...] [--flags N] [-g DIR]
+```
+
+Exports each selected model to its own directory containing OBJ geometry, MTL
+materials, optional `TMOBJ.GR` PNG texture, and `metadata.json`. Output root
+also contains `manifest.json`. Omitting `--item` exports all 21 item IDs in
+Titan's current built-in model mapping. Repeated `--item` values select a
+subset. `--flags` selects dynamic painting, gravestone, pillar, or shelf
+texture variants where applicable.
+
+Exported vertices are relative to the executable model's `0x0078` placement
+pivot. Metadata retains the raw origin vertex, adjusted placement origin, and
+collision half-extents.
+
+OBJ UV V-coordinates are flipped to match OBJ/OpenGL image origin. Textured
+face commands `00A8`, `00B4`, `00CE`, `00A0`, and `00D2` use the selected
+object texture; the constant `6` field in `00A8`/`00A0` is not a
+`TMOBJ.GR` image index. Faces without bitmap art retain UU2 palette colors as
+MTL diffuse materials.
+
+```text
+model_exports/
+    manifest.json
+    item_344_table/
+        table_item_344_model_24.obj
+        table_item_344_model_24.mtl
+        tmobj_032.png
+        metadata.json
+```
+
+Door frames, doors, bridges, levers, switches, writing, variable ceiling
+height, and owner-controlled bed colors require special instance rules and
+remain outside this first standalone batch exporter.
+
+### `uw2 palette-export`
+
+```text
+titan uw2 palette-export [PALS.DAT] [--index N] [--swatch-size N] [-o DIR] [-g DIR]
+```
+
+Exports selected 256-color, 6-bit VGA palette as PNG swatch grid plus text.
+
+### `uw2 shape-info`
+
+```text
+titan uw2 shape-info ARCHIVE.GR [-a ALLPALS.DAT] [--json] [-o FILE] [-g DIR]
+```
+
+Lists declared/decoded image counts, bitmap encoding, dimensions, offsets,
+and auxiliary palette index. `--json` emits machine-readable metadata.
+
+### `uw2 shape-export`
+
+```text
+titan uw2 shape-export ARCHIVE.GR INDEX [-p PALS.DAT] [-a ALLPALS.DAT]
+    [--palette-index N] [--transparent-index N] [-o DIR] [-g DIR]
+```
+
+Exports one sparse archive index to RGBA PNG. Defaults: palette 0, transparent
+index 0, `PALS.DAT`/`ALLPALS.DAT` beside configured game data.
+
+Castle Britannia fountain proof:
+
+```bash
+titan uw2 shape-export OBJECTS.GR 302 -g "C:/UW2" -o fountain/
+titan uw2 shape-export ANIMO.GR 6 -g "C:/UW2" -o fountain/
+```
+
+### `uw2 shape-batch`
+
+```text
+titan uw2 shape-batch ARCHIVE.GR [-p PALS.DAT] [-a ALLPALS.DAT]
+    [--palette-index N] [--transparent-index N] [-o DIR] [-g DIR]
+```
+
+Exports every non-empty GR slot. Also writes `<archive>_summary.json`.
+
+### `uw2 object-info`
+
+```text
+titan uw2 object-info ITEM_ID [--comobj COMOBJ.DAT]
+    [--objects OBJECTS.DAT] [-g DIR]
+```
+
+Prints one item's decoded `COMOBJ.DAT` render fields as JSON. IDs 448..463
+also include `OBJECTS.DAT` animation start/end frames when available.
+
+### `uw2 object-dump`
+
+```text
+titan uw2 object-dump [--comobj COMOBJ.DAT] [--objects OBJECTS.DAT]
+    [-f json|csv] [-o FILE] [-g DIR]
+```
+
+Exports all 512 common-object records. Default output: `uw2_objects.json`.
 
 ---
 
@@ -1013,6 +1243,89 @@ titan dialogue launch --host 127.0.0.1 --port 4173
 > files and for Exult-generated saves, but are not intended as generic parsers
 > for every untouched commercial archive/container layout.
 
+### U7 Flex archive commands
+
+---
+
+#### `u7 flex-create`
+
+Create a new empty U7/Exult Flex archive. The result contains a valid
+128-byte U7 Flex header and zero records, ready for later population by
+shape/archive tooling.
+
+This command deliberately uses the U7 writer (`magic1 = 0xFFFF1A00`), which
+is the format used by archives such as `SHAPES.VGA`. Do not substitute the
+shared root-level `titan flex-create` command: that command writes the
+different U8/Pentagram-style Flex header.
+
+```
+titan u7 flex-create <output.VGA|output.FLX> [-t TITLE] [--force]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `output` | New U7 Flex archive path. The filename must end in `.VGA` or `.FLX` |
+| `-t TEXT`, `--title TEXT` | Optional title stored in the 80-byte U7 Flex header |
+| `--force` | Replace an existing output file. Without this flag, the command refuses to overwrite |
+
+**Examples**
+```bash
+# Create an empty custom shape archive with zero records
+titan u7 flex-create U7O.VGA --title "U7O Dynamic Shapes"
+
+# Deliberately replace an earlier generated archive
+titan u7 flex-create U7O.VGA --title "U7O Dynamic Shapes" --force
+```
+
+---
+
+#### `u7 flex-add-shape`
+
+Add a standalone U7 `.shp` to a U7/Exult Flex archive. By default, the command
+selects the lowest zero-length record; if every existing record is occupied,
+it appends a new record. Pass `--index N` to select a specific zero-based shape
+record instead. If `N` is beyond the current table, the archive grows and all
+intervening records are left empty. An occupied specific record is protected
+unless `--replace` is also supplied. The assigned record index is the shape
+number reported after a successful write.
+
+Choose exactly one output mode. `--output` leaves the source archive unchanged;
+`--in-place` atomically replaces it only after the complete updated archive has
+been written. Existing separate output files require `--force`.
+
+```
+titan u7 flex-add-shape <archive.VGA|archive.FLX> <shape.shp>
+                        (-o OUTPUT | --in-place) [--force]
+                        [--index N [--replace]]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `archive` | Existing U7/Exult `.VGA` or `.FLX` archive |
+| `shape` | Standalone U7 `.shp` containing at least one valid frame |
+| `-o FILE`, `--output FILE` | Write a separate updated `.VGA`/`.FLX`, leaving the source unchanged |
+| `--in-place` | Atomically update the source archive |
+| `--force` | Replace an existing `--output` file; not needed with explicit `--in-place` |
+| `--index N` | Write to this specific zero-based shape record; omitted means lowest empty record or append |
+| `--replace` | Permit replacement when the selected `--index` is occupied; requires `--index` |
+
+**Examples**
+```bash
+# Safest workflow: write a separate archive
+titan u7 flex-add-shape U7O.VGA ranger.shp -o U7O_updated.VGA
+
+# Explicitly update the source archive
+titan u7 flex-add-shape U7O.VGA ranger.shp --in-place
+
+# Create empty records through 459 and put the shape at record/shape 460
+titan u7 flex-add-shape U7O.VGA ranger.shp --index 460 --in-place
+
+# Deliberately replace an occupied record 460
+titan u7 flex-add-shape U7O.VGA ranger.shp --index 460 --replace --in-place
+```
+
+---
+
 ### U7 shape commands
 
 ---
@@ -1066,6 +1379,46 @@ titan u7 shape-export SHAPES.VGA --shape 177 -p PALETTES.FLX --translucent --sta
 # Exact indexed translucency compositing against a background exported with --indexed
 titan u7 shape-export SHAPES.VGA --shape 177 -p PALETTES.FLX \
   --translucent-bg shape_177_indexed/shape_0177_f0000.png --static STATIC/ -o shape_177_exact/
+```
+
+---
+
+#### `u7 shape-import`
+
+Create one standalone U7 RLE `.shp` file from all PNG files directly inside
+a directory. This command only writes the requested `.shp`; it does not open,
+patch, or otherwise modify `SHAPES.VGA` or another Flex archive.
+
+Frames are assigned indices in Windows Explorer-style Name A-Z order:
+sorting is case-insensitive and numeric runs are compared numerically
+(`frame2.png` precedes `frame10.png`). Subdirectories and non-PNG files are
+ignored.
+
+```
+titan u7 shape-import <directory> -p PALETTE -o OUTPUT.shp [--palette-index N]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `directory` | Directory containing the PNG frame images |
+| `-p FILE`, `--palette FILE` | Required path to U7 `PALETTES.FLX` or a raw `.pal` file |
+| `-o FILE`, `--output FILE` | Required standalone output path; must end in `.shp` |
+| `--palette-index N` | Palette record to use when `--palette` is a Flex archive (default: `0`, the main daytime palette) |
+
+RGBA source colours are mapped to the nearest RGB entry in palette indices
+0–254. Pixels with alpha below 128 become U7 transparency index 255; opaque
+pixels are never mapped to index 255. Every frame hotspot is placed at its
+bottom-right pixel (`xoff = width - 1`, `yoff = height - 1`). This initial
+importer does not read frame metadata, so a 1×1 placeholder receives hotspot
+`(0, 0)`. An existing output `.shp` is replaced.
+
+**Examples**
+```bash
+# Pack alphabetically named actor frames into one standalone shape
+titan u7 shape-import actor_frames/ -p STATIC/PALETTES.FLX -o ranger_variant7.shp
+
+# Select another palette record from PALETTES.FLX
+titan u7 shape-import frames/ -p STATIC/PALETTES.FLX --palette-index 3 -o night_shape.shp
 ```
 
 ---
@@ -1471,6 +1824,17 @@ titan u7 map-render [static] [--game bg|si]
 > marked as transparent (mostly interior rooftops and windows).  Extended
 > roof metadata is only present in Exult's supplementary `shapeinf.dat`.
 
+> **Frame bit 5 and object footprints:** Titan derives map-object footprint
+> orientation from both `TFA.DAT` and the effective `SHAPES.VGA` archive.
+> For shapes with 32 or fewer real frames, frame bit 5 (`0x20`, frames 32+)
+> denotes a generated reflection and swaps the stored X/Y tile dimensions.
+> For shapes containing more than 32 real frames, bit 5 belongs to the real
+> archive frame number, so Titan does not swap X/Y. This matches Exult commit
+> [`ac51a798`](https://github.com/exult/exult/commit/ac51a7985f3a9ed65006f230fbd41e30d7176046)
+> and fixes extended mod shapes such as SI door shape 376. This rule affects
+> footprint/depth interpretation only; it does not change door state or the
+> separate `frame % 4 < 2` open-door classification.
+
 **Examples**
 ```bash
 # Use config defaults for Black Gate (no STATIC path required)
@@ -1615,6 +1979,12 @@ Three output formats:
 > 512-byte TFA animation tail at offset `3 * 1024`. Exult-only text metadata
 > such as `shape_info.txt` flags is separate; for example `on_fire` is stored
 > in Exult's `Shape_info::shape_flags`, not in `TFA.DAT`.
+>
+> **Archive-dependent dimensions:** TFA stores one base X/Y/Z footprint per
+> shape; it does not record whether frame bit 5 is reflection or a real frame
+> bit. Titan can resolve that distinction only when the effective
+> `SHAPES.VGA` frame count is available. Raw `typeflag-dump` dimensions remain
+> the stored base values; map rendering applies frame-specific orientation.
 
 ```
 titan u7 typeflag-dump [static] [--game bg|si] [-o FILE] [-f FORMAT]
@@ -3585,6 +3955,16 @@ A value on the command line always wins.
 | `save-list` | List entries in a U8 save archive |
 | `save-extract` | Extract entries from a U8 save archive |
 | `unkcoff-dump` | Dump `UNKCOFF.DAT` code-offset table |
+| `uw2 map-extract` | Decode UU2 map, object, automap, note, and light data |
+| `uw2 map-render` | Render UU2 maps directly from original files |
+| `uw2 model-render` | Render standalone `UW2.EXE` polygon models to PNG |
+| `uw2 model-export` | Export individual UU2 models to OBJ/MTL/PNG/JSON |
+| `uw2 palette-export` | Export one `PALS.DAT` palette |
+| `uw2 shape-info` | Inspect one UU2 `.GR` archive |
+| `uw2 shape-export` | Export one UU2 `.GR` image to PNG |
+| `uw2 shape-batch` | Export every non-empty image from a UU2 `.GR` archive |
+| `uw2 object-info` | Inspect one `COMOBJ.DAT` item record |
+| `uw2 object-dump` | Export all `COMOBJ.DAT` item records |
 | `u7 save-list` | List entries in an Exult U7 savegame |
 | `u7 save-extract` | Extract entries from an Exult U7 savegame |
 | `u7 gflag-dump` | Dump global flags from a U7 save or `flaginit` file |
