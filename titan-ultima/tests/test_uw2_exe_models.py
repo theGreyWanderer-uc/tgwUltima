@@ -1,8 +1,7 @@
 """Tests for documented UW2.EXE built-in model decoding."""
 
 import struct
-
-import pytest
+import unittest
 
 from titan.uw2.exe_models import ModelVertex, UW2ModelArchive, UW2ModelError
 from titan.uw2.model_render import model_texture_index
@@ -44,64 +43,68 @@ def _synthetic_executable() -> bytes:
     return bytes(data)
 
 
-def test_decodes_vertices_faces_and_executable_palette() -> None:
-    archive = UW2ModelArchive.from_data(_synthetic_executable())
+class UW2ExecutableModelTests(unittest.TestCase):
+    def assertTupleAlmostEqual(
+        self, actual: tuple[float, ...] | None, expected: tuple[float, ...]
+    ) -> None:
+        if actual is None:
+            self.fail("expected a numeric tuple, got None")
+        self.assertEqual(len(actual), len(expected))
+        for actual_value, expected_value in zip(actual, expected, strict=True):
+            self.assertAlmostEqual(actual_value, expected_value)
 
-    model = archive.model(0x18)
+    def test_decodes_vertices_faces_and_executable_palette(self) -> None:
+        archive = UW2ModelArchive.from_data(_synthetic_executable())
 
-    assert model.extents == pytest.approx((0.28125, 0.3125, 0.46875))
-    assert model.origin == pytest.approx((0.0, 0.0, 0.15625))
-    assert model.placement_origin == pytest.approx((0.0, 0.0, 0.0))
-    assert model.collision_half_extents == pytest.approx((0.140625, 0.15625, 0.234375))
-    assert len(model.triangles) == 3
-    assert model.triangles[0].palette_index == 0xCA
-    assert model.triangles[0].vertices[1].x == 1.0
-    assert model.triangles[0].vertices[2].y == 1.0
-    assert model.triangles[1].vertices[2].roof is True
-    assert model.triangles[2].textured is True
-    assert model.triangles[2].texture_id == 6
-    assert model.triangles[2].vertices[1].u == pytest.approx(1.0)
+        model = archive.model(0x18)
 
+        self.assertTupleAlmostEqual(model.extents, (0.28125, 0.3125, 0.46875))
+        self.assertTupleAlmostEqual(model.origin, (0.0, 0.0, 0.15625))
+        self.assertTupleAlmostEqual(model.placement_origin, (0.0, 0.0, 0.0))
+        self.assertTupleAlmostEqual(
+            model.collision_half_extents, (0.140625, 0.15625, 0.234375)
+        )
+        self.assertEqual(len(model.triangles), 3)
+        self.assertEqual(model.triangles[0].palette_index, 0xCA)
+        self.assertEqual(model.triangles[0].vertices[1].x, 1.0)
+        self.assertEqual(model.triangles[0].vertices[2].y, 1.0)
+        self.assertTrue(model.triangles[1].vertices[2].roof)
+        self.assertTrue(model.triangles[2].textured)
+        self.assertEqual(model.triangles[2].texture_id, 6)
+        self.assertAlmostEqual(model.triangles[2].vertices[1].u, 1.0)
 
-@pytest.mark.parametrize(
-    ("heading", "expected"),
-    (
-        (0, (1.0, 0.0)),
-        (1, (2**-0.5, -(2**-0.5))),
-        (2, (0.0, -1.0)),
-        (3, (-(2**-0.5), -(2**-0.5))),
-        (4, (-1.0, 0.0)),
-        (5, (-(2**-0.5), 2**-0.5)),
-        (6, (0.0, 1.0)),
-        (7, (2**-0.5, 2**-0.5)),
-    ),
-)
-def test_orients_all_headings_clockwise(
-    heading: int, expected: tuple[float, float]
-) -> None:
-    model = UW2ModelArchive.from_data(_synthetic_executable()).model(0x18)
+    def test_orients_all_headings_clockwise(self) -> None:
+        model = UW2ModelArchive.from_data(_synthetic_executable()).model(0x18)
+        cases = (
+            (0, (1.0, 0.0)),
+            (1, (2**-0.5, -(2**-0.5))),
+            (2, (0.0, -1.0)),
+            (3, (-(2**-0.5), -(2**-0.5))),
+            (4, (-1.0, 0.0)),
+            (5, (-(2**-0.5), 2**-0.5)),
+            (6, (0.0, 1.0)),
+            (7, (2**-0.5, 2**-0.5)),
+        )
 
-    x, y, z = model.oriented_position(ModelVertex(1.0, 0.0, 0.25), heading)
+        for heading, expected in cases:
+            with self.subTest(heading=heading):
+                x, y, z = model.oriented_position(ModelVertex(1.0, 0.0, 0.25), heading)
+                self.assertTupleAlmostEqual((x, y), expected)
+                self.assertAlmostEqual(z, 0.25)
 
-    assert (x, y) == pytest.approx(expected)
-    assert z == pytest.approx(0.25)
+    def test_item_table_resolves_table_model(self) -> None:
+        archive = UW2ModelArchive.from_data(_synthetic_executable())
 
+        self.assertIs(archive.model_for_item(0x0158), archive.model(0x18))
+        self.assertIsNone(archive.model_for_item(0x0001))
 
-def test_item_table_resolves_table_model() -> None:
-    archive = UW2ModelArchive.from_data(_synthetic_executable())
+    def test_resolves_item_selected_model_textures(self) -> None:
+        self.assertEqual(model_texture_index(0x0158), 32)
+        self.assertEqual(model_texture_index(0x015C), 38)
+        self.assertEqual(model_texture_index(0x0163, flags=2), 44)
+        self.assertEqual(model_texture_index(0x0169, flags=1), 37)
+        self.assertIsNone(model_texture_index(0x0167))
 
-    assert archive.model_for_item(0x0158) is archive.model(0x18)
-    assert archive.model_for_item(0x0001) is None
-
-
-def test_resolves_item_selected_model_textures() -> None:
-    assert model_texture_index(0x0158) == 32
-    assert model_texture_index(0x015C) == 38
-    assert model_texture_index(0x0163, flags=2) == 44
-    assert model_texture_index(0x0169, flags=1) == 37
-    assert model_texture_index(0x0167) is None
-
-
-def test_rejects_unknown_executable_build() -> None:
-    with pytest.raises(UW2ModelError, match="no supported UW2 model table"):
-        UW2ModelArchive.from_data(bytes(0x1000))
+    def test_rejects_unknown_executable_build(self) -> None:
+        with self.assertRaisesRegex(UW2ModelError, "no supported UW2 model table"):
+            UW2ModelArchive.from_data(bytes(0x1000))
