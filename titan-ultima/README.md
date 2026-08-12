@@ -3,15 +3,16 @@
 **TITAN** - Tool for Interpreting and Transforming Archival Nodes.
 
 TITAN is a Python CLI and library for working with proprietary data formats
-from *Ultima 8: Pagan*, *Ultima 7: The Black Gate / Serpent Isle*,
-*Ultima 6: The False Prophet*, and the *Ultima Online Classic Client*.
+from *Ultima 8: Pagan*, *Ultima Underworld II: Labyrinth of Worlds*,
+*Ultima 7: The Black Gate / Serpent Isle*, *Ultima 6: The False Prophet*,
+and the *Ultima Online Classic Client*.
 It reads, extracts, converts, inspects, and
 reconstructs archives, shapes/tiles, palettes, music, speech, maps, world
 objects, saves, dialogue, and Exult runtime data. Early *Ultima 9: Ascension*
 support (FLX archives, `TYPENAME.FLX`, and `sound/*.flx` decoding) is also
 available under `titan u9`.
 
-Run `titan --help`, `titan u8 --help`, `titan u7 --help`, `titan u6 --help`,
+Run `titan --help`, `titan uw2 --help`, `titan u8 --help`, `titan u7 --help`, `titan u6 --help`,
 `titan u9 --help`, `titan uo --help`, or see the full
 [CLI reference](cli_reference.md).
 
@@ -34,10 +35,10 @@ Requirements:
 
 Optional:
 
-- `pyvista` (`pip install pyvista`) — only for `titan u9 model-export`'s
-  auto-generated `preview.png`/`preview_front.png` renders. Without it,
-  `model-export` still works; the preview step is skipped with a
-  one-line note.
+- `pyvista` plus VTK (`pip install pyvista`) — used by `titan uw2
+  model-render`, `uw2 map-3d-render`, and U9 preview rendering.
+- `trimesh` (`pip install trimesh`) — used by `titan uw2 map-3d-export` to
+  write GLB. UU2 standalone `model-export` needs neither optional package.
 
 ---
 
@@ -83,6 +84,23 @@ base = "<Ultima 6 install>"` to `titan.toml` yourself, or pass
 titan u6 map-render -g "C:/Ultima6" --full -o u6_world.png
 ```
 
+Ultima Underworld II install detection is not in `titan setup` yet. Add its
+root manually; commands also accept `-g`/`--gamedir`:
+
+```toml
+[uw2.game]
+base = "C:/Games/Ultima Underworld 2"
+```
+
+```bash
+titan uw2 map-render --slots 0 -o castle_maps/
+titan uw2 model-render --item 0x158 --item 0x15c -o model_renders/
+titan uw2 model-export -o model_exports/
+titan uw2 object-info 457
+titan uw2 shape-export OBJECTS.GR 302 -o fountain/
+titan uw2 shape-export ANIMO.GR 6 -o fountain/
+```
+
 If setup cannot find UO automatically, add it manually:
 
 ```toml
@@ -102,8 +120,8 @@ place for command options, longer examples, and format notes.
 
 | Area | Ultima 8 | Ultima 7 / Exult | Quick example | Reference |
 |---|---|---|---|---|
-| Archives | Flex `.FLX` list/extract/create/update | Flex/VGA-style archive support where relevant | `titan flex-list U8SHAPES.FLX` | [Flex commands](cli_reference.md#flex-archive-commands) |
-| Shapes | Export/import U8 `.shp` frames; `shape-batch` also accepts `U8SHAPES.FLX` directly and uses bundled U8 class names in exported PNG filenames when available | Export U7 shapes from `SHAPES.VGA`, `FACES.VGA`, etc.; render frame-sequence or colour-cycle animation to GIF via `shape-animate`; inventory a whole archive's cycling/translucency/animation content via `shape-cycle-scan` | `titan u7 shape-export SHAPES.VGA --shape 150 -p PALETTES.FLX -o shape_150/` | [U8 commands](cli_reference.md#ultima-8-commands-titan-u8), [U7 shape commands](cli_reference.md#u7-shape-commands) |
+| Archives | Flex `.FLX` list/extract/create/update | Create an empty U7/Exult archive via `u7 flex-create`; add a standalone shape to its lowest empty or a specific record via `u7 flex-add-shape` | `titan u7 flex-add-shape U7O.VGA actor.shp --index 460 --in-place` | [Shared Flex commands](cli_reference.md#flex-archive-commands), [U7 Flex commands](cli_reference.md#u7-flex-archive-commands) |
+| Shapes | Export/import U8 `.shp` frames; `shape-batch` also accepts `U8SHAPES.FLX` directly and uses bundled U8 class names in exported PNG filenames when available | Export U7 shapes from `SHAPES.VGA`, `FACES.VGA`, etc.; create standalone `.shp` files from A-Z-sorted PNG frames via `shape-import`; render animations via `shape-animate`; inventory cycling/translucency/animation content via `shape-cycle-scan` | `titan u7 shape-import actor_frames/ -p PALETTES.FLX -o actor.shp` | [U8 commands](cli_reference.md#ultima-8-commands-titan-u8), [U7 shape commands](cli_reference.md#u7-shape-commands) |
 | Shape conversion | `shape-convert-u7`/`shape-convert-u7-all`: convert one or every U8 static/scenery shape into a U7/Exult-compatible shape (resize + palette requantize + hotspot-convention shift, footprint-calibrated against real U7 game data) | (target format) | `titan u8 shape-convert-u7-all STATIC/U8SHAPES.FLX --typeflag STATIC/TYPEFLAG.DAT --u7-static /path/to/u7/STATIC` | [U8 shape-convert-u7](cli_reference.md#u8-shape-convert-u7) |
 | Palettes | Export U8 VGA palette | Export 12+ U7 palettes from `PALETTES.FLX`; inspect slots, semantic names, and colour-cycling via `palette-info` | `titan u7 palette-export PALETTES.FLX -o palettes/` | [U7 palette commands](cli_reference.md#u7-palette-commands) |
 | Music | XMIDI to MIDI from `MUSIC.FLX` (preserves embedded playlist names in exported MIDI filenames when present) | MIDI export from `ADLIBMUS.DAT`, `MT32MUS.DAT`, `ENDSCORE.XMI`; optional GM rewrite | `titan u7 music-export MT32MUS.DAT --target gm -o music_gm/` | [U8 music commands](cli_reference.md#music-commands), [U7 music commands](cli_reference.md#u7-music-commands) |
@@ -117,6 +135,31 @@ place for command options, longer examples, and format notes.
 | Container data | Not applicable | Browse IREG container contents with full nesting; filter by container name, item name, or tile area; optional per-frame item names via Exult FLX | `titan u7 container-browse --game bg --container-name chest` | [U7 container-browse](cli_reference.md#u7-container-browse) |
 | Egg data | Not applicable | Query IREG egg trigger objects — type, usecode function, probability, location | `titan u7 egg-query --game bg --type usecode` | [U7 egg-query](cli_reference.md#u7-egg-query) |
 | Text and misc data | Gump layout, XOR credits, quotes, transform palettes | Global flags and selected runtime metadata | `titan u8 credits-decrypt ECREDITS.DAT` | [U8 data commands](cli_reference.md#u8-data-inspection-commands) |
+
+### Ultima Underworld II
+
+Native UU2 support covers `LEV.ARK` map extraction, 2D cutaway maps, textured
+3D map rendering/GLB export, standalone built-in model rendering/export, `PALS.DAT`, terrain
+and `.GR` image archives, `ALLPALS.DAT`
+auxiliary palettes, `COMOBJ.DAT` render metadata, and `OBJECTS.DAT` animation
+descriptors. Map rendering uses verified `OBJECTS.GR` icons for model-based
+furniture by default and can optionally project built-in `UW2.EXE` geometry.
+Standalone model commands decode that geometry directly, apply palette
+materials and item-selected `TMOBJ.GR` textures, then render PNG views or write
+one OBJ/MTL/PNG asset set per item. Placed meshes use native scale 1, clockwise
+45-degree headings, and the `0x0078` model pivot; standalone OBJ vertices are
+also relative to that pivot. NPC animation archives remain future work.
+
+| Area | Coverage | Quick example |
+|---|---|---|
+| Maps | Render directly from `LEV.ARK`, terrain, doors, decals, `OBJECTS.GR`, animated `ANIMO.GR` overlays, and 2D furniture icons; optional `UW2.EXE` geometry and diagnostic extraction | `titan uw2 map-render --slots 0 -g "C:/UW2" -o maps/ --tick 1` |
+| 3D maps | Render selectable camera views or export GLB from textured tile geometry, placed `UW2.EXE` furniture, and sprite/ANIMO billboards; objects remain individually named | `titan uw2 map-3d-render --slot 0 --region 17,46,22,52 -g "C:/UW2" -o castle_3d/` |
+| 3D objects | Render standalone camera views or export 21 mapped built-in item IDs as individual OBJ/MTL assets; UV faces use `TMOBJ.GR`, other faces use palette materials | `titan uw2 model-export -g "C:/UW2" -o models/` |
+| Palettes | Export any 256-color VGA palette from `PALS.DAT` | `titan uw2 palette-export PALS.DAT --index 0 -o palettes/` |
+| Shapes | Inspect/export one or every non-empty image from any `.GR` archive | `titan uw2 shape-export OBJECTS.GR 302 -g "C:/UW2" -o fountain/` |
+| Object metadata | Dump sprite/NPC/model/texture render types; inspect `ANIMO.GR` frame ranges | `titan uw2 object-info 457 -g "C:/UW2"` |
+
+See [UU2 commands](cli_reference.md#ultima-underworld-ii-commands-titan-uw2).
 
 ### Ultima 6
 
@@ -215,6 +258,14 @@ titan u7 map-render STATIC/ --full -o u7_world.png
 # Minimap sample with grid.
 titan u7 map-sample STATIC/ --scale 4 --grid -o minimap.png
 ```
+
+U7 map rendering combines each shape's TFA footprint with its real
+`SHAPES.VGA` frame count. Frame bit `0x20` swaps X/Y dimensions only for
+shapes with 32 or fewer real frames, where frames 32+ are generated
+reflections. Shapes with more than 32 real archive frames keep their stored
+dimensions. This matches current Exult behavior and fixes extended mod doors
+and other multi-frame objects without changing door-state or open-frame
+rules.
 
 ### U7 World Query
 

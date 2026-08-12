@@ -12,8 +12,70 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ## [0.7.3]
 
+### Added
+
+- **U7 standalone shape import:** added `titan u7 shape-import` to create one
+  U7 RLE `.shp` from PNG frames in Windows Explorer-style Name A-Z order.
+  RGBA pixels are quantized against a selected U7 palette, alpha maps to
+  transparency index 255, and frame hotspots default to the bottom-right
+  pixel. The command writes only a standalone `.shp`, never a Flex archive.
+- **Empty U7 Flex creation:** added `titan u7 flex-create` to create a valid
+  zero-record U7/Exult `.VGA` or `.FLX` archive using the U7 header format,
+  with an optional title and guarded `--force` replacement.
+- **U7 shape archive insertion:** added `titan u7 flex-add-shape` to validate
+  and place a standalone `.shp` in the lowest empty U7 Flex record, appending
+  when no gap exists, or at a specific `--index` while filling intervening
+  records as empty. Occupied indexed records require `--replace`. The command
+  supports separate output or explicit atomic in-place updates and reports the
+  assigned record/shape number.
+- **Native Ultima Underworld II command family:** added `titan uw2` with
+  `map-extract`, `map-render`, `palette-export`, `shape-info`, `shape-export`,
+  `shape-batch`, `object-info`, and `object-dump`. The map commands migrate
+  the established `uuw2data/scripts` pipeline into Titan: `LEV.ARK` decoding,
+  level/object/automap/note/light JSON, `T64.TR` terrain, GR doors and decals,
+  and U7-style overhead cutaway rendering. `map-render` reads these sources
+  directly into memory and leaves only final PNG files by default; optional
+  `--keep-intermediates` retains diagnostic exports. It also composites normal
+  `OBJECTS.GR` sprites and `ANIMO.GR` effect frames selected through
+  `COMOBJ.DAT`/`OBJECTS.DAT`, including Castle Britannia's two-object fountain.
+  It independently decodes the supported `UW2.EXE` model-node format in memory
+  and can project common-object meshes. The U7-style renderer defaults to
+  verified `OBJECTS.GR` furniture icons instead, placing tables, chairs,
+  benches, chests, and similar items behind loose food and object sprites;
+  executable geometry remains available through `--model-style geometry`.
+  Other new library modules decode
+  `PALS.DAT`, sparse `.GR` archives and known GR bitmap encodings,
+  `ALLPALS.DAT`, `COMOBJ.DAT` render types, and `OBJECTS.DAT` animation frame
+  ranges. Commands accept `-g`/`--gamedir` or `[uw2.game] base` from
+  `titan.toml`.
+- **Standalone UU2 polygon model tools:** added `titan uw2 model-render` for
+  PyVista/VTK camera renders and `titan uw2 model-export` for individual
+  OBJ/MTL/PNG/JSON assets. Both read `UW2.EXE`, `PALS.DAT`, and `TMOBJ.GR`
+  directly. Batch export covers all 21 currently mapped built-in item IDs,
+  preserves palette-colored faces, resolves item-selected bitmap textures,
+  writes one directory per item, and records the batch in `manifest.json`.
+  Special door, bridge, lever, switch, and writing rules remain future work.
+- **Textured UU2 3D map scenes:** added `titan uw2 map-3d-render` camera PNGs
+  and `map-3d-export` GLB/JSON output from one shared in-memory scene. Tile
+  geometry uses `T64.TR`; mapped furniture uses individually placed, named
+  `UW2.EXE` model parts with palette or `TMOBJ.GR` materials; loose objects
+  and ANIMO frames use alpha billboards. Inclusive tile crops allow small
+  validation scenes. Castle dining-room food records now align with table
+  tops by preserving native model Z units. Placed meshes use native scale `1`,
+  clockwise 45-degree headings, and each executable model's `0x0078` origin
+  pivot. Individual OBJ exports use the same pivot and record both origin and
+  collision half-extents in metadata.
+
 ### Fixed
 
+- **U7 frame-32+ object footprints:** map rendering now matches Exult's
+  corrected frame-bit interpretation. Frame bit 5 (`0x20`) swaps a shape's
+  X/Y tile dimensions only when the shape has 32 or fewer real frames and
+  the bit denotes a generated reflection. Shapes with more than 32 real
+  `SHAPES.VGA` frames retain their stored TFA dimensions for frames 32+.
+  This fixes depth sorting and fallback bounds for extended mod shapes such
+  as the 40-frame Serpent Isle door shape 376. Door state persistence and
+  Exult's separate `frame % 4 < 2` open-door rule are unchanged.
 - **U8 embedded-name export filenames:** `titan u8 music-export` and
   `titan u8 sound-export-all` now preserve the names Titan already parses
   from the source archives instead of always falling back to generic archive

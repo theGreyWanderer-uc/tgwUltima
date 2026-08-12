@@ -8,8 +8,10 @@ is_animated shapes, 40 of them with a zero nibble).
 
 from __future__ import annotations
 
+import struct
 import unittest
 
+from titan.u7.shape import U7Shape
 from titan.u7.typeflag import U7TypeFlags
 
 FLAG_IS_ANIMATED = 0x04
@@ -105,6 +107,66 @@ def _make_tfa_bytes_full(byte012_by_shape: dict) -> bytes:
         base[shnum * 3 + 1] = b1
         base[shnum * 3 + 2] = b2
     return bytes(base) + bytes(512)
+
+
+def _make_empty_rle_shape(frame_count: int) -> bytes:
+    """Build a valid offset table whose frames contain no pixel runs."""
+    first_offset = 4 + frame_count * 4
+    return struct.pack("<I", first_offset) + struct.pack(
+        f"<{frame_count}I", *([first_offset] * frame_count)
+    )
+
+
+class Bit5FrameReflectionTests(unittest.TestCase):
+    SHAPE_NUM = 376
+
+    def _shape_entry(self) -> tuple[U7TypeFlags, U7TypeFlags.ShapeEntry]:
+        # TFA bytes A8/22/18: solid 1x4x5 SI door, matching shape 376.
+        tfa = U7TypeFlags.parse(
+            _make_tfa_bytes_full({self.SHAPE_NUM: (0xA8, 0x22, 0x18)})
+        )
+        entry = tfa.get(self.SHAPE_NUM)
+        if entry is None:
+            self.fail(f"Shape {self.SHAPE_NUM} missing from synthetic TFA")
+        return tfa, entry
+
+    def test_unknown_frame_count_preserves_bit5_reflection(self):
+        _, entry = self._shape_entry()
+        self.assertEqual(entry.footpad_tiles(32), (4, 1, 5))
+
+    def test_32_real_frames_still_use_bit5_reflection(self):
+        tfa, entry = self._shape_entry()
+        tfa.apply_shape_frame_counts({self.SHAPE_NUM: 32})
+        self.assertTrue(entry.uses_bit5_frame_reflection)
+        self.assertEqual(entry.footpad_tiles(32), (4, 1, 5))
+
+    def test_33_real_frames_disable_bit5_reflection(self):
+        tfa, entry = self._shape_entry()
+        tfa.apply_shape_frame_counts({self.SHAPE_NUM: 33})
+        self.assertFalse(entry.uses_bit5_frame_reflection)
+        self.assertEqual(entry.footpad_tiles(32), (1, 4, 5))
+
+    def test_modified_shape_376_frames_32_to_39_keep_stored_footprint(self):
+        tfa, entry = self._shape_entry()
+        record = _make_empty_rle_shape(40)
+        frame_count = U7Shape.count_frames_from_data(record)
+        tfa.apply_shape_frame_counts({self.SHAPE_NUM: frame_count})
+
+        self.assertEqual(frame_count, 40)
+        for frame in range(32, 40):
+            with self.subTest(frame=frame):
+                self.assertEqual(entry.footpad_tiles(frame), (1, 4, 5))
+
+    def test_frames_below_bit5_keep_stored_footprint(self):
+        tfa, entry = self._shape_entry()
+        tfa.apply_shape_frame_counts({self.SHAPE_NUM: 40})
+        self.assertEqual(entry.footpad_tiles(31), (1, 4, 5))
+
+    def test_tile_frame_count_uses_raw_64_byte_frames(self):
+        self.assertEqual(
+            U7Shape.count_frames_from_data(bytes(33 * 64), is_tile=True),
+            33,
+        )
 
 
 class ContactEffectAliasTests(unittest.TestCase):

@@ -492,6 +492,54 @@ def cmd_palette_info(args: SimpleNamespace) -> int:
 # ============================================================================
 
 
+def cmd_shape_import(args: SimpleNamespace) -> int:
+    """Create a standalone U7 SHP from PNG frames in Windows A-Z name order."""
+    from titan.u7.palette import U7Palette
+    from titan.u7.shape_import import create_u7_shape_from_pngs, sorted_png_frame_paths
+
+    source_dir = Path(args.directory)
+    if not source_dir.is_dir():
+        print(f"ERROR: Shape import directory not found: {source_dir}", file=sys.stderr)
+        return 1
+
+    palette_path = Path(args.palette)
+    if not palette_path.is_file():
+        print(f"ERROR: Shape import palette not found: {palette_path}", file=sys.stderr)
+        return 1
+
+    output_path = Path(args.output)
+    if output_path.suffix.lower() != ".shp":
+        print(
+            f"ERROR: Shape import output must be a standalone .shp file: {output_path}",
+            file=sys.stderr,
+        )
+        return 1
+
+    png_paths = sorted_png_frame_paths(source_dir)
+    if not png_paths:
+        print(
+            f"ERROR: No PNG frames found in shape import directory: {source_dir}",
+            file=sys.stderr,
+        )
+        return 1
+
+    try:
+        palette = U7Palette.from_file(
+            str(palette_path),
+            palette_index=args.palette_index,
+        )
+        shape = create_u7_shape_from_pngs(png_paths, palette)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        shape.save(str(output_path))
+    except (OSError, ValueError) as error:
+        print(f"ERROR: U7 shape import failed: {error}", file=sys.stderr)
+        return 1
+
+    print(f"Shape created: {len(shape.frames)} frames -> {output_path}")
+    print("  Frame order: Windows A-Z by PNG filename")
+    return 0
+
+
 def _load_translucent_bg_indices(path: str, num_frames: int) -> "list | None":
     """Load an indexed ('P' mode) PNG produced by ``--indexed`` and reuse
     its pixel-index array as the exact-compositing background for every
@@ -1192,9 +1240,208 @@ def _looks_like_text(data: bytes) -> bool:
     return all((0x20 <= b <= 0x7E) or b in (0x0A, 0x0D, 0x09) for b in sample)
 
 
+def cmd_u7_flex_create(args: SimpleNamespace) -> int:
+    """Create a new empty U7/Exult Flex archive without overwriting by default."""
+    from titan._version import TITAN_VERSION
+    from titan.u7.flex import U7FlexArchive
+
+    output_path = Path(args.output)
+    if output_path.suffix.lower() not in {".vga", ".flx"}:
+        print(
+            f"ERROR: U7 Flex create output must end in .VGA or .FLX: {output_path}",
+            file=sys.stderr,
+        )
+        return 1
+    if output_path.exists() and not args.force:
+        print(
+            f"ERROR: U7 Flex create output already exists (use --force to replace): {output_path}",
+            file=sys.stderr,
+        )
+        return 1
+
+    archive = U7FlexArchive()
+    archive.title = args.title or f"Empty U7 Flex archive created by TITAN v{TITAN_VERSION}"
+
+    try:
+        archive.save(str(output_path))
+    except OSError as error:
+        print(f"ERROR: U7 Flex create failed: {error}", file=sys.stderr)
+        return 1
+
+    return 0
+
+
+def cmd_u7_flex_add_shape(args: SimpleNamespace) -> int:
+    """Add a standalone U7 shape to the first free record in a U7 Flex archive."""
+    from titan.u7.flex import U7FlexArchive
+    from titan.u7.flex_shape_add import (
+        add_shape_at_record_index,
+        add_shape_to_first_available_record,
+        save_u7_flex_atomically,
+    )
+    from titan.u7.shape import U7Shape
+
+    archive_path = Path(args.archive)
+    shape_path = Path(args.shape)
+    if not archive_path.is_file():
+        print(f"ERROR: U7 Flex add-shape archive not found: {archive_path}", file=sys.stderr)
+        return 1
+    if not shape_path.is_file():
+        print(f"ERROR: U7 Flex add-shape shape not found: {shape_path}", file=sys.stderr)
+        return 1
+    if bool(args.output) == bool(args.in_place):
+        print(
+            "ERROR: U7 Flex add-shape requires exactly one of --output or --in-place",
+            file=sys.stderr,
+        )
+        return 1
+
+    requested_index = getattr(args, "index", None)
+    replace_record = getattr(args, "replace", False)
+    if requested_index is not None and requested_index < 0:
+        print(
+            f"ERROR: U7 Flex add-shape record index must be non-negative: {requested_index}",
+            file=sys.stderr,
+        )
+        return 1
+    if replace_record and requested_index is None:
+        print(
+            "ERROR: U7 Flex add-shape --replace requires --index",
+            file=sys.stderr,
+        )
+        return 1
+
+    output_path = archive_path if args.in_place else Path(args.output)
+    if output_path.suffix.lower() not in {".vga", ".flx"}:
+        print(
+            f"ERROR: U7 Flex add-shape output must end in .VGA or .FLX: {output_path}",
+            file=sys.stderr,
+        )
+        return 1
+    if not args.in_place and output_path.resolve() == archive_path.resolve():
+        print(
+            "ERROR: U7 Flex add-shape requires --in-place when output is the source archive",
+            file=sys.stderr,
+        )
+        return 1
+    if not args.in_place and output_path.exists() and not args.force:
+        print(
+            f"ERROR: U7 Flex add-shape output already exists (use --force to replace): {output_path}",
+            file=sys.stderr,
+        )
+        return 1
+
+    try:
+        archive = U7FlexArchive.from_file(str(archive_path))
+        shape_data = shape_path.read_bytes()
+        shape = U7Shape.from_data(shape_data)
+        if not shape.frames:
+            print(
+                f"ERROR: U7 Flex add-shape input contains no valid frames: {shape_path}",
+                file=sys.stderr,
+            )
+            return 1
+        if requested_index is None:
+            record_index = add_shape_to_first_available_record(archive, shape_data)
+        else:
+            record_index = add_shape_at_record_index(
+                archive,
+                shape_data,
+                requested_index,
+                replace=replace_record,
+            )
+        save_u7_flex_atomically(archive, output_path)
+    except (OSError, ValueError) as error:
+        print(f"ERROR: U7 Flex add-shape failed: {error}", file=sys.stderr)
+        return 1
+
+    print(
+        f"Shape added: {shape_path} -> {output_path} "
+        f"(record {record_index}, {len(archive.records)} total records)"
+    )
+    return 0
+
+
 # ============================================================================
 # TYPER COMMAND WRAPPERS
 # ============================================================================
+
+# ---- flex ------------------------------------------------------------------
+
+
+@u7_app.command("flex-create")
+def u7_flex_create_cmd(
+    output: Annotated[
+        str,
+        typer.Argument(help="New empty U7 Flex archive path (.VGA or .FLX)"),
+    ],
+    title: Annotated[
+        Optional[str],
+        typer.Option("-t", "--title", help="Archive title stored in the U7 Flex header"),
+    ] = None,
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Replace the output file if it already exists"),
+    ] = False,
+) -> None:
+    """Create a new empty U7/Exult Flex archive with zero records."""
+    raise SystemExit(
+        cmd_u7_flex_create(
+            SimpleNamespace(
+                output=output,
+                title=title,
+                force=force,
+            )
+        )
+    )
+
+
+@u7_app.command("flex-add-shape")
+def u7_flex_add_shape_cmd(
+    archive: Annotated[
+        str,
+        typer.Argument(help="Source U7 Flex archive (.VGA or .FLX)"),
+    ],
+    shape: Annotated[
+        str,
+        typer.Argument(help="Standalone U7 .shp file to add"),
+    ],
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Write a separate updated archive"),
+    ] = None,
+    in_place: Annotated[
+        bool,
+        typer.Option("--in-place", help="Atomically update the source archive"),
+    ] = False,
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Replace an existing --output archive"),
+    ] = False,
+    index: Annotated[
+        Optional[int],
+        typer.Option("--index", help="Specific zero-based shape record index"),
+    ] = None,
+    replace: Annotated[
+        bool,
+        typer.Option("--replace", help="Replace an occupied --index record"),
+    ] = False,
+) -> None:
+    """Add a U7 shape to a specific or the lowest empty Flex record."""
+    raise SystemExit(
+        cmd_u7_flex_add_shape(
+            SimpleNamespace(
+                archive=archive,
+                shape=shape,
+                output=output,
+                in_place=in_place,
+                force=force,
+                index=index,
+                replace=replace,
+            )
+        )
+    )
+
 
 # ---- palette ---------------------------------------------------------------
 
@@ -1343,6 +1590,38 @@ def shape_export_cmd(
                 translucent=translucent,
                 translucent_bg=translucent_bg,
                 static=static,
+            )
+        )
+    )
+
+
+@u7_app.command("shape-import")
+def shape_import_cmd(
+    directory: Annotated[
+        str,
+        typer.Argument(help="Directory containing PNG frame images"),
+    ],
+    palette: Annotated[
+        str,
+        typer.Option("-p", "--palette", help="Path to PALETTES.FLX or .pal file"),
+    ],
+    output: Annotated[
+        str,
+        typer.Option("-o", "--output", help="Standalone output .shp path"),
+    ],
+    palette_index: Annotated[
+        int,
+        typer.Option("--palette-index", help="Palette record within PALETTES.FLX"),
+    ] = 0,
+) -> None:
+    """Create a standalone U7 SHP from PNG frames in Windows A-Z name order."""
+    raise SystemExit(
+        cmd_shape_import(
+            SimpleNamespace(
+                directory=directory,
+                palette=palette,
+                output=output,
+                palette_index=palette_index,
             )
         )
     )
