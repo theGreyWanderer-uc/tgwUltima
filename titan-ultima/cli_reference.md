@@ -1395,30 +1395,84 @@ sorting is case-insensitive and numeric runs are compared numerically
 ignored.
 
 ```
-titan u7 shape-import <directory> -p PALETTE -o OUTPUT.shp [--palette-index N]
+titan u7 shape-import <directory> -o OUTPUT.shp [--game bg|si]
+                      [-p PALETTE] [--palette-index N]
 ```
 
 | Argument | Description |
 |----------|-------------|
 | `directory` | Directory containing the PNG frame images |
-| `-p FILE`, `--palette FILE` | Required path to U7 `PALETTES.FLX` or a raw `.pal` file |
+| `-p FILE`, `--palette FILE` | Path to U7 `PALETTES.FLX` or a raw `.pal` file. Overrides the selected game's configured palette |
 | `-o FILE`, `--output FILE` | Required standalone output path; must end in `.shp` |
 | `--palette-index N` | Palette record to use when `--palette` is a Flex archive (default: `0`, the main daytime palette) |
+| `--game bg|si` | Select the `u7bg` or `u7si` palette configured by `titan setup` when `--palette` is omitted (default: `bg`) |
 
 RGBA source colours are mapped to the nearest RGB entry in palette indices
 0–254. Pixels with alpha below 128 become U7 transparency index 255; opaque
-pixels are never mapped to index 255. Every frame hotspot is placed at its
-bottom-right pixel (`xoff = width - 1`, `yoff = height - 1`). This initial
-importer does not read frame metadata, so a 1×1 placeholder receives hotspot
-`(0, 0)`. An existing output `.shp` is replaced.
+pixels are never mapped to index 255. Every frame uses origin
+X/Y `(0, 0)` (`xright = 0`, `ybelow = 0`), which places the drawing anchor at
+the bottom-right pixel. This initial importer does not read frame metadata, so
+a 1×1 placeholder also receives origin `(0, 0)`. WIHH.DAT weapon
+attachment coordinates are separate data and are not stored in the `.shp`.
+An existing output `.shp` is replaced.
 
 **Examples**
 ```bash
 # Pack alphabetically named actor frames into one standalone shape
-titan u7 shape-import actor_frames/ -p STATIC/PALETTES.FLX -o ranger_variant7.shp
+titan u7 shape-import actor_frames/ --game bg -o ranger_variant7.shp
 
 # Select another palette record from PALETTES.FLX
 titan u7 shape-import frames/ -p STATIC/PALETTES.FLX --palette-index 3 -o night_shape.shp
+```
+
+---
+
+#### `u7 shape-frame-report`
+
+Export one combined inventory of every shape record and every decoded frame
+in a U7 shape Flex archive. The report separates the three coordinate
+concepts that are easy to confuse:
+
+- `origin_x`/`origin_y` are the signed `xright`/`ybelow` values Exult Studio
+  displays as Origin X/Y.
+- `hotspot_x_from_left`/`hotspot_y_from_top` are the same drawing anchor
+  converted to PNG top-left-relative coordinates.
+- `attachment_x`/`attachment_y` and their raw counterparts come from
+  `WIHH.DAT` and position a held weapon or item.
+
+```
+titan u7 shape-frame-report <archive> -o REPORT [-f csv|json] [--wihh FILE]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `archive` | Required U7 shape Flex archive, such as `SHAPES.VGA`, `FACES.VGA`, or a custom `.VGA`/`.FLX` |
+| `-o FILE`, `--output FILE` | Required output report path |
+| `-f csv|json`, `--format csv|json` | Output format (default: `csv`) |
+| `--wihh FILE` | Explicit `WIHH.DAT` path. When omitted, Titan looks for `WIHH.DAT` beside the archive. If none is found, the report is still written with blank/null attachment fields |
+
+Every real frame receives one row. Empty archive records, records that decode
+to no frames, and malformed records receive one diagnostic row so every Flex
+record remains represented. Diagnostic state is reported in `shape_status`
+and `parse_error`.
+
+Raw 8x8 ground tiles have no RLE extent header. Their width, height, and frame
+number are reported, but their origin and hotspot fields are blank/null rather
+than exposing Titan's internal synthetic tile values. WIHH only contains 32
+attachment pairs for shapes that have a table record; frames without a
+corresponding pair also have blank/null attachment fields.
+
+**Examples**
+
+```powershell
+# WIHH.DAT is discovered automatically because both files are in STATIC.
+titan u7 shape-frame-report C:\Ultima\ultima7bg\ULTIMA7\STATIC\SHAPES.VGA `
+  -o C:\temp\shapes_frame_report.csv
+
+# Report a custom archive while explicitly combining the base-game WIHH table.
+titan u7 shape-frame-report C:\temp\U7O.VGA `
+  --wihh C:\Ultima\ultima7bg\ULTIMA7\STATIC\WIHH.DAT `
+  -f json -o C:\temp\u7o_frame_report.json
 ```
 
 ---
@@ -3980,6 +4034,7 @@ A value on the command line always wins.
 | `u7 egg-query` | Query egg trigger objects from IREG — type, usecode function, location |
 | `u7 palette-info` | Inspect `PALETTES.FLX` slot occupancy, semantic names, encoding, and colour-cycling ranges |
 | `u7 shape-animate` | Render a shape's frame-sequence or colour-cycle animation to an animated GIF |
+| `u7 shape-frame-report` | Export every shape/frame origin, top-left drawing hotspot, and WIHH weapon attachment as CSV or JSON |
 | `u7 shape-cycle-scan` | Inventory a VGA archive for colour-cycling/translucency/animation content; export indexed frames + descriptor |
 | `dialogue prepare` | Generate dialogue runtime artifacts |
 | `dialogue copy` | Optionally copy NPC JSON files and META sidecars to a destination folder |

@@ -19,8 +19,8 @@ def _write_test_shape(path: Path, palette_index: int = 7) -> bytes:
     frame = U7Shape.Frame()
     frame.width = 2
     frame.height = 2
-    frame.xoff = 1
-    frame.yoff = 1
+    frame.origin_x = 0
+    frame.origin_y = 0
     frame.pixels = np.array(
         [[0xFF, palette_index], [palette_index, palette_index]], dtype=np.uint8
     )

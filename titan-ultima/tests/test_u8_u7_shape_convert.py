@@ -103,9 +103,11 @@ class ConvertFrameTests(unittest.TestCase):
         src = _solid_u8_frame(4, 8, index=0)
         frame = convert_frame(src, 2.0, _u8_palette(), _u7_palette())
         self.assertIsNotNone(frame)
+        assert frame is not None
         self.assertEqual((frame.width, frame.height), (8, 16))
-        self.assertEqual(frame.xoff, frame.width - 1)
-        self.assertEqual(frame.yoff, frame.height - 1)
+        self.assertEqual((frame.origin_x, frame.origin_y), (0, 0))
+        self.assertEqual(frame.hotspot_x_from_left, frame.width - 1)
+        self.assertEqual(frame.hotspot_y_from_top, frame.height - 1)
         self.assertFalse(frame.is_tile)
 
     def test_quantizes_to_nearest_u7_palette_color(self) -> None:

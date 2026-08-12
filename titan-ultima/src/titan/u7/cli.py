@@ -502,7 +502,19 @@ def cmd_shape_import(args: SimpleNamespace) -> int:
         print(f"ERROR: Shape import directory not found: {source_dir}", file=sys.stderr)
         return 1
 
-    palette_path = Path(args.palette)
+    palette_value = getattr(args, "palette", None)
+    if not palette_value:
+        _, palette_value = _resolve_u7_paths(getattr(args, "game", "bg"))
+    if not palette_value:
+        game = getattr(args, "game", "bg")
+        print(
+            "ERROR: Shape import palette not configured: pass --palette or "
+            f"configure [u7{game}.paths] palette in titan.toml",
+            file=sys.stderr,
+        )
+        return 1
+
+    palette_path = Path(palette_value)
     if not palette_path.is_file():
         print(f"ERROR: Shape import palette not found: {palette_path}", file=sys.stderr)
         return 1
@@ -867,7 +879,8 @@ def cmd_shape_batch_dir(args: SimpleNamespace) -> int:
     else:
         pal = U7Palette.default_palette()
 
-    outdir = args.output or f"{Path(srcdir.rstrip('/\\')).name}_png"
+    source_dir_name = Path(srcdir.rstrip("/\\")).name
+    outdir = args.output or f"{source_dir_name}_png"
     os.makedirs(outdir, exist_ok=True)
 
     indexed = getattr(args, "indexed", False)
@@ -1601,18 +1614,26 @@ def shape_import_cmd(
         str,
         typer.Argument(help="Directory containing PNG frame images"),
     ],
-    palette: Annotated[
-        str,
-        typer.Option("-p", "--palette", help="Path to PALETTES.FLX or .pal file"),
-    ],
     output: Annotated[
         str,
         typer.Option("-o", "--output", help="Standalone output .shp path"),
     ],
+    palette: Annotated[
+        Optional[str],
+        typer.Option(
+            "-p",
+            "--palette",
+            help="Path to PALETTES.FLX or .pal file (default: selected game's titan.toml palette)",
+        ),
+    ] = None,
     palette_index: Annotated[
         int,
         typer.Option("--palette-index", help="Palette record within PALETTES.FLX"),
     ] = 0,
+    game: Annotated[
+        Literal["bg", "si"],
+        typer.Option("--game", help="Use BG or SI titan.toml palette defaults"),
+    ] = "bg",
 ) -> None:
     """Create a standalone U7 SHP from PNG frames in Windows A-Z name order."""
     raise SystemExit(
@@ -1622,6 +1643,42 @@ def shape_import_cmd(
                 palette=palette,
                 output=output,
                 palette_index=palette_index,
+                game=game,
+            )
+        )
+    )
+
+
+@u7_app.command("shape-frame-report")
+def shape_frame_report_cmd(
+    file: Annotated[
+        str,
+        typer.Argument(help="Path to a U7 shape Flex archive such as SHAPES.VGA"),
+    ],
+    output: Annotated[
+        str,
+        typer.Option("-o", "--output", help="Output CSV or JSON report path"),
+    ],
+    wihh: Annotated[
+        Optional[str],
+        typer.Option(
+            "--wihh",
+            help="Path to WIHH.DAT (default: discover it beside the archive)",
+        ),
+    ] = None,
+    format: Annotated[
+        Literal["csv", "json"],
+        typer.Option("-f", "--format", help="Report format: csv (default) or json"),
+    ] = "csv",
+) -> None:
+    """Export every shape/frame origin, drawing hotspot, and WIHH attachment."""
+    raise SystemExit(
+        cmd_shape_frame_report(
+            SimpleNamespace(
+                file=file,
+                output=output,
+                wihh=wihh,
+                format=format,
             )
         )
     )
@@ -2193,7 +2250,7 @@ def cmd_typeflag_dump(args: SimpleNamespace) -> int:
 
 
 def cmd_wihh_dump(args: SimpleNamespace) -> int:
-    """Dump U7 weapon-in-hand offsets from WIHH.DAT."""
+    """Dump U7 weapon attachment coordinates from WIHH.DAT."""
     from titan.u7.names import U7ShapeNames
     from titan.u7.wihh import U7WeaponInHandOffsets
 
@@ -2223,6 +2280,84 @@ def cmd_wihh_dump(args: SimpleNamespace) -> int:
         print(f"WIHH dump written to: {args.output}")
     else:
         print(content)
+    return 0
+
+
+def cmd_shape_frame_report(args: SimpleNamespace) -> int:
+    """Export all shape frames, drawing anchors, and WIHH attachments."""
+    from titan.u7.flex import U7FlexArchive
+    from titan.u7.shape_frame_report import build_u7_shape_frame_report
+    from titan.u7.wihh import U7WeaponInHandOffsets
+
+    archive_path = Path(args.file)
+    if not archive_path.is_file():
+        print(
+            f"ERROR: U7 shape Flex archive not found: {archive_path}",
+            file=sys.stderr,
+        )
+        return 1
+
+    explicit_wihh_path = getattr(args, "wihh", None)
+    wihh_path: Optional[Path] = None
+    if explicit_wihh_path:
+        wihh_path = Path(explicit_wihh_path)
+        if not wihh_path.is_file():
+            print(f"ERROR: WIHH.DAT not found: {wihh_path}", file=sys.stderr)
+            return 1
+    else:
+        for filename in ("WIHH.DAT", "wihh.dat"):
+            candidate = archive_path.parent / filename
+            if candidate.is_file():
+                wihh_path = candidate
+                break
+
+    try:
+        archive = U7FlexArchive.from_file(str(archive_path))
+        wihh = (
+            U7WeaponInHandOffsets.from_file(
+                str(wihh_path),
+                shape_count=len(archive.records),
+            )
+            if wihh_path is not None
+            else None
+        )
+        report = build_u7_shape_frame_report(
+            archive,
+            archive_path=str(archive_path.resolve()),
+            wihh=wihh,
+            wihh_path=str(wihh_path.resolve()) if wihh_path else None,
+        )
+    except (OSError, ValueError) as exc:
+        print(f"ERROR: Shape frame report failed: {exc}", file=sys.stderr)
+        return 1
+
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    content = report.to_json() if args.format == "json" else report.to_csv()
+    try:
+        with output_path.open("w", encoding="utf-8", newline="") as output_file:
+            output_file.write(content)
+            if args.format == "json":
+                output_file.write("\n")
+    except OSError as exc:
+        print(f"ERROR: Could not write shape frame report: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"Shape frame report written to: {output_path}")
+    print(
+        f"  Shapes: {report.shape_count} records "
+        f"({report.populated_shape_count} populated, {report.empty_shape_count} empty)"
+    )
+    print(f"  Frames: {report.frame_count}")
+    print(
+        f"  WIHH: {wihh_path if wihh_path else 'not found; attachment columns are blank'}"
+    )
+    if report.parse_error_count:
+        print(
+            f"  WARNING: {report.parse_error_count} record(s) could not be decoded; "
+            "see shape_status and parse_error columns",
+            file=sys.stderr,
+        )
     return 0
 
 
@@ -3857,7 +3992,7 @@ def wihh_dump_cmd(
         ),
     ] = False,
 ) -> None:
-    """Dump U7 WIHH.DAT weapon-in-hand actor offsets."""
+    """Dump U7 WIHH.DAT weapon attachment coordinates."""
     raise SystemExit(
         cmd_wihh_dump(
             SimpleNamespace(

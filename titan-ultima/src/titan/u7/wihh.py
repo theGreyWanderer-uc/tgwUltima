@@ -1,8 +1,13 @@
-"""Ultima 7 weapon-in-hand hotspot offsets from ``WIHH.DAT``."""
+"""Ultima 7 weapon attachment coordinates from ``WIHH.DAT``.
+
+These values align an actor's hand with a held item's attachment point.  They
+are separate from the SHP frame Origin X/Y values that place the complete
+sprite relative to the world drawing anchor.
+"""
 
 from __future__ import annotations
 
-__all__ = ["U7WeaponInHandOffsets", "U7WeaponOffsetFrame"]
+__all__ = ["U7WeaponAttachmentFrame", "U7WeaponInHandOffsets"]
 
 import csv
 import io
@@ -18,28 +23,29 @@ _RECORD_SIZE = _FRAME_COUNT * 2
 
 
 @dataclass
-class U7WeaponOffsetFrame:
-    """Weapon draw offset for one actor shape frame."""
+class U7WeaponAttachmentFrame:
+    """Weapon attachment coordinates for one shape and canonical frame."""
 
     shape: int
     frame: int
-    x: int
-    y: int
-    raw_x: int
-    raw_y: int
+    attachment_x: int
+    attachment_y: int
+    raw_attachment_x: int
+    raw_attachment_y: int
 
     @property
     def draw_weapon(self) -> bool:
-        return self.x != 255 and self.y != 255
+        """Return whether this frame defines a usable weapon attachment."""
+        return self.attachment_x != 255 and self.attachment_y != 255
 
 
 class U7WeaponInHandOffsets:
-    """Decoded ``wihh.dat`` actor weapon-in-hand offset table."""
+    """Decoded ``wihh.dat`` per-shape weapon attachment table."""
 
     def __init__(
         self,
         offsets: list[int],
-        frames_by_shape: dict[int, list[U7WeaponOffsetFrame]],
+        frames_by_shape: dict[int, list[U7WeaponAttachmentFrame]],
         source_size: int,
     ) -> None:
         self.offsets = offsets
@@ -82,7 +88,7 @@ class U7WeaponInHandOffsets:
             for index in range(table_count)
         ]
 
-        frames_by_shape: dict[int, list[U7WeaponOffsetFrame]] = {}
+        frames_by_shape: dict[int, list[U7WeaponAttachmentFrame]] = {}
         for shape, offset in enumerate(offsets):
             if (
                 offset == 0
@@ -90,23 +96,25 @@ class U7WeaponInHandOffsets:
                 or offset > len(data) - _RECORD_SIZE
             ):
                 continue
-            frames: list[U7WeaponOffsetFrame] = []
+            frames: list[U7WeaponAttachmentFrame] = []
             for frame in range(_FRAME_COUNT):
                 pos = offset + frame * 2
-                raw_x = data[pos]
-                raw_y = data[pos + 1]
-                x = raw_x
-                y = raw_y
-                if x > 63 or y > 63:
-                    x = y = 255
+                raw_attachment_x = data[pos]
+                raw_attachment_y = data[pos + 1]
+                attachment_x = raw_attachment_x
+                attachment_y = raw_attachment_y
+                # Exult treats 64 and 255 alike: either coordinate outside
+                # 0..63 means this frame has no drawable attachment point.
+                if attachment_x > 63 or attachment_y > 63:
+                    attachment_x = attachment_y = 255
                 frames.append(
-                    U7WeaponOffsetFrame(
+                    U7WeaponAttachmentFrame(
                         shape=shape,
                         frame=frame,
-                        x=x,
-                        y=y,
-                        raw_x=raw_x,
-                        raw_y=raw_y,
+                        attachment_x=attachment_x,
+                        attachment_y=attachment_y,
+                        raw_attachment_x=raw_attachment_x,
+                        raw_attachment_y=raw_attachment_y,
                     )
                 )
             frames_by_shape[shape] = frames
@@ -128,7 +136,7 @@ class U7WeaponInHandOffsets:
             if frame.draw_weapon
         )
 
-    def get(self, shape: int) -> list[U7WeaponOffsetFrame]:
+    def get(self, shape: int) -> list[U7WeaponAttachmentFrame]:
         return self.frames_by_shape.get(shape, [])
 
     def dump_summary(self) -> str:
@@ -155,10 +163,10 @@ class U7WeaponInHandOffsets:
                 "shape_name",
                 "offset",
                 "frame",
-                "x",
-                "y",
-                "raw_x",
-                "raw_y",
+                "attachment_x",
+                "attachment_y",
+                "raw_attachment_x",
+                "raw_attachment_y",
                 "draw_weapon",
                 "has_offset",
             ]
@@ -191,10 +199,10 @@ class U7WeaponInHandOffsets:
                         shape_names.get(shape) if shape_names else "",
                         offset,
                         frame.frame,
-                        frame.x,
-                        frame.y,
-                        frame.raw_x,
-                        frame.raw_y,
+                        frame.attachment_x,
+                        frame.attachment_y,
+                        frame.raw_attachment_x,
+                        frame.raw_attachment_y,
                         int(frame.draw_weapon),
                         1,
                     ]

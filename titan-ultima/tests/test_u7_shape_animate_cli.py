@@ -13,7 +13,6 @@ already covered by test_u7_shape_animation.py.
 from __future__ import annotations
 
 import os
-import struct
 import tempfile
 import unittest
 from types import SimpleNamespace
@@ -70,7 +69,7 @@ def _write_shapes_vga(static_dir: str) -> str:
         # animation; identical frames would get deduped by the GIF encoder.
         frame = U7Shape.Frame()
         frame.width, frame.height = 4, 4
-        frame.xoff, frame.yoff = 1, 1
+        frame.set_hotspot_from_top_left(1, 1)
         pixels = np.full((4, 4), 0xFF, dtype=np.uint8)  # transparent
         pixels[1:3, 1:3] = _TRANSLUCENT_INDEX  # a translucent patch
         pixels[0, step] = 1  # a distinguishing opaque marker pixel per frame

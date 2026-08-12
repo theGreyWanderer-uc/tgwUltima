@@ -62,7 +62,7 @@ def create_u7_shape_from_pngs(
     png_paths: list[Path],
     palette: U7ImportPalette,
 ) -> U7Shape:
-    """Create an RLE U7 shape using PNG list order and bottom-right hotspots."""
+    """Create an RLE U7 shape using Exult Studio's default Origin (0, 0)."""
     shape = U7Shape()
     for png_path in png_paths:
         with Image.open(png_path) as image:
@@ -71,8 +71,11 @@ def create_u7_shape_from_pngs(
         frame = U7Shape.Frame()
         frame.width = pixels.shape[1]
         frame.height = pixels.shape[0]
-        frame.xoff = frame.width - 1
-        frame.yoff = frame.height - 1
+        # Exult Studio Origin X/Y are xright/ybelow.  (0, 0) places the
+        # drawing anchor at the bottom-right pixel; WIHH weapon attachment
+        # offsets are separate data and are not stored in this SHP frame.
+        frame.origin_x = 0
+        frame.origin_y = 0
         frame.pixels = pixels
         shape.frames.append(frame)
 
