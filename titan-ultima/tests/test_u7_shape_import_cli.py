@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from PIL import Image
 
@@ -45,6 +46,7 @@ class ShapeImportCliTests(unittest.TestCase):
                 palette=str(self.palette_path),
                 palette_index=0,
                 output=str(self.output_path),
+                game="bg",
             )
         )
 
@@ -117,11 +119,59 @@ class ShapeImportCliTests(unittest.TestCase):
                 palette=str(self.palette_path),
                 palette_index=0,
                 output=str(archive_path),
+                game="bg",
             )
         )
 
         self.assertEqual(result, 1)
         self.assertFalse(archive_path.exists())
+
+    def test_resolves_palette_from_selected_game_config(self) -> None:
+        _write_rgba_frame(self.frames_dir / "frame.png", (255, 0, 0, 255))
+
+        with patch(
+            "titan.u7.cli._resolve_u7_paths",
+            return_value=(str(self.root), str(self.palette_path)),
+        ) as resolve_paths:
+            result = cmd_shape_import(
+                SimpleNamespace(
+                    directory=str(self.frames_dir),
+                    palette=None,
+                    palette_index=0,
+                    output=str(self.output_path),
+                    game="si",
+                )
+            )
+
+        self.assertEqual(result, 0)
+        resolve_paths.assert_called_once_with("si")
+        self.assertTrue(self.output_path.is_file())
+
+    def test_explicit_palette_overrides_selected_game_config(self) -> None:
+        _write_rgba_frame(self.frames_dir / "frame.png", (255, 0, 0, 255))
+
+        with patch("titan.u7.cli._resolve_u7_paths") as resolve_paths:
+            result = self._run_import()
+
+        self.assertEqual(result, 0)
+        resolve_paths.assert_not_called()
+
+    def test_rejects_missing_explicit_and_configured_palette(self) -> None:
+        _write_rgba_frame(self.frames_dir / "frame.png", (255, 0, 0, 255))
+
+        with patch("titan.u7.cli._resolve_u7_paths", return_value=(None, None)):
+            result = cmd_shape_import(
+                SimpleNamespace(
+                    directory=str(self.frames_dir),
+                    palette=None,
+                    palette_index=0,
+                    output=str(self.output_path),
+                    game="bg",
+                )
+            )
+
+        self.assertEqual(result, 1)
+        self.assertFalse(self.output_path.exists())
 
 
 if __name__ == "__main__":

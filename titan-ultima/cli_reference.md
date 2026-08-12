@@ -1395,15 +1395,17 @@ sorting is case-insensitive and numeric runs are compared numerically
 ignored.
 
 ```
-titan u7 shape-import <directory> -p PALETTE -o OUTPUT.shp [--palette-index N]
+titan u7 shape-import <directory> -o OUTPUT.shp [--game bg|si]
+                      [-p PALETTE] [--palette-index N]
 ```
 
 | Argument | Description |
 |----------|-------------|
 | `directory` | Directory containing the PNG frame images |
-| `-p FILE`, `--palette FILE` | Required path to U7 `PALETTES.FLX` or a raw `.pal` file |
+| `-p FILE`, `--palette FILE` | Path to U7 `PALETTES.FLX` or a raw `.pal` file. Overrides the selected game's configured palette |
 | `-o FILE`, `--output FILE` | Required standalone output path; must end in `.shp` |
 | `--palette-index N` | Palette record to use when `--palette` is a Flex archive (default: `0`, the main daytime palette) |
+| `--game bg|si` | Select the `u7bg` or `u7si` palette configured by `titan setup` when `--palette` is omitted (default: `bg`) |
 
 RGBA source colours are mapped to the nearest RGB entry in palette indices
 0–254. Pixels with alpha below 128 become U7 transparency index 255; opaque
@@ -1417,7 +1419,7 @@ An existing output `.shp` is replaced.
 **Examples**
 ```bash
 # Pack alphabetically named actor frames into one standalone shape
-titan u7 shape-import actor_frames/ -p STATIC/PALETTES.FLX -o ranger_variant7.shp
+titan u7 shape-import actor_frames/ --game bg -o ranger_variant7.shp
 
 # Select another palette record from PALETTES.FLX
 titan u7 shape-import frames/ -p STATIC/PALETTES.FLX --palette-index 3 -o night_shape.shp

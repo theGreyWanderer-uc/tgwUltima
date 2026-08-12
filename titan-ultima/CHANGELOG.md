@@ -30,6 +30,9 @@ This project uses [Semantic Versioning](https://semver.org/):
   weapon attachment coordinates (`attachment_x`/`attachment_y`) and kept
   clearly separate from SHP frame origins in the API, CSV output, CLI help,
   and documentation.
+- **Configured U7 shape-import palettes:** `titan u7 shape-import` now accepts
+  `--game bg|si` and uses that game's `titan.toml` palette when `--palette` is
+  omitted. An explicit `--palette` continues to take precedence.
 
 ---
 

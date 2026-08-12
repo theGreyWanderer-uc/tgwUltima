@@ -502,7 +502,19 @@ def cmd_shape_import(args: SimpleNamespace) -> int:
         print(f"ERROR: Shape import directory not found: {source_dir}", file=sys.stderr)
         return 1
 
-    palette_path = Path(args.palette)
+    palette_value = getattr(args, "palette", None)
+    if not palette_value:
+        _, palette_value = _resolve_u7_paths(getattr(args, "game", "bg"))
+    if not palette_value:
+        game = getattr(args, "game", "bg")
+        print(
+            "ERROR: Shape import palette not configured: pass --palette or "
+            f"configure [u7{game}.paths] palette in titan.toml",
+            file=sys.stderr,
+        )
+        return 1
+
+    palette_path = Path(palette_value)
     if not palette_path.is_file():
         print(f"ERROR: Shape import palette not found: {palette_path}", file=sys.stderr)
         return 1
@@ -867,7 +879,8 @@ def cmd_shape_batch_dir(args: SimpleNamespace) -> int:
     else:
         pal = U7Palette.default_palette()
 
-    outdir = args.output or f"{Path(srcdir.rstrip('/\\')).name}_png"
+    source_dir_name = Path(srcdir.rstrip("/\\")).name
+    outdir = args.output or f"{source_dir_name}_png"
     os.makedirs(outdir, exist_ok=True)
 
     indexed = getattr(args, "indexed", False)
@@ -1601,18 +1614,26 @@ def shape_import_cmd(
         str,
         typer.Argument(help="Directory containing PNG frame images"),
     ],
-    palette: Annotated[
-        str,
-        typer.Option("-p", "--palette", help="Path to PALETTES.FLX or .pal file"),
-    ],
     output: Annotated[
         str,
         typer.Option("-o", "--output", help="Standalone output .shp path"),
     ],
+    palette: Annotated[
+        Optional[str],
+        typer.Option(
+            "-p",
+            "--palette",
+            help="Path to PALETTES.FLX or .pal file (default: selected game's titan.toml palette)",
+        ),
+    ] = None,
     palette_index: Annotated[
         int,
         typer.Option("--palette-index", help="Palette record within PALETTES.FLX"),
     ] = 0,
+    game: Annotated[
+        Literal["bg", "si"],
+        typer.Option("--game", help="Use BG or SI titan.toml palette defaults"),
+    ] = "bg",
 ) -> None:
     """Create a standalone U7 SHP from PNG frames in Windows A-Z name order."""
     raise SystemExit(
@@ -1622,6 +1643,7 @@ def shape_import_cmd(
                 palette=palette,
                 output=output,
                 palette_index=palette_index,
+                game=game,
             )
         )
     )
