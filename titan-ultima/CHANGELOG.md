@@ -14,6 +14,20 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Added
 
+- **U7 standalone shape import:** added `titan u7 shape-import` to create one
+  U7 RLE `.shp` from PNG frames in Windows Explorer-style Name A-Z order.
+  RGBA pixels are quantized against a selected U7 palette, alpha maps to
+  transparency index 255, and frame hotspots default to the bottom-right
+  pixel. The command writes only a standalone `.shp`, never a Flex archive.
+- **Empty U7 Flex creation:** added `titan u7 flex-create` to create a valid
+  zero-record U7/Exult `.VGA` or `.FLX` archive using the U7 header format,
+  with an optional title and guarded `--force` replacement.
+- **U7 shape archive insertion:** added `titan u7 flex-add-shape` to validate
+  and place a standalone `.shp` in the lowest empty U7 Flex record, appending
+  when no gap exists, or at a specific `--index` while filling intervening
+  records as empty. Occupied indexed records require `--replace`. The command
+  supports separate output or explicit atomic in-place updates and reports the
+  assigned record/shape number.
 - **Native Ultima Underworld II command family:** added `titan uw2` with
   `map-extract`, `map-render`, `palette-export`, `shape-info`, `shape-export`,
   `shape-batch`, `object-info`, and `object-dump`. The map commands migrate

@@ -1243,6 +1243,89 @@ titan dialogue launch --host 127.0.0.1 --port 4173
 > files and for Exult-generated saves, but are not intended as generic parsers
 > for every untouched commercial archive/container layout.
 
+### U7 Flex archive commands
+
+---
+
+#### `u7 flex-create`
+
+Create a new empty U7/Exult Flex archive. The result contains a valid
+128-byte U7 Flex header and zero records, ready for later population by
+shape/archive tooling.
+
+This command deliberately uses the U7 writer (`magic1 = 0xFFFF1A00`), which
+is the format used by archives such as `SHAPES.VGA`. Do not substitute the
+shared root-level `titan flex-create` command: that command writes the
+different U8/Pentagram-style Flex header.
+
+```
+titan u7 flex-create <output.VGA|output.FLX> [-t TITLE] [--force]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `output` | New U7 Flex archive path. The filename must end in `.VGA` or `.FLX` |
+| `-t TEXT`, `--title TEXT` | Optional title stored in the 80-byte U7 Flex header |
+| `--force` | Replace an existing output file. Without this flag, the command refuses to overwrite |
+
+**Examples**
+```bash
+# Create an empty custom shape archive with zero records
+titan u7 flex-create U7O.VGA --title "U7O Dynamic Shapes"
+
+# Deliberately replace an earlier generated archive
+titan u7 flex-create U7O.VGA --title "U7O Dynamic Shapes" --force
+```
+
+---
+
+#### `u7 flex-add-shape`
+
+Add a standalone U7 `.shp` to a U7/Exult Flex archive. By default, the command
+selects the lowest zero-length record; if every existing record is occupied,
+it appends a new record. Pass `--index N` to select a specific zero-based shape
+record instead. If `N` is beyond the current table, the archive grows and all
+intervening records are left empty. An occupied specific record is protected
+unless `--replace` is also supplied. The assigned record index is the shape
+number reported after a successful write.
+
+Choose exactly one output mode. `--output` leaves the source archive unchanged;
+`--in-place` atomically replaces it only after the complete updated archive has
+been written. Existing separate output files require `--force`.
+
+```
+titan u7 flex-add-shape <archive.VGA|archive.FLX> <shape.shp>
+                        (-o OUTPUT | --in-place) [--force]
+                        [--index N [--replace]]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `archive` | Existing U7/Exult `.VGA` or `.FLX` archive |
+| `shape` | Standalone U7 `.shp` containing at least one valid frame |
+| `-o FILE`, `--output FILE` | Write a separate updated `.VGA`/`.FLX`, leaving the source unchanged |
+| `--in-place` | Atomically update the source archive |
+| `--force` | Replace an existing `--output` file; not needed with explicit `--in-place` |
+| `--index N` | Write to this specific zero-based shape record; omitted means lowest empty record or append |
+| `--replace` | Permit replacement when the selected `--index` is occupied; requires `--index` |
+
+**Examples**
+```bash
+# Safest workflow: write a separate archive
+titan u7 flex-add-shape U7O.VGA ranger.shp -o U7O_updated.VGA
+
+# Explicitly update the source archive
+titan u7 flex-add-shape U7O.VGA ranger.shp --in-place
+
+# Create empty records through 459 and put the shape at record/shape 460
+titan u7 flex-add-shape U7O.VGA ranger.shp --index 460 --in-place
+
+# Deliberately replace an occupied record 460
+titan u7 flex-add-shape U7O.VGA ranger.shp --index 460 --replace --in-place
+```
+
+---
+
 ### U7 shape commands
 
 ---
@@ -1296,6 +1379,46 @@ titan u7 shape-export SHAPES.VGA --shape 177 -p PALETTES.FLX --translucent --sta
 # Exact indexed translucency compositing against a background exported with --indexed
 titan u7 shape-export SHAPES.VGA --shape 177 -p PALETTES.FLX \
   --translucent-bg shape_177_indexed/shape_0177_f0000.png --static STATIC/ -o shape_177_exact/
+```
+
+---
+
+#### `u7 shape-import`
+
+Create one standalone U7 RLE `.shp` file from all PNG files directly inside
+a directory. This command only writes the requested `.shp`; it does not open,
+patch, or otherwise modify `SHAPES.VGA` or another Flex archive.
+
+Frames are assigned indices in Windows Explorer-style Name A-Z order:
+sorting is case-insensitive and numeric runs are compared numerically
+(`frame2.png` precedes `frame10.png`). Subdirectories and non-PNG files are
+ignored.
+
+```
+titan u7 shape-import <directory> -p PALETTE -o OUTPUT.shp [--palette-index N]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `directory` | Directory containing the PNG frame images |
+| `-p FILE`, `--palette FILE` | Required path to U7 `PALETTES.FLX` or a raw `.pal` file |
+| `-o FILE`, `--output FILE` | Required standalone output path; must end in `.shp` |
+| `--palette-index N` | Palette record to use when `--palette` is a Flex archive (default: `0`, the main daytime palette) |
+
+RGBA source colours are mapped to the nearest RGB entry in palette indices
+0–254. Pixels with alpha below 128 become U7 transparency index 255; opaque
+pixels are never mapped to index 255. Every frame hotspot is placed at its
+bottom-right pixel (`xoff = width - 1`, `yoff = height - 1`). This initial
+importer does not read frame metadata, so a 1×1 placeholder receives hotspot
+`(0, 0)`. An existing output `.shp` is replaced.
+
+**Examples**
+```bash
+# Pack alphabetically named actor frames into one standalone shape
+titan u7 shape-import actor_frames/ -p STATIC/PALETTES.FLX -o ranger_variant7.shp
+
+# Select another palette record from PALETTES.FLX
+titan u7 shape-import frames/ -p STATIC/PALETTES.FLX --palette-index 3 -o night_shape.shp
 ```
 
 ---
