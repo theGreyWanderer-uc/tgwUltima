@@ -262,8 +262,19 @@ def door_swing_radians(item_id: int, flags: int, doordir: int) -> float:
 
 
 def door_lift(item_id: int, flags: int) -> float:
-    """Vertical rise for a portcullis; zero for a hinged door."""
-    if not is_portcullis(item_id):
+    """Extra vertical rise for a portcullis caught part-way open.
+
+    Zero for a hinged door, and **zero for the already-open forms**: a placed
+    door carries its own raise in ``zpos``. Measured across the shipped levels,
+    both open forms sit 24 height units - three quarters of a tile - above
+    their tile floor, while every closed door and portcullis sits exactly on
+    it. Adding a lift on top of that raised ``zpos`` counted the rise twice and
+    left open portcullises floating clear above the wall.
+
+    The formula still applies to a portcullis stopped mid-travel, which no
+    shipped level contains but which the animation uses.
+    """
+    if not is_portcullis(item_id) or is_open_door(item_id):
         return 0.0
     frames = door_animation_frames(item_id)
     return door_animation_index(item_id, flags) * (PORTCULLIS_FULL_LIFT / frames)

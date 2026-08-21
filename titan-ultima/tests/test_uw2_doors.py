@@ -146,10 +146,20 @@ class UW2DoorStateTests(unittest.TestCase):
 
         self.assertAlmostEqual(forward, -reverse)
 
-    def test_portcullis_rises_instead_of_swinging(self) -> None:
+    def test_a_portcullis_never_swings(self) -> None:
         self.assertEqual(door_swing_radians(OPEN_PORTCULLIS, 12, 0), 0.0)
-        self.assertAlmostEqual(door_lift(OPEN_PORTCULLIS, 12), 0.8)
+        self.assertEqual(door_swing_radians(CLOSED_PORTCULLIS, 0, 1), 0.0)
+
+    def test_an_open_portcullis_carries_its_raise_in_zpos(self) -> None:
+        # Both open forms sit 24 height units above their tile floor in every
+        # shipped level, while closed ones sit exactly on it. Adding a lift on
+        # top counted the rise twice and left them floating above the wall.
+        self.assertEqual(door_lift(OPEN_PORTCULLIS, 12), 0.0)
         self.assertEqual(door_lift(CLOSED_PORTCULLIS, 0), 0.0)
+
+    def test_a_portcullis_stopped_part_way_still_lifts(self) -> None:
+        # No shipped level contains one, but the animation uses this.
+        self.assertAlmostEqual(door_lift(CLOSED_PORTCULLIS, 2), 0.4)
 
     def test_hinged_doors_never_lift(self) -> None:
         self.assertEqual(door_lift(OPEN_DOOR, 13), 0.0)
@@ -348,7 +358,8 @@ class UW2DoorSceneTests(unittest.TestCase):
         self.assertTrue(door.metadata["door_open"])
         self.assertTrue(door.metadata["door_portcullis"])
         self.assertEqual(door.metadata["door_swing_degrees"], 0.0)
-        self.assertAlmostEqual(door.metadata["door_lift"], 0.8)
+        # Raised position comes from zpos, not from an added lift.
+        self.assertEqual(door.metadata["door_lift"], 0.0)
 
     def test_reconstructed_geometry_is_declared(self) -> None:
         # An exporter must be able to tell rebuilt bars from decoded geometry.
