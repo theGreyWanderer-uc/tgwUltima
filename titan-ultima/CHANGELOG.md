@@ -59,11 +59,6 @@ This project uses [Semantic Versioning](https://semver.org/):
   walls and bridges plus 277 controls and signs that were absent before.
   Bridges resolve either an object texture or a level **floor** mapping entry
   from `flags`; special walls take a **wall** mapping entry named by `owner`.
-- **Shared UU2 instance rules:** added `titan.uw2.instances`, one resolver for
-  which texture a placed object selects, replacing two partial and divergent
-  copies in `model_render` and `map_render`. This fixes a latent bug where a
-  lever or switch with the enchantment bit set indexed into the wrong image
-  range; no shipped instance triggered it, so rendered output is unchanged.
 - **UU2 sign text and instance metadata:** writing objects now carry their
   decoded prefix and readable message (`The plaque reads: LIBRARY`) in scene
   and GLB manifest metadata, resolved from `STRINGS.PAK` block 8. Placed
@@ -84,12 +79,6 @@ This project uses [Semantic Versioning](https://semver.org/):
   `--contact-sheet` flag on both it and `uw2 shape-batch`. Contact-sheet cells
   are sized to the largest image and smaller images centred, so ragged archives
   such as `TMOBJ.GR` stay aligned.
-- **UU2 regression coverage:** added tests pinning the `0x7c00`
-  active-mobile-count interpretation (an exact count, not a count-minus-one)
-  and the diagonal wall corner-gap fill, including the height-mismatch case
-  that previously left a visible notch. Both were previously verified only by
-  ad-hoc scripts. The synthetic tests need no game files; opt-in classes gated
-  on `TITAN_UW2_GAMEDIR` re-run the original whole-archive and real-map checks.
 - **Combined U7 shape frame report:** added `titan u7 shape-frame-report` to
   export every record and frame from a U7 shape Flex archive as CSV or JSON.
   The report keeps Exult Studio Origin X/Y, top-left-relative drawing
@@ -592,12 +581,6 @@ This project uses [Semantic Versioning](https://semver.org/):
 - Completed the U8 Spell Catalog with all 36 castable spells across
   Necromancy, Sorcery, Thaumaturgy, and Theurgy, including mana costs and
   their usage context, incantations, reagents, focuses, and source references.
-- Expanded dialogue-library validation to verify the schema, section totals,
-  content totals, canonical spell metadata and school counts, Resurrection's
-  source text, and the exclusion of non-readable scroll handlers.
-- Added browser coverage for the Spell Catalog, mana and slot presentation,
-  Resurrection, library navigation and fallback behavior, object
-  classification, and the BASEBOOK library flow.
 
 ### Changed
 
