@@ -6,6 +6,7 @@ __all__ = ["uw2_app"]
 
 import csv
 import json
+import struct
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Annotated, Optional
@@ -14,13 +15,26 @@ import typer
 
 from titan._config import get_config
 from titan.uw2.gr import UW2GRArchive, UW2GRError
+from titan.uw2.grid_render import COORDINATE_MODES, render_grids_direct
 from titan.uw2.map_pipeline import (
+    MAP_SLOT_COUNT,
     export_render_assets,
+    export_terrain_textures,
     extract_maps,
+    load_levels,
     render_maps,
     render_maps_direct,
+    verify_maps,
 )
-from titan.uw2.map3d import export_map_scene, render_map_scene
+from titan.uw2.map3d import (
+    BACKENDS,
+    DEFAULT_ZOOM,
+    DOWNSAMPLE_FILTERS,
+    TEXTURE_FILTERS,
+    export_map_scene,
+    render_map_scene,
+    render_stacked_worlds,
+)
 from titan.uw2.model_export import UW2ModelExportError, export_object_models
 from titan.uw2.model_render import UW2ModelRenderError, render_object_models
 from titan.uw2.object_data import (
@@ -31,7 +45,18 @@ from titan.uw2.object_data import (
     UW2ObjectDataError,
 )
 from titan.uw2.palette import UW2Palette, UW2PaletteError
-from titan.uw2.scene3d import UW2SceneError, parse_tile_region
+from titan.uw2.scene3d import (
+    CEILING_SOURCES,
+    DEFAULT_Z_SCALE,
+    UW2SceneError,
+    parse_tile_region,
+)
+from titan.uw2.terrain import make_contact_sheet
+from titan.uw2.texture_catalog import (
+    build_texture_catalog,
+    export_texture_catalog,
+    export_texture_usage,
+)
 
 uw2_app = typer.Typer(
     name="uw2",
@@ -206,15 +231,51 @@ def cmd_shape_batch(args: SimpleNamespace) -> int:
     output = Path(args.output or f"{archive_path.stem.lower()}_png")
     output.mkdir(parents=True, exist_ok=True)
     stem = archive_path.stem.lower()
+    images = []
     for record in archive.images:
-        record.to_image(palette, transparent_index=args.transparent_index).save(
-            output / f"{stem}_{record.index:03d}.png"
-        )
+        image = record.to_image(palette, transparent_index=args.transparent_index)
+        image.save(output / f"{stem}_{record.index:03d}.png")
+        images.append(image)
     summary_path = output / f"{stem}_summary.json"
     summary_path.write_text(json.dumps(archive.summary(), indent=2), encoding="utf-8")
     typer.echo(
         f"Exported {len(archive.images)}/{archive.declared_image_count} UU2 GR images: {output}"
     )
+    if getattr(args, "contact_sheet", False) and images:
+        sheet_path = output / f"{stem}_contact_sheet.png"
+        make_contact_sheet(images).save(sheet_path)
+        typer.echo(f"Contact sheet: {sheet_path}")
+    return 0
+
+
+def cmd_terrain_export(args: SimpleNamespace) -> int:
+    """Export T64.TR terrain textures, optionally with a contact sheet."""
+    game_directory = _uw2_game_directory(args.gamedir)
+    if game_directory is None:
+        typer.echo("ERROR: provide --gamedir or configure [uw2.game] base", err=True)
+        return 1
+    terrain_path = _uw2_data_file("T64.TR", game_directory)
+    palette_path = _uw2_data_file("PALS.DAT", game_directory)
+    if not _require_file(terrain_path, "terrain archive"):
+        return 1
+    if not _require_file(palette_path, "palette"):
+        return 1
+    try:
+        result = export_terrain_textures(
+            game_directory,
+            args.output,
+            contact_sheet=args.contact_sheet,
+            scale=args.scale,
+        )
+    except (OSError, KeyError, ValueError, UW2PaletteError) as error:
+        typer.echo(f"ERROR: {error}", err=True)
+        return 1
+    typer.echo(
+        f"Exported {result['count']} UU2 terrain textures "
+        f"({result['resolution']}x{result['resolution']}): {Path(args.output)}"
+    )
+    if result["contact_sheet"]:
+        typer.echo(f"Contact sheet: {result['contact_sheet']}")
     return 0
 
 
@@ -329,6 +390,136 @@ def cmd_map_extract(args: SimpleNamespace) -> int:
     return 0
 
 
+def cmd_map_verify(args: SimpleNamespace) -> int:
+    """Smoke-check LEV.ARK block shapes and decode every populated slot."""
+    game_directory = _uw2_game_directory(args.gamedir)
+    if game_directory is None:
+        typer.echo("ERROR: provide --gamedir or configure [uw2.game] base", err=True)
+        return 1
+    lev_path = _uw2_data_file("LEV.ARK", game_directory)
+    if not _require_file(lev_path, "map archive"):
+        return 1
+    try:
+        report = verify_maps(game_directory)
+    except (OSError, KeyError, ValueError, struct.error) as error:
+        typer.echo(f"ERROR: {error}", err=True)
+        return 1
+
+    if args.output:
+        destination = Path(args.output)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        typer.echo(f"Wrote UU2 map verification report: {destination}")
+
+    if args.json_output:
+        typer.echo(json.dumps(report, indent=2))
+    else:
+        slots = report["populated_level_slots"]
+        typer.echo(f"LEV.ARK: {report['lev_ark']}")
+        typer.echo(f"Header prefix: {report['header_prefix_hex']}")
+        typer.echo(
+            f"Blocks: {report['block_count']} total, "
+            f"{report['available_blocks']} available"
+        )
+        typer.echo(f"Populated level slots: {len(slots)}")
+        typer.echo("Slots: " + ", ".join(str(slot) for slot in slots))
+        typer.echo(
+            "Observed 0x7c06 markers: "
+            + ", ".join(
+                f"{marker} x{count}"
+                for marker, count in report["level_markers"].items()
+            )
+        )
+
+    if not report["ok"]:
+        typer.echo("", err=True)
+        typer.echo("Errors:", err=True)
+        for error_text in report["errors"]:
+            typer.echo(f"- {error_text}", err=True)
+        return 1
+
+    typer.echo("Smoke checks passed.")
+    return 0
+
+
+def cmd_map_grid(args: SimpleNamespace) -> int:
+    """Render flat top-down diagnostic grids from original files."""
+    game_directory = _uw2_game_directory(args.gamedir)
+    if game_directory is None:
+        typer.echo("ERROR: provide --gamedir or configure [uw2.game] base", err=True)
+        return 1
+    lev_path = _uw2_data_file("LEV.ARK", game_directory)
+    if not _require_file(lev_path, "map archive"):
+        return 1
+    slots = args.slots if args.slots else [0]
+    options = {
+        key: value
+        for key, value in vars(args).items()
+        if key not in {"gamedir", "output", "slots"}
+    }
+    try:
+        written = render_grids_direct(
+            game_directory, args.output, slots=slots, **options
+        )
+    except (OSError, KeyError, ValueError) as error:
+        typer.echo(f"ERROR: {error}", err=True)
+        return 1
+    for path in written:
+        typer.echo(f"Rendered UU2 grid: {path}")
+    return 0
+
+
+def cmd_texture_catalog(args: SimpleNamespace) -> int:
+    """Join STRINGS.PAK texture descriptions to TERRAIN.DAT properties."""
+    game_directory = _uw2_game_directory(args.gamedir)
+    if game_directory is None:
+        typer.echo("ERROR: provide --gamedir or configure [uw2.game] base", err=True)
+        return 1
+    strings_path = _uw2_data_file("STRINGS.PAK", game_directory)
+    if not _require_file(strings_path, "string archive"):
+        return 1
+    try:
+        destination = export_texture_catalog(game_directory, args.output)
+    except (OSError, KeyError, ValueError, struct.error) as error:
+        typer.echo(f"ERROR: {error}", err=True)
+        return 1
+    typer.echo(f"Wrote UU2 texture catalog: {destination}")
+    return 0
+
+
+def cmd_texture_usage(args: SimpleNamespace) -> int:
+    """Report where each named texture is used, per level and tile role."""
+    game_directory = _uw2_game_directory(args.gamedir)
+    if game_directory is None:
+        typer.echo("ERROR: provide --gamedir or configure [uw2.game] base", err=True)
+        return 1
+    strings_path = _uw2_data_file("STRINGS.PAK", game_directory)
+    lev_path = _uw2_data_file("LEV.ARK", game_directory)
+    if not _require_file(strings_path, "string archive"):
+        return 1
+    if not _require_file(lev_path, "map archive"):
+        return 1
+
+    slots = args.slots if args.slots else range(MAP_SLOT_COUNT)
+    try:
+        catalog = build_texture_catalog(game_directory)
+        levels = load_levels(game_directory, slots)
+        if not levels:
+            raise ValueError(f"no populated UU2 map slots in {sorted(set(slots))}")
+        written = export_texture_usage(levels, catalog, args.output)
+        if args.write_catalog:
+            written.append(export_texture_catalog(game_directory, args.output))
+    except (OSError, KeyError, ValueError, struct.error) as error:
+        typer.echo(f"ERROR: {error}", err=True)
+        return 1
+
+    typer.echo(
+        f"Wrote texture usage for {len(levels)} UU2 levels "
+        f"({len(written)} files): {Path(args.output)}"
+    )
+    return 0
+
+
 def cmd_model_render(args: SimpleNamespace) -> int:
     """Render selected executable 3D objects without loading a map."""
     game_directory = _uw2_game_directory(args.gamedir)
@@ -382,25 +573,85 @@ def cmd_map_3d_render(args: SimpleNamespace) -> int:
     if game_directory is None:
         typer.echo("ERROR: provide --gamedir or configure [uw2.game] base", err=True)
         return 1
+    slots = args.slot if isinstance(args.slot, (list, tuple)) else [args.slot]
+    written: list[Path] = []
     try:
-        written = render_map_scene(
+        for slot in slots:
+            written.extend(
+                render_map_scene(
+                    game_directory,
+                    args.output,
+                    slot=slot,
+                    region=parse_tile_region(args.region),
+                    views=args.views,
+                    size=args.size,
+                    width=args.width,
+                    height=args.height,
+                    include_ceilings=args.include_ceilings,
+                    include_sprites=not args.no_sprites,
+                    model_scale=args.model_scale,
+                    sprite_scale=args.sprite_scale,
+                    tick=args.tick,
+                    ceiling_source=args.ceiling_source,
+                    z_scale=args.z_scale,
+                    zoom=args.zoom,
+                    fit_margin=args.fit_margin,
+                    supersample=args.supersample,
+                    downsample_filter=args.downsample_filter,
+                    texture_filter=args.texture_filter,
+                    texture_scale=args.texture_scale,
+                    backend=args.backend,
+                    name_files=args.name_files,
+                )
+            )
+    except (OSError, KeyError, ValueError, UW2SceneError) as error:
+        typer.echo(f"ERROR: {error}", err=True)
+        return 1
+    for path in written:
+        typer.echo(f"Rendered UU2 3D map: {path}")
+    return 0
+
+
+def cmd_map_stack(args: SimpleNamespace) -> int:
+    """Render each world's levels as one vertically stacked cutaway."""
+    game_directory = _uw2_game_directory(args.gamedir)
+    if game_directory is None:
+        typer.echo("ERROR: provide --gamedir or configure [uw2.game] base", err=True)
+        return 1
+    lev_path = _uw2_data_file("LEV.ARK", game_directory)
+    if not _require_file(lev_path, "map archive"):
+        return 1
+    try:
+        written = render_stacked_worlds(
             game_directory,
             args.output,
-            slot=args.slot,
-            region=parse_tile_region(args.region),
+            worlds=args.worlds,
+            max_levels=args.max_levels,
             views=args.views,
             size=args.size,
+            width=args.width,
+            height=args.height,
             include_ceilings=args.include_ceilings,
-            include_sprites=not args.no_sprites,
-            model_scale=args.model_scale,
-            sprite_scale=args.sprite_scale,
+            include_sprites=args.include_sprites,
+            stack_gap=args.stack_gap,
+            stagger_x=args.stagger_x,
+            stagger_y=args.stagger_y,
+            ceiling_source=args.ceiling_source,
+            z_scale=args.z_scale,
+            zoom=args.zoom,
+            fit_margin=args.fit_margin,
+            supersample=args.supersample,
+            downsample_filter=args.downsample_filter,
+            texture_filter=args.texture_filter,
+            texture_scale=args.texture_scale,
+            backend=args.backend,
             tick=args.tick,
         )
     except (OSError, KeyError, ValueError, UW2SceneError) as error:
         typer.echo(f"ERROR: {error}", err=True)
         return 1
     for path in written:
-        typer.echo(f"Rendered UU2 3D map: {path}")
+        typer.echo(f"Rendered UU2 stacked world: {path}")
     return 0
 
 
@@ -421,6 +672,9 @@ def cmd_map_3d_export(args: SimpleNamespace) -> int:
             model_scale=args.model_scale,
             sprite_scale=args.sprite_scale,
             tick=args.tick,
+            ceiling_source=args.ceiling_source,
+            z_scale=args.z_scale,
+            name_files=args.name_files,
         )
     except (OSError, KeyError, ValueError, UW2SceneError) as error:
         typer.echo(f"ERROR: {error}", err=True)
@@ -513,6 +767,40 @@ SlotsOption = Annotated[
     typer.Option("--slots", help="Zero-based LEV.ARK map slots (repeat values)"),
 ]
 
+CeilingSourceOption = Annotated[
+    str,
+    typer.Option(
+        "--ceiling-source",
+        help="runtime port rule, or ua for UnderworldAdventures mapping[32]",
+    ),
+]
+
+ZScaleOption = Annotated[
+    float,
+    typer.Option("--z-scale", help="Map height units per rendered unit"),
+]
+
+
+def _validate_view_options(
+    *,
+    downsample_filter: str | None = None,
+    texture_filter: str | None = None,
+    backend: str | None = None,
+    ceiling_source: str | None = None,
+) -> None:
+    """Reject bad choices as usage errors rather than runtime failures."""
+    checks = (
+        ("--downsample-filter", downsample_filter, tuple(DOWNSAMPLE_FILTERS)),
+        ("--texture-filter", texture_filter, TEXTURE_FILTERS),
+        ("--backend", backend, BACKENDS),
+        ("--ceiling-source", ceiling_source, CEILING_SOURCES),
+    )
+    for hint, value, allowed in checks:
+        if value is not None and value not in allowed:
+            raise typer.BadParameter(
+                f"must be one of {', '.join(allowed)}", param_hint=hint
+            )
+
 
 @uw2_app.command("model-render")
 def model_render_cmd(
@@ -578,31 +866,144 @@ def map_extract_cmd(
     raise SystemExit(cmd_map_extract(SimpleNamespace(**locals())))
 
 
+@uw2_app.command("map-verify")
+def map_verify_cmd(
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit the full report as JSON")
+    ] = False,
+    output: Annotated[
+        Optional[str], typer.Option("-o", "--output", help="Optional JSON report path")
+    ] = None,
+    gamedir: GameDirOption = None,
+) -> None:
+    """Smoke-check LEV.ARK block shapes and decode every populated map slot."""
+    raise SystemExit(cmd_map_verify(SimpleNamespace(**locals())))
+
+
 @uw2_app.command("map-3d-render")
 def map_3d_render_cmd(
     output: Annotated[str, typer.Option("-o", "--output")] = "uw2_maps_3d",
     slot: Annotated[
-        int, typer.Option("--slot", help="Zero-based LEV.ARK map slot")
-    ] = 0,
+        Optional[list[int]],
+        typer.Option("--slot", help="Zero-based LEV.ARK map slot; repeat as needed"),
+    ] = None,
     region: Annotated[
         Optional[str],
         typer.Option("--region", help="Inclusive tile bounds: x1,y1,x2,y2"),
     ] = None,
     views: Annotated[
         Optional[list[str]],
-        typer.Option("--view", help="iso-ne, iso-nw, iso-se, iso-sw, or top; repeat"),
+        typer.Option("--view", help="iso-ne/nw/se/sw, low-ne, low-nw, or top"),
     ] = None,
     size: Annotated[int, typer.Option("--size", help="Square PNG size")] = 1200,
+    width: Annotated[
+        Optional[int], typer.Option("--width", help="Override --size horizontally")
+    ] = None,
+    height: Annotated[
+        Optional[int], typer.Option("--height", help="Override --size vertically")
+    ] = None,
     include_ceilings: Annotated[bool, typer.Option("--include-ceilings")] = False,
     no_sprites: Annotated[bool, typer.Option("--no-sprites")] = False,
     model_scale: Annotated[float, typer.Option("--model-scale")] = 1.0,
     sprite_scale: Annotated[float, typer.Option("--sprite-scale")] = 1.0,
     tick: Annotated[int, typer.Option("--tick", help="ANIMO animation tick")] = 0,
+    ceiling_source: CeilingSourceOption = "runtime",
+    z_scale: ZScaleOption = DEFAULT_Z_SCALE,
+    zoom: Annotated[
+        float, typer.Option("--zoom", help="Above 1.0 crops closer in")
+    ] = DEFAULT_ZOOM,
+    fit_margin: Annotated[
+        float, typer.Option("--fit-margin", help="Extra framing around the map")
+    ] = 1.0,
+    supersample: Annotated[
+        int, typer.Option("--supersample", help="Render at N x, then downsample")
+    ] = 1,
+    downsample_filter: Annotated[
+        str, typer.Option("--downsample-filter", help="lanczos, nearest, or box")
+    ] = "lanczos",
+    texture_filter: Annotated[
+        str,
+        typer.Option("--texture-filter", help="linear, or nearest for crisp pixels"),
+    ] = "linear",
+    texture_scale: Annotated[
+        int, typer.Option("--texture-scale", help="Nearest pre-scale for textures")
+    ] = 1,
+    backend: Annotated[
+        str, typer.Option("--backend", help="pyvista, software, or auto")
+    ] = "auto",
+    name_files: Annotated[bool, typer.Option("--name-files")] = False,
     gamedir: GameDirOption = None,
 ) -> None:
     """Render textured UU2 tile geometry and individually placed objects."""
     views = views or ["iso-ne", "top"]
+    slot = slot if slot else [0]
+    _validate_view_options(
+        downsample_filter=downsample_filter,
+        texture_filter=texture_filter,
+        backend=backend,
+        ceiling_source=ceiling_source,
+    )
     raise SystemExit(cmd_map_3d_render(SimpleNamespace(**locals())))
+
+
+@uw2_app.command("map-stack")
+def map_stack_cmd(
+    output: Annotated[str, typer.Option("-o", "--output")] = "uw2_stacks",
+    worlds: Annotated[
+        Optional[list[str]],
+        typer.Option("--world", help="World-name slug filter; repeat as needed"),
+    ] = None,
+    max_levels: Annotated[
+        Optional[int],
+        typer.Option("--max-levels", help="Only the first N levels per world"),
+    ] = None,
+    views: Annotated[
+        Optional[list[str]],
+        typer.Option("--view", help="iso-ne/nw/se/sw, low-ne, low-nw, or top"),
+    ] = None,
+    size: Annotated[int, typer.Option("--size", help="Square PNG size")] = 2400,
+    width: Annotated[
+        Optional[int], typer.Option("--width", help="Override --size horizontally")
+    ] = None,
+    height: Annotated[
+        Optional[int], typer.Option("--height", help="Override --size vertically")
+    ] = None,
+    stack_gap: Annotated[
+        float, typer.Option("--stack-gap", help="Vertical distance between levels")
+    ] = 7.0,
+    stagger_x: Annotated[float, typer.Option("--stagger-x")] = 0.0,
+    stagger_y: Annotated[float, typer.Option("--stagger-y")] = 0.0,
+    include_ceilings: Annotated[bool, typer.Option("--include-ceilings")] = False,
+    include_sprites: Annotated[
+        bool, typer.Option("--include-sprites", help="Also place object billboards")
+    ] = False,
+    tick: Annotated[int, typer.Option("--tick", help="ANIMO animation tick")] = 0,
+    ceiling_source: CeilingSourceOption = "runtime",
+    z_scale: ZScaleOption = DEFAULT_Z_SCALE,
+    zoom: Annotated[float, typer.Option("--zoom")] = DEFAULT_ZOOM,
+    fit_margin: Annotated[float, typer.Option("--fit-margin")] = 1.15,
+    supersample: Annotated[int, typer.Option("--supersample")] = 1,
+    downsample_filter: Annotated[
+        str, typer.Option("--downsample-filter", help="lanczos, nearest, or box")
+    ] = "lanczos",
+    texture_filter: Annotated[
+        str, typer.Option("--texture-filter", help="linear or nearest")
+    ] = "nearest",
+    texture_scale: Annotated[int, typer.Option("--texture-scale")] = 4,
+    backend: Annotated[
+        str, typer.Option("--backend", help="pyvista, software, or auto")
+    ] = "auto",
+    gamedir: GameDirOption = None,
+) -> None:
+    """Render each world's levels as one vertically stacked cutaway."""
+    views = views or ["iso-ne"]
+    _validate_view_options(
+        downsample_filter=downsample_filter,
+        texture_filter=texture_filter,
+        backend=backend,
+        ceiling_source=ceiling_source,
+    )
+    raise SystemExit(cmd_map_stack(SimpleNamespace(**locals())))
 
 
 @uw2_app.command("map-3d-export")
@@ -620,9 +1021,13 @@ def map_3d_export_cmd(
     model_scale: Annotated[float, typer.Option("--model-scale")] = 1.0,
     sprite_scale: Annotated[float, typer.Option("--sprite-scale")] = 1.0,
     tick: Annotated[int, typer.Option("--tick", help="ANIMO animation tick")] = 0,
+    ceiling_source: CeilingSourceOption = "runtime",
+    z_scale: ZScaleOption = DEFAULT_Z_SCALE,
+    name_files: Annotated[bool, typer.Option("--name-files")] = False,
     gamedir: GameDirOption = None,
 ) -> None:
     """Export textured UU2 map GLB; retain every placed item as named nodes."""
+    _validate_view_options(ceiling_source=ceiling_source)
     raise SystemExit(cmd_map_3d_export(SimpleNamespace(**locals())))
 
 
@@ -775,6 +1180,59 @@ def map_render_cmd(
     raise SystemExit(cmd_map_render(SimpleNamespace(**locals())))
 
 
+@uw2_app.command("map-grid")
+def map_grid_cmd(
+    output: Annotated[
+        str, typer.Option("-o", "--output", help="Rendered PNG directory")
+    ],
+    slots: SlotsOption = None,
+    tile_size: Annotated[int, typer.Option("--tile-size")] = 64,
+    margin: Annotated[int, typer.Option("--margin")] = 56,
+    background: Annotated[str, typer.Option("--background")] = "#08090b",
+    grid_label_step: Annotated[int, typer.Option("--grid-label-step")] = 1,
+    coordinate_mode: Annotated[
+        str, typer.Option("--coordinate-mode", help="display, raw, or both")
+    ] = "display",
+    no_solid_labels: Annotated[
+        bool,
+        typer.Option("--no-solid-labels", help="Label only non-solid tiles"),
+    ] = False,
+    name_files: Annotated[bool, typer.Option("--name-files")] = False,
+    gamedir: GameDirOption = None,
+) -> None:
+    """Render flat top-down diagnostic tile grids with coordinate labels."""
+    if coordinate_mode not in COORDINATE_MODES:
+        raise typer.BadParameter(
+            "must be display, raw, or both", param_hint="--coordinate-mode"
+        )
+    raise SystemExit(cmd_map_grid(SimpleNamespace(**locals())))
+
+
+@uw2_app.command("texture-catalog")
+def texture_catalog_cmd(
+    output: Annotated[
+        str, typer.Option("-o", "--output", help="Directory for texture_catalog.json")
+    ],
+    gamedir: GameDirOption = None,
+) -> None:
+    """Export decoded T64.TR texture names and TERRAIN.DAT properties."""
+    raise SystemExit(cmd_texture_catalog(SimpleNamespace(**locals())))
+
+
+@uw2_app.command("texture-usage")
+def texture_usage_cmd(
+    output: Annotated[str, typer.Option("-o", "--output", help="Usage JSON directory")],
+    slots: SlotsOption = None,
+    write_catalog: Annotated[
+        bool,
+        typer.Option("--write-catalog", help="Also write texture_catalog.json"),
+    ] = False,
+    gamedir: GameDirOption = None,
+) -> None:
+    """Report per-level floor/wall/ceiling texture usage with tile coordinates."""
+    raise SystemExit(cmd_texture_usage(SimpleNamespace(**locals())))
+
+
 @uw2_app.command("palette-export")
 def palette_export_cmd(
     file: Annotated[str, typer.Argument(help="PALS.DAT path/name")] = "PALS.DAT",
@@ -864,10 +1322,33 @@ def shape_batch_cmd(
     output: Annotated[
         Optional[str], typer.Option("-o", "--output", help="Output directory")
     ] = None,
+    contact_sheet: Annotated[
+        bool,
+        typer.Option("--contact-sheet", help="Also write a tiled contact sheet"),
+    ] = False,
     gamedir: GameDirOption = None,
 ) -> None:
     """Export every non-empty image from a UU2 GR shape archive to PNG."""
     raise SystemExit(cmd_shape_batch(SimpleNamespace(**locals())))
+
+
+@uw2_app.command("terrain-export")
+def terrain_export_cmd(
+    output: Annotated[
+        str, typer.Option("-o", "--output", help="Terrain PNG directory")
+    ],
+    contact_sheet: Annotated[
+        bool,
+        typer.Option("--contact-sheet", help="Also write t64_contact_sheet.png"),
+    ] = False,
+    scale: Annotated[
+        int,
+        typer.Option("--scale", help="Nearest-neighbour upscale factor"),
+    ] = 1,
+    gamedir: GameDirOption = None,
+) -> None:
+    """Export T64.TR terrain textures as PNG with an optional contact sheet."""
+    raise SystemExit(cmd_terrain_export(SimpleNamespace(**locals())))
 
 
 @uw2_app.command("object-info")

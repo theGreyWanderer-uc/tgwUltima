@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable
@@ -9,12 +10,48 @@ from typing import Iterable
 from PIL import Image
 
 from titan.uw2.geometry import TexturedTriangle, generate_tile_triangles
+from titan.uw2.instances import (
+    BED_ITEM,
+    DOOR_FRAME_MODEL,
+    DOORS,
+    REMOVABLE_WALL_ITEM,
+    TERRAIN,
+    TMFLAT,
+    TMOBJ,
+    WALL_ROLE,
+    MaterialRef,
+    bed_face_palette,
+    bed_palette_indices,
+    door_class,
+    door_lift,
+    door_panel_model,
+    door_swing_radians,
+    door_texture_id,
+    is_door,
+    is_open_door,
+    is_portcullis,
+    is_secret_door,
+    is_wall_mounted,
+    object_material_for,
+    portcullis_bar_model,
+    special_model_index,
+    terrain_texture_id,
+    writing_message_index,
+    writing_prefix_index,
+)
 from titan.uw2.map_pipeline import MapRenderAssets, load_levels, load_render_assets
-from titan.uw2.model_render import ITEM_MODEL_NAMES, model_texture_index
+from titan.uw2.model_render import ITEM_MODEL_NAMES
 
 
 class UW2SceneError(ValueError):
     """Raised when a UU2 map scene cannot be built or written."""
+
+
+DEFAULT_Z_SCALE = 1.0 / 32.0
+"""Level height units are 1/32 of a tile edge."""
+
+CEILING_SOURCES = ("runtime", "ua")
+"""``runtime`` follows the runtime port; ``ua`` uses UnderworldAdventures' mapping[32]."""
 
 
 @dataclass(frozen=True)
@@ -103,6 +140,8 @@ def build_map_scene(
     model_scale: float = 1.0,
     sprite_scale: float = 1.0,
     tick: int = 0,
+    ceiling_source: str = "runtime",
+    z_scale: float = DEFAULT_Z_SCALE,
 ) -> UW2Scene:
     """Read original game files and build one map scene fully in memory."""
     levels = load_levels(source, [slot])
@@ -117,6 +156,8 @@ def build_map_scene(
         model_scale=model_scale,
         sprite_scale=sprite_scale,
         tick=tick,
+        ceiling_source=ceiling_source,
+        z_scale=z_scale,
     )
 
 
@@ -130,10 +171,16 @@ def build_level_scene(
     model_scale: float = 1.0,
     sprite_scale: float = 1.0,
     tick: int = 0,
+    ceiling_source: str = "runtime",
+    z_scale: float = DEFAULT_Z_SCALE,
 ) -> UW2Scene:
     """Build scene from one decoded level plus in-memory source assets."""
     if model_scale <= 0 or sprite_scale <= 0:
         raise UW2SceneError("model and sprite scales must be positive")
+    if ceiling_source not in CEILING_SOURCES:
+        raise UW2SceneError(f"ceiling source must be one of {CEILING_SOURCES}")
+    if z_scale <= 0:
+        raise UW2SceneError("z scale must be positive")
     x1, y1, x2, y2 = region
     scene = UW2Scene(
         slot=int(level["slot_index"]),
@@ -152,8 +199,8 @@ def build_level_scene(
         for triangle in generate_tile_triangles(
             tile,
             tile_map,
-            z_scale=1.0 / 32.0,
-            ceiling_source="runtime",
+            z_scale=z_scale,
+            ceiling_source=ceiling_source,
             include_ceilings=include_ceilings,
         ):
             key = f"terrain_{triangle.texture_id:03d}"
@@ -175,12 +222,32 @@ def build_level_scene(
         if item_id == 0:
             continue
         metadata = assets.common_objects.get(item_id)
-        model = (
-            assets.models.model_for_item(item_id) if assets.models is not None else None
-        )
+        if is_door(item_id) and assets.models is not None:
+            scene.objects.append(
+                _build_door_object(
+                    scene, obj, tile, assets, model_scale, z_scale, level=level
+                )
+            )
+            continue
+        model = None
+        if assets.models is not None:
+            model = assets.models.model_for_item(item_id)
+            if model is None:
+                special = special_model_index(item_id)
+                if special is not None:
+                    model = assets.models.model(special)
         if model is not None:
             scene.objects.append(
-                _build_model_object(scene, obj, tile, model, assets, model_scale)
+                _build_model_object(
+                    scene,
+                    obj,
+                    tile,
+                    model,
+                    assets,
+                    model_scale,
+                    z_scale,
+                    level=level,
+                )
             )
         elif include_sprites and metadata.render_type == 0:
             image = _object_image(item_id, tick, assets)
@@ -191,7 +258,7 @@ def build_level_scene(
                 continue
             scene.objects.append(
                 _build_sprite_object(
-                    scene, obj, tile, image, metadata.height, sprite_scale
+                    scene, obj, tile, image, metadata.height, sprite_scale, z_scale
                 )
             )
         else:
@@ -235,10 +302,11 @@ def _object_name(obj: dict, kind: str) -> str:
 
 
 def _placed_metadata(obj: dict, tile: dict) -> dict[str, object]:
-    return {
+    item_id = int(obj["item_id"])
+    metadata: dict[str, object] = {
         "slot": int(obj["slot"]),
-        "item_id": int(obj["item_id"]),
-        "item_id_hex": f"{int(obj['item_id']):#06x}",
+        "item_id": item_id,
+        "item_id_hex": f"{item_id:#06x}",
         "tile_x": int(tile["x"]),
         "tile_y": int(tile["y"]),
         "in_tile_x": int(obj.get("in_tile_x", 4)),
@@ -248,30 +316,115 @@ def _placed_metadata(obj: dict, tile: dict) -> dict[str, object]:
         "flags": int(obj.get("flags", 0)),
         "quality": int(obj.get("quality", 0)),
         "owner": int(obj.get("owner", 0)),
+        "enchanted": bool(obj.get("enchanted", False)),
     }
+    if is_wall_mounted(item_id):
+        metadata["wall_mounted"] = True
+    if item_id == REMOVABLE_WALL_ITEM:
+        # A thin wall the player can remove; exporters should keep it separate
+        # from baked terrain so it stays individually addressable.
+        metadata["removable_wall"] = True
+    if item_id == BED_ITEM:
+        # Applied to the bedding faces; recorded here so an exporter can see
+        # which owner produced them without recomputing the formula.
+        sheet, pillow = bed_palette_indices(int(obj.get("owner", 0)))
+        metadata["bed_sheet_palette_index"] = sheet
+        metadata["bed_pillow_palette_index"] = pillow
+    link = obj.get("special_link")
+    if link:
+        metadata["trigger_link"] = int(link)
+    return metadata
 
 
-def _build_model_object(scene, obj, tile, model, assets, model_scale) -> SceneObject:
+def _register_material(scene: UW2Scene, reference, level: dict, assets) -> str | None:
+    """Register the material a :class:`MaterialRef` names; return its scene key."""
+    if reference is None:
+        return None
+    if reference.source == TMOBJ:
+        key = f"tmobj_{reference.index:03d}"
+        image = assets.tmobj.get(reference.index)
+    elif reference.source == TMFLAT:
+        key = f"tmflat_{reference.index:03d}"
+        image = assets.tmflat.get(reference.index)
+    elif reference.source == DOORS:
+        texture_id = door_texture_id(reference, level)
+        if texture_id is None:
+            return None
+        key = f"doors_{texture_id:03d}"
+        image = assets.doors.get(texture_id)
+    elif reference.is_terrain:
+        texture_id = terrain_texture_id(reference, level)
+        if texture_id is None:
+            return None
+        key = f"terrain_{texture_id:03d}"
+        image = assets.terrain.get(texture_id)
+    else:
+        return None
+    if image is None:
+        return None
+    scene.materials.setdefault(key, SceneMaterial(key, image=image))
+    return key
+
+
+def _writing_metadata(obj: dict, strings) -> dict[str, object]:
+    """Readable sign text for a writing object, when strings are available."""
+    index = writing_message_index(obj)
+    result: dict[str, object] = {
+        "writing_prefix_index": writing_prefix_index(int(obj.get("flags", 0))),
+    }
+    if index is not None:
+        result["writing_message_index"] = index
+    if strings is None:
+        return result
+    prefix = strings.get(8, result["writing_prefix_index"])
+    if prefix:
+        result["writing_prefix"] = prefix
+    if index is not None:
+        message = strings.get(8, index)
+        if message:
+            result["writing_text"] = message.strip()
+    return result
+
+
+def _build_model_object(
+    scene,
+    obj,
+    tile,
+    model,
+    assets,
+    model_scale,
+    z_scale=DEFAULT_Z_SCALE,
+    level: dict | None = None,
+) -> SceneObject:
     name = _object_name(obj, "model")
-    placed = SceneObject(name=name, kind="model", metadata=_placed_metadata(obj, tile))
+    metadata = _placed_metadata(obj, tile)
+    reference = object_material_for(obj)
+    textured_key = _register_material(scene, reference, level or {}, assets)
+    if reference is not None:
+        metadata["texture_source"] = reference.source
+        metadata["texture_index"] = reference.index
+        if reference.role:
+            metadata["texture_role"] = reference.role
+    if int(obj["item_id"]) == 0x0166:
+        metadata.update(_writing_metadata(obj, getattr(assets, "strings", None)))
+    placed = SceneObject(name=name, kind="model", metadata=metadata)
     groups: dict[str, ScenePart] = {}
-    item_id = int(obj["item_id"])
-    texture_index = model_texture_index(item_id, int(obj.get("flags", 0)))
     center_x = float(tile["x"]) + float(obj.get("in_tile_x", 4)) / 8.0
     center_y = float(tile["y"]) + float(obj.get("in_tile_y", 4)) / 8.0
-    base_z = float(obj.get("zpos", tile["floor_height"])) / 32.0
+    base_z = float(obj.get("zpos", tile["floor_height"])) * z_scale
     heading = int(obj.get("heading", 0))
+    bed_owner = int(obj.get("owner", 0)) if int(obj["item_id"]) == BED_ITEM else None
     for triangle in model.triangles:
-        textured = triangle.textured and texture_index in assets.tmobj
-        if textured:
-            material_key = f"tmobj_{texture_index:03d}"
-            scene.materials.setdefault(
-                material_key,
-                SceneMaterial(material_key, image=assets.tmobj[texture_index]),
-            )
+        if triangle.textured and textured_key is not None:
+            material_key = textured_key
         else:
-            material_key = f"palette_{triangle.palette_index:03d}"
-            color = (*assets.palette.colors[triangle.palette_index], 255)
+            palette_index = triangle.palette_index
+            if bed_owner is not None:
+                owner_colour = bed_face_palette(triangle, bed_owner)
+                if owner_colour is not None:
+                    palette_index = owner_colour
+            material_key = f"palette_{palette_index:03d}"
+            color = (*assets.palette.colors[palette_index], 255)
             scene.materials.setdefault(material_key, SceneMaterial(material_key, color))
         part = groups.setdefault(
             material_key,
@@ -285,7 +438,7 @@ def _build_model_object(scene, obj, tile, model, assets, model_scale) -> SceneOb
             x = local_x + center_x
             y = local_y + center_y
             z = (
-                float(tile["ceiling_height"]) / 32.0
+                float(tile["ceiling_height"]) * z_scale
                 if vertex.roof
                 # Executable model Z already uses map-height units: table
                 # base 96 + native top 10 = food records at zpos 106.
@@ -306,13 +459,206 @@ def _build_model_object(scene, obj, tile, model, assets, model_scale) -> SceneOb
     placed.parts.extend(groups.values())
     placed.metadata.update(
         model_index=model.index,
-        texture_index=texture_index,
         triangle_count=sum(len(part.triangles) for part in placed.parts),
     )
     return placed
 
 
-def _build_sprite_object(scene, obj, tile, image, common_height, sprite_scale):
+def _build_door_object(
+    scene,
+    obj,
+    tile,
+    assets,
+    model_scale,
+    z_scale=DEFAULT_Z_SCALE,
+    level: dict | None = None,
+) -> SceneObject:
+    """Compose a doorway as one object with separately named frame and panel.
+
+    The frame is the fixed surround, its roof vertices reaching the tile
+    ceiling. The panel is the moving leaf: hinged doors swing about one vertical
+    edge, portcullises rise straight up. Both stay in one ``SceneObject`` so an
+    exporter keeps the doorway together while still addressing the parts.
+    """
+    item_id = int(obj["item_id"])
+    level = level or {}
+    name = _object_name(obj, "door")
+    metadata = _placed_metadata(obj, tile)
+    doordir = int(obj.get("doordir", 0))
+    swing = door_swing_radians(item_id, int(obj.get("flags", 0)), doordir)
+    lift = door_lift(item_id, int(obj.get("flags", 0)))
+    metadata.update(
+        door_class=door_class(item_id),
+        door_open=is_open_door(item_id),
+        door_portcullis=is_portcullis(item_id),
+        door_secret=is_secret_door(item_id),
+        doordir=doordir,
+        door_swing_degrees=round(math.degrees(swing), 3),
+        door_lift=round(lift, 4),
+    )
+
+    placed = SceneObject(name=name, kind="door", metadata=metadata)
+    frame_model = assets.models.model(DOOR_FRAME_MODEL)
+    panel_model = assets.models.model(door_panel_model(item_id))
+    if is_portcullis(item_id):
+        # The executable has no portcullis; its slot holds the solid door
+        # panel, which would read as a slab across the doorway.
+        panel_model = portcullis_bar_model(panel_model)
+        metadata["door_geometry"] = "reconstructed"
+    else:
+        metadata["door_geometry"] = "decoded"
+
+    # The frame borrows the wall it is cut into; the panel takes a door texture,
+    # except a secret door which also wears the wall.
+    frame_reference = MaterialRef(TERRAIN, int(tile["wall_texture_index"]), WALL_ROLE)
+    frame_key = _register_material(scene, frame_reference, level, assets)
+    panel_reference = object_material_for(obj, tile)
+    panel_key = _register_material(scene, panel_reference, level, assets)
+    if panel_reference is not None:
+        metadata["texture_source"] = panel_reference.source
+        metadata["texture_index"] = panel_reference.index
+
+    _emit_model_parts(
+        scene,
+        placed,
+        f"{name}_frame",
+        frame_model,
+        obj,
+        tile,
+        assets,
+        model_scale,
+        z_scale,
+        textured_key=frame_key,
+    )
+    _emit_model_parts(
+        scene,
+        placed,
+        f"{name}_panel",
+        panel_model,
+        obj,
+        tile,
+        assets,
+        model_scale,
+        z_scale,
+        textured_key=panel_key,
+        swing=swing,
+        lift=lift,
+        doordir=doordir,
+    )
+    placed.metadata.update(
+        model_index=frame_model.index,
+        panel_model_index=panel_model.index,
+        triangle_count=sum(len(part.triangles) for part in placed.parts),
+    )
+    return placed
+
+
+def _emit_model_parts(
+    scene,
+    placed,
+    name,
+    model,
+    obj,
+    tile,
+    assets,
+    model_scale,
+    z_scale,
+    *,
+    textured_key: str | None,
+    swing: float = 0.0,
+    lift: float = 0.0,
+    doordir: int = 0,
+) -> None:
+    """Append one model's triangles to a scene object, optionally hinged."""
+    groups: dict[str, ScenePart] = {}
+    center_x = float(tile["x"]) + float(obj.get("in_tile_x", 4)) / 8.0
+    center_y = float(tile["y"]) + float(obj.get("in_tile_y", 4)) / 8.0
+    base_z = float(obj.get("zpos", tile["floor_height"])) * z_scale
+    heading = int(obj.get("heading", 0))
+    hinge = _door_hinge(model, doordir) if swing else None
+
+    for triangle in model.triangles:
+        if triangle.textured and textured_key is not None:
+            material_key = textured_key
+        else:
+            material_key = f"palette_{triangle.palette_index:03d}"
+            color = (*assets.palette.colors[triangle.palette_index], 255)
+            scene.materials.setdefault(material_key, SceneMaterial(material_key, color))
+        part = groups.setdefault(
+            material_key,
+            ScenePart(name=f"{name}_{material_key}", material_key=material_key),
+        )
+        vertices = []
+        for vertex in triangle.vertices:
+            local_x, local_y, local_z = model.local_position(vertex)
+            if hinge is not None:
+                local_x, local_y = _rotate_about(local_x, local_y, hinge, swing)
+            local_x, local_y, local_z = _oriented(
+                model, local_x, local_y, local_z, heading, model_scale
+            )
+            z = (
+                float(tile["ceiling_height"]) * z_scale
+                if vertex.roof
+                else base_z + local_z + lift
+            )
+            vertices.append((local_x + center_x, local_y + center_y, z))
+        part.triangles.append(
+            SceneTriangle(
+                vertices=(vertices[0], vertices[1], vertices[2]),
+                uvs=(
+                    (triangle.vertices[0].u, 1.0 - triangle.vertices[0].v),
+                    (triangle.vertices[1].u, 1.0 - triangle.vertices[1].v),
+                    (triangle.vertices[2].u, 1.0 - triangle.vertices[2].v),
+                ),
+            )
+        )
+    placed.parts.extend(groups.values())
+
+
+def _door_hinge(model, doordir: int) -> tuple[float, float]:
+    """Hinge point in model-local space, chosen by the swing direction.
+
+    The reference pivots on the same vertical edge either way, taking the front
+    corner normally and the rear corner when ``doordir`` is set, which is what
+    reverses the swing.
+    """
+    points = [
+        model.local_position(vertex)
+        for triangle in model.triangles
+        for vertex in triangle.vertices
+    ]
+    hinge_x = min(point[0] for point in points)
+    depths = [point[1] for point in points]
+    return (hinge_x, max(depths) if doordir == 1 else min(depths))
+
+
+def _rotate_about(
+    x: float, y: float, hinge: tuple[float, float], radians: float
+) -> tuple[float, float]:
+    cosine, sine = math.cos(radians), math.sin(radians)
+    dx, dy = x - hinge[0], y - hinge[1]
+    return (
+        hinge[0] + dx * cosine - dy * sine,
+        hinge[1] + dx * sine + dy * cosine,
+    )
+
+
+def _oriented(
+    model, local_x: float, local_y: float, local_z: float, heading: int, scale: float
+) -> tuple[float, float, float]:
+    """Apply the clockwise heading to an already model-local position."""
+    angle = -(heading & 7) * math.tau / 8.0
+    cosine, sine = math.cos(angle), math.sin(angle)
+    return (
+        (local_x * cosine - local_y * sine) * scale,
+        (local_x * sine + local_y * cosine) * scale,
+        local_z,
+    )
+
+
+def _build_sprite_object(
+    scene, obj, tile, image, common_height, sprite_scale, z_scale=DEFAULT_Z_SCALE
+):
     name = _object_name(obj, "sprite")
     material_key = f"sprite_slot_{int(obj['slot']):04d}"
     scene.materials[material_key] = SceneMaterial(
@@ -320,8 +666,8 @@ def _build_sprite_object(scene, obj, tile, image, common_height, sprite_scale):
     )
     center_x = float(tile["x"]) + float(obj.get("in_tile_x", 4)) / 8.0
     center_y = float(tile["y"]) + float(obj.get("in_tile_y", 4)) / 8.0
-    base_z = float(obj.get("zpos", tile["floor_height"])) / 32.0
-    height = max(float(common_height) / 32.0, 0.25) * sprite_scale
+    base_z = float(obj.get("zpos", tile["floor_height"])) * z_scale
+    height = max(float(common_height) * z_scale, 0.25) * sprite_scale
     width = height * image.width / max(image.height, 1)
     triangles: list[SceneTriangle] = []
     # Crossed planes remain visible from arbitrary exported-scene cameras.

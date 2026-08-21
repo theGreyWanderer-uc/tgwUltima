@@ -285,6 +285,8 @@ def _parse_object_slot(level_block: bytes, slot: int) -> dict:
         "item_id": item_id,
         "flags": (word0 >> 9) & 0x0F,
         "enchanted": bool(word0 & 0x1000),
+        # Bit 13 is the door swing direction; only doors consult it.
+        "doordir": (word0 >> 13) & 0x01,
         "hidden": bool(word0 & 0x4000),
         "is_quantity_raw": is_quantity_raw,
         "is_quantity_loader_adjusted": is_quantity,

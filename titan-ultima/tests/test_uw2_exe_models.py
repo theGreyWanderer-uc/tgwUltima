@@ -108,3 +108,39 @@ class UW2ExecutableModelTests(unittest.TestCase):
     def test_rejects_unknown_executable_build(self) -> None:
         with self.assertRaisesRegex(UW2ModelError, "no supported UW2 model table"):
             UW2ModelArchive.from_data(bytes(0x1000))
+
+
+class UW2ModelPaletteTests(unittest.TestCase):
+    """The info entry holds up to four colours, not three.
+
+    ``uw-formats.txt`` documents three colours plus a trailing byte, but the
+    bed declares four and references all four. Reading only three painted its
+    quilt and pillow with the frame's colour.
+    """
+
+    def _archive(self, entry: bytes) -> UW2ModelArchive:
+        data = bytearray(_synthetic_executable())
+        info = 0x6908A
+        data[info + 0x18 * 5 : info + 0x18 * 5 + 5] = entry
+        return UW2ModelArchive.from_data(bytes(data))
+
+    def test_reads_all_four_declared_colours(self) -> None:
+        archive = self._archive(bytes((0x04, 49, 198, 82, 77)))
+
+        self.assertEqual(archive._model_palette(0x18), (49, 198, 82, 77))
+
+    def test_reads_only_as_many_colours_as_declared(self) -> None:
+        archive = self._archive(bytes((0x02, 49, 198, 82, 77)))
+
+        self.assertEqual(archive._model_palette(0x18), (49, 198))
+
+    def test_caps_an_overlarge_count_at_the_entry_width(self) -> None:
+        # The pillar declares nine, which five bytes cannot hold.
+        archive = self._archive(bytes((0x09, 140, 0, 0, 4)))
+
+        self.assertEqual(archive._model_palette(0x18), (140, 0, 0, 4))
+
+    def test_zero_count_falls_back_to_one_colour(self) -> None:
+        archive = self._archive(bytes((0x00, 0, 0, 0, 0)))
+
+        self.assertEqual(archive._model_palette(0x18), (0,))

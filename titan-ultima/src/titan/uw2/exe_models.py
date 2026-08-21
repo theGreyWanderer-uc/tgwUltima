@@ -13,6 +13,10 @@ import struct
 
 
 MODEL_COUNT = 32
+
+MODEL_PALETTE_MAX = 4
+"""A five-byte model info entry holds a count plus at most four colours."""
+
 UW2_BUILDS = (
     (0x54CF0, 0x59AA64D4, 0x54D8A, 0x6908A),
     (0x550E0, 0x59AA64D4, 0x5517A, 0x6947A),
@@ -202,11 +206,20 @@ class UW2ModelArchive:
         return model
 
     def _model_palette(self, index: int) -> tuple[int, ...]:
+        """Per-model colour table from the executable's model info entry.
+
+        An info entry is five bytes: a count in the low nibble of the first,
+        then up to four palette indices. ``uw-formats.txt`` documents only
+        three colours plus a trailing byte, but the bed (``0x1D``) declares
+        four and uses all four - reading only three painted its quilt and
+        pillow with the frame's colour. Two models declare more than three;
+        widening the table to four changes the bed alone.
+        """
         offset = self.info_offset + index * 5
         count = self.data[offset] & 0x0F
         if count == 0:
             return (0,)
-        count = min(count, 3)
+        count = min(count, MODEL_PALETTE_MAX)
         return tuple(self.data[offset + 1 : offset + 1 + count])
 
 
@@ -468,15 +481,128 @@ class _ModelParser:
     ) -> None:
         if len(vertices) < 3:
             return
-        for index in range(1, len(vertices) - 1):
+        for first, second, third in _triangulate_polygon(vertices):
             self.state.triangles.append(
                 ModelTriangle(
-                    vertices=(vertices[0], vertices[index], vertices[index + 1]),
+                    vertices=(vertices[first], vertices[second], vertices[third]),
                     palette_index=color,
                     texture_id=texture_id,
                     textured=textured,
                 )
             )
+
+
+def _triangulate_polygon(
+    vertices: list[ModelVertex],
+) -> list[tuple[int, int, int]]:
+    """Triangulate one planar face, returning index triples into ``vertices``.
+
+    Faces in these models are not all convex. A bed's side is a single outline
+    tracing up one post, along the rail, up the other post and back underneath,
+    which leaves a notch between the posts. Fanning from the first vertex fills
+    that notch solid, welding the posts to the frame. Ear clipping follows the
+    real outline instead, and reduces to the same surface as a fan whenever the
+    polygon is convex.
+    """
+    count = len(vertices)
+    if count < 3:
+        return []
+    if count == 3:
+        return [(0, 1, 2)]
+
+    plane = _dominant_plane(vertices)
+    points = [plane(vertex) for vertex in vertices]
+    remaining = list(range(count))
+    if _signed_area(points, remaining) < 0.0:
+        remaining.reverse()
+
+    triangles: list[tuple[int, int, int]] = []
+    guard = 0
+    while len(remaining) > 3 and guard < count * count:
+        guard += 1
+        for position in range(len(remaining)):
+            previous = remaining[position - 1]
+            current = remaining[position]
+            following = remaining[(position + 1) % len(remaining)]
+            if _is_ear(points, remaining, previous, current, following):
+                triangles.append((previous, current, following))
+                remaining.pop(position)
+                break
+        else:
+            # Degenerate or self-intersecting outline: fall back rather than
+            # drop the face entirely.
+            return [(0, index, index + 1) for index in range(1, count - 1)]
+    if len(remaining) == 3:
+        triangles.append((remaining[0], remaining[1], remaining[2]))
+    return triangles
+
+
+def _dominant_plane(vertices: list[ModelVertex]):
+    """Pick the axis pair that best preserves a planar face's area."""
+    normal_x = normal_y = normal_z = 0.0
+    for index, current in enumerate(vertices):
+        following = vertices[(index + 1) % len(vertices)]
+        normal_x += (current.y - following.y) * (current.z + following.z)
+        normal_y += (current.z - following.z) * (current.x + following.x)
+        normal_z += (current.x - following.x) * (current.y + following.y)
+    largest = max(abs(normal_x), abs(normal_y), abs(normal_z))
+    if largest == abs(normal_x):
+        return lambda vertex: (vertex.y, vertex.z)
+    if largest == abs(normal_y):
+        return lambda vertex: (vertex.z, vertex.x)
+    return lambda vertex: (vertex.x, vertex.y)
+
+
+def _signed_area(points: list[tuple[float, float]], order: list[int]) -> float:
+    total = 0.0
+    for position, index in enumerate(order):
+        following = order[(position + 1) % len(order)]
+        total += (
+            points[index][0] * points[following][1]
+            - points[following][0] * points[index][1]
+        )
+    return total / 2.0
+
+
+def _cross(
+    origin: tuple[float, float],
+    first: tuple[float, float],
+    second: tuple[float, float],
+) -> float:
+    return (first[0] - origin[0]) * (second[1] - origin[1]) - (first[1] - origin[1]) * (
+        second[0] - origin[0]
+    )
+
+
+def _is_ear(
+    points: list[tuple[float, float]],
+    remaining: list[int],
+    previous: int,
+    current: int,
+    following: int,
+) -> bool:
+    area = _cross(points[previous], points[current], points[following])
+    if area <= 1e-12:
+        return False
+    for other in remaining:
+        if other in (previous, current, following):
+            continue
+        if _contains(points, previous, current, following, points[other]):
+            return False
+    return True
+
+
+def _contains(
+    points: list[tuple[float, float]],
+    previous: int,
+    current: int,
+    following: int,
+    point: tuple[float, float],
+) -> bool:
+    first = _cross(points[previous], points[current], point)
+    second = _cross(points[current], points[following], point)
+    third = _cross(points[following], points[previous], point)
+    return first >= 0.0 and second >= 0.0 and third >= 0.0
 
 
 class _Reader:
