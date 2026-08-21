@@ -1,9 +1,9 @@
-"""Unit tests for uu2map.topology's tile-adjacency and diagonal-boundary rules.
+"""Unit tests for titan.uw2.topology's tile-adjacency and diagonal-boundary rules.
 
 These pin down the hand-debugged behavior described in
-uuw2data/references/UU2_debug_render_commands.md and
-UU2_mapping_data_structure_report.md so a future refactor of the shared
-topology module (used by all three renderers) can't silently regress it.
+reference/uw2/UU2_debug_render_commands.md and
+reference/uw2/UU2_mapping_data_structure_report.md so a future refactor of the
+shared topology module (used by all three renderers) can't silently regress it.
 """
 
 from titan.uw2.topology import (

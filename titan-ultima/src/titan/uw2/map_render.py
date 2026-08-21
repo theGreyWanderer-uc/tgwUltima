@@ -23,6 +23,12 @@ from titan.uw2.render_common import (
     parse_hex_color,
     render_output_filename,
 )
+from titan.uw2.instances import (
+    REMOVABLE_WALL_ITEM,
+    THIN_WALL_ITEM,
+    is_wall_mounted,
+    object_material_for,
+)
 from titan.uw2.topology import (
     SIDES,
     clip_diagonal_floor_image,
@@ -1223,17 +1229,22 @@ def make_flat_object_panels(
 
 
 def flat_object_texture(obj: dict) -> tuple[str | None, int]:
+    """Texture archive and image for a flat wall-mounted decal object.
+
+    Delegates to the shared rules in :mod:`titan.uw2.instances`. Only the
+    object-texture classes are drawn as decals here; bridges and special walls
+    borrow a level architectural texture and are handled as map geometry.
+    """
     item_id = int(obj.get("item_id", 0))
-    flags = int(obj.get("flags", 0))
-    if item_id == 0x0161:
-        return "tmobj", flags + 4
-    if item_id == 0x0162:
-        return "tmobj", flags + 12
-    if item_id == 0x0166:
-        return "tmobj", (flags & 0x07) + 20
-    if 0x0170 <= item_id <= 0x017F:
-        return "tmflat", item_id & 0x0F
-    return None, 0
+    if not is_wall_mounted(item_id) or item_id in (
+        THIN_WALL_ITEM,
+        REMOVABLE_WALL_ITEM,
+    ):
+        return None, 0
+    reference = object_material_for(obj)
+    if reference is None or reference.is_terrain:
+        return None, 0
+    return reference.source, reference.index
 
 
 def make_decal_panel(

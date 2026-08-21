@@ -14,6 +14,82 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Added
 
+- **UU2 texture names and usage:** added `titan uw2 texture-catalog`, which
+  joins `STRINGS.PAK` block 10 texture descriptions to `TERRAIN.DAT` property
+  words for all 256 `T64.TR` texture IDs, and `titan uw2 texture-usage`, which
+  reports where each named texture is used per level with tile coordinates
+  grouped by floor, wall, and both ceiling interpretations
+  (`ceiling_runtime` and UnderworldAdventures' `ceiling_ua`). Wall descriptions
+  come from the texture's own string index and floor descriptions from
+  `510 - texture_id`. Both read original game files directly and need no
+  extracted intermediates; this wires up the previously unused
+  `titan.uw2.strings` Huffman decoder.
+- **UU2 map verification:** added `titan uw2 map-verify` to smoke-check
+  `LEV.ARK` before a longer extract or render. It confirms the 320-block table,
+  checks map, texture-mapping, and automap block sizes for every populated
+  slot, decodes each slot through the normal level parser, and prints the
+  `0x7c06` marker histogram. Failures are collected and reported rather than
+  raised, and the command exits non-zero so it can gate a pipeline.
+- **UU2 doors in 3D scenes:** doorways are now composed and placed. Each is one
+  scene object holding separately named frame and panel parts - the fixed
+  surround from executable model `0x01`, whose roof vertices reach the tile
+  ceiling, and the moving leaf from `0x0E` or `0x0F` for a secret door. Panels
+  take one of the level's six door textures; a secret door instead wears its
+  tile's wall texture. Hinged doors swing about the vertical edge that
+  `doordir` selects, which also reverses the direction, and portcullises rise
+  rather than swing. A portcullis is drawn as a reconstructed grid of three
+  vertical and four cross bars: `UW2.EXE` has no portcullis model - its slot
+  holds the ordinary solid door panel - so the bars are rebuilt in the
+  reference's proportions and flagged as `door_geometry: reconstructed` to keep
+  them distinguishable from decoded geometry. Open, portcullis, secret, swing angle, lift, and `doordir`
+  are all recorded for exporters. This places 259 doors across 34 levels that
+  were previously skipped; the only 3D classes still unplaced are NPCs.
+- **UU2 door swing direction decoded:** object word 0 bit 13 is the door swing
+  direction and was not parsed at all. It is now exposed as `doordir` on every
+  decoded object record.
+- **UU2 owner-coloured beds:** bed bedding now takes its instance colours -
+  quilt `4 * owner + 5`, pillow `4 * owner`, masked to a byte so high owners
+  wrap as the game does. The quilt and pillow share one executable colour
+  group and are told apart by position along the bed.
+- **UU2 special object classes in 3D scenes:** `map-3d-render` and
+  `map-3d-export` now place bridges, the `0x16E`/`0x16F` texture-map walls, the
+  `0x170`-`0x17F` wall controls, levers, switches, and writing. All six classes
+  previously fell through the scene builder and were counted as
+  `render_type_3d_model` skips. Across all 42 levels this places 770 special
+  walls and bridges plus 277 controls and signs that were absent before.
+  Bridges resolve either an object texture or a level **floor** mapping entry
+  from `flags`; special walls take a **wall** mapping entry named by `owner`.
+- **Shared UU2 instance rules:** added `titan.uw2.instances`, one resolver for
+  which texture a placed object selects, replacing two partial and divergent
+  copies in `model_render` and `map_render`. This fixes a latent bug where a
+  lever or switch with the enchantment bit set indexed into the wrong image
+  range; no shipped instance triggered it, so rendered output is unchanged.
+- **UU2 sign text and instance metadata:** writing objects now carry their
+  decoded prefix and readable message (`The plaque reads: LIBRARY`) in scene
+  and GLB manifest metadata, resolved from `STRINGS.PAK` block 8. Placed
+  objects also record their texture source and index, wall-mounted and
+  removable-wall markers, trigger links, and the enchantment flag.
+- **UU2 flat diagnostic grids:** added `titan uw2 map-grid`, a top-down view
+  with no oblique projection and no wall height, so a tile's screen box is a
+  pure function of its coordinates. Composites floor textures clipped to
+  diagonal floor triangles, outlines every side not shared with an open
+  neighbour, and marks diagonal hypotenuses and doors at their in-tile offset
+  and heading, with selectable display/raw/both coordinate labels.
+- **UU2 stacked world cutaways:** added `titan uw2 map-stack` to render each
+  world's levels as one vertically stacked scene, first level on top and each
+  lower level dropped by `--stack-gap`, with optional per-level `--stagger-x`
+  and `--stagger-y` and a `--world` slug filter.
+- **UU2 terrain texture export:** added `titan uw2 terrain-export` for
+  `T64.TR` PNGs with optional nearest-neighbour `--scale`, and a
+  `--contact-sheet` flag on both it and `uw2 shape-batch`. Contact-sheet cells
+  are sized to the largest image and smaller images centred, so ragged archives
+  such as `TMOBJ.GR` stay aligned.
+- **UU2 regression coverage:** added tests pinning the `0x7c00`
+  active-mobile-count interpretation (an exact count, not a count-minus-one)
+  and the diagonal wall corner-gap fill, including the height-mismatch case
+  that previously left a visible notch. Both were previously verified only by
+  ad-hoc scripts. The synthetic tests need no game files; opt-in classes gated
+  on `TITAN_UW2_GAMEDIR` re-run the original whole-archive and real-map checks.
 - **Combined U7 shape frame report:** added `titan u7 shape-frame-report` to
   export every record and frame from a U7 shape Flex archive as CSV or JSON.
   The report keeps Exult Studio Origin X/Y, top-left-relative drawing
@@ -22,6 +98,20 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Changed
 
+- **UU2 3D map render controls:** `map-3d-render` gained the `low-ne` and
+  `low-nw` low-angle camera presets, repeatable `--slot`, non-square
+  `--width`/`--height`, `--zoom`, `--fit-margin`, `--supersample` with
+  `--downsample-filter`, `--texture-filter nearest` and `--texture-scale` for
+  crisp pixel-art output, `--name-files`, and a `--backend` choice. When
+  PyVista is unavailable, `auto` now falls back to a dependency-free Pillow
+  preview with a warning instead of failing outright. Default output is
+  unchanged and remains pixel-identical.
+- **UU2 ceiling-texture rule is selectable:** `map-3d-render` and
+  `map-3d-export` accept `--ceiling-source runtime|ua`, exposing the
+  UnderworldAdventures `mapping[32]` interpretation that the geometry layer
+  already supported but nothing could reach. The two rules disagree on every
+  level. Both commands also accept `--z-scale`, which now scales placed object
+  and sprite heights alongside terrain rather than only terrain.
 - **U7 frame origin convention:** `U7Shape.Frame` now exposes
   `origin_x`/`origin_y` using `xright`/`ybelow` convention.
   Explicit top-left-relative drawing-anchor helpers replace the ambiguous
@@ -33,6 +123,24 @@ This project uses [Semantic Versioning](https://semver.org/):
 - **Configured U7 shape-import palettes:** `titan u7 shape-import` now accepts
   `--game bg|si` and uses that game's `titan.toml` palette when `--palette` is
   omitted. An explicit `--palette` continues to take precedence.
+
+### Fixed
+
+- **UU2 model faces are no longer filled across concave outlines.** Executable
+  model faces were triangulated as a fan from the first vertex, which is only
+  valid for convex polygons. A bed's side is a single outline tracing up one
+  post, along the rail, up the other post and back underneath; fanning filled
+  the notch between the posts and welded them to the frame. Faces are now
+  ear-clipped. Eight of the thirty-two models were mis-shaped this way - bench,
+  boulder, large boulder, arrow, shrine, chest, chair, and bed - and now render
+  with their real gaps and legs. `map-render` output is unchanged, since its
+  default `--model-style icons` draws `OBJECTS.GR` sprites rather than
+  executable geometry.
+- **UU2 model colour tables were truncated.** A model info entry holds a count
+  plus up to four palette indices, but only three were read. The bed declares
+  four and references all four, so sixteen of its triangles were painted with
+  the frame's colour instead of the bedding's. Of the thirty-two models, only
+  the bed is affected.
 
 ---
 

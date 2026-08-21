@@ -10,6 +10,7 @@ import numpy as np
 
 from titan.uw2.exe_models import ITEM_MODEL_INDEX, ModelTriangle, UW2ModelArchive
 from titan.uw2.gr import UW2GRArchive
+from titan.uw2.instances import TMOBJ, object_material
 from titan.uw2.palette import UW2Palette
 
 
@@ -47,21 +48,16 @@ class UW2ModelRenderUnavailableError(UW2ModelRenderError):
 
 
 def model_texture_index(item_id: int, flags: int = 0) -> int | None:
-    """Resolve item-selected ``TMOBJ.GR`` image for textured model faces."""
-    flag = flags & 0xFF
-    if item_id == 0x0158:
-        return 32
-    if item_id == 0x015C:
-        return 38
-    if item_id == 0x0160:
-        return flag
-    if item_id == 0x0163:
-        return 42 + flag
-    if item_id == 0x0165:
-        return 28 + flag
-    if item_id == 0x0169:
-        return 36 + flag
-    return None
+    """Resolve item-selected ``TMOBJ.GR`` image for textured model faces.
+
+    Standalone model tools have no level context, so only object-texture rules
+    apply here; classes that borrow a level architectural texture resolve to
+    ``None``. See :mod:`titan.uw2.instances` for the shared rule set.
+    """
+    reference = object_material(item_id, flags)
+    if reference is None or reference.source != TMOBJ:
+        return None
+    return reference.index
 
 
 def render_object_models(

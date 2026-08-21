@@ -103,10 +103,19 @@ def load_palette_rgb(pals_dat: str | Path, palette_index: int = 0) -> list[int]:
 def make_contact_sheet(
     images: list[Image.Image], columns: int = 16, padding: int = 2
 ) -> Image.Image:
+    """Tile images into a grid, one cell per image.
+
+    Cells are sized to the largest image and smaller ones are centred, so
+    ragged archives such as ``TMOBJ.GR`` stay aligned. Uniform input (every
+    ``T64.TR`` texture is 64x64) lays out exactly as a fixed-cell grid would.
+    """
     if not images:
         raise ValueError("cannot make a contact sheet without images")
+    if columns < 1:
+        raise ValueError("contact sheet needs at least one column")
 
-    width, height = images[0].size
+    width = max(image.width for image in images)
+    height = max(image.height for image in images)
     rows = (len(images) + columns - 1) // columns
     sheet = Image.new(
         "RGBA",
@@ -118,8 +127,14 @@ def make_contact_sheet(
     )
 
     for index, image in enumerate(images):
-        x = padding + (index % columns) * (width + padding)
-        y = padding + (index // columns) * (height + padding)
-        sheet.alpha_composite(image, (x, y))
+        cell_x = padding + (index % columns) * (width + padding)
+        cell_y = padding + (index // columns) * (height + padding)
+        sheet.alpha_composite(
+            image.convert("RGBA"),
+            (
+                cell_x + (width - image.width) // 2,
+                cell_y + (height - image.height) // 2,
+            ),
+        )
 
     return sheet

@@ -73,9 +73,10 @@ See [Configuration (titan.toml)](#configuration-titantoml) below.
 
 ## Ultima Underworld II commands (`titan uw2`)
 
-Native UU2 support covers `LEV.ARK` map extraction, U7-style cutaway map
-rendering, palettes, terrain and `.GR` shape archives, common object render
-metadata, animation frame descriptors, and standalone rendering/export of
+Native UU2 support covers `LEV.ARK` map extraction and verification, U7-style
+cutaway map rendering, palettes, terrain and `.GR` shape archives,
+`STRINGS.PAK` texture descriptions and per-level texture usage, common object
+render metadata, animation frame descriptors, and standalone rendering/export of
 built-in `UW2.EXE` polygon models. NPC animation archives and special model
 classes such as doors and bridges are not yet exposed by standalone 3D
 commands.
@@ -93,6 +94,23 @@ Decodes selected `LEV.ARK` slots (all available slots by default) into level
 JSON, including tiles, object chains, texture mappings, automap records, map
 notes, `DL.DAT` lighting, `TERRAIN.DAT`, and `SHADES.DAT`. Output matches the
 data contract used by the original `uuw2data/scripts` renderers.
+
+### `uw2 map-verify`
+
+```text
+titan uw2 map-verify [--json] [-o FILE] [-g DIR]
+```
+
+Smoke-checks `LEV.ARK` before a longer extract or render: confirms the 320-block
+table, checks each populated slot's map, texture-mapping, and automap block
+sizes, decodes every populated slot through the normal level parser, and prints
+the `0x7c06` marker histogram. Problems are collected and reported rather than
+raised, so one malformed slot does not mask the rest of the archive. Exits
+non-zero when any check fails, which makes it usable as a pre-flight gate.
+
+```bash
+titan uw2 map-verify -g "C:/UW2"
+```
 
 ### `uw2 map-render`
 
@@ -130,24 +148,100 @@ assets under `OUTPUT/_map_data` or `--workdir`; `--reuse-workdir` supports the
 legacy extracted renderer path. Run `titan uw2 map-render --help` for all
 projection, wall, lighting, fill, and debug-grid options.
 
+### `uw2 map-grid`
+
+```text
+titan uw2 map-grid -o DIR [--slots N ...] [--tile-size N] [--margin N]
+    [--background #RRGGBB] [--grid-label-step N]
+    [--coordinate-mode display|raw|both] [--no-solid-labels] [--name-files]
+    [-g DIR]
+```
+
+Renders a flat top-down diagnostic grid: one axis-aligned square per tile, with
+no oblique projection and no wall height at all. Because a tile's screen box is
+a pure function of its coordinates, anything out of place is a data problem
+rather than a projection artefact, which makes this the view for checking tile
+adjacency, diagonal cut corners, door headings, and coordinate conventions.
+
+Floor textures are composited per tile and clipped to the floor triangle on
+diagonals; solid tiles fill flat. White edges mark every side not shared with an
+open neighbour, yellow marks a diagonal hypotenuse, and orange marks doors at
+their in-tile offset and heading. `--coordinate-mode` selects the per-tile
+label: `display` (`x,display_y`), `raw` (`x,raw_y`), or `both`.
+`--no-solid-labels` labels only non-solid tiles.
+
+```powershell
+titan uw2 map-grid -g "C:/UW2" --slots 0 -o grids/ --grid-label-step 4 --no-solid-labels
+```
+
 ### `uw2 map-3d-render`
 
 ```text
-titan uw2 map-3d-render --slot N [--region x1,y1,x2,y2]
-    [--view iso-ne|iso-nw|iso-se|iso-sw|top ...] [--size N]
-    [--model-scale SCALE] [-o DIR] [-g DIR]
+titan uw2 map-3d-render [--slot N ...] [--region x1,y1,x2,y2]
+    [--view iso-ne|iso-nw|iso-se|iso-sw|low-ne|low-nw|top ...]
+    [--size N | --width N --height N] [--model-scale SCALE]
+    [--ceiling-source runtime|ua] [--z-scale F]
+    [--zoom F] [--fit-margin F] [--supersample N] [--downsample-filter F]
+    [--texture-filter linear|nearest] [--texture-scale N]
+    [--backend pyvista|software|auto] [--name-files] [-o DIR] [-g DIR]
 ```
 
 Builds textured 3D tile geometry directly from original archives, places
 mapped `UW2.EXE` furniture as meshes, and places ordinary/ANIMO objects as
 camera-facing textured billboards. `--region` uses inclusive raw tile bounds;
-omitting it builds the full 64x64 level. Ceilings are omitted for external
-camera views unless `--include-ceilings` is set. Default views are `iso-ne`
-and `top`. Requires PyVista/VTK.
+omitting it builds the full 64x64 level. `--slot` repeats to render several
+levels with the same settings. Ceilings are omitted for external camera views
+unless `--include-ceilings` is set. Default views are `iso-ne` and `top`.
 
 ```powershell
 titan uw2 map-3d-render -g "C:/UW2" --slot 0 --region 17,46,22,52 `
     --view iso-ne --view top -o castle_dining_3d/
+```
+
+Framing and quality:
+
+- `--size` sets a square image; `--width`/`--height` override either axis.
+- `--zoom` above the default crops closer in; `--fit-margin` above `1.0` pulls
+  back to leave framing around the map. Their default pair reproduces the
+  framing the camera presets were tuned against.
+- `--supersample N` renders at N times the requested size and downsamples with
+  `--downsample-filter` (`lanczos`, `nearest`, or `box`).
+- `--texture-filter nearest` with `--texture-scale 4` keeps the original 64x64
+  art crisp instead of smoothing it, for an in-game pixel look. These improve
+  sampling and framing only; they add no detail beyond the source art.
+
+`low-ne` and `low-nw` share the isometric bearings with the camera dropped
+towards the floor, so wall faces and ceiling clearance read instead of the plan.
+
+`--ceiling-source` selects which ceiling-texture rule to use: `runtime` (the
+runtime port's, the default) or `ua` for UnderworldAdventures' `mapping[32]`.
+They disagree on every level, so this is the switch to reach for when
+comparing Titan against another implementation.
+
+Rendering normally uses PyVista/VTK. `--backend software` forces a
+dependency-free Pillow fallback that paints each triangle in its texture's
+average colour, back to front; `auto` (the default) uses PyVista when it is
+importable and falls back with a warning when it is not. The fallback shows
+layout and geometry, not textures.
+
+### `uw2 map-stack`
+
+```text
+titan uw2 map-stack [--world SLUG ...] [--max-levels N] [--view VIEW ...]
+    [--stack-gap F] [--stagger-x F] [--stagger-y F] [--include-ceilings]
+    [--include-sprites] [quality options] [-o DIR] [-g DIR]
+```
+
+Renders each world's levels as one vertically stacked cutaway, first available
+level on top and each lower level dropped by `--stack-gap`. `--world` filters
+by slugified world name (`prison_tower`, `ice_caverns`, ...) and repeats;
+`--max-levels` keeps only the first N levels of each world. `--stagger-x` and
+`--stagger-y` slide lower levels sideways to expose overlaps. Ceilings and
+object billboards are omitted by default so interiors stay readable, and the
+same framing, texture, and backend options as `map-3d-render` apply.
+
+```powershell
+titan uw2 map-stack -g "C:/UW2" --world prison_tower --max-levels 4 -o stacks/
 ```
 
 ### `uw2 map-3d-export`
@@ -155,6 +249,7 @@ titan uw2 map-3d-render -g "C:/UW2" --slot 0 --region 17,46,22,52 `
 ```text
 titan uw2 map-3d-export --slot N [--region x1,y1,x2,y2]
     [--include-ceilings] [--no-sprites] [--model-scale SCALE]
+    [--ceiling-source runtime|ua] [--z-scale F] [--name-files]
     [-o DIR] [-g DIR]
 ```
 
@@ -170,6 +265,23 @@ Castle dining-room validation crop:
 titan uw2 map-3d-export -g "C:/UW2" --slot 0 --region 17,46,22,52 `
     -o castle_dining_3d/
 ```
+
+Specially handled classes are placed alongside ordinary furniture: bridges,
+the `0x16E`/`0x16F` texture-map walls, `0x170`-`0x17F` wall controls, levers,
+switches, and writing. Each records the texture it selected
+(`texture_source`, `texture_index`, and for level-mapped materials
+`texture_role`), plus `wall_mounted`, `removable_wall`, `trigger_link`, and
+`enchanted` where they apply. Writing objects additionally carry
+`writing_prefix` and `writing_text` decoded from `STRINGS.PAK`, so a sign's
+readable message survives into the GLB manifest.
+
+Doorways are composed rather than drawn as one mesh: each is a single object
+holding separately named frame and panel parts, so an exporter can move the
+leaf without touching the surround. Each records `door_open`,
+`door_portcullis`, `door_secret`, `doordir`, `door_swing_degrees`, and
+`door_lift`. Portcullis bars are reconstructed rather than decoded - `UW2.EXE`
+has no portcullis model - so those objects report
+`door_geometry: reconstructed`; all other doors report `decoded`.
 
 Object Z is not guessed. Map `zpos` supplies base height. Native model Z stays
 in map-height units while model X/Y uses `--model-scale`, which defaults to
@@ -233,6 +345,43 @@ Door frames, doors, bridges, levers, switches, writing, variable ceiling
 height, and owner-controlled bed colors require special instance rules and
 remain outside this first standalone batch exporter.
 
+### `uw2 texture-catalog`
+
+```text
+titan uw2 texture-catalog -o DIR [-g DIR]
+```
+
+Writes `texture_catalog.json`: one entry per `T64.TR` texture ID with its
+readable wall and floor descriptions decoded from `STRINGS.PAK` block 10, the
+raw and cleaned forms of each, and the joined `TERRAIN.DAT` property word
+(water, lava, stairs, grating, and similar). Wall descriptions are stored at the
+texture's own string index and floor descriptions at `510 - texture_id`. Each
+entry names the matching `textures/t64_###.png` produced by
+`map-render --keep-intermediates`.
+
+```bash
+titan uw2 texture-catalog -g "C:/UW2" -o uw2_textures/
+```
+
+### `uw2 texture-usage`
+
+```text
+titan uw2 texture-usage -o DIR [--slots N ...] [--write-catalog] [-g DIR]
+```
+
+Reports where each named texture is actually used. For every requested slot
+(all available slots by default) it writes
+`level_###_texture_usage.json` listing each texture ID with its catalog
+description, per-role counts, and the tile coordinates that use it as a floor,
+wall, or ceiling. Both ceiling interpretations are reported side by side:
+`ceiling_runtime` (the runtime port's rule) and `ceiling_ua`
+(UnderworldAdventures' `mapping[32]`). A `texture_usage_summary.json` totals
+each level. `--write-catalog` also emits `texture_catalog.json` alongside.
+
+```bash
+titan uw2 texture-usage -g "C:/UW2" -o uw2_usage/ --slots 0 --slots 24
+```
+
 ### `uw2 palette-export`
 
 ```text
@@ -270,11 +419,28 @@ titan uw2 shape-export ANIMO.GR 6 -g "C:/UW2" -o fountain/
 ### `uw2 shape-batch`
 
 ```text
-titan uw2 shape-batch ARCHIVE.GR [-p PALS.DAT] [-a ALLPALS.DAT]
+titan uw2 shape-batch ARCHIVE.GR [-p PALS.DAT] [-a ALLPALS.DAT] [--contact-sheet]
     [--palette-index N] [--transparent-index N] [-o DIR] [-g DIR]
 ```
 
 Exports every non-empty GR slot. Also writes `<archive>_summary.json`.
+
+### `uw2 terrain-export`
+
+```text
+titan uw2 terrain-export -o DIR [--contact-sheet] [--scale N] [-g DIR]
+```
+
+Exports every `T64.TR` terrain texture as `t64_###.png` plus a
+`t64_summary.json`, matching the layout `texture-catalog` entries reference.
+`--scale` upsamples with nearest-neighbour for pixel-art inspection, and
+`--contact-sheet` writes a tiled `t64_contact_sheet.png`. `uw2 shape-batch`
+takes the same `--contact-sheet` flag for GR archives; cells are sized to the
+largest image so ragged archives such as `TMOBJ.GR` stay aligned.
+
+```powershell
+titan uw2 terrain-export -g "C:/UW2" -o uw2_terrain/ --contact-sheet --scale 4
+```
 
 ### `uw2 object-info`
 
