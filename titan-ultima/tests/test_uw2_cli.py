@@ -241,6 +241,8 @@ class UW2CliTests(unittest.TestCase):
             texture_scale=1,
             backend="auto",
             name_files=False,
+            plan_scale=1,
+            native=False,
         )
 
     @patch("titan.uw2.cli.render_map_scene")

@@ -37,6 +37,11 @@ WRITING_ITEM = 0x0166
 LEVER_ITEM = 0x0161
 SWITCH_ITEM = 0x0162
 BED_ITEM = 0x0167
+MOONGATE_ITEM = 0x015A
+TABLE_ITEM = 0x0158
+TABLE_TMOBJ_BASE = 32
+PAINTING_ITEM = 0x0163
+SHELF_ITEM = 0x0169
 THIN_WALL_ITEM = 0x016E
 REMOVABLE_WALL_ITEM = 0x016F
 CONTROL_FIRST = 0x0170
@@ -61,6 +66,16 @@ WRITING_PREFIX_BASE = 368
 
 WRITING_MESSAGE_BIAS = 0x200
 """A writing's message index is ``quantity_or_link - 0x200``."""
+
+CEILING_BRIDGE_MIN_ZPOS = 120
+"""A bridge at or above this height is acting as ceiling, not as a walkway.
+
+``uw-formats.txt`` notes that bridges can be used to alter the fixed ceiling
+height, and the shipped data separates cleanly: deck bridges top out at zpos
+104, then 43 of the 352 sit at 121 or 127 against a ceiling of 128, with
+nothing in between. Castle Britannia roofs its courtyard with a five-by-five
+grid of them.
+"""
 
 DOOR_FIRST = 0x0140
 DOOR_LAST = 0x014F
@@ -92,16 +107,24 @@ SPECIAL_MODEL_INDEX: dict[int, int] = {
     LEVER_ITEM: 0x10,
     SWITCH_ITEM: 0x11,
     WRITING_ITEM: 0x12,
-    THIN_WALL_ITEM: 0x14,
+    THIN_WALL_ITEM: 0x16,
     REMOVABLE_WALL_ITEM: 0x16,
     BRIDGE_ITEM: 0x02,
     **{item: 0x10 for item in range(CONTROL_FIRST, CONTROL_LAST + 1)},
 }
 """Executable model slots for classes the ordinary item table does not map.
 
-Slots ``0x10``, ``0x11``, ``0x12`` and ``0x14`` share one offset in ``UW2.EXE``
-and decode to the same 0.25x0.25 textured quad, so these classes differ only in
-which texture they select. ``0x16`` is the full-tile variant.
+Slots ``0x10``, ``0x11`` and ``0x12`` share one offset in ``UW2.EXE`` and decode
+to the same 0.25x0.25 textured quad, which suits a lever, a switch or a line of
+writing - small things fixed to a wall face.
+
+Both special texture-map classes take ``0x16``, the full-tile quad, even though
+``0x016E`` also has a quarter-tile slot at ``0x14``. UA draws either of them as
+one tile square and one tile high (``RenderTmapObject``: ``dir *= 0.5`` to each
+side, ``pos.z`` to ``pos.z + 1.0``), and the shipped levels only make sense that
+way - the throne room hangs its banners as two panels 32 height units apart, the
+same spacing the ``0x016F`` stained glass beside them uses, which meets end to
+end only if each panel is a whole tile tall.
 """
 
 WALL_MOUNTED_ITEMS = frozenset(
@@ -109,6 +132,53 @@ WALL_MOUNTED_ITEMS = frozenset(
     | set(range(CONTROL_FIRST, CONTROL_LAST + 1))
 )
 """Classes placed against a wall face rather than standing on the floor."""
+
+TILE_ALIGNED_ITEMS = frozenset({BRIDGE_ITEM} | set(range(DOOR_FIRST, DOOR_LAST + 1)))
+"""Classes whose geometry spans a whole tile, so the tile is their position.
+
+A bridge deck and a doorway both measure exactly one tile across. Centring them
+on the object's sub-tile cell instead leaves the whole span about 1/16 of a tile
+off its own tile. UW2 places both from the tile: ``RenderBridge`` in
+underworldexporter overrides the computed position with
+``ObjectTileX * 1.2f + 1.2f / 2f``, and its door case reads ``ObjectTileX`` and
+``ObjectTileY`` without consulting ``xpos``/``ypos`` at all.
+"""
+
+SUB_TILE_UNITS = 256
+"""World units per tile: a tile index is the full coordinate ``>> 8``."""
+
+SUB_TILE_STEPS = 8
+"""Distinct sub-tile positions; ``xpos`` is 3 bits, ``(coordinate >> 5) & 7``."""
+
+SUB_TILE_CELL = SUB_TILE_UNITS // SUB_TILE_STEPS
+"""World units spanned by one sub-tile step."""
+
+MOBILE_SUB_TILE_BIAS = 15
+"""Units UW2 adds when it expands ``tile`` plus ``xpos`` into a live coordinate.
+
+Recorded because it is easy to reach for and wrong here. When the game needs a
+*mobile* object's full coordinate it builds one as
+``(tile << 8) + (xpos << 5) + 0xF`` - ``ObjectCreator.cs``,
+``motion_projectile.cs`` and ``spellcasting_class_11.cs`` in UnderworldGodot all
+do it - which lands just short of the cell centre. That is for collision and
+motion, not for where static scenery is drawn, and applying it to placement
+pushes wall furniture through the wall: a shelf at ``xpos`` 7 measures a quarter
+tile, so it reaches the wall face exactly at ``xpos / 8`` and overshoots by
+1/16 of a tile with the bias added. The shipped levels are laid out on the plain
+eighth grid - a bed running 25.25 to 25.75, its shelf 25.75 to 26.00, the wall at
+26.00 - so :func:`sub_tile_fraction` uses no bias. UnderworldGodot's own
+``GetCoordinate`` takes the same view for static objects.
+"""
+
+
+def sub_tile_fraction(value: object) -> float:
+    """Fraction across a tile for one stored 3-bit sub-tile coordinate.
+
+    Out-of-range input is clamped to the representable 0-7 rather than raising,
+    since it is decoded from three bits and cannot legitimately fall outside.
+    """
+    step = min(SUB_TILE_STEPS - 1, max(0, int(value)))  # type: ignore[arg-type]
+    return (step * SUB_TILE_CELL) / SUB_TILE_UNITS
 
 
 @dataclass(frozen=True)
@@ -151,8 +221,12 @@ def object_material(
         slot = door_texture_slot(item_id)
         return None if slot is None else MaterialRef(DOORS, slot)
 
-    if item_id == 0x0158:
-        return MaterialRef(TMOBJ, 32)
+    if item_id == TABLE_ITEM:
+        # A table's flags choose its surface: 32 and 34 are planking, 33 is
+        # marble, 35 is stone. Thirty of the game's seventy-four tables set
+        # them, and were all being planked. UnderworldGodot reads it the same
+        # way (``objects/table.cs``: ``32 + uwobject.flags``).
+        return MaterialRef(TMOBJ, TABLE_TMOBJ_BASE + (flags & 0x03))
     if item_id == 0x015C:
         return MaterialRef(TMOBJ, 38)
     if item_id == 0x0160:
@@ -202,6 +276,15 @@ def terrain_texture_id(ref: MaterialRef, level: dict) -> int | None:
     if not 0 <= ref.index < len(entries):
         return None
     return int(entries[ref.index])
+
+
+def is_ceiling_bridge(item_id: int, zpos: int) -> bool:
+    """Whether a bridge is standing in for the ceiling rather than a walkway.
+
+    Such a bridge roofs the space below it, so a render that omits ceilings
+    should omit it too or the room cannot be seen into.
+    """
+    return item_id == BRIDGE_ITEM and int(zpos) >= CEILING_BRIDGE_MIN_ZPOS
 
 
 def is_door(item_id: int) -> bool:
@@ -415,6 +498,142 @@ def is_wall_mounted(item_id: int) -> bool:
     return item_id in WALL_MOUNTED_ITEMS
 
 
+def is_tile_aligned(item_id: int) -> bool:
+    return item_id in TILE_ALIGNED_ITEMS
+
+
+DECAL_WALL_EDGE = {0: ("y", 1.0), 2: ("x", 1.0), 4: ("y", 0.0), 6: ("x", 0.0)}
+"""Which tile edge a wall decal's heading fixes it to: axis and edge offset.
+
+A decal hangs on a wall face, so the coordinate across that wall is the tile
+boundary, not the object's sub-tile cell - UA's ``RenderDecal`` sets it from the
+tile and reads ``xpos``/``ypos`` only for the position along the wall. Derived
+here from the shipped levels: of the decals on each heading, the matching
+neighbour is the solid one far more often than any other (43-45% against
+7-26% for the rest, the remainder being corners with several solid sides).
+"""
+
+DECAL_FACE_DEPTH = 1.0 / 16.0
+"""How far a decal's own geometry stands out from the position it is given.
+
+Every ``0x017x`` control, lever, switch and special wall decodes to a flat quad
+sitting this far outward - into the wall - of the object's centre. Pinning the
+centre to the wall plane would therefore leave the visible face that far inside
+the rock, so the centre is set back by the same amount and the face lands on the
+wall exactly. Measured as 1/16 of a tile across all 689 decals on a square
+heading, with no variation between classes.
+"""
+
+
+def object_centre(obj: dict, tile: dict) -> tuple[float, float]:
+    """Where a placed object's geometry is centred, in tile units.
+
+    Tile-spanning classes take the tile centre and a wall decal takes the face
+    of the wall it hangs on; everything else takes its sub-tile cell. See
+    :data:`TILE_ALIGNED_ITEMS`, :data:`DECAL_WALL_EDGE` and
+    :func:`sub_tile_fraction`.
+    """
+    item_id = int(obj.get("item_id", 0))
+    if is_tile_aligned(item_id):
+        return (float(tile["x"]) + 0.5, float(tile["y"]) + 0.5)
+    centre_x = float(tile["x"]) + sub_tile_fraction(obj.get("in_tile_x", 4))
+    centre_y = float(tile["y"]) + sub_tile_fraction(obj.get("in_tile_y", 4))
+    if is_wall_mounted(item_id):
+        # Only the four square headings name a wall; the seven objects on a
+        # diagonal heading keep their sub-tile cell on both axes.
+        edge = DECAL_WALL_EDGE.get(int(obj.get("heading", 0)) & 7)
+        if edge is not None:
+            axis, offset = edge
+            # Set back from the wall plane so the quad's face, not its centre,
+            # is what lands on the wall.
+            inset = DECAL_FACE_DEPTH if offset == 0.0 else -DECAL_FACE_DEPTH
+            if axis == "x":
+                centre_x = float(tile["x"]) + offset + inset
+            else:
+                centre_y = float(tile["y"]) + offset + inset
+    return (centre_x, centre_y)
+
+
+def is_wall_clamped(item_id: int, kind: str) -> bool:
+    """Whether an object should be kept clear of the wall tiles beside it.
+
+    Only a door is left out. Its leaf stands in the opening, so half the panel
+    thickness lies in the wall by construction and moving it would push the door
+    out of its own doorway. Tile-aligned classes fill their tile exactly and so
+    have nothing to correct.
+
+    Things fixed to a wall - shelves, paintings, levers, writing - are clamped
+    like anything else. The shift is only ever the depth of the overhang, so it
+    leaves them flush against the wall face rather than through it, which is
+    where a wall fixture belongs. Exempting them left shelves poking into the
+    rock while the crockery standing on them was moved clear, pulling the two
+    apart.
+    """
+    return not (kind == "door" or is_tile_aligned(item_id))
+
+
+def _axis_clamp(
+    low: float, high: float, limit_low: float | None, limit_high: float | None
+) -> float:
+    """Smallest shift bringing ``low..high`` inside the limits that apply."""
+    if limit_low is None and limit_high is None:
+        return 0.0
+    if (
+        limit_low is not None
+        and limit_high is not None
+        and high - low > limit_high - limit_low
+    ):
+        # Wider than the gap it has to sit in - a fountain or a rubble pile is
+        # larger than one tile. Centre it: shifting to clear one wall would only
+        # bury the other end in the opposite one.
+        return (limit_low + limit_high) / 2.0 - (low + high) / 2.0
+    over_low = 0.0 if limit_low is None else max(0.0, limit_low - low)
+    over_high = 0.0 if limit_high is None else max(0.0, high - limit_high)
+    return over_low - over_high
+
+
+def wall_clamp_offset(
+    bounds: tuple[float, float, float, float],
+    tile: dict,
+    tile_map: dict,
+    item_id: int,
+    kind: str,
+) -> tuple[float, float]:
+    """XY shift keeping an object's footprint out of the solid tiles beside it.
+
+    ``bounds`` is ``(min_x, max_x, min_y, max_y)`` in tile units. Only tiles the
+    map calls ``solid`` block: a diagonal still has floor on one side, and
+    treating it as a wall would shove objects out of perfectly good corners.
+
+    underworldexporter nudges on ``xpos == 0 or 7`` alone, without checking that
+    a wall is there, which moves objects that merely sit on the boundary between
+    two open tiles. Testing the neighbour instead leaves those where they are.
+    """
+    if not is_wall_clamped(item_id, kind):
+        return (0.0, 0.0)
+    tile_x, tile_y = int(tile["x"]), int(tile["y"])
+
+    def solid(x: int, y: int) -> bool:
+        neighbour = tile_map.get((x, y))
+        return neighbour is None or neighbour.get("type_name") == "solid"
+
+    min_x, max_x, min_y, max_y = bounds
+    return (
+        _axis_clamp(
+            min_x,
+            max_x,
+            float(tile_x) if solid(tile_x - 1, tile_y) else None,
+            float(tile_x + 1) if solid(tile_x + 1, tile_y) else None,
+        ),
+        _axis_clamp(
+            min_y,
+            max_y,
+            float(tile_y) if solid(tile_x, tile_y - 1) else None,
+            float(tile_y + 1) if solid(tile_x, tile_y + 1) else None,
+        ),
+    )
+
+
 def heading_vector(heading: int) -> tuple[float, float]:
     """Unit XY direction for a UU2 heading, in the clockwise convention.
 
@@ -445,6 +664,29 @@ BED_PILLOW_MIN_Y = 0.15
 The two are spatially disjoint with a clean gap: quilt faces sit at y
 -0.167..+0.018 and the pillow's raised box at y +0.243..+0.316.
 """
+
+
+MOONGATE_LINK_BIAS = 512
+"""Subtracted from a moongate's link field to get the palette index it shows.
+
+A moongate carries its colour on the instance, not the model: UnderworldGodot
+returns ``uwobject.link - 512`` for every face of one
+(``objects/moongate.cs``). The shipped gates use it for the whole spectrum the
+Ethereal Void needs - red at ``0x21``, blue at ``0x4F``, yellow ``0x10``,
+orange ``0x2D``, purple ``0x5A`` and ``0x5B``, green ``0xAB``, white ``0xC2``.
+The model's own table has nothing to say about any of it.
+"""
+
+
+def moongate_palette(obj: dict) -> int | None:
+    """Palette index a placed moongate is tinted with, if its link gives one."""
+    if int(obj.get("item_id", 0)) != MOONGATE_ITEM:
+        return None
+    link = obj.get("quantity_or_link")
+    if link is None:
+        return None
+    index = int(link) - MOONGATE_LINK_BIAS
+    return index if 0 <= index < 256 else None
 
 
 def bed_face_palette(triangle, owner: int) -> int | None:

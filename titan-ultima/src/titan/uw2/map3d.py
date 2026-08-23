@@ -36,7 +36,45 @@ VIEW_OFFSETS: dict[str, tuple[float, float, float]] = {
     # floor so wall faces and ceiling clearance read instead of the plan.
     "low-ne": (1.0, 1.0, 0.28),
     "low-nw": (-1.0, 1.0, 0.28),
+    # Square-on from the south, looking north: the plan pushed away from
+    # overhead and tilted until walls stand up, without the corner bearing the
+    # iso presets take. North stays north, so a room keeps the shape it has on
+    # the plan. 48 degrees above the map - steep enough to see over near walls
+    # into the rooms behind them, shallow enough for height to read.
+    "south": (0.0, -1.0, 1.1),
+    "low-s": (0.0, -1.0, 0.2),
+    # Straight down. Only meaningful under the parallel projection the plan
+    # view uses; the tiny -y lean the perspective "top" carries would break
+    # the one-texel-per-pixel mapping.
+    "plan": (0.0, 0.0, 1.0),
 }
+
+PLAN_VIEW = "plan"
+"""Orthographic, unlit, pixel-exact floor plan.
+
+Perspective cannot reproduce a texture exactly: surfaces sit at varying angles
+and distances, so a texel covers a non-integer, non-uniform run of pixels and
+the GPU has to resample. A straight-down parallel projection at a whole
+multiple of :data:`NATIVE_PIXELS_PER_TILE` makes the mapping one texel to one
+pixel, and skipping the light kit keeps the sampled colour unscaled, so floors
+come back byte-identical to their ``T64.TR`` source.
+"""
+
+MAX_RENDER_EDGE = 16384
+"""Largest edge a computed native size may reach, before it is refused.
+
+The usual ceiling on a framebuffer or texture, and a useful sanity check: a
+view shallow enough to need more than this cannot show floor detail whatever
+resolution it is given.
+"""
+
+NATIVE_PIXELS_PER_TILE = 64
+"""Side of a ``T64.TR`` texture, and the plan view's 1:1 output scale.
+
+One terrain texture maps across exactly one tile, so at 64 pixels per tile
+each texel is one pixel. Larger whole multiples stay lossless - they are a
+nearest-neighbour enlargement - but carry no extra detail.
+"""
 
 VIEWS = frozenset(VIEW_OFFSETS)
 
@@ -81,9 +119,13 @@ def render_map_scene(
     texture_scale: int = 1,
     backend: str = "auto",
     name_files: bool = False,
+    plan_scale: int = 1,
+    native: bool = False,
 ) -> list[Path]:
     """Build one scene and render requested camera views as PNG."""
     options = _validate_render_options(
+        plan_scale=plan_scale,
+        native=native,
         views=views,
         size=size,
         width=width,
@@ -132,6 +174,8 @@ def render_scene_views(
     texture_filter: str,
     texture_scale: int,
     backend: str,
+    plan_scale: int = 1,
+    native: bool = False,
 ) -> list[Path]:
     """Render an already-built scene from each requested camera preset."""
     plotter_module = None
@@ -158,8 +202,26 @@ def render_scene_views(
     written: list[Path] = []
     for view in views:
         path = destination / f"{stem}_{view}.png"
-        render_width = width * supersample
-        render_height = height * supersample
+        if view == PLAN_VIEW:
+            # Size follows from the region: the plan view is defined by its
+            # pixels per tile, not by a requested image size. Supersampling is
+            # skipped for the same reason - the downsample would average texels.
+            render_width, render_height = plan_render_size(scene.region, plan_scale)
+        elif native and plotter_module is not None:
+            # Enough pixels that the most foreshortened floor tile still gets a
+            # whole texture across it. Supersampling on top would only be
+            # thrown away by the downsample, so it is skipped here too.
+            render_width, render_height = native_render_size(
+                plotter_module,
+                scene,
+                view,
+                scale=plan_scale,
+                zoom=zoom,
+                fit_margin=fit_margin,
+            )
+        else:
+            render_width = width * supersample
+            render_height = height * supersample
         rendered: Image.Image | None = None
         if plotter_module is not None:
             try:
@@ -191,7 +253,7 @@ def render_scene_views(
                 zoom=zoom,
                 fit_margin=fit_margin,
             )
-        if supersample > 1:
+        if supersample > 1 and view != PLAN_VIEW and not native:
             rendered = rendered.resize(
                 (width, height), DOWNSAMPLE_FILTERS[downsample_filter]
             )
@@ -202,6 +264,8 @@ def render_scene_views(
 
 def _validate_render_options(
     *,
+    plan_scale: int = 1,
+    native: bool = False,
     views: Iterable[str],
     size: int,
     width: int | None,
@@ -241,9 +305,13 @@ def _validate_render_options(
         raise UW2SceneError(f"texture filter must be one of {TEXTURE_FILTERS}")
     if texture_scale < 1:
         raise UW2SceneError("texture scale must be at least 1")
+    if plan_scale < 1:
+        raise UW2SceneError("plan scale must be at least 1")
     if backend not in BACKENDS:
         raise UW2SceneError(f"backend must be one of {BACKENDS}")
     return {
+        "plan_scale": plan_scale,
+        "native": native,
         "views": requested,
         "width": effective_width,
         "height": effective_height,
@@ -315,7 +383,7 @@ def export_map_scene(
                 )
             tm_material = trimesh.visual.material.PBRMaterial(**kwargs)
             material_cache[material.key] = tm_material
-        mesh = _trimesh_part(trimesh, part, tm_material)
+        mesh = _trimesh_part(trimesh, part, tm_material, material)
         node_name = _unique_name(part.name, used_names)
         mesh.metadata.update(
             {
@@ -516,10 +584,35 @@ def _part_arrays(part: ScenePart) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     )
 
 
-def _trimesh_part(trimesh, part, material):
+def _part_vertex_colors(part: ScenePart, fallback) -> np.ndarray:
+    """One RGB per point of :func:`_part_arrays`, for a shaded-across part.
+
+    Corners are never shared between faces there - each triangle contributes
+    three fresh points - so this lines up with the point array without any
+    re-indexing. Faces in the part that carry no colours of their own take the
+    material's, which keeps a part mixing the two looking right.
+    """
+    colors: list[tuple[int, int, int]] = []
+    for triangle in part.triangles:
+        if triangle.colors is None:
+            colors.extend([tuple(fallback[:3])] * 3)
+        else:
+            colors.extend(tuple(corner[:3]) for corner in triangle.colors)
+    return np.asarray(colors, dtype=np.uint8)
+
+
+def _trimesh_part(trimesh, part, material, scene_material=None):
     points, faces, uv = _part_arrays(part)
     mesh = trimesh.Trimesh(vertices=points, faces=faces, process=False)
-    mesh.visual = trimesh.visual.texture.TextureVisuals(uv=uv, material=material)
+    if part.has_vertex_colors and scene_material is not None:
+        # glTF carries these as COLOR_0, so the gradient survives the export.
+        rgb = _part_vertex_colors(part, scene_material.color)
+        alpha = np.full((len(rgb), 1), 255, dtype=np.uint8)
+        mesh.visual = trimesh.visual.ColorVisuals(
+            mesh=mesh, vertex_colors=np.hstack((rgb, alpha))
+        )
+    else:
+        mesh.visual = trimesh.visual.texture.TextureVisuals(uv=uv, material=material)
     return mesh
 
 
@@ -535,34 +628,55 @@ def _render_view(
     texture_filter: str,
     texture_scale: int,
 ) -> Image.Image:
+    plan = view == PLAN_VIEW
     plotter = pv.Plotter(off_screen=True, window_size=(width, height))
     plotter.set_background("#0c1118", top="#526171")
     texture_cache: dict[str, object] = {}
-    nearest = texture_filter == "nearest"
+    # The plan view samples one texel per pixel, so interpolation there would
+    # blend neighbours that the source never mixes.
+    nearest = plan or texture_filter == "nearest"
     for part, owner in iter_scene_parts(scene):
         if owner is not None and owner.kind == "sprite":
             part = _camera_billboard_part(part, owner.metadata, view)
+        part = _wall_clamped_part(part, owner)
         material = scene.materials[part.material_key]
         points, faces, uv = _part_arrays(part)
         packed_faces = np.column_stack((np.full(len(faces), 3), faces)).ravel()
         mesh = pv.PolyData(points, packed_faces)
-        options = dict(
-            smooth_shading=False,
-            show_edges=False,
-            ambient=0.35,
-            diffuse=0.75,
-            specular=0.05,
+        options: dict[str, object] = (
+            dict(smooth_shading=False, show_edges=False, lighting=False)
+            if plan
+            else dict(
+                smooth_shading=False,
+                show_edges=False,
+                ambient=0.35,
+                diffuse=0.75,
+                specular=0.05,
+            )
         )
         if material.image is not None:
             texture = texture_cache.get(material.key)
             if texture is None:
-                source = _scaled_texture_image(material.image, texture_scale)
+                source = _scaled_texture_image(
+                    material.image, 1 if plan else texture_scale
+                )
                 texture = pv.Texture(np.asarray(source))
                 texture.flip_y()
                 texture.interpolate = not (material.nearest or nearest)
                 texture_cache[material.key] = texture
             mesh.active_texture_coordinates = uv
             plotter.add_mesh(mesh, texture=texture, **options)
+        elif part.has_vertex_colors:
+            # Shaded across its corners, so the colour rides on the points
+            # rather than on one material for the whole part.
+            mesh.point_data["uw2_shade"] = _part_vertex_colors(part, material.color)
+            plotter.add_mesh(
+                mesh,
+                scalars="uw2_shade",
+                rgb=True,
+                opacity=material.color[3] / 255.0,
+                **options,
+            )
         else:
             plotter.add_mesh(
                 mesh,
@@ -570,25 +684,13 @@ def _render_view(
                 opacity=material.color[3] / 255.0,
                 **options,
             )
-    plotter.enable_lightkit()
-    plotter.enable_anti_aliasing("ssaa")
-    bounds = _scene_bounds(scene)
-    center = (
-        (bounds[0] + bounds[1]) / 2.0,
-        (bounds[2] + bounds[3]) / 2.0,
-        (bounds[4] + bounds[5]) / 2.0,
-    )
-    horizontal = max(bounds[1] - bounds[0], bounds[3] - bounds[2], 1.0)
-    vertical = max(bounds[5] - bounds[4], 1.0)
-    distance = max(horizontal, vertical) * 1.8
-    offset = VIEW_OFFSETS[view]
-    plotter.camera_position = [
-        tuple(center[axis] + offset[axis] * distance for axis in range(3)),
-        center,
-        _view_up(view),
-    ]
-    plotter.reset_camera()
-    plotter.camera.zoom(zoom / fit_margin)
+    if not plan:
+        # The light kit scales sampled texel colour, which the plan view cannot
+        # afford; every other view wants the shading.
+        plotter.enable_lightkit()
+        plotter.enable_anti_aliasing("ssaa")
+    bounds = _framing_bounds(scene)
+    _set_scene_camera(plotter, bounds, view, zoom, fit_margin)
     array = plotter.screenshot(None, return_img=True)
     plotter.close()
     # Keep PyVista's native RGB so saved PNGs match the previous output format;
@@ -628,17 +730,29 @@ def _render_software(
     for part, owner in iter_scene_parts(scene):
         if owner is not None and owner.kind == "sprite":
             part = _camera_billboard_part(part, owner.metadata, view)
+        part = _wall_clamped_part(part, owner)
         material = scene.materials[part.material_key]
         color = color_cache.get(material.key)
         if color is None:
             color = _average_material_color(material)
             color_cache[material.key] = color
         for triangle in part.triangles:
+            face_color = color
+            if triangle.colors is not None:
+                # This backend fills whole polygons, so a face shaded across
+                # its corners takes their mean.
+                face_color = (
+                    *(
+                        sum(corner[channel] for corner in triangle.colors) // 3
+                        for channel in range(3)
+                    ),
+                    color[3],
+                )
             relative = np.asarray(triangle.vertices, dtype=np.float64) - center
             projected = np.column_stack(
                 (relative @ right, relative @ up, relative @ forward)
             )
-            faces.append((float(projected[:, 2].mean()), projected, color))
+            faces.append((float(projected[:, 2].mean()), projected, face_color))
 
     image = Image.new("RGBA", (width, height), BACKGROUND_RGBA)
     everything = np.concatenate([projected for _d, projected, _c in faces])
@@ -684,7 +798,156 @@ def _camera_basis(view: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
 
 
 def _view_up(view: str) -> tuple[float, float, float]:
-    return (0.0, 1.0, 0.0) if view == "top" else (0.0, 0.0, 1.0)
+    return (0.0, 1.0, 0.0) if view in ("top", PLAN_VIEW) else (0.0, 0.0, 1.0)
+
+
+def plan_render_size(
+    region: tuple[int, int, int, int], scale: int = 1
+) -> tuple[int, int]:
+    """Pixel size that renders ``region`` at ``scale`` x native tile resolution."""
+    if scale < 1:
+        raise UW2SceneError("plan scale must be at least 1")
+    x1, y1, x2, y2 = region
+    step = NATIVE_PIXELS_PER_TILE * scale
+    return ((x2 - x1 + 1) * step, (y2 - y1 + 1) * step)
+
+
+def _set_scene_camera(plotter, bounds, view: str, zoom: float, margin: float) -> None:
+    """Point the camera at a scene's framing bounds, as every view expects it."""
+    center = (
+        (bounds[0] + bounds[1]) / 2.0,
+        (bounds[2] + bounds[3]) / 2.0,
+        (bounds[4] + bounds[5]) / 2.0,
+    )
+    horizontal = max(bounds[1] - bounds[0], bounds[3] - bounds[2], 1.0)
+    vertical = max(bounds[5] - bounds[4], 1.0)
+    distance = max(horizontal, vertical) * 1.8
+    offset = VIEW_OFFSETS[view]
+    plotter.camera_position = [
+        tuple(center[axis] + offset[axis] * distance for axis in range(3)),
+        center,
+        _view_up(view),
+    ]
+    if view == PLAN_VIEW:
+        # Half the visible vertical extent in world units. With the window
+        # sized to the region this puts one tile on exactly one whole block of
+        # pixels, which is what makes the output reproduce the source texels.
+        plotter.camera.enable_parallel_projection()
+        plotter.camera.parallel_scale = (bounds[3] - bounds[2]) / 2.0
+        plotter.camera.clipping_range = (1.0, distance + vertical + 2.0)
+    else:
+        # Fitting to the supplied bounds rather than to the actors keeps the
+        # framing a function of the region alone.
+        plotter.reset_camera(bounds=bounds)
+        plotter.camera.zoom(zoom / margin)
+
+
+def native_render_size(
+    pv,
+    scene: UW2Scene,
+    view: str,
+    *,
+    scale: int = 1,
+    zoom: float = DEFAULT_ZOOM,
+    fit_margin: float = 1.0,
+    aspect: float | None = None,
+    probe: int = 700,
+) -> tuple[int, int]:
+    """Pixel size at which no floor tile in ``scene`` is sampled below native.
+
+    The plan view answers this exactly: it is parallel and square-on, so one
+    tile is always :data:`NATIVE_PIXELS_PER_TILE` pixels. Every other preset
+    looks at the floor from an angle, which foreshortens it - a tile 64 pixels
+    wide across the screen covers only ``64 * sin(elevation)`` up it - and under
+    perspective the far side of the map is smaller than the near side too. Both
+    together mean a tilted view needs a *larger* image than the plan to hold the
+    same detail; at the 48 degrees of ``south`` the shortfall is about 26%.
+
+    Rather than model VTK's camera fit, this measures it: the projection is set
+    up at a small probe size with no geometry in it, the worst tile in the
+    region is measured, and the answer scales linearly from there because
+    enlarging the window at a fixed aspect scales the projection with it.
+    """
+    if scale < 1:
+        raise UW2SceneError("native scale must be at least 1")
+    if view == PLAN_VIEW:
+        return plan_render_size(scene.region, scale)
+
+    x1, y1, x2, y2 = scene.region
+    if aspect is None:
+        aspect = (y2 - y1 + 1) / (x2 - x1 + 1)
+    probe_height = max(64, round(probe * aspect))
+    worst = _worst_pixels_per_tile(
+        pv, scene, view, probe, probe_height, zoom, fit_margin
+    )
+    if worst <= 0.0:
+        raise UW2SceneError(f"could not measure tile sampling for view {view!r}")
+    factor = (NATIVE_PIXELS_PER_TILE * scale) / worst
+    width, height = round(probe * factor), round(probe_height * factor)
+    if max(width, height) > MAX_RENDER_EDGE:
+        # A shallow view cannot be talked into showing floor detail. At 11
+        # degrees a tile is foreshortened to under a fifth of its width, so
+        # native sampling wants five times the resolution in every direction.
+        raise UW2SceneError(
+            f"native sampling for view {view!r} needs {width}x{height}, past the "
+            f"{MAX_RENDER_EDGE} pixel edge most drivers allow. The floor is too "
+            f"foreshortened at this elevation to hold its detail; use a steeper "
+            f"view, a smaller region, or size the render explicitly."
+        )
+    return (width, height)
+
+
+def _worst_pixels_per_tile(
+    pv, scene: UW2Scene, view: str, width: int, height: int, zoom: float, margin: float
+) -> float:
+    """Smallest on-screen size of a one-tile floor step, over the whole region.
+
+    Sampled on a grid rather than at the centre: under perspective the far edge
+    of the map is the limiting case, and it is the detail there that is lost
+    first.
+    """
+    import vtk
+
+    plotter = pv.Plotter(off_screen=True, window_size=(width, height))
+    bounds = _framing_bounds(scene)
+    _set_scene_camera(plotter, bounds, view, zoom, margin)
+    plotter.render()
+    renderer = plotter.renderer
+    coordinate = vtk.vtkCoordinate()
+    coordinate.SetCoordinateSystemToWorld()
+
+    def display(point: tuple[float, float, float]) -> np.ndarray:
+        coordinate.SetValue(*point)
+        return np.asarray(coordinate.GetComputedDoubleDisplayValue(renderer), float)
+
+    x1, y1, x2, y2 = scene.region
+    floor_z = bounds[4]
+    worst = float("inf")
+    steps = 5
+    for i in range(steps):
+        for j in range(steps):
+            x = x1 + (x2 - x1) * i / (steps - 1)
+            y = y1 + (y2 - y1) * j / (steps - 1)
+            origin = display((x, y, floor_z))
+            east = np.linalg.norm(display((x + 1.0, y, floor_z)) - origin)
+            north = np.linalg.norm(display((x, y + 1.0, floor_z)) - origin)
+            worst = min(worst, east, north)
+    plotter.close()
+    return 0.0 if worst == float("inf") else float(worst)
+
+
+def _framing_bounds(scene: UW2Scene) -> tuple[float, float, float, float, float, float]:
+    """Camera-fitting bounds taken from the tile region, not from the geometry.
+
+    Fitting to the geometry lets any object decide the framing: moving one item
+    a fraction of a tile re-fits the camera and shifts every pixel in the
+    output, so two renders of the same region cannot be compared. The tile
+    region is fixed by the caller, so the framing is too. Height still comes
+    from the scene, which has no comparable free parameter.
+    """
+    x1, y1, x2, y2 = scene.region
+    _minx, _maxx, _miny, _maxy, min_z, max_z = _scene_bounds(scene)
+    return (float(x1), float(x2 + 1), float(y1), float(y2 + 1), min_z, max_z)
 
 
 def _scaled_texture_image(image: Image.Image, texture_scale: int) -> Image.Image:
@@ -694,6 +957,36 @@ def _scaled_texture_image(image: Image.Image, texture_scale: int) -> Image.Image
     return source.resize(
         (source.width * texture_scale, source.height * texture_scale),
         Image.Resampling.NEAREST,
+    )
+
+
+def _wall_clamped_part(part: ScenePart, owner: SceneObject | None) -> ScenePart:
+    """Shift a part clear of the wall tiles beside it, if the scene asked for it.
+
+    The offset is computed and stored while the scene is built, where the tile
+    grid is known, but is deliberately not baked into the vertices: a GLB export
+    keeps the placement the level data actually holds, and only what is drawn
+    moves. Objects the rules exempt carry no offset and pass straight through.
+    """
+    if owner is None:
+        return part
+    offset = owner.metadata.get("wall_clamp")
+    if not offset:
+        return part
+    dx, dy = float(offset[0]), float(offset[1])
+    return ScenePart(
+        name=part.name,
+        material_key=part.material_key,
+        triangles=[
+            SceneTriangle(
+                tuple(
+                    (vertex[0] + dx, vertex[1] + dy, vertex[2])
+                    for vertex in triangle.vertices
+                ),
+                triangle.uvs,
+            )
+            for triangle in part.triangles
+        ],
     )
 
 
@@ -719,12 +1012,14 @@ def _camera_billboard_part(
     d = _vector_tuple(center - right * half_width + up * half_height)
     from titan.uw2.scene3d import SceneTriangle
 
+    # Render textures are flipped vertically by _render_view, so v=0 samples the
+    # source image's bottom row. The upper screen corners therefore take v=1.
     return ScenePart(
         name=part.name,
         material_key=part.material_key,
         triangles=[
-            SceneTriangle((a, b, c), ((0, 1), (1, 1), (1, 0))),
-            SceneTriangle((a, c, d), ((0, 1), (1, 0), (0, 0))),
+            SceneTriangle((a, b, c), ((0, 0), (1, 0), (1, 1))),
+            SceneTriangle((a, c, d), ((0, 0), (1, 1), (0, 1))),
         ],
     )
 

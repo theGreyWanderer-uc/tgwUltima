@@ -189,10 +189,16 @@ def _wall_triangles(
     texture: int,
     z_scale: float,
 ) -> list[TexturedTriangle]:
-    v1 = (ceiling - z1) / 32.0
-    v2 = (ceiling - z2) / 32.0
-    v3 = (ceiling - nz2) / 32.0
-    v4 = (ceiling - nz1) / 32.0
+    # Distance below the ceiling, in texture heights, turned over: both
+    # consumers flip v before sampling, so the row that should meet the ceiling
+    # is v=1, not v=0. Anchoring at the ceiling and repeating downwards is
+    # unchanged; only which end of the image lands up. Left the other way round,
+    # a wall texture with ground detail along its foot - the ice wall 51, say -
+    # hung that detail from the ceiling.
+    v1 = 1.0 - (ceiling - z1) / 32.0
+    v2 = 1.0 - (ceiling - z2) / 32.0
+    v3 = 1.0 - (ceiling - nz2) / 32.0
+    v4 = 1.0 - (ceiling - nz1) / 32.0
 
     if side in ("left", "front"):
         return [
@@ -376,7 +382,28 @@ def _floor_and_ceiling_triangles(
         out.append(ceil_tri1)
         if tri2_used:
             out.append(ceil_tri2)
-    return out
+    return [_with_south_first_rows(triangle) for triangle in out]
+
+
+def _with_south_first_rows(triangle: TexturedTriangle) -> TexturedTriangle:
+    """Turn a horizontal surface's ``v`` over, so image row 0 lies to the south.
+
+    Floor and ceiling ``v`` is generated straight from the world ``y`` the vertex
+    sits at, which reads a ``T64.TR`` image as though its first row belonged to
+    the north edge of the tile. It belongs to the south: the 2.5D renderers have
+    always turned floor textures over for this
+    (``map_render.floor_texture_image``, ``grid_render``), and the four-tile
+    pentagram inlaid in the Ethereal Void and Scintillus Academy only resolves
+    into one figure this way round.
+
+    Walls are untouched. Their ``v`` runs up the wall rather than across the
+    map, and nothing about it is ambiguous.
+    """
+    return TexturedTriangle(
+        texture_id=triangle.texture_id,
+        vertices=triangle.vertices,
+        uvs=tuple((u, 1.0 - v) for u, v in triangle.uvs),  # type: ignore[arg-type]
+    )
 
 
 def _tile_edge_coords(

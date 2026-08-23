@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import unittest
 
 from titan.uw2.exe_models import ModelTriangle, ModelVertex, UW2Model
+from titan.uw2.instances import sub_tile_fraction
 from titan.uw2.scene3d import (
     UW2Scene,
     UW2SceneError,
@@ -59,7 +60,8 @@ class UW2Scene3DTests(unittest.TestCase):
             for triangle in part.triangles
             for vertex in triangle.vertices
         ]
-        self.assertEqual(max(vertex[0] for vertex in vertices), 19.5)
+        centre_x = 18 + sub_tile_fraction(4)
+        self.assertEqual(max(vertex[0] for vertex in vertices), centre_x + 1.0)
         self.assertEqual(max(vertex[2] for vertex in vertices), 3.3125)
 
     def test_model_origin_and_clockwise_heading_are_applied_before_placement(
@@ -102,8 +104,8 @@ class UW2Scene3DTests(unittest.TestCase):
         placed = _build_model_object(scene, obj, tile, model, assets, model_scale=1.0)
 
         first = placed.parts[0].triangles[0].vertices[0]
-        self.assertAlmostEqual(first[0], 10.5)
-        self.assertAlmostEqual(first[1], 19.5)
+        self.assertAlmostEqual(first[0], 10 + sub_tile_fraction(4))
+        self.assertAlmostEqual(first[1], 20 + sub_tile_fraction(4) - 1.0)
         self.assertAlmostEqual(first[2], 1.5)
 
 
