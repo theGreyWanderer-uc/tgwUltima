@@ -602,6 +602,8 @@ def cmd_map_3d_render(args: SimpleNamespace) -> int:
                     texture_scale=args.texture_scale,
                     backend=args.backend,
                     name_files=args.name_files,
+                    plan_scale=getattr(args, "plan_scale", 1),
+                    native=getattr(args, "native", False),
                 )
             )
     except (OSError, KeyError, ValueError, UW2SceneError) as error:
@@ -893,9 +895,26 @@ def map_3d_render_cmd(
     ] = None,
     views: Annotated[
         Optional[list[str]],
-        typer.Option("--view", help="iso-ne/nw/se/sw, low-ne, low-nw, or top"),
+        typer.Option(
+            "--view",
+            help="iso-ne/nw/se/sw, low-ne, low-nw, south, low-s, top, or plan",
+        ),
     ] = None,
     size: Annotated[int, typer.Option("--size", help="Square PNG size")] = 1200,
+    plan_scale: Annotated[
+        int,
+        typer.Option(
+            "--plan-scale",
+            help="Tile size for self-sizing views, in multiples of 64 pixels",
+        ),
+    ] = 1,
+    native: Annotated[
+        bool,
+        typer.Option(
+            "--native",
+            help="Size every view so no floor tile falls below native resolution",
+        ),
+    ] = False,
     width: Annotated[
         Optional[int], typer.Option("--width", help="Override --size horizontally")
     ] = None,

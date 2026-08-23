@@ -15,6 +15,7 @@ from typing import Iterable
 
 from PIL import Image, ImageDraw, ImageFont
 
+from titan.uw2.instances import sub_tile_fraction
 from titan.uw2.map_pipeline import load_levels, load_terrain_images
 from titan.uw2.render_common import (
     parse_hex_color,
@@ -128,8 +129,8 @@ def draw_door_marker(
     width = max(3, tile_size // 12)
     if door_obj is not None:
         heading = int(door_obj.get("heading", 0))
-        obj_x = (min(7, max(0, int(door_obj.get("in_tile_x", 4)))) + 0.5) / 8.0
-        obj_y = (min(7, max(0, int(door_obj.get("in_tile_y", 4)))) + 0.5) / 8.0
+        obj_x = sub_tile_fraction(door_obj.get("in_tile_x", 4))
+        obj_y = sub_tile_fraction(door_obj.get("in_tile_y", 4))
     else:
         heading = infer_flag_door_heading(tile, tile_map)
         obj_x = 0.5

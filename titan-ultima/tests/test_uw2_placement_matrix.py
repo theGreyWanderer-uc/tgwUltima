@@ -23,6 +23,7 @@ from PIL import Image
 from titan.uw2.exe_models import ITEM_MODEL_INDEX, ModelTriangle, ModelVertex, UW2Model
 from titan.uw2.instances import (
     BRIDGE_ITEM,
+    CEILING_BRIDGE_MIN_ZPOS,
     CONTROL_FIRST,
     DOORS,
     LEVER_ITEM,
@@ -31,6 +32,8 @@ from titan.uw2.instances import (
     TMFLAT,
     TMOBJ,
     WRITING_ITEM,
+    is_ceiling_bridge,
+    sub_tile_fraction,
 )
 from titan.uw2.scene3d import build_level_scene
 
@@ -169,8 +172,8 @@ class UW2HeadingPlacementTests(unittest.TestCase):
 
     def _offset(self, heading: int) -> tuple[float, float]:
         _scene, placed = _build(TABLE, heading=heading)
-        centre_x = 4 + 4 / 8.0
-        centre_y = 5 + 4 / 8.0
+        centre_x = 4 + sub_tile_fraction(4)
+        centre_y = 5 + sub_tile_fraction(4)
         far = max(
             _vertices(placed),
             key=lambda v: (v[0] - centre_x) ** 2 + (v[1] - centre_y) ** 2,
@@ -273,6 +276,49 @@ class UW2MaterialSourceTests(unittest.TestCase):
             {source for source, _i, _f, _k in self.CASES},
             {TMOBJ, TMFLAT, TERRAIN, DOORS},
         )
+
+
+class UW2CeilingBridgeTests(unittest.TestCase):
+    """A bridge at ceiling height roofs the room, so it follows --include-ceilings.
+
+    `uw-formats.txt` notes bridges can alter the fixed ceiling height. The
+    shipped data separates cleanly: deck bridges top out at zpos 104, then 43
+    sit at 121 or 127 against a ceiling of 128. Castle Britannia roofs its
+    courtyard with a five-by-five grid of them, which hid the fountain.
+    """
+
+    def test_only_bridges_near_the_ceiling_count(self) -> None:
+        self.assertTrue(is_ceiling_bridge(BRIDGE_ITEM, 127))
+        self.assertTrue(is_ceiling_bridge(BRIDGE_ITEM, CEILING_BRIDGE_MIN_ZPOS))
+        self.assertFalse(is_ceiling_bridge(BRIDGE_ITEM, 104))
+        self.assertFalse(is_ceiling_bridge(BRIDGE_ITEM, 0))
+
+    def test_other_classes_are_never_ceiling_bridges(self) -> None:
+        self.assertFalse(is_ceiling_bridge(TABLE, 127))
+        self.assertFalse(is_ceiling_bridge(THIN_WALL_ITEM, 127))
+
+    def test_a_ceiling_bridge_is_dropped_when_ceilings_are_off(self) -> None:
+        level = _level([_object(BRIDGE_ITEM, flags=0, zpos=127)])
+
+        scene = build_level_scene(level, _assets(), include_ceilings=False)
+
+        self.assertEqual(scene.objects, [])
+        self.assertEqual(scene.skipped["ceiling_bridge"], 1)
+
+    def test_a_ceiling_bridge_returns_with_ceilings_on(self) -> None:
+        level = _level([_object(BRIDGE_ITEM, flags=0, zpos=127)])
+
+        scene = build_level_scene(level, _assets(), include_ceilings=True)
+
+        self.assertEqual(len(scene.objects), 1)
+        self.assertNotIn("ceiling_bridge", scene.skipped)
+
+    def test_a_deck_bridge_is_kept_either_way(self) -> None:
+        for include in (False, True):
+            with self.subTest(include_ceilings=include):
+                level = _level([_object(BRIDGE_ITEM, flags=0, zpos=64)])
+                scene = build_level_scene(level, _assets(), include_ceilings=include)
+                self.assertEqual(len(scene.objects), 1)
 
 
 class UW2StateVariantTests(unittest.TestCase):

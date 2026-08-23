@@ -14,6 +14,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageEnhance, ImageFont
 
 from titan.uw2.exe_models import MODEL_ICON_ITEM_IDS, UW2ModelArchive
+from titan.uw2.instances import sub_tile_fraction
 from titan.uw2.object_data import UW2AnimationTable, UW2CommonObjectTable
 from titan.uw2.palette import UW2Palette
 
@@ -587,8 +588,8 @@ def make_sprite_primitives(
             ),
             Image.Resampling.NEAREST,
         )
-        raw_x = float(tile["x"]) + float(obj.get("in_tile_x", 4)) / 8.0
-        raw_y = float(tile["y"]) + float(obj.get("in_tile_y", 4)) / 8.0
+        raw_x = float(tile["x"]) + sub_tile_fraction(obj.get("in_tile_x", 4))
+        raw_y = float(tile["y"]) + sub_tile_fraction(obj.get("in_tile_y", 4))
         display_x, display_y = transform_boundary_point(
             raw_x, raw_y, y_size, args.orientation
         )
@@ -636,8 +637,8 @@ def make_model_primitives(
         if model is None:
             continue
         heading = int(obj.get("heading", 0)) & 0x07
-        center_x = float(tile["x"]) + float(obj.get("in_tile_x", 4)) / 8.0
-        center_y = float(tile["y"]) + float(obj.get("in_tile_y", 4)) / 8.0
+        center_x = float(tile["x"]) + sub_tile_fraction(obj.get("in_tile_x", 4))
+        center_y = float(tile["y"]) + sub_tile_fraction(obj.get("in_tile_y", 4))
         object_lift = round(
             (float(obj.get("zpos", tile["floor_height"])) - float(min_floor))
             / max(float(args.floor_height_per_lift), 0.001)
@@ -1293,8 +1294,8 @@ def decal_line_points(
     x = int(tile["x"])
     y = int(tile["y"])
     heading = int(obj.get("heading", 0))
-    obj_x = min(7, max(0, int(obj.get("in_tile_x", 4)))) / 8.0
-    obj_y = min(7, max(0, int(obj.get("in_tile_y", 4)))) / 8.0
+    obj_x = sub_tile_fraction(obj.get("in_tile_x", 4))
+    obj_y = sub_tile_fraction(obj.get("in_tile_y", 4))
     half_width = 0.14
     if str(tile["type_name"]).startswith("diagonal_") and heading not in (0, 2, 4, 6):
         return diagonal_decal_line_points(
@@ -1364,8 +1365,8 @@ def door_line_points_from_object(
     x: int, y: int, obj: dict
 ) -> tuple[tuple[float, float], tuple[float, float]]:
     heading = int(obj.get("heading", 0))
-    obj_x = (min(7, max(0, int(obj.get("in_tile_x", 4)))) + 0.5) / 8.0
-    obj_y = (min(7, max(0, int(obj.get("in_tile_y", 4)))) + 0.5) / 8.0
+    obj_x = sub_tile_fraction(obj.get("in_tile_x", 4))
+    obj_y = sub_tile_fraction(obj.get("in_tile_y", 4))
     inset = 0.08
     if heading in (2, 6):
         center = x + obj_x

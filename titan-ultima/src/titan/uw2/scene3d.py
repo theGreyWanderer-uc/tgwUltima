@@ -9,6 +9,7 @@ from typing import Iterable
 
 from PIL import Image
 
+from titan.uw2.exe_models import shaded_palette_index
 from titan.uw2.geometry import TexturedTriangle, generate_tile_triangles
 from titan.uw2.instances import (
     BED_ITEM,
@@ -31,9 +32,13 @@ from titan.uw2.instances import (
     is_open_door,
     is_portcullis,
     is_secret_door,
+    is_ceiling_bridge,
     is_wall_mounted,
+    moongate_palette,
     object_material_for,
     portcullis_bar_model,
+    object_centre,
+    wall_clamp_offset,
     special_model_index,
     terrain_texture_id,
     writing_message_index,
@@ -74,6 +79,19 @@ class SceneTriangle:
         tuple[float, float, float],
     ]
     uvs: tuple[tuple[float, float], tuple[float, float], tuple[float, float]]
+    colors: (
+        tuple[
+            tuple[int, int, int, int],
+            tuple[int, int, int, int],
+            tuple[int, int, int, int],
+        ]
+        | None
+    ) = None
+    """A colour per corner, where the model shades the face across it.
+
+    Set only on executable-model faces the model marks Gouraud. The part's
+    material still names a colour, which is the mean of these, so a consumer
+    that can only take one colour per face keeps working."""
 
 
 @dataclass
@@ -83,6 +101,11 @@ class ScenePart:
     name: str
     material_key: str
     triangles: list[SceneTriangle] = field(default_factory=list)
+
+    @property
+    def has_vertex_colors(self) -> bool:
+        """Whether any face in this part is shaded across its corners."""
+        return any(triangle.colors is not None for triangle in self.triangles)
 
 
 @dataclass
@@ -221,9 +244,16 @@ def build_level_scene(
         item_id = int(obj.get("item_id", 0))
         if item_id == 0:
             continue
+        if not include_ceilings and is_ceiling_bridge(
+            item_id, obj.get("zpos", tile["floor_height"])
+        ):
+            # A bridge at ceiling height roofs the room below it, so it goes
+            # with the ceiling planes rather than staying behind to hide it.
+            scene.skipped["ceiling_bridge"] = scene.skipped.get("ceiling_bridge", 0) + 1
+            continue
         metadata = assets.common_objects.get(item_id)
         if is_door(item_id) and assets.models is not None:
-            scene.objects.append(
+            _place_object(scene, tile, tile_map)(
                 _build_door_object(
                     scene, obj, tile, assets, model_scale, z_scale, level=level
                 )
@@ -237,7 +267,7 @@ def build_level_scene(
                 if special is not None:
                     model = assets.models.model(special)
         if model is not None:
-            scene.objects.append(
+            _place_object(scene, tile, tile_map)(
                 _build_model_object(
                     scene,
                     obj,
@@ -256,7 +286,7 @@ def build_level_scene(
                     scene.skipped.get("missing_sprite", 0) + 1
                 )
                 continue
-            scene.objects.append(
+            _place_object(scene, tile, tile_map)(
                 _build_sprite_object(
                     scene, obj, tile, image, metadata.height, sprite_scale, z_scale
                 )
@@ -265,6 +295,39 @@ def build_level_scene(
             key = f"render_type_{metadata.render_type_name}"
             scene.skipped[key] = scene.skipped.get(key, 0) + 1
     return scene
+
+
+def _place_object(scene, tile: dict, tile_map: dict):
+    """Add a built object to the scene, recording any wall clamp it needs.
+
+    The clamp is stored, never applied: the vertices stay where the level data
+    puts them so a GLB export still reproduces it, and the renderer offsets the
+    geometry as it draws. See :func:`titan.uw2.instances.wall_clamp_offset`.
+    """
+
+    def place(placed: SceneObject) -> None:
+        scene.objects.append(placed)
+        points = [
+            vertex
+            for part in placed.parts
+            for triangle in part.triangles
+            for vertex in triangle.vertices
+        ]
+        if not points:
+            return
+        xs = [point[0] for point in points]
+        ys = [point[1] for point in points]
+        offset = wall_clamp_offset(
+            (min(xs), max(xs), min(ys), max(ys)),
+            tile,
+            tile_map,
+            int(placed.metadata.get("item_id", 0)),
+            placed.kind,
+        )
+        if offset != (0.0, 0.0):
+            placed.metadata["wall_clamp"] = offset
+
+    return place
 
 
 def _from_textured_triangle(triangle: TexturedTriangle) -> SceneTriangle:
@@ -330,6 +393,11 @@ def _placed_metadata(obj: dict, tile: dict) -> dict[str, object]:
         sheet, pillow = bed_palette_indices(int(obj.get("owner", 0)))
         metadata["bed_sheet_palette_index"] = sheet
         metadata["bed_pillow_palette_index"] = pillow
+    gate_colour = moongate_palette(obj)
+    if gate_colour is not None:
+        # A moongate is tinted by its own link field rather than by the model,
+        # which is how the Ethereal Void gets a gate per colour zone.
+        metadata["moongate_palette_index"] = gate_colour
     link = obj.get("special_link")
     if link:
         metadata["trigger_link"] = int(link)
@@ -409,23 +477,57 @@ def _build_model_object(
         metadata.update(_writing_metadata(obj, getattr(assets, "strings", None)))
     placed = SceneObject(name=name, kind="model", metadata=metadata)
     groups: dict[str, ScenePart] = {}
-    center_x = float(tile["x"]) + float(obj.get("in_tile_x", 4)) / 8.0
-    center_y = float(tile["y"]) + float(obj.get("in_tile_y", 4)) / 8.0
+    center_x, center_y = object_centre(obj, tile)
     base_z = float(obj.get("zpos", tile["floor_height"])) * z_scale
     heading = int(obj.get("heading", 0))
     bed_owner = int(obj.get("owner", 0)) if int(obj["item_id"]) == BED_ITEM else None
+    gate_colour = moongate_palette(obj)
     for triangle in model.triangles:
+        corner_colors = None
         if triangle.textured and textured_key is not None:
             material_key = textured_key
         else:
-            palette_index = triangle.palette_index
+            # Where the face's colour starts from. An instance can replace it:
+            # bedding is picked from the bed's owner, a moongate's tint from its
+            # link. Whichever wins has to be what the shading works on, or the
+            # face ends up lit in the colour it no longer wears.
+            base_index = triangle.palette_index
+            shadeable = True
             if bed_owner is not None:
                 owner_colour = bed_face_palette(triangle, bed_owner)
                 if owner_colour is not None:
-                    palette_index = owner_colour
+                    # An owner colour is an exact entry, not a point on a ramp;
+                    # stepping down from it walks into whatever ramp follows.
+                    base_index = owner_colour
+                    shadeable = False
+            elif gate_colour is not None:
+                base_index = gate_colour
+            palette_index = (
+                shaded_palette_index(
+                    assets.palette.colors, base_index, triangle.shade
+                )
+                if shadeable
+                else base_index
+            )
             material_key = f"palette_{palette_index:03d}"
             color = (*assets.palette.colors[palette_index], 255)
             scene.materials.setdefault(material_key, SceneMaterial(material_key, color))
+            if triangle.corner_shades is not None and shadeable:
+                # The model shades this face across its corners. Each takes its
+                # own step down the ramp; the part keeps the mean as its
+                # material, so anything that can hold only one colour per face
+                # still has one to use.
+                corner_colors = tuple(
+                    (
+                        *assets.palette.colors[
+                            shaded_palette_index(
+                                assets.palette.colors, base_index, step
+                            )
+                        ],
+                        255,
+                    )
+                    for step in triangle.corner_shades
+                )
         part = groups.setdefault(
             material_key,
             ScenePart(name=f"{name}_{material_key}", material_key=material_key),
@@ -454,6 +556,7 @@ def _build_model_object(
                     (triangle.vertices[1].u, 1.0 - triangle.vertices[1].v),
                     (triangle.vertices[2].u, 1.0 - triangle.vertices[2].v),
                 ),
+                colors=corner_colors,
             )
         )
     placed.parts.extend(groups.values())
@@ -571,8 +674,7 @@ def _emit_model_parts(
 ) -> None:
     """Append one model's triangles to a scene object, optionally hinged."""
     groups: dict[str, ScenePart] = {}
-    center_x = float(tile["x"]) + float(obj.get("in_tile_x", 4)) / 8.0
-    center_y = float(tile["y"]) + float(obj.get("in_tile_y", 4)) / 8.0
+    center_x, center_y = object_centre(obj, tile)
     base_z = float(obj.get("zpos", tile["floor_height"])) * z_scale
     heading = int(obj.get("heading", 0))
     hinge = _door_hinge(model, doordir) if swing else None
@@ -664,13 +766,14 @@ def _build_sprite_object(
     scene.materials[material_key] = SceneMaterial(
         material_key, image=image.convert("RGBA")
     )
-    center_x = float(tile["x"]) + float(obj.get("in_tile_x", 4)) / 8.0
-    center_y = float(tile["y"]) + float(obj.get("in_tile_y", 4)) / 8.0
+    center_x, center_y = object_centre(obj, tile)
     base_z = float(obj.get("zpos", tile["floor_height"])) * z_scale
     height = max(float(common_height) * z_scale, 0.25) * sprite_scale
     width = height * image.width / max(image.height, 1)
     triangles: list[SceneTriangle] = []
     # Crossed planes remain visible from arbitrary exported-scene cameras.
+    # Both consumers flip v: the renderer through texture.flip_y, the GLB export
+    # through trimesh's glTF conversion. The top edge therefore takes v=1.
     for dx, dy in ((width / 2.0, 0.0), (0.0, width / 2.0)):
         a = (center_x - dx, center_y - dy, base_z)
         b = (center_x + dx, center_y + dy, base_z)
@@ -678,10 +781,10 @@ def _build_sprite_object(
         d = (center_x - dx, center_y - dy, base_z + height)
         triangles.extend(
             (
-                SceneTriangle((a, b, c), ((0, 1), (1, 1), (1, 0))),
-                SceneTriangle((a, c, d), ((0, 1), (1, 0), (0, 0))),
-                SceneTriangle((c, b, a), ((1, 0), (1, 1), (0, 1))),
-                SceneTriangle((d, c, a), ((0, 0), (1, 0), (0, 1))),
+                SceneTriangle((a, b, c), ((0, 0), (1, 0), (1, 1))),
+                SceneTriangle((a, c, d), ((0, 0), (1, 1), (0, 1))),
+                SceneTriangle((c, b, a), ((1, 1), (1, 0), (0, 0))),
+                SceneTriangle((d, c, a), ((0, 1), (1, 1), (0, 0))),
             )
         )
     placed = SceneObject(

@@ -14,6 +14,39 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Added
 
+- **UU2 native-resolution sizing for any view:** `titan uw2 map-3d --native`
+  sizes a render so no floor tile in the region falls below the 64 pixels a
+  `T64.TR` texture actually has. The plan view answers this by arithmetic, being
+  parallel and square-on; every other preset looks at the floor from an angle,
+  which foreshortens it by `sin(elevation)` - 26% at `south`, 51% at `iso-ne` -
+  and under perspective the far side of the map is smaller again, so a tilted
+  view needs a *larger* image than the plan to hold the same detail. Rather than
+  model VTK's camera fit, the projection is measured at a small probe size with
+  no geometry in it and scaled from there. A view too shallow to reach native
+  within a 16384-pixel edge is refused with an explanation rather than
+  attempted: at the 11 degrees of `low-s` the floor simply cannot hold its
+  detail. Losslessness is still the plan view's alone - perspective resamples
+  whatever the resolution - but undersampling need not be.
+
+- **UU2 square-on southern views:** added `south` and `low-s` to
+  `titan uw2 map-3d`. Every other 3D preset takes a corner bearing, which turns
+  a room 45 degrees away from the shape it has on the plan. These stand due
+  south and look north, so north stays up and rooms keep their plan outline
+  while walls stand up and height reads. `south` sits 48 degrees above the map -
+  steep enough to see over near walls into the rooms behind, shallow enough for
+  height to tell; `low-s` drops to 11 degrees, matching the existing `low-ne`
+  and `low-nw` eye-level presets.
+
+- **UU2 lossless map plans:** added a `plan` camera view to `titan uw2 map-3d`,
+  an orthographic straight-down projection sized from the tile region at the
+  native 64 pixels per tile - the side of a `T64.TR` texture, one of which maps
+  across exactly one tile. Every open tile comes back byte-identical to its
+  source texture; verified across all 290 unoccupied tiles of Castle Britannia.
+  Exactness needs both the parallel projection and unlit shading, since the
+  light kit scales sampled texel colour to about 0.94. `--plan-scale` renders
+  whole multiples, which stay lossless but add no detail. The perspective views,
+  `top` included, are unchanged and cannot be pixel-exact in principle: surfaces
+  at varying angles and distances give a texel a non-uniform pixel footprint.
 - **UU2 texture names and usage:** added `titan uw2 texture-catalog`, joining
   `STRINGS.PAK` block 10 descriptions to `TERRAIN.DAT` properties for all 256
   `T64.TR` textures (wall at the texture's own string index, floor at
@@ -99,6 +132,174 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Fixed
 
+- **UU2 model colours: a slot past the model's table is the engine's to fill.**
+  A model's nodes name a slot in its own small colour table, and several reach
+  past the end of it. Wrapping the index round was wrong; palette 0 suits every
+  model that does it except the one where it shows. The large blackrock gem asks
+  a two-entry table for slots 3 and 12 to 16 because its colours come from quest
+  state, not the model: each facet is `0x52` until its bit is set in quest 130,
+  then `0x4D`, with `0x4F` on the one game variable 6 points at
+  (UnderworldGodot, `objects/largeblackrockgem.cs`). `0x4C` to `0x52` is a blue
+  ramp. A map render has no save game, so the gem is drawn as it stands at the
+  start, every facet `0x52`. It was white before, and briefly black.
+- **UU2 chests were grey.** The chest declares two colours, a warm brown
+  `0x8E` and a grey `0xCA`, and its face nodes call the grey twenty-one times
+  and the brown once. In the game it is brown, and nothing on the placed object
+  can be choosing: all forty chests in the shipped levels carry `flags` and
+  `owner` of zero. There is no texture path either - the model is 112 flat faces
+  with no UVs, and `TMOBJ.GR` holds no chest surface. Nor does any palette in
+  `PALS.DAT` make `0xCA` warm without recolouring the rest of the game. The
+  chest is now drawn in the colour it declares first, its shading unchanged, so
+  it keeps the lighter lid and darker sides. Recorded rather than decoded: the
+  executable says otherwise, and UnderworldAdventures' table agrees with the
+  executable but shares our arithmetic, so it is not a second opinion.
+  UnderworldGodot gives its chest a brown body, by hand.
+- **UU2 Gouraud-shaded model faces were drawn at one flat colour.** A model
+  defines a vertex shading table (`0x00D4`) giving every vertex its own step
+  down the colour's ramp, and `0x00D6` switches the following faces onto it.
+  Fourteen of the thirty-two models do this, covering 1035 of the 1205
+  flat-shaded faces in the set, so ignoring it dropped most of the modelling:
+  boulders were smooth grey blobs, the shrine a silhouette, a barrel had no
+  staves. Faces now carry a colour per corner, and 90% of them have corners at
+  different steps. `_part_arrays` already gives each triangle three fresh points
+  rather than sharing corners between faces, so the colours line up with it
+  without re-indexing; a part still names one material, which every face that
+  is not shaded keeps using, and which holds the mean for anything that can take
+  only one colour per face. PyVista draws them as point scalars, the GLB export
+  as `COLOR_0`, and the software fallback averages the corners since it fills
+  whole polygons. A moongate is a single quad with a bright middle, which now
+  reads as the gradient it is rather than a flat panel. `0x002E`, which the
+  format notes switches the shading back off, is honoured. The shading works on
+  whatever colour the face ends up wearing: an instance can replace the model's,
+  and taking the corners from the model's instead turned Castle Britannia's
+  owner-coloured beds blue and gave blue moongates a red gradient. Where the
+  replacement is a point on a ramp, as a gate's link colour is, it shades; where
+  it is an exact entry, as an owner's is, the face stays flat.
+- **UU2 executable models were drawn flat, losing their shading.** A face's
+  colour node carries a shade in the word after the colour, which we read and
+  threw away: "the same calculations and palette indexing rules apply here" as
+  for the Gouraud table, per `uw-formats.txt`. The palette runs in short
+  darkening ramps, so the shade is simply the next entries along - grey `0xCA`
+  falls from 96 to 24 over five steps, the chair's brown `0x8F` from 132 to 44 -
+  and faces of one model use different steps. A chest spans six of them, which
+  is why it read as a flat silhouette instead of a box with a lid; benches lost
+  their planking and chairs their depth. Faces are now shaded as the model asks.
+  A ramp is a handful of entries long and nothing marks where one ends, so a
+  step that would lighten the colour has run off the end - three faces of the
+  arrow do - and keeps its base colour. An instance colour, bedding from its
+  owner or a moongate from its link, is an exact entry rather than a point on a
+  ramp, so it replaces the shaded colour rather than being stepped itself.
+- **UU2 moongates take their colour from the placed object.** Every one was
+  rendering the same, because the model's own colour table has nothing to say
+  about it: a gate is tinted by its link field, `link - 512`, as UnderworldGodot
+  reads it (`objects/moongate.cs`). The shipped gates use the whole spectrum the
+  Ethereal Void needs - red `0x21`, blue `0x4F`, yellow `0x10`, orange `0x2D`,
+  purple `0x5A` and `0x5B`, green `0xAB`, white `0xC2` - so the Yellow Zone's
+  gates are yellow and the Colour Zone carries seven different ones. The index
+  is recorded on the object as `moongate_palette_index`.
+- **UU2 table surfaces ignored their flags.** A table's flags choose the top:
+  `32` and `34` are planking, `33` marble, `35` stone. We pinned every table to
+  `32`, so the thirty of the game's seventy-four that ask for something else
+  were all planked. Paintings and pillars already varied correctly.
+- **UU2 moongates were black.** The moongate is the only model whose info entry
+  sets the top bit of its header byte, and the only one whose first colour byte
+  is `0x00` - a placeholder rather than "black", which we read literally. It
+  stands for palette index `0x21`, the one entry in `PALS.DAT` that reads
+  `(212, 16, 36)` in palettes 0, 2, 3, 4 and 7 but `(24, 44, 188)` in 5 and 6:
+  the red moongate and the blue one, from a single model and a single index. 73
+  gates across the Ethereal Void. The value is recorded rather than decoded -
+  the executable gives no derivation for it - and it matches the table
+  UnderworldAdventures transcribed by hand. Which palette a level chooses is
+  still not modelled, so all 73 render red for now.
+- **UU2 wall panels were drawn a quarter of their size.** Class `0x016E` took the
+  quarter-tile quad at executable slot `0x14`, so a wall hanging built from
+  stacked panels came out as fragments with gaps between them - Castle
+  Britannia's throne room hangs its two ankh banners either side of the stained
+  glass this way. Both special texture-map classes are one tile square and one
+  tile high, as UA draws them (`RenderTmapObject`: `dir *= 0.5` to each side,
+  `pos.z` to `pos.z + 1.0`), and the shipped levels only work out that way: the
+  banners are stacked 32 height units apart, the same spacing as the `0x016F`
+  stained glass beside them, which meets end to end only at a whole tile each.
+  `0x016E` now takes the full-tile slot `0x16` as well. 335 panels across 36
+  levels. Levers, switches and writing keep the quarter-tile quad, which is the
+  right size for them.
+- **UU2 floors, ceilings and walls were drawn upside down in 3D.** Both
+  consumers of a scene turn `v` over before sampling - the renderer through
+  `texture.flip_y`, the GLB export through trimesh - so a surface's `v` has to
+  be written in that sense, and terrain never was. Floor `v` came straight from
+  the world `y`, putting image row 0 at the north edge of the tile when it
+  belongs to the south; wall `v` was measured down from the ceiling, hanging the
+  foot of the image from it. On the noise-like stonework that fills most of UU2
+  neither shows. Two things gave it away: the pentagram inlaid across four floor
+  tiles in the Ethereal Void and Scintillus Academy, textures 236 to 239, which
+  only resolves into one figure the right way up, and ice wall 51, whose ground
+  detail sat at the ceiling. This also settles a disagreement between pipelines,
+  since the 2.5D renderers have always turned floor textures over. Executable
+  models, doors and sprites were already correct and are untouched.
+- **UU2 bridges and doorways sat a fraction off their own tile.** Both span a
+  whole tile, so the tile is their position, but they were centred on the
+  object's sub-tile cell - leaving the whole span about 1/16 of a tile out.
+  Bridges were the single largest source of geometry crossing into walls, 7.4
+  of 19.0 tiles-squared across the game. UW2 places both from the tile:
+  underworldexporter's `RenderBridge` discards the computed position for
+  `ObjectTileX * 1.2f + 1.2f / 2f`, and its door case never reads `xpos`/`ypos`.
+  Bridge overlap is now zero; doors keep only the half panel thickness that sits
+  in the opening by construction.
+- **UU2 loose scenery no longer hangs over the wall beside it.** Objects are
+  drawn centred on their sub-tile cell at full size, and UW2 puts a fifth of all
+  sub-tile coordinates hard against a tile edge, so half a table or a book landed
+  inside the wall. The game never had to care - it is only seen from inside the
+  room - but a top-down plan shows it, and the orthographic `plan` view made it
+  plain by drawing wall tiles as empty space. Renders now shift such objects the
+  smallest distance that clears the wall, dropping overlap from 11.0 to 4.2
+  tiles-squared. Only genuinely solid neighbours push, so an object on the
+  boundary between two open tiles stays put, unlike underworldexporter's
+  `WallAdjust`, which nudges on the sub-tile value alone. Wall fixtures - shelves,
+  paintings, levers, writing - are shifted too: the move is only ever the depth of
+  the overhang, so they end up flush against the wall face instead of through it.
+  Only a door is left alone, its leaf standing in the opening. The offset is
+  recorded on the object and applied when drawing, so a GLB export still carries
+  the placement `LEV.ARK` holds.
+- **UU2 render framing no longer moves when an object does.** The camera was
+  fitted with `reset_camera()`, which frames the actors, so shifting one item a
+  fraction of a tile re-fit the camera and moved every pixel in the output -
+  a placement change of 0.06 tiles displaced a whole render by 6 px and made
+  49% of its pixels differ. Framing now comes from the tile region the caller
+  asked for, which nothing in the data can perturb; the same comparison moves
+  0 px and differs only in the 2.7% of pixels the objects actually occupy.
+- **UU2 sub-tile placement is shared by all sixteen call sites.** They had
+  disagreed - most read `xpos / 8`, two used a `+0.5` approximation - so the
+  2.5D and 3D renderers placed the same object differently. One
+  `sub_tile_fraction` helper now serves them all. It applies no bias: the `0xF`
+  UW2 adds when expanding a tile and `xpos` into a live coordinate belongs to
+  collision, not to where static scenery is drawn, and applying it pushed wall
+  furniture through the wall. The shipped levels sit on the plain eighth grid -
+  a bed runs 25.25 to 25.75, the shelf at its head 25.75 to 26.00, the wall face
+  at 26.00 - each piece meeting the next exactly.
+- **UU2 wall decals hang on the wall face rather than near it.** A lever, switch,
+  pull chain, writing or special wall panel took both coordinates from its
+  sub-tile cell, leaving it up to 1/16 of a tile off the wall it is fixed to. The
+  coordinate across the wall now comes from the tile edge the object's heading
+  names, as UA's `RenderDecal` does, set back by the 1/16 the decal's own quad
+  stands outward. All 689 decals on a square heading now sit exactly on their
+  wall plane, where none did before. The heading-to-wall mapping is confirmed
+  against the shipped levels.
+- **UU2 sprites are no longer drawn upside down.** Every sprite billboard, in
+  every 3D view and every exported GLB, was mirrored vertically. Both consumers
+  flip `v` before sampling - the renderer through `texture.flip_y`, the GLB
+  export through trimesh's glTF conversion - but the sprite quads put `v=0` on
+  their top edge, so it sampled the source image's bottom row. The upper edge
+  now takes `v=1`. Terrain and executable models were already correct: terrain
+  UVs come from the geometry and model UVs are written as `1.0 - v`. Most items
+  are small and near-symmetric, which is why it went unseen; anything with clear
+  vertical structure, such as plants and hanging objects, was visibly inverted.
+- **UU2 ceiling-height bridges no longer roof a ceiling-less render.** A bridge
+  can stand in for the fixed ceiling - Castle Britannia roofs its courtyard with
+  a five-by-five grid at `zpos` 127 against a ceiling of 128 - so placing them
+  hid the courtyard and its fountain. Bridges at ceiling height now follow
+  `--include-ceilings` like the ceiling planes do. The data separates cleanly:
+  deck bridges top out at `zpos` 104, and the 43 that act as ceiling sit at 121
+  or 127, so walkway bridges are unaffected.
 - **UU2 open portcullises no longer float above the wall.** A placed door
   carries its raise in `zpos` - both open forms sit 24 height units above their
   tile floor, every closed one exactly on it - so adding the animation lift on

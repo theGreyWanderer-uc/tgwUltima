@@ -6,7 +6,7 @@ palette entries from executable instead of embedding tables from other tools.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import math
 from pathlib import Path
 import struct
@@ -16,6 +16,69 @@ MODEL_COUNT = 32
 
 MODEL_PALETTE_MAX = 4
 """A five-byte model info entry holds a count plus at most four colours."""
+
+INFO_INDIRECT_FIRST_COLOR = 0x80
+"""Info-entry flag marking a model whose first colour is not stored inline.
+
+Only the moongate (``0x17``) sets it, and it is the only model whose first
+colour byte is ``0x00`` - a placeholder rather than "black". The colour it
+stands for is :data:`MOONGATE_FIRST_COLOR`.
+"""
+
+CHEST_MODEL = 0x19
+"""The chest, whose faces name a colour the game does not appear to use."""
+
+CHEST_COLOR_SLOT = 0
+"""Which of the chest's two declared colours its faces are drawn in.
+
+The chest declares ``0x8E`` (148, 88, 36), a warm brown, and ``0xCA``
+(96, 96, 96), a grey. Its face nodes call the grey twenty-one times and the
+brown once, and that same slot mechanism is demonstrably right elsewhere - the
+bed's frame, the chair, the boulders all come out correct. In the game the
+chest is nevertheless brown, checked in Castle Britannia where all forty of
+them carry ``flags`` and ``owner`` of zero, so nothing on the instance can be
+selecting it. UnderworldGodot also gives its chest a brown body
+(``objects/chest.cs``), by hand rather than from the executable.
+
+UnderworldAdventures' table agrees with our reading, but is not independent of
+it: ``ModelDecoder.cpp`` maps colour offsets with the same arithmetic, so its
+``{ 0x8E, 0xCA }`` was very likely dumped from the same bytes.
+
+So this is recorded, not decoded: the chest is drawn in the colour it declares
+first. The face shading still applies, which gives it the lighter lid and
+darker sides the game shows.
+"""
+
+BLACKROCK_GEM_MODEL = 0x1E
+"""The large blackrock gem, whose colours the engine decides, not the model."""
+
+BLACKROCK_GEM_COLOR = 0x52
+"""The gem's facet colour with no quest gems collected yet.
+
+The gem reaches well past its own two-entry colour table - slots 3 and 12 to 16
+- because the engine supplies those colours from game state rather than the
+model. UnderworldGodot transcribes the rule
+(``objects/largeblackrockgem.cs``): each of the eight facets is ``0x52`` until
+its bit is set in quest 130, then ``0x4D``, with ``0x4F`` marking the one game
+variable 6 points at, and the body cycling around ``0x53``. ``0x4C`` to ``0x52``
+is a blue ramp, from lavender down to deep blue.
+
+A map render has no save game, so the gem is drawn as it stands at the start:
+every facet still ``0x52``. Reading the out-of-range slots as palette 0 instead
+made it black, and wrapping them round made it white; it is blue either way in
+the game.
+"""
+
+MOONGATE_FIRST_COLOR = 0x21
+"""Stand-in for the moongate's placeholder first colour.
+
+Only reached if a gate's link field does not give one. The colour a moongate
+actually shows is on the instance, not the model - see
+:func:`titan.uw2.instances.moongate_palette` - which is why the entry in the
+executable is a placeholder in the first place. This value is
+UnderworldAdventures' (``ModelDecoder.cpp``: ``{ 0x21, 0x02, 0x04 }``), the red
+that most gates happen to use.
+"""
 
 UW2_BUILDS = (
     (0x54CF0, 0x59AA64D4, 0x54D8A, 0x6908A),
@@ -53,6 +116,31 @@ MODEL_ICON_ITEM_IDS = frozenset(
 )
 
 
+def shaded_palette_index(colors, palette_index: int, shade: int) -> int:
+    """Step a model face's colour down its palette ramp by ``shade``.
+
+    A ``0x00BC`` node gives a colour and, in the word after it, how far to
+    darken it - "the same calculations and palette indexing rules apply here"
+    as for the Gouraud table, per ``uw-formats.txt``. The palette is laid out in
+    short darkening ramps, so the step is simply the next entries along: grey
+    ``0xCA`` runs 96 to 24 over five steps, the chair's brown ``0x8F`` 132 to
+    44. Faces of one model use different steps, which is the shading the game
+    shows on a chest or a bed and we drew flat.
+
+    A ramp is only a handful of entries long and nothing marks where one ends,
+    so a step that would *lighten* the colour has run off the end of it - three
+    faces of the arrow do - and the base colour is kept instead.
+    """
+    if shade <= 0:
+        return palette_index
+    target = palette_index + shade
+    if target >= len(colors):
+        return palette_index
+    if sum(colors[target]) > sum(colors[palette_index]):
+        return palette_index
+    return target
+
+
 class UW2ModelError(ValueError):
     """Raised when executable model data is missing or malformed."""
 
@@ -73,6 +161,16 @@ class ModelTriangle:
     palette_index: int
     texture_id: int | None = None
     textured: bool = False
+    shade: int = 0
+    """Steps to darken :attr:`palette_index` by; see :func:`shaded_palette_index`."""
+    corner_shades: tuple[int, int, int] | None = None
+    """A step per corner, where the model shades the face across it.
+
+    ``0x00D4`` gives every vertex its own step down the colour's ramp and
+    ``0x00D6`` switches the following faces onto it. 90% of such faces have
+    corners at different steps, so collapsing them to one loses the gradient
+    the model draws. :attr:`shade` keeps that mean for consumers that can only
+    take a colour per face."""
 
 
 @dataclass(frozen=True)
@@ -124,6 +222,8 @@ class _ModelState:
     triangles: list[ModelTriangle]
     origin: tuple[float, float, float] | None = None
     collision_half_extents: tuple[float, float, float] | None = None
+    vertex_dark: dict[int, int] = field(default_factory=dict)
+    """How far down its ramp each vertex sits, from the model's ``0x00D4`` table."""
 
 
 class UW2ModelArchive:
@@ -214,13 +314,23 @@ class UW2ModelArchive:
         four and uses all four - reading only three painted its quilt and
         pillow with the frame's colour. Two models declare more than three;
         widening the table to four changes the bed alone.
+
+        The count is trusted as written except that it is capped: the pillar
+        (``0x0A``) claims nine colours where four bytes follow. It draws no
+        flat-coloured face at all, so nothing reads the surplus.
+
+        One model carries :data:`INFO_INDIRECT_FIRST_COLOR`; see there.
         """
         offset = self.info_offset + index * 5
-        count = self.data[offset] & 0x0F
+        header = self.data[offset]
+        count = header & 0x0F
         if count == 0:
             return (0,)
         count = min(count, MODEL_PALETTE_MAX)
-        return tuple(self.data[offset + 1 : offset + 1 + count])
+        colors = list(self.data[offset + 1 : offset + 1 + count])
+        if header & INFO_INDIRECT_FIRST_COLOR and colors:
+            colors[0] = MOONGATE_FIRST_COLOR
+        return tuple(colors)
 
 
 class _ModelParser:
@@ -249,6 +359,8 @@ class _ModelParser:
         color: int,
         translation: tuple[float, float, float],
         depth: int,
+        shade: int = 0,
+        gouraud: bool = False,
     ) -> None:
         if depth > 128:
             raise UW2ModelError(f"UW2 model {self.model_index:#04x} node tree too deep")
@@ -361,7 +473,15 @@ class _ModelParser:
                     reader.skip(6)
                 elif command == 0x007E:
                     indices = [reader.vertex_ref() for _ in range(reader.u16())]
-                    self._add_face(indices, color)
+                    face_shade = shade
+                    corner_darks = None
+                    if gouraud:
+                        face_shade = self._face_dark(indices, shade)
+                        corner_darks = [
+                            self.state.vertex_dark.get(index, face_shade)
+                            for index in indices
+                        ]
+                    self._add_face(indices, color, face_shade, corner_darks)
                 elif command in {0x00A8, 0x00B4, 0x00CE}:
                     # The 00A8 field is always 6 in known data. It marks the
                     # textured face form; the placed item selects TMOBJ.GR.
@@ -412,28 +532,44 @@ class _ModelParser:
                 elif command == 0x0014:
                     reader.vertex_ref()
                     color = self._color(reader.u16())
+                    shade = 0
                     reader.vertex_ref()
                 elif command == 0x0016:
                     reader.vertex_ref()
                     color = self._color(reader.u16())
+                    shade = 0
                     reader.u16()
                 elif command == 0x00BC:
+                    # "define flat face shade": a colour and, in the word after
+                    # it, how far down that colour's ramp to go.
                     color = self._color(reader.u16())
-                    reader.u16()
+                    shade = reader.u16()
+                    gouraud = False
                 elif command == 0x00BE:
                     self._color(reader.u16())
                     color = self._color(reader.u16())
+                    shade = 0
                 elif command == 0x00D4:
+                    # The model's one vertex shading table: a base colour, then
+                    # how far down its ramp each vertex sits.
                     count = reader.u16()
                     color = self._color(reader.u16())
+                    shade = 0
                     for _ in range(count):
-                        reader.vertex_ref()
-                        reader.u8()
+                        vertex_index = reader.vertex_ref()
+                        self.state.vertex_dark[vertex_index] = reader.u8()
                     if count & 1:
                         reader.u8()
-                elif command in {0x0040, 0x0044, 0x00D6}:
+                elif command == 0x00D6:
+                    gouraud = True
+                elif command in {0x0040, 0x0044}:
                     pass
-                elif command in {0x0012, 0x002E, 0x00B2}:
+                elif command == 0x002E:
+                    # Documented as switching Gouraud back off; the Lotus leans
+                    # on it and the table uses it once.
+                    gouraud = False
+                    reader.u16()
+                elif command in {0x0012, 0x00B2}:
                     reader.u16()
                 else:
                     raise UW2ModelError(
@@ -465,11 +601,57 @@ class _ModelParser:
         return self.state.vertices[index]
 
     def _color(self, color_offset: int) -> int:
-        index = ((color_offset - 0x2680) // 2) % len(self.palette)
+        if self.model_index == CHEST_MODEL and self.palette:
+            # See CHEST_COLOR_SLOT: its faces ask for the grey, the game shows
+            # the brown, and no instance field can be choosing between them.
+            return self.palette[min(CHEST_COLOR_SLOT, len(self.palette) - 1)]
+        index = (color_offset - 0x2680) // 2
+        if not 0 <= index < len(self.palette):
+            # Reaching past the model's own table means the engine, not the
+            # model, chooses this colour. Only the gem does it in a way that
+            # shows; everything else that reaches out has a one-entry table and
+            # wrapped onto the same colour anyway. UnderworldAdventures returns
+            # palette 0 here, which suits those but turns the gem black.
+            if self.model_index == BLACKROCK_GEM_MODEL:
+                return BLACKROCK_GEM_COLOR
+            return 0
         return self.palette[index]
 
-    def _add_face(self, indices: list[int], color: int) -> None:
-        self._triangulate([self._vertex(index) for index in indices], color, None)
+    def _face_dark(self, indices: list[int], fallback: int) -> int:
+        """One shade for a Gouraud face, averaged over the vertices it uses.
+
+        UW2 shades these faces across their corners, each vertex carrying its
+        own step down the colour's ramp. A scene part here is one colour for
+        many triangles, so the face takes the mean of its corners instead: on
+        the boulders, shrine and furniture that use this the faces are small
+        enough that the difference is slight, and it is the whole of the
+        modelling that was being dropped. It does flatten a gradient drawn
+        across a single large panel - a moongate is one quad with a bright
+        middle - which needs colour per vertex to show properly.
+        """
+        darks = [
+            self.state.vertex_dark[index]
+            for index in indices
+            if index in self.state.vertex_dark
+        ]
+        if not darks:
+            return fallback
+        return int(round(sum(darks) / len(darks)))
+
+    def _add_face(
+        self,
+        indices: list[int],
+        color: int,
+        shade: int = 0,
+        corner_darks: list[int] | None = None,
+    ) -> None:
+        self._triangulate(
+            [self._vertex(index) for index in indices],
+            color,
+            None,
+            shade=shade,
+            corner_darks=corner_darks,
+        )
 
     def _triangulate(
         self,
@@ -478,16 +660,29 @@ class _ModelParser:
         texture_id: int | None,
         *,
         textured: bool = False,
+        shade: int = 0,
+        corner_darks: list[int] | None = None,
     ) -> None:
         if len(vertices) < 3:
             return
         for first, second, third in _triangulate_polygon(vertices):
+            corner_shades = (
+                (
+                    corner_darks[first],
+                    corner_darks[second],
+                    corner_darks[third],
+                )
+                if corner_darks is not None and len(corner_darks) == len(vertices)
+                else None
+            )
             self.state.triangles.append(
                 ModelTriangle(
                     vertices=(vertices[first], vertices[second], vertices[third]),
                     palette_index=color,
                     texture_id=texture_id,
                     textured=textured,
+                    shade=shade,
+                    corner_shades=corner_shades,
                 )
             )
 

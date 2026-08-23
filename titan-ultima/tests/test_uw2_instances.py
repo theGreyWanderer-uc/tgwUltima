@@ -190,7 +190,16 @@ class UW2ModelSlotTests(unittest.TestCase):
         self.assertEqual(special_model_index(SWITCH_ITEM), 0x11)
         self.assertEqual(special_model_index(WRITING_ITEM), 0x12)
         self.assertEqual(special_model_index(BRIDGE_ITEM), 0x02)
-        self.assertEqual(special_model_index(THIN_WALL_ITEM), 0x14)
+
+    def test_both_texture_map_classes_take_the_full_tile_quad(self) -> None:
+        """A tmap panel is one tile square and one tile high, either class.
+
+        ``0x016E`` also has a quarter-tile slot at ``0x14``, and using it left
+        the throne room's banners as fragments: they hang as two panels 32
+        height units apart, so each has to be a whole tile tall to meet. UA
+        draws both classes the same way, in ``RenderTmapObject``.
+        """
+        self.assertEqual(special_model_index(THIN_WALL_ITEM), 0x16)
         self.assertEqual(special_model_index(REMOVABLE_WALL_ITEM), 0x16)
 
     def test_every_control_shares_the_quad_slot(self) -> None:
@@ -281,6 +290,56 @@ class UW2BedFaceTests(unittest.TestCase):
         quilt = self._face(77, BED_PILLOW_MIN_Y - 0.1)
 
         self.assertEqual(bed_face_palette(quilt, 63), 1)
+
+
+class UW2InstanceColourTests(unittest.TestCase):
+    """Classes whose look comes off the placed object rather than the model.
+
+    UnderworldGodot's per-object ``ModelColour`` overrides are the list of these
+    (``src/objects/*.cs``); each is checked against the shipped levels here.
+    """
+
+    def test_a_moongate_is_tinted_by_its_own_link(self) -> None:
+        """``uwobject.link - 512``, which is how the Void gets a gate per zone.
+
+        The shipped gates span the spectrum: red 0x21, blue 0x4F, yellow 0x10,
+        orange 0x2D, purple 0x5A and 0x5B, green 0xAB, white 0xC2.
+        """
+        from titan.uw2.instances import MOONGATE_ITEM, moongate_palette
+
+        for link, expected in ((545, 0x21), (591, 0x4F), (528, 0x10), (706, 0xC2)):
+            with self.subTest(link=link):
+                obj = {"item_id": MOONGATE_ITEM, "quantity_or_link": link}
+                self.assertEqual(moongate_palette(obj), expected)
+
+    def test_a_moongate_without_a_link_has_no_tint(self) -> None:
+        from titan.uw2.instances import MOONGATE_ITEM, moongate_palette
+
+        self.assertIsNone(moongate_palette({"item_id": MOONGATE_ITEM}))
+
+    def test_only_moongates_are_tinted_this_way(self) -> None:
+        from titan.uw2.instances import moongate_palette
+
+        self.assertIsNone(
+            moongate_palette({"item_id": 0x0158, "quantity_or_link": 545})
+        )
+
+    def test_a_link_outside_the_palette_is_ignored(self) -> None:
+        from titan.uw2.instances import MOONGATE_ITEM, moongate_palette
+
+        for link in (0, 511, 768, 4096):
+            with self.subTest(link=link):
+                obj = {"item_id": MOONGATE_ITEM, "quantity_or_link": link}
+                self.assertIsNone(moongate_palette(obj))
+
+    def test_a_table_surface_follows_its_flags(self) -> None:
+        """32 and 34 plank, 33 is marble, 35 stone; 30 of 74 tables set them."""
+        from titan.uw2.instances import TABLE_ITEM, TMOBJ, MaterialRef
+
+        for flags, expected in ((0, 32), (1, 33), (2, 34), (3, 35)):
+            with self.subTest(flags=flags):
+                reference = object_material_for({"item_id": TABLE_ITEM, "flags": flags})
+                self.assertEqual(reference, MaterialRef(TMOBJ, expected))
 
 
 if __name__ == "__main__":
