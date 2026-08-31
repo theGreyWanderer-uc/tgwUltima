@@ -1,9 +1,5 @@
 #  ◄◄◄ theGreyWanderer's Ultima ►►► 
 
-## 🧙‍♂️ Welcome!
-I'm learning to code and thought I was going to start with something fun and simple. Well... I only got it 50% correct!
-<br><br>
-
 ## Titan Ultima Toolkit
 
 This repository is an **Ultima reverse-engineering and game-modding toolkit**
@@ -15,6 +11,11 @@ rendering, and rebuilding Ultima game data.
 game-specific commands work with archives, graphics, maps, palettes, audio,
 saves, dialogue, world objects, and other proprietary Ultima formats without
 requiring every project to maintain a separate parser.
+
+## 🧙‍♂️ Welcome!
+
+I'm learning to code and thought I was going to start with something fun and
+simple. Well... I only got it 50% correct!
 
 ## Ultima VII and Exult Support
 
