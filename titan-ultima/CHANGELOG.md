@@ -48,6 +48,12 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Fixed
 
+- **Exult-compiled U7 Usecode parsing:** `usecode-disasm` and
+  `usecode-scan-intrinsic` now skip the optional compiled symbol table,
+  including nested class scopes and shape-function metadata. Corrected the
+  boundary calculation for legacy `0xFFFF` extended functions and added
+  support for newer `0xFFFE` records with 32-bit function IDs, allowing BG and
+  SI mod `USECODE` files to be read completely.
 - **Exult V2 IFIX record detection:** fixed ambiguous IFIX records whose byte
   lengths are divisible by both four and five by honoring the Exult Flex V2
   header marker before falling back to record-size detection.
