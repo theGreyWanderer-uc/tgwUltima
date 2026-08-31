@@ -7,12 +7,6 @@ void theurgyReveal object#() () {
     var curMana = caster->get_npc_prop(MANA);
     UI_error_message("Mana before casting: " + curMana);
 
-        if (curMana < 5) {
-        item_say("@Not enough mana...@");
-        UI_error_message("Not enough mana to cast spell - return");
-        return;
-    }
-
     //get caster's position and set search distance
     var findPos = UI_get_object_position(caster);
     var dist = 7;
@@ -26,7 +20,10 @@ void theurgyReveal object#() () {
         }
     }
 
-    caster->set_npc_prop(MANA, -5);
+    if (!spendMagicMana(caster, 5)) {
+        return;
+    }
+
     UI_error_message("Begin Animation and Effects");
     item_say("@Ort Lor@");
     script item {
@@ -49,7 +46,7 @@ void theurgyReveal object#() () {
                 nohalt;
                 call spellClearFlag, INVISIBLE;
             }
-            obj->obj_sprite_effect(ANIMATION_GREEN_BUBBLES, -1, -1, 0, 0, 0, -1);
+            obj->obj_sprite_effect(SPRITE_GREEN_CIRCLES, -1, -1, 0, 0, 0, -1);
         }
     }
 }

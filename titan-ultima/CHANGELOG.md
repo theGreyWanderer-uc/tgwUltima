@@ -10,6 +10,50 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ---
 
+## [0.7.5]
+
+### Added
+
+- **Universal U7 map JSON workflows:** added `titan u7 map-export-json` to
+  preserve terrain definitions, the complete 192x192 chunk layout, fixed
+  objects, shape metadata, and source provenance in one versioned JSON file.
+  Added `titan u7 map-render-json` to render that document without consulting
+  `U7MAP`, `U7CHUNKS`, or `U7IFIX`, including single-superchunk, tiled full-map,
+  overview, projection, and grid options.
+- **Native secondary-map creation:** added `titan u7 map-create` to create an
+  empty Exult secondary-map namespace or materialize universal JSON as native
+  `u7map`, shared `u7chunks`, and `u7ifix*` files. Destinations and map numbers
+  are always explicit; existing maps require `--overwrite-map`, while shared
+  terrain expansion requires `--update-chunks`. Writes are staged and verified
+  before installation, and optional GAMEDAT namespaces use the same `mapNN`
+  naming.
+- **Ultima III NES map conversion:** added `titan u3 map-create`, backed by an
+  embedded, checksum-verified copy of the original 64x64 NES Sosaria map. It
+  deterministically expands the U3 layout into an SI-sized U7 map using the
+  selected Serpent Isle JSON construction source, seed-controlled biome,
+  coast, mountain, and rare-feature rules, and a user-selected secondary-map
+  number. Optional output includes the generated universal JSON and a classic
+  full-map render.
+
+### Changed
+
+- **Separate U7 map and graphics roots:** `titan u7 map-render` now accepts
+  `--map-root`, allowing scratch or mod `U7MAP`/`U7CHUNKS`/`U7IFIX` data to be
+  rendered with graphics, palettes, and type metadata from another STATIC
+  directory. Existing rendering behavior is unchanged when the option is
+  omitted.
+- **In-memory U7 map rendering:** `U7MapRenderer` can now receive terrain
+  definitions, map placement, and fixed objects directly, providing the shared
+  rendering path used by universal JSON documents.
+
+### Fixed
+
+- **Exult V2 IFIX record detection:** fixed ambiguous IFIX records whose byte
+  lengths are divisible by both four and five by honoring the Exult Flex V2
+  header marker before falling back to record-size detection.
+
+---
+
 ## [0.7.4]
 
 ### Added
@@ -931,7 +975,7 @@ This project uses [Semantic Versioning](https://semver.org/):
 - **Larger overlay text:** highlight coordinate/custom label text size is
   now tripled for readability on full-world renders.
 - **Zone profiles for `u7 map-render`:** new `--zone-profile` option loads
-  canonical rectangle sets from packaged JSON data (`si_zones`,
+  built-in rectangle sets from packaged JSON data (`si_zones`,
   `bg_zones`) and renders them through the existing highlight path.
 - **Zone ID filtering:** new repeatable `--zone-id` option selects specific
   zones from a profile; `--all-zones` includes every zone.

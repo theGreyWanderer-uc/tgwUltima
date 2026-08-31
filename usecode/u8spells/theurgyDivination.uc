@@ -7,23 +7,18 @@ extern var getPaganCalendar();
 void theurgyDivination object#() () {
     UI_error_message("theurgyDivination executing");
 
-    //adjust this later
     var curMana = item->get_npc_prop(MANA);
     UI_error_message("curMana proc eval using -item->get_npc_prop(MANA)- before checking:" + curMana);
 
-    if (curMana < 3) {
-        item_say("@Not enough mana...@");
-        UI_error_message("Not enough mana to cast spell - return");
+    if (!spendMagicMana(item, 3)) {
         return;
     }
 
-    //adjust this later
-    item->set_npc_prop(MANA, -3);
     UI_error_message("Begin Animation and Effects");
 
     //get pagan calendar data from utility/paganCalendar.uc
     var date = getPaganCalendar();
-    UI_error_message("Pagan Calendar Data: Year=" + date[DATE_YEAR] + ", Month=" + date[DATE_MONTH] + ", Day=" + date[DATE_DAY_OF_MONTH] + ", Week=" + date[DATE_WEEK] + ", DayName=" + date[DATE_DAY_NAME] + ", TimeName=" + date[DATE_TIME_NAME]);
+    UI_error_message("Pagan Calendar Data: Year=" + date[DATE_YEAR] + ", Month=" + date[DATE_MONTH] + ", Day=" + date[DATE_DAY_OF_MONTH] + ", Week=" + date[DATE_WEEK] + ", ExtraDay=" + date[DATE_EXTRA_DAY] + ", DayName=" + date[DATE_DAY_NAME] + ", TimeName=" + date[DATE_TIME_NAME]);
 
     //spell script - call map, run anim and sfx
     item_say("@In Wis@");
@@ -43,8 +38,8 @@ void theurgyDivination object#() () {
     }
 
     //make bark string
-    var day_str = "@It is " + date[DATE_DAY_NAME] + "@";
-    var week_month_str = "@The " + date[DATE_WEEK] + " week of " + date[DATE_MONTH_NAME] + "@";
+    var day_str = "@It is " + date[DATE_DAY_LABEL] + "@";
+    var week_month_str = "@It is " + date[DATE_WEEK_LABEL] + "@";
     var time_str = "@During " + date[DATE_TIME_NAME] + "@";
     var year_str = "@In the year " + date[DATE_YEAR] + "@";
 

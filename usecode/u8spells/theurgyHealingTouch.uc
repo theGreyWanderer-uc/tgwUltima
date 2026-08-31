@@ -8,15 +8,6 @@ var caster = getOuterContainer(item);
 var curMana = caster->get_npc_prop(MANA);
 UI_error_message("curMana proc eval using -caster->get_npc_prop(MANA)- eval before checking:" + curMana); 
 
-	if (curMana < 5)
-	{
-		item_say("@Not enough mana...@");
-		var curManaMessage = "curMana proc eval using -get_npc_prop- while failing check:" + curMana;
-		UI_error_message(curManaMessage);
-		UI_error_message("Not enough mana to cast spell - return");
-		return;
-	}        
-
 	var target = UI_click_on_item();
 	target->halt_scheduled();
 
@@ -35,12 +26,14 @@ UI_error_message("curMana proc eval using -caster->get_npc_prop(MANA)- eval befo
 					return;
 				}
 
-				caster->set_npc_prop(MANA, -5);
-				UI_error_message("Subtract 5 from mana pool");
+				if (!spendMagicMana(caster, 5))
+				{
+					return;
+				}
 				
 				UI_error_message("Begin Animation and Effects");
 
-				item_say("@Mani@");
+				item_say("@In Mani@");
 					
 					script caster
 					{

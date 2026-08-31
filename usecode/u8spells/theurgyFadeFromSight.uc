@@ -7,13 +7,10 @@ void theurgyFadeFromSight object#() () {
     var curMana = caster->get_npc_prop(MANA);
     UI_error_message("curMana proc eval using -caster->get_npc_prop(MANA)- before checking:" + curMana);
 
-    if (curMana < 5) {
-        item_say("@Not enough mana...@");
-        UI_error_message("Not enough mana to cast spell - return");
+    if (!spendMagicMana(caster, 5)) {
         return;
     }
 
-    caster->set_npc_prop(MANA, -5);
     UI_error_message("Begin Animation and Effects");
     item_say("@Quas An Lor@");
 
@@ -30,8 +27,7 @@ void theurgyFadeFromSight object#() () {
     UI_error_message("Caster should now be invisible");
 
     var baseDuration = 180;  //3 minutes in seconds
-    var randomOffset = UI_get_random(61) - 30;  //random value between -30 and 30
-    var duration = baseDuration + randomOffset;  //total duration in seconds
+    var duration = randomSpellDuration(baseDuration, 30);  //total duration in seconds, 150-210
 
     UI_error_message("Invisibility duration: " + duration + " seconds");
 

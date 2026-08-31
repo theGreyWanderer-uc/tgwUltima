@@ -11,9 +11,11 @@ reconstructs archives, shapes/tiles, palettes, music, speech, maps, world
 objects, saves, dialogue, and Exult runtime data. Early *Ultima 9: Ascension*
 support (FLX archives, `TYPENAME.FLX`, and `sound/*.flx` decoding) is also
 available under `titan u9`.
+Deterministic *Ultima III: Exodus* NES Sosaria-to-U7 map conversion is
+available under `titan u3`.
 
-Run `titan --help`, `titan uw2 --help`, `titan u8 --help`, `titan u7 --help`, `titan u6 --help`,
-`titan u9 --help`, `titan uo --help`, or see the full
+Run `titan --help`, `titan uw2 --help`, `titan u8 --help`, `titan u7 --help`,
+`titan u6 --help`, `titan u3 --help`, `titan u9 --help`, `titan uo --help`, or see the full
 [CLI reference](cli_reference.md).
 
 ---
@@ -71,6 +73,9 @@ titan u7 map-render --game bg --sc 85 -o britain_bg.png
 titan u7 typeflag-dump --game si -f csv -o tfa_si.csv
 titan u7 gamedat-info --game si -f detail -o gamedat_info.txt
 
+# Build embedded U3 NES Sosaria as a selected native U7 secondary map
+titan u3 map-create si_source_map.json --output-root scratch/ --map-num 4 --no-render
+
 # UO configured commands, if [uo.game] base is set
 titan uo gump-export -o uo_gumps/
 titan uo animation-body-names-export -o uo_metadata/
@@ -115,7 +120,7 @@ The detailed dialogue web documentation lives in
 
 ## Capabilities
 
-The table below is the compact command map. The CLI reference is the canonical
+The table below is the compact command map. The CLI reference is the main
 place for command options, longer examples, and format notes.
 
 | Area | Ultima 8 | Ultima 7 / Exult | Quick example | Reference |
@@ -127,7 +132,7 @@ place for command options, longer examples, and format notes.
 | Music | XMIDI to MIDI from `MUSIC.FLX` (preserves embedded playlist names in exported MIDI filenames when present) | MIDI export from `ADLIBMUS.DAT`, `MT32MUS.DAT`, `ENDSCORE.XMI`; optional GM rewrite | `titan u7 music-export MT32MUS.DAT --target gm -o music_gm/` | [U8 music commands](cli_reference.md#music-commands), [U7 music commands](cli_reference.md#u7-music-commands) |
 | Sound and speech | Sonarc sound effects and speech FLX archives (preserves embedded 8-byte SFX identifiers in exported WAV filenames when present) | Creative Voice `.voc` decode and `U7SPEECH.SPC` export | `titan u7 speech-export U7SPEECH.SPC -o speech_wav/` | [Sound commands](cli_reference.md#sound-commands), [U7 voice commands](cli_reference.md#u7-voice--speech-commands) |
 | Dialogue web | Prepare, optionally copy NPC JSON/META files, validate, and launch the U8 dialogue web machine | Not applicable | `titan dialogue launch` | [Dialogue CLI](cli_reference.md#dialogue-commands-titan-dialogue), [Dialogue README](src/titan/dialogue/websrc/READMEd.md) |
-| Maps | Render U8 isometric/top-down maps from `FIXED.DAT`, GLOBs, shapes, saves | Render U7 maps from `U7MAP`, `U7CHUNKS`, `U7IFIX*`, `SHAPES.VGA`, optional `u7ireg*` | `titan u7 map-render STATIC/ --full -o u7_world.png` | [U8 map commands](cli_reference.md#u8-map-commands), [U7 map commands](cli_reference.md#u7-map-commands) |
+| Maps | Render U8 isometric/top-down maps from `FIXED.DAT`, GLOBs, shapes, saves | Export, render, and materialize universal U7 map JSON; create empty secondary Exult maps; render native maps with `SHAPES.VGA` and optional `u7ireg*` | `titan u7 map-export-json STATIC/ -o u7_map.json` | [U8 map commands](cli_reference.md#u8-map-commands), [U7 map commands](cli_reference.md#u7-map-commands) |
 | Type data | Decode U8 `TYPEFLAG.DAT` | Decode U7 `TFA.DAT`, `SHPDIMS.DAT`, `WGTVOL.DAT`, `OCCLUDE.DAT` | `titan u7 typeflag-dump STATIC/ -f csv -o tfa_data.csv` | [U8 data commands](cli_reference.md#u8-data-inspection-commands), [U7 type flag commands](cli_reference.md#u7-type-flag-commands) |
 | Saves and runtime data | List/extract U8 save archives | Read Exult `.sav`; inspect loose `gamedat/`; dump NPCs, schedules, flags | `titan u7 save-info exult00bg.sav` | [U8 save commands](cli_reference.md#u8-save-archive-commands), [U7 save commands](cli_reference.md#u7-save-commands) |
 | Fonts | U8 font archives can be extracted as Flex data | U7 `font-create` wizard for Exult-compatible font shapes | `titan u7 font-create` | [U7 font-create](cli_reference.md#u7-font-create) |
@@ -246,9 +251,19 @@ titan u7 save-npcs exult00si.sav --static STATIC/ -f detail
 titan u7 save-schedules exult00si.sav -f detail
 ```
 
-### U7 Map Rendering
+### U7 Map Creation, Interchange, and Rendering
 
 ```bash
+# Export a complete native map to universal JSON.
+titan u7 map-export-json STATIC/ -o u7_map.json
+
+# Render directly from JSON without consulting native U7 map files.
+titan u7 map-render-json u7_map.json --static STATIC/ --sc 0x55 \
+  -o superChunk_85_from_json.png
+
+# Materialize universal JSON as a selected native secondary map.
+titan u7 map-create --output-root scratch/ --map-num 4 --from-json u7_map.json
+
 # Superchunk render.
 titan u7 map-render STATIC/ --sc 0x55 -o superChunk_85.png
 
@@ -266,6 +281,27 @@ reflections. Shapes with more than 32 real archive frames keep their stored
 dimensions. This matches current Exult behavior and fixes extended mod doors
 and other multi-frame objects without changing door-state or open-frame
 rules.
+
+### U3 NES Sosaria Map Creation
+
+```bash
+# List U3 NES commands, then inspect every map-create option
+titan u3 --help
+titan u3 map-create --help
+
+# Export the Serpent Isle construction source
+titan u7 map-export-json --game si -o si_source_map.json
+
+# Create the map in the selected native U7 secondary-map slot
+titan u3 map-create si_source_map.json \
+  --output-root "D:/work/maps" --map-num 4 --seed 42
+```
+
+U3-specific generation uses Titan's embedded original NES overworld, then
+passes resulting universal map document directly to shared U7 native writer.
+Existing `mapNN` replacement still requires `--overwrite-map`; shared terrain
+append still requires `--update-chunks`. Interactive runs offer a full classic
+render after creation. Scripts can choose `--render` or `--no-render`.
 
 ### U7 World Query
 
