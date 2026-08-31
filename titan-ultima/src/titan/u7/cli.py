@@ -416,7 +416,9 @@ def _palette_inspection_rows(filepath: str) -> list[dict]:
 def _palette_info_text(filepath: str, rows: list[dict], detail: bool) -> str:
     from titan.u7.palette_semantics import CYCLE_RANGES
 
-    lines = [f"{filepath}: {len(rows)} slot(s), {sum(1 for r in rows if not r['is_empty'])} populated"]
+    lines = [
+        f"{filepath}: {len(rows)} slot(s), {sum(1 for r in rows if not r['is_empty'])} populated"
+    ]
     for row in rows:
         if not detail and row["is_empty"]:
             continue
@@ -437,7 +439,9 @@ def _palette_info_text(filepath: str, rows: list[dict], detail: bool) -> str:
 
     if detail:
         lines.append("")
-        lines.append("Colour-cycling ranges (apply to every populated palette; see titan.u7.palette_cycle):")
+        lines.append(
+            "Colour-cycling ranges (apply to every populated palette; see titan.u7.palette_cycle):"
+        )
         for r in CYCLE_RANGES:
             lines.append(f"  {r.name:8s} {r.start:3d}-{r.end:3d}")
 
@@ -468,7 +472,8 @@ def cmd_palette_info(args: SimpleNamespace) -> int:
             {
                 "slots": rows,
                 "cycle_ranges": [
-                    {"name": r.name, "start": r.start, "end": r.end} for r in CYCLE_RANGES
+                    {"name": r.name, "start": r.start, "end": r.end}
+                    for r in CYCLE_RANGES
                 ],
             },
             indent=2,
@@ -654,7 +659,12 @@ def cmd_shape_export(args: SimpleNamespace) -> int:
     # forced it explicitly -- mirrors shape-animate's existing auto-detection
     # instead of silently exporting flat/wrong colours for translucent shapes.
     auto_detected = False
-    if not is_translucent and not translucent_bg_path and static_dir and shape_idx is not None:
+    if (
+        not is_translucent
+        and not translucent_bg_path
+        and static_dir
+        and shape_idx is not None
+    ):
         from titan.u7.typeflag import U7TypeFlags
 
         tfa_entry = U7TypeFlags.from_dir(static_dir).get(shape_idx)
@@ -677,7 +687,9 @@ def cmd_shape_export(args: SimpleNamespace) -> int:
 
     exact_background = None
     if translucent_bg_path:
-        exact_background = _load_translucent_bg_indices(translucent_bg_path, len(shape.frames))
+        exact_background = _load_translucent_bg_indices(
+            translucent_bg_path, len(shape.frames)
+        )
         if exact_background is None:
             return 1
         is_translucent = True
@@ -740,7 +752,11 @@ def cmd_shape_animate(args: SimpleNamespace) -> int:
         print(f"ERROR: File not found: {filepath}", file=sys.stderr)
         return 1
 
-    pal = U7Palette.from_file(args.palette) if args.palette else U7Palette.default_palette()
+    pal = (
+        U7Palette.from_file(args.palette)
+        if args.palette
+        else U7Palette.default_palette()
+    )
 
     is_flex = U7FlexArchive.is_u7_flex(filepath)
     if is_flex:
@@ -822,13 +838,19 @@ def cmd_shape_animate(args: SimpleNamespace) -> int:
         )
         default_steps = 24 if anim.ani_type.name == "HOURLY" else anim.nframes
         steps = args.steps or default_steps
-        frame_indices = simulate_frame_sequence(anim, 0, steps, hour_start=args.hour_start or 0)
+        frame_indices = simulate_frame_sequence(
+            anim, 0, steps, hour_start=args.hour_start or 0
+        )
         gif_frames = [images[i] for i in frame_indices if 0 <= i < len(images)]
-        default_duration = 200 if anim.ani_type.name == "HOURLY" else TICK_MS * anim.frame_delay
+        default_duration = (
+            200 if anim.ani_type.name == "HOURLY" else TICK_MS * anim.frame_delay
+        )
         duration = args.duration or default_duration
         label = " (translucency-composited)" if is_translucent else ""
-        print(f"Animating {name}: {anim.ani_type.name.lower()} frame sequence{label}, "
-              f"{len(gif_frames)} steps @ {duration}ms")
+        print(
+            f"Animating {name}: {anim.ani_type.name.lower()} frame sequence{label}, "
+            f"{len(gif_frames)} steps @ {duration}ms"
+        )
     else:
         if not has_cycle_pixels(shape.frames[target_frame].pixels):
             print(
@@ -848,8 +870,10 @@ def cmd_shape_animate(args: SimpleNamespace) -> int:
             )
             gif_frames.append(imgs[target_frame])
         label = " (translucency-composited)" if is_translucent else ""
-        print(f"Animating {name} frame {target_frame}: colour-cycle preview{label}, "
-              f"{steps} steps @ {duration}ms")
+        print(
+            f"Animating {name} frame {target_frame}: colour-cycle preview{label}, "
+            f"{steps} steps @ {duration}ms"
+        )
 
     if not gif_frames:
         print("ERROR: No frames produced for animation", file=sys.stderr)
@@ -1037,7 +1061,11 @@ def cmd_shape_cycle_scan(args: SimpleNamespace) -> int:
     xfstart = translucency.xfstart if translucency.num_slots else 238
     names = U7ShapeNames.from_static_dir(args.static)
 
-    pal = U7Palette.from_file(args.palette) if args.palette else U7Palette.default_palette()
+    pal = (
+        U7Palette.from_file(args.palette)
+        if args.palette
+        else U7Palette.default_palette()
+    )
 
     outdir = args.output or "shape_cycle_scan"
     os.makedirs(outdir, exist_ok=True)
@@ -1273,7 +1301,9 @@ def cmd_u7_flex_create(args: SimpleNamespace) -> int:
         return 1
 
     archive = U7FlexArchive()
-    archive.title = args.title or f"Empty U7 Flex archive created by TITAN v{TITAN_VERSION}"
+    archive.title = (
+        args.title or f"Empty U7 Flex archive created by TITAN v{TITAN_VERSION}"
+    )
 
     try:
         archive.save(str(output_path))
@@ -1297,10 +1327,15 @@ def cmd_u7_flex_add_shape(args: SimpleNamespace) -> int:
     archive_path = Path(args.archive)
     shape_path = Path(args.shape)
     if not archive_path.is_file():
-        print(f"ERROR: U7 Flex add-shape archive not found: {archive_path}", file=sys.stderr)
+        print(
+            f"ERROR: U7 Flex add-shape archive not found: {archive_path}",
+            file=sys.stderr,
+        )
         return 1
     if not shape_path.is_file():
-        print(f"ERROR: U7 Flex add-shape shape not found: {shape_path}", file=sys.stderr)
+        print(
+            f"ERROR: U7 Flex add-shape shape not found: {shape_path}", file=sys.stderr
+        )
         return 1
     if bool(args.output) == bool(args.in_place):
         print(
@@ -1390,7 +1425,9 @@ def u7_flex_create_cmd(
     ],
     title: Annotated[
         Optional[str],
-        typer.Option("-t", "--title", help="Archive title stored in the U7 Flex header"),
+        typer.Option(
+            "-t", "--title", help="Archive title stored in the U7 Flex header"
+        ),
     ] = None,
     force: Annotated[
         bool,
@@ -1505,7 +1542,8 @@ def palette_info_cmd(
     format: Annotated[
         Literal["summary", "detail", "csv", "json"],
         typer.Option(
-            "-f", "--format",
+            "-f",
+            "--format",
             help="Output format: summary (default), detail, csv, json",
         ),
     ] = "summary",
@@ -1728,15 +1766,22 @@ def shape_animate_cmd(
     ] = "auto",
     steps: Annotated[
         Optional[int],
-        typer.Option("--steps", help="Number of animation steps (default depends on mode/type)"),
+        typer.Option(
+            "--steps", help="Number of animation steps (default depends on mode/type)"
+        ),
     ] = None,
     duration: Annotated[
         Optional[int],
-        typer.Option("--duration", help="Milliseconds per GIF frame (default depends on mode/type)"),
+        typer.Option(
+            "--duration",
+            help="Milliseconds per GIF frame (default depends on mode/type)",
+        ),
     ] = None,
     hour_start: Annotated[
         Optional[int],
-        typer.Option("--hour-start", help="Starting in-game hour for HOURLY-type animations"),
+        typer.Option(
+            "--hour-start", help="Starting in-game hour for HOURLY-type animations"
+        ),
     ] = None,
 ) -> None:
     """Render a shape's frame-sequence or palette-cycle animation to an
@@ -1778,11 +1823,17 @@ def shape_batch_cmd(
     ] = None,
     range_start: Annotated[
         Optional[int],
-        typer.Option("--range-start", help="First shape index to export (default: 0; VGA archive input only)"),
+        typer.Option(
+            "--range-start",
+            help="First shape index to export (default: 0; VGA archive input only)",
+        ),
     ] = None,
     range_end: Annotated[
         Optional[int],
-        typer.Option("--range-end", help="Last shape index (exclusive; default: all; VGA archive input only)"),
+        typer.Option(
+            "--range-end",
+            help="Last shape index (exclusive; default: all; VGA archive input only)",
+        ),
     ] = None,
     indexed: Annotated[
         bool,
@@ -1835,7 +1886,9 @@ def shape_cycle_scan_cmd(
     ] = None,
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory (default: shape_cycle_scan/)"),
+        typer.Option(
+            "-o", "--output", help="Output directory (default: shape_cycle_scan/)"
+        ),
     ] = None,
     range_start: Annotated[
         Optional[int],
@@ -2014,6 +2067,11 @@ def cmd_map_render(args: SimpleNamespace) -> int:
         print(f"ERROR: STATIC directory not found: {static_dir}", file=sys.stderr)
         return 1
 
+    map_root = getattr(args, "map_root", None)
+    if map_root and not os.path.isdir(map_root):
+        print(f"ERROR: Map root directory not found: {map_root}", file=sys.stderr)
+        return 1
+
     shapes_path = os.path.join(static_dir, "SHAPES.VGA")
     if not os.path.isfile(shapes_path):
         print(f"ERROR: SHAPES.VGA not found in {static_dir}", file=sys.stderr)
@@ -2030,7 +2088,7 @@ def cmd_map_render(args: SimpleNamespace) -> int:
 
     pal = U7Palette.from_file(palette_path)
     map_num = int(getattr(args, "map_num", 0) or 0)
-    renderer = U7MapRenderer(static_dir, map_num=map_num)
+    renderer = U7MapRenderer(static_dir, map_num=map_num, map_root=map_root)
 
     view = args.view or "classic"
     if view not in U7MapRenderer.PROJECTIONS:
@@ -2142,6 +2200,219 @@ def cmd_map_render(args: SimpleNamespace) -> int:
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     img.save(out_path)
     print(f"Output: {img.width}×{img.height} -> {out_path}")
+    return 0
+
+
+def cmd_map_create(args: SimpleNamespace) -> int:
+    """Create one native Exult map namespace, optionally from universal JSON."""
+    from titan.u7.native_map_create import (
+        U7NativeMapCreateError,
+        create_u7_native_map,
+    )
+
+    try:
+        result = create_u7_native_map(
+            args.output_root,
+            args.map_num,
+            source_json=args.from_json,
+            gamedat_root=args.gamedat_root,
+            materialize_empty=args.materialize_empty,
+            overwrite_map=args.overwrite_map,
+            update_chunks=args.update_chunks,
+            dry_run=args.dry_run,
+        )
+    except (OSError, U7NativeMapCreateError, ValueError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+
+    action = "Would create" if result.dry_run else "Created"
+    print(f"{action} native U7 map {result.map_number:02x}: {result.map_directory}")
+    if result.gamedat_directory:
+        print(f"GAMEDAT namespace: {result.gamedat_directory}")
+    if result.empty_map:
+        state = (
+            "materialized zero U7MAP"
+            if result.materialized_empty_map
+            else "missing U7MAP"
+        )
+        print(f"Empty map: {state}")
+    else:
+        print(
+            f"U7MAP: {result.u7map_bytes} bytes; "
+            f"IFIX: {result.ifix_files} files / {result.fixed_objects} objects"
+        )
+        print(
+            f"U7CHUNKS: {result.chunks_action}; "
+            f"{result.definitions_written} definitions "
+            f"({result.definitions_appended} appended)"
+        )
+        print(f"Remapped map references: {result.remapped_definition_references}")
+    return 0
+
+
+def cmd_map_export_json(args: SimpleNamespace) -> int:
+    """Export a complete U7 map, terrain definitions, and IFIX objects to JSON."""
+    from titan.u7.map_json import (
+        U7MapJsonError,
+        build_u7_map_document,
+        write_u7_map_document,
+    )
+
+    static_dir = args.static
+    if not static_dir:
+        static_dir, _ = _resolve_u7_paths(args.game)
+    if not static_dir:
+        print("ERROR: No STATIC directory supplied or configured.", file=sys.stderr)
+        return 1
+
+    try:
+        document = build_u7_map_document(
+            static_dir,
+            game=args.game,
+            map_number=args.map_num,
+            include_fixed_objects=args.include_fixed,
+            include_shape_metadata=args.include_shape_metadata,
+            wrap_x=args.wrap_x,
+            wrap_y=args.wrap_y,
+        )
+        write_u7_map_document(document, args.output, pretty=args.pretty)
+    except (OSError, U7MapJsonError, ValueError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+
+    counts = document["counts"]
+    print(
+        f"Exported {counts['definitions']} definitions, "
+        f"{counts['map_chunk_references']} chunk references, and "
+        f"{counts['fixed_objects']} fixed objects."
+    )
+    print(f"Output: {args.output}")
+    return 0
+
+
+def cmd_map_render_json(args: SimpleNamespace) -> int:
+    """Render a universal U7 map JSON without consulting U7 map data files."""
+    from PIL import Image
+
+    from titan.u7.map_json import (
+        U7MapJsonError,
+        load_u7_map_document,
+        renderer_from_u7_map_document,
+    )
+    from titan.u7.palette import U7Palette
+
+    try:
+        document = load_u7_map_document(args.json_file)
+        static_dir = args.static
+        if not static_dir:
+            static_dir, _ = _resolve_u7_paths(document["game"])
+        if not static_dir:
+            raise U7MapJsonError("No graphics STATIC directory supplied or configured")
+
+        palette_path = args.palette
+        if not palette_path:
+            _, palette_path = _resolve_u7_paths(document["game"])
+        if not palette_path:
+            palette_path = os.path.join(static_dir, "PALETTES.FLX")
+
+        palette = U7Palette.from_file(palette_path)
+        renderer = renderer_from_u7_map_document(
+            document,
+            static_dir,
+            allow_asset_mismatch=args.allow_asset_mismatch,
+        )
+
+        if args.superchunk is not None:
+            if not 0 <= args.superchunk < 144:
+                raise U7MapJsonError("Superchunk must be between 0 and 143")
+            image = renderer.render_superchunk(
+                args.superchunk,
+                palette,
+                view=args.view,
+                grid=args.grid,
+                grid_size=args.grid_size,
+            )
+            output = args.output or f"u7_json_sc{args.superchunk:02X}.png"
+            os.makedirs(os.path.dirname(output) or ".", exist_ok=True)
+            image.save(output)
+            print(f"Output: {image.width}x{image.height} -> {output}")
+            return 0
+
+        if not args.tiles_dir and not args.output:
+            raise U7MapJsonError(
+                "World render requires --tiles-dir, --output overview, or both"
+            )
+        if args.overview_scale < 1:
+            raise U7MapJsonError("--overview-scale must be at least 1")
+
+        logical_superchunk_pixels = 2048
+        scaled_superchunk_pixels = logical_superchunk_pixels // args.overview_scale
+        if scaled_superchunk_pixels < 1:
+            raise U7MapJsonError("--overview-scale is too large")
+        overview = None
+        if args.output:
+            overview = Image.new(
+                "RGBA",
+                (scaled_superchunk_pixels * 12, scaled_superchunk_pixels * 12),
+                (0, 0, 0, 255),
+            )
+        if args.tiles_dir:
+            os.makedirs(args.tiles_dir, exist_ok=True)
+
+        for superchunk in range(144):
+            image = renderer.render_superchunk(
+                superchunk,
+                palette,
+                view=args.view,
+                grid=args.grid,
+                grid_size=args.grid_size,
+            )
+            if args.tiles_dir:
+                tile_path = os.path.join(
+                    args.tiles_dir, f"superchunk_{superchunk:03d}.png"
+                )
+                image.save(tile_path)
+            if overview is not None:
+                logical = image.crop((64, 64, 2112, 2112))
+                if args.overview_scale != 1:
+                    logical = logical.resize(
+                        (scaled_superchunk_pixels, scaled_superchunk_pixels),
+                        Image.Resampling.LANCZOS,
+                    )
+                overview.paste(
+                    logical,
+                    (
+                        (superchunk % 12) * scaled_superchunk_pixels,
+                        (superchunk // 12) * scaled_superchunk_pixels,
+                    ),
+                )
+            if superchunk % 12 == 11:
+                print(f"Rendered superchunk row {superchunk // 12 + 1}/12")
+
+        if overview is not None:
+            os.makedirs(os.path.dirname(args.output) or ".", exist_ok=True)
+            overview.save(args.output)
+            print(f"Overview: {overview.width}x{overview.height} -> {args.output}")
+        if args.tiles_dir:
+            manifest = {
+                "schema": "titan.u7.map-render-tiles",
+                "schema_version": 1,
+                "source_json": os.path.basename(args.json_file),
+                "view": args.view,
+                "tile_count": 144,
+                "tile_pixels": [2176, 2176],
+                "logical_origin": [64, 64],
+                "logical_pixels": [2048, 2048],
+                "filename_pattern": "superchunk_{decimal:03d}.png",
+            }
+            manifest_path = os.path.join(args.tiles_dir, "render_manifest.json")
+            with open(manifest_path, "w", encoding="utf-8", newline="\n") as handle:
+                json.dump(manifest, handle, indent=2)
+                handle.write("\n")
+            print(f"Tiles: 144 -> {args.tiles_dir}")
+    except (OSError, U7MapJsonError, ValueError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
     return 0
 
 
@@ -3600,19 +3871,255 @@ _EXCLUDE_FLAG_CHOICES = [
 ]
 
 
+@u7_app.command("map-create")
+def map_create_cmd(
+    output_root: Annotated[
+        str,
+        typer.Option(
+            "--output-root",
+            help="Required PATCH-like root where mapNN and shared u7chunks are written",
+        ),
+    ],
+    map_num: Annotated[
+        int,
+        typer.Option(
+            "--map-num",
+            help="Required secondary map number; 1 becomes map01, 16 becomes map10",
+        ),
+    ],
+    from_json: Annotated[
+        Optional[str],
+        typer.Option(
+            "--from-json",
+            help="Universal U7 map JSON to materialize; omit for an empty map",
+        ),
+    ] = None,
+    gamedat_root: Annotated[
+        Optional[str],
+        typer.Option(
+            "--gamedat-root",
+            help="Optional explicit GAMEDAT-like root where an empty mapNN is created",
+        ),
+    ] = None,
+    materialize_empty: Annotated[
+        bool,
+        typer.Option(
+            "--materialize-empty/--directory-only",
+            help="For empty maps, write a 73728-byte all-zero u7map",
+        ),
+    ] = False,
+    overwrite_map: Annotated[
+        bool,
+        typer.Option(
+            "--overwrite-map",
+            help="Explicitly permit replacement of an existing mapNN namespace",
+        ),
+    ] = False,
+    update_chunks: Annotated[
+        bool,
+        typer.Option(
+            "--update-chunks",
+            help="Explicitly permit appending missing definitions to existing u7chunks",
+        ),
+    ] = False,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="Validate and report planned native files without writing",
+        ),
+    ] = False,
+) -> None:
+    """Create an empty or JSON-backed native Exult map in explicit folders."""
+    raise SystemExit(
+        cmd_map_create(
+            SimpleNamespace(
+                output_root=output_root,
+                map_num=map_num,
+                from_json=from_json,
+                gamedat_root=gamedat_root,
+                materialize_empty=materialize_empty,
+                overwrite_map=overwrite_map,
+                update_chunks=update_chunks,
+                dry_run=dry_run,
+            )
+        )
+    )
+
+
+@u7_app.command("map-export-json")
+def map_export_json_cmd(
+    static: Annotated[
+        Optional[str],
+        typer.Argument(
+            help="Path to STATIC containing U7MAP, U7CHUNKS, U7IFIX, and graphics"
+        ),
+    ] = None,
+    game: Annotated[
+        Literal["bg", "si"],
+        typer.Option("--game", help="Ultima VII game data format"),
+    ] = "bg",
+    map_num: Annotated[
+        int,
+        typer.Option("--map-num", help="Map number; zero is the main world"),
+    ] = 0,
+    output: Annotated[
+        str,
+        typer.Option("-o", "--output", help="Output JSON path"),
+    ] = "u7_map.json",
+    include_fixed: Annotated[
+        bool,
+        typer.Option(
+            "--include-fixed/--no-fixed",
+            help="Include fixed IFIX objects required by terrain such as mountains",
+        ),
+    ] = True,
+    include_shape_metadata: Annotated[
+        bool,
+        typer.Option(
+            "--shape-metadata/--no-shape-metadata",
+            help="Include dimensions and names for referenced shape frames",
+        ),
+    ] = True,
+    wrap_x: Annotated[
+        bool,
+        typer.Option("--wrap-x/--no-wrap-x", help="Declare horizontal map wrapping"),
+    ] = False,
+    wrap_y: Annotated[
+        bool,
+        typer.Option("--wrap-y/--no-wrap-y", help="Declare vertical map wrapping"),
+    ] = False,
+    pretty: Annotated[
+        bool,
+        typer.Option("--pretty/--compact", help="Pretty or compact JSON output"),
+    ] = False,
+) -> None:
+    """Export a complete U7 map to universal JSON."""
+    raise SystemExit(
+        cmd_map_export_json(
+            SimpleNamespace(
+                static=static,
+                game=game,
+                map_num=map_num,
+                output=output,
+                include_fixed=include_fixed,
+                include_shape_metadata=include_shape_metadata,
+                wrap_x=wrap_x,
+                wrap_y=wrap_y,
+                pretty=pretty,
+            )
+        )
+    )
+
+
+@u7_app.command("map-render-json")
+def map_render_json_cmd(
+    json_file: Annotated[
+        str,
+        typer.Argument(help="Universal U7 map JSON file"),
+    ],
+    static: Annotated[
+        Optional[str],
+        typer.Option(
+            "--static", help="STATIC graphics directory; map files are not read"
+        ),
+    ] = None,
+    palette: Annotated[
+        Optional[str],
+        typer.Option("-p", "--palette", help="PALETTES.FLX path"),
+    ] = None,
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Overview PNG, or PNG for --superchunk"),
+    ] = None,
+    tiles_dir: Annotated[
+        Optional[str],
+        typer.Option(
+            "--tiles-dir", help="Write 144 normal-renderer superchunk PNG tiles"
+        ),
+    ] = None,
+    superchunk: Annotated[
+        Optional[str],
+        typer.Option("--superchunk", "--sc", help="Render only one superchunk"),
+    ] = None,
+    overview_scale: Annotated[
+        int,
+        typer.Option(
+            "--overview-scale",
+            help="Normal-render pixels per overview pixel; 8 gives 3072x3072",
+        ),
+    ] = 8,
+    view: Annotated[
+        Literal["classic", "flat", "steep"],
+        typer.Option("--view", help="Map projection"),
+    ] = "classic",
+    grid: Annotated[
+        bool,
+        typer.Option("--grid/--no-grid", help="Draw chunk and superchunk grids"),
+    ] = False,
+    grid_size: Annotated[
+        int,
+        typer.Option("--grid-size", help="Grid line width"),
+    ] = 1,
+    allow_asset_mismatch: Annotated[
+        bool,
+        typer.Option(
+            "--allow-asset-mismatch",
+            help="Render despite graphics hashes differing from JSON provenance",
+        ),
+    ] = False,
+) -> None:
+    """Render universal map JSON without U7MAP, U7CHUNKS, or U7IFIX."""
+    sc_int: int | None = None
+    if superchunk is not None:
+        try:
+            sc_int = int(superchunk, 0)
+        except ValueError:
+            print(f"ERROR: Invalid superchunk integer: {superchunk}", file=sys.stderr)
+            raise SystemExit(1)
+    raise SystemExit(
+        cmd_map_render_json(
+            SimpleNamespace(
+                json_file=json_file,
+                static=static,
+                palette=palette,
+                output=output,
+                tiles_dir=tiles_dir,
+                superchunk=sc_int,
+                overview_scale=overview_scale,
+                view=view,
+                grid=grid,
+                grid_size=grid_size,
+                allow_asset_mismatch=allow_asset_mismatch,
+            )
+        )
+    )
+
+
 @u7_app.command("map-render")
 def map_render_cmd(
     static: Annotated[
         Optional[str],
         typer.Argument(
-            help="Path to STATIC directory containing U7MAP, U7CHUNKS, "
-            "SHAPES.VGA, etc. (default: from titan.toml u7bg/u7si)"
+            help="Path to STATIC containing SHAPES.VGA and type data; also "
+            "map data unless --map-root is supplied "
+            "(default: from titan.toml u7bg/u7si)"
         ),
     ] = None,
     game: Annotated[
         Literal["bg", "si"],
         typer.Option("--game", help="Use config section for BG or SI defaults"),
     ] = "bg",
+    map_root: Annotated[
+        Optional[str],
+        typer.Option(
+            "--map-root",
+            help=(
+                "Optional separate root containing U7CHUNKS and U7MAP/U7IFIX "
+                "map data; defaults to the STATIC argument"
+            ),
+        ),
+    ] = None,
     superchunk: Annotated[
         Optional[str],
         typer.Option(
@@ -3770,7 +4277,7 @@ def map_render_cmd(
             "--map-num",
             help=(
                 "Map number: 0 = default world map (root STATIC), "
-                "1+ = mapNN/ subdirectory inside STATIC and gamedat (default: 0)"
+                "1+ = mapNN/ inside the map root and gamedat (default: 0)"
             ),
         ),
     ] = 0,
@@ -3835,6 +4342,7 @@ def map_render_cmd(
             SimpleNamespace(
                 game=game,
                 static=static,
+                map_root=map_root,
                 superchunk=sc_int,
                 chunk_x0=chunk_x0 or 0,
                 chunk_y0=chunk_y0 or 0,

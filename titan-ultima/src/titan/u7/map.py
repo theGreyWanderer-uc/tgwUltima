@@ -56,7 +56,7 @@ from typing import Callable
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from titan.u7.flex import U7FlexArchive
+from titan.u7.flex import U7_FLEX_EXULT_MAGIC2, U7_FLEX_MAGIC2, U7FlexArchive
 from titan.u7.shape import U7Shape, FIRST_OBJ_SHAPE
 from titan.u7.palette import U7Palette
 from titan.u7.typeflag import U7TypeFlags
@@ -78,6 +78,7 @@ C_CHUNK_BYTES_V2 = C_TILES_PER_CHUNK * C_TILES_PER_CHUNK * 3  # 768
 # Exult V2 extended chunks header (10 bytes)
 _V2_CHUNKS_MAGIC = b"\xff\xff\xff\xffexlt\x00\x00"
 _V2_CHUNKS_HDR_SIZE = 10
+
 
 def _frame_to_rgba(
     fr: U7Shape.Frame,
@@ -304,10 +305,13 @@ class U7TileRectOverlay:
 
 class U7MapRenderer:
     """
-    Render Ultima 7 maps from STATIC data files.
+    Render Ultima 7 maps using STATIC assets and optional separate map data.
 
     Handles terrain tiles (U7MAP + U7CHUNKS), fixed objects (U7IFIX),
     and optionally dynamic objects (u7ireg).
+
+    ``map_root`` defaults to ``static_dir`` so existing callers retain their
+    original file lookup behavior.
 
     Supports configurable view projections and typeflag-based filtering.
     """
@@ -343,22 +347,67 @@ class U7MapRenderer:
         static_dir: str,
         map_num: int = 0,
         *,
+        map_root: str | None = None,
         game: str = "bg",
         exult_flx_path: str | None = None,
     ) -> None:
         self.static_dir = static_dir
+        self.map_root = map_root or static_dir
         self.map_num = map_num
         self.game = game
         self.exult_flx_path = exult_flx_path
-        # For map_num > 0, U7MAP and IFIX live in a mapNN/ subdir.
+        # Map data normally shares the STATIC root. A separate map root lets
+        # scratch/native maps reuse the original game's rendering assets.
         self._map_data_dir: str = (
-            os.path.join(static_dir, f"map{map_num:02x}") if map_num > 0 else static_dir
+            os.path.join(self.map_root, f"map{map_num:02x}")
+            if map_num > 0
+            else self.map_root
         )
         self._terrain_map: list[list[int]] | None = None
         self._terrains: list[list[tuple[int, int]]] | None = None  # terrain shapes
         self._tfa: U7TypeFlags | None = None
         self._shapes_vga: U7FlexArchive | None = None
         self._translucency: U7Translucency | None = None
+        self._fixed_objects_by_superchunk: dict[int, list[U7MapObject]] | None = None
+
+    @classmethod
+    def from_map_data(
+        cls,
+        static_dir: str,
+        *,
+        terrain_map: list[list[int]],
+        terrains: list[list[tuple[int, int]]],
+        fixed_objects: list[U7MapObject] | None = None,
+        game: str = "bg",
+        exult_flx_path: str | None = None,
+    ) -> "U7MapRenderer":
+        """Create a renderer whose map layout comes from memory, not U7 map files."""
+        renderer = cls(
+            static_dir,
+            game=game,
+            exult_flx_path=exult_flx_path,
+        )
+        renderer._terrain_map = terrain_map
+        renderer._terrains = terrains
+        fixed_by_superchunk: dict[int, list[U7MapObject]] = {}
+        for obj in fixed_objects or []:
+            chunk_x = obj.tx // C_TILES_PER_CHUNK
+            chunk_y = obj.ty // C_TILES_PER_CHUNK
+            superchunk = (
+                chunk_y // C_CHUNKS_PER_SCHUNK * C_NUM_SCHUNKS
+                + chunk_x // C_CHUNKS_PER_SCHUNK
+            )
+            fixed_by_superchunk.setdefault(superchunk, []).append(obj)
+        renderer._fixed_objects_by_superchunk = fixed_by_superchunk
+        return renderer
+
+    def _fixed_objects_for_superchunk(self, schunk: int) -> list[U7MapObject]:
+        """Return fixed objects from injected map data or the matching IFIX file."""
+        if self._fixed_objects_by_superchunk is not None:
+            return list(self._fixed_objects_by_superchunk.get(schunk, []))
+        ifix_name = f"U7IFIX{schunk:02X}"
+        ifix_path = os.path.join(self._map_data_dir, ifix_name)
+        return self.parse_ifix(ifix_path, schunk)
 
     # ------------------------------------------------------------------
     # Lazy loaders
@@ -425,7 +474,7 @@ class U7MapRenderer:
         if not os.path.isfile(path):
             path = os.path.join(self._map_data_dir, "u7map")
         if not os.path.isfile(path) and self.map_num > 0:
-            path = os.path.join(self.static_dir, "U7MAP")
+            path = os.path.join(self.map_root, "U7MAP")
         with open(path, "rb") as f:
             data = f.read()
 
@@ -461,7 +510,7 @@ class U7MapRenderer:
         Returns a list of terrains, each being 256 ``(shape, frame)``
         tuples for the 16×16 tiles (row-major: ``[tiley * 16 + tilex]``).
         """
-        path = os.path.join(self.static_dir, "U7CHUNKS")
+        path = os.path.join(self.map_root, "U7CHUNKS")
         with open(path, "rb") as f:
             data = f.read()
 
@@ -544,9 +593,14 @@ class U7MapRenderer:
             abs_cx = scx + local_cx
             abs_cy = scy + local_cy
 
-            # Detect format: V2 (5 bytes/obj) vs V1 (4 bytes/obj)
-            entry_size = 4
-            if len(rec) % 5 == 0 and len(rec) % 4 != 0:
+            # Exult marks V2 IFIX archives in the Flex header. Prefer that
+            # marker because record sizes divisible by both four and five are
+            # otherwise ambiguous. Retain size detection for older writers.
+            is_exult_v2 = (flex.magic2 & 0xFFFFFF00) == U7_FLEX_EXULT_MAGIC2 and (
+                flex.magic2 & 0xFF
+            ) > 0
+            entry_size = 5 if is_exult_v2 else 4
+            if flex.magic2 == U7_FLEX_MAGIC2 and len(rec) % 5 == 0 and len(rec) % 4:
                 entry_size = 5
 
             num_entries = len(rec) // entry_size
@@ -733,11 +787,17 @@ class U7MapRenderer:
                 has_children_field = False
 
                 if is_egg:
-                    lift = (payload[4 + adj] >> 4) & 0x0F if len(payload) > 4 + adj else 0
+                    lift = (
+                        (payload[4 + adj] >> 4) & 0x0F if len(payload) > 4 + adj else 0
+                    )
                     quality = payload[5 + adj] if len(payload) > 5 + adj else 0
                     obj = U7MapObject(
-                        tx=abs_tx, ty=abs_ty, tz=lift,
-                        shape=shnum, frame=frnum, quality=quality,
+                        tx=abs_tx,
+                        ty=abs_ty,
+                        tz=lift,
+                        shape=shnum,
+                        frame=frnum,
+                        quality=quality,
                         source="ireg",
                     )
                 else:
@@ -754,8 +814,12 @@ class U7MapRenderer:
                         continue
                     has_children_field = decoded.has_children_marker
                     obj = U7MapObject(
-                        tx=abs_tx, ty=abs_ty, tz=decoded.lift,
-                        shape=shnum, frame=frnum, quality=decoded.quality,
+                        tx=abs_tx,
+                        ty=abs_ty,
+                        tz=decoded.lift,
+                        shape=shnum,
+                        frame=frnum,
+                        quality=decoded.quality,
                         source="ireg",
                         raw_quality=decoded.raw_quality,
                         object_flags=decoded.object_flags,
@@ -911,9 +975,7 @@ class U7MapRenderer:
         # --- IFIX fixed objects ---
         objects: list[U7MapObject] = []
         if include_fixed:
-            ifix_name = f"U7IFIX{schunk:02X}"
-            ifix_path = os.path.join(self._map_data_dir, ifix_name)
-            ifix_objs = self.parse_ifix(ifix_path, schunk)
+            ifix_objs = self._fixed_objects_for_superchunk(schunk)
             for obj in ifix_objs:
                 if obj.shape not in exclude:
                     objects.append(obj)
@@ -1687,9 +1749,7 @@ class U7MapRenderer:
         )
 
         for sc in sorted(needed_schunks):
-            ifix_name = f"U7IFIX{sc:02X}"
-            ifix_path = os.path.join(self._map_data_dir, ifix_name)
-            ifix_objs = self.parse_ifix(ifix_path, sc)
+            ifix_objs = self._fixed_objects_for_superchunk(sc)
             for obj in ifix_objs:
                 obj_cx = obj.tx // C_TILES_PER_CHUNK
                 obj_cy = obj.ty // C_TILES_PER_CHUNK
@@ -1873,15 +1933,10 @@ class U7MapRenderer:
         """Return a summary dict of all superchunks and their object counts."""
         result: dict[int, dict] = {}
         for sc in range(C_NUM_SCHUNKS * C_NUM_SCHUNKS):
-            ifix_name = f"U7IFIX{sc:02X}"
-            ifix_path = os.path.join(self.static_dir, ifix_name)
-            n_ifix = 0
-            if os.path.isfile(ifix_path):
-                try:
-                    objs = self.parse_ifix(ifix_path, sc)
-                    n_ifix = len(objs)
-                except Exception:
-                    pass
+            try:
+                n_ifix = len(self._fixed_objects_for_superchunk(sc))
+            except (OSError, ValueError):
+                n_ifix = 0
             scx = sc % C_NUM_SCHUNKS
             scy = sc // C_NUM_SCHUNKS
             result[sc] = {

@@ -55,7 +55,7 @@ app = typer.Typer(
     name="titan",
     help=(
         "TITAN \u2013 Tool for Interpreting and Transforming Archival Nodes.\n"
-        "Work with Ultima file formats (UW2, U8, U7, U6, U9, UO)."
+        "Work with Ultima file formats (UW2, U8, U7, U6, U3 NES, U9, UO)."
     ),
     no_args_is_help=True,
     rich_markup_mode=None,
@@ -1360,6 +1360,7 @@ def config_cmd(
 
 from titan.u8.cli import u8_app  # noqa: E402
 from titan.u7.cli import u7_app  # noqa: E402
+from titan.u3.cli import u3_app  # noqa: E402
 from titan.u6.cli import u6_app  # noqa: E402
 from titan.u9.cli import u9_app  # noqa: E402
 from titan.uo.cli import uo_app  # noqa: E402
@@ -1368,6 +1369,7 @@ from titan.dialogue.cli import dialogue_app  # noqa: E402
 
 app.add_typer(u8_app)
 app.add_typer(u7_app)
+app.add_typer(u3_app)
 app.add_typer(u6_app)
 app.add_typer(u9_app)
 app.add_typer(uo_app)

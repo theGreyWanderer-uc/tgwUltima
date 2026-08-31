@@ -33,6 +33,7 @@ titan uw2 <command>             # Ultima Underworld II: Labyrinth of Worlds
 titan u8 <command>              # Ultima 8: Pagan
 titan u7 <command>              # Ultima 7: The Black Gate / Serpent Isle
 titan u6 <command>              # Ultima 6: The False Prophet
+titan u3 <command>              # Ultima III NES map conversion
 titan u9 <command>              # Ultima 9: Ascension
 titan uo <command>              # Ultima Online Classic Client
 ```
@@ -1992,6 +1993,208 @@ titan u7 speech-export INTROSND.DAT -o speech/
 
 ---
 
+#### `u7 map-create`
+
+Create an empty secondary Exult map namespace, or materialize a complete
+native map from Titan's universal U7 map JSON. The command always requires an
+explicit destination and map number; it does not consult configured game paths
+or choose PATCH/GAMEDAT locations for the user.
+
+```
+titan u7 map-create --output-root DIR --map-num N
+                    [--from-json FILE] [--gamedat-root DIR]
+                    [--materialize-empty] [--overwrite-map]
+                    [--update-chunks] [--dry-run]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `--output-root DIR` | Required PATCH-like root. Titan creates `mapNN` here and, for JSON-backed maps, creates or reuses the shared `u7chunks` file here |
+| `--map-num N` | Required secondary map number from 1 through 255. Names use lowercase, two-digit hexadecimal: 1 = `map01`, 3 = `map03`, 16 = `map10` |
+| `--from-json FILE` | Materialize terrain definitions, the 192x192 chunk layout, and fixed objects from a `titan.u7.map` JSON document |
+| `--gamedat-root DIR` | Also create the matching empty `mapNN` namespace under an explicitly supplied GAMEDAT-like root |
+| `--materialize-empty` | Without JSON, write a 73,728-byte all-zero `u7map`. The default `--directory-only` behavior matches Exult Studio's empty-map setup and leaves `u7map` absent |
+| `--overwrite-map` | Permit replacement of an existing PATCH `mapNN` and/or GAMEDAT `mapNN`. Without this exact flag, Titan refuses to touch either existing namespace |
+| `--update-chunks` | Permit appending missing terrain definitions to an existing shared `u7chunks`. Existing definitions are content-matched and reused; JSON layout references are remapped as needed |
+| `--dry-run` | Parse, validate, merge, encode, and report the plan without creating or replacing files or directories |
+
+JSON-backed creation writes native `u7map`, populated `u7ifixSS` archives,
+and shared `u7chunks`, plus `mapNN/titan-map-create.json` containing creation
+statistics and the source JSON SHA-256. Staged files are read back and checked
+before installation. Existing `mapNN` content is replaced as one directory,
+so stale IFIX archives cannot survive an explicitly authorized overwrite.
+
+The destination may be a scratch folder, a mod's PATCH folder, or any other
+directory. This makes it safe to build and inspect a map away from a live mod,
+then rerun the same command against the final PATCH path or move the generated
+files manually.
+
+**Examples**
+
+```bash
+# Create an Exult-style empty map namespace in a scratch root
+titan u7 map-create --output-root "D:/work/maps" --map-num 1
+
+# Preview a JSON-backed build without writing anything
+titan u7 map-create --output-root "D:/work/maps" --map-num 4 \
+  --from-json u7_map.json --dry-run
+
+# Build the native map in the scratch root
+titan u7 map-create --output-root "D:/work/maps" --map-num 4 \
+  --from-json u7_map.json
+
+# Existing shared terrain may require explicit append permission
+titan u7 map-create --output-root "mods/MyMod/patch" --map-num 4 \
+  --from-json u7_map.json --update-chunks
+
+# Replacing an existing map namespace is always explicit
+titan u7 map-create --output-root "mods/MyMod/patch" --map-num 4 \
+  --from-json u7_map.json --update-chunks --overwrite-map
+```
+
+---
+
+#### `u7 map-export-json`
+
+Export a complete native U7 map into Titan's portable `titan.u7.map` JSON
+format. The document contains every terrain definition, the complete 192x192
+chunk layout, optional IFIX objects and shape/frame metadata, source hashes,
+geometry, and usage statistics.
+
+```
+titan u7 map-export-json [static] [--game bg|si] [--map-num N]
+                         [-o FILE] [--include-fixed | --no-fixed]
+                         [--shape-metadata | --no-shape-metadata]
+                         [--wrap-x | --no-wrap-x]
+                         [--wrap-y | --no-wrap-y]
+                         [--pretty | --compact]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `static` | Source STATIC/map root containing shared `U7CHUNKS`, graphics metadata, and root map data or a selected `mapNN`; defaults to configured BG/SI STATIC |
+| `--game bg\|si` | Select source format and configured path; default `bg` |
+| `--map-num N` | Export map `0` from the source root or secondary map `N` from `mapNN`; default `0` |
+| `-o FILE`, `--output FILE` | Output JSON path; default `u7_map.json` |
+| `--include-fixed`, `--no-fixed` | Include or omit IFIX objects such as mountain faces; included by default |
+| `--shape-metadata`, `--no-shape-metadata` | Include or omit dimensions, origins, names, and frame counts for referenced shapes; included by default |
+| `--wrap-x`, `--wrap-y` | Declare horizontal or vertical wrapping in JSON metadata; both default off and do not alter source map data |
+| `--pretty`, `--compact` | Write indented or compact JSON; compact is the default |
+
+```bash
+# Export the configured Serpent Isle main map
+titan u7 map-export-json --game si -o serpent_isle_map.json --pretty
+
+# Export secondary map04 from an explicit map/asset root
+titan u7 map-export-json "mods/MyMod/patch" --map-num 4 \
+  --no-shape-metadata -o map04.json
+```
+
+---
+
+#### `u7 map-render-json`
+
+Render directly from a `titan.u7.map` JSON document without consulting
+`U7MAP`, `U7CHUNKS`, or `U7IFIX*`. Rendering still requires `SHAPES.VGA`,
+palette, and type metadata from an explicit or configured STATIC directory.
+
+```
+titan u7 map-render-json JSON [--static DIR] [-p PALETTE]
+                         [-o PNG] [--tiles-dir DIR]
+                         [--superchunk N] [--overview-scale N]
+                         [--view classic|flat|steep]
+                         [--grid | --no-grid] [--grid-size N]
+                         [--allow-asset-mismatch]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `JSON` | Universal `titan.u7.map` JSON document to render |
+| `--static DIR` | Graphics/type-data STATIC directory; defaults to configured game recorded by the JSON document |
+| `-p FILE`, `--palette FILE` | Palette archive; defaults to configured palette and then `PALETTES.FLX` below `--static` |
+| `-o PNG`, `--output PNG` | Single-superchunk PNG with `--superchunk`, otherwise the stitched full-world overview PNG |
+| `--tiles-dir DIR` | Write all 144 full-resolution superchunk PNGs plus `render_manifest.json` |
+| `--superchunk N`, `--sc N` | Render only superchunk 0 through 143; decimal and `0x` hexadecimal accepted |
+| `--overview-scale N` | Full-render downscale divisor; default `8` produces a 3072x3072 overview |
+| `--view classic\|flat\|steep` | Projection; default `classic` |
+| `--grid`, `--no-grid` | Enable or disable chunk/superchunk grids; disabled by default |
+| `--grid-size N` | Grid line width; default `1` |
+| `--allow-asset-mismatch` | Permit rendering when required graphics/type-data hashes differ from JSON provenance |
+
+Without `--superchunk`, at least one of `--output` or `--tiles-dir` is
+required. Supplying both writes the overview and the 144 full-resolution tiles
+in one pass.
+
+```bash
+# Render one full-resolution superchunk with grids
+titan u7 map-render-json serpent_isle_map.json --sc 0x55 \
+  --grid -o superchunk_085.png
+
+# Render a 3072x3072 overview and retain every full-resolution superchunk
+titan u7 map-render-json serpent_isle_map.json --static "SERPENT/STATIC" \
+  -o serpent_isle_overview.png --tiles-dir serpent_isle_superchunks/
+```
+
+---
+
+### U3 NES map commands
+
+#### `u3 map-create`
+
+Build deterministic, SI-sized native U7 map data from Titan's embedded 64x64
+Ultima III NES Sosaria overworld. The original 2,048 packed map bytes and all
+U3-specific generation rules live under `titan.u3`. The SI source JSON supplies
+terrain definitions, biome samples, and rare-feature analysis; it does not
+supply U3 map layout.
+
+```
+titan u3 map-create SI_SOURCE_JSON --output-root DIR
+                    [--map-num N] [--seed N]
+                    [--json-output FILE] [--json-only]
+                    [--pretty | --compact]
+                    [--gamedat-root DIR]
+                    [--update-chunks] [--overwrite-map] [--dry-run]
+                    [--render | --no-render]
+                    [--static DIR] [-p PALETTE] [--render-output PNG]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `SI_SOURCE_JSON` | Universal export of original SI map, used as U7 construction source |
+| `--output-root DIR` | Required root receiving shared `u7chunks` and `mapNN` |
+| `--map-num N` | Native secondary-map number from 1 through 255; default `4` creates `map04` |
+| `--seed N` | Deterministic biome and terrain seed; default `42` |
+| `--json-output FILE` | Optionally preserve intermediate universal U7 JSON |
+| `--json-only` | Write `--json-output` without native map creation; requires `--json-output` and cannot be combined with `--dry-run` |
+| `--pretty`, `--compact` | Write optional JSON indented or compact; compact is the default |
+| `--gamedat-root DIR` | Optionally create matching empty GAMEDAT `mapNN` namespace |
+| `--update-chunks` | Permit appending missing definitions to existing shared `u7chunks` |
+| `--overwrite-map` | Permit replacement of existing `mapNN`; never implied |
+| `--dry-run` | Validate and report native output without writing |
+| `--render`, `--no-render` | Force or suppress post-create classic rendering |
+| `--static DIR`, `-p FILE` | U7 graphics and palette for post-create rendering |
+| `--render-output PNG` | Classic render path; defaults beside generated `mapNN` |
+
+```bash
+# First export the configured Serpent Isle construction source
+titan u7 map-export-json --game si -o si_source_map.json
+
+# Then generate U3 Sosaria in the selected secondary-map slot
+titan u3 map-create si_source_map.json \
+  --output-root "D:/work/maps" --map-num 4 --seed 42
+```
+
+Native materialization uses the same guarded writer as `u7 map-create`.
+Interactive terminals ask whether to render after successful creation.
+Non-interactive use never prompts; pass `--render` explicitly. The generated
+metadata records a checksum of the embedded packed U3 map bytes. `--render`
+requires actual native creation and therefore cannot be combined with
+`--json-only` or `--dry-run`.
+
+---
+
+### U7 map commands (continued)
+
 #### `u7 map-render`
 
 Render a U7 map region (single superchunk, arbitrary chunk range, or
@@ -2004,6 +2207,8 @@ nearby-flat fill for seamless ground coverage.
 
 ```
 titan u7 map-render [static] [--game bg|si]
+                    [--map-root DIR]
+                    [--map-num N]
                     [--superchunk N | --cx0 X0 --cy0 Y0 --cx1 X1 --cy1 Y1 | --full]
                     [-p PAL] [-o FILE] [--view VIEW]
                     [--gamedat DIR] [--grid] [--exclude FLAG ...]
@@ -2015,8 +2220,9 @@ titan u7 map-render [static] [--game bg|si]
 
 | Argument | Description |
 |----------|-------------|
-| `static` | Optional path to `STATIC/` directory containing `U7MAP`, `U7CHUNKS`, `U7IFIX*`, `SHAPES.VGA`, `TFA.DAT`. If omitted, resolved from `titan.toml` (`[u7bg.paths]` / `[u7si.paths]`) |
+| `static` | Optional path to `STATIC/` containing `SHAPES.VGA`, `TFA.DAT`, and related rendering assets. It also supplies map data unless `--map-root` is used. If omitted, resolved from `titan.toml` (`[u7bg.paths]` / `[u7si.paths]`) |
 | `--game bg|si` | Select which config section to use when resolving defaults (`bg` = `[u7bg.*]`, `si` = `[u7si.*]`) |
+| `--map-root DIR` | Optional separate map-data root containing shared `U7CHUNKS` and root `U7MAP`/`U7IFIX*` or secondary `mapNN/` data. Rendering assets still come from `static`. When omitted, map data continues to come from `static` |
 | `--superchunk N`, `--sc N` | Superchunk number 0–143 (hex ok, e.g. `0x55`). Renders a 16×16 chunk region |
 | `--cx0`, `--cy0`, `--cx1`, `--cy1` | Chunk-level bounding box (0–191). Alternative to `--superchunk` |
 | `--full` | Render the entire world map (shorthand for `--cx0 0 --cy0 0 --cx1 191 --cy1 191`) |
@@ -2027,7 +2233,7 @@ titan u7 map-render [static] [--game bg|si]
 | `--grid / --no-grid` | Overlay grid lines (default: off). Blue lines for chunk boundaries (16×16 tiles each, coords e.g. `80,96`) with coordinate labels; red lines for superchunk boundaries (16×16 chunks each) with SC number labels |
 | `--grid-size N` | Grid line width in pixels (default: 1) |
 | `--exclude FLAG` | Exclude shapes by TFA flag. Repeatable. Choices: `no_solid`, `no_water`, `no_animated`, `no_sfx`, `no_transparent`, `no_translucent`, `no_door`, `no_barge`, `no_light`, `no_poisonous`, `no_strange_movement`, `no_building` |
-| `--zone-profile NAME` | Load canonical zone data and convert it to highlight rectangles. Current built-ins: `si_zones`, `bg_zones` |
+| `--zone-profile NAME` | Load built-in zone data and convert it to highlight rectangles. Current profiles: `si_zones`, `bg_zones` |
 | `--zone-id ID` | Include only selected zone IDs from `--zone-profile`. Repeatable. Accepts numeric IDs (e.g. `3`, `13`) and symbolic IDs where applicable (e.g. `A`) |
 | `--all-zones` | Include every zone from `--zone-profile`. Also the default when `--zone-profile` is set and no `--zone-id` is provided |
 | `--highlight-tile-rect TX0,TY0,TX1,TY1,#RRGGBB[,LABEL]` | Outline a world-tile rectangle (inclusive bounds). Repeatable; each rectangle can use its own colour and optional custom label text. Also accepts `#RRGGBBAA` |
@@ -2035,7 +2241,7 @@ titan u7 map-render [static] [--game bg|si]
 | `--highlight-lift N` | Projection lift for highlight rectangles (default: 0). Useful in `classic`/`steep` views when you want overlays shifted with lift |
 | `--highlight-fill-alpha N` | Highlight fill alpha (0–255, default: 128 = 50%). Set `0` for outline-only |
 | `--highlight-labels / --no-highlight-labels` | Draw labels on highlighted rectangles (default: on). Uses custom `LABEL` when provided, else `tx0,ty0,tx1,ty1` |
-| `--map-num N` | Map number to render: `0` = default world (root `STATIC/`, default), `1`+ = `mapNN/` subdirectory inside `STATIC` for IFIX and U7MAP. Used with multi-map mods; pass the mod patch dir as `STATIC` |
+| `--map-num N` | Map number to render: `0` = default world at the map-data root; `1`+ = its `mapNN/` subdirectory for IFIX and U7MAP. The map-data root is `static` by default or `--map-root` when supplied |
 
 > **U7 and roof tiles:** U7's `TFA.DAT` does not have a dedicated roof flag
 > (unlike U8's `TYPEFLAG.DAT`).  Use `--exclude no_building` to remove all
@@ -2112,6 +2318,11 @@ titan u7 map-render STATIC/ --full \
 
 # Render a mod's alternate map — pass the patch dir as STATIC, select map 1
 titan u7 map-render "mods/MyMod/patch" --map-num 1 --sc 0x08 -o mod_map1_sc08.png
+
+# Render scratch map04 while reusing Serpent Isle graphics and type metadata
+titan u7 map-render "C:/Ultima/ultima7si/SERPENT/STATIC" \
+  --map-root "D:/_Repos/tgwUltima/u7data/maps/u3map" \
+  --game si --map-num 4 --full --view classic -o u3map_full_classic.png
 
 # Mod map with IREG dynamic objects (gamedat must contain map01/ subdir)
 titan u7 map-render "mods/MyMod/patch" --map-num 1 --sc 0x08 \
