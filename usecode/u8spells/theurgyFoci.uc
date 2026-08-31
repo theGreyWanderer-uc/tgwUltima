@@ -60,6 +60,13 @@ void theurgyFoci shape#(1058) ()
 			UI_error_message("Spell Execution Finished");
 		}		
 
+		else if (theurgyFrame == 10)  //theurgyIntervention
+		{
+			UI_error_message("Frame 10 Detected - Spell Execution Start");
+			AVATAR->theurgyIntervention();
+			UI_error_message("Spell Execution Finished");
+		}		
+
 		else if (theurgyFrame == 12)  //theurgyAerialServant
 		{
 
@@ -75,11 +82,10 @@ void theurgyFoci shape#(1058) ()
 			UI_error_message("Spell Execution Finished");
 		}
 
-		else if (theurgyFrame == 15)  //theurgyObjectDebugger
+		else if (theurgyFrame == 16)  //theurgyHearTruth
 		{
-			UI_error_message("Frame 15 Detected - Spell Execution Start");
-			var caster = getOuterContainer(item);
-        	caster->theurgyObjectDebugger();
+			UI_error_message("Frame 16 Detected - Spell Execution Start");
+			AVATAR->theurgyHearTruth();
 			UI_error_message("Spell Execution Finished");
 		}
 

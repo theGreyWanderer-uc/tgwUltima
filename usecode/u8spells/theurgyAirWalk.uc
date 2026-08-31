@@ -188,7 +188,7 @@ void projectileCleanup object#()()
 void theurgyAirWalk object#() ()
 {
     var caster = AVATAR;
-    UI_error_message("theurgyAirWalk called");    
+    UI_error_message("theurgyAirWalk called");
     UI_error_message("Caster ID: " + caster);
     var start_pos = UI_get_object_position(caster);
     if (!start_pos || UI_get_array_size(start_pos) < 3)
@@ -250,6 +250,14 @@ void theurgyAirWalk object#() ()
         UI_error_message("Debug JUMP1 dexterity (y): " + dexterity);
         UI_error_message("Debug JUMP1 intelligence (z): " + intelligence);
         UI_error_message("Debug JUMP1 training (dir): " + training);
+
+        if (!spendMagicMana(caster, 15))
+        {
+            UI_remove_item(marker);
+            return;
+        }
+
+        item_say("@Vas Hur Por@");
         
         //script block
         script caster
@@ -260,7 +268,7 @@ void theurgyAirWalk object#() ()
             actor frame LEAN;
             wait 3;
             actor frame KNEEL;
-            actor frame RAISE_2H;
+            actor frame CAST_1;
             wait 3;
             call vanishAvatar;       //make caster vanish
             wait 1;                  //pause before launch
