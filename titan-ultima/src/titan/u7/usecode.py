@@ -127,6 +127,10 @@ _OPERAND_WIDTH = {
     "var": 2,
 }
 
+_UCSYMTBL_MAGIC = b"\xff\xff\xff\xffYSCU"
+_SYMBOL_KIND_CLASS_SCOPE = 4
+_SYMBOL_KIND_SHAPE_FUNCTION = 6
+
 
 def _u16(data: bytes, pos: int) -> int:
     return int.from_bytes(data[pos : pos + 2], "little")
@@ -134,6 +138,50 @@ def _u16(data: bytes, pos: int) -> int:
 
 def _u32(data: bytes, pos: int) -> int:
     return int.from_bytes(data[pos : pos + 4], "little")
+
+
+def _require_bytes(data: bytes, pos: int, size: int, context: str) -> None:
+    if pos < 0 or size < 0 or pos + size > len(data):
+        raise ValueError(f"Truncated U7 USECODE {context} at file offset 0x{pos:X}")
+
+
+def _skip_symbol_scope(data: bytes, pos: int) -> int:
+    """Return the byte following one Exult USECODE symbol-table scope."""
+    _require_bytes(data, pos, 8, "symbol-table scope header")
+    symbol_count = _u32(data, pos)
+    pos += 8  # Count followed by the symbol-table format version.
+
+    for _ in range(symbol_count):
+        name_end = data.find(b"\0", pos)
+        if name_end < 0:
+            raise ValueError(
+                f"Unterminated U7 USECODE symbol name at file offset 0x{pos:X}"
+            )
+        pos = name_end + 1
+
+        _require_bytes(data, pos, 6, "symbol record")
+        kind = _u16(data, pos)
+        pos += 6  # Kind followed by the symbol value/function number.
+
+        if kind == _SYMBOL_KIND_CLASS_SCOPE:
+            pos = _skip_symbol_scope(data, pos)
+            _require_bytes(data, pos, 2, "class method count")
+            method_count = _u16(data, pos)
+            pos += 2
+            _require_bytes(data, pos, method_count * 2 + 2, "class metadata")
+            pos += method_count * 2 + 2  # Method ids followed by variable count.
+        elif kind == _SYMBOL_KIND_SHAPE_FUNCTION:
+            _require_bytes(data, pos, 4, "shape-function metadata")
+            pos += 4
+
+    return pos
+
+
+def _function_stream_offset(data: bytes) -> int:
+    """Locate functions after Exult's optional compiled symbol table."""
+    if not data.startswith(_UCSYMTBL_MAGIC):
+        return 0
+    return _skip_symbol_scope(data, len(_UCSYMTBL_MAGIC))
 
 
 def _signed(value: int, bits: int) -> int:
@@ -269,21 +317,29 @@ class U7UsecodeFile:
 
     @classmethod
     def from_bytes(cls, data: bytes) -> "U7UsecodeFile":
-        pos = 0
+        pos = _function_stream_offset(data)
         functions: list[U7UsecodeFunctionRecord] = []
         while pos + 6 <= len(data):
             start = pos
             func_id = _u16(data, pos)
             pos += 2
-            ext32 = func_id == 0xFFFF
-            if ext32:
+            ext32 = func_id in (0xFFFE, 0xFFFF)
+            if func_id == 0xFFFE:
+                if pos + 12 > len(data):
+                    break
+                func_id = _u32(data, pos)
+                func_size = _u32(data, pos + 4)
+                data_size = _u32(data, pos + 8)
+                pos += 12
+                end_offset = start + func_size + 10
+            elif func_id == 0xFFFF:
                 if pos + 10 > len(data):
                     break
                 func_id = _u16(data, pos)
                 func_size = _u32(data, pos + 2)
                 data_size = _u32(data, pos + 6)
                 pos += 10
-                end_offset = start + func_size + 10
+                end_offset = start + func_size + 8
             else:
                 if pos + 4 > len(data):
                     break
