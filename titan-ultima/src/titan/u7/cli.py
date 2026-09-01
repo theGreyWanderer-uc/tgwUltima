@@ -60,6 +60,38 @@ def _resolve_u7_paths(game: str) -> tuple[Optional[str], Optional[str]]:
     return static, palette
 
 
+def _resolve_u7_patch_base_static(
+    selected_static: str,
+    configured_static: Optional[str],
+) -> Optional[str]:
+    """Find a distinct base STATIC for an explicitly selected mod patch."""
+    selected_path = Path(selected_static).expanduser().resolve()
+
+    def _is_usable_base(candidate: Path) -> bool:
+        try:
+            distinct = candidate.resolve() != selected_path
+        except OSError:
+            distinct = candidate != selected_path
+        if not distinct or not candidate.is_dir():
+            return False
+        return any(
+            (candidate / filename).is_file()
+            for filename in ("SHAPES.VGA", "shapes.vga")
+        )
+
+    if configured_static:
+        configured_path = Path(configured_static).expanduser()
+        if _is_usable_base(configured_path):
+            return str(configured_path)
+
+    for ancestor in (selected_path, *selected_path.parents):
+        for dirname in ("STATIC", "static"):
+            candidate = ancestor / dirname
+            if _is_usable_base(candidate):
+                return str(candidate)
+    return None
+
+
 def _resolve_u7_text_flx(game: str, static_dir: Optional[str] = None) -> Optional[str]:
     """Resolve TEXT.FLX path from config, with fallback to STATIC dir."""
     cfg = get_config() or {}
@@ -2070,9 +2102,11 @@ def cmd_map_render(args: SimpleNamespace) -> int:
     from titan.u7.map import U7MapRenderer, U7TileRectOverlay
     from titan.u7.palette import U7Palette
 
+    game = getattr(args, "game", "bg")
+    configured_static, configured_palette = _resolve_u7_paths(game)
     static_dir = args.static
     if not static_dir:
-        static_dir, _ = _resolve_u7_paths(getattr(args, "game", "bg"))
+        static_dir = configured_static
     if not os.path.isdir(static_dir):
         print(f"ERROR: STATIC directory not found: {static_dir}", file=sys.stderr)
         return 1
@@ -2087,9 +2121,16 @@ def cmd_map_render(args: SimpleNamespace) -> int:
         print(f"ERROR: SHAPES.VGA not found in {static_dir}", file=sys.stderr)
         return 1
 
+    base_static_dir = (
+        _resolve_u7_patch_base_static(static_dir, configured_static)
+        if args.static
+        else None
+    )
     palette_path = args.palette
     if not palette_path:
-        _, palette_path = _resolve_u7_paths(getattr(args, "game", "bg"))
+        palette_path = configured_palette
+        if (not palette_path or not os.path.isfile(palette_path)) and base_static_dir:
+            palette_path = os.path.join(base_static_dir, "PALETTES.FLX")
     if not palette_path:
         palette_path = os.path.join(static_dir, "PALETTES.FLX")
     if not os.path.isfile(palette_path):
@@ -2098,7 +2139,13 @@ def cmd_map_render(args: SimpleNamespace) -> int:
 
     pal = U7Palette.from_file(palette_path)
     map_num = int(getattr(args, "map_num", 0) or 0)
-    renderer = U7MapRenderer(static_dir, map_num=map_num, map_root=map_root)
+    renderer = U7MapRenderer(
+        static_dir,
+        map_num=map_num,
+        map_root=map_root,
+        base_static_dir=base_static_dir,
+        game=game,
+    )
 
     view = args.view or "classic"
     if view not in U7MapRenderer.PROJECTIONS:
@@ -2108,6 +2155,13 @@ def cmd_map_render(args: SimpleNamespace) -> int:
             file=sys.stderr,
         )
         return 1
+
+    if renderer.shapes_vga_base_fill_count:
+        print(
+            "Sparse SHAPES.VGA overlay: filled "
+            f"{renderer.shapes_vga_base_fill_count} empty records from "
+            f"{base_static_dir}"
+        )
 
     # Build exclude set
     exclude: set[int] = set()
@@ -4111,14 +4165,19 @@ def map_render_cmd(
     static: Annotated[
         Optional[str],
         typer.Argument(
-            help="Path to STATIC containing SHAPES.VGA and type data; also "
-            "map data unless --map-root is supplied "
+            help="Path to base STATIC or a mod patch containing SHAPES.VGA "
+            "and type data; sparse records inherit from the configured game "
+            "base or a nearby STATIC; also supplies map data unless "
+            "--map-root is used "
             "(default: from titan.toml u7bg/u7si)"
         ),
     ] = None,
     game: Annotated[
         Literal["bg", "si"],
-        typer.Option("--game", help="Use config section for BG or SI defaults"),
+        typer.Option(
+            "--game",
+            help="Use the BG or SI config for defaults and sparse patch base assets",
+        ),
     ] = "bg",
     map_root: Annotated[
         Optional[str],
@@ -4159,7 +4218,10 @@ def map_render_cmd(
         typer.Option(
             "-p",
             "--palette",
-            help="Path to PALETTES.FLX (default: STATIC/PALETTES.FLX)",
+            help=(
+                "Path to PALETTES.FLX (default: configured game palette, "
+                "inferred patch base, then selected STATIC)"
+            ),
         ),
     ] = None,
     output: Annotated[

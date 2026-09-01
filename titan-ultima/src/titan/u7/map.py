@@ -330,6 +330,12 @@ class U7MapRenderer:
     ``map_root`` defaults to ``static_dir`` so existing callers retain their
     original file lookup behavior.
 
+    ``base_static_dir`` optionally supplies the original BG or SI graphics for
+    an Exult mod patch.  When the selected ``SHAPES.VGA`` has empty records,
+    those records are filled from the base archive in memory.  Complete
+    archives and renderers that omit this option retain the original loading
+    path.
+
     Supports configurable view projections and typeflag-based filtering.
     """
 
@@ -365,11 +371,13 @@ class U7MapRenderer:
         map_num: int = 0,
         *,
         map_root: str | None = None,
+        base_static_dir: str | None = None,
         game: str = "bg",
         exult_flx_path: str | None = None,
     ) -> None:
         self.static_dir = static_dir
         self.map_root = map_root or static_dir
+        self.base_static_dir = base_static_dir
         self.map_num = map_num
         self.game = game
         self.exult_flx_path = exult_flx_path
@@ -384,6 +392,7 @@ class U7MapRenderer:
         self._terrains: list[list[tuple[int, int]]] | None = None  # terrain shapes
         self._tfa: U7TypeFlags | None = None
         self._shapes_vga: U7FlexArchive | None = None
+        self._shapes_vga_base_fill_count = 0
         self._translucency: U7Translucency | None = None
         self._fixed_objects_by_superchunk: dict[int, list[U7MapObject]] | None = None
 
@@ -471,11 +480,61 @@ class U7MapRenderer:
 
     @property
     def shapes_vga(self) -> U7FlexArchive:
-        """SHAPES.VGA Flex archive."""
+        """Effective SHAPES.VGA, with sparse patch holes filled if requested."""
         if self._shapes_vga is None:
-            path = os.path.join(self.static_dir, "SHAPES.VGA")
-            self._shapes_vga = U7FlexArchive.from_file(path)
+            path = _find_case_insensitive_file(self.static_dir, "SHAPES.VGA")
+            selected = U7FlexArchive.from_file(path)
+            self._shapes_vga = self._overlay_base_shapes_if_sparse(selected, path)
         return self._shapes_vga
+
+    @property
+    def shapes_vga_base_fill_count(self) -> int:
+        """Number of empty patch records supplied by the base archive."""
+        _ = self.shapes_vga
+        return self._shapes_vga_base_fill_count
+
+    def _overlay_base_shapes_if_sparse(
+        self,
+        selected: U7FlexArchive,
+        selected_path: str,
+    ) -> U7FlexArchive:
+        """Return an in-memory base-plus-patch archive when records are missing."""
+        if not self.base_static_dir:
+            return selected
+
+        base_path = _find_case_insensitive_file(self.base_static_dir, "SHAPES.VGA")
+        if not os.path.isfile(base_path):
+            return selected
+        if os.path.normcase(os.path.abspath(selected_path)) == os.path.normcase(
+            os.path.abspath(base_path)
+        ):
+            return selected
+
+        base = U7FlexArchive.from_file(base_path)
+        record_count = max(len(selected.records), len(base.records))
+        effective_records: list[bytes] = []
+        base_fill_count = 0
+        for index in range(record_count):
+            selected_record = (
+                selected.records[index] if index < len(selected.records) else b""
+            )
+            base_record = base.records[index] if index < len(base.records) else b""
+            if selected_record:
+                effective_records.append(selected_record)
+            else:
+                effective_records.append(base_record)
+                if base_record:
+                    base_fill_count += 1
+
+        if base_fill_count == 0:
+            return selected
+
+        effective = U7FlexArchive()
+        effective.title = selected.title
+        effective.magic2 = selected.magic2
+        effective.records = effective_records
+        self._shapes_vga_base_fill_count = base_fill_count
+        return effective
 
     # ------------------------------------------------------------------
     # U7MAP parser
