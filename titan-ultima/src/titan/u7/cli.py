@@ -1315,14 +1315,14 @@ def cmd_u7_flex_create(args: SimpleNamespace) -> int:
 
 
 def cmd_u7_flex_add_shape(args: SimpleNamespace) -> int:
-    """Add a standalone U7 shape to the first free record in a U7 Flex archive."""
+    """Add a standalone U7 shape to the first permitted free Flex record."""
     from titan.u7.flex import U7FlexArchive
     from titan.u7.flex_shape_add import (
         add_shape_at_record_index,
         add_shape_to_first_available_record,
         save_u7_flex_atomically,
     )
-    from titan.u7.shape import U7Shape
+    from titan.u7.shape import FIRST_OBJ_SHAPE, U7Shape
 
     archive_path = Path(args.archive)
     shape_path = Path(args.shape)
@@ -1390,7 +1390,14 @@ def cmd_u7_flex_add_shape(args: SimpleNamespace) -> int:
             )
             return 1
         if requested_index is None:
-            record_index = add_shape_to_first_available_record(archive, shape_data)
+            minimum_record_index = (
+                FIRST_OBJ_SHAPE if archive_path.name.casefold() == "shapes.vga" else 0
+            )
+            record_index = add_shape_to_first_available_record(
+                archive,
+                shape_data,
+                minimum_record_index=minimum_record_index,
+            )
         else:
             record_index = add_shape_at_record_index(
                 archive,
@@ -1477,7 +1484,10 @@ def u7_flex_add_shape_cmd(
         typer.Option("--replace", help="Replace an occupied --index record"),
     ] = False,
 ) -> None:
-    """Add a U7 shape to a specific or the lowest empty Flex record."""
+    """Add a U7 shape to a specific or the lowest permitted empty record.
+
+    Automatic SHAPES.VGA allocation starts at shape 150, after the flat shapes.
+    """
     raise SystemExit(
         cmd_u7_flex_add_shape(
             SimpleNamespace(

@@ -97,6 +97,31 @@ class U7FlexAddShapeCliTests(unittest.TestCase):
         result = U7FlexArchive.from_file(str(self.output_path))
         self.assertEqual(result.records, [b"occupied", self.shape_data])
 
+    def test_shapes_vga_automatic_allocation_starts_at_record_150(self) -> None:
+        self.archive_path = self.root / "SHAPES.VGA"
+        self._write_archive([])
+
+        self.assertEqual(self._run(output=str(self.output_path)), 0)
+
+        result = U7FlexArchive.from_file(str(self.output_path))
+        self.assertEqual(len(result.records), 151)
+        self.assertEqual(result.records[:150], [b""] * 150)
+        self.assertEqual(result.records[150], self.shape_data)
+
+    def test_shapes_vga_uses_lowest_empty_record_after_record_149(self) -> None:
+        self.archive_path = self.root / "shapes.vga"
+        records = [b""] * 153
+        records[150] = b"occupied 150"
+        records[152] = b"occupied 152"
+        self._write_archive(records)
+
+        self.assertEqual(self._run(in_place=True), 0)
+
+        result = U7FlexArchive.from_file(str(self.archive_path))
+        self.assertEqual(result.records[150], b"occupied 150")
+        self.assertEqual(result.records[151], self.shape_data)
+        self.assertEqual(result.records[152], b"occupied 152")
+
     def test_requires_exactly_one_output_mode(self) -> None:
         self._write_archive([])
 
