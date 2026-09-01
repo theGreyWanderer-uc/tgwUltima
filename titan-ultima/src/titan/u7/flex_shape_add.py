@@ -1,4 +1,4 @@
-"""Add standalone U7 shapes to the first available record in a U7 Flex archive."""
+"""Add standalone U7 shapes to an available record in a U7 Flex archive."""
 
 from __future__ import annotations
 
@@ -12,14 +12,24 @@ from titan.u7.flex import U7FlexArchive
 def add_shape_to_first_available_record(
     archive: U7FlexArchive,
     shape_data: bytes,
+    *,
+    minimum_record_index: int = 0,
 ) -> int:
-    """Store shape bytes in the lowest empty record, appending when no gap exists."""
-    try:
-        record_index = archive.records.index(b"")
-        archive.records[record_index] = shape_data
-    except ValueError:
-        record_index = len(archive.records)
-        archive.records.append(shape_data)
+    """Store shape bytes in the lowest permitted empty record, or append them."""
+    if minimum_record_index < 0:
+        raise ValueError(
+            "Minimum U7 Flex shape record index must be non-negative: "
+            f"{minimum_record_index}"
+        )
+
+    for record_index in range(minimum_record_index, len(archive.records)):
+        if not archive.records[record_index]:
+            archive.records[record_index] = shape_data
+            return record_index
+
+    record_index = max(minimum_record_index, len(archive.records))
+    archive.records.extend([b""] * (record_index - len(archive.records)))
+    archive.records.append(shape_data)
     return record_index
 
 

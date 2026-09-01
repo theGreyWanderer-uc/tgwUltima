@@ -1473,7 +1473,7 @@ titan u7 flex-add-shape <archive.VGA|archive.FLX> <shape.shp>
 | `-o FILE`, `--output FILE` | Write a separate updated `.VGA`/`.FLX`, leaving the source unchanged |
 | `--in-place` | Atomically update the source archive |
 | `--force` | Replace an existing `--output` file; not needed with explicit `--in-place` |
-| `--index N` | Write to this specific zero-based shape record; omitted means lowest empty record or append |
+| `--index N` | Write to this specific zero-based shape record; omitted means lowest permitted empty record or append |
 | `--replace` | Permit replacement when the selected `--index` is occupied; requires `--index` |
 
 **Examples**
@@ -1490,6 +1490,11 @@ titan u7 flex-add-shape U7O.VGA ranger.shp --index 460 --in-place
 # Deliberately replace an occupied record 460
 titan u7 flex-add-shape U7O.VGA ranger.shp --index 460 --replace --in-place
 ```
+
+When automatic allocation is used with a source archive named `SHAPES.VGA`
+(case-insensitive), Titan reserves shape records 0 through 149 for U7 flat
+textures and begins its search at record 150. An explicit `--index` remains
+unchanged for intentional placement at a particular shape number.
 
 ---
 
