@@ -26,6 +26,7 @@ from titan.u9.mesh_export import MeshExportError, export_obj, export_stl
 from titan.u9.model import U9Model, U9ModelError
 from titan.u9.model_naming import label_for_model, names_for_model
 from titan.u9.nonfixed import U9Nonfixed, U9NonfixedError
+from titan.u9.npc import NO_CLASS, U9NpcError, U9Npcs
 from titan.u9.palette import U9Palette, U9PaletteError
 from titan.u9.sound import U9SoundRecord, U9SoundRecordError
 from titan.u9.texture import U9TextureError, decode_frame
@@ -1181,6 +1182,128 @@ def cmd_activity_opcodes(args: SimpleNamespace) -> int:
 
 
 # ============================================================================
+# CLI COMMANDS — NPC TABLE (runtime/NPC.FLX, and a savegame's live copy)
+# ============================================================================
+
+def _load_npcs(filepath: str, from_save: bool) -> Optional[U9Npcs]:
+    """Open runtime/NPC.FLX, or the live array inside a savegame file."""
+    if not os.path.isfile(filepath):
+        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
+        return None
+    try:
+        if from_save:
+            return U9Npcs.from_process_data(filepath)
+        return U9Npcs.from_file(filepath)
+    except U9NpcError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return None
+
+
+def cmd_npc_list(args: SimpleNamespace) -> int:
+    """List NPC records; the record index is also the activity set index."""
+    npcs = _load_npcs(args.file, args.save)
+    if npcs is None:
+        return 1
+
+    rows = list(npcs)
+    if args.region is not None:
+        rows = [n for n in rows if n.region == args.region]
+    if args.npc_class is not None:
+        rows = [n for n in rows if n.class_id == args.npc_class]
+    if not args.all:
+        rows = [n for n in rows if n.name]
+    shown = rows[: args.limit] if args.limit else rows
+
+    print(f"{args.file} -- {len(rows)} NPC(s) of {len(npcs)} record(s)")
+    print(f"{'Idx':>5}  {'Name':<24} {'G':>1}  {'Class':>5}  {'Region':>6}  "
+          f"{'HP':>5}  {'Mana':>5}  Position")
+    print("-" * 90)
+    for n in shown:
+        cls = "-" if not n.has_class else str(n.class_id)
+        print(f"{n.index:>5}  {n.name:<24} {'F' if n.is_female else 'M'}  {cls:>5}  "
+              f"{n.region:>6}  {n.health_max:>5}  {n.mana_max:>5}  "
+              f"{n.x},{n.y},{n.z}")
+    if args.limit and len(rows) > args.limit:
+        print(f"... ({len(rows) - args.limit} more; raise --limit to see more)")
+    return 0
+
+
+def cmd_npc_show(args: SimpleNamespace) -> int:
+    """Print one NPC record's decoded fields."""
+    npcs = _load_npcs(args.file, args.save)
+    if npcs is None:
+        return 1
+    try:
+        n = npcs.npc(args.index)
+    except U9NpcError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
+    print(f"{args.file} -- NPC {n.index}")
+    print(f"  Name        : {n.name!r}")
+    print(f"  Gender      : {'female' if n.is_female else 'male'}")
+    print(f"  Health      : {n.health_current} / {n.health_max}")
+    print(f"  Mana        : {n.mana_current} / {n.mana_max}")
+    print(f"  Class       : {n.class_id if n.has_class else 'none (0xFFFF)'}")
+    print(f"  Combat value: {n.combat_value}")
+    print(f"  Region      : {n.region}")
+    print(f"  Position    : {n.x}, {n.y}, {n.z}")
+    print(f"  Scale       : {n.scale[0]}%, {n.scale[1]}%, {n.scale[2]}%")
+    print(f"  Record index {n.index} is also this NPC's activity set index.")
+    print("  Undecoded bytes are available as U9Npc.raw.")
+    return 0
+
+
+def cmd_npc_classes(args: SimpleNamespace) -> int:
+    """Group NPCs by class_id -- the grouping clusters by faction, not appearance."""
+    npcs = _load_npcs(args.file, args.save)
+    if npcs is None:
+        return 1
+
+    histogram = npcs.class_histogram()
+    print(f"{args.file} -- {len(histogram)} distinct class_id value(s)")
+    for class_id, count in histogram.most_common():
+        label = "none (0xFFFF)" if class_id == NO_CLASS else str(class_id)
+        members = [n.name for n in npcs.by_class(class_id) if n.name]
+        preview = ", ".join(members[: args.members])
+        if len(members) > args.members:
+            preview += ", ..."
+        print(f"  {label:>13}  x{count:<4} {preview}")
+    return 0
+
+
+def cmd_npc_diff(args: SimpleNamespace) -> int:
+    """Compare a shipped NPC table against a savegame's copy, field by field."""
+    left = _load_npcs(args.file, False)
+    right = _load_npcs(args.save_file, True)
+    if left is None or right is None:
+        return 1
+
+    print(f"{args.file}\n{args.save_file}")
+    print(f"  {len(left)} authored record(s) vs {len(right)} live record(s)")
+    if len(right) > len(left):
+        spawned = [n.name for n in list(right)[len(left):] if n.name]
+        print(f"  {len(right) - len(left)} extra live slot(s), {len(spawned)} named "
+              f"(runtime-spawned): {', '.join(spawned[:8])}"
+              + (", ..." if len(spawned) > 8 else ""))
+
+    changed = left.changed_fields(right)
+    print(f"  {len(changed)} byte offset(s) differ across the shared records:")
+    for offset, count in changed.items():
+        print(f"      {offset:#06x}  {count} NPC(s)")
+
+    moved = [
+        (a, b) for a, b in zip(left, right)
+        if (a.region, a.x, a.y, a.z) != (b.region, b.x, b.y, b.z)
+    ]
+    print(f"  {len(moved)} NPC(s) moved:")
+    for a, b in moved[: args.limit or len(moved)]:
+        print(f"      {a.name:<16} region {a.region} {a.x},{a.y},{a.z}"
+              f"  ->  region {b.region} {b.x},{b.y},{b.z}")
+    return 0
+
+
+# ============================================================================
 # Typer command wrappers
 # ============================================================================
 
@@ -1592,3 +1715,59 @@ def activity_opcodes_cmd(
 ) -> None:
     """Report U9 activity step-opcode and sequence-name frequency."""
     raise SystemExit(cmd_activity_opcodes(SimpleNamespace(file=file, limit=limit)))
+
+
+@u9_app.command("npc-list")
+def npc_list_cmd(
+    file: Annotated[str, typer.Argument(help="Path to runtime/NPC.FLX, or a savegame file with --save")],
+    save: Annotated[
+        bool, typer.Option("-s", "--save", help="Read the live array from a savegame processes.dat / .sav"),
+    ] = False,
+    region: Annotated[
+        Optional[int], typer.Option("-r", "--region", help="Only NPCs in this region"),
+    ] = None,
+    npc_class: Annotated[
+        Optional[int], typer.Option("-c", "--class", help="Only NPCs with this class_id"),
+    ] = None,
+    all: Annotated[bool, typer.Option("-a", "--all", help="Include unnamed/empty slots")] = False,
+    limit: Annotated[Optional[int], typer.Option("-n", "--limit", help="Maximum rows to print")] = None,
+) -> None:
+    """List U9 NPC records; the record index is also the activity set index."""
+    raise SystemExit(cmd_npc_list(SimpleNamespace(
+        file=file, save=save, region=region, npc_class=npc_class, all=all, limit=limit)))
+
+
+@u9_app.command("npc-show")
+def npc_show_cmd(
+    file: Annotated[str, typer.Argument(help="Path to runtime/NPC.FLX, or a savegame file with --save")],
+    index: Annotated[int, typer.Argument(help="NPC record index")],
+    save: Annotated[
+        bool, typer.Option("-s", "--save", help="Read the live array from a savegame processes.dat / .sav"),
+    ] = False,
+) -> None:
+    """Print one U9 NPC record's decoded fields."""
+    raise SystemExit(cmd_npc_show(SimpleNamespace(file=file, index=index, save=save)))
+
+
+@u9_app.command("npc-classes")
+def npc_classes_cmd(
+    file: Annotated[str, typer.Argument(help="Path to runtime/NPC.FLX, or a savegame file with --save")],
+    save: Annotated[
+        bool, typer.Option("-s", "--save", help="Read the live array from a savegame processes.dat / .sav"),
+    ] = False,
+    members: Annotated[
+        int, typer.Option("-m", "--members", help="Member names to preview per class"),
+    ] = 8,
+) -> None:
+    """Group U9 NPCs by class_id and preview each group's members."""
+    raise SystemExit(cmd_npc_classes(SimpleNamespace(file=file, save=save, members=members)))
+
+
+@u9_app.command("npc-diff")
+def npc_diff_cmd(
+    file: Annotated[str, typer.Argument(help="Path to the shipped runtime/NPC.FLX")],
+    save_file: Annotated[str, typer.Argument(help="Path to a savegame processes.dat or u9game*.sav")],
+    limit: Annotated[Optional[int], typer.Option("-n", "--limit", help="Maximum moved NPCs to print")] = None,
+) -> None:
+    """Compare the shipped U9 NPC table against a savegame's live copy."""
+    raise SystemExit(cmd_npc_diff(SimpleNamespace(file=file, save_file=save_file, limit=limit)))

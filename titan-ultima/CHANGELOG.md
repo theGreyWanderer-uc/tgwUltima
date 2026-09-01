@@ -32,6 +32,21 @@ This project uses [Semantic Versioning](https://semver.org/):
   never an invented entity, and `U9Chunk.is_complete` reports it per chunk.
   Trigger records are counted but not decoded.
 
+- **U9 NPC table:** added `titan.u9.npc`, a reader for `runtime/NPC.FLX` — the
+  only U9 FLX archive whose single used entry is a flat record array, 352 NPCs
+  of 316 bytes each, indexed so that the record index is also the activity set
+  index. Decodes name, gender, health, mana, `class_id`, combat value, region,
+  world position and scale. Added `titan u9 npc-list`, `npc-show`,
+  `npc-classes` and `npc-diff`; all four also read the live copy of the array
+  that a savegame embeds in `processes.dat` and `u9game*.sav`, located by
+  signature since its offset is not fixed. Documented in
+  `reference/u9/npc/u9_npc_reference.md`, including a correction to the
+  published community documentation — the record is **316 bytes, not 323**;
+  323 leaves 120 bytes over and lands every field on noise, while 316 divides
+  the payload exactly and validates every documented field offset. Comparing
+  the shipped table against a savegame separates static identity from runtime
+  state, and shows that NPCs which walk land exactly on `highway.dat`
+  navigation points.
 - **U9 NPC activity sequences:** added `titan.u9.activity`, a container reader
   for `static/activity.flx`, the named behaviour scripts an NPC runs. Decodes
   each entry into records of `u8 ordinal`, a fixed-width 15-byte name field,

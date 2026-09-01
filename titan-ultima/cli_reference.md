@@ -3837,7 +3837,8 @@ formats are still an early work in progress compared to U7/U8 -- FLX
 archive reading, `TYPENAME.FLX`, `sound/*.flx` (Speech/sfx/music) decoding,
 `sappear.flx` 3D models, `runtime/nonfixed.<region>` dynamic world data,
 `static/triggers.flx` trigger scripts, `static/activity.flx` NPC activity
-sequences, and `static/highway.dat` NPC navigation data are supported so far.
+sequences, `static/highway.dat` NPC navigation data, and the `runtime/NPC.FLX`
+NPC table are supported so far.
 
 ### FLX archive commands
 
@@ -4612,6 +4613,125 @@ titan u9 activity-opcodes <file> [-n LIMIT]
 ```bash
 titan u9 activity-opcodes static/activity.flx
 ```
+
+---
+
+### NPC table commands
+
+`runtime/NPC.FLX` holds U9's NPC table. It is the only U9 FLX archive with a
+single used entry: its payload is a flat array of 352 fixed 316-byte records,
+one per NPC. **The record index is the NPC's identity** — it is also the
+activity set index, which is what ties an NPC to its behaviour scripts.
+
+The Ultima Codex documents a 323-byte record; that is wrong. 323 leaves 120
+bytes over, while 316 divides the payload exactly and makes every one of the
+Codex's field offsets validate.
+
+A savegame carries a live copy of the same array in `savegame/processes.dat`
+and inside `savegame/u9game*.sav`. Pass `--save` to read that instead. The live
+array is longer than the shipped one — the engine appends runtime-spawned
+wildlife after the authored NPCs.
+
+---
+
+#### `u9 npc-list`
+
+List NPC records with class, region, stats and position.
+
+```
+titan u9 npc-list <file> [-s] [-r REGION] [-c CLASS] [-a] [-n LIMIT]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `runtime/NPC.FLX`, or a savegame file with `--save` |
+| `-s`, `--save` | Read the live array from a savegame `processes.dat` or `.sav` |
+| `-r N`, `--region N` | Only NPCs in this region |
+| `-c N`, `--class N` | Only NPCs with this `class_id` |
+| `-a`, `--all` | Include unnamed/empty slots |
+| `-n N`, `--limit N` | Maximum rows to print |
+
+**Example**
+```bash
+titan u9 npc-list runtime/NPC.FLX -r 9 -n 20
+```
+
+---
+
+#### `u9 npc-show`
+
+Print one NPC record's decoded fields.
+
+```
+titan u9 npc-show <file> <index> [-s]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `runtime/NPC.FLX`, or a savegame file with `--save` |
+| `index` | NPC record index — also the activity set index |
+| `-s`, `--save` | Read the live array from a savegame file |
+
+**Example**
+```bash
+titan u9 npc-show runtime/NPC.FLX 166
+```
+
+To see what that NPC actually does, feed the same index to
+`titan u9 activity-show`.
+
+---
+
+#### `u9 npc-classes`
+
+Group NPCs by `class_id` and preview each group's members.
+
+```
+titan u9 npc-classes <file> [-s] [-m MEMBERS]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `runtime/NPC.FLX`, or a savegame file with `--save` |
+| `-s`, `--save` | Read the live array from a savegame file |
+| `-m N`, `--members N` | Member names to preview per class (default 8) |
+
+The grouping is behavioural, not visual — class 10 is every gargoyle in the
+game, 36 is pirates and bandits, 62 is guards — but members of one class span
+dozens of distinct models, so it is not an appearance field.
+
+---
+
+#### `u9 npc-diff`
+
+Compare the shipped NPC table against a savegame's live copy: which byte
+offsets the engine writes, and which NPCs moved.
+
+```
+titan u9 npc-diff <file> <save_file> [-n LIMIT]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to the shipped `runtime/NPC.FLX` |
+| `save_file` | Path to a savegame `processes.dat` or `u9game*.sav` |
+| `-n N`, `--limit N` | Maximum moved NPCs to print |
+
+**Example**
+```bash
+titan u9 npc-diff runtime/NPC.FLX savegame/processes.dat
+```
+
+```
+  352 authored record(s) vs 513 live record(s)
+  161 extra live slot(s), 29 named (runtime-spawned): Small Fish, Butterfly 3, ...
+  5 NPC(s) moved:
+      Avatar    region 9 98332,20480,0    ->  region 14 6110,9472,1746
+      Dermot    region 9 60544,58819,2631 ->  region 9 60273,58746,2631
+```
+
+In the save examined, every NPC that walked landed exactly on a `highway.dat`
+navigation point.
 
 ---
 
