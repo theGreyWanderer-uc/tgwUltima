@@ -5,10 +5,20 @@ Modules for Ultima 9: Ascension file formats.
 
 Canonical imports::
 
+    from titan.u9.activity import U9Activities
     from titan.u9.flx_archive import U9FlxArchive
+    from titan.u9.highway import U9Highway
+    from titan.u9.triggers import U9Triggers
     from titan.u9.typename import U9TypeNames
     from titan.u9.sound import U9SoundRecord
-    from titan.u9.adpcm import decode_stereo, decode_mono as decode_adpcm_mono
+    from titan.u9.activity import (
+    U9Activities,
+    U9Activity,
+    U9ActivityError,
+    U9ActivityRecord,
+    U9ActivityStep,
+)
+from titan.u9.adpcm import decode_stereo, decode_mono as decode_adpcm_mono
     from titan.u9.microtalk import decode_mono as decode_microtalk_mono
     from titan.u9.model import U9Model
     from titan.u9.texture import decode_frame
@@ -25,6 +35,7 @@ from __future__ import annotations
 
 from titan.u9.adpcm import AdpcmDecodeError, decode_mono as decode_adpcm_mono, decode_stereo
 from titan.u9.flx_archive import U9FlxArchive, U9FlxArchiveError, U9FlxDirEntry
+from titan.u9.highway import U9Highway, U9HighwayError, U9HighwayPoint, U9HighwayRoute
 from titan.u9.icon import icon_entry_indices, used_texture_ids
 from titan.u9.mesh_export import MeshExportError, export_obj, export_stl
 from titan.u9.microtalk import MicroTalkDecodeError, decode_mono as decode_microtalk_mono
@@ -50,8 +61,9 @@ from titan.u9.palette import U9Palette, U9PaletteError
 from titan.u9.preview import PreviewError, PreviewUnavailableError, render_preview
 from titan.u9.sound import U9SoundRecord, U9SoundRecordError
 from titan.u9.texture import U9TextureError, U9TextureFrame, decode_frame
+from titan.u9.triggers import U9Trigger, U9TriggerRecord, U9Triggers, U9TriggersError
 from titan.u9.typename import U9TypeNameEntry, U9TypeNames
-from titan.u9.types_dat import U9TypeRecord, U9TypesDat
+from titan.u9.types_dat import U9TypeRecord, U9TypesDat, U9TypesDatError
 
 __all__ = [
     "U9FlxArchive",
@@ -80,10 +92,24 @@ __all__ = [
     "export_stl",
     "MeshExportError",
     "U9TypesDat",
+    "U9TypesDatError",
     "U9TypeRecord",
     "label_for_model",
     "names_for_model",
     "slugify",
+    "U9Highway",
+    "U9Activities",
+    "U9Activity",
+    "U9ActivityError",
+    "U9ActivityRecord",
+    "U9ActivityStep",
+    "U9Triggers",
+    "U9TriggersError",
+    "U9Trigger",
+    "U9TriggerRecord",
+    "U9HighwayError",
+    "U9HighwayPoint",
+    "U9HighwayRoute",
     "U9Nonfixed",
     "U9NonfixedError",
     "U9Chunk",

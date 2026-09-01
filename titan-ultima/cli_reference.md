@@ -3835,8 +3835,9 @@ titan u6 schedule-dump SCHEDULE --actor 0
 All commands below are invoked as `titan u9 <command>`. Ultima 9's file
 formats are still an early work in progress compared to U7/U8 -- FLX
 archive reading, `TYPENAME.FLX`, `sound/*.flx` (Speech/sfx/music) decoding,
-`sappear.flx` 3D models, and `runtime/nonfixed.<region>` dynamic world data
-are supported so far.
+`sappear.flx` 3D models, `runtime/nonfixed.<region>` dynamic world data,
+`static/triggers.flx` trigger scripts, `static/activity.flx` NPC activity
+sequences, and `static/highway.dat` NPC navigation data are supported so far.
 
 ### FLX archive commands
 
@@ -4328,6 +4329,289 @@ Changed:
 Entities are matched by chunk and record offset, so this reports real
 field-level edits rather than raw byte deltas. Both files must have the
 same chunk grid.
+
+---
+
+### Highway navigation commands
+
+`static/highway.dat` is Ultima 9's NPC navigation network: a graph of
+*highway points* -- invisible world markers, the U9 analogue of Ultima 7's
+patheggs -- plus precomputed routes through that graph, so the engine can
+look up a long path instead of solving one.
+
+Points are keyed by **trigger ID**, the same identifier carried by
+`U9Entity.trigger_id` in the runtime regions. The physical markers are
+entities of type 1134 (unnamed in `TYPENAME.FLX`): 815 of the 817 points sit
+at exactly the coordinates this file declares. See
+`reference/u9/highway/u9_highway_reference.md`.
+
+---
+
+#### `u9 highway-info`
+
+Summarize the navigation graph: point and route counts, trigger ID range,
+world extent, connectivity, and the longest precomputed route.
+
+```
+titan u9 highway-info <file>
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/highway.dat` |
+
+**Example**
+```bash
+titan u9 highway-info static/highway.dat
+```
+
+Warns if the route block does not parse completely or if any route
+references a point the file does not declare.
+
+---
+
+#### `u9 highway-points`
+
+List navigation points with their absolute world positions, how many graph
+neighbours each has, and how many routes visit it.
+
+```
+titan u9 highway-points <file> [-i ID] [-n LIMIT]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/highway.dat` |
+| `-i ID`, `--id ID` | Show only the point with this trigger ID |
+| `-n N`, `--limit N` | Maximum rows to print |
+
+**Example**
+```bash
+titan u9 highway-points static/highway.dat -i 53504
+```
+
+To find the marker itself in the world, look for an entity carrying that
+trigger ID with `titan u9 nonfixed-entities`.
+
+---
+
+#### `u9 highway-routes`
+
+List the precomputed routes, optionally only those visiting one point, and
+optionally with each route's full node path.
+
+```
+titan u9 highway-routes <file> [-i ID] [-p] [-n LIMIT]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/highway.dat` |
+| `-i ID`, `--id ID` | Only routes whose path visits this trigger ID |
+| `-p`, `--paths` | Print each route's full node path |
+| `-n N`, `--limit N` | Maximum routes to print |
+
+**Example**
+```bash
+titan u9 highway-routes static/highway.dat -i 53504 -p
+```
+
+```
+  53508 -> 53501  nodes 8, hops 7, distance 82
+      53508 -> 53507 -> 53506 -> 53505 -> 53504 -> 53503 -> 53502 -> 53501
+```
+
+A route's path is self-inclusive -- its first and last nodes are the route's
+own endpoints -- so `hops` is one fewer than the node count.
+
+---
+
+### Trigger script commands
+
+`static/triggers.flx` holds U9's trigger scripts, and **the FLX entry index is
+the trigger ID** -- the same value carried by runtime entities, which is what
+associates a world object with the script that fires for it.
+
+A trigger body is a list of 6-byte `opcode / arg0 / arg1 / arg2` records ending
+at the first record whose opcode is `0xFF`. Records after that terminator are
+slack left behind by a trigger that shrank, and are not decoded.
+
+**Opcode meanings are not decoded.** These commands expose the record stream
+and container structure so the language can be worked out incrementally; see
+`reference/u9/triggers/u9_triggers_reference.md`.
+
+---
+
+#### `u9 trigger-list`
+
+List trigger scripts with their record counts and leading opcodes.
+
+```
+titan u9 trigger-list <file> [-a] [-n LIMIT]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/triggers.flx` |
+| `-a`, `--all` | Include empty triggers (those whose body is just a terminator) |
+| `-n N`, `--limit N` | Maximum rows to print |
+
+**Example**
+```bash
+titan u9 trigger-list static/triggers.flx -n 20
+```
+
+The `Term` column flags the two shipped triggers that carry no terminator; the
+`Slack` column counts stale records behind it.
+
+---
+
+#### `u9 trigger-show`
+
+Dump one trigger's records.
+
+```
+titan u9 trigger-show <file> <id>
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/triggers.flx` |
+| `id` | Trigger ID -- the value a runtime entity carries in `trigger_id` |
+
+**Example**
+```bash
+titan u9 trigger-show static/triggers.flx 308
+```
+
+```
+    #  Opcode   Arg0    Arg1    Arg2
+  --------------------------------------
+    0    0x33     16    2220     238
+    1    0x1b     26     679    9413
+    2    0x1b     24     679    9925
+    3    0x1b     14    3660    8839
+```
+
+To find which world objects fire a trigger, list a region's entities with
+`titan u9 nonfixed-entities` and match on the `Trig` column.
+
+---
+
+#### `u9 trigger-opcodes`
+
+Report how often each opcode appears across the whole archive -- the natural
+starting point for decoding the language.
+
+```
+titan u9 trigger-opcodes <file> [-n LIMIT]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/triggers.flx` |
+| `-n N`, `--limit N` | Maximum opcodes to print |
+
+**Example**
+```bash
+titan u9 trigger-opcodes static/triggers.flx -n 15
+```
+
+Also names any trigger whose record list runs off the end without a
+terminator.
+
+---
+
+### NPC activity commands
+
+`static/activity.flx` holds U9's NPC activity sequences -- the named behaviour
+scripts an NPC runs, with names like `Sequence 1`, `Stand`, `Loiter`,
+`After Yew` and `walking in hse`. One FLX entry is one activity set.
+
+Each record is `u8 ordinal`, a fixed 15-byte NUL-terminated name field, and a
+list of 9-byte steps ending at a `0xFF` step. All 214 used entries parse with
+their bodies consumed exactly.
+
+**Step opcode meanings are not decoded.** These commands expose the step
+stream and container structure; see
+`reference/u9/activity/u9_activity_reference.md`.
+
+---
+
+#### `u9 activity-list`
+
+List activity sets with their record and step counts, and the names they hold.
+
+```
+titan u9 activity-list <file> [-n LIMIT]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/activity.flx` |
+| `-n N`, `--limit N` | Maximum rows to print |
+
+**Example**
+```bash
+titan u9 activity-list static/activity.flx -n 20
+```
+
+Names any entry that did not parse cleanly. That list is empty on the shipped
+archive; the pre-patch original reports entry 76, whose single record has no
+terminator and which the v1.19H patch deletes.
+
+---
+
+#### `u9 activity-show`
+
+Dump one activity set's named records and their steps.
+
+```
+titan u9 activity-show <file> <id>
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/activity.flx` |
+| `id` | Activity set ID -- the FLX entry index |
+
+**Example**
+```bash
+titan u9 activity-show static/activity.flx 1
+```
+
+```
+  7 of 7 declared record(s), 328-byte payload
+  [1] Sequence 1
+        0  opcode 0x04  1f 00 00 00 00 00 00 00
+  [2] After Yew
+        0  opcode 0x03  b4 cc 09 00 00 00 00 00
+        1  opcode 0x0a  01 00 00 00 00 00 00 00
+```
+
+The bracketed number is the record's stored `ordinal`, which is a label rather
+than a counter -- it does not always start at 1 and can contain gaps.
+
+---
+
+#### `u9 activity-opcodes`
+
+Report step-opcode frequency and activity-name frequency across the archive --
+the starting point for decoding the step language.
+
+```
+titan u9 activity-opcodes <file> [-n LIMIT]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/activity.flx` |
+| `-n N`, `--limit N` | Maximum names to print (default 15) |
+
+**Example**
+```bash
+titan u9 activity-opcodes static/activity.flx
+```
 
 ---
 

@@ -22,6 +22,7 @@ TYPENAME_DIR_OFFSET = 0x80
 TYPENAME_MARKER = 0x1B81
 TYPES_DAT_HEADER_SIZE = 8
 TYPES_DAT_RECORD_STRUCT = "<IHHHBBBBH"
+TYPES_DAT_MAX_RECORDS = 8192
 
 
 def _typename_entry(name: str | None) -> bytes:
@@ -56,8 +57,14 @@ def _types_record(default_model_id: int) -> bytes:
 
 
 def _build_types(default_model_ids: list[int]) -> U9TypesDat:
-    data = b"\x00" * TYPES_DAT_HEADER_SIZE + b"".join(_types_record(m) for m in default_model_ids)
-    return U9TypesDat(data)
+    """A complete 131,080-byte TYPES.DAT: the given types, then empty ones.
+
+    U9TypesDat requires the exact 8 + 16*8192 layout, since that size is
+    the only thing distinguishing a TYPES.DAT from any other file.
+    """
+    records = [_types_record(m) for m in default_model_ids]
+    records += [_types_record(0)] * (TYPES_DAT_MAX_RECORDS - len(records))
+    return U9TypesDat(b"\x00" * TYPES_DAT_HEADER_SIZE + b"".join(records))
 
 
 class SlugifyTests(unittest.TestCase):

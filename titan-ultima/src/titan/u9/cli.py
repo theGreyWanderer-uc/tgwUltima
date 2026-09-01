@@ -18,7 +18,9 @@ from typing import Annotated, Optional
 import typer
 from PIL import Image
 
+from titan.u9.activity import U9Activities, U9ActivityError
 from titan.u9.flx_archive import U9FlxArchive, U9FlxArchiveError
+from titan.u9.highway import U9Highway, U9HighwayError
 from titan.u9.icon import icon_entry_indices
 from titan.u9.mesh_export import MeshExportError, export_obj, export_stl
 from titan.u9.model import U9Model, U9ModelError
@@ -27,8 +29,9 @@ from titan.u9.nonfixed import U9Nonfixed, U9NonfixedError
 from titan.u9.palette import U9Palette, U9PaletteError
 from titan.u9.sound import U9SoundRecord, U9SoundRecordError
 from titan.u9.texture import U9TextureError, decode_frame
+from titan.u9.triggers import U9Triggers, U9TriggersError
 from titan.u9.typename import U9TypeNames
-from titan.u9.types_dat import U9TypesDat
+from titan.u9.types_dat import U9TypesDat, U9TypesDatError
 
 # ============================================================================
 # Typer sub-app
@@ -36,7 +39,7 @@ from titan.u9.types_dat import U9TypesDat
 
 u9_app = typer.Typer(
     name="u9",
-    help="Ultima 9: Ascension — FLX archive, sound, 3D model, and runtime region commands.",
+    help="Ultima 9: Ascension — FLX archive, sound, 3D model, world, script, and navigation commands.",
     no_args_is_help=True,
     pretty_exceptions_enable=False,
 )
@@ -288,10 +291,19 @@ def _load_model(sappear_file: str, model_id: int) -> U9Model:
 
 
 def _load_naming(types_path: Optional[str], typenames_path: Optional[str]):
-    """Returns (U9TypesDat, U9TypeNames) if both paths are given, else None."""
+    """Returns (U9TypesDat, U9TypeNames) if both paths are given, else None.
+
+    Naming is optional decoration, so a bad path or a file that is not
+    really a TYPES.DAT warns and falls back to unnamed output rather than
+    failing the export.
+    """
     if not types_path or not typenames_path:
         return None
-    return U9TypesDat.from_file(types_path), U9TypeNames.from_file(typenames_path)
+    try:
+        return U9TypesDat.from_file(types_path), U9TypeNames.from_file(typenames_path)
+    except (U9TypesDatError, U9FlxArchiveError, OSError) as e:
+        print(f"WARNING: could not load type names ({e}); continuing without them", file=sys.stderr)
+        return None
 
 
 def cmd_model_info(args: SimpleNamespace) -> int:
@@ -851,6 +863,323 @@ def cmd_nonfixed_diff(args: SimpleNamespace) -> int:
 
 
 # ============================================================================
+# CLI COMMANDS — HIGHWAY NAVIGATION GRAPH (static/highway.dat)
+# ============================================================================
+
+def _load_highway(filepath: str) -> Optional[U9Highway]:
+    """Open static/highway.dat, reporting the reason on failure."""
+    if not os.path.isfile(filepath):
+        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
+        return None
+    try:
+        return U9Highway.from_file(filepath)
+    except U9HighwayError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return None
+
+
+def cmd_highway_info(args: SimpleNamespace) -> int:
+    """Summarize the U9 NPC navigation graph: points, routes, connectivity."""
+    highway = _load_highway(args.file)
+    if highway is None:
+        return 1
+
+    adjacency = highway.neighbors()
+    edges = sum(len(v) for v in adjacency.values()) // 2
+    unknown = highway.unknown_path_nodes()
+    xs = [p.x for p in highway.points]
+    ys = [p.y for p in highway.points]
+    ids = [p.trigger_id for p in highway.points]
+
+    print(f"{args.file} -- U9 highway navigation graph")
+    print(f"  Points          : {len(highway.points)} of {highway.declared_point_count} declared")
+    print(f"  Routes          : {len(highway.routes)} of {highway.declared_route_count} declared")
+    print(f"  Route block     : {highway.route_bytes} bytes, {highway.route_bytes_consumed} consumed")
+    if ids:
+        print(f"  Trigger IDs     : {min(ids)}..{max(ids)}")
+        print(f"  World extent    : x {min(xs)}..{max(xs)}, y {min(ys)}..{max(ys)}")
+    print(f"  Connectivity    : {len(adjacency)} point(s) appear in a route, {edges} edge(s)")
+    if highway.routes:
+        longest = max(highway.routes, key=lambda r: r.path_length)
+        print(f"  Longest route   : {longest.start_trigger_id} -> {longest.last_trigger_id}, "
+              f"{longest.path_length} nodes, distance {longest.route_distance}")
+    if unknown:
+        print(f"  WARNING: {len(unknown)} route node(s) have no declared point: {unknown[:10]}")
+    if not highway.is_complete:
+        print("  WARNING: file did not parse completely -- truncated or not a highway.dat")
+    print("  Points are keyed by trigger ID; the world markers are entities of")
+    print("  type 1134 -- see 'titan u9 nonfixed-entities'.")
+    return 0
+
+
+def cmd_highway_points(args: SimpleNamespace) -> int:
+    """List highway navigation points and their absolute world positions."""
+    highway = _load_highway(args.file)
+    if highway is None:
+        return 1
+
+    adjacency = highway.neighbors()
+    if args.id is not None:
+        point = highway.point(args.id)
+        if point is None:
+            print(f"No highway point with trigger ID {args.id}.")
+            return 0
+        points = [point]
+    else:
+        points = list(highway.points)
+
+    shown = points[: args.limit] if args.limit else points
+    print(f"{args.file} -- {len(points)} point(s)")
+    print(f"{'TriggerID':>10}  {'X':>8}  {'Y':>8}  {'Links':>5}  Routes")
+    print("-" * 52)
+    for p in shown:
+        links = len(adjacency.get(p.trigger_id, ()))
+        through = len(highway.routes_through(p.trigger_id))
+        print(f"{p.trigger_id:>10}  {p.x:>8}  {p.y:>8}  {links:>5}  {through}")
+    if args.limit and len(points) > args.limit:
+        print(f"... ({len(points) - args.limit} more; raise --limit to see more)")
+    return 0
+
+
+def cmd_highway_routes(args: SimpleNamespace) -> int:
+    """List precomputed routes through the highway graph."""
+    highway = _load_highway(args.file)
+    if highway is None:
+        return 1
+
+    routes = highway.routes_through(args.id) if args.id is not None else list(highway.routes)
+    if args.id is not None and not routes:
+        print(f"No route visits trigger ID {args.id}.")
+        return 0
+
+    shown = routes[: args.limit] if args.limit else routes
+    print(f"{args.file} -- {len(routes)} route(s)")
+    for r in shown:
+        print(
+            f"  {r.start_trigger_id} -> {r.last_trigger_id}  "
+            f"nodes {r.path_length}, hops {r.hops}, distance {r.route_distance}"
+        )
+        if args.paths:
+            print(f"      {' -> '.join(str(n) for n in r.path)}")
+    if args.limit and len(routes) > args.limit:
+        print(f"... ({len(routes) - args.limit} more; raise --limit to see more)")
+    return 0
+
+
+# ============================================================================
+# CLI COMMANDS — TRIGGER SCRIPTS (static/triggers.flx)
+# ============================================================================
+
+def _load_triggers(filepath: str) -> Optional[U9Triggers]:
+    """Open static/triggers.flx, reporting the reason on failure."""
+    if not os.path.isfile(filepath):
+        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
+        return None
+    try:
+        return U9Triggers.from_file(filepath)
+    except U9TriggersError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return None
+
+
+def cmd_trigger_list(args: SimpleNamespace) -> int:
+    """List trigger scripts with their record counts."""
+    triggers = _load_triggers(args.file)
+    if triggers is None:
+        return 1
+
+    try:
+        entries = triggers.triggers()
+    except U9TriggersError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
+    if not args.all:
+        entries = [t for t in entries if not t.is_empty]
+    shown = entries[: args.limit] if args.limit else entries
+
+    empty = sum(1 for t in triggers.triggers() if t.is_empty)
+    print(f"{args.file} -- {len(entries)} trigger(s) of {triggers.num_entries} slots ({empty} empty)")
+    print(f"{'TriggerID':>10}  {'Records':>7}  {'Slack':>5}  {'Term':>5}  Opcodes")
+    print("-" * 66)
+    for t in shown:
+        term = "yes" if t.terminated else "NO"
+        ops = " ".join(f"{o:#04x}" for o in t.opcodes[:6])
+        if len(t.opcodes) > 6:
+            ops += " ..."
+        print(f"{t.trigger_id:>10}  {len(t.records):>7}  {t.slack_records:>5}  {term:>5}  {ops}")
+    if args.limit and len(entries) > args.limit:
+        print(f"... ({len(entries) - args.limit} more; raise --limit to see more)")
+    return 0
+
+
+def cmd_trigger_show(args: SimpleNamespace) -> int:
+    """Dump one trigger script's records."""
+    triggers = _load_triggers(args.file)
+    if triggers is None:
+        return 1
+
+    try:
+        trigger = triggers.trigger(args.id)
+    except U9TriggersError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
+    if trigger is None:
+        print(f"Trigger {args.id} is an unused slot.")
+        return 0
+
+    print(f"{args.file} -- trigger {trigger.trigger_id}")
+    if trigger.is_empty:
+        print("  (empty -- the terminator is the first record)")
+    if not trigger.terminated:
+        print("  WARNING: no 0xFF terminator; the record list runs to the end of the entry")
+    if trigger.slack_records:
+        print(f"  {trigger.slack_records} stale record(s) after the terminator, not decoded")
+    if trigger.records:
+        print(f"  {'#':>3}  {'Opcode':>6}  {'Arg0':>5}  {'Arg1':>6}  {'Arg2':>6}")
+        print("  " + "-" * 38)
+        for index, r in enumerate(trigger.records):
+            print(f"  {index:>3}  {r.opcode:>#6x}  {r.arg0:>5}  {r.arg1:>6}  {r.arg2:>6}")
+    print("  Opcode meanings are not decoded; see reference/u9/triggers/.")
+    return 0
+
+
+def cmd_trigger_opcodes(args: SimpleNamespace) -> int:
+    """Report how often each trigger opcode appears -- a starting point for decoding them."""
+    triggers = _load_triggers(args.file)
+    if triggers is None:
+        return 1
+
+    try:
+        histogram = triggers.opcode_histogram()
+        unterminated = triggers.unterminated_trigger_ids()
+    except U9TriggersError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
+    total = sum(histogram.values())
+    print(f"{args.file} -- {total} body record(s), {len(histogram)} distinct opcode(s)")
+    if unterminated:
+        print(f"  unterminated trigger(s): {unterminated}")
+    print(f"{'Opcode':>7}  {'Count':>7}  {'Share':>7}")
+    print("-" * 26)
+    rows = histogram.most_common(args.limit) if args.limit else histogram.most_common()
+    for opcode, count in rows:
+        print(f"{opcode:>#7x}  {count:>7}  {100 * count / total:>6.2f}%")
+    if args.limit and len(histogram) > args.limit:
+        print(f"... ({len(histogram) - args.limit} more; raise --limit to see more)")
+    return 0
+
+
+# ============================================================================
+# CLI COMMANDS — NPC ACTIVITY SEQUENCES (static/activity.flx)
+# ============================================================================
+
+def _load_activities(filepath: str) -> Optional[U9Activities]:
+    """Open static/activity.flx, reporting the reason on failure."""
+    if not os.path.isfile(filepath):
+        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
+        return None
+    try:
+        return U9Activities.from_file(filepath)
+    except U9ActivityError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return None
+
+
+def cmd_activity_list(args: SimpleNamespace) -> int:
+    """List activity sets with their record counts and names."""
+    activities = _load_activities(args.file)
+    if activities is None:
+        return 1
+
+    try:
+        entries = activities.activities()
+        incomplete = activities.incomplete_activity_ids()
+    except U9ActivityError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
+    shown = entries[: args.limit] if args.limit else entries
+    print(f"{args.file} -- {len(entries)} activity set(s) of {activities.num_entries} slots")
+    if incomplete:
+        print(f"  entries that did not parse cleanly: {incomplete}")
+    print(f"{'ID':>5}  {'Records':>7}  {'Steps':>5}  Names")
+    print("-" * 72)
+    for a in shown:
+        steps = sum(len(r.steps) for r in a.records)
+        names = ", ".join(a.names[:4])
+        if len(a.names) > 4:
+            names += ", ..."
+        print(f"{a.activity_id:>5}  {len(a.records):>7}  {steps:>5}  {names}")
+    if args.limit and len(entries) > args.limit:
+        print(f"... ({len(entries) - args.limit} more; raise --limit to see more)")
+    return 0
+
+
+def cmd_activity_show(args: SimpleNamespace) -> int:
+    """Dump one activity set's records and steps."""
+    activities = _load_activities(args.file)
+    if activities is None:
+        return 1
+
+    try:
+        activity = activities.activity(args.id)
+    except U9ActivityError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
+    if activity is None:
+        print(f"Activity {args.id} is an unused slot.")
+        return 0
+
+    print(f"{args.file} -- activity {activity.activity_id}")
+    print(f"  {len(activity.records)} of {activity.declared_record_count} declared record(s), "
+          f"{activity.payload_length}-byte payload")
+    if activity.trailing_bytes:
+        print(f"  WARNING: {activity.trailing_bytes} byte(s) left over after the last record")
+    for record in activity.records:
+        print(f"  [{record.ordinal}] {record.name}")
+        if not record.terminated:
+            print("       WARNING: no 0xFF step; the record runs to the end of the entry")
+        for index, step in enumerate(record.steps):
+            print(f"       {index:>2}  opcode {step.opcode:#04x}  {step.operands.hex(' ')}")
+        if not record.steps:
+            print("       (no steps)")
+    print("  Step opcode meanings are not decoded; see reference/u9/activity/.")
+    return 0
+
+
+def cmd_activity_opcodes(args: SimpleNamespace) -> int:
+    """Report step opcode and activity name frequency across the archive."""
+    activities = _load_activities(args.file)
+    if activities is None:
+        return 1
+
+    try:
+        opcodes = activities.opcode_histogram()
+        names = activities.name_histogram()
+    except U9ActivityError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
+    total = sum(opcodes.values())
+    print(f"{args.file} -- {total} step(s), {len(opcodes)} distinct opcode(s), "
+          f"{len(names)} distinct name(s)")
+    print(f"{'Opcode':>7}  {'Count':>7}  {'Share':>7}")
+    print("-" * 26)
+    for opcode, count in opcodes.most_common():
+        print(f"{opcode:>#7x}  {count:>7}  {100 * count / total:>6.2f}%")
+    print("")
+    print(f"{'Count':>7}  Name")
+    print("-" * 30)
+    for name, count in names.most_common(args.limit or 15):
+        print(f"{count:>7}  {name}")
+    return 0
+
+
+# ============================================================================
 # Typer command wrappers
 # ============================================================================
 
@@ -1158,3 +1487,107 @@ def nonfixed_diff_cmd(
 ) -> None:
     """Compare two U9 runtime regions entity by entity (e.g. patched vs original)."""
     raise SystemExit(cmd_nonfixed_diff(SimpleNamespace(left=left, right=right, typenames=typenames)))
+
+
+@u9_app.command("highway-info")
+def highway_info_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/highway.dat")],
+) -> None:
+    """Summarize the U9 NPC navigation graph: points, routes, connectivity."""
+    raise SystemExit(cmd_highway_info(SimpleNamespace(file=file)))
+
+
+@u9_app.command("highway-points")
+def highway_points_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/highway.dat")],
+    id: Annotated[
+        Optional[int], typer.Option("-i", "--id", help="Show only the point with this trigger ID"),
+    ] = None,
+    limit: Annotated[
+        Optional[int], typer.Option("-n", "--limit", help="Maximum rows to print"),
+    ] = None,
+) -> None:
+    """List U9 highway navigation points and their world positions."""
+    raise SystemExit(cmd_highway_points(SimpleNamespace(file=file, id=id, limit=limit)))
+
+
+@u9_app.command("highway-routes")
+def highway_routes_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/highway.dat")],
+    id: Annotated[
+        Optional[int], typer.Option("-i", "--id", help="Only routes visiting this trigger ID"),
+    ] = None,
+    paths: Annotated[
+        bool, typer.Option("-p", "--paths", help="Print each route's full node path"),
+    ] = False,
+    limit: Annotated[
+        Optional[int], typer.Option("-n", "--limit", help="Maximum routes to print"),
+    ] = None,
+) -> None:
+    """List the precomputed routes through the U9 highway graph."""
+    raise SystemExit(cmd_highway_routes(SimpleNamespace(file=file, id=id, paths=paths, limit=limit)))
+
+
+@u9_app.command("trigger-list")
+def trigger_list_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/triggers.flx")],
+    all: Annotated[
+        bool, typer.Option("-a", "--all", help="Include empty triggers"),
+    ] = False,
+    limit: Annotated[
+        Optional[int], typer.Option("-n", "--limit", help="Maximum rows to print"),
+    ] = None,
+) -> None:
+    """List U9 trigger scripts; the trigger ID is the FLX entry index."""
+    raise SystemExit(cmd_trigger_list(SimpleNamespace(file=file, all=all, limit=limit)))
+
+
+@u9_app.command("trigger-show")
+def trigger_show_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/triggers.flx")],
+    id: Annotated[int, typer.Argument(help="Trigger ID, as carried by a runtime entity")],
+) -> None:
+    """Dump one U9 trigger script's records."""
+    raise SystemExit(cmd_trigger_show(SimpleNamespace(file=file, id=id)))
+
+
+@u9_app.command("trigger-opcodes")
+def trigger_opcodes_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/triggers.flx")],
+    limit: Annotated[
+        Optional[int], typer.Option("-n", "--limit", help="Maximum opcodes to print"),
+    ] = None,
+) -> None:
+    """Report trigger opcode frequency across the whole archive."""
+    raise SystemExit(cmd_trigger_opcodes(SimpleNamespace(file=file, limit=limit)))
+
+
+@u9_app.command("activity-list")
+def activity_list_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/activity.flx")],
+    limit: Annotated[
+        Optional[int], typer.Option("-n", "--limit", help="Maximum rows to print"),
+    ] = None,
+) -> None:
+    """List U9 NPC activity sets and the named sequences they hold."""
+    raise SystemExit(cmd_activity_list(SimpleNamespace(file=file, limit=limit)))
+
+
+@u9_app.command("activity-show")
+def activity_show_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/activity.flx")],
+    id: Annotated[int, typer.Argument(help="Activity set ID (the FLX entry index)")],
+) -> None:
+    """Dump one U9 activity set's named records and their steps."""
+    raise SystemExit(cmd_activity_show(SimpleNamespace(file=file, id=id)))
+
+
+@u9_app.command("activity-opcodes")
+def activity_opcodes_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/activity.flx")],
+    limit: Annotated[
+        Optional[int], typer.Option("-n", "--limit", help="Maximum names to print"),
+    ] = None,
+) -> None:
+    """Report U9 activity step-opcode and sequence-name frequency."""
+    raise SystemExit(cmd_activity_opcodes(SimpleNamespace(file=file, limit=limit)))

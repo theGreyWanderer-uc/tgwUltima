@@ -31,6 +31,43 @@ This project uses [Semantic Versioning](https://semver.org/):
   declared count exactly for 95.4% of chunks; every residual is an undershoot,
   never an invented entity, and `U9Chunk.is_complete` reports it per chunk.
   Trigger records are counted but not decoded.
+
+- **U9 NPC activity sequences:** added `titan.u9.activity`, a container reader
+  for `static/activity.flx`, the named behaviour scripts an NPC runs. Decodes
+  each entry into records of `u8 ordinal`, a fixed-width 15-byte name field,
+  and a list of 9-byte steps ending at a `0xFF` step; all 214 used entries
+  parse with their bodies consumed exactly, yielding 617 records and 617
+  terminators. Added `titan u9 activity-list`, `activity-show` and
+  `activity-opcodes`. Step opcode meanings are deliberately not decoded.
+  Documented in `reference/u9/activity/u9_activity_reference.md`, including the
+  two findings that make the format parse at all: the name field is fixed width
+  rather than a bare C string (its padding is uninitialised memory, which is
+  what defeats a forward-scanning parser), and the record `ordinal` is a label
+  that need not start at 1 or run without gaps.
+- **U9 trigger scripts:** added `titan.u9.triggers`, a container reader for
+  `static/triggers.flx`, where the FLX entry index is the trigger ID carried by
+  runtime entities. Decodes each trigger into its 6-byte
+  `opcode / arg0 / arg1 / arg2` records, ending at the first `0xFF` opcode and
+  reporting stale records behind that terminator as slack rather than decoding
+  them. Added `titan u9 trigger-list`, `trigger-show` and `trigger-opcodes`.
+  Opcode meanings are deliberately not decoded -- 90 distinct opcodes appear
+  and nothing is guessed; `trigger-opcodes` reports their frequency as a
+  starting point. Documented in
+  `reference/u9/triggers/u9_triggers_reference.md`, including why the opcode is
+  the low byte rather than the leading `u16` and why the terminator must be
+  matched on that byte.
+- **U9 NPC navigation graph:** added `titan.u9.highway`, a reader for
+  `static/highway.dat` -- the highway-point graph and precomputed routes U9
+  uses for NPC navigation, the game's analogue of Ultima 7's patheggs. Decodes
+  the point table (trigger ID plus absolute world position) and the
+  variable-length route records (endpoints, node path, route distance), and
+  exposes route lookup and an undirected adjacency graph. Added
+  `titan u9 highway-info`, `highway-points` and `highway-routes`. Documented in
+  `reference/u9/highway/u9_highway_reference.md`, including the correlation
+  that identifies what a highway node physically is: 815 of the 817 points have
+  an entity of type 1134 -- unnamed in `TYPENAME.FLX`, i.e. an invisible marker
+  -- at exactly the declared coordinates, which also independently validates
+  the `nonfixed` reader's world-coordinate arithmetic against a separate file.
 - **Sparse U7 mod-patch rendering:** `titan u7 map-render` now detects sparse
   Exult mod `patch/SHAPES.VGA` archives and fills their empty records in memory
   from the selected BG or SI base archive. Base assets are resolved from the
@@ -38,6 +75,20 @@ This project uses [Semantic Versioning](https://semver.org/):
   the base palette is used when the patch does not provide one. Populated
   patch records remain authoritative, no archive is rewritten, and complete
   base-game archives retain the existing direct rendering behavior.
+
+### Fixed
+
+- **`titan.u9.types_dat` accepted files that were not `TYPES.DAT`.** The reader
+  validated nothing and silently discarded a trailing partial record, so any
+  file at least 24 bytes long parsed as some number of nonsense records --
+  `static/highway.dat` came back as 776 of them. It now requires the exact
+  131,080-byte layout (`8 + 16*8192`) and raises the new `U9TypesDatError`
+  otherwise. Across the 545 U9 data files in this project's game copy, 544 are
+  now rejected and only the real `TYPES.DAT` is accepted; a looser
+  whole-number-of-records rule would still have admitted 144 of them, since
+  every `terrain.*` file happens to be a multiple of 16 plus 8 bytes. Model
+  export commands treat naming as optional decoration and now warn and continue
+  unnamed rather than failing.
 
 ---
 
