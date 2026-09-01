@@ -80,6 +80,23 @@ _V2_CHUNKS_MAGIC = b"\xff\xff\xff\xffexlt\x00\x00"
 _V2_CHUNKS_HDR_SIZE = 10
 
 
+def _find_case_insensitive_file(directory: str, filename: str) -> str:
+    """Resolve a game-data filename regardless of host filesystem casing."""
+    direct_path = os.path.join(directory, filename)
+    if os.path.isfile(direct_path):
+        return direct_path
+
+    target_name = filename.casefold()
+    try:
+        with os.scandir(directory) as entries:
+            for entry in entries:
+                if entry.is_file() and entry.name.casefold() == target_name:
+                    return entry.path
+    except OSError:
+        return direct_path
+    return direct_path
+
+
 def _frame_to_rgba(
     fr: U7Shape.Frame,
     flat_rgb: bytes | list[int],
@@ -406,7 +423,7 @@ class U7MapRenderer:
         if self._fixed_objects_by_superchunk is not None:
             return list(self._fixed_objects_by_superchunk.get(schunk, []))
         ifix_name = f"U7IFIX{schunk:02X}"
-        ifix_path = os.path.join(self._map_data_dir, ifix_name)
+        ifix_path = _find_case_insensitive_file(self._map_data_dir, ifix_name)
         return self.parse_ifix(ifix_path, schunk)
 
     # ------------------------------------------------------------------
@@ -470,11 +487,9 @@ class U7MapRenderer:
 
         Returns ``grid[cx][cy]`` = terrain index into U7CHUNKS.
         """
-        path = os.path.join(self._map_data_dir, "U7MAP")
-        if not os.path.isfile(path):
-            path = os.path.join(self._map_data_dir, "u7map")
+        path = _find_case_insensitive_file(self._map_data_dir, "U7MAP")
         if not os.path.isfile(path) and self.map_num > 0:
-            path = os.path.join(self.map_root, "U7MAP")
+            path = _find_case_insensitive_file(self.map_root, "U7MAP")
         with open(path, "rb") as f:
             data = f.read()
 
@@ -510,7 +525,7 @@ class U7MapRenderer:
         Returns a list of terrains, each being 256 ``(shape, frame)``
         tuples for the 16×16 tiles (row-major: ``[tiley * 16 + tilex]``).
         """
-        path = os.path.join(self.map_root, "U7CHUNKS")
+        path = _find_case_insensitive_file(self.map_root, "U7CHUNKS")
         with open(path, "rb") as f:
             data = f.read()
 

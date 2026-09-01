@@ -48,6 +48,9 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Fixed
 
+- **Cross-platform U7 map filenames:** map rendering now resolves `U7MAP`,
+  `U7CHUNKS`, and `U7IFIXnn` case-insensitively, so native lowercase map files
+  work on Linux as well as Windows.
 - **SHAPES.VGA flat-record protection:** `titan u7 flex-add-shape` now begins
   automatic allocation at shape 150 when updating `SHAPES.VGA`, preserving
   records 0 through 149 for the format's required 8x8 flat textures. Explicit
