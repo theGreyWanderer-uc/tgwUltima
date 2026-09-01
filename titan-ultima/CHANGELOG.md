@@ -14,6 +14,23 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Added
 
+- **U9 runtime region support:** added `titan.u9.nonfixed`, a reader for
+  `runtime/nonfixed.<region>` -- Ultima 9's dynamic world data, holding the
+  objects whose state the game can change and write back. Decodes the region
+  chunk grid, each chunk's page chain, the 32-byte entity records (position,
+  elevation, type, quaternion rotation, flags, mesh, trigger) and their
+  16-byte extra-data blocks. Added `titan u9 nonfixed-info`,
+  `nonfixed-chunks`, `nonfixed-entities` and `nonfixed-diff`; the last
+  compares two regions entity by entity and reports field-level edits, so a
+  patched region can be read against its original. The format was verified
+  against 166 real region files and is documented in
+  `reference/u9/nonfixed/u9_nonfixed_reference.md`, including two corrections
+  to the published community documentation: `nextEntity` is a `uint32` rather
+  than a `uint16` plus an unknown `uint16`, and the chunk table carries the
+  same one-based offset bias as `nextPage`. Entity enumeration recovers the
+  declared count exactly for 95.4% of chunks; every residual is an undershoot,
+  never an invented entity, and `U9Chunk.is_complete` reports it per chunk.
+  Trigger records are counted but not decoded.
 - **Sparse U7 mod-patch rendering:** `titan u7 map-render` now detects sparse
   Exult mod `patch/SHAPES.VGA` archives and fills their empty records in memory
   from the selected BG or SI base archive. Base assets are resolved from the

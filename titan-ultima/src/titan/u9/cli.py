@@ -23,6 +23,7 @@ from titan.u9.icon import icon_entry_indices
 from titan.u9.mesh_export import MeshExportError, export_obj, export_stl
 from titan.u9.model import U9Model, U9ModelError
 from titan.u9.model_naming import label_for_model, names_for_model
+from titan.u9.nonfixed import U9Nonfixed, U9NonfixedError
 from titan.u9.palette import U9Palette, U9PaletteError
 from titan.u9.sound import U9SoundRecord, U9SoundRecordError
 from titan.u9.texture import U9TextureError, decode_frame
@@ -35,7 +36,7 @@ from titan.u9.types_dat import U9TypesDat
 
 u9_app = typer.Typer(
     name="u9",
-    help="Ultima 9: Ascension — FLX archive, sound, and 3D model commands.",
+    help="Ultima 9: Ascension — FLX archive, sound, 3D model, and runtime region commands.",
     no_args_is_help=True,
     pretty_exceptions_enable=False,
 )
@@ -640,6 +641,216 @@ def cmd_icon_export_all(args: SimpleNamespace) -> int:
 
 
 # ============================================================================
+# CLI COMMANDS — RUNTIME NONFIXED REGIONS (runtime/nonfixed.%d)
+# ============================================================================
+
+def _load_region(filepath: str) -> Optional[U9Nonfixed]:
+    """Open a nonfixed region file, reporting the reason on failure."""
+    if not os.path.isfile(filepath):
+        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
+        return None
+    try:
+        return U9Nonfixed.from_file(filepath)
+    except U9NonfixedError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return None
+
+
+def _load_typenames(path: Optional[str]) -> Optional[U9TypeNames]:
+    if not path:
+        return None
+    try:
+        return U9TypeNames.from_file(path)
+    except (U9FlxArchiveError, OSError) as e:
+        print(f"WARNING: could not read type names from {path}: {e}", file=sys.stderr)
+        return None
+
+
+def cmd_nonfixed_info(args: SimpleNamespace) -> int:
+    """Summarize one runtime/nonfixed.%d region: grid, pages, entities, triggers."""
+    region = _load_region(args.file)
+    if region is None:
+        return 1
+
+    chunks = region.chunks()
+    pages = sum(len(c.pages) for c in chunks)
+    entities = sum(len(c.entities) for c in chunks)
+    declared = sum(c.declared_entity_count for c in chunks)
+    triggers = sum(c.trigger_count for c in chunks)
+    extras = sum(1 for c in chunks for e in c.entities if e.has_extra_data)
+    incomplete = [c for c in chunks if not c.is_complete]
+
+    print(f"{args.file} -- {region.width}x{region.height} chunk region")
+    print(f"  Header          : {region.header_size} bytes")
+    print(f"  Payload         : {region.payload_size} bytes (watermark {region.declared_payload_size})")
+    print(f"  Populated chunks: {len(chunks)} of {region.num_chunks}")
+    print(f"  Pages           : {pages}")
+    print(f"  Entities        : {entities} walked, {declared} declared")
+    print(f"  Triggers        : {triggers} (record layout not decoded)")
+    print(f"  Extra-data      : {extras} entities carry a block")
+    if incomplete:
+        missing = declared - entities
+        print(
+            f"  NOTE: {len(incomplete)} chunk(s) undershot by {missing} entit"
+            f"{'y' if missing == 1 else 'ies'} -- see reference/u9/nonfixed/."
+        )
+    return 0
+
+
+def cmd_nonfixed_chunks(args: SimpleNamespace) -> int:
+    """List every populated chunk in a region with its page and entity counts."""
+    region = _load_region(args.file)
+    if region is None:
+        return 1
+
+    chunks = region.chunks()
+    print(f"{args.file} -- {len(chunks)} populated chunk(s) of {region.num_chunks}")
+    print(f"{'Idx':>5}  {'Grid':<9}  {'Base (x,y)':<15}  {'Pages':>5}  {'Ents':>6}  {'Decl':>6}  {'Trig':>5}  Full")
+    print("-" * 74)
+    for c in chunks:
+        grid = f"{c.chunk_x},{c.chunk_y}"
+        base = f"{c.base_x},{c.base_y}"
+        flag = "yes" if c.is_complete else f"-{c.declared_entity_count - len(c.entities)}"
+        print(
+            f"{c.index:>5}  {grid:<9}  {base:<15}  {len(c.pages):>5}  "
+            f"{len(c.entities):>6}  {c.declared_entity_count:>6}  {c.trigger_count:>5}  {flag}"
+        )
+    return 0
+
+
+def cmd_nonfixed_entities(args: SimpleNamespace) -> int:
+    """List dynamic objects in a region, optionally restricted to one chunk."""
+    region = _load_region(args.file)
+    if region is None:
+        return 1
+
+    if args.chunk is not None:
+        try:
+            cx, cy = (int(v) for v in args.chunk.split(",", 1))
+        except ValueError:
+            print(f"ERROR: --chunk expects 'X,Y', got {args.chunk!r}", file=sys.stderr)
+            return 1
+        try:
+            chunk = region.chunk(cx, cy)
+        except U9NonfixedError as e:
+            print(f"ERROR: {e}", file=sys.stderr)
+            return 1
+        if chunk is None:
+            print(f"Chunk ({cx}, {cy}) holds no pages.")
+            return 0
+        chunks = [chunk]
+    else:
+        chunks = region.chunks()
+
+    names = _load_typenames(args.typenames)
+    rows = [(c, e) for c in chunks for e in c.entities]
+    shown = rows[: args.limit] if args.limit else rows
+
+    print(f"{args.file} -- {len(rows)} entit{'y' if len(rows) == 1 else 'ies'}")
+    header = f"{'Offset':>8}  {'Chunk':<7}  {'World (x,y,z)':<20}  {'Type':>5}  {'Mesh':>5}  {'Trig':>5}  {'Extra':>7}"
+    if names:
+        header += "  Name"
+    print(header)
+    print("-" * (len(header) + 8))
+    for c, e in shown:
+        grid = f"{c.chunk_x},{c.chunk_y}"
+        pos = f"{e.world_x},{e.world_y},{e.z}"
+        extra = f"{e.extra_data_offset:#07x}" if e.has_extra_data else "-"
+        line = (
+            f"{e.offset:>#8x}  {grid:<7}  {pos:<20}  {e.type_index:>5}  "
+            f"{e.mesh_index:>5}  {e.trigger_id:>5}  {extra:>7}"
+        )
+        if names:
+            line += f"  {names.name_for(e.type_index) or ''}"
+        print(line)
+    if args.limit and len(rows) > args.limit:
+        print(f"... ({len(rows) - args.limit} more; raise --limit to see more)")
+    return 0
+
+
+def _entity_fields(entity) -> dict:
+    return {
+        "x": entity.offset_x,
+        "y": entity.offset_y,
+        "z": entity.z,
+        "type": entity.type_index,
+        "rotation": entity.rotation,
+        "flags": entity.flags,
+        "mesh": entity.mesh_index,
+        "trigger": entity.trigger_id,
+        "extra": entity.extra_data_offset,
+    }
+
+
+def cmd_nonfixed_diff(args: SimpleNamespace) -> int:
+    """Compare two region files entity by entity -- e.g. a patched region against its original."""
+    left = _load_region(args.left)
+    right = _load_region(args.right)
+    if left is None or right is None:
+        return 1
+
+    if (left.width, left.height) != (right.width, right.height):
+        print(
+            f"Region grids differ: {left.width}x{left.height} vs {right.width}x{right.height}",
+            file=sys.stderr,
+        )
+        return 1
+
+    names = _load_typenames(args.typenames)
+
+    def index(region):
+        return {
+            (c.index, e.offset): (c, e)
+            for c in region.chunks()
+            for e in c.entities
+        }
+
+    a, b = index(left), index(right)
+    only_left = sorted(set(a) - set(b))
+    only_right = sorted(set(b) - set(a))
+    changed = []
+    for key in sorted(set(a) & set(b)):
+        fa, fb = _entity_fields(a[key][1]), _entity_fields(b[key][1])
+        delta = {k: (fa[k], fb[k]) for k in fa if fa[k] != fb[k]}
+        if delta:
+            changed.append((key, delta))
+
+    print(args.left)
+    print(args.right)
+    print(
+        f"  {len(a)} vs {len(b)} entities  |  "
+        f"{len(changed)} changed, {len(only_left)} removed, {len(only_right)} added"
+    )
+    if not (changed or only_left or only_right):
+        print("  No entity-level differences.")
+        return 0
+
+    def label(entry):
+        chunk, entity = entry
+        name = f" {names.name_for(entity.type_index)}" if names else ""
+        return f"chunk {chunk.chunk_x},{chunk.chunk_y} @{entity.offset:#08x} type {entity.type_index}{name}"
+
+    if changed:
+        print("")
+        print("Changed:")
+        for key, delta in changed:
+            print(f"  {label(a[key])}")
+            for field, (old, new) in delta.items():
+                print(f"      {field}: {old} -> {new}")
+    if only_left:
+        print("")
+        print(f"Only in {args.left}:")
+        for key in only_left:
+            print(f"  {label(a[key])}")
+    if only_right:
+        print("")
+        print(f"Only in {args.right}:")
+        for key in only_right:
+            print(f"  {label(b[key])}")
+    return 0
+
+
+# ============================================================================
 # Typer command wrappers
 # ============================================================================
 
@@ -900,3 +1111,50 @@ def icon_export_all_cmd(
     raise SystemExit(
         cmd_icon_export_all(SimpleNamespace(file=file, textures=textures, palette=palette, output=output))
     )
+
+
+@u9_app.command("nonfixed-info")
+def nonfixed_info_cmd(
+    file: Annotated[str, typer.Argument(help="Path to a runtime/nonfixed.<region> file")],
+) -> None:
+    """Summarize a U9 runtime region: chunk grid, pages, entities, triggers."""
+    raise SystemExit(cmd_nonfixed_info(SimpleNamespace(file=file)))
+
+
+@u9_app.command("nonfixed-chunks")
+def nonfixed_chunks_cmd(
+    file: Annotated[str, typer.Argument(help="Path to a runtime/nonfixed.<region> file")],
+) -> None:
+    """List every populated chunk in a U9 runtime region with its counts."""
+    raise SystemExit(cmd_nonfixed_chunks(SimpleNamespace(file=file)))
+
+
+@u9_app.command("nonfixed-entities")
+def nonfixed_entities_cmd(
+    file: Annotated[str, typer.Argument(help="Path to a runtime/nonfixed.<region> file")],
+    chunk: Annotated[
+        Optional[str], typer.Option("-c", "--chunk", help="Restrict to one chunk, as 'X,Y'"),
+    ] = None,
+    typenames: Annotated[
+        Optional[str], typer.Option("-t", "--typenames", help="Path to static/TYPENAME.FLX for object names"),
+    ] = None,
+    limit: Annotated[
+        Optional[int], typer.Option("-n", "--limit", help="Maximum rows to print"),
+    ] = None,
+) -> None:
+    """List the dynamic objects stored in a U9 runtime region."""
+    raise SystemExit(
+        cmd_nonfixed_entities(SimpleNamespace(file=file, chunk=chunk, typenames=typenames, limit=limit))
+    )
+
+
+@u9_app.command("nonfixed-diff")
+def nonfixed_diff_cmd(
+    left: Annotated[str, typer.Argument(help="First runtime/nonfixed.<region> file")],
+    right: Annotated[str, typer.Argument(help="Second runtime/nonfixed.<region> file")],
+    typenames: Annotated[
+        Optional[str], typer.Option("-t", "--typenames", help="Path to static/TYPENAME.FLX for object names"),
+    ] = None,
+) -> None:
+    """Compare two U9 runtime regions entity by entity (e.g. patched vs original)."""
+    raise SystemExit(cmd_nonfixed_diff(SimpleNamespace(left=left, right=right, typenames=typenames)))

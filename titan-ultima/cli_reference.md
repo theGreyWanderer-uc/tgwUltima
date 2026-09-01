@@ -3834,8 +3834,9 @@ titan u6 schedule-dump SCHEDULE --actor 0
 
 All commands below are invoked as `titan u9 <command>`. Ultima 9's file
 formats are still an early work in progress compared to U7/U8 -- FLX
-archive reading, `TYPENAME.FLX`, and `sound/*.flx` (Speech/sfx/music)
-decoding are supported so far.
+archive reading, `TYPENAME.FLX`, `sound/*.flx` (Speech/sfx/music) decoding,
+`sappear.flx` 3D models, and `runtime/nonfixed.<region>` dynamic world data
+are supported so far.
 
 ### FLX archive commands
 
@@ -4202,6 +4203,131 @@ titan u9 icon-export-all <file> <textures> [-p PALETTE] [-o DIR]
 ```bash
 titan u9 icon-export-all static/sappear.flx static/bitmapsh.flx -p static/ankh.pal -o icon_export/
 ```
+
+---
+
+### Runtime region commands
+
+Ultima 9 keeps its *dynamic* world data -- the objects whose state the game
+may change and write back -- in `runtime/nonfixed.<region>`, one file per
+region. Each is a grid of 4096-unit chunks holding entity records with
+position, type, mesh, rotation, flags and trigger association.
+
+These commands read that format. The parser is verified against 166 real
+region files; see `reference/u9/nonfixed/u9_nonfixed_reference.md` for the
+byte layout, the verification evidence, and the one known limitation
+(entity enumeration recovers 95.4% of chunks exactly, and every residual
+is an undershoot -- never an invented entity).
+
+Triggers are counted but not decoded; their record layout is unknown.
+
+---
+
+#### `u9 nonfixed-info`
+
+Summarize one region: chunk grid, page count, entity and trigger totals.
+
+```
+titan u9 nonfixed-info <file>
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to a `runtime/nonfixed.<region>` file |
+
+**Example**
+```bash
+titan u9 nonfixed-info runtime/nonfixed.22
+```
+
+Reports a `NOTE:` line when the entity walk undershot a chunk's declared
+count.
+
+---
+
+#### `u9 nonfixed-chunks`
+
+List every populated chunk with its grid position, base coordinate, page
+count, entity count and whether enumeration was complete.
+
+```
+titan u9 nonfixed-chunks <file>
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to a `runtime/nonfixed.<region>` file |
+
+**Example**
+```bash
+titan u9 nonfixed-chunks runtime/nonfixed.22
+```
+
+The `Full` column shows `yes`, or the shortfall (e.g. `-2`) when the walk
+found fewer entities than the page headers declare.
+
+---
+
+#### `u9 nonfixed-entities`
+
+List the dynamic objects in a region, optionally restricted to one chunk
+and optionally named from `static/TYPENAME.FLX`.
+
+```
+titan u9 nonfixed-entities <file> [-c X,Y] [-t TYPENAME.FLX] [-n LIMIT]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to a `runtime/nonfixed.<region>` file |
+| `-c X,Y`, `--chunk X,Y` | Restrict to one chunk by grid coordinate |
+| `-t FILE`, `--typenames FILE` | Path to `static/TYPENAME.FLX` -- adds a `Name` column |
+| `-n N`, `--limit N` | Maximum rows to print |
+
+**Example**
+```bash
+titan u9 nonfixed-entities runtime/nonfixed.22 -c 1,0 -t static/TYPENAME.FLX -n 20
+```
+
+Positions are world coordinates -- the chunk's base plus the entity's
+stored offset.
+
+---
+
+#### `u9 nonfixed-diff`
+
+Compare two region files entity by entity: which objects changed, which
+were removed, which were added, and which fields differ. Useful for
+inspecting what a patch or a mod did to a region.
+
+```
+titan u9 nonfixed-diff <left> <right> [-t TYPENAME.FLX]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `left` | First `runtime/nonfixed.<region>` file |
+| `right` | Second `runtime/nonfixed.<region>` file |
+| `-t FILE`, `--typenames FILE` | Path to `static/TYPENAME.FLX` -- names each changed object |
+
+**Example**
+```bash
+titan u9 nonfixed-diff originals/nonfixed.22 nonfixed.22 -t static/TYPENAME.FLX
+```
+
+```
+  397 vs 397 entities  |  2 changed, 0 removed, 0 added
+
+Changed:
+  chunk 0,0 @0x003ec0 type 2946 Rune of Spirituality
+      z: 4252 -> 3812
+  chunk 0,0 @0x003ee0 type 5291 Ankh of Spirituality
+      z: 4231 -> 3807
+```
+
+Entities are matched by chunk and record offset, so this reports real
+field-level edits rather than raw byte deltas. Both files must have the
+same chunk grid.
 
 ---
 

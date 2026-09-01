@@ -15,6 +15,7 @@ Canonical imports::
     from titan.u9.mesh_export import export_obj, export_stl
     from titan.u9.types_dat import U9TypesDat
     from titan.u9.model_naming import label_for_model
+    from titan.u9.nonfixed import U9Nonfixed
     from titan.u9.palette import U9Palette
     from titan.u9.preview import render_preview  # optional, needs `pip install pyvista`
     from titan.u9.icon import icon_entry_indices
@@ -37,6 +38,14 @@ from titan.u9.model import (
     U9TriangleCorner,
 )
 from titan.u9.model_naming import label_for_model, names_for_model, slugify
+from titan.u9.nonfixed import (
+    U9Chunk,
+    U9Entity,
+    U9ExtraData,
+    U9Nonfixed,
+    U9NonfixedError,
+    U9Page,
+)
 from titan.u9.palette import U9Palette, U9PaletteError
 from titan.u9.preview import PreviewError, PreviewUnavailableError, render_preview
 from titan.u9.sound import U9SoundRecord, U9SoundRecordError
@@ -75,6 +84,12 @@ __all__ = [
     "label_for_model",
     "names_for_model",
     "slugify",
+    "U9Nonfixed",
+    "U9NonfixedError",
+    "U9Chunk",
+    "U9Page",
+    "U9Entity",
+    "U9ExtraData",
     "U9Palette",
     "U9PaletteError",
     "render_preview",
