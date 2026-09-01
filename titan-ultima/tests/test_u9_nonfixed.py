@@ -1,9 +1,8 @@
 """Tests for titan.u9.nonfixed's runtime/nonfixed.%d decoder.
 
 Fixtures are built to the exact byte layout verified against 166 real
-region files -- see the module docstring and
-``reference/u9/nonfixed/u9_nonfixed_reference.md``. The properties they
-pin down are the ones that verification established:
+region files -- see the module docstring. The properties they pin down
+are the ones that verification established:
 
 * header size is ``36 + 4*width*height``;
 * chunk-table entries and ``next_page`` are biased by one, and ``0``

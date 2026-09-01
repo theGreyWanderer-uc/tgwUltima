@@ -192,12 +192,11 @@ class U9Limb:
     transform for the limb -- a static "bind pose", not necessarily the
     pose the creature is meant to be seen in during real gameplay.
     Real animation (``static/anim.flx``) would apply its own per-frame
-    transform on top of/instead of this one; see
-    ``reference/u9/anim/u9_anim_flx_reference.md`` for exploratory notes
-    on that format (not implemented -- and note that even a full
-    implementation only repositions limbs rigidly, it can't change a
-    triangle's UV mapping, so it's irrelevant to texture-placement
-    oddities on a given sub-mesh, only to pose/motion).
+    transform on top of/instead of this one. That format is not
+    implemented, and note that even a full implementation only
+    repositions limbs rigidly -- it can't change a triangle's UV
+    mapping, so it's irrelevant to texture-placement oddities on a
+    given sub-mesh, only to pose/motion.
     """
 
     limb_id: int

@@ -6,7 +6,7 @@ a list of 6-byte ``opcode/arg0/arg1/arg2`` records, and the list ends at the
 first record whose opcode byte is 0xFF. Records after that terminator are
 slack left behind by a trigger that shrank, not instructions.
 
-See ``reference/u9/triggers/u9_triggers_reference.md``.
+See the module docstring for how each rule was established.
 """
 
 from __future__ import annotations

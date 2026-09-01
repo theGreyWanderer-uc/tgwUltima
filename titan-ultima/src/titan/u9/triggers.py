@@ -21,11 +21,20 @@ terminator, several of those with slack after it. This reader stops at the
 first ``0xFF`` and reports the leftovers as
 :attr:`U9Trigger.slack_records` rather than decoding them.
 
-**Opcode semantics are not decoded.** 90 distinct opcodes appear across the
-27,000-odd body records; this module exposes the record stream and the
-container structure, not their meaning. ``arg0`` is a genuine per-record
-parameter and not a category tag -- opcode ``0x01`` alone uses 32 distinct
-``arg0`` values, and only 13 of the 90 opcodes hold ``arg0`` constant.
+**Opcode semantics are almost entirely undecoded.** 90 distinct opcodes
+appear across the 20,000-odd body records; this module exposes the record
+stream and the container structure, not their meaning. ``arg0`` is a genuine
+per-record parameter and not a category tag -- opcode ``0x01`` alone uses 32
+distinct ``arg0`` values, and only 13 of the 90 opcodes hold ``arg0``
+constant.
+
+The one exception is opcode ``0x31``, which runs an NPC activity record:
+``arg1`` is an activity set index in :mod:`titan.u9.activity` (also the NPC's
+index in ``runtime/NPC.FLX``) and ``arg2``'s **low byte** is a record
+``ordinal`` within that set. That pair names a record which actually exists
+in 500 of the archive's 506 ``0x31`` steps (98.8%); reading ``arg2`` whole
+scores 96.0%, which is what exposed the high byte as a separate field. No
+other opcode with 20 or more steps passes the same test above 51.6%.
 
 Verified against the real ``static/triggers.flx`` (242,476 bytes, 10,000
 entries, 6,712 used, both the v1.19H copy and its pre-patch original):
@@ -92,7 +101,11 @@ class U9TriggersError(Exception):
 
 @dataclass(frozen=True)
 class U9TriggerRecord:
-    """One 6-byte trigger instruction. Opcode meanings are not decoded."""
+    """One 6-byte trigger instruction.
+
+    Only opcode ``0xFF`` (terminator) and ``0x31`` (run an activity record)
+    have known meanings; see the module docstring.
+    """
 
     opcode: int
     arg0: int

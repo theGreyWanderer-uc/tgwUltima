@@ -8,8 +8,8 @@ ending at a 0xFF step``.
 The three properties these pin down are the ones that were easy to get
 wrong -- the name field is fixed width rather than a bare C string, a
 record's extent is local rather than implied by its name, and ``ordinal``
-is a label that need not start at 1 or run without gaps. See
-``reference/u9/activity/u9_activity_reference.md``.
+is a label that need not start at 1 or run without gaps. See the module
+docstring for the evidence behind each.
 """
 
 from __future__ import annotations

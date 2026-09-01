@@ -55,8 +55,7 @@ geometry only.
 **Static bind pose only (minor, cosmetic)**: both exporters use each
 limb's single stored transform (see :class:`titan.u9.model.U9Limb`),
 not a real animated/posed configuration (``static/anim.flx`` isn't
-implemented -- see ``reference/u9/anim/u9_anim_flx_reference.md`` for
-exploratory notes). This can leave a small sub-mesh in an unposed
+implemented). This can leave a small sub-mesh in an unposed
 resting position (e.g. not tucked/folded the way it would be
 mid-animation). Note: an earlier version of this docstring attributed
 a dragon wing's hand/claw sub-mesh showing a patch of the shared

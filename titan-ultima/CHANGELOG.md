@@ -38,7 +38,9 @@ This project uses [Semantic Versioning](https://semver.org/):
   and a list of 9-byte steps ending at a `0xFF` step; all 214 used entries
   parse with their bodies consumed exactly, yielding 617 records and 617
   terminators. Added `titan u9 activity-list`, `activity-show` and
-  `activity-opcodes`. Step opcode meanings are deliberately not decoded.
+  `activity-opcodes`. Of the 12 step opcodes, `0x01` and `0x02` are decoded --
+  they move an NPC between two `highway.dat` navigation points, verified on
+  156 of 156 steps; the rest are deliberately left alone rather than guessed.
   Documented in `reference/u9/activity/u9_activity_reference.md`, including the
   two findings that make the format parse at all: the name field is fixed width
   rather than a bare C string (its padding is uninitialised memory, which is
@@ -50,9 +52,11 @@ This project uses [Semantic Versioning](https://semver.org/):
   `opcode / arg0 / arg1 / arg2` records, ending at the first `0xFF` opcode and
   reporting stale records behind that terminator as slack rather than decoding
   them. Added `titan u9 trigger-list`, `trigger-show` and `trigger-opcodes`.
-  Opcode meanings are deliberately not decoded -- 90 distinct opcodes appear
-  and nothing is guessed; `trigger-opcodes` reports their frequency as a
-  starting point. Documented in
+  Of the 90 opcodes, only `0x31` is decoded -- it runs an NPC activity record,
+  naming an `activity.flx` set in `arg1` and a record ordinal in `arg2`'s low
+  byte, resolving in 500 of 506 steps (98.8%). The other 89 are deliberately
+  left alone rather than guessed; `trigger-opcodes` reports their frequency as
+  a starting point. Documented in
   `reference/u9/triggers/u9_triggers_reference.md`, including why the opcode is
   the low byte rather than the leading `u16` and why the terminator must be
   matched on that byte.

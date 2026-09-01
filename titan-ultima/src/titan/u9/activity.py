@@ -59,12 +59,20 @@ array of 352 fixed 316-byte NPC records. All 215 used activity slots have a
 named NPC at the same index, and the names match the characters -- NPC 1
 ``LordBritish`` has ``After Yew`` / ``To Abyss`` / ``Endgame``, NPC 9
 ``Raven`` has ``Goto Despise`` / ``Go To Wrong``, NPC 39 ``Irene`` has
-``Shopkeep``. See ``reference/u9/activity/`` for the full evidence.
+``Shopkeep``.
 
-**Step opcode semantics are not decoded.** 12 distinct opcodes appear
+**Step opcode semantics are mostly undecoded.** 12 distinct opcodes appear
 across 1,049 non-terminator steps, dominated by ``0x04``, ``0x0A``, ``0x03``
-and ``0x01``.
-This module exposes the step stream, not its meaning.
+and ``0x01``. This module exposes the step stream, not its meaning.
+
+The exceptions are ``0x01`` and ``0x02``, which move an NPC between two
+navigation points: the operand is a source ``u16`` and a destination ``u16``
+naming points in :mod:`titan.u9.highway`, followed by four bytes that are
+zero throughout. Both halves are declared points in all 156 such steps
+(100%), against 2 of 385 for ``0x04`` and none for the rest. NPC 166
+``Dermot`` is the clearest case: his ``Sequence 2`` (51823 -> 51554) and
+``Sequence 4`` (51554 -> 51823) are exact mirrors, the cemetery-to-pub round
+trip his patch notes describe.
 
 Example::
 
@@ -106,7 +114,11 @@ class U9ActivityError(Exception):
 
 @dataclass(frozen=True)
 class U9ActivityStep:
-    """One 9-byte step. Opcode meanings are not decoded."""
+    """One 9-byte step.
+
+    Only opcodes ``0xFF`` (terminator) and ``0x01``/``0x02`` (move between
+    highway points) have known meanings; see the module docstring.
+    """
 
     opcode: int
     operands: bytes

@@ -704,7 +704,8 @@ def cmd_nonfixed_info(args: SimpleNamespace) -> int:
         missing = declared - entities
         print(
             f"  NOTE: {len(incomplete)} chunk(s) undershot by {missing} entit"
-            f"{'y' if missing == 1 else 'ies'} -- see reference/u9/nonfixed/."
+            f"{'y' if missing == 1 else 'ies'}. Enumeration can miss entities; "
+            "it never invents them."
         )
     return 0
 
@@ -1041,7 +1042,7 @@ def cmd_trigger_show(args: SimpleNamespace) -> int:
         print("  " + "-" * 38)
         for index, r in enumerate(trigger.records):
             print(f"  {index:>3}  {r.opcode:>#6x}  {r.arg0:>5}  {r.arg1:>6}  {r.arg2:>6}")
-    print("  Opcode meanings are not decoded; see reference/u9/triggers/.")
+    print("  Opcode 0x31 runs an activity record; the other 89 are not decoded.")
     return 0
 
 
@@ -1147,7 +1148,7 @@ def cmd_activity_show(args: SimpleNamespace) -> int:
             print(f"       {index:>2}  opcode {step.opcode:#04x}  {step.operands.hex(' ')}")
         if not record.steps:
             print("       (no steps)")
-    print("  Step opcode meanings are not decoded; see reference/u9/activity/.")
+    print("  Opcodes 0x01/0x02 move between highway points; the other ten are not decoded.")
     return 0
 
 

@@ -3,8 +3,7 @@
 Fixtures match the byte layout verified against the real 12,428-byte
 ``static/highway.dat`` -- 817 points, 149 routes, a declared route block of
 2,612 bytes consumed exactly, and every path node resolving to a declared
-point. See the module docstring and
-``reference/u9/highway/u9_highway_reference.md``.
+point. See the module docstring.
 """
 
 from __future__ import annotations

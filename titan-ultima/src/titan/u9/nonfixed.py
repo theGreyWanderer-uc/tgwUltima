@@ -80,8 +80,7 @@ and the page walk down simultaneously.
 exactly for 95.4% of chunks. Every residual is an *undershoot* -- fewer
 entities than declared, never more, never out of bounds -- so a caller may
 see an incomplete chunk but never an invented entity.
-:attr:`U9Chunk.is_complete` reports it per chunk. See
-``reference/u9/nonfixed/u9_nonfixed_reference.md`` for the full analysis.
+:attr:`U9Chunk.is_complete` reports it per chunk.
 
 Triggers are counted but not decoded; their record layout is unknown.
 
