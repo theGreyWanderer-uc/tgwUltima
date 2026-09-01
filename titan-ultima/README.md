@@ -274,6 +274,14 @@ titan u7 map-render STATIC/ --full -o u7_world.png
 titan u7 map-sample STATIC/ --scale 4 --grid -o minimap.png
 ```
 
+`u7 map-render` also accepts an Exult mod's `patch/` directory as its graphics
+and map source. If that directory's `SHAPES.VGA` is a sparse override archive,
+Titan fills its empty records in memory from the base game selected by
+`--game bg|si` and configured in `titan.toml`. If those paths are not
+configured, Titan looks for the nearest base `STATIC/` above the mod's
+`patch/` directory. Complete base-game archives continue through the normal
+renderer path unchanged.
+
 U7 map rendering combines each shape's TFA footprint with its real
 `SHAPES.VGA` frame count. Frame bit `0x20` swaps X/Y dimensions only for
 shapes with 32 or fewer real frames, where frames 32+ are generated

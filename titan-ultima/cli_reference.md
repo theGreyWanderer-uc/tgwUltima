@@ -2225,13 +2225,13 @@ titan u7 map-render [static] [--game bg|si]
 
 | Argument | Description |
 |----------|-------------|
-| `static` | Optional path to `STATIC/` containing `SHAPES.VGA`, `TFA.DAT`, and related rendering assets. It also supplies map data unless `--map-root` is used. If omitted, resolved from `titan.toml` (`[u7bg.paths]` / `[u7si.paths]`) |
-| `--game bg|si` | Select which config section to use when resolving defaults (`bg` = `[u7bg.*]`, `si` = `[u7si.*]`) |
+| `static` | Optional path to a base `STATIC/` or Exult mod `patch/` containing `SHAPES.VGA`, `TFA.DAT`, and related rendering assets. It also supplies map data unless `--map-root` is used. If omitted, resolved from `titan.toml` (`[u7bg.paths]` / `[u7si.paths]`) |
+| `--game bg|si` | Select which config section supplies defaults and the base graphics for sparse mod patches (`bg` = `[u7bg.*]`, `si` = `[u7si.*]`) |
 | `--map-root DIR` | Optional separate map-data root containing shared `U7CHUNKS` and root `U7MAP`/`U7IFIX*` or secondary `mapNN/` data. Rendering assets still come from `static`. When omitted, map data continues to come from `static` |
 | `--superchunk N`, `--sc N` | Superchunk number 0–143 (hex ok, e.g. `0x55`). Renders a 16×16 chunk region |
 | `--cx0`, `--cy0`, `--cx1`, `--cy1` | Chunk-level bounding box (0–191). Alternative to `--superchunk` |
 | `--full` | Render the entire world map (shorthand for `--cx0 0 --cy0 0 --cx1 191 --cy1 191`) |
-| `-p FILE`, `--palette FILE` | Path to `PALETTES.FLX` (default: `STATIC/PALETTES.FLX`) |
+| `-p FILE`, `--palette FILE` | Path to `PALETTES.FLX`. Default resolution order: configured game palette, inferred mod base `STATIC/PALETTES.FLX`, then selected `static/PALETTES.FLX` |
 | `-o FILE`, `--output FILE` | Output PNG path (default: auto-named) |
 | `--view VIEW` | Projection view: `classic` (45° lift, default), `flat` (no lift), `steep` (exaggerated lift) |
 | `--gamedat DIR` | Path to `gamedat/` directory to include IREG dynamic objects |
@@ -2265,6 +2265,15 @@ titan u7 map-render [static] [--game bg|si]
 > and fixes extended mod shapes such as SI door shape 376. This rule affects
 > footprint/depth interpretation only; it does not change door state or the
 > separate `frame % 4 < 2` open-door classification.
+
+> **Sparse mod graphics:** Exult mod `patch/SHAPES.VGA` files may contain only
+> changed records, leaving the remaining Flex slots empty. When `static` points
+> to such a patch, Titan overlays its populated records on the base archive
+> configured for `--game bg|si`, entirely in memory. If the game is not
+> configured, Titan looks upward from the patch for the nearest base
+> `STATIC/` directory. A complete archive, a render using configured base
+> defaults, or a renderer without a separate base directory keeps the existing
+> direct-load behavior. An explicit `--palette` is never replaced.
 
 **Examples**
 ```bash
@@ -2321,8 +2330,10 @@ titan u7 map-render STATIC/ --full \
    --zone-profile bg_zones --all-zones \
    -o u7_bg_guard_regions.png
 
-# Render a mod's alternate map — pass the patch dir as STATIC, select map 1
-titan u7 map-render "mods/MyMod/patch" --map-num 1 --sc 0x08 -o mod_map1_sc08.png
+# Render a BG mod's alternate map. Sparse patch SHAPES.VGA records inherit
+# from the configured BG base archive.
+titan u7 map-render "mods/MyMod/patch" --game bg \
+  --map-num 1 --sc 0x08 -o mod_map1_sc08.png
 
 # Render scratch map04 while reusing Serpent Isle graphics and type metadata
 titan u7 map-render "C:/Ultima/ultima7si/SERPENT/STATIC" \

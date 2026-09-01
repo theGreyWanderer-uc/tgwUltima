@@ -10,6 +10,20 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ---
 
+## [0.7.6]
+
+### Added
+
+- **Sparse U7 mod-patch rendering:** `titan u7 map-render` now detects sparse
+  Exult mod `patch/SHAPES.VGA` archives and fills their empty records in memory
+  from the selected BG or SI base archive. Base assets are resolved from the
+  `--game` configuration or the nearest game-install `STATIC` directory, and
+  the base palette is used when the patch does not provide one. Populated
+  patch records remain authoritative, no archive is rewritten, and complete
+  base-game archives retain the existing direct rendering behavior.
+
+---
+
 ## [0.7.5]
 
 ### Added
