@@ -48,6 +48,10 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Fixed
 
+- **SHAPES.VGA flat-record protection:** `titan u7 flex-add-shape` now begins
+  automatic allocation at shape 150 when updating `SHAPES.VGA`, preserving
+  records 0 through 149 for the format's required 8x8 flat textures. Explicit
+  `--index` placement remains available.
 - **Exult-compiled U7 Usecode parsing:** `usecode-disasm` and
   `usecode-scan-intrinsic` now skip the optional compiled symbol table,
   including nested class scopes and shape-function metadata. Corrected the
