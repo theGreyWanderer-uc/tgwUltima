@@ -32,6 +32,23 @@ This project uses [Semantic Versioning](https://semver.org/):
   never an invented entity, and `U9Chunk.is_complete` reports it per chunk.
   Trigger records are counted but not decoded.
 
+- **U9 NPC pool handle decoded, and NPC CSV export:** the `u32` at NPC record
+  offset `0x00` is a **byte offset into the region's live object pool**, not the
+  unknown identifier it was first documented as. Disassembly of `u9.exe` puts
+  the first read at `0x004CD6E0`, resolving `*(void **)(pool + 0x34) + handle`;
+  pool elements are 32 bytes, which is why every value is a multiple of 32.
+  `U9Npc.unknown_id` is therefore renamed **`pool_handle`**, read as a `u32`
+  rather than a `u16`, and joined by `pool_index` and `is_placed`. Added
+  `titan u9 npc-csv`, which exports every record as CSV — decoded fields as
+  named columns plus the full 316-byte record as hex, so nothing is lost.
+  Also decodes the `u32` at `0x48` as `flags` — a bitfield the engine tests
+  (`& 0x800` at four sites), 15 distinct values over 250 of 352 records, with
+  bit 27 implying a non-zero combat value on all 64 records that carry it. No
+  bit is given a name; the field is exposed raw.
+  Corrected in `reference/u9/nonfixed/`: the entity `type_index` field is a
+  **global object id** whose sub-512 range is the NPC-record space, not an NPC
+  index as such.
+
 - **U9 NPC table:** added `titan.u9.npc`, a reader for `runtime/NPC.FLX` — the
   only U9 FLX archive whose single used entry is a flat record array, 352 NPCs
   of 316 bytes each, indexed so that the record index is also the activity set

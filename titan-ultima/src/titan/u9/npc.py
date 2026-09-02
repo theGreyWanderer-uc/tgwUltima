@@ -13,12 +13,11 @@ in ``savegame/processes.dat`` and again inside ``savegame/u9game1.sav``.
 
 ``runtime/NPC.FLX`` is *mostly* static but the engine does write back to it.
 Two installs of the same build diverged by 29 bytes across 5 NPC records
-after play -- position on all five, and ``unknown_id`` on two of them.
+after play -- position on all five, and ``pool_handle`` on two of them.
 
 Each record is 316 bytes (``0x13C``)::
 
-    0x00  unknown_id      u16   -- unique per NPC, multiple of 32, 0 = unplaced
-    0x02  (zero)          u16   -- zero in every record of every file seen
+    0x00  pool_handle     u32   -- byte offset into the region's object pool
     0x04  name            char[32], NUL-terminated
     0x24  gender          u8    -- 0 male, 1 female
     0x34  health_current  u16
@@ -28,6 +27,7 @@ Each record is 316 bytes (``0x13C``)::
     0x3C  mana_max        u16
     0x3E  mana_max2       u16   -- always equal to mana_max
     0x44  class_id        u16   -- 0..62, 0xFFFF = none; see below
+    0x48  flags           u32   -- bit meanings partly known; see below
     0x54  combat_value    u16   -- 0 on non-combatants
     0x58  region          u32   -- runtime/nonfixed.<region>
     0x5C  x               u32   -- absolute world X
@@ -67,21 +67,86 @@ gargoyle in the game (``Valkadesh``, ``Winged Gargoyle``, ``Vassgralem``,
 ...), 36 is pirates and bandits, 62 is guards, 39 mages, 34 townsfolk -- so
 faction or behaviour class is the natural reading.
 
+``flags`` at ``0x48`` is a bitfield the engine reads -- ``0x4c7296``,
+``0x4c77ac``, ``0x4cc08c`` and ``0x4cdbb7`` all test ``& 0x800``. Only 15
+distinct values occur, on 250 of 352 records, and three bits carry measurable
+signal:
+
+* **bit 11** (``0x800``), the one the engine tests, is set on 109 records and
+  collects hostile creatures -- Generic Pirate, Generic Bandit, Winged
+  Gargoyle, Goblin Commander, Small Rat, Bloated Demon. Friendly NPCs with a
+  ``combat_value`` (Avatar, LordBritish, Geoffrey, Valkadesh) do *not* have
+  it, so it is not "has combat stats".
+* **bit 27** (``0x08000000``) is set on 64 records, and every one of them has
+  ``combat_value > 0``. The implication runs one way: 69 records carry a
+  combat value without this bit.
+* **bit 0** (``0x1``) is set on 136 records and runs the other way -- 14% of
+  them have a combat value, against 53% of the rest.
+
+No bit is given a name here, because a correlation is not a meaning.
+
 Comparing the shipped table against a real savegame identifies which fields
 the engine writes back. Position, region and a handful of undecoded fields
 (``0x68``, ``0xEC``, ``0xF0``, ``0x110``) change; name, stats and
-``class_id`` do not. ``unknown_id`` changes rarely -- one NPC across twelve
-savegame files -- but it does change, and it is reallocated rather than
-edited: both observed new values were slots free in the shipped table.
+``class_id`` do not. ``pool_handle`` changes rarely -- one NPC across twelve
+savegame files -- because it names the NPC's slot in the live object pool
+(see below), and that slot only moves when the NPC is re-instantiated.
 
 In one save three NPCs had moved, and all three were standing exactly on a
 :mod:`titan.u9.highway` navigation point -- direct confirmation that the
 highway graph drives NPC movement.
 
-In a live region the entity that represents an NPC carries the **NPC's
-record index in its** ``type_index`` **field**, not a ``TYPES.DAT`` type.
-Matching that way against a savegame's ``nonfixed.9`` finds 159 of 169
-NPCs, 157 of them at exactly the position the NPC record gives.
+In a live region, the entity that represents an NPC can be found by its
+``type_index`` (:mod:`titan.u9.nonfixed`, entity ``+0x0A``): matching that
+field against the NPC's record index finds 159 of 169 NPCs in a savegame's
+``nonfixed.9``, 157 at exactly the position the NPC record gives. That field
+is a **global object id** rather than an NPC index as such -- values below
+512 are the NPC-record range, which is why the match works.
+
+``pool_handle`` at ``0x00`` is **a byte offset into the region's object
+pool** -- the NPC's live world instance. Confirmed by disassembly of
+``u9.exe``: the first read is at ``0x004cd6e0``, which computes
+
+    object = *(void **)(pool + 0x34) + record->pool_handle
+
+with ``pool = *(void **)(*(void **)0x0091f0e0 + 0xd0)``. The pool's
+allocator at ``0x4c63e0`` fixes its element size at 32 bytes, which is why
+every handle is a multiple of 32; :attr:`U9Npc.pool_index` divides it out.
+Those 32 bytes are the world object body, not a descriptor -- every field is
+inside the record and ``+0x1c`` closes it exactly. The handle space is
+shared rather than NPC-specific: world objects decode the same way at
+``+0x0c`` and ``+0x1c``, and both readers are virtual methods on the pool's
+own vtable.
+
+The link is bidirectional: the record's handle gives the object, and the
+object's ``+0x0a`` -- a global object id whose sub-512 range is the NPC
+records -- gives the record back.
+
+The field is **tri-state**, which is what lets the allocator use zero as its
+free test:
+
+===========  ====================================================
+value        meaning
+===========  ====================================================
+0            slot free, or the NPC has no world placement
+1            slot allocated, no pool object yet
+other        a pool handle, always a multiple of 32
+===========  ====================================================
+
+The runtime array holds **512** records, not 352. The loader ``malloc``s
+``0x27800`` bytes (316 x 512 exactly), zeroes them, then reads ``npc.flx``
+over the top; a savegame moves ``0x1b280`` (316 x 352) as one block. So
+**slots 0-351 are the file's NPCs and slots 352-511 are a runtime spawn
+pool**, and the zeroing is why an unwritten slot reads 0.
+
+Spawning clones a record. The allocator at ``0x4f2a99`` gates on
+``cmp edi, 0x160`` -- only file-defined NPCs may be cloned -- scans slots 511
+down to 352 for a zero field 0, ``rep movsd`` 79 dwords (the whole 316-byte
+record), fixes up ``+0x5c`` and ``+0x58``, then stamps the new slot with 1.
+Many of the shipped table's zero-handle records are therefore **spawn
+templates** rather than absent NPCs: ``Small Fish`` (slot 37), ``Dragonfly``
+(297), ``Dog`` (304) and ``Yellowbird`` (328) all sit unplaced in region 0
+and appear cloned into high slots in a savegame.
 
 Example::
 
@@ -106,12 +171,14 @@ RECORD_SIZE = 0x13C  # 316
 NAME_OFFSET = 0x04
 NAME_FIELD_SIZE = 32
 NO_CLASS = 0xFFFF
+POOL_ELEMENT_SIZE = 32
 
-_UNKNOWN_ID = 0x00
+_POOL_HANDLE = 0x00
 _GENDER = 0x24
 _HEALTH = 0x34
 _MANA = 0x3A
 _CLASS_ID = 0x44
+_FLAGS = 0x48
 _COMBAT_VALUE = 0x54
 _REGION = 0x58
 _POSITION = 0x5C
@@ -134,7 +201,7 @@ class U9Npc:
     """One 316-byte NPC record."""
 
     index: int
-    unknown_id: int
+    pool_handle: int
     name: str
     gender: int
     health_current: int
@@ -144,6 +211,7 @@ class U9Npc:
     mana_max: int
     mana_max2: int
     class_id: int
+    flags: int
     combat_value: int
     region: int
     x: int
@@ -151,6 +219,31 @@ class U9Npc:
     z: int
     scale: tuple[int, int, int]
     raw: bytes
+
+    @property
+    def pool_index(self) -> int:
+        """``pool_handle`` as an element index -- the pool's elements are 32 bytes."""
+        return self.pool_handle // POOL_ELEMENT_SIZE
+
+    @property
+    def is_slot_used(self) -> bool:
+        """True when this record slot is occupied.
+
+        ``pool_handle == 0`` is the allocator's free test. In the shipped
+        table it means the NPC has no world placement -- it pairs exactly
+        with ``region == 0`` and position ``(0, 0, 0)`` -- and some of those
+        records are spawn templates rather than absent NPCs.
+        """
+        return self.pool_handle != 0
+
+    @property
+    def has_pool_object(self) -> bool:
+        """True when the handle actually addresses a pool object.
+
+        ``pool_handle == 1`` is the allocator's "slot taken, no object yet"
+        marker, so it is occupied but not dereferenceable.
+        """
+        return self.pool_handle > 1
 
     @property
     def is_female(self) -> bool:
@@ -205,7 +298,7 @@ def _parse(data: bytes, base: int, index: int) -> U9Npc:
     mc, mm, mm2 = struct.unpack_from("<3H", r, _MANA)
     return U9Npc(
         index=index,
-        unknown_id=struct.unpack_from("<H", r, _UNKNOWN_ID)[0],
+        pool_handle=struct.unpack_from("<I", r, _POOL_HANDLE)[0],
         name=r[NAME_OFFSET : NAME_OFFSET + NAME_FIELD_SIZE]
         .split(b"\x00", 1)[0]
         .decode("ascii", errors="replace"),
@@ -217,6 +310,7 @@ def _parse(data: bytes, base: int, index: int) -> U9Npc:
         mana_max=mm,
         mana_max2=mm2,
         class_id=struct.unpack_from("<H", r, _CLASS_ID)[0],
+        flags=struct.unpack_from("<I", r, _FLAGS)[0],
         combat_value=struct.unpack_from("<H", r, _COMBAT_VALUE)[0],
         region=struct.unpack_from("<I", r, _REGION)[0],
         x=struct.unpack_from("<I", r, _POSITION)[0],

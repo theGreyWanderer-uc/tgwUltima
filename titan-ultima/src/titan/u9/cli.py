@@ -8,7 +8,9 @@ from __future__ import annotations
 
 __all__ = ["u9_app"]
 
+import csv
 import os
+import struct
 import sys
 from collections import Counter
 from pathlib import Path
@@ -1246,9 +1248,16 @@ def cmd_npc_show(args: SimpleNamespace) -> int:
     print(f"  Mana        : {n.mana_current} / {n.mana_max}")
     print(f"  Class       : {n.class_id if n.has_class else 'none (0xFFFF)'}")
     print(f"  Combat value: {n.combat_value}")
+    print(f"  Flags       : {n.flags:#010x}")
     print(f"  Region      : {n.region}")
     print(f"  Position    : {n.x}, {n.y}, {n.z}")
     print(f"  Scale       : {n.scale[0]}%, {n.scale[1]}%, {n.scale[2]}%")
+    if n.has_pool_object:
+        print(f"  Pool handle : {n.pool_handle} (element {n.pool_index} of the region object pool)")
+    elif n.is_slot_used:
+        print("  Pool handle : 1 -- slot allocated, no pool object yet")
+    else:
+        print("  Pool handle : 0 -- slot free / no world placement")
     print(f"  Record index {n.index} is also this NPC's activity set index.")
     print("  Undecoded bytes are available as U9Npc.raw.")
     return 0
@@ -1269,6 +1278,61 @@ def cmd_npc_classes(args: SimpleNamespace) -> int:
         if len(members) > args.members:
             preview += ", ..."
         print(f"  {label:>13}  x{count:<4} {preview}")
+    return 0
+
+
+def cmd_npc_csv(args: SimpleNamespace) -> int:
+    """Export every NPC record to CSV: decoded fields, then the whole record as hex."""
+    npcs = _load_npcs(args.file, args.save)
+    if npcs is None:
+        return 1
+
+    rows = list(npcs)
+    if not args.all:
+        rows = [n for n in rows if n.name]
+
+    out_path = args.output or f"{Path(args.file).stem}_npcs.csv"
+    os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+
+    header = [
+        "index", "name", "gender", "sex",
+        "health_current", "health_max", "health_max2",
+        "mana_current", "mana_max", "mana_max2",
+        "class_id", "flags", "combat_value",
+        "region", "x", "y", "z",
+        "scale_x", "scale_y", "scale_z",
+        "pool_handle", "pool_index",
+        # Undecoded but genuinely varying; kept as named columns so they can be
+        # correlated without re-slicing the raw bytes.
+        "unk_0x4e", "unk_0x56", "unk_0xb0", "unk_0xc4", "unk_0xc8",
+        "raw_hex",
+    ]
+    with open(out_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(header)
+        for n in rows:
+            writer.writerow([
+                n.index, n.name, n.gender, "female" if n.is_female else "male",
+                n.health_current, n.health_max, n.health_max2,
+                n.mana_current, n.mana_max, n.mana_max2,
+                n.class_id if n.has_class else "", f"{n.flags:#010x}", n.combat_value,
+                n.region, n.x, n.y, n.z,
+                n.scale[0], n.scale[1], n.scale[2],
+                n.pool_handle, n.pool_index,
+                struct.unpack_from("<H", n.raw, 0x4E)[0],
+                struct.unpack_from("<H", n.raw, 0x56)[0],
+                struct.unpack_from("<I", n.raw, 0xB0)[0],
+                struct.unpack_from("<H", n.raw, 0xC4)[0],
+                n.raw[0xC8],
+                n.raw.hex(),
+            ])
+
+    print(f"{args.file} -- wrote {len(rows)} NPC row(s) -> {out_path}")
+    print(f"  {len(header)} columns; raw_hex carries the full {len(rows[0].raw) if rows else 0}-byte record")
+    if not args.all:
+        blank = len(npcs) - len(rows)
+        if blank:
+            print(f"  {blank} unnamed/blank slot(s) omitted; pass --all to include them")
     return 0
 
 
@@ -1771,3 +1835,18 @@ def npc_diff_cmd(
 ) -> None:
     """Compare the shipped U9 NPC table against a savegame's live copy."""
     raise SystemExit(cmd_npc_diff(SimpleNamespace(file=file, save_file=save_file, limit=limit)))
+
+
+@u9_app.command("npc-csv")
+def npc_csv_cmd(
+    file: Annotated[str, typer.Argument(help="Path to runtime/NPC.FLX, or a savegame file with --save")],
+    output: Annotated[
+        Optional[str], typer.Option("-o", "--output", help="Output CSV path (default: <file>_npcs.csv)"),
+    ] = None,
+    save: Annotated[
+        bool, typer.Option("-s", "--save", help="Read the live array from a savegame processes.dat / .sav"),
+    ] = False,
+    all: Annotated[bool, typer.Option("-a", "--all", help="Include unnamed/blank slots")] = False,
+) -> None:
+    """Export every U9 NPC record to CSV, decoded fields plus the raw record."""
+    raise SystemExit(cmd_npc_csv(SimpleNamespace(file=file, output=output, save=save, all=all)))

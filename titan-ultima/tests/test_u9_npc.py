@@ -23,24 +23,26 @@ CODEX_RECORD_SIZE = 323
 def _record(
     name: str = "",
     *,
-    unknown_id: int = 0,
+    pool_handle: int = 0,
     gender: int = 0,
     health: tuple[int, int] = (0, 0),
     mana: tuple[int, int] = (0, 0),
     class_id: int = NO_CLASS,
+    flags: int = 0,
     combat_value: int = 0,
     region: int = 0,
     pos: tuple[int, int, int] = (0, 0, 0),
     scale: tuple[int, int, int] = (100, 100, 100),
 ) -> bytes:
     r = bytearray(RECORD_SIZE)
-    struct.pack_into("<I", r, 0x00, unknown_id)
+    struct.pack_into("<I", r, 0x00, pool_handle)
     encoded = name.encode("ascii")[:31]
     r[0x04 : 0x04 + len(encoded)] = encoded
     r[0x24] = gender
     struct.pack_into("<3H", r, 0x34, health[0], health[1], health[1])
     struct.pack_into("<3H", r, 0x3A, mana[0], mana[1], mana[1])
     struct.pack_into("<H", r, 0x44, class_id)
+    struct.pack_into("<I", r, 0x48, flags)
     struct.pack_into("<H", r, 0x54, combat_value)
     struct.pack_into("<I", r, 0x58, region)
     struct.pack_into("<II", r, 0x5C, pos[0], pos[1])
@@ -59,19 +61,21 @@ class NpcRecordTests(unittest.TestCase):
 
     def test_decodes_every_documented_field(self) -> None:
         block = _record(
-            "Dermot", unknown_id=1024, gender=0, health=(200, 255), mana=(1, 2),
-            class_id=34, combat_value=400, region=9, pos=(60544, 58819, 2631),
+            "Dermot", pool_handle=1024, gender=0, health=(200, 255), mana=(1, 2),
+            class_id=34, flags=0x08000800, combat_value=400, region=9,
+            pos=(60544, 58819, 2631),
             scale=(80, 80, 80),
         )
         n = U9Npcs(block).npc(0)
         self.assertEqual(n.name, "Dermot")
-        self.assertEqual(n.unknown_id, 1024)
+        self.assertEqual(n.pool_handle, 1024)
         self.assertFalse(n.is_female)
         self.assertEqual((n.health_current, n.health_max), (200, 255))
         self.assertEqual((n.mana_current, n.mana_max), (1, 2))
         self.assertEqual(n.health_max, n.health_max2)
         self.assertEqual(n.mana_max, n.mana_max2)
         self.assertEqual(n.class_id, 34)
+        self.assertEqual(n.flags, 0x08000800)
         self.assertTrue(n.has_class)
         self.assertEqual(n.combat_value, 400)
         self.assertEqual(n.region, 9)
