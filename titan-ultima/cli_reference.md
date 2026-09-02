@@ -5022,6 +5022,94 @@ show a bare type index.
 
 ---
 
+### Book and sign commands
+
+`static/BOOKS-EN.FLX` holds every readable object in U9 that is not spoken
+dialogue — books, scrolls, signs, plaques, banners and quest note strings.
+460 of its 4,096 slots are used.
+
+Each entry is a length-prefixed title and body. The text is **single-byte**,
+not the UTF-16LE used by `text.flx`. Bodies carry a backtick markup: `` `f1 ``
+to `` `f5 `` select a font, `` `p `` breaks a page. See
+`reference/u9/books/u9_books_reference.md`.
+
+---
+
+#### `u9 books-list`
+
+List the books, scrolls and signs in the archive.
+
+```
+titan u9 books-list <file> [-s] [-n LIMIT]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/BOOKS-EN.FLX` |
+| `-s`, `--by-size` | Order by body size, largest first |
+| `-n N`, `--limit N` | Maximum rows to print |
+
+Entry 161 is marked `[embedded document]`: the shipped archive has a word
+processor file there in place of its text.
+
+---
+
+#### `u9 books-show`
+
+Print one book's text, by id or by name. Multi-page books are printed with
+page markers.
+
+```
+titan u9 books-show <file> [-i ID] [-b NAME]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/BOOKS-EN.FLX` |
+| `-i N`, `--id N` | Book id as shown by `books-list` (default 1) |
+| `-b NAME`, `--name NAME` | Look the book up by name instead |
+
+**Example**
+```bash
+titan u9 books-show static/BOOKS-EN.FLX -b "History of Britannia"
+```
+
+---
+
+#### `u9 books-search`
+
+Find books whose text or title contains a substring, showing the matching
+passage in context.
+
+```
+titan u9 books-search <file> <needle> [-c] [-n LIMIT]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/BOOKS-EN.FLX` |
+| `needle` | Substring to look for |
+| `-c`, `--case-sensitive` | Match case exactly |
+| `-n N`, `--limit N` | Maximum matches to print |
+
+**Example**
+```bash
+titan u9 books-search static/BOOKS-EN.FLX "Guardian"
+```
+
+---
+
+#### `u9 books-export`
+
+Export the archive to CSV: id, index, name, byte count, page count, fonts used
+and the markup-stripped text.
+
+```
+titan u9 books-export <file> [-o OUT.csv]
+```
+
+---
+
 ### Terrain commands
 
 `static/terrain.<region>` is the ground surface under a U9 region — a height

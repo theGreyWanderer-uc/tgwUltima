@@ -48,6 +48,20 @@ This project uses [Semantic Versioning](https://semver.org/):
   order — only 1 of 2,815 chunks lands where that predicts, so grid position has
   to come from the page's own base.
 
+- **U9 books and signs:** added `titan.u9.books`, a reader for
+  `static/BOOKS-EN.FLX` — every readable object in the game that is not spoken
+  dialogue: books, scrolls, signs, plaques, banners and quest note strings.
+  Decodes the `u32`-length title and body of all 460 used entries, strips the
+  backtick markup and splits pages. Added `titan u9 books-list`, `books-show`,
+  `books-search` and `books-export`. Documented in
+  `reference/u9/books/u9_books_reference.md`, including two things a reader has
+  to get right: the archive is **single-byte** text, not the UTF-16LE that
+  `text.flx` and `misctext.flx` use — decoded as UTF-16 the prose comes out as
+  CJK rather than failing loudly — and entry 160, `161: DestardSecret`, is a
+  19,456-byte **Microsoft Word document** that was imported into the archive in
+  place of its prose and shipped that way, so it is flagged by OLE2 magic number
+  rather than rendered as text.
+
 - **U9 terrain height maps:** added `titan.u9.terrain`, a reader for
   `static/terrain.<region>` — the ground surface under the world, completing the
   region trio with `static/fixed` and `runtime/nonfixed`. Decodes the header,

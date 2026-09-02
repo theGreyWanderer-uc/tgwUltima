@@ -21,6 +21,7 @@ import typer
 from PIL import Image
 
 from titan.u9.activity import U9Activities, U9ActivityError
+from titan.u9.books import U9Books, U9BooksError
 from titan.u9.flx_archive import U9FlxArchive, U9FlxArchiveError
 from titan.u9.fixed import U9Fixed, U9FixedError
 from titan.u9.highway import U9Highway, U9HighwayError
@@ -1935,6 +1936,140 @@ def cmd_terrain_export(args: SimpleNamespace) -> int:
 
 
 # ============================================================================
+# CLI COMMANDS -- BOOKS AND SIGNS (static/BOOKS-EN.FLX)
+# ============================================================================
+
+def _load_books(filepath: str) -> Optional[U9Books]:
+    """Open a BOOKS-*.FLX archive, reporting the reason on failure."""
+    if not os.path.isfile(filepath):
+        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
+        return None
+    try:
+        return U9Books.from_file(filepath)
+    except U9BooksError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return None
+
+
+def cmd_books_list(args: SimpleNamespace) -> int:
+    """List the books, scrolls and signs in the archive."""
+    books = _load_books(args.file)
+    if books is None:
+        return 1
+    try:
+        rows = books.books()
+    except U9BooksError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
+    if args.by_size:
+        rows.sort(key=lambda b: -len(b))
+    shown = rows[: args.limit] if args.limit else rows
+
+    print(f"{args.file} -- {len(rows)} entr{'y' if len(rows) == 1 else 'ies'} "
+          f"of {books.num_entries} slots")
+    print(f"{'Id':>5}  {'Bytes':>7}  {'Pages':>5}  Name")
+    print("-" * 60)
+    for book in shown:
+        note = "  [embedded document]" if book.is_embedded_document else ""
+        print(f"{book.book_id:>5}  {len(book):>7}  {len(book.pages):>5}  {book.name}{note}")
+    if args.limit and len(rows) > args.limit:
+        print(f"... ({len(rows) - args.limit} more; raise --limit to see more)")
+    return 0
+
+
+def cmd_books_show(args: SimpleNamespace) -> int:
+    """Print one book's text, by id or by name."""
+    books = _load_books(args.file)
+    if books is None:
+        return 1
+    try:
+        if args.name:
+            book = books.by_name(args.name)
+            if book is None:
+                print(f"No book named {args.name!r}. Try 'titan u9 books-list'.")
+                return 1
+        else:
+            book = books.book(args.id - 1)
+            if book is None:
+                print(f"Book id {args.id} is an unused slot.")
+                return 1
+    except U9BooksError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
+    print(f"{book.book_id}: {book.name}  ({len(book)} bytes)")
+    if book.is_embedded_document:
+        print("  This entry is an embedded document, not game text -- the shipped")
+        print("  archive has a word processor file here in place of the prose.")
+        return 0
+    print("-" * 60)
+    pages = book.pages
+    for number, page in enumerate(pages, start=1):
+        if len(pages) > 1:
+            print(f"[page {number}/{len(pages)}]")
+        print(page.replace("\r\n", "\n").rstrip())
+    return 0
+
+
+def cmd_books_search(args: SimpleNamespace) -> int:
+    """Find books whose text or title contains a substring."""
+    books = _load_books(args.file)
+    if books is None:
+        return 1
+    try:
+        hits = books.search(args.needle, ignore_case=not args.case_sensitive)
+    except U9BooksError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
+    shown = hits[: args.limit] if args.limit else hits
+    print(f"{args.file} -- {len(hits)} match(es) for {args.needle!r}")
+    needle = args.needle if args.case_sensitive else args.needle.lower()
+    for book in shown:
+        text = book.text.replace("\r\n", " ")
+        hay = text if args.case_sensitive else text.lower()
+        at = hay.find(needle)
+        if at < 0:
+            snippet = book.name
+        else:
+            start = max(0, at - 30)
+            snippet = ("..." if start else "") + text[start : at + len(needle) + 40].strip()
+        print(f"{book.book_id:>5}  {book.name[:28]:<28}  {snippet}")
+    if args.limit and len(hits) > args.limit:
+        print(f"... ({len(hits) - args.limit} more; raise --limit to see more)")
+    return 0
+
+
+def cmd_books_export(args: SimpleNamespace) -> int:
+    """Export the archive to CSV: id, name, pages, fonts and text."""
+    books = _load_books(args.file)
+    if books is None:
+        return 1
+    try:
+        rows = books.books()
+    except U9BooksError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
+    out_path = args.output or f"{Path(args.file).stem}_books.csv"
+    os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+    with open(out_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["id", "index", "name", "bytes", "pages", "fonts",
+                         "is_embedded_document", "text"])
+        for book in rows:
+            writer.writerow([
+                book.book_id, book.index, book.name, len(book), len(book.pages),
+                " ".join(str(v) for v in book.fonts),
+                int(book.is_embedded_document),
+                "" if book.is_embedded_document else book.text,
+            ])
+    print(f"{args.file} -- wrote {len(rows)} row(s) -> {out_path}")
+    return 0
+
+
+# ============================================================================
 # Typer command wrappers
 # ============================================================================
 
@@ -2609,3 +2744,48 @@ def terrain_export_cmd(
 ) -> None:
     """Export every point of a U9 region height map to CSV."""
     raise SystemExit(cmd_terrain_export(SimpleNamespace(file=file, output=output)))
+
+
+@u9_app.command("books-list")
+def books_list_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/BOOKS-EN.FLX")],
+    by_size: Annotated[bool, typer.Option("-s", "--by-size", help="Order by body size, largest first")] = False,
+    limit: Annotated[Optional[int], typer.Option("-n", "--limit", help="Maximum rows to print")] = None,
+) -> None:
+    """List the books, scrolls and signs in a U9 book archive."""
+    raise SystemExit(cmd_books_list(SimpleNamespace(file=file, by_size=by_size, limit=limit)))
+
+
+@u9_app.command("books-show")
+def books_show_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/BOOKS-EN.FLX")],
+    id: Annotated[int, typer.Option("-i", "--id", help="Book id, as shown by books-list")] = 1,
+    name: Annotated[
+        Optional[str], typer.Option("-b", "--name", help="Look the book up by name instead"),
+    ] = None,
+) -> None:
+    """Print one U9 book's text."""
+    raise SystemExit(cmd_books_show(SimpleNamespace(file=file, id=id, name=name)))
+
+
+@u9_app.command("books-search")
+def books_search_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/BOOKS-EN.FLX")],
+    needle: Annotated[str, typer.Argument(help="Substring to look for")],
+    case_sensitive: Annotated[bool, typer.Option("-c", "--case-sensitive", help="Match case exactly")] = False,
+    limit: Annotated[Optional[int], typer.Option("-n", "--limit", help="Maximum matches to print")] = None,
+) -> None:
+    """Search a U9 book archive, showing the matching passage."""
+    raise SystemExit(cmd_books_search(SimpleNamespace(
+        file=file, needle=needle, case_sensitive=case_sensitive, limit=limit)))
+
+
+@u9_app.command("books-export")
+def books_export_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/BOOKS-EN.FLX")],
+    output: Annotated[
+        Optional[str], typer.Option("-o", "--output", help="Output CSV path"),
+    ] = None,
+) -> None:
+    """Export a U9 book archive to CSV."""
+    raise SystemExit(cmd_books_export(SimpleNamespace(file=file, output=output)))
