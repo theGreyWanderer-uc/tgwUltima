@@ -6,6 +6,7 @@ Modules for Ultima 9: Ascension file formats.
 Canonical imports::
 
     from titan.u9.activity import U9Activities
+    from titan.u9.fixed import U9Fixed
     from titan.u9.flx_archive import U9FlxArchive
     from titan.u9.highway import U9Highway
     from titan.u9.npc import U9Npcs
@@ -37,6 +38,13 @@ from titan.u9.adpcm import decode_stereo, decode_mono as decode_adpcm_mono
 from __future__ import annotations
 
 from titan.u9.adpcm import AdpcmDecodeError, decode_mono as decode_adpcm_mono, decode_stereo
+from titan.u9.fixed import (
+    U9Fixed,
+    U9FixedChunk,
+    U9FixedError,
+    U9FixedObject,
+    U9FixedPage,
+)
 from titan.u9.flx_archive import U9FlxArchive, U9FlxArchiveError, U9FlxDirEntry
 from titan.u9.highway import U9Highway, U9HighwayError, U9HighwayPoint, U9HighwayRoute
 from titan.u9.icon import icon_entry_indices, used_texture_ids
@@ -103,6 +111,11 @@ __all__ = [
     "label_for_model",
     "names_for_model",
     "slugify",
+    "U9Fixed",
+    "U9FixedChunk",
+    "U9FixedError",
+    "U9FixedObject",
+    "U9FixedPage",
     "U9Highway",
     "U9Activities",
     "U9Activity",

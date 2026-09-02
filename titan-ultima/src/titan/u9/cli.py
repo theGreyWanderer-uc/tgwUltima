@@ -22,6 +22,7 @@ from PIL import Image
 
 from titan.u9.activity import U9Activities, U9ActivityError
 from titan.u9.flx_archive import U9FlxArchive, U9FlxArchiveError
+from titan.u9.fixed import U9Fixed, U9FixedError
 from titan.u9.highway import U9Highway, U9HighwayError
 from titan.u9.icon import icon_entry_indices
 from titan.u9.mesh_export import MeshExportError, export_obj, export_stl
@@ -1601,6 +1602,134 @@ def cmd_text_export(args: SimpleNamespace) -> int:
 
 
 # ============================================================================
+# CLI COMMANDS — STATIC WORLD GEOMETRY (static/fixed.%d)
+# ============================================================================
+
+def _load_fixed(filepath: str) -> Optional[U9Fixed]:
+    """Open a static/fixed.<region> file, reporting the reason on failure."""
+    if not os.path.isfile(filepath):
+        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
+        return None
+    try:
+        return U9Fixed.from_file(filepath)
+    except U9FixedError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return None
+
+
+def cmd_fixed_info(args: SimpleNamespace) -> int:
+    """Summarize one static region: chunk grid, pages and object totals."""
+    region = _load_fixed(args.file)
+    if region is None:
+        return 1
+
+    chunks = region.chunks()
+    pages = sum(len(c.pages) for c in chunks)
+    objects = sum(len(c.objects) for c in chunks)
+    chained = sum(1 for c in chunks if len(c.pages) > 1)
+
+    print(f"{args.file} -- {region.width}x{region.height} chunk region")
+    print(f"  Header          : {region.header_size} bytes (0x20 + 4*w*h)")
+    print(f"  Payload         : {region.payload_size} bytes "
+          f"(watermark {region.declared_payload_size})")
+    print(f"  Populated chunks: {len(chunks)} of {region.num_chunks}")
+    print(f"  Pages           : {pages} ({chained} chunk(s) span more than one)")
+    print(f"  Objects         : {objects}")
+    print("  Chunk positions come from each page's base, not the table order.")
+    return 0
+
+
+def cmd_fixed_chunks(args: SimpleNamespace) -> int:
+    """List populated chunks with their grid position and object counts."""
+    region = _load_fixed(args.file)
+    if region is None:
+        return 1
+
+    chunks = region.chunks()
+    if args.by_grid:
+        chunks.sort(key=lambda c: (c.chunk_y, c.chunk_x))
+    shown = chunks[: args.limit] if args.limit else chunks
+
+    print(f"{args.file} -- {len(chunks)} populated chunk(s) of {region.num_chunks}")
+    print(f"{'Slot':>5}  {'Grid':<9}  {'Base (x,y)':<15}  {'Pages':>5}  {'Objects':>7}")
+    print("-" * 54)
+    for c in shown:
+        print(f"{c.table_index:>5}  {f'{c.chunk_x},{c.chunk_y}':<9}  "
+              f"{f'{c.base_x},{c.base_y}':<15}  {len(c.pages):>5}  {len(c.objects):>7}")
+    if args.limit and len(chunks) > args.limit:
+        print(f"... ({len(chunks) - args.limit} more; raise --limit to see more)")
+    return 0
+
+
+def cmd_fixed_objects(args: SimpleNamespace) -> int:
+    """List immovable objects, optionally restricted to one chunk."""
+    region = _load_fixed(args.file)
+    if region is None:
+        return 1
+
+    if args.chunk is not None:
+        try:
+            cx, cy = (int(v) for v in args.chunk.split(",", 1))
+        except ValueError:
+            print(f"ERROR: --chunk expects 'X,Y', got {args.chunk!r}", file=sys.stderr)
+            return 1
+        try:
+            chunk = region.chunk(cx, cy)
+        except U9FixedError as e:
+            print(f"ERROR: {e}", file=sys.stderr)
+            return 1
+        if chunk is None:
+            print(f"Chunk ({cx}, {cy}) holds no pages.")
+            return 0
+        chunks = [chunk]
+    else:
+        chunks = region.chunks()
+
+    names = _load_typenames(args.typenames)
+    rows = [(c, o) for c in chunks for o in c.objects]
+    if args.type is not None:
+        rows = [(c, o) for c, o in rows if o.type_index == args.type]
+    shown = rows[: args.limit] if args.limit else rows
+
+    print(f"{args.file} -- {len(rows)} object(s)")
+    header = (f"{'Offset':>8}  {'Chunk':<7}  {'World (x,y,z)':<20}  {'Type':>5}  "
+              f"{'Flags':>10}")
+    if names:
+        header += "  Name"
+    print(header)
+    print("-" * (len(header) + 8))
+    for c, o in shown:
+        line = (f"{o.offset:>#8x}  {f'{c.chunk_x},{c.chunk_y}':<7}  "
+                f"{f'{o.world_x},{o.world_y},{o.z}':<20}  {o.type_index:>5}  "
+                f"{o.flags:>#10x}")
+        if names:
+            line += f"  {names.name_for(o.type_index) or ''}"
+        print(line)
+    if args.limit and len(rows) > args.limit:
+        print(f"... ({len(rows) - args.limit} more; raise --limit to see more)")
+    return 0
+
+
+def cmd_fixed_types(args: SimpleNamespace) -> int:
+    """Report which object types a static region uses, most common first."""
+    region = _load_fixed(args.file)
+    if region is None:
+        return 1
+    names = _load_typenames(args.typenames)
+    histogram = Counter(o.type_index for o in region.objects())
+    total = sum(histogram.values())
+    print(f"{args.file} -- {total} object(s), {len(histogram)} distinct type(s)")
+    print(f"{'Type':>6}  {'Count':>7}  {'Share':>7}  Name")
+    print("-" * 46)
+    for type_index, count in histogram.most_common(args.limit or None):
+        label = (names.name_for(type_index) or "") if names else ""
+        print(f"{type_index:>6}  {count:>7}  {100 * count / total:>6.2f}%  {label}")
+    if args.limit and len(histogram) > args.limit:
+        print(f"... ({len(histogram) - args.limit} more; raise --limit to see more)")
+    return 0
+
+
+# ============================================================================
 # Typer command wrappers
 # ============================================================================
 
@@ -2159,3 +2288,48 @@ def text_export_cmd(
 ) -> None:
     """Export a U9 text archive to CSV."""
     raise SystemExit(cmd_text_export(SimpleNamespace(file=file, output=output)))
+
+
+@u9_app.command("fixed-info")
+def fixed_info_cmd(
+    file: Annotated[str, typer.Argument(help="Path to a static/fixed.<region> file")],
+) -> None:
+    """Summarize a U9 static region: chunk grid, pages and object totals."""
+    raise SystemExit(cmd_fixed_info(SimpleNamespace(file=file)))
+
+
+@u9_app.command("fixed-chunks")
+def fixed_chunks_cmd(
+    file: Annotated[str, typer.Argument(help="Path to a static/fixed.<region> file")],
+    by_grid: Annotated[bool, typer.Option("-g", "--by-grid", help="Order by grid position, not table slot")] = False,
+    limit: Annotated[Optional[int], typer.Option("-n", "--limit", help="Maximum rows to print")] = None,
+) -> None:
+    """List the populated chunks in a U9 static region."""
+    raise SystemExit(cmd_fixed_chunks(SimpleNamespace(file=file, by_grid=by_grid, limit=limit)))
+
+
+@u9_app.command("fixed-objects")
+def fixed_objects_cmd(
+    file: Annotated[str, typer.Argument(help="Path to a static/fixed.<region> file")],
+    chunk: Annotated[Optional[str], typer.Option("-c", "--chunk", help="Restrict to one chunk, as 'X,Y'")] = None,
+    type: Annotated[Optional[int], typer.Option("-t", "--type", help="Only objects of this type index")] = None,
+    typenames: Annotated[
+        Optional[str], typer.Option("--typenames", help="Path to static/TYPENAME.FLX for object names"),
+    ] = None,
+    limit: Annotated[Optional[int], typer.Option("-n", "--limit", help="Maximum rows to print")] = None,
+) -> None:
+    """List the immovable objects in a U9 static region."""
+    raise SystemExit(cmd_fixed_objects(SimpleNamespace(
+        file=file, chunk=chunk, type=type, typenames=typenames, limit=limit)))
+
+
+@u9_app.command("fixed-types")
+def fixed_types_cmd(
+    file: Annotated[str, typer.Argument(help="Path to a static/fixed.<region> file")],
+    typenames: Annotated[
+        Optional[str], typer.Option("--typenames", help="Path to static/TYPENAME.FLX for object names"),
+    ] = None,
+    limit: Annotated[Optional[int], typer.Option("-n", "--limit", help="Maximum types to print")] = None,
+) -> None:
+    """Report which object types a U9 static region uses."""
+    raise SystemExit(cmd_fixed_types(SimpleNamespace(file=file, typenames=typenames, limit=limit)))

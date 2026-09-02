@@ -3839,7 +3839,8 @@ archive reading, `TYPENAME.FLX`, `sound/*.flx` (Speech/sfx/music) decoding,
 `static/triggers.flx` trigger scripts, `static/activity.flx` NPC activity
 sequences, `static/highway.dat` NPC navigation data, the `runtime/NPC.FLX` NPC table, and
 the `static/sdInfo*.flx` texture metadata tables, and the `static/text.flx` and
-`static/misctext.flx` text archives are supported so far.
+`static/misctext.flx` text archives, and `static/fixed.<region>` static world
+geometry are supported so far.
 
 ### FLX archive commands
 
@@ -4926,6 +4927,98 @@ titan u9 text-export <file> [-o OUT.csv]
 |----------|-------------|
 | `file` | Path to `static/text.flx` or `static/misctext.flx` |
 | `-o FILE`, `--output FILE` | Output CSV path (default: `<file>_text.csv`) |
+
+---
+
+### Static world commands
+
+`static/fixed.<region>` holds U9's immovable objects — trees, buildings,
+terrain clutter — one file per region. It is the static counterpart to
+`runtime/nonfixed.<region>`; together they are the whole map.
+
+The two formats are close siblings with three differences that matter: the
+header is `0x20 + 4*w*h` rather than `36 + 4*w*h`, the chunk table is **not**
+row-major so a chunk's grid position comes from its page's base, and an
+object's rotation is four `int16` components rather than three plus a flags
+word. See `reference/u9/fixed/u9_fixed_reference.md`.
+
+---
+
+#### `u9 fixed-info`
+
+Summarize one region: chunk grid, page count and object total.
+
+```
+titan u9 fixed-info <file>
+```
+
+**Example**
+```bash
+titan u9 fixed-info static/fixed.22
+```
+
+---
+
+#### `u9 fixed-chunks`
+
+List populated chunks with grid position, base coordinate, page and object
+counts.
+
+```
+titan u9 fixed-chunks <file> [-g] [-n LIMIT]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to a `static/fixed.<region>` file |
+| `-g`, `--by-grid` | Order by grid position rather than table slot |
+| `-n N`, `--limit N` | Maximum rows to print |
+
+The `Slot` and `Grid` columns differ, which is the point: the table is not in
+row-major order.
+
+---
+
+#### `u9 fixed-objects`
+
+List the immovable objects, optionally restricted to one chunk or one type.
+
+```
+titan u9 fixed-objects <file> [-c X,Y] [-t TYPE] [--typenames TYPENAME.FLX] [-n LIMIT]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to a `static/fixed.<region>` file |
+| `-c X,Y`, `--chunk X,Y` | Restrict to one chunk by grid coordinate |
+| `-t N`, `--type N` | Only objects of this type index |
+| `--typenames FILE` | Path to `static/TYPENAME.FLX` — adds a `Name` column |
+| `-n N`, `--limit N` | Maximum rows to print |
+
+**Example**
+```bash
+titan u9 fixed-objects static/fixed.9 -c 14,14 --typenames static/TYPENAME.FLX
+```
+
+Positions are world coordinates: the chunk's base plus the object's offset.
+
+---
+
+#### `u9 fixed-types`
+
+Report which object types a region uses, most common first.
+
+```
+titan u9 fixed-types <file> [--typenames TYPENAME.FLX] [-n LIMIT]
+```
+
+**Example**
+```bash
+titan u9 fixed-types static/fixed.9 --typenames static/TYPENAME.FLX -n 20
+```
+
+Only about a quarter of static object types carry a display name, so most rows
+show a bare type index.
 
 ---
 

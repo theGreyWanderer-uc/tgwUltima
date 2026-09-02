@@ -32,6 +32,22 @@ This project uses [Semantic Versioning](https://semver.org/):
   never an invented entity, and `U9Chunk.is_complete` reports it per chunk.
   Trigger records are counted but not decoded.
 
+- **U9 static world geometry:** added `titan.u9.fixed`, a reader for
+  `static/fixed.<region>` — the immovable objects that `runtime/nonfixed` does
+  not cover, so the two together are the whole map. Decodes the chunk grid, each
+  chunk's page chain and the 24-byte object records (reference, chunk-relative
+  position, elevation, type, quaternion, flags). Added `titan u9 fixed-info`,
+  `fixed-chunks`, `fixed-objects` and `fixed-types`. Verified against 164 region
+  files — 2,815 chunks, 3,315 pages, 106,454 objects — with every page base on
+  the 4096 grid, every object position inside its chunk, and every rotation a
+  normalised quaternion. Documented in
+  `reference/u9/fixed/u9_fixed_reference.md`, including two corrections to the
+  published community documentation: an object's rotation is **four** `int16`
+  components, not three plus a `uint16` flags field (normalised on 100% read as
+  four, 10.7% read as three), and the chunk table is **not** in `[x + y*width]`
+  order — only 1 of 2,815 chunks lands where that predicts, so grid position has
+  to come from the page's own base.
+
 - **U9 text archives:** added `titan.u9.text`, a reader for `static/text.flx`
   and `static/misctext.flx` — one NUL-terminated UTF-16LE string per FLX entry,
   decoding cleanly on all 7,996 used entries across both files. `text.flx`
