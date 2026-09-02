@@ -30,7 +30,9 @@ from titan.u9.model_naming import label_for_model, names_for_model
 from titan.u9.nonfixed import U9Nonfixed, U9NonfixedError
 from titan.u9.npc import NO_CLASS, U9NpcError, U9Npcs
 from titan.u9.palette import U9Palette, U9PaletteError
+from titan.u9.sdinfo import U9SdInfo, U9SdInfoError
 from titan.u9.sound import U9SoundRecord, U9SoundRecordError
+from titan.u9.text import U9TextArchive, U9TextError
 from titan.u9.texture import U9TextureError, decode_frame
 from titan.u9.triggers import U9Triggers, U9TriggersError
 from titan.u9.typename import U9TypeNames
@@ -1368,6 +1370,237 @@ def cmd_npc_diff(args: SimpleNamespace) -> int:
 
 
 # ============================================================================
+# CLI COMMANDS — TEXTURE METADATA (static/sdInfo*.flx)
+# ============================================================================
+
+def _load_sdinfo(filepath: str) -> Optional[U9SdInfo]:
+    """Open a static/sdInfo*.flx table, reporting the reason on failure."""
+    if not os.path.isfile(filepath):
+        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
+        return None
+    try:
+        return U9SdInfo.from_file(filepath)
+    except U9SdInfoError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return None
+
+
+def cmd_sdinfo_list(args: SimpleNamespace) -> int:
+    """List texture metadata records: dimensions, frames and mip levels."""
+    info = _load_sdinfo(args.file)
+    if info is None:
+        return 1
+
+    try:
+        rows = info.records()
+    except U9SdInfoError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
+    if args.animated:
+        rows = [r for r in rows if r.is_animated]
+    shown = rows[: args.limit] if args.limit else rows
+
+    print(f"{args.file} -- {len(rows)} record(s) of {info.num_entries} slots")
+    print(f"{'Index':>6}  {'Size':<11}  {'Max':<11}  {'Frames':>6}  {'Mips':>4}  Notes")
+    print("-" * 66)
+    for r in shown:
+        notes = []
+        if r.frames_vary_in_size:
+            notes.append("frames differ in size")
+        if not r.is_power_of_two:
+            notes.append("not power of two")
+        print(f"{r.index:>6}  {f'{r.width}x{r.height}':<11}  "
+              f"{f'{r.max_width}x{r.max_height}':<11}  {r.frame_count:>6}  "
+              f"{r.mip_levels:>4}  {', '.join(notes)}")
+    if args.limit and len(rows) > args.limit:
+        print(f"... ({len(rows) - args.limit} more; raise --limit to see more)")
+    return 0
+
+
+def cmd_sdinfo_show(args: SimpleNamespace) -> int:
+    """Print one texture's metadata record, decoded fields and raw dwords."""
+    info = _load_sdinfo(args.file)
+    if info is None:
+        return 1
+    try:
+        r = info.record(args.index)
+    except U9SdInfoError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+    if r is None:
+        print(f"Texture {args.index} is an unused slot.")
+        return 0
+
+    print(f"{args.file} -- texture {r.index}")
+    print(f"  Frame 0     : {r.width} x {r.height}")
+    print(f"  Max frame   : {r.max_width} x {r.max_height}")
+    print(f"  Frames      : {r.frame_count}")
+    print(f"  Mip levels  : {r.mip_levels}")
+    print(f"  log2 dims   : {r.log2_width}, {r.log2_height}"
+          f"{'' if r.is_power_of_two else '  (dimensions are not powers of two)'}")
+    print(f"  Flags       : mip {r.flag:#06x}, frame {r.frame_flag:#06x}")
+    print("  Raw dwords  : " + " ".join(f"{v:#010x}" for v in r.fields))
+    print("  Dwords 0, 3, 4, 7 and 8 are not decoded.")
+    return 0
+
+
+def cmd_sdinfo_verify(args: SimpleNamespace) -> int:
+    """Cross-check a metadata table against its partner texture archive."""
+    info = _load_sdinfo(args.file)
+    if info is None:
+        return 1
+    if not os.path.isfile(args.textures):
+        print(f"ERROR: File not found: {args.textures}", file=sys.stderr)
+        return 1
+    try:
+        counts = info.cross_check(U9FlxArchive.from_file(args.textures))
+    except (U9SdInfoError, U9FlxArchiveError) as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
+    total = counts["compared"]
+    print(f"{args.file}")
+    print(f"{args.textures}")
+    print(f"  Same index set : {'yes' if counts['same_index_set'] else 'NO'}")
+    print(f"  Compared       : {total} entries")
+    for key, label in (("max_dims", "max dimensions"),
+                       ("frame_count", "frame count"),
+                       ("mip_levels", "mip levels")):
+        n = counts[key]
+        flag = "" if n == total else "   <-- MISMATCH"
+        print(f"  {label:<15}: {n}/{total} ({100 * n / total if total else 0:.1f}%){flag}")
+    return 0 if total and all(counts[k] == total for k in ("max_dims", "frame_count", "mip_levels")) else 1
+
+
+# ============================================================================
+# CLI COMMANDS — TEXT ARCHIVES (static/text.flx, static/misctext.flx)
+# ============================================================================
+
+def _load_text(filepath: str) -> Optional[U9TextArchive]:
+    """Open a UTF-16 text archive, reporting the reason on failure."""
+    if not os.path.isfile(filepath):
+        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
+        return None
+    try:
+        return U9TextArchive.from_file(filepath)
+    except U9TextError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return None
+
+
+def cmd_text_list(args: SimpleNamespace) -> int:
+    """Print strings from a text archive, optionally just one source block."""
+    text = _load_text(args.file)
+    if text is None:
+        return 1
+
+    try:
+        if args.block:
+            block = text.block_for(args.block)
+            if block is None:
+                print(f"No block named {args.block!r}. Try 'titan u9 text-blocks'.")
+                return 1
+            rows = list(block.lines)
+            print(f"{args.file} -- block {block.name!r}, {len(rows)} line(s)")
+        else:
+            rows = [e for e in text.entries() if args.markers or not e.is_file_marker]
+            print(f"{args.file} -- {len(rows)} entr{'y' if len(rows) == 1 else 'ies'} "
+                  f"of {len(text)} used")
+    except U9TextError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
+    shown = rows[: args.limit] if args.limit else rows
+    for e in shown:
+        print(f"{e.index:>6}  {e.text}")
+    if args.limit and len(rows) > args.limit:
+        print(f"... ({len(rows) - args.limit} more; raise --limit to see more)")
+    return 0
+
+
+def cmd_text_blocks(args: SimpleNamespace) -> int:
+    """List the source-file blocks in text.flx and how many lines each holds."""
+    text = _load_text(args.file)
+    if text is None:
+        return 1
+    try:
+        blocks = text.blocks()
+    except U9TextError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
+    if not blocks:
+        print(f"{args.file} -- no BEGIN FILE markers; this archive is a flat list "
+              f"of {len(text)} strings")
+        return 0
+
+    blocks.sort(key=lambda b: -len(b) if args.by_size else b.marker_index)
+    shown = blocks[: args.limit] if args.limit else blocks
+    total = sum(len(b) for b in blocks)
+    print(f"{args.file} -- {len(blocks)} block(s), {total} line(s)")
+    print(f"{'Marker':>7}  {'Lines':>6}  Name")
+    print("-" * 46)
+    for b in shown:
+        print(f"{b.marker_index:>7}  {len(b):>6}  {b.name}")
+    if args.limit and len(blocks) > args.limit:
+        print(f"... ({len(blocks) - args.limit} more; raise --limit to see more)")
+    return 0
+
+
+def cmd_text_search(args: SimpleNamespace) -> int:
+    """Find strings containing a substring, with the block each belongs to."""
+    text = _load_text(args.file)
+    if text is None:
+        return 1
+    try:
+        hits = text.search(args.needle, ignore_case=not args.case_sensitive)
+        owner = {}
+        for block in text.blocks():
+            for line in block.lines:
+                owner[line.index] = block.name
+    except U9TextError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
+    shown = hits[: args.limit] if args.limit else hits
+    print(f"{args.file} -- {len(hits)} match(es) for {args.needle!r}")
+    for e in shown:
+        where = owner.get(e.index)
+        prefix = f"{e.index:>6}  {where:<18}" if where else f"{e.index:>6}  {'':<18}"
+        print(f"{prefix}  {e.text}")
+    if args.limit and len(hits) > args.limit:
+        print(f"... ({len(hits) - args.limit} more; raise --limit to see more)")
+    return 0
+
+
+def cmd_text_export(args: SimpleNamespace) -> int:
+    """Export a text archive to CSV: index, block, marker flag, text."""
+    text = _load_text(args.file)
+    if text is None:
+        return 1
+    try:
+        entries = text.entries()
+        owner = {}
+        for block in text.blocks():
+            for line in block.lines:
+                owner[line.index] = block.name
+    except U9TextError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
+    out_path = args.output or f"{Path(args.file).stem}_text.csv"
+    os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+    with open(out_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["index", "block", "is_file_marker", "text"])
+        for e in entries:
+            writer.writerow([e.index, owner.get(e.index, ""), int(e.is_file_marker), e.text])
+    print(f"{args.file} -- wrote {len(entries)} row(s) -> {out_path}")
+    return 0
+
+
+# ============================================================================
 # Typer command wrappers
 # ============================================================================
 
@@ -1850,3 +2083,79 @@ def npc_csv_cmd(
 ) -> None:
     """Export every U9 NPC record to CSV, decoded fields plus the raw record."""
     raise SystemExit(cmd_npc_csv(SimpleNamespace(file=file, output=output, save=save, all=all)))
+
+
+@u9_app.command("sdinfo-list")
+def sdinfo_list_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/sdInfo.flx, sdInfo16.flx or sdInfoC.flx")],
+    animated: Annotated[
+        bool, typer.Option("-a", "--animated", help="Only textures with more than one frame"),
+    ] = False,
+    limit: Annotated[Optional[int], typer.Option("-n", "--limit", help="Maximum rows to print")] = None,
+) -> None:
+    """List U9 texture metadata: dimensions, frame count and mip levels."""
+    raise SystemExit(cmd_sdinfo_list(SimpleNamespace(file=file, animated=animated, limit=limit)))
+
+
+@u9_app.command("sdinfo-show")
+def sdinfo_show_cmd(
+    file: Annotated[str, typer.Argument(help="Path to a static/sdInfo*.flx table")],
+    index: Annotated[int, typer.Argument(help="Texture index -- the same index as in the bitmap archive")],
+) -> None:
+    """Print one U9 texture's metadata record."""
+    raise SystemExit(cmd_sdinfo_show(SimpleNamespace(file=file, index=index)))
+
+
+@u9_app.command("sdinfo-verify")
+def sdinfo_verify_cmd(
+    file: Annotated[str, typer.Argument(help="Path to a static/sdInfo*.flx table")],
+    textures: Annotated[str, typer.Argument(help="Path to its partner bitmap*.flx archive")],
+) -> None:
+    """Cross-check a U9 texture metadata table against its bitmap archive."""
+    raise SystemExit(cmd_sdinfo_verify(SimpleNamespace(file=file, textures=textures)))
+
+
+@u9_app.command("text-list")
+def text_list_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/text.flx or static/misctext.flx")],
+    block: Annotated[
+        Optional[str], typer.Option("-b", "--block", help="Only one source block, by name (e.g. Raven)"),
+    ] = None,
+    markers: Annotated[bool, typer.Option("-m", "--markers", help="Include BEGIN FILE markers")] = False,
+    limit: Annotated[Optional[int], typer.Option("-n", "--limit", help="Maximum lines to print")] = None,
+) -> None:
+    """Print strings from a U9 text archive."""
+    raise SystemExit(cmd_text_list(SimpleNamespace(file=file, block=block, markers=markers, limit=limit)))
+
+
+@u9_app.command("text-blocks")
+def text_blocks_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/text.flx")],
+    by_size: Annotated[bool, typer.Option("-s", "--by-size", help="Order by line count, largest first")] = False,
+    limit: Annotated[Optional[int], typer.Option("-n", "--limit", help="Maximum blocks to print")] = None,
+) -> None:
+    """List the source-file blocks in a U9 text archive."""
+    raise SystemExit(cmd_text_blocks(SimpleNamespace(file=file, by_size=by_size, limit=limit)))
+
+
+@u9_app.command("text-search")
+def text_search_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/text.flx or static/misctext.flx")],
+    needle: Annotated[str, typer.Argument(help="Substring to look for")],
+    case_sensitive: Annotated[bool, typer.Option("-c", "--case-sensitive", help="Match case exactly")] = False,
+    limit: Annotated[Optional[int], typer.Option("-n", "--limit", help="Maximum matches to print")] = None,
+) -> None:
+    """Search a U9 text archive, showing which block each match belongs to."""
+    raise SystemExit(cmd_text_search(SimpleNamespace(
+        file=file, needle=needle, case_sensitive=case_sensitive, limit=limit)))
+
+
+@u9_app.command("text-export")
+def text_export_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/text.flx or static/misctext.flx")],
+    output: Annotated[
+        Optional[str], typer.Option("-o", "--output", help="Output CSV path (default: <file>_text.csv)"),
+    ] = None,
+) -> None:
+    """Export a U9 text archive to CSV."""
+    raise SystemExit(cmd_text_export(SimpleNamespace(file=file, output=output)))

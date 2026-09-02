@@ -9,6 +9,8 @@ Canonical imports::
     from titan.u9.flx_archive import U9FlxArchive
     from titan.u9.highway import U9Highway
     from titan.u9.npc import U9Npcs
+    from titan.u9.sdinfo import U9SdInfo
+    from titan.u9.text import U9TextArchive
     from titan.u9.triggers import U9Triggers
     from titan.u9.typename import U9TypeNames
     from titan.u9.sound import U9SoundRecord
@@ -61,7 +63,9 @@ from titan.u9.nonfixed import (
 from titan.u9.npc import U9Npc, U9NpcError, U9Npcs
 from titan.u9.palette import U9Palette, U9PaletteError
 from titan.u9.preview import PreviewError, PreviewUnavailableError, render_preview
+from titan.u9.sdinfo import U9SdInfo, U9SdInfoError, U9SdInfoRecord
 from titan.u9.sound import U9SoundRecord, U9SoundRecordError
+from titan.u9.text import U9TextArchive, U9TextBlock, U9TextEntry, U9TextError
 from titan.u9.texture import U9TextureError, U9TextureFrame, decode_frame
 from titan.u9.triggers import U9Trigger, U9TriggerRecord, U9Triggers, U9TriggersError
 from titan.u9.typename import U9TypeNameEntry, U9TypeNames
@@ -112,6 +116,13 @@ __all__ = [
     "U9HighwayError",
     "U9HighwayPoint",
     "U9HighwayRoute",
+    "U9TextArchive",
+    "U9TextBlock",
+    "U9TextEntry",
+    "U9TextError",
+    "U9SdInfo",
+    "U9SdInfoError",
+    "U9SdInfoRecord",
     "U9Npcs",
     "U9Npc",
     "U9NpcError",

@@ -32,6 +32,31 @@ This project uses [Semantic Versioning](https://semver.org/):
   never an invented entity, and `U9Chunk.is_complete` reports it per chunk.
   Trigger records are counted but not decoded.
 
+- **U9 text archives:** added `titan.u9.text`, a reader for `static/text.flx`
+  and `static/misctext.flx` — one NUL-terminated UTF-16LE string per FLX entry,
+  decoding cleanly on all 7,996 used entries across both files. `text.flx`
+  additionally groups into 266 blocks delimited by `BEGIN FILE` markers naming
+  Origin's conversation source files, 90% of which match an NPC name in
+  `runtime/NPC.FLX`; the remainder are locations. Added `titan u9 text-list`,
+  `text-blocks`, `text-search` and `text-export`. Documented in
+  `reference/u9/text/u9_text_reference.md`, including the two things that shape
+  a reader: there is no closing `END FILE` marker, so a block runs to the next
+  `BEGIN`, and `misctext.flx` has no markers at all, so block grouping degrades
+  to an empty list rather than inventing one.
+
+- **U9 texture metadata:** added `titan.u9.sdinfo`, a reader for the
+  `static/sdInfo*.flx` tables — one per `bitmap*.flx` archive and index-parallel
+  to it, giving frame-0 dimensions, largest-frame dimensions, frame count and
+  mip levels for every texture **without decoding pixels**. Added
+  `titan u9 sdinfo-list`, `sdinfo-show` and `sdinfo-verify`; the last
+  cross-checks a table against its partner archive and exits non-zero on any
+  shortfall. No community documentation covers these files; the layout was
+  established by correlation and all four decoded fields reproduce on 100% of
+  entries in all three pairs (19,772 records). Documented in
+  `reference/u9/sdinfo/u9_sdinfo_reference.md`, including the trap that sank the
+  first draft: two fields carry a flag in their high half, and reading
+  `frame count` whole rather than masked matches on only 13.5% of `sdInfoC.flx`.
+
 - **U9 NPC pool handle decoded, and NPC CSV export:** the `u32` at NPC record
   offset `0x00` is a **byte offset into the region's live object pool**, not the
   unknown identifier it was first documented as. Disassembly of `u9.exe` puts

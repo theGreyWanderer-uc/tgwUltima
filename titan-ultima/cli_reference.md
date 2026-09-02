@@ -3837,8 +3837,9 @@ formats are still an early work in progress compared to U7/U8 -- FLX
 archive reading, `TYPENAME.FLX`, `sound/*.flx` (Speech/sfx/music) decoding,
 `sappear.flx` 3D models, `runtime/nonfixed.<region>` dynamic world data,
 `static/triggers.flx` trigger scripts, `static/activity.flx` NPC activity
-sequences, `static/highway.dat` NPC navigation data, and the `runtime/NPC.FLX`
-NPC table are supported so far.
+sequences, `static/highway.dat` NPC navigation data, the `runtime/NPC.FLX` NPC table, and
+the `static/sdInfo*.flx` texture metadata tables, and the `static/text.flx` and
+`static/misctext.flx` text archives are supported so far.
 
 ### FLX archive commands
 
@@ -4732,6 +4733,199 @@ titan u9 npc-diff runtime/NPC.FLX savegame/processes.dat
 
 In the save examined, every NPC that walked landed exactly on a `highway.dat`
 navigation point.
+
+---
+
+### Texture metadata commands
+
+`static/sdInfo.flx`, `sdInfo16.flx` and `sdInfoC.flx` are per-texture metadata
+tables, one beside each `bitmap*.flx` archive and **index-parallel** to it:
+`sdInfo16.flx` entry *n* describes `bitmap16.flx` entry *n*.
+
+Each used entry is a fixed 48-byte record giving frame-0 dimensions, the
+largest frame's dimensions, the frame count and the mip level count — without
+decoding any pixels. See `reference/u9/sdinfo/u9_sdinfo_reference.md`.
+
+---
+
+#### `u9 sdinfo-list`
+
+List metadata records with dimensions, frame count and mip levels.
+
+```
+titan u9 sdinfo-list <file> [-a] [-n LIMIT]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/sdInfo.flx`, `sdInfo16.flx` or `sdInfoC.flx` |
+| `-a`, `--animated` | Only textures with more than one frame |
+| `-n N`, `--limit N` | Maximum rows to print |
+
+**Example**
+```bash
+titan u9 sdinfo-list static/sdInfo16.flx --animated -n 20
+```
+
+Flags textures whose frames differ in size, and those whose dimensions are not
+powers of two.
+
+---
+
+#### `u9 sdinfo-show`
+
+Print one texture's metadata record, decoded fields and raw dwords.
+
+```
+titan u9 sdinfo-show <file> <index>
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to a `static/sdInfo*.flx` table |
+| `index` | Texture index — the same index as in the bitmap archive |
+
+**Example**
+```bash
+titan u9 sdinfo-show static/sdInfo16.flx 512
+```
+
+Five of the twelve dwords are undecoded and are printed raw.
+
+---
+
+#### `u9 sdinfo-verify`
+
+Cross-check a metadata table against its partner texture archive: same index
+set, and agreement on max dimensions, frame count and mip levels.
+
+```
+titan u9 sdinfo-verify <file> <textures>
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to a `static/sdInfo*.flx` table |
+| `textures` | Path to its partner `bitmap*.flx` archive |
+
+**Example**
+```bash
+titan u9 sdinfo-verify static/sdInfoC.flx static/bitmapC.flx
+```
+
+```
+  Same index set : yes
+  Compared       : 6576 entries
+  max dimensions : 6576/6576 (100.0%)
+  frame count    : 6576/6576 (100.0%)
+  mip levels     : 6576/6576 (100.0%)
+```
+
+Exits non-zero if any check falls short, so it works as a data-integrity gate.
+
+---
+
+### Text commands
+
+`static/text.flx` and `static/misctext.flx` hold the game's writing. Both store
+one NUL-terminated UTF-16LE string per FLX entry — no header, no length prefix.
+
+`misctext.flx` is a flat list of 340 interface strings. `text.flx` holds 7,390
+lines of conversation grouped into 266 blocks by `BEGIN FILE` markers naming
+Origin's source files; 90% of those names are NPCs, the rest are places. See
+`reference/u9/text/u9_text_reference.md`.
+
+---
+
+#### `u9 text-list`
+
+Print strings, optionally just one source block.
+
+```
+titan u9 text-list <file> [-b BLOCK] [-m] [-n LIMIT]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/text.flx` or `static/misctext.flx` |
+| `-b NAME`, `--block NAME` | Only this source block, e.g. `Raven` (case and `.cpp` ignored) |
+| `-m`, `--markers` | Include the `BEGIN FILE` markers |
+| `-n N`, `--limit N` | Maximum lines to print |
+
+**Example**
+```bash
+titan u9 text-list static/text.flx -b Dermot
+```
+
+---
+
+#### `u9 text-blocks`
+
+List the source-file blocks and their line counts.
+
+```
+titan u9 text-blocks <file> [-s] [-n LIMIT]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/text.flx` |
+| `-s`, `--by-size` | Order by line count, largest first |
+| `-n N`, `--limit N` | Maximum blocks to print |
+
+**Example**
+```bash
+titan u9 text-blocks static/text.flx --by-size -n 10
+```
+
+```
+static/text.flx -- 266 block(s), 7390 line(s)
+ Marker   Lines  Name
+   4676     470  Raven
+   1453     165  LordBritish
+```
+
+On `misctext.flx` it reports that the archive carries no markers rather than
+returning nothing.
+
+---
+
+#### `u9 text-search`
+
+Find strings containing a substring, showing which block each belongs to.
+
+```
+titan u9 text-search <file> <needle> [-c] [-n LIMIT]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/text.flx` or `static/misctext.flx` |
+| `needle` | Substring to look for |
+| `-c`, `--case-sensitive` | Match case exactly |
+| `-n N`, `--limit N` | Maximum matches to print |
+
+**Example**
+```bash
+titan u9 text-search static/text.flx "Guardian" -n 20
+```
+
+Markers are skipped, so searching for a path fragment returns nothing.
+
+---
+
+#### `u9 text-export`
+
+Export an archive to CSV: index, block, marker flag, text.
+
+```
+titan u9 text-export <file> [-o OUT.csv]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/text.flx` or `static/misctext.flx` |
+| `-o FILE`, `--output FILE` | Output CSV path (default: `<file>_text.csv`) |
 
 ---
 
