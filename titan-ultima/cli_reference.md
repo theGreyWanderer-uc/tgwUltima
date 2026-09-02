@@ -5022,6 +5022,131 @@ show a bare type index.
 
 ---
 
+### Terrain commands
+
+`static/terrain.<region>` is the ground surface under a U9 region — a height
+map, one file per region, alongside that region's `static/fixed` and
+`runtime/nonfixed`.
+
+The region is a grid of 16×16-point **tiles**, each covering 8×8 world
+coordinates, and each tile names a **chunk** of 256 packed 32-bit points.
+Chunks are shared: a quarter of tiles point at a chunk another tile also uses,
+which is how flat expanses are stored once. Each point packs a 12-bit height, a
+hole flag, a quad split direction, a 5-bit animation frame and a 10-bit ground
+texture index. See `reference/u9/terrain/u9_terrain_reference.md`.
+
+---
+
+#### `u9 terrain-info`
+
+Summarize one region: point and tile grids, chunk sharing and height range.
+
+```
+titan u9 terrain-info <file>
+```
+
+**Example**
+```bash
+titan u9 terrain-info static/terrain.9
+```
+
+Reports trailing slack when a file carries stale chunks past the last one its
+header declares, and identifies the four unused region slots that are a bare
+header and nothing else.
+
+---
+
+#### `u9 terrain-tiles`
+
+Print the tile grid as the chunk index each tile refers to.
+
+```
+titan u9 terrain-tiles <file>
+```
+
+Repeated indices across the grid are chunk sharing, not an error.
+
+---
+
+#### `u9 terrain-chunk`
+
+Dump one chunk's 16×16 points as a grid.
+
+```
+titan u9 terrain-chunk <file> [-i INDEX | -t X,Y] [-f FIELD]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to a `static/terrain.<region>` file |
+| `-i N`, `--index N` | Chunk index to dump (default 0) |
+| `-t X,Y`, `--tile X,Y` | Dump the chunk that tile (X, Y) uses instead |
+| `-f F`, `--field F` | `height` (default), `texture`, `frame` or `hole` |
+
+**Example**
+```bash
+titan u9 terrain-chunk static/terrain.22 -t 1,1 -f height
+```
+
+---
+
+#### `u9 terrain-textures`
+
+Report which ground textures a region paints with, most used first.
+
+```
+titan u9 terrain-textures <file> [--sdinfo sdInfo16.flx] [-n LIMIT]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to a `static/terrain.<region>` file |
+| `--sdinfo FILE` | Path to a matching `static/sdInfo*.flx` — adds size and frame-count columns |
+| `-n N`, `--limit N` | Maximum textures to print |
+
+**Example**
+```bash
+titan u9 terrain-textures static/terrain.9 --sdinfo static/sdInfo16.flx -n 20
+```
+
+Texture indices address `static/bitmap8.flx` or `bitmap16.flx`, index-parallel
+to the `sdInfo` archive of the same width.
+
+---
+
+#### `u9 terrain-heightmap`
+
+Render a region's height map to a greyscale PNG, black at the region's lowest
+point and white at its highest.
+
+```
+titan u9 terrain-heightmap <file> [-o OUT.png] [-s SCALE]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to a `static/terrain.<region>` file |
+| `-o FILE`, `--output FILE` | Output PNG path |
+| `-s N`, `--scale N` | Nearest-neighbour magnification |
+
+**Example**
+```bash
+titan u9 terrain-heightmap static/terrain.9 -o britannia.png
+```
+
+---
+
+#### `u9 terrain-export`
+
+Export every point of a region to CSV: region and tile coordinates, chunk
+index, height, hole and split flags, frame, texture and the raw word.
+
+```
+titan u9 terrain-export <file> [-o OUT.csv]
+```
+
+---
+
 ## Ultima Online Classic Client commands (`titan uo`)
 
 All commands below are invoked as `titan uo <command>`. They read an installed

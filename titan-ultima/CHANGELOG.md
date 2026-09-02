@@ -48,6 +48,26 @@ This project uses [Semantic Versioning](https://semver.org/):
   order — only 1 of 2,815 chunks lands where that predicts, so grid position has
   to come from the page's own base.
 
+- **U9 terrain height maps:** added `titan.u9.terrain`, a reader for
+  `static/terrain.<region>` — the ground surface under the world, completing the
+  region trio with `static/fixed` and `runtime/nonfixed`. Decodes the header,
+  the tile grid, chunk sharing and the packed 32-bit points (height, hole flag,
+  quad split, animation frame, ground texture). Added `titan u9 terrain-info`,
+  `terrain-tiles`, `terrain-chunk`, `terrain-textures`, `terrain-heightmap` and
+  `terrain-export`. Verified against all 168 shipped region files — 50,780
+  chunks, 55,908 tiles, 12,999,680 points — with every tile index inside its
+  file's chunk count, every point texture resolving to an `sdInfo16.flx` record,
+  every frame inside that record's frame count, and every region's tile grid
+  exactly twice its `fixed` chunk grid on 164 of 164. Rendering `terrain.9` as a
+  greyscale height map produces a recognisable map of Britannia. Documented in
+  `reference/u9/terrain/u9_terrain_reference.md`, including three corrections to
+  the published community documentation: `texture` is a **10**-bit field rather
+  than the documented `uint9` (shipped regions reach index 936, which a 9-bit
+  read truncates), `frame` is **5** bits rather than the documented six-bit span
+  (bit 21 is set on none of the 13 million shipped points), and bit 15 is not a
+  free flag but the quadrangle split direction, set on `(x + y)` odd for 99.5%
+  of points.
+
 - **U9 text archives:** added `titan.u9.text`, a reader for `static/text.flx`
   and `static/misctext.flx` — one NUL-terminated UTF-16LE string per FLX entry,
   decoding cleanly on all 7,996 used entries across both files. `text.flx`

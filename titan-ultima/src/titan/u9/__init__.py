@@ -12,6 +12,7 @@ Canonical imports::
     from titan.u9.npc import U9Npcs
     from titan.u9.sdinfo import U9SdInfo
     from titan.u9.text import U9TextArchive
+    from titan.u9.terrain import U9Terrain
     from titan.u9.triggers import U9Triggers
     from titan.u9.typename import U9TypeNames
     from titan.u9.sound import U9SoundRecord
@@ -73,6 +74,12 @@ from titan.u9.palette import U9Palette, U9PaletteError
 from titan.u9.preview import PreviewError, PreviewUnavailableError, render_preview
 from titan.u9.sdinfo import U9SdInfo, U9SdInfoError, U9SdInfoRecord
 from titan.u9.sound import U9SoundRecord, U9SoundRecordError
+from titan.u9.terrain import (
+    U9Terrain,
+    U9TerrainChunk,
+    U9TerrainError,
+    U9TerrainPoint,
+)
 from titan.u9.text import U9TextArchive, U9TextBlock, U9TextEntry, U9TextError
 from titan.u9.texture import U9TextureError, U9TextureFrame, decode_frame
 from titan.u9.triggers import U9Trigger, U9TriggerRecord, U9Triggers, U9TriggersError
@@ -129,6 +136,10 @@ __all__ = [
     "U9HighwayError",
     "U9HighwayPoint",
     "U9HighwayRoute",
+    "U9Terrain",
+    "U9TerrainChunk",
+    "U9TerrainError",
+    "U9TerrainPoint",
     "U9TextArchive",
     "U9TextBlock",
     "U9TextEntry",

@@ -34,6 +34,7 @@ from titan.u9.palette import U9Palette, U9PaletteError
 from titan.u9.sdinfo import U9SdInfo, U9SdInfoError
 from titan.u9.sound import U9SoundRecord, U9SoundRecordError
 from titan.u9.text import U9TextArchive, U9TextError
+from titan.u9.terrain import U9Terrain, U9TerrainError
 from titan.u9.texture import U9TextureError, decode_frame
 from titan.u9.triggers import U9Triggers, U9TriggersError
 from titan.u9.typename import U9TypeNames
@@ -1730,6 +1731,210 @@ def cmd_fixed_types(args: SimpleNamespace) -> int:
 
 
 # ============================================================================
+# CLI COMMANDS -- TERRAIN HEIGHT MAP (static/terrain.%d)
+# ============================================================================
+
+def _load_terrain(filepath: str) -> Optional[U9Terrain]:
+    """Open a static/terrain.<region> file, reporting the reason on failure."""
+    if not os.path.isfile(filepath):
+        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
+        return None
+    try:
+        return U9Terrain.from_file(filepath)
+    except U9TerrainError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return None
+
+
+def cmd_terrain_info(args: SimpleNamespace) -> int:
+    """Summarize one region height map: grid, chunk sharing and height range."""
+    region = _load_terrain(args.file)
+    if region is None:
+        return 1
+
+    print(f"{args.file} -- {region.name or '(unnamed)'}")
+    if region.is_empty:
+        print("  Unused region slot: a bare header, no tile grid and no chunks.")
+        print(f"  Header still declares {region.declared_chunk_count} chunk(s).")
+        return 0
+
+    low, high = region.height_range()
+    unused = len(region.unused_chunks())
+    shared = region.shared_tile_count()
+    print(f"  Points          : {region.width}x{region.height}")
+    print(f"  World coords    : {region.world_width}x{region.world_height}")
+    print(f"  Tiles           : {region.tile_width}x{region.tile_height} "
+          f"({region.tile_count} total, {shared} sharing a chunk)")
+    print(f"  Chunks          : {region.chunk_count} "
+          f"(declared {region.declared_chunk_count}, {unused} referenced by no tile)")
+    print(f"  Height range    : {low}..{high}")
+    if region.slack_bytes:
+        print(f"  Trailing slack  : {region.slack_bytes} bytes past the last chunk")
+    return 0
+
+
+def cmd_terrain_tiles(args: SimpleNamespace) -> int:
+    """Print the tile grid as the chunk index each tile refers to."""
+    region = _load_terrain(args.file)
+    if region is None:
+        return 1
+    if region.is_empty:
+        print(f"{args.file} -- unused region slot, no tile grid.")
+        return 0
+
+    print(f"{args.file} -- {region.tile_width}x{region.tile_height} tiles "
+          f"over {region.chunk_count} chunk(s)")
+    width = max(3, len(str(max(region.tiles))))
+    for tile_y in range(region.tile_height):
+        base = tile_y * region.tile_width
+        row = region.tiles[base : base + region.tile_width]
+        print(f"{tile_y:>4}  " + " ".join(f"{v:>{width}}" for v in row))
+    return 0
+
+
+def cmd_terrain_chunk(args: SimpleNamespace) -> int:
+    """Dump one chunk's 16x16 points, as height, texture or frame."""
+    region = _load_terrain(args.file)
+    if region is None:
+        return 1
+    try:
+        if args.tile is not None:
+            try:
+                tile_x, tile_y = (int(v) for v in args.tile.split(",", 1))
+            except ValueError:
+                print(f"ERROR: --tile expects 'X,Y', got {args.tile!r}", file=sys.stderr)
+                return 1
+            index = region.tile(tile_x, tile_y)
+        else:
+            index = args.index or 0
+        chunk = region.chunk(index)
+    except U9TerrainError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
+    field = args.field
+    pick = {
+        "height": lambda p: p.height,
+        "texture": lambda p: p.texture,
+        "frame": lambda p: p.frame,
+        "hole": lambda p: int(p.is_hole),
+    }[field]
+    points = chunk.points()
+    values = [pick(p) for p in points]
+    holes = sum(1 for p in points if p.is_hole)
+
+    print(f"{args.file} -- chunk {index}, {field} "
+          f"({'flat' if chunk.is_flat else 'varied'}, {holes} hole point(s))")
+    width = max(2, len(str(max(values))))
+    for y in range(16):
+        row = values[y * 16 : (y + 1) * 16]
+        print(f"{y:>4}  " + " ".join(f"{v:>{width}}" for v in row))
+    return 0
+
+
+def cmd_terrain_textures(args: SimpleNamespace) -> int:
+    """Report which ground textures a region paints with, most used first."""
+    region = _load_terrain(args.file)
+    if region is None:
+        return 1
+    if region.is_empty:
+        print(f"{args.file} -- unused region slot, no chunks.")
+        return 0
+
+    histogram: Counter = Counter()
+    for chunk in region.chunks():
+        histogram.update(chunk.textures())
+    total = sum(histogram.values())
+
+    info = None
+    if args.sdinfo:
+        info = _load_sdinfo(args.sdinfo)
+        if info is None:
+            return 1
+        records = {r.index: r for r in info.records()}
+
+    print(f"{args.file} -- {total} point(s), {len(histogram)} distinct texture(s)")
+    header = f"{'Texture':>8}  {'Points':>9}  {'Share':>7}"
+    if info:
+        header += f"  {'Size':>9}  {'Frames':>6}"
+    print(header)
+    print("-" * len(header))
+    for texture, count in histogram.most_common(args.limit or None):
+        line = f"{texture:>8}  {count:>9}  {100 * count / total:>6.2f}%"
+        if info:
+            record = records.get(texture)
+            line += (f"  {f'{record.width}x{record.height}':>9}  {record.frame_count:>6}"
+                     if record else f"  {'--':>9}  {'--':>6}")
+        print(line)
+    if args.limit and len(histogram) > args.limit:
+        print(f"... ({len(histogram) - args.limit} more; raise --limit to see more)")
+    return 0
+
+
+def cmd_terrain_heightmap(args: SimpleNamespace) -> int:
+    """Render a region's height map to a greyscale PNG."""
+    region = _load_terrain(args.file)
+    if region is None:
+        return 1
+    if region.is_empty:
+        print(f"{args.file} -- unused region slot, nothing to render.")
+        return 1
+
+    rows = region.heightmap()
+    low, high = region.height_range()
+    span = max(1, high - low)
+    image = Image.new("L", (region.width, region.height))
+    image.putdata([(value - low) * 255 // span for row in rows for value in row])
+    if args.scale and args.scale > 1:
+        image = image.resize(
+            (region.width * args.scale, region.height * args.scale), Image.NEAREST
+        )
+
+    out_path = args.output or f"{Path(args.file).name.replace('.', '_')}_height.png"
+    directory = os.path.dirname(os.path.abspath(out_path))
+    os.makedirs(directory, exist_ok=True)
+    image.save(out_path)
+    print(f"{args.file} -- {region.width}x{region.height}, heights {low}..{high} "
+          f"-> {out_path}")
+    return 0
+
+
+def cmd_terrain_export(args: SimpleNamespace) -> int:
+    """Export every point of a region to CSV."""
+    region = _load_terrain(args.file)
+    if region is None:
+        return 1
+    if region.is_empty:
+        print(f"{args.file} -- unused region slot, nothing to export.")
+        return 1
+
+    out_path = args.output or f"{Path(args.file).name.replace('.', '_')}_points.csv"
+    directory = os.path.dirname(os.path.abspath(out_path))
+    os.makedirs(directory, exist_ok=True)
+    written = 0
+    with open(out_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow([
+            "x", "y", "tile_x", "tile_y", "chunk", "height", "hole",
+            "split", "frame", "texture", "flag13", "flag14", "raw",
+        ])
+        for tile_y in range(region.tile_height):
+            for tile_x in range(region.tile_width):
+                index = region.tile(tile_x, tile_y)
+                for point in region.chunk(index).points():
+                    flag13, flag14 = point.unknown_flags
+                    writer.writerow([
+                        tile_x * 16 + point.x, tile_y * 16 + point.y,
+                        tile_x, tile_y, index, point.height, int(point.is_hole),
+                        int(point.is_split), point.frame, point.texture,
+                        int(flag13), int(flag14), point.value,
+                    ])
+                    written += 1
+    print(f"{args.file} -- wrote {written} point(s) -> {out_path}")
+    return 0
+
+
+# ============================================================================
 # Typer command wrappers
 # ============================================================================
 
@@ -2333,3 +2538,74 @@ def fixed_types_cmd(
 ) -> None:
     """Report which object types a U9 static region uses."""
     raise SystemExit(cmd_fixed_types(SimpleNamespace(file=file, typenames=typenames, limit=limit)))
+
+
+@u9_app.command("terrain-info")
+def terrain_info_cmd(
+    file: Annotated[str, typer.Argument(help="Path to a static/terrain.<region> file")],
+) -> None:
+    """Summarize a U9 region height map."""
+    raise SystemExit(cmd_terrain_info(SimpleNamespace(file=file)))
+
+
+@u9_app.command("terrain-tiles")
+def terrain_tiles_cmd(
+    file: Annotated[str, typer.Argument(help="Path to a static/terrain.<region> file")],
+) -> None:
+    """Print a U9 region's tile grid as chunk indices."""
+    raise SystemExit(cmd_terrain_tiles(SimpleNamespace(file=file)))
+
+
+@u9_app.command("terrain-chunk")
+def terrain_chunk_cmd(
+    file: Annotated[str, typer.Argument(help="Path to a static/terrain.<region> file")],
+    index: Annotated[Optional[int], typer.Option("-i", "--index", help="Chunk index to dump")] = None,
+    tile: Annotated[
+        Optional[str], typer.Option("-t", "--tile", help="Dump the chunk a tile uses, as 'X,Y'"),
+    ] = None,
+    field: Annotated[
+        str, typer.Option("-f", "--field", help="Which field to show: height, texture, frame or hole"),
+    ] = "height",
+) -> None:
+    """Dump one 16x16 chunk of a U9 region height map."""
+    if field not in ("height", "texture", "frame", "hole"):
+        print(f"ERROR: --field must be height, texture, frame or hole, got {field!r}",
+              file=sys.stderr)
+        raise SystemExit(1)
+    raise SystemExit(cmd_terrain_chunk(SimpleNamespace(
+        file=file, index=index, tile=tile, field=field)))
+
+
+@u9_app.command("terrain-textures")
+def terrain_textures_cmd(
+    file: Annotated[str, typer.Argument(help="Path to a static/terrain.<region> file")],
+    sdinfo: Annotated[
+        Optional[str], typer.Option("--sdinfo", help="Path to a matching static/sdInfo*.flx for sizes"),
+    ] = None,
+    limit: Annotated[Optional[int], typer.Option("-n", "--limit", help="Maximum textures to print")] = None,
+) -> None:
+    """Report which ground textures a U9 region paints with."""
+    raise SystemExit(cmd_terrain_textures(SimpleNamespace(file=file, sdinfo=sdinfo, limit=limit)))
+
+
+@u9_app.command("terrain-heightmap")
+def terrain_heightmap_cmd(
+    file: Annotated[str, typer.Argument(help="Path to a static/terrain.<region> file")],
+    output: Annotated[
+        Optional[str], typer.Option("-o", "--output", help="Output PNG path"),
+    ] = None,
+    scale: Annotated[int, typer.Option("-s", "--scale", help="Nearest-neighbour magnification")] = 1,
+) -> None:
+    """Render a U9 region height map to a greyscale PNG."""
+    raise SystemExit(cmd_terrain_heightmap(SimpleNamespace(file=file, output=output, scale=scale)))
+
+
+@u9_app.command("terrain-export")
+def terrain_export_cmd(
+    file: Annotated[str, typer.Argument(help="Path to a static/terrain.<region> file")],
+    output: Annotated[
+        Optional[str], typer.Option("-o", "--output", help="Output CSV path"),
+    ] = None,
+) -> None:
+    """Export every point of a U9 region height map to CSV."""
+    raise SystemExit(cmd_terrain_export(SimpleNamespace(file=file, output=output)))
