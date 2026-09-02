@@ -147,6 +147,16 @@ def decode_frame(entry_data: bytes, frame_index: int = 0, palette: Optional[U9Pa
     pixel_data_start = frame_offset + header_size
     pixel_count = width * height
 
+    # The 8-bit paths index bytes directly, so a short buffer would raise a bare
+    # IndexError past this function's documented U9TextureError contract -- and
+    # bitmapsh.flx is entirely 8-bit, so that is the common path, not a corner.
+    bytes_needed = pixel_count * (1 if is_8bit else 2)
+    if pixel_data_start + bytes_needed > len(entry_data):
+        raise U9TextureError(
+            f"pixel data truncated: frame needs {bytes_needed} bytes at offset "
+            f"{pixel_data_start}, entry is {len(entry_data)} bytes"
+        )
+
     try:
         if is_8bit:
             if palette is not None:
@@ -157,7 +167,7 @@ def decode_frame(entry_data: bytes, frame_index: int = 0, palette: Optional[U9Pa
             pixels_rgba = _decode_565(entry_data, pixel_data_start, pixel_count)
         else:
             pixels_rgba = _decode_5551(entry_data, pixel_data_start, pixel_count)
-    except struct.error as e:
+    except (struct.error, IndexError) as e:
         raise U9TextureError(f"pixel data truncated: {e}") from e
 
     return U9TextureFrame(width=width, height=height, pixels_rgba=pixels_rgba, is_transparent=is_transparent)

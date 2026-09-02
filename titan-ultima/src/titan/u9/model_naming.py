@@ -39,9 +39,12 @@ Example::
 
 from __future__ import annotations
 
-__all__ = ["names_for_model", "label_for_model", "slugify"]
+__all__ = ["MAX_LABEL_LENGTH", "names_for_model", "label_for_model", "slugify"]
 
 import re
+
+MAX_LABEL_LENGTH = 64
+"""Longest label :func:`label_for_model` will return -- see its docstring."""
 
 from titan.u9.typename import U9TypeNames
 from titan.u9.types_dat import U9TypesDat
@@ -63,9 +66,27 @@ def slugify(text: str) -> str:
     return slug or "unnamed"
 
 
-def label_for_model(model_id: int, types: U9TypesDat, typenames: U9TypeNames) -> str | None:
-    """A single filesystem-safe slug joining every name claimed for ``model_id``, or ``None`` if none."""
+def label_for_model(
+    model_id: int, types: U9TypesDat, typenames: U9TypeNames, *, max_length: int = MAX_LABEL_LENGTH
+) -> str | None:
+    """A single filesystem-safe slug joining every name claimed for ``model_id``, or ``None`` if none.
+
+    Popular models are claimed by many types, and joining every name produces
+    labels long enough to break exports: model 766 (a scroll, claimed by ten
+    map types) yields 155 characters, and ``model-export-all`` puts the stem in
+    the path twice -- once as the folder, once as the file -- which clears
+    Windows' 260-character limit on its own.
+
+    The label is therefore truncated to ``max_length``, cut back to a hyphen so
+    it never ends mid-word. Callers pair it with the zero-padded model id, which
+    is what makes a stem unique, so truncation cannot collide two models.
+    """
     names = names_for_model(model_id, types, typenames)
     if not names:
         return None
-    return "-".join(slugify(name) for name in names)
+    label = "-".join(slugify(name) for name in names)
+    if len(label) <= max_length:
+        return label
+    clipped = label[:max_length]
+    cut = clipped.rfind("-")
+    return (clipped[:cut] if cut > 0 else clipped).rstrip("-")

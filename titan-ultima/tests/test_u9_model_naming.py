@@ -14,7 +14,12 @@ import struct
 import unittest
 
 from titan.u9.flx_archive import U9FlxArchive
-from titan.u9.model_naming import label_for_model, names_for_model, slugify
+from titan.u9.model_naming import (
+    MAX_LABEL_LENGTH,
+    label_for_model,
+    names_for_model,
+    slugify,
+)
 from titan.u9.typename import U9TypeNames
 from titan.u9.types_dat import U9TypesDat
 
@@ -112,6 +117,68 @@ class NamesForModelTests(unittest.TestCase):
 
         self.assertEqual(names_for_model(9999, types, typenames), [])
         self.assertIsNone(label_for_model(9999, types, typenames))
+
+
+class LabelLengthRegressionTests(unittest.TestCase):
+    """Labels are capped so nested export paths stay inside Windows' MAX_PATH.
+
+    Model 766 is claimed by ten map types and produced a 155-character label.
+    ``model-export-all`` writes ``<outdir>/<stem>/<stem>.obj``, putting the
+    stem in the path twice, which cleared the 260-character limit on its own.
+    """
+
+    MODEL_ID = 99
+
+    def _crowded_model(self, count: int = 20):
+        """One model claimed by ``count`` named types -- the shape that got long."""
+        types = _build_types([self.MODEL_ID] * count)
+        typenames = _build_typenames(
+            [_typename_entry(f"map of somewhere number {i}") for i in range(count)]
+        )
+        return types, typenames
+
+    def test_long_label_is_capped(self) -> None:
+        types, typenames = self._crowded_model()
+        label = label_for_model(self.MODEL_ID, types, typenames)
+        self.assertLessEqual(len(label), MAX_LABEL_LENGTH)
+
+    def test_cap_falls_on_a_hyphen_not_mid_word(self) -> None:
+        types, typenames = self._crowded_model()
+        label = label_for_model(self.MODEL_ID, types, typenames)
+        self.assertFalse(label.endswith("-"))
+        full = label_for_model(self.MODEL_ID, types, typenames, max_length=10_000)
+        self.assertGreater(len(full), MAX_LABEL_LENGTH)
+        self.assertTrue(full.startswith(label))
+
+    def test_short_label_is_untouched(self) -> None:
+        types = _build_types([0, 1805])
+        typenames = _build_typenames([_typename_entry(None), _typename_entry("Lord British")])
+        self.assertEqual(label_for_model(1805, types, typenames), "lord-british")
+
+    def test_max_length_is_overridable(self) -> None:
+        types, typenames = self._crowded_model()
+        label = label_for_model(self.MODEL_ID, types, typenames, max_length=20)
+        self.assertLessEqual(len(label), 20)
+        self.assertFalse(label.endswith("-"))
+
+    def test_truncation_cannot_collide_two_models(self) -> None:
+        # Callers pair the label with the zero-padded model id, which is what
+        # keeps stems unique once the label itself is clipped.
+        types = _build_types([1] * 20 + [2] * 20)
+        typenames = _build_typenames(
+            [_typename_entry(f"map of somewhere number {i}") for i in range(40)]
+        )
+        stems = {
+            f"model_{model_id:05d}_{label_for_model(model_id, types, typenames)}"
+            for model_id in (1, 2)
+        }
+        self.assertEqual(len(stems), 2)
+
+    def test_exported_path_stays_within_max_path(self) -> None:
+        # model-export-all nests the stem: <outdir>/<stem>/<stem>.obj
+        types, typenames = self._crowded_model()
+        stem = f"model_{self.MODEL_ID:05d}_{label_for_model(self.MODEL_ID, types, typenames)}"
+        self.assertLess(len(stem) * 2 + len("/.obj"), 200)
 
 
 if __name__ == "__main__":

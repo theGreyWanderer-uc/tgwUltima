@@ -189,6 +189,36 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Fixed
 
+- **`titan.u9.mesh_export` collapsed limbs that share a `limb_id`.**
+  `_world_matrices` resolved world transforms into a dict keyed by `limb_id`,
+  but three shipped `sappear.flx` models reuse an id across limbs carrying
+  different transforms, so the dict kept only the last and every copy was
+  placed at that one's position. Model 775's three `limb_id=91` limbs, stored
+  at (-49.6, 27.2, 0), (30.4, 44.8, 0) and (22.4, -25.6, 0), all exported at
+  the third; models 217 and 1296 were affected the same way. Matrices are now
+  keyed by the limb's index, with a parent named by a duplicated id resolving
+  to the first limb carrying it. Verified against all 3,764 archive entries.
+
+- **`titan.u9.texture` raised `IndexError` past its own error contract.** The
+  8-bit decode paths index bytes directly rather than going through
+  `struct.unpack_from`, and the guard around them caught only `struct.error`,
+  so a truncated 8-bit frame escaped as a bare `IndexError` while a truncated
+  16-bit frame correctly raised `U9TextureError`. `bitmapsh.flx` is entirely
+  8-bit, so this was the common path rather than a corner: any caller catching
+  `U9TextureError` to skip a bad entry crashed instead. `decode_frame` now
+  bounds-checks the pixel buffer before decoding.
+
+- **`titan.u9.model_naming` produced labels long enough to break exports.**
+  `label_for_model` joined every name claimed for a model, and model 766 -- a
+  scroll claimed by ten map types -- came back with 155 characters. Since
+  `model-export-all` writes `<outdir>/<stem>/<stem>.obj`, putting the stem in
+  the path twice, that cleared Windows' 260-character path limit on its own; a
+  single `model-export` already produced a 286-character path. Labels are now
+  capped at `MAX_LABEL_LENGTH` (64), cut back to a hyphen so they never end
+  mid-word, with the cap overridable per call. The zero-padded model id that
+  callers pair with the label keeps stems unique: all 1,706 named models still
+  resolve to distinct stems.
+
 - **`titan.u9.types_dat` accepted files that were not `TYPES.DAT`.** The reader
   validated nothing and silently discarded a trailing partial record, so any
   file at least 24 bytes long parsed as some number of nonsense records --

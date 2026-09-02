@@ -120,5 +120,56 @@ class DecodeFrameEdgeCaseTests(unittest.TestCase):
             decode_frame(bytes(entry))
 
 
+class TruncatedPixelDataRegressionTests(unittest.TestCase):
+    """8-bit frames must not leak IndexError past the U9TextureError contract.
+
+    The 8-bit decode paths index bytes directly rather than going through
+    ``struct.unpack_from``, so a short buffer raised a bare ``IndexError``
+    while the 16-bit paths raised ``U9TextureError``. ``bitmapsh.flx`` is
+    entirely 8-bit, so this was the common path: a caller catching
+    ``U9TextureError`` to skip a bad entry crashed instead.
+    """
+
+    @staticmethod
+    def _entry(width: int, height: int, payload: bytes, declared_length: int) -> bytes:
+        return (
+            struct.pack("<4HII", width, 0, height, 0, 1, 0)
+            + struct.pack("<2I", 0x18, declared_length)
+            + struct.pack("<2H4I", 0, 0x6000, width, height, 0, 0)
+            + b"\x00" * (4 * height)
+            + payload
+        )
+
+    def _truncated_8bit(self) -> bytes:
+        # declares a full 8-bit frame, supplies half the pixels
+        width = height = 4
+        declared = 0x14 + 4 * height + width * height
+        return self._entry(width, height, b"\x01" * (width * height // 2), declared)
+
+    def test_truncated_8bit_without_palette_raises_texture_error(self) -> None:
+        with self.assertRaises(U9TextureError):
+            decode_frame(self._truncated_8bit())
+
+    def test_truncated_8bit_with_palette_raises_texture_error(self) -> None:
+        with self.assertRaises(U9TextureError):
+            decode_frame(self._truncated_8bit(), 0, U9Palette(bytes(1024)))
+
+    def test_truncated_16bit_still_raises_texture_error(self) -> None:
+        width = height = 4
+        declared = 0x14 + 4 * height + width * height * 2
+        entry = self._entry(width, height, b"\x01" * (width * height), declared)
+        with self.assertRaises(U9TextureError):
+            decode_frame(entry)
+
+    def test_complete_8bit_frame_still_decodes(self) -> None:
+        width = height = 2
+        declared = 0x14 + 4 * height + width * height
+        entry = self._entry(width, height, b"\x7f" * (width * height), declared)
+        frame = decode_frame(entry)
+        self.assertEqual((frame.width, frame.height), (2, 2))
+        self.assertEqual(len(frame.pixels_rgba), 2 * 2 * 4)
+        self.assertEqual(frame.pixels_rgba[:4], b"\x7f\x7f\x7f\xff")
+
+
 if __name__ == "__main__":
     unittest.main()

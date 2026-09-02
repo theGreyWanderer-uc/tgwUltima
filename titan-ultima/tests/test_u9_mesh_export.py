@@ -13,10 +13,17 @@ docstring, not re-derived here.
 
 from __future__ import annotations
 
+import os
 import struct
+import tempfile
 import unittest
 
-from titan.u9.mesh_export import MeshExportError, export_obj, export_stl
+from titan.u9.mesh_export import (
+    MeshExportError,
+    _world_matrices,
+    export_obj,
+    export_stl,
+)
 from titan.u9.model import (
     INVISIBLE_TEXTURE_ID,
     U9Limb,
@@ -279,6 +286,84 @@ class ExportStlTests(unittest.TestCase):
         # second written vertex = corner 1 = vertex_index 1 = local (1,0,0), scale 1 -> world (1,0,0)
         vx, vy, vz = struct.unpack_from("<3f", data, 84 + 12 + 12)
         self.assertAlmostEqual(vx, 1.0, places=5)
+
+
+class DuplicateLimbIdRegressionTests(unittest.TestCase):
+    """Three shipped models reuse a limb_id across limbs with different transforms.
+
+    ``sappear.flx`` models 217, 775 and 1296 each carry two or more limbs
+    sharing one ``limb_id``. Resolving world matrices into a dict keyed by
+    ``limb_id`` keeps only the last of them, so every copy is placed at that
+    one's position -- model 775's three ``limb_id=91`` limbs, stored at
+    (-49.6, 27.2, 0), (30.4, 44.8, 0) and (22.4, -25.6, 0), all collapsed onto
+    the third. Matrices are keyed by limb index instead.
+    """
+
+    def _duplicate_id_model(self) -> U9Model:
+        # two limbs, same limb_id, different translations, both roots
+        limbs = [
+            U9Limb(limb_id=7, parent_id=7, scale=(1.0, 1.0, 1.0), position=(10.0, 0.0, 0.0),
+                   rotation=(1.0, 0.0, 0.0, 0.0), lods=(_single_triangle_lod(1),)),
+            U9Limb(limb_id=7, parent_id=7, scale=(1.0, 1.0, 1.0), position=(0.0, 20.0, 0.0),
+                   rotation=(1.0, 0.0, 0.0, 0.0), lods=(_single_triangle_lod(1),)),
+        ]
+        return _model_header_defaults(775, limbs)
+
+    def test_duplicate_ids_keep_their_own_transforms(self) -> None:
+        matrices = _world_matrices(self._duplicate_id_model())
+        self.assertEqual(len(matrices), 2)
+        translations = [(matrices[i][3], matrices[i][7], matrices[i][11]) for i in (0, 1)]
+        self.assertEqual(translations, [(10.0, 0.0, 0.0), (0.0, 20.0, 0.0)])
+
+    def test_export_does_not_collapse_duplicate_limbs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "dup.obj")
+            export_obj(self._duplicate_id_model(), path, scale=1.0)
+            xs = {round(p[0], 3) for p in _parse_obj_positions(path)}
+            ys = {round(p[1], 3) for p in _parse_obj_positions(path)}
+        # the second limb must still contribute geometry 20 units up in Y
+        self.assertIn(10.0, xs)
+        self.assertIn(20.0, ys)
+
+    def test_parent_named_by_a_duplicated_id_resolves_to_the_first(self) -> None:
+        limbs = [
+            U9Limb(limb_id=3, parent_id=3, scale=(1.0, 1.0, 1.0), position=(5.0, 0.0, 0.0),
+                   rotation=(1.0, 0.0, 0.0, 0.0), lods=(_single_triangle_lod(1),)),
+            U9Limb(limb_id=3, parent_id=3, scale=(1.0, 1.0, 1.0), position=(0.0, 9.0, 0.0),
+                   rotation=(1.0, 0.0, 0.0, 0.0), lods=(_single_triangle_lod(1),)),
+            U9Limb(limb_id=4, parent_id=3, scale=(1.0, 1.0, 1.0), position=(1.0, 0.0, 0.0),
+                   rotation=(1.0, 0.0, 0.0, 0.0), lods=(_single_triangle_lod(1),)),
+        ]
+        matrices = _world_matrices(_model_header_defaults(1, limbs))
+        # child of "limb 3" rides the *first* limb 3 (5,0,0), not the second
+        self.assertEqual((matrices[2][3], matrices[2][7], matrices[2][11]), (6.0, 0.0, 0.0))
+
+
+class ImplicitRootRegressionTests(unittest.TestCase):
+    """505 shipped models point a limb at parent 0, which is never stored.
+
+    Limb 0 is an implicit model root that no ``sappear.flx`` record writes out.
+    A limb naming it must fall back to its own local transform rather than
+    being dropped or resolved against a missing parent.
+    """
+
+    def test_missing_parent_falls_back_to_the_local_transform(self) -> None:
+        limbs = [
+            U9Limb(limb_id=1, parent_id=0, scale=(1.0, 1.0, 1.0), position=(3.0, 4.0, 5.0),
+                   rotation=(1.0, 0.0, 0.0, 0.0), lods=(_single_triangle_lod(1),)),
+        ]
+        matrices = _world_matrices(_model_header_defaults(2, limbs))
+        self.assertEqual((matrices[0][3], matrices[0][7], matrices[0][11]), (3.0, 4.0, 5.0))
+
+    def test_parent_cycle_still_terminates(self) -> None:
+        limbs = [
+            U9Limb(limb_id=1, parent_id=2, scale=(1.0, 1.0, 1.0), position=(1.0, 0.0, 0.0),
+                   rotation=(1.0, 0.0, 0.0, 0.0), lods=(_single_triangle_lod(1),)),
+            U9Limb(limb_id=2, parent_id=1, scale=(1.0, 1.0, 1.0), position=(0.0, 1.0, 0.0),
+                   rotation=(1.0, 0.0, 0.0, 0.0), lods=(_single_triangle_lod(1),)),
+        ]
+        matrices = _world_matrices(_model_header_defaults(3, limbs))
+        self.assertEqual(len(matrices), 2)
 
 
 if __name__ == "__main__":

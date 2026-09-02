@@ -98,29 +98,43 @@ class _FlatVertex:
 
 
 def _world_matrices(model: U9Model) -> dict[int, Mat4]:
-    """Resolve each limb's world matrix by walking its parent chain (memoized, cycle-safe)."""
-    by_id = {limb.limb_id: limb for limb in model.limbs}
+    """Resolve each limb's world matrix by walking its parent chain (memoized, cycle-safe).
+
+    Keyed by the limb's **index** in ``model.limbs``, not by ``limb_id``: three
+    shipped models (217, 775, 1296) reuse a ``limb_id`` across limbs that carry
+    different transforms, so an id-keyed map keeps only the last and collapses
+    every copy onto its position.
+
+    A parent is still named by ``limb_id``; where an id is duplicated the first
+    limb carrying it is taken as the parent. A ``parent_id`` naming no stored
+    limb -- 505 shipped models point at limb 0, an implicit root that is never
+    written out -- resolves to identity, leaving the limb at its own local
+    transform.
+    """
+    first_index_for_id: dict[int, int] = {}
+    for index, limb in enumerate(model.limbs):
+        first_index_for_id.setdefault(limb.limb_id, index)
+
     resolved: dict[int, Mat4] = {}
 
-    def resolve(limb_id: int, _visiting: frozenset[int] = frozenset()) -> Mat4:
-        if limb_id in resolved:
-            return resolved[limb_id]
-        limb = by_id.get(limb_id)
-        if limb is None:
-            return IDENTITY
+    def resolve(index: int, _visiting: frozenset[int] = frozenset()) -> Mat4:
+        if index in resolved:
+            return resolved[index]
+        limb = model.limbs[index]
 
         local = mat4_trs(limb.position, limb.rotation, limb.scale)
-        if limb.is_root or limb.parent_id in _visiting or limb.parent_id not in by_id:
+        parent_index = first_index_for_id.get(limb.parent_id)
+        if limb.is_root or parent_index is None or parent_index in _visiting:
             world = local
         else:
-            parent_world = resolve(limb.parent_id, _visiting | {limb_id})
+            parent_world = resolve(parent_index, _visiting | {index})
             world = mat4_multiply(parent_world, local)
 
-        resolved[limb_id] = world
+        resolved[index] = world
         return world
 
-    for limb in model.limbs:
-        resolve(limb.limb_id)
+    for index in range(len(model.limbs)):
+        resolve(index)
     return resolved
 
 
@@ -128,13 +142,13 @@ def _flatten(model: U9Model, lod_level: int, reverse_winding: bool) -> list[tupl
     world_matrices = _world_matrices(model)
     triangles: list[tuple[_FlatVertex, _FlatVertex, _FlatVertex]] = []
 
-    for limb in model.limbs:
+    for limb_index, limb in enumerate(model.limbs):
         if lod_level >= len(limb.lods):
             continue
         lod = limb.lods[lod_level]
         if lod is None:
             continue
-        world = world_matrices.get(limb.limb_id, IDENTITY)
+        world = world_matrices.get(limb_index, IDENTITY)
 
         for tri in lod.triangles:
             material = lod.materials[tri.material_index] if lod.materials else None
