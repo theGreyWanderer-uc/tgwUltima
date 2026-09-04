@@ -9,6 +9,8 @@ import unittest
 from types import SimpleNamespace
 
 from titan.u9.cli import (
+    PALETTE_FILENAME,
+    _find_palette,
     cmd_flx_extract,
     cmd_flx_extract_all,
     cmd_flx_list,
@@ -165,6 +167,62 @@ class SoundCliCommandTests(unittest.TestCase):
         written = os.listdir(outdir)
         self.assertEqual(len(written), 1)
         self.assertIn("pcm_one.wav", written[0])
+
+
+class PaletteDiscoveryTests(unittest.TestCase):
+    """``ankh.pal`` sits beside the archive, so it is found without being asked for.
+
+    Decoding an 8-bit frame with no palette does not fail -- it silently
+    produces a scrambled greyscale image, because the palette is ordered by hue
+    rather than by brightness. A whole-game extraction was published with all
+    6,597 ``bitmapsh.flx`` entries wrong that way, which is why discovery is
+    automatic rather than merely warned about.
+    """
+
+    @staticmethod
+    def _touch(*paths: str) -> None:
+        for path in paths:
+            with open(path, "wb") as f:
+                f.write(b"x")
+
+    def test_finds_the_palette_beside_the_archive(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = os.path.join(tmp, "bitmapsh.flx")
+            palette = os.path.join(tmp, PALETTE_FILENAME)
+            self._touch(archive, palette)
+            found, auto = _find_palette(None, archive)
+            self.assertEqual(found, palette)
+            self.assertTrue(auto)
+
+    def test_match_is_case_insensitive(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = os.path.join(tmp, "bitmapsh.flx")
+            self._touch(archive, os.path.join(tmp, "ANKH.PAL"))
+            found, auto = _find_palette(None, archive)
+            self.assertIsNotNone(found)
+            self.assertTrue(auto)
+
+    def test_explicit_palette_wins_over_discovery(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = os.path.join(tmp, "bitmapsh.flx")
+            chosen = os.path.join(tmp, "other.pal")
+            self._touch(archive, os.path.join(tmp, PALETTE_FILENAME), chosen)
+            found, auto = _find_palette(chosen, archive)
+            self.assertEqual(found, chosen)
+            self.assertFalse(auto)
+
+    def test_no_palette_beside_the_archive_returns_none(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = os.path.join(tmp, "bitmapsh.flx")
+            self._touch(archive)
+            self.assertEqual(_find_palette(None, archive), (None, False))
+
+    def test_missing_directory_is_not_an_error(self) -> None:
+        missing = os.path.join(tempfile.gettempdir(), "no_such_titan_dir", "x.flx")
+        self.assertEqual(_find_palette(None, missing), (None, False))
+
+    def test_no_archive_path_returns_none(self) -> None:
+        self.assertEqual(_find_palette(None, None), (None, False))
 
 
 if __name__ == "__main__":

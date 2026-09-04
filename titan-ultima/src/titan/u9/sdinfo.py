@@ -106,6 +106,31 @@ class U9SdInfoRecord:
     fields: tuple[int, ...]
 
     @property
+    def format_selector(self) -> int:
+        """The engine's pixel-format selector for this texture: ``fields[0]`` byte 1.
+
+        This is the descriptor byte the renderer switches on, and it is the only
+        thing that distinguishes the two one-byte-per-texel formats from each
+        other -- a payload-length test sees both as "8-bit":
+
+        =======  ==========================  ==============================
+        Value    Format                      8-bit frames in shipped data
+        =======  ==========================  ==============================
+        0        ``P_8`` -- palette indices  12,254
+        2        ``ALPHA_INTENSITY_44``      42
+        3        ``ALPHA_8`` -- mask         10,428
+        =======  ==========================  ==============================
+
+        Value 1 also occurs, only on 16-bit and BC1 entries.
+
+        Pass this to :func:`titan.u9.texture.decode_frame` as ``selector`` to
+        decode a texture the way the engine does. Without it that function falls
+        back to bit 9 of the frame flags, which agrees on 22,724 of 22,724 8-bit
+        frames but cannot separate ``ALPHA_INTENSITY_44`` from ``ALPHA_8``.
+        """
+        return (self.fields[0] >> 8) & 0xFF
+
+    @property
     def is_animated(self) -> bool:
         return self.frame_count > 1
 

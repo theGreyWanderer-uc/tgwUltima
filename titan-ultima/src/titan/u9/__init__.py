@@ -9,6 +9,7 @@ Canonical imports::
     from titan.u9.books import U9Books
     from titan.u9.fixed import U9Fixed
     from titan.u9.flx_archive import U9FlxArchive
+    from titan.u9.flx_writer import build_flx
     from titan.u9.highway import U9Highway
     from titan.u9.npc import U9Npcs
     from titan.u9.sdinfo import U9SdInfo
@@ -49,6 +50,13 @@ from titan.u9.fixed import (
     U9FixedPage,
 )
 from titan.u9.flx_archive import U9FlxArchive, U9FlxArchiveError, U9FlxDirEntry
+from titan.u9.flx_writer import (
+    U9FlxWriteError,
+    build_flx,
+    repack,
+    repack_equivalent,
+    write_flx,
+)
 from titan.u9.highway import U9Highway, U9HighwayError, U9HighwayPoint, U9HighwayRoute
 from titan.u9.icon import icon_entry_indices, used_texture_ids
 from titan.u9.mesh_export import MeshExportError, export_obj, export_stl
@@ -84,12 +92,23 @@ from titan.u9.terrain import (
 )
 from titan.u9.text import U9TextArchive, U9TextBlock, U9TextEntry, U9TextError
 from titan.u9.texture import U9TextureError, U9TextureFrame, decode_frame
+from titan.u9.texture_writer import (
+    U9TextureWriteError,
+    encode_bc1,
+    frame_encoding,
+    replace_frame,
+)
 from titan.u9.triggers import U9Trigger, U9TriggerRecord, U9Triggers, U9TriggersError
 from titan.u9.typename import U9TypeNameEntry, U9TypeNames
 from titan.u9.types_dat import U9TypeRecord, U9TypesDat, U9TypesDatError
 
 __all__ = [
     "U9FlxArchive",
+    "U9FlxWriteError",
+    "build_flx",
+    "repack",
+    "repack_equivalent",
+    "write_flx",
     "U9FlxArchiveError",
     "U9FlxDirEntry",
     "U9TypeNames",
@@ -111,6 +130,10 @@ __all__ = [
     "decode_frame",
     "U9TextureFrame",
     "U9TextureError",
+    "U9TextureWriteError",
+    "encode_bc1",
+    "frame_encoding",
+    "replace_frame",
     "export_obj",
     "export_stl",
     "MeshExportError",

@@ -48,6 +48,40 @@ This project uses [Semantic Versioning](https://semver.org/):
   order — only 1 of 2,815 chunks lands where that predicts, so grid position has
   to come from the page's own base.
 
+- **U9 BC1 texture support and PNG import:** `static/bitmapC.flx`'s
+  `compression = 1` is **BC1/DXT1**, not the unknown format previously recorded
+  here — confirmed on real data (payload length matches a BC1 base plus mip
+  chain on 2,029 of 2,029 sampled frames) and cross-checked against `u9ed`,
+  which decodes it with `BCnEncoder.Net`. `titan.u9.texture` now decodes it, so
+  `bitmapC.flx` went from **14% readable to 100%** — roughly 122 MB of texture
+  data that titan previously rejected. Added `titan.u9.texture_writer`, which
+  encodes RGB565, RGBA5551, 8-bit paletted and BC1, and replaces one frame's
+  pixels in place; and `titan u9 texture-import`, which drops a same-size PNG
+  into a given entry and frame. Round-trip on real archives is **lossless for
+  RGB565 and 8-bit paletted (RMSE 0.00)** and 2.77 RMSE mean for BC1, which is
+  lossy by construction; the patched entry is always exactly as long as the
+  original, so the four undecoded header fields and the row offset table are
+  carried through untouched. Documented in
+  `reference/u9/texture/u9_bitmap_flx_reference.md`.
+
+- **U9 FLX packing:** added `titan.u9.flx_writer`, the counterpart to
+  `titan.u9.flx_archive` — U9's container format can now be written as well as
+  read, so an archive can be unpacked, edited and packed back. Added
+  `titan u9 flx-pack` (build an archive from the `NNNNN.bin` files
+  `flx-extract-all` produces) and `titan u9 flx-repack` (rebuild an archive,
+  optionally swapping entries, and verify the result). Header conventions were
+  measured across all 25 shipped archives, which agree exactly: `unknown1` is 0,
+  `unknown2` is 2, both size fields hold the total file size, the reserved block
+  at `0x60` is constant, and payload starts flush against the directory with no
+  gaps and no alignment. Round-tripping every shipped archive gives **19 of 25
+  byte-identical, 6 content-equivalent, 0 broken**; each of the six shrinks by
+  exactly its count of bytes no directory entry points at (`treedat.flx` is 38%
+  dead space), with zero overlapping bytes anywhere, so a rebuild is lossless
+  for everything an archive declares. Documented in
+  `reference/u9/flx/u9_flx_container_reference.md`. This writes the container
+  only — re-encoding a decoded texture or model back into an entry still has no
+  implementation.
+
 - **U9 books and signs:** added `titan.u9.books`, a reader for
   `static/BOOKS-EN.FLX` — every readable object in the game that is not spoken
   dialogue: books, scrolls, signs, plaques, banners and quest note strings.
@@ -188,6 +222,67 @@ This project uses [Semantic Versioning](https://semver.org/):
   base-game archives retain the existing direct rendering behavior.
 
 ### Fixed
+
+- **8-bit texture frames are three formats, and the selector is in `sdInfo`.**
+  One byte per texel covers `P_8` (palette indices), `ALPHA_8` (a coverage mask
+  whose colour comes from the vertex) and `ALPHA_INTENSITY_44` (4-bit alpha plus
+  4-bit intensity), and a payload-length test sees all three as simply "8-bit".
+  The engine's discriminator turns out to be present in the shipped data:
+  **`sdInfo` field 0, byte 1**, now exposed as
+  `U9SdInfoRecord.format_selector` and accepted by `decode_frame` as
+  `selector`. `icon-export`, `icon-export-all`, `model-export`,
+  `model-export-all` and `texture-import` find the matching `sdInfo` archive
+  beside the bitmap archive automatically. Verified against an independent
+  classification: on `bitmapsh.flx`, the only archive holding both kinds, the
+  byte separates them perfectly, including on the 1,629 entries where it
+  disagrees with the frame-header flags. Without an `sdInfo` the reader falls
+  back to frame-flags bit 9, which agrees on all 22,724 shipped 8-bit frames
+  about mask-versus-paletted but cannot separate the two mask formats — so the
+  42 `ALPHA_INTENSITY_44` frames (`bitmapsh` entries 1025, 2070, 3190) decoded
+  as flat masks until now.
+
+- **8-bit texture frames are two formats, and every one was decoded as
+  paletted.** One byte per texel covers both **P_8** (palette indices) and
+  **ALPHA_8** (an intensity mask whose colour comes from the vertex), and the
+  engine tells them apart with a descriptor selector that is not in the archive
+  — so the payload-length test that identifies "8-bit" cannot identify *which*
+  8-bit. Running `ankh.pal` over a mask produces rainbow confetti; sparkles,
+  lightning and the pentagram glow were all affected. `decode_frame` now treats
+  bit 9 (`0x200`) of the frame-header flags as the discriminator, which
+  separates shipped data cleanly (mean step ~5 between adjacent texel values
+  with the bit set, ~22 without), and reports the outcome as
+  `U9TextureFrame.is_intensity`. Masks decode with coverage in alpha, mirrored
+  into RGB so they stay visible. **10,470 of 22,724 8-bit frames are masks**, so
+  `ankh.pal` is needed by `bitmapsh.flx` alone — every 8-bit frame in
+  `bitmap16.flx` and `bitmapC.flx` is a mask, which is why those two archives
+  carry exactly the same 3,476 of them. Not to be confused with a `U9Material`'s
+  own `0x200`, which selects point over bilinear filtering.
+
+- **8-bit textures decoded as scrambled greyscale unless a palette was passed
+  by hand.** `static/ankh.pal` sits beside every texture archive, but the CLI
+  only used it when `-p/--palette` was given; without it, `decode_frame` fell
+  back to treating the raw palette index as a grey level. That fallback is not
+  merely desaturated but structurally wrong, because `ankh.pal` is ordered by
+  hue rather than brightness — index 10 is a bright lavender `(179, 132, 233)`
+  and rendered as grey level 10, very nearly black. The result keeps the image's
+  shapes, so it reads as a real low-detail greyscale asset rather than an error.
+  A whole-game bulk extraction was published with all **6,597 `bitmapsh.flx`
+  entries** wrong this way, and with `bitmapsh` being 99.1% 8-bit the archive
+  looked like a greyscale set. `icon-export`, `icon-export-all`, `model-export`,
+  `model-export-all` and `texture-import` now find `ankh.pal` next to the
+  archive automatically, report which palette they used, and warn when they
+  decode without one. `-p` still overrides.
+
+- **`titan u9 icon-export` overwrote its own output across frames.** The
+  output file was named `icon_<entry>.png` with no frame index, so exporting a
+  second frame of the same entry replaced the first instead of sitting beside
+  it — silently, and most visibly on the animated entries that hold ten or
+  twenty frames. Output is now `icon_<entry>_frame_<n>.png`.
+
+- **`titan.u9.flx_archive` documented the comment field as NUL-padded.** All 25
+  shipped archives space-pad it (`0x20`). Read-only, so nothing behaved wrongly,
+  but a writer following the docstring would have produced a visible diff
+  against every original.
 
 - **`titan.u9.mesh_export` collapsed limbs that share a `limb_id`.**
   `_world_matrices` resolved world transforms into a dict keyed by `limb_id`,

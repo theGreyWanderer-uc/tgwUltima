@@ -10,6 +10,7 @@ __all__ = ["u9_app"]
 
 import csv
 import os
+import re
 import struct
 import sys
 from collections import Counter
@@ -23,6 +24,12 @@ from PIL import Image
 from titan.u9.activity import U9Activities, U9ActivityError
 from titan.u9.books import U9Books, U9BooksError
 from titan.u9.flx_archive import U9FlxArchive, U9FlxArchiveError
+from titan.u9.flx_writer import (
+    U9FlxWriteError,
+    repack,
+    repack_equivalent,
+    write_flx,
+)
 from titan.u9.fixed import U9Fixed, U9FixedError
 from titan.u9.highway import U9Highway, U9HighwayError
 from titan.u9.icon import icon_entry_indices
@@ -37,6 +44,11 @@ from titan.u9.sound import U9SoundRecord, U9SoundRecordError
 from titan.u9.text import U9TextArchive, U9TextError
 from titan.u9.terrain import U9Terrain, U9TerrainError
 from titan.u9.texture import U9TextureError, decode_frame
+from titan.u9.texture_writer import (
+    U9TextureWriteError,
+    frame_encoding,
+    replace_frame,
+)
 from titan.u9.triggers import U9Triggers, U9TriggersError
 from titan.u9.typename import U9TypeNames
 from titan.u9.types_dat import U9TypesDat, U9TypesDatError
@@ -360,16 +372,103 @@ def cmd_model_info(args: SimpleNamespace) -> int:
     return 0
 
 
+PALETTE_FILENAME = "ankh.pal"
+
+
+def _find_palette(explicit: Optional[str], beside: Optional[str]) -> tuple[Optional[str], bool]:
+    """Resolve which palette file to use.
+
+    Returns ``(path, was_auto_discovered)``. An explicit ``-p`` always wins.
+    Otherwise ``ankh.pal`` is looked for next to the archive being read, which
+    is where the game keeps it -- decoding an 8-bit frame without it silently
+    produces a scrambled greyscale image rather than an error, so finding it is
+    worth doing automatically.
+    """
+    if explicit:
+        return explicit, False
+    if not beside:
+        return None, False
+    directory = os.path.dirname(os.path.abspath(beside))
+    try:
+        entries = os.listdir(directory)
+    except OSError:
+        return None, False
+    for name in entries:
+        if name.lower() == PALETTE_FILENAME:
+            return os.path.join(directory, name), True
+    return None, False
+
+
+def _load_palette(explicit: Optional[str], beside: Optional[str], *, quiet: bool = False):
+    """Load the palette for a decode, reporting where it came from."""
+    path, auto = _find_palette(explicit, beside)
+    if path is None:
+        if not quiet:
+            print(f"  NOTE: no {PALETTE_FILENAME} found next to the archive; 8-bit frames "
+                  f"will decode as scrambled greyscale. Pass -p to supply one.")
+        return None
+    try:
+        palette = U9Palette.from_file(path)
+    except (U9PaletteError, OSError) as e:
+        print(f"ERROR: could not read palette {path}: {e}", file=sys.stderr)
+        return None
+    if auto and not quiet:
+        print(f"  Palette         : {path} (found automatically)")
+    return palette
+
+
+SDINFO_FOR_ARCHIVE = {
+    "bitmapsh.flx": "sdInfo.flx",
+    "bitmap16.flx": "sdInfo16.flx",
+    "bitmapc.flx": "sdInfoC.flx",
+}
+
+
+def _load_selectors(textures_path: Optional[str], *, quiet: bool = False) -> dict:
+    """Map entry index -> the engine's pixel-format selector, from sdInfo.
+
+    The selector is the only thing separating the two one-byte-per-texel
+    formats, so decoding without it silently renders 42 ALPHA_INTENSITY_44
+    frames as plain masks. The matching sdInfo archive sits beside the bitmap
+    archive, so it is found the same way ankh.pal is.
+    """
+    if not textures_path:
+        return {}
+    partner = SDINFO_FOR_ARCHIVE.get(os.path.basename(textures_path).lower())
+    if partner is None:
+        return {}
+    directory = os.path.dirname(os.path.abspath(textures_path))
+    try:
+        entries = os.listdir(directory)
+    except OSError:
+        return {}
+    match = next((n for n in entries if n.lower() == partner.lower()), None)
+    if match is None:
+        if not quiet:
+            print(f"  NOTE: no {partner} beside the archive; ALPHA_INTENSITY_44 frames "
+                  f"will decode as plain masks.")
+        return {}
+    try:
+        info = U9SdInfo.from_file(os.path.join(directory, match))
+    except (U9SdInfoError, OSError):
+        return {}
+    if not quiet:
+        print(f"  Format table    : {os.path.join(directory, match)} (found automatically)")
+    return {r.index: r.format_selector for r in info.records()}
+
+
 def _make_texture_resolver(textures_path: Optional[str], palette_path: Optional[str]):
     if not textures_path:
         return None
     texture_archive = U9FlxArchive.from_file(textures_path)
-    palette = U9Palette.from_file(palette_path) if palette_path else None
+    palette = _load_palette(palette_path, textures_path)
+    selectors = _load_selectors(textures_path)
 
     def resolver(texture_id: int, frame: int):
         try:
             blob = texture_archive.read_entry(texture_id)
-            return decode_frame(blob, frame, palette=palette)
+            return decode_frame(blob, frame, palette=palette,
+                                selector=selectors.get(texture_id))
         except (U9FlxArchiveError, U9TextureError):
             return None
 
@@ -600,18 +699,24 @@ def cmd_icon_export(args: SimpleNamespace) -> int:
         print(f"ERROR: entry {args.entry_id} is an empty/unused archive slot", file=sys.stderr)
         return 1
 
-    palette = U9Palette.from_file(args.palette) if args.palette else None
+    palette = _load_palette(args.palette, args.textures)
+    selectors = _load_selectors(args.textures)
     try:
-        frame = decode_frame(blob, args.frame, palette=palette)
+        frame = decode_frame(blob, args.frame, palette=palette,
+                             selector=selectors.get(args.entry_id))
     except U9TextureError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
 
     outdir = args.output or "."
     os.makedirs(outdir, exist_ok=True)
-    out_path = os.path.join(outdir, f"icon_{args.entry_id:05d}.png")
+    # The frame index belongs in the name: an entry can hold many frames, and
+    # naming them all after the entry alone made a second export overwrite the
+    # first instead of sitting beside it.
+    out_path = os.path.join(outdir, f"icon_{args.entry_id:05d}_frame_{args.frame:03d}.png")
     Image.frombytes("RGBA", (frame.width, frame.height), frame.pixels_rgba).save(out_path)
-    print(f"Exported entry {args.entry_id} ({frame.width}x{frame.height}) -> {out_path}")
+    print(f"Exported entry {args.entry_id} frame {args.frame} "
+          f"({frame.width}x{frame.height}) -> {out_path}")
     return 0
 
 
@@ -634,7 +739,8 @@ def cmd_icon_export_all(args: SimpleNamespace) -> int:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
 
-    palette = U9Palette.from_file(args.palette) if args.palette else None
+    palette = _load_palette(args.palette, args.textures)
+    selectors = _load_selectors(args.textures)
     icon_ids = icon_entry_indices(sappear, textures)
 
     outdir = args.output or "icon_export"
@@ -645,7 +751,7 @@ def cmd_icon_export_all(args: SimpleNamespace) -> int:
     for idx in icon_ids:
         blob = textures.read_entry(idx)
         try:
-            frame = decode_frame(blob, 0, palette=palette)
+            frame = decode_frame(blob, 0, palette=palette, selector=selectors.get(idx))
         except U9TextureError:
             failed += 1
             continue
@@ -2070,6 +2176,170 @@ def cmd_books_export(args: SimpleNamespace) -> int:
 
 
 # ============================================================================
+# CLI COMMANDS -- FLX PACKING
+# ============================================================================
+
+_FLX_ENTRY_RE = re.compile(r"^(\d+)\.bin$", re.IGNORECASE)
+
+
+def _entries_from_dir(directory: str) -> Optional[dict]:
+    """Read NNNNN.bin files back into an {index: blob} table."""
+    if not os.path.isdir(directory):
+        print(f"ERROR: Directory not found: {directory}", file=sys.stderr)
+        return None
+    entries: dict = {}
+    skipped = 0
+    for name in sorted(os.listdir(directory)):
+        match = _FLX_ENTRY_RE.match(name)
+        if match is None:
+            skipped += 1
+            continue
+        with open(os.path.join(directory, name), "rb") as f:
+            entries[int(match.group(1))] = f.read()
+    if not entries:
+        print(f"ERROR: No NNNNN.bin entry files in {directory}", file=sys.stderr)
+        return None
+    if skipped:
+        print(f"  (ignored {skipped} file(s) not named NNNNN.bin)")
+    return entries
+
+
+def cmd_flx_pack(args: SimpleNamespace) -> int:
+    """Build an FLX archive from a directory of NNNNN.bin entry files."""
+    entries = _entries_from_dir(args.directory)
+    if entries is None:
+        return 1
+    try:
+        written = write_flx(args.output, entries, count=args.count, comment=args.comment)
+    except U9FlxWriteError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+    slots = args.count if args.count is not None else max(entries) + 1
+    print(f"Packed {len(entries)} entr{'y' if len(entries) == 1 else 'ies'} "
+          f"into {slots} slot(s) -> {args.output} ({written} bytes)")
+    if args.count is None:
+        print("  Slot count was inferred. Pass --count to match an original archive.")
+    return 0
+
+
+def cmd_flx_repack(args: SimpleNamespace) -> int:
+    """Rebuild an FLX archive, optionally replacing entries, and verify the result."""
+    if not os.path.isfile(args.file):
+        print(f"ERROR: File not found: {args.file}", file=sys.stderr)
+        return 1
+    try:
+        archive = U9FlxArchive.from_file(args.file)
+    except U9FlxArchiveError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
+    replacements: dict = {}
+    if args.replace:
+        entries = _entries_from_dir(args.replace)
+        if entries is None:
+            return 1
+        replacements = entries
+
+    try:
+        data = repack(archive, replacements)
+    except U9FlxWriteError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
+    with open(args.file, "rb") as f:
+        original = f.read()
+
+    identical = data == original
+    equivalent = repack_equivalent(original, data)
+
+    out_path = args.output or (Path(args.file).stem + "_repacked.flx")
+    os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+    with open(out_path, "wb") as f:
+        f.write(data)
+
+    print(f"{args.file} -- {len(archive.used_entry_indices())} used of "
+          f"{archive.num_entries} slot(s)")
+    if replacements:
+        print(f"  Replaced        : {len(replacements)} entr"
+              f"{'y' if len(replacements) == 1 else 'ies'}")
+    print(f"  Written         : {out_path} ({len(data)} bytes, "
+          f"{len(data) - len(original):+d})")
+    if not replacements:
+        print(f"  Byte-identical  : {'yes' if identical else 'no'}")
+        print(f"  Same contents   : {'yes' if equivalent else 'NO -- THIS IS A BUG'}")
+        if not identical and equivalent:
+            print("  The rebuild drops bytes no directory entry points at, and may")
+            print("  reorder payloads. Every entry the archive declares is preserved.")
+    return 0 if (equivalent or replacements) else 1
+
+
+# ============================================================================
+# CLI COMMANDS -- TEXTURE IMPORT (PNG -> bitmap*.flx)
+# ============================================================================
+
+def cmd_texture_import(args: SimpleNamespace) -> int:
+    """Replace one texture frame with a PNG of the same size."""
+    for label, path in (("Archive", args.textures), ("Image", args.image)):
+        if not os.path.isfile(path):
+            print(f"ERROR: {label} not found: {path}", file=sys.stderr)
+            return 1
+    if args.palette and not os.path.isfile(args.palette):
+        print(f"ERROR: Palette file not found: {args.palette}", file=sys.stderr)
+        return 1
+
+    try:
+        archive = U9FlxArchive.from_file(args.textures)
+    except U9FlxArchiveError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
+    if not (0 <= args.entry_id < archive.num_entries):
+        print(f"ERROR: entry_id {args.entry_id} out of range "
+              f"(0..{archive.num_entries - 1})", file=sys.stderr)
+        return 1
+    blob = archive.read_entry(args.entry_id)
+    if not blob:
+        print(f"ERROR: entry {args.entry_id} is an unused archive slot", file=sys.stderr)
+        return 1
+
+    image = Image.open(args.image).convert("RGBA")
+    palette = _load_palette(args.palette, args.textures)
+
+    try:
+        encoding = frame_encoding(blob, args.frame)
+        patched = replace_frame(
+            blob, args.frame, image.tobytes(), image.width, image.height, palette=palette
+        )
+    except (U9TextureWriteError, struct.error) as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
+    out_path = args.output or f"{Path(args.textures).stem}_patched.flx"
+    try:
+        data = repack(archive, {args.entry_id: patched})
+    except U9FlxWriteError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+    os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+    with open(out_path, "wb") as f:
+        f.write(data)
+
+    print(f"{args.image} ({image.width}x{image.height}) -> "
+          f"{Path(args.textures).name} entry {args.entry_id} frame {args.frame}")
+    print(f"  Encoding        : {encoding}")
+    print(f"  Entry length    : {len(patched)} bytes (unchanged: "
+          f"{'yes' if len(patched) == len(blob) else 'NO'})")
+    print(f"  Written         : {out_path} ({len(data)} bytes)")
+    if encoding == "bc1":
+        print("  BC1 is lossy by design; re-encoding will not reproduce the original bytes.")
+    if encoding == "paletted" and palette is None:
+        print("  WARNING: no --palette given for an 8-bit frame.")
+    print("  The other quality tiers still hold the old image -- see the reference doc")
+    print("  on which archive the game loads for a given texture-detail setting.")
+    return 0
+
+
+# ============================================================================
 # Typer command wrappers
 # ============================================================================
 
@@ -2169,8 +2439,8 @@ def model_export_cmd(
         Optional[str],
         typer.Option(
             "-t", "--textures",
-            help="Path to a texture archive -- prefer bitmap16.flx or bitmapsh.flx "
-            "(bitmapC.flx is mostly an unsupported compressed format, see titan.u9.texture)",
+            help="Path to a texture archive: bitmap16.flx, bitmapsh.flx or "
+            "bitmapC.flx -- all three decode, and hold the same textures",
         ),
     ] = None,
     palette: Annotated[
@@ -2223,8 +2493,8 @@ def model_export_all_cmd(
         Optional[str],
         typer.Option(
             "-t", "--textures",
-            help="Path to a texture archive -- prefer bitmap16.flx or bitmapsh.flx "
-            "(bitmapC.flx is mostly an unsupported compressed format, see titan.u9.texture)",
+            help="Path to a texture archive: bitmap16.flx, bitmapsh.flx or "
+            "bitmapC.flx -- all three decode, and hold the same textures",
         ),
     ] = None,
     palette: Annotated[
@@ -2789,3 +3059,55 @@ def books_export_cmd(
 ) -> None:
     """Export a U9 book archive to CSV."""
     raise SystemExit(cmd_books_export(SimpleNamespace(file=file, output=output)))
+
+
+@u9_app.command("flx-pack")
+def flx_pack_cmd(
+    directory: Annotated[str, typer.Argument(help="Directory of NNNNN.bin entry files")],
+    output: Annotated[str, typer.Argument(help="Output .flx path")],
+    count: Annotated[
+        Optional[int], typer.Option("-c", "--count", help="Directory slot count (default: smallest that fits)"),
+    ] = None,
+    comment: Annotated[
+        Optional[str], typer.Option("--comment", help="ASCII comment, max 76 bytes"),
+    ] = None,
+) -> None:
+    """Build a U9 FLX archive from extracted entry files."""
+    raise SystemExit(cmd_flx_pack(SimpleNamespace(
+        directory=directory, output=output, count=count, comment=comment)))
+
+
+@u9_app.command("flx-repack")
+def flx_repack_cmd(
+    file: Annotated[str, typer.Argument(help="Path to an existing U9 FLX archive")],
+    output: Annotated[
+        Optional[str], typer.Option("-o", "--output", help="Output path (default: <stem>_repacked.flx)"),
+    ] = None,
+    replace: Annotated[
+        Optional[str], typer.Option("-r", "--replace", help="Directory of NNNNN.bin files to swap in"),
+    ] = None,
+) -> None:
+    """Rebuild a U9 FLX archive, optionally replacing entries, and verify it."""
+    raise SystemExit(cmd_flx_repack(SimpleNamespace(file=file, output=output, replace=replace)))
+
+
+@u9_app.command("texture-import")
+def texture_import_cmd(
+    textures: Annotated[
+        str, typer.Argument(help="Path to a texture archive: bitmap16.flx, bitmapsh.flx or bitmapC.flx"),
+    ],
+    entry_id: Annotated[int, typer.Argument(help="Entry ID to replace")],
+    image: Annotated[str, typer.Argument(help="PNG to import; must match the frame's size exactly")],
+    frame: Annotated[int, typer.Option("--frame", help="Frame index within the entry")] = 0,
+    palette: Annotated[
+        Optional[str],
+        typer.Option("-p", "--palette", help="Path to static/ankh.pal -- required for 8-bit frames"),
+    ] = None,
+    output: Annotated[
+        Optional[str], typer.Option("-o", "--output", help="Output archive path (default: <stem>_patched.flx)"),
+    ] = None,
+) -> None:
+    """Replace one U9 texture frame with a same-size PNG."""
+    raise SystemExit(cmd_texture_import(SimpleNamespace(
+        textures=textures, entry_id=entry_id, image=image, frame=frame,
+        palette=palette, output=output)))

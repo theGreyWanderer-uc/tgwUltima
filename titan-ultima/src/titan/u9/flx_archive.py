@@ -5,7 +5,8 @@ An FLX file is a flat directory-of-blobs container used throughout U9's
 ``static/``, ``sound/``, and ``runtime/`` data (bitmap16.flx, sappear.flx,
 TYPENAME.FLX, Speech.flx, NPC.FLX, ...). Layout, byte-for-byte::
 
-    0x00  Comment          76 bytes, ASCII, NUL-padded
+    0x00  Comment          76 bytes, ASCII -- **space**-padded in every shipped
+                           archive, not NUL-padded (all 25 agree)
     0x4C  Unknown1         u32
     0x50  Count            u32   -- number of directory entries
     0x54  Unknown2         u32

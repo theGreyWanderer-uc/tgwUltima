@@ -4071,7 +4071,7 @@ titan u9 model-export <file> <model_id> [-t TEXTURES] [-p PALETTE] [--types TYPE
 |----------|-------------|
 | `file` | Path to `static/sappear.flx` |
 | `model_id` | Model ID (0-7999) to export |
-| `-t FILE`, `--textures FILE` | Path to a texture archive -- prefer `bitmap16.flx` or `bitmapsh.flx` (`bitmapC.flx` is mostly an unsupported compressed format) |
+| `-t FILE`, `--textures FILE` | Path to a texture archive: `bitmap16.flx`, `bitmapsh.flx` or `bitmapC.flx` -- all three decode and hold the same textures |
 | `-p FILE`, `--palette FILE` | Path to `static/ankh.pal` -- colors 8-bit textures (default: flat grayscale) |
 | `--types FILE` | Path to `static/TYPES.DAT` (with `--typenames`, names the output folder/files) |
 | `--typenames FILE` | Path to `static/TYPENAME.FLX` (with `--types`, names the output folder/files) |
@@ -4117,7 +4117,7 @@ titan u9 model-export-all <file> [-t TEXTURES] [-p PALETTE] [--types TYPES] [--t
 | Argument | Description |
 |----------|-------------|
 | `file` | Path to `static/sappear.flx` |
-| `-t FILE`, `--textures FILE` | Path to a texture archive -- prefer `bitmap16.flx` or `bitmapsh.flx` (`bitmapC.flx` is mostly an unsupported compressed format) |
+| `-t FILE`, `--textures FILE` | Path to a texture archive: `bitmap16.flx`, `bitmapsh.flx` or `bitmapC.flx` -- all three decode and hold the same textures |
 | `-p FILE`, `--palette FILE` | Path to `static/ankh.pal` -- colors 8-bit textures (default: flat grayscale) |
 | `--types FILE` | Path to `static/TYPES.DAT` (with `--typenames`, names each output folder/files) |
 | `--typenames FILE` | Path to `static/TYPENAME.FLX` (with `--types`, names each output folder/files) |
@@ -5019,6 +5019,130 @@ titan u9 fixed-types static/fixed.9 --typenames static/TYPENAME.FLX -n 20
 
 Only about a quarter of static object types carry a display name, so most rows
 show a bare type index.
+
+---
+
+#### `u9 texture-import`
+
+Replace one texture frame with a PNG of the same size. The image is encoded the
+way that frame already was — BC1, RGB565, RGBA5551 or 8-bit paletted — and
+spliced in place, so the entry keeps its exact length and every undecoded
+header field is preserved.
+
+```
+titan u9 texture-import <archive> <entry_id> <image.png> [--frame N] [-p ankh.pal] [-o OUT.flx]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `archive` | `bitmap16.flx`, `bitmapsh.flx` or `bitmapC.flx` |
+| `entry_id` | Entry to replace |
+| `image.png` | PNG; **must match the frame's dimensions exactly** |
+| `--frame N` | Frame index within the entry (default 0) |
+| `-p FILE`, `--palette FILE` | `static/ankh.pal` — found automatically when it sits beside the archive; pass this to override |
+| `-o FILE`, `--output FILE` | Output archive (default: `<stem>_patched.flx`) |
+
+**Example**
+```bash
+titan u9 icon-export static/bitmapC.flx 1 -o work/
+# edit work/icon_00001_frame_000.png
+titan u9 texture-import static/bitmapC.flx 1 work/icon_00001_frame_000.png -o bitmapC.flx
+```
+
+RGB565 and 8-bit paletted round-trip losslessly. BC1 is lossy by construction
+(2.77 RMSE mean on real frames). Mip levels are regenerated, so a patched entry
+is never byte-identical to the original even when the image is unchanged.
+
+The three archives are the game's texture-quality tiers: replacing a texture in
+one leaves the other two holding the old image.
+
+---
+
+**Palettes and format tables are found automatically.** Every command that
+decodes texture data looks beside the archive it is reading for two companions
+the game keeps there, and reports which it used:
+
+* `ankh.pal` -- without it, 8-bit paletted frames decode as scrambled greyscale
+  rather than failing, because the palette is ordered by hue and not by
+  brightness.
+* the matching `sdInfo` archive (`bitmapsh.flx` / `sdInfo.flx`, `bitmap16.flx` /
+  `sdInfo16.flx`, `bitmapC.flx` / `sdInfoC.flx`) -- it carries the engine's
+  pixel-format selector, which is the only thing separating the three
+  one-byte-per-texel formats. Without it the reader falls back to a frame-flag
+  heuristic that cannot distinguish `ALPHA_8` from `ALPHA_INTENSITY_44`, and 42
+  frames decode as flat masks.
+
+Pass `-p` only when the archive has been copied away from `static/`, or to
+supply a different palette.
+
+### FLX packing commands
+
+U9's FLX container can be written as well as read, so an archive can be
+unpacked, edited and packed back. This covers the **container only**: entry
+payloads pass through byte-for-byte, which is all that archives of opaque blobs
+(`text.flx`, `BOOKS-EN.FLX`, `sappear.flx`, `TYPENAME.FLX`) need. Re-encoding a
+*decoded* texture or model back into an entry has no implementation — see
+`reference/u9/flx/u9_flx_container_reference.md`.
+
+Round-tripping all 25 shipped archives gives 19 byte-identical, 6
+content-equivalent, 0 broken. The six differ only by dropping bytes no
+directory entry points at.
+
+---
+
+#### `u9 flx-pack`
+
+Build an archive from a directory of `NNNNN.bin` entry files — the naming
+`flx-extract-all` produces, so the two compose directly.
+
+```
+titan u9 flx-pack <directory> <output.flx> [-c COUNT] [--comment TEXT]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `directory` | Directory of `NNNNN.bin` files; anything else is ignored |
+| `output.flx` | Output archive path |
+| `-c N`, `--count N` | Directory slot count (default: smallest that fits) |
+| `--comment TEXT` | ASCII comment, max 76 bytes |
+
+**Example**
+```bash
+titan u9 flx-extract-all static/misctext.flx -o unpacked/
+titan u9 flx-pack unpacked/ misctext.flx --count 348
+```
+
+**Pass `--count` when rebuilding a real archive.** Shipped archives
+over-allocate slots heavily — `sappear.flx` declares 8,000 for 3,764 entries —
+and without it the count is inferred from the highest index present, which will
+not match the original.
+
+---
+
+#### `u9 flx-repack`
+
+Rebuild an archive in place, optionally swapping entries, and verify the
+result.
+
+```
+titan u9 flx-repack <file> [-o OUT.flx] [-r DIR]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | An existing U9 FLX archive |
+| `-o FILE`, `--output FILE` | Output path (default: `<stem>_repacked.flx`) |
+| `-r DIR`, `--replace DIR` | Directory of `NNNNN.bin` files to swap in |
+
+**Example**
+```bash
+titan u9 flx-repack static/TYPENAME.FLX -o out.flx
+titan u9 flx-repack static/misctext.flx -r edited/ -o patched.flx
+```
+
+With no `--replace` this is a self-check: it reports whether the rebuild is
+byte-identical and whether the contents match, and exits non-zero if the
+contents ever differ. The slot count is always preserved.
 
 ---
 
