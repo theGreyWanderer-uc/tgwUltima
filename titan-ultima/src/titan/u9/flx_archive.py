@@ -19,6 +19,13 @@ An entry with ``offset == 0`` (or ``length == 0``) is an unused slot, not
 an entry at offset 0 -- the archive's own header always occupies real
 offset 0, so a genuine entry can never legitimately start there.
 
+``0x4C`` and the reserved block at ``0x60``-``0x7F`` are **unused and empty** in
+every shipped archive -- a zero word, and 32 zero bytes but for a ``1`` at
+``0x68``. Neither ever varies, so neither carries information and nothing can be
+inferred about their purpose from the data. Write the shipped values; read
+nothing into them. The 76-byte comment field is likewise 76 spaces in every
+archive, never written to.
+
 The word at ``0x54`` is checked on construction, because without it this reader
 accepted **570 of the 595 files** in a game install -- ``ddraw.dll``,
 ``ConfigINI.exe``, ``.ini`` and ``.txt`` among them. With it, exactly the 41
