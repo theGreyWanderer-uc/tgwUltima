@@ -38,7 +38,9 @@ from titan.u9.model import (
 def _material(texture_id: int, first_face: int = 0, face_count: int = 1) -> U9Material:
     return U9Material(
         texture_id=texture_id,
-        subtexture_count=0,
+        flags_02=0,
+        render_flags=0,
+        flags_06=0,
         first_face=first_face,
         face_count=face_count,
         default_alpha=255,

@@ -72,8 +72,8 @@ def _face(corners: tuple[bytes, bytes, bytes], normal=(0.0, 0.0, 1.0), color=(25
     return data
 
 
-def _material(texture_id: int, first_face: int, face_count: int, subtexture_count: int = 0) -> bytes:
-    data = struct.pack("<6H", texture_id, 0, subtexture_count, 0, first_face, face_count)
+def _material(texture_id: int, first_face: int, face_count: int, render_flags: int = 0) -> bytes:
+    data = struct.pack("<6H", texture_id, 0, render_flags, 0, first_face, face_count)
     data += bytes([255, 255, 0, 0, 0, 0, 0, 0])  # default_alpha, modified_alpha, anim fields
     data += struct.pack("<I", 0)  # anim timer
     assert len(data) == MATERIAL_SIZE

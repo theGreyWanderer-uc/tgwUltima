@@ -137,16 +137,89 @@ class U9Triangle:
     """RGBA, each 0-255. Real data: model 0's faces are all (200, 200, 200, 255)."""
 
 
+#: Bits of :attr:`U9Material.render_flags` (the u16 at material +0x04).
+#: Meanings come from u9.exe ``Renderer_SetMaterial`` (``0x00586550``), which
+#: bit-tests this field to build the runtime material. Bits 1, 12-15 are
+#: neither set in shipped data nor read there.
+MATERIAL_FLAG_CHROMAKEY = 0x0001
+MATERIAL_FLAG_MODE_MASK = 0x000C
+MATERIAL_FLAG_UNKNOWN_4 = 0x0010
+MATERIAL_FLAG_RUNTIME_40 = 0x0020
+MATERIAL_FLAG_RUNTIME_01 = 0x0040
+MATERIAL_FLAG_RUNTIME_200 = 0x0080
+MATERIAL_FLAG_CLAMP_S = 0x0100
+MATERIAL_FLAG_CLAMP_T = 0x0200
+MATERIAL_FLAG_TRANSLUCENT = 0x0400
+MATERIAL_FLAG_UNKNOWN_11 = 0x0800
+
+#: ``modified_alpha`` uses this as "no override"; any other value is a
+#: per-material constant alpha, which the engine copies to the runtime
+#: material and applies to vertex colours before the backend sees them.
+MATERIAL_ALPHA_NONE = 0xFF
+
+
 @dataclass(frozen=True)
 class U9Material:
     """
     One material entry (0x18 = 24 bytes). Real data: model 0 has exactly
     1 material with ``texture_id=0``, ``first_face=0``, ``face_count=12``
     (covering all 12 of the cube's faces).
+
+    ``render_flags`` is the u16 at +0x04, previously read as
+    ``subtexture_count``. It is a bit field, not a count: across all 3,748
+    sappear entries (24,476 materials) it takes only 12 distinct values, the
+    largest is 2076, and 48% of the non-zero values exceed 16. The engine
+    confirms it - ``Renderer_SetMaterial`` at u9.exe ``0x00586550`` reads a u32
+    at +0x04 and bit-tests it to build the runtime material's flag word.
+
+    Bits observed in shipped data, and what the engine does with each:
+
+    ==== ======== ==================================================
+    bit  in data  engine use
+    ==== ======== ==================================================
+    0    yes      gates the chromakey path
+    2,3  yes      two-bit mode field, copied to runtime ``+0x10 & 0x0C``
+    4    yes      not read by ``Renderer_SetMaterial``
+    5    no       -> runtime ``0x40``
+    6    yes      -> runtime ``0x01``
+    7    no       -> runtime ``0x200``
+    8,9  yes      texture clamp axes -> runtime ``0x80`` / ``0x100``
+    10   no       translucent -> runtime ``0x02``
+    11   yes      not read by ``Renderer_SetMaterial``
+    ==== ======== ==================================================
+
+    Bit 10 never appears in sappear data, so model translucency comes only
+    from ``modified_alpha != 0xFF``, which the engine stores as a per-material
+    constant alpha.
+
+    ``flags_02`` and ``flags_06`` are the u16 fields at +0x02 and +0x06,
+    exposed raw and **not safe to branch on**. Roughly 17.5% of each field
+    holds MSVC debug-heap fill - ``0xCDCD`` (uninitialised heap) and ``0xBAAD``
+    (``BAADF00D``) - so the tool that built ``sappear.flx`` wrote these structs
+    without clearing them, and much of what is stored is uninitialised memory
+    rather than data.
+
+    * ``flags_02``: 36.7% zero, 17.5% debug fill, 43.6% large arbitrary values,
+      and only 2.2% small values with no repeating family. Treat as noise
+      unless proven otherwise.
+    * ``flags_06``: carries a real signal under the noise. 26.1% of materials
+      hold a value below ``0x100``, dominated by a tight family - ``0x82``
+      (3557), ``0x8B`` (1431), ``0x84`` (514), ``0x83`` (136), plus ``0x9F``,
+      ``0x9C``, ``0x80``. That ``0x80``-``0x9F`` clustering is structured and
+      worth decoding.
+
+    ``render_flags`` by contrast shows no fill patterns at all and takes just
+    12 values, which is independent evidence that +0x04 is a field the writer
+    initialises and +0x02 / +0x06 partly are not.
+
+    ``Renderer_SetMaterial`` reads none of these two, consistent with them
+    being ignored by the renderer.
     """
 
     texture_id: int
-    subtexture_count: int
+    flags_02: int
+    render_flags: int
+    flags_06: int
     first_face: int
     face_count: int
     default_alpha: int
@@ -365,13 +438,15 @@ def _parse_corner(data: bytes, pos: int) -> U9TriangleCorner:
 
 
 def _parse_material(data: bytes, pos: int) -> U9Material:
-    tex_id, _flags, subtex_count, _flags2, first_face, face_count = struct.unpack_from("<6H", data, pos)
+    tex_id, flags_02, render_flags, flags_06, first_face, face_count = struct.unpack_from("<6H", data, pos)
     default_alpha, modified_alpha, anim_start, anim_end, cur_frame, anim_speed, _anim_type, _playback = (
         struct.unpack_from("<8B", data, pos + 12)
     )
     return U9Material(
         texture_id=tex_id,
-        subtexture_count=subtex_count,
+        flags_02=flags_02,
+        render_flags=render_flags,
+        flags_06=flags_06,
         first_face=first_face,
         face_count=face_count,
         default_alpha=default_alpha,
