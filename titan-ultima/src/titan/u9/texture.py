@@ -102,6 +102,7 @@ __all__ = [
     "FORMAT_ALPHA_8",
     "FORMAT_ALPHA_INTENSITY_44",
     "FORMAT_P8",
+    "SELECTOR_ARGB_1555",
     "INTENSITY_FLAG",
     "COMPRESSION_NONE",
     "U9TextureError",
@@ -130,6 +131,23 @@ FORMAT_ALPHA_INTENSITY_44 = 2
 FORMAT_ALPHA_8 = 3
 """``sdInfo`` selector: 8-bit coverage mask, colour supplied by the vertex."""
 
+SELECTOR_ARGB_1555 = 1
+"""``sdInfo`` selector on a **16-bit** frame: ARGB_1555. Anything else is RGB_565.
+
+The selector's meaning depends on the depth branch: 0 is ``P_8`` on a
+one-byte-per-texel frame and ``RGB_565`` on a two-byte one. Only value 1 means
+1555, and it occurs on no 8-bit frame.
+
+Measured over all 17,720 shipped 16-bit frames, this agrees with the frame
+header's transparency flag on **17,718**. The two exceptions are frame 1 of
+``bitmap16`` entries 1623 and 6146, whose header words read ``flags=0x6500,
+u2=0x2656`` where all fourteen sibling frames of the same entry read
+``0x0400, 0x6000`` -- corrupt header words in an otherwise regular entry, not a
+format signal. Keying on the selector is preferred anyway because it is stored
+per *entry* and so survives exactly that kind of damage, where the per-frame
+flag does not.
+"""
+
 INTENSITY_FLAG = 0x200
 """Frame-flags bit 9: a fallback for when no ``sdInfo`` selector is available.
 
@@ -143,12 +161,14 @@ tell :data:`FORMAT_ALPHA_8` from :data:`FORMAT_ALPHA_INTENSITY_44` -- both set
 it. The 42 frames of the latter therefore decode as plain masks under the
 fallback, losing their alpha nibble.
 
-**Not to be confused with the material's own ``0x200``.** A
-:class:`titan.u9.model.U9Material` carries two undecoded ``u16`` flag words of
-its own, and the ``0x200`` bit there is understood to select point over
-bilinear filtering -- a different field, in a different file, with a different
-meaning. This constant is bit 9 of the **frame header** at ``frame_offset +
-0x00``.
+**Not to be confused with the material's own ``0x200``**, which selects point
+over bilinear filtering. The engine's runtime material flag word collides with
+two separate archive fields by bit number and matches neither in meaning --
+``0x200`` here, and ``0x20`` against ``sdInfo``'s ``fields[0]``. Bit numbers in
+the engine's structures say nothing about bit numbers in these files; see
+``reference/u9/sdinfo/u9_sdinfo_reference.md``, "Bit numbers here mean nothing
+to the engine". This constant is bit 9 of the **frame header** at
+``frame_offset + 0x00``.
 """
 
 BC1_BLOCK_BYTES = 8
@@ -268,6 +288,15 @@ def decode_frame(
         eight_bit_format = FORMAT_P8
     is_intensity = eight_bit_format in (FORMAT_ALPHA_8, FORMAT_ALPHA_INTENSITY_44)
 
+    # 16-bit frames pick between 565 and 1555 the same way: the selector is
+    # authoritative, the transparency flag is the fallback.
+    if is_8bit:
+        sixteen_bit_is_1555 = False
+    elif selector is None:
+        sixteen_bit_is_1555 = is_transparent
+    else:
+        sixteen_bit_is_1555 = selector == SELECTOR_ARGB_1555
+
     pixel_count = width * height
 
     # The 8-bit paths index bytes directly, so a short buffer would raise a bare
@@ -290,10 +319,10 @@ def decode_frame(
                 pixels_rgba = _decode_paletted(entry_data, pixel_data_start, pixel_count, palette)
             else:
                 pixels_rgba = _decode_monochrome(entry_data, pixel_data_start, pixel_count)
-        elif not is_transparent:
-            pixels_rgba = _decode_565(entry_data, pixel_data_start, pixel_count)
-        else:
+        elif sixteen_bit_is_1555:
             pixels_rgba = _decode_5551(entry_data, pixel_data_start, pixel_count)
+        else:
+            pixels_rgba = _decode_565(entry_data, pixel_data_start, pixel_count)
     except (struct.error, IndexError) as e:
         raise U9TextureError(f"pixel data truncated: {e}") from e
 

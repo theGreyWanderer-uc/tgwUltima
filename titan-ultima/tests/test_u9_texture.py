@@ -21,6 +21,7 @@ from titan.u9.texture import (
     FORMAT_ALPHA_INTENSITY_44,
     FORMAT_P8,
     INTENSITY_FLAG,
+    SELECTOR_ARGB_1555,
     U9TextureError,
     decode_frame,
 )
@@ -274,6 +275,74 @@ class FormatSelectorTests(unittest.TestCase):
         )
         frame = decode_frame(entry, 0, selector=FORMAT_ALPHA_8)
         self.assertFalse(frame.is_intensity)
+
+
+class SixteenBitSelectorTests(unittest.TestCase):
+    """565 versus 1555 is decided by the selector, not the frame flag.
+
+    The community documentation describes U9's 16-bit textures as a fixed
+    5/5/5/1, which is wrong -- most are 565. What decides it is the same
+    ``sdInfo`` descriptor byte that picks between the one-byte formats: on a
+    16-bit frame, selector 1 means ARGB_1555 and anything else means RGB_565.
+
+    Measured over all 17,720 shipped 16-bit frames, that agrees with the frame
+    header's transparency flag on **17,718 (99.99%)**. The two exceptions are
+    frame 1 of ``bitmap16`` entries 1623 and 6146, whose header words read
+    ``flags=0x6500, u2=0x2656`` where all fourteen sibling frames read
+    ``0x0400, 0x6000`` -- corrupt words in an otherwise uniform entry, not a
+    format signal. So the two keys never *meaningfully* disagree; the selector
+    is preferred because it lives per entry and survives that damage, while the
+    per-frame flag does not.
+    """
+
+    RED_565 = 0b11111_000000_00000
+    RED_1555 = 0b1_11111_00000_00000
+
+    def _frame(self, flags: int, pixel: int, **kw):
+        entry = _build_entry(
+            width=1, height=1, mip_count=0, unknown1=flags,
+            pixel_bytes=struct.pack("<H", pixel),
+        )
+        return decode_frame(entry, 0, **kw)
+
+    def test_selector_1_decodes_as_1555(self) -> None:
+        frame = self._frame(0x0000, self.RED_1555, selector=SELECTOR_ARGB_1555)
+        self.assertEqual(frame.pixels_rgba, bytes((255, 0, 0, 255)))
+
+    def test_selector_0_decodes_as_565(self) -> None:
+        frame = self._frame(0x0100, self.RED_565, selector=FORMAT_P8)
+        self.assertEqual(frame.pixels_rgba, bytes((255, 0, 0, 255)))
+
+    def test_selector_overrides_a_contradicting_transparency_flag(self) -> None:
+        # exactly the shipped case: flag says 1555, selector says 565.
+        # Reading the flag gives a different pixel; the selector must win.
+        by_selector = self._frame(0x0100, self.RED_565, selector=FORMAT_P8)
+        by_flag = self._frame(0x0100, self.RED_565)
+        self.assertNotEqual(by_selector.pixels_rgba, by_flag.pixels_rgba)
+        self.assertEqual(by_selector.pixels_rgba, bytes((255, 0, 0, 255)))
+
+    def test_without_a_selector_the_flag_still_decides(self) -> None:
+        opaque = self._frame(0x0000, self.RED_565)
+        transparent = self._frame(0x0100, self.RED_1555)
+        self.assertEqual(opaque.pixels_rgba, bytes((255, 0, 0, 255)))
+        self.assertEqual(transparent.pixels_rgba, bytes((255, 0, 0, 255)))
+
+    def test_the_alpha_bit_only_exists_in_1555(self) -> None:
+        clear = self._frame(0x0100, 0b0_00000_00000_11111, selector=SELECTOR_ARGB_1555)
+        self.assertEqual(clear.pixels_rgba, bytes((0, 0, 255, 0)))
+        # the same word read as 565 is opaque, with the bits meaning something else
+        as565 = self._frame(0x0100, 0b0_00000_00000_11111, selector=FORMAT_P8)
+        self.assertEqual(as565.pixels_rgba[3], 255)
+
+    def test_selector_1_never_applies_to_an_8_bit_frame(self) -> None:
+        # selector 1 occurs on no 8-bit frame; if one were seen, it must not be
+        # mistaken for a mask or for 1555
+        entry = _build_entry(
+            width=1, height=1, mip_count=0, unknown1=0x0000, pixel_bytes=bytes((7,))
+        )
+        frame = decode_frame(entry, 0, selector=SELECTOR_ARGB_1555)
+        self.assertFalse(frame.is_intensity)
+        self.assertEqual(frame.pixels_rgba, bytes((7, 7, 7, 255)))
 
 
 class TruncatedPixelDataRegressionTests(unittest.TestCase):
