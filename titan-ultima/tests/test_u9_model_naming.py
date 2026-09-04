@@ -40,6 +40,7 @@ def _build_typenames(entries_data: list[bytes]) -> U9TypeNames:
     dir_size = count * 8
     header = bytearray(TYPENAME_DIR_OFFSET)
     struct.pack_into("<I", header, 0x50, count)
+    struct.pack_into("<I", header, 0x54, 2)  # FLX format-version word
 
     payload = bytearray()
     dir_entries = []

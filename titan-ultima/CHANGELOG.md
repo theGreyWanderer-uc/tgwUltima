@@ -223,6 +223,28 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Fixed
 
+- **`titan.u9.flx_archive` accepted almost any file as an FLX archive.** The
+  reader validated nothing beyond a minimum length, so it parsed **570 of the
+  595 files** in a game install — `ddraw.dll`, `3DfxSpl2.dll`, `ConfigINI.exe`
+  and assorted `.ini` and `.txt` among them — producing a directory of garbage
+  offsets rather than an error. It now checks the format word at `0x54`, which
+  is 2 in every shipped archive, along with a plausible entry count and a
+  directory that fits the data. That accepts exactly the **41** real archives
+  and rejects the other 554. The check is deliberately structural rather than
+  cosmetic: the space-filled comment would have worked equally well as a
+  signature on shipped data, but requiring it would reject archives
+  `titan.u9.flx_writer` produces with a comment of their own. Same class of
+  false-accept as the earlier `titan.u9.types_dat` bug.
+
+  Applying the signature also identified **16 FLX archives with no `.flx`
+  extension**: `Texture8.9`/`.14` and `texture16.9`/`.14`, plus twelve dialect
+  variants of the game's text — `Mbrk`, `Tbrk` and `Tnbrk` with `.br`, `.fn`,
+  `.ns` and `.vl` suffixes. The `Mbrk.*` files hold 340 entries each, matching
+  `misctext.flx`, and the `Tbrk.*` files 7,656, matching `text.flx`; they are
+  the same UTF-16LE format and `titan.u9.text` reads them as they are. Where
+  `misctext.flx` has *"The gate is locked."*, `Mbrk.br` has *"Zee gete-a is
+  lucked."* and `Mbrk.fn` *"The gate does be lokked."*
+
 - **8-bit texture frames are three formats, and the selector is in `sdInfo`.**
   One byte per texel covers `P_8` (palette indices), `ALPHA_8` (a coverage mask
   whose colour comes from the vertex) and `ALPHA_INTENSITY_44` (4-bit alpha plus

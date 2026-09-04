@@ -32,6 +32,7 @@ def _build_flx(entries_data: list[bytes]) -> bytes:
     header = bytearray(DIR_OFFSET)
     header[0:12] = b"TYPENAME.FLX"
     struct.pack_into("<I", header, 0x50, count)
+    struct.pack_into("<I", header, 0x54, 2)  # FLX format-version word
 
     payload = bytearray()
     dir_entries: list[tuple[int, int]] = []

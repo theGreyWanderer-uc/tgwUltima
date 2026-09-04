@@ -17,6 +17,7 @@ from titan.u9.text import MARKER_SUFFIX, U9TextArchive, U9TextError
 
 FLX_DIR_OFFSET = 0x80
 FLX_COUNT_OFFSET = 0x50
+FLX_VERSION_OFFSET = 0x54
 FLX_SIZE_OFFSET = 0x58
 
 
@@ -43,6 +44,7 @@ def _archive(entries: dict[int, bytes], count: int = 12) -> U9FlxArchive:
     for index, (offset, length) in enumerate(directory):
         struct.pack_into("<II", header, FLX_DIR_OFFSET + index * 8, offset, length)
     struct.pack_into("<I", header, FLX_COUNT_OFFSET, count)
+    struct.pack_into("<I", header, FLX_VERSION_OFFSET, 2)
     struct.pack_into("<I", header, FLX_SIZE_OFFSET, len(header) + len(payload))
     return U9FlxArchive(bytes(header) + payload)
 
