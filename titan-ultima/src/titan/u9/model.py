@@ -139,10 +139,14 @@ class U9Triangle:
 
 #: Bits of :attr:`U9Material.render_flags` (the u16 at material +0x04).
 #: Meanings come from u9.exe ``Renderer_SetMaterial`` (``0x00586550``), which
-#: bit-tests this field to build the runtime material. Bits 1, 12-15 are
-#: neither set in shipped data nor read there.
+#: bit-tests this field to build the runtime material, and by ``0x00585C90``,
+#: the pooled/deferred setter, which decodes two bits the first one ignores.
+#: Bits 1 and 12-15 are neither set in shipped data nor read by either.
 MATERIAL_FLAG_CHROMAKEY = 0x0001
 MATERIAL_FLAG_MODE_MASK = 0x000C
+#: Bit 3 of the mode pair also routes the primitive into the engine's
+#: depth-sorted translucency pool. Carried by cobwebs, fire, blood, forcefields.
+MATERIAL_FLAG_SORTED_POOL = 0x0008
 MATERIAL_FLAG_UNKNOWN_4 = 0x0010
 MATERIAL_FLAG_RUNTIME_40 = 0x0020
 MATERIAL_FLAG_RUNTIME_01 = 0x0040
@@ -150,7 +154,9 @@ MATERIAL_FLAG_RUNTIME_200 = 0x0080
 MATERIAL_FLAG_CLAMP_S = 0x0100
 MATERIAL_FLAG_CLAMP_T = 0x0200
 MATERIAL_FLAG_TRANSLUCENT = 0x0400
-MATERIAL_FLAG_UNKNOWN_11 = 0x0800
+#: Additive blending. Carried by ether clouds, fire, globes, forcefields,
+#: sparklers, moongates and flame scrolls - emissive effects.
+MATERIAL_FLAG_ADDITIVE = 0x0800
 
 #: ``modified_alpha`` uses this as "no override"; any other value is a
 #: per-material constant alpha, which the engine copies to the runtime
@@ -178,14 +184,14 @@ class U9Material:
     bit  in data  engine use
     ==== ======== ==================================================
     0    yes      gates the chromakey path
-    2,3  yes      two-bit mode field, copied to runtime ``+0x10 & 0x0C``
-    4    yes      not read by ``Renderer_SetMaterial``
+    2,3  yes      two-bit mode field; bit 3 also routes to the sorted pool
+    4    yes      read by neither builder - still unexplained
     5    no       -> runtime ``0x40``
     6    yes      -> runtime ``0x01``
     7    no       -> runtime ``0x200``
     8,9  yes      texture clamp axes -> runtime ``0x80`` / ``0x100``
     10   no       translucent -> runtime ``0x02``
-    11   yes      not read by ``Renderer_SetMaterial``
+    11   yes      additive blending -> runtime ``0x400`` (set by ``0x00585C90``)
     ==== ======== ==================================================
 
     Bit 10 never appears in sappear data, so model translucency comes only
