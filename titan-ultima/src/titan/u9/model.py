@@ -271,11 +271,12 @@ class U9Limb:
     transform for the limb -- a static "bind pose", not necessarily the
     pose the creature is meant to be seen in during real gameplay.
     Real animation (``static/anim.flx``) would apply its own per-frame
-    transform on top of/instead of this one. That format is not
-    implemented, and note that even a full implementation only
-    repositions limbs rigidly -- it can't change a triangle's UV
-    mapping, so it's irrelevant to texture-placement oddities on a
-    given sub-mesh, only to pose/motion.
+    transform on top of/instead of this one. :mod:`titan.u9.animation`
+    parses those tracks, but model-to-clip selection and animated export
+    are not implemented. Even when applied, animation only repositions
+    limbs rigidly -- it can't change a triangle's UV mapping, so it's
+    irrelevant to texture-placement oddities on a given sub-mesh, only
+    to pose/motion.
     """
 
     limb_id: int

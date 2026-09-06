@@ -14,6 +14,20 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Added
 
+- **U9 animation clip reader:** added `titan.u9.animation`, a complete parser
+  for all 857 used entries in `static/anim.flx`: inclusive source-frame ranges,
+  LightWave source paths, part-ID manifests, 23,333 named part tracks,
+  1,310,139 timestamped quaternion/position/scale frames, and 937 raw suffix
+  triples. Added `titan u9 animation-list` and `animation-show`. An
+  archive-wide structural pass resolved both uncertainties in the earlier
+  single-entry notes: a part has no extra word before its frame array, and a
+  44-byte frame begins with `time_ms` before its quaternion, position, and
+  scale. Every entry and part consumes exactly, every manifest matches its
+  part IDs, all quaternions are unit length within 0.001, and every scale is
+  exactly one. Documented in
+  `reference/u9/anim/u9_anim_flx_reference.md`; model-to-clip selection,
+  opaque header-tail words, and suffix semantics remain open.
+
 - **U9 runtime region support:** added `titan.u9.nonfixed`, a reader for
   `runtime/nonfixed.<region>` -- Ultima 9's dynamic world data, holding the
   objects whose state the game can change and write back. Decodes the region

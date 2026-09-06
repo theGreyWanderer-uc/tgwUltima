@@ -187,10 +187,10 @@ for the full command list.
 
 ### Ultima 9 (early)
 
-U9 support is newer and narrower in scope than U8/U7 so far — FLX archives,
-`TYPENAME.FLX`, `sound/*.flx` (`Speech.flx`, `sfx.flx`, `music.flx`) decoding
-(EA-XA ADPCM, mono and stereo, and EA MicroTalk speech), and 3D model +
-texture export from `static/sappear.flx`.
+U9 support is newer than U8/U7 and includes FLX archives, `TYPENAME.FLX`,
+`sound/*.flx` (`Speech.flx`, `sfx.flx`, `music.flx`) decoding (EA-XA ADPCM,
+mono and stereo, and EA MicroTalk speech), `anim.flx` skeletal clips, and 3D
+model + texture export from `static/sappear.flx`.
 
 | Area | Coverage | Quick example |
 |---|---|---|
@@ -198,6 +198,7 @@ texture export from `static/sappear.flx`.
 | Metadata | Decode `TYPENAME.FLX` type-ID → name pairs | `titan u9 typename-dump static/TYPENAME.FLX` |
 | Sound and speech | Decode `Speech.flx`/`sfx.flx`/`music.flx` to WAV (PCM, mono/stereo ADPCM, EA MicroTalk) | `titan u9 sound-extract sound/Speech.flx -o speech_wav/` |
 | 3D models and textures | Export `sappear.flx` models (limb hierarchy, LODs, materials) to textured OBJ+MTL+PNG or geometry-only STL, with real palette colors for 8-bit textures, optional naming via `TYPES.DAT`/`TYPENAME.FLX` (e.g. `model_01805_lord-british`), and two auto-generated preview renders, front and back (needs the optional `pyvista` package) | `titan u9 model-export static/sappear.flx 2 -t static/bitmap16.flx -o model_2/` |
+| Animation clips | Parse every `anim.flx` clip's source range/path, part-ID manifest, named part tracks, timestamped quaternion/position/scale frames, and raw suffix records | `titan u9 animation-show static/anim.flx 172 --part 1 -n 10` |
 | 2D UI icons | List/export the standalone 2D icons (spell-rune sigils, item icons, ...) mixed into the same `bitmap16.flx`/`bitmapC.flx`/`bitmapsh.flx` archives as 3D model textures -- identified as the entries no `sappear.flx` model ever references, kept in a separate module/command group/output dir from the mesh commands above | `titan u9 icon-export-all static/sappear.flx static/bitmapsh.flx -p static/ankh.pal -o icon_export/` |
 
 See the [U9 commands reference](cli_reference.md#ultima-9-commands-titan-u9)

@@ -54,17 +54,17 @@ geometry only.
 
 **Static bind pose only (minor, cosmetic)**: both exporters use each
 limb's single stored transform (see :class:`titan.u9.model.U9Limb`),
-not a real animated/posed configuration (``static/anim.flx`` isn't
-implemented). This can leave a small sub-mesh in an unposed
-resting position (e.g. not tucked/folded the way it would be
-mid-animation). Note: an earlier version of this docstring attributed
-a dragon wing's hand/claw sub-mesh showing a patch of the shared
-atlas's face graphic to *this* limitation -- that was wrong. That
-symptom was actually the UV V-flip bug above (the wing's claw
-happened to sample a UV region that, unflipped, landed on the face
-texture); it's gone as of the V-flip fix, confirmed by re-rendering
-model 3623. Genuine bind-pose-only effects are limb *positioning*
-only and never change which texture region a triangle samples.
+not a real animated/posed configuration. :mod:`titan.u9.animation` parses
+``static/anim.flx``, but the model-to-clip link and animated export are not
+implemented. This can leave a small sub-mesh in an unposed resting position
+(e.g. not tucked/folded the way it would be mid-animation). Note: an earlier
+version of this docstring attributed a dragon wing's hand/claw sub-mesh showing
+a patch of the shared atlas's face graphic to *this* limitation -- that was
+wrong. That symptom was actually the UV V-flip bug above (the wing's claw
+happened to sample a UV region that, unflipped, landed on the face texture);
+it's gone as of the V-flip fix, confirmed by re-rendering model 3623. Genuine
+bind-pose-only effects are limb *positioning* only and never change which
+texture region a triangle samples.
 """
 
 from __future__ import annotations

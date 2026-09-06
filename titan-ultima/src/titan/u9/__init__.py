@@ -6,6 +6,7 @@ Modules for Ultima 9: Ascension file formats.
 Canonical imports::
 
     from titan.u9.activity import U9Activities
+    from titan.u9.animation import U9Animations
     from titan.u9.books import U9Books
     from titan.u9.fixed import U9Fixed
     from titan.u9.flx_archive import U9FlxArchive
@@ -41,6 +42,14 @@ from titan.u9.adpcm import decode_stereo, decode_mono as decode_adpcm_mono
 from __future__ import annotations
 
 from titan.u9.adpcm import AdpcmDecodeError, decode_mono as decode_adpcm_mono, decode_stereo
+from titan.u9.animation import (
+    U9Animation,
+    U9AnimationError,
+    U9AnimationFrame,
+    U9AnimationPart,
+    U9Animations,
+    U9AnimationSuffix,
+)
 from titan.u9.books import U9Book, U9Books, U9BooksError
 from titan.u9.fixed import (
     U9Fixed,
@@ -118,6 +127,12 @@ __all__ = [
     "decode_stereo",
     "decode_adpcm_mono",
     "AdpcmDecodeError",
+    "U9Animation",
+    "U9AnimationError",
+    "U9AnimationFrame",
+    "U9AnimationPart",
+    "U9Animations",
+    "U9AnimationSuffix",
     "decode_microtalk_mono",
     "MicroTalkDecodeError",
     "U9Model",

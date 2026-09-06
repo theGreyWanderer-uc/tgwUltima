@@ -22,6 +22,7 @@ import typer
 from PIL import Image
 
 from titan.u9.activity import U9Activities, U9ActivityError
+from titan.u9.animation import U9AnimationError, U9Animations
 from titan.u9.books import U9Books, U9BooksError
 from titan.u9.flx_archive import U9FlxArchive, U9FlxArchiveError
 from titan.u9.flx_writer import (
@@ -1078,6 +1079,141 @@ def cmd_highway_routes(args: SimpleNamespace) -> int:
             print(f"      {' -> '.join(str(n) for n in r.path)}")
     if args.limit and len(routes) > args.limit:
         print(f"... ({len(routes) - args.limit} more; raise --limit to see more)")
+    return 0
+
+
+# ============================================================================
+# CLI COMMANDS — ANIMATION CLIPS (static/anim.flx)
+# ============================================================================
+
+
+def _load_animations(filepath: str) -> Optional[U9Animations]:
+    """Open static/anim.flx, reporting the reason on failure."""
+    if not os.path.isfile(filepath):
+        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
+        return None
+    try:
+        return U9Animations.from_file(filepath)
+    except U9AnimationError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return None
+
+
+def cmd_animation_list(args: SimpleNamespace) -> int:
+    """List animation clips with their frame, part and suffix counts."""
+    animations = _load_animations(args.file)
+    if animations is None:
+        return 1
+
+    animation_ids = animations.used_animation_ids()
+    shown = animation_ids[: args.limit] if args.limit else animation_ids
+    print(
+        f"{args.file} -- {len(animation_ids)} animation clip(s) "
+        f"of {animations.num_entries} slots"
+    )
+    print(
+        f"{'ID':>5}  {'Frames':>6}  {'Parts':>5}  {'Last ms':>8}  {'Suffix':>6}  Source"
+    )
+    print("-" * 96)
+    for animation_id in shown:
+        try:
+            animation = animations.animation(animation_id)
+        except U9AnimationError as e:
+            print(f"ERROR: {e}", file=sys.stderr)
+            return 1
+        if animation is None:
+            continue
+        print(
+            f"{animation.animation_id:>5}  {animation.frame_count:>6}  "
+            f"{len(animation.parts):>5}  {animation.duration_ms:>8}  "
+            f"{len(animation.suffixes):>6}  {animation.source_name}"
+        )
+    if args.limit and len(animation_ids) > args.limit:
+        print(
+            f"... ({len(animation_ids) - args.limit} more; raise --limit to see more)"
+        )
+    return 0
+
+
+def cmd_animation_show(args: SimpleNamespace) -> int:
+    """Show one animation, optionally dumping one part's frame transforms."""
+    animations = _load_animations(args.file)
+    if animations is None:
+        return 1
+
+    try:
+        animation = animations.animation(args.id)
+    except U9AnimationError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+    if animation is None:
+        print(f"Animation {args.id} is an unused slot.")
+        return 0
+
+    print(f"{args.file} -- animation {animation.animation_id}")
+    print(f"  Source          : {animation.source_name}")
+    print(
+        f"  Source frames   : {animation.start_frame}..{animation.end_frame} "
+        f"({animation.frame_count} total)"
+    )
+    print(
+        f"  Timing          : {animation.source_fps} fps, "
+        f"{animation.frame_interval_ms} nominal ms, last timestamp {animation.duration_ms} ms"
+    )
+    print(
+        f"  Structure       : {len(animation.header_words)} header words, "
+        f"{len(animation.parts)} parts, {len(animation.suffixes)} suffix records"
+    )
+
+    if args.part is None:
+        parts = animation.parts[: args.limit] if args.limit else animation.parts
+        print(f"  {'Part ID':>7}  {'Frames':>6}  {'Last ms':>8}  Name")
+        print("  " + "-" * 52)
+        for part in parts:
+            last_ms = part.frames[-1].time_ms if part.frames else 0
+            print(
+                f"  {part.part_id:>7}  {part.frame_count:>6}  {last_ms:>8}  {part.name}"
+            )
+        if args.limit and len(animation.parts) > args.limit:
+            print(
+                f"  ... ({len(animation.parts) - args.limit} more; "
+                "raise --limit to see more)"
+            )
+    else:
+        selected_part = animation.part(args.part)
+        if selected_part is None:
+            print(
+                f"ERROR: animation {animation.animation_id} has no part ID {args.part}",
+                file=sys.stderr,
+            )
+            return 1
+        frames = (
+            selected_part.frames[: args.limit] if args.limit else selected_part.frames
+        )
+        print(
+            f"  Part {selected_part.part_id}: {selected_part.name} "
+            f"({selected_part.frame_count} frames)"
+        )
+        for index, frame in enumerate(frames):
+            rotation = ", ".join(f"{value:.6g}" for value in frame.rotation)
+            position = ", ".join(f"{value:.6g}" for value in frame.position)
+            scale = ", ".join(f"{value:.6g}" for value in frame.scale)
+            print(
+                f"    {index:>4}  {frame.time_ms:>6} ms  "
+                f"q=({rotation})  p=({position})  s=({scale})"
+            )
+        if args.limit and selected_part.frame_count > args.limit:
+            print(
+                f"    ... ({selected_part.frame_count - args.limit} more; "
+                "raise --limit to see more)"
+            )
+
+    if animation.suffixes:
+        suffixes = " ".join(
+            f"({a}, {b}, {c})"
+            for a, b, c in (suffix.values for suffix in animation.suffixes)
+        )
+        print(f"  Raw suffixes    : {suffixes}")
     return 0
 
 
@@ -2686,6 +2822,37 @@ def highway_routes_cmd(
 ) -> None:
     """List the precomputed routes through the U9 highway graph."""
     raise SystemExit(cmd_highway_routes(SimpleNamespace(file=file, id=id, paths=paths, limit=limit)))
+
+
+@u9_app.command("animation-list")
+def animation_list_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
+    limit: Annotated[
+        Optional[int],
+        typer.Option("-n", "--limit", help="Maximum rows to print"),
+    ] = None,
+) -> None:
+    """List U9 animation clips, source paths, frame counts and animated parts."""
+    raise SystemExit(cmd_animation_list(SimpleNamespace(file=file, limit=limit)))
+
+
+@u9_app.command("animation-show")
+def animation_show_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
+    id: Annotated[int, typer.Argument(help="Animation ID (the FLX entry index)")],
+    part: Annotated[
+        Optional[int],
+        typer.Option("-p", "--part", help="Dump transform frames for this part ID"),
+    ] = None,
+    limit: Annotated[
+        Optional[int],
+        typer.Option("-n", "--limit", help="Maximum parts or frames to print"),
+    ] = None,
+) -> None:
+    """Show one U9 animation's structure or one part's transform frames."""
+    raise SystemExit(
+        cmd_animation_show(SimpleNamespace(file=file, id=id, part=part, limit=limit))
+    )
 
 
 @u9_app.command("trigger-list")

@@ -3840,7 +3840,7 @@ archive reading, `TYPENAME.FLX`, `sound/*.flx` (Speech/sfx/music) decoding,
 sequences, `static/highway.dat` NPC navigation data, the `runtime/NPC.FLX` NPC table, and
 the `static/sdInfo*.flx` texture metadata tables, and the `static/text.flx` and
 `static/misctext.flx` text archives, and `static/fixed.<region>` static world
-geometry are supported so far.
+geometry, and `static/anim.flx` skeletal transform clips are supported so far.
 
 ### FLX archive commands
 
@@ -4522,6 +4522,69 @@ titan u9 trigger-opcodes static/triggers.flx -n 15
 
 Also names any trigger whose record list runs off the end without a
 terminator.
+
+---
+
+### Animation clip commands
+
+`static/anim.flx` stores one reusable skeletal transform clip per used FLX
+entry. Each clip has its LightWave source path and inclusive source-frame
+range, a part-ID manifest, named part tracks, and timestamped quaternion,
+position, and scale transforms. All 857 used entries parse and consume exactly.
+
+The archive does not use `sappear.flx` model IDs as animation IDs, and Titan
+does not yet resolve which clip family a model selects. See
+`reference/u9/anim/u9_anim_flx_reference.md` for the verified layout and open
+linkage questions.
+
+---
+
+#### `u9 animation-list`
+
+List animation IDs with frame, part and suffix counts and their source paths.
+
+```
+titan u9 animation-list <file> [-n LIMIT]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/anim.flx` |
+| `-n N`, `--limit N` | Maximum rows to print |
+
+**Example**
+```bash
+titan u9 animation-list static/anim.flx -n 20
+```
+
+---
+
+#### `u9 animation-show`
+
+Show one clip's source timing and part list, or dump one part's transform
+frames with `--part`.
+
+```
+titan u9 animation-show <file> <id> [-p PART_ID] [-n LIMIT]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/anim.flx` |
+| `id` | Animation ID -- the FLX entry index |
+| `-p ID`, `--part ID` | Print timestamped transforms for this part ID |
+| `-n N`, `--limit N` | Maximum parts or frames to print |
+
+**Examples**
+```bash
+titan u9 animation-show static/anim.flx 172
+titan u9 animation-show static/anim.flx 172 --part 1 -n 10
+```
+
+The second form identifies part 1 as `BIP01` and prints frames as
+`time_ms`, quaternion `(w,x,y,z)`, position `(x,y,z)`, and scale `(x,y,z)`.
+Suffix records are displayed as raw integer triples because their semantics
+are not yet known.
 
 ---
 
@@ -5619,6 +5682,8 @@ A value on the command line always wins.
 | `u9 model-info` | Print a model's limb/LOD/material/texture summary |
 | `u9 model-export` | Export one model to OBJ+MTL(+PNG textures) and/or STL |
 | `u9 model-export-all` | Batch version of `model-export`, over every used model in a `sappear.flx` |
+| `u9 animation-list` | List `anim.flx` clips with timing, part counts and source paths |
+| `u9 animation-show` | Show one animation clip or dump one part's transform frames |
 | `u9 icon-list` | List candidate 2D UI icon entries not referenced by any 3D model |
 | `u9 icon-export` | Export one texture archive entry to PNG, regardless of mesh usage |
 | `u9 icon-export-all` | Batch-export every candidate 2D UI icon to PNG |
