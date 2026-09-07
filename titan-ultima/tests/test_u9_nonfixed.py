@@ -11,7 +11,10 @@ are the ones that verification established:
 * ``next_entity`` is a ``uint32``, region-relative -- a ``uint16``
   reading loses every link past the first 64 KiB;
 * ``entity_count`` is per page, so a chunk's expected total is the sum
-  over its page chain.
+  over its page chain;
+* page ``+0x04`` and ``+0x08`` are the free-entity and free-extra-data
+  heads, and 16-byte free nodes link through their second dword;
+* one 32-byte allocator cell holds either an entity or two extra-data slots.
 """
 
 from __future__ import annotations
@@ -84,6 +87,48 @@ def _extra(arg_count: int, arg_types: tuple[int, int, int], values: tuple[int, i
     out = struct.pack("<B3B3I", arg_count, *arg_types, *values)
     assert len(out) == EXTRA_SIZE
     return out
+
+
+def _allocator_payload(
+    *,
+    entities: dict[int, bytes],
+    extras: dict[int, bytes],
+    heads: list[int],
+) -> bytes:
+    """Build one complete 4 KiB page with both allocator free lists."""
+    payload = bytearray(0x1000)
+    split_cells = {offset // ENTITY_SIZE * ENTITY_SIZE for offset in extras}
+    entity_cells = set(entities)
+    assert not split_cells & entity_cells
+
+    all_cells = set(range(PAGE_HEADER_SIZE, 0x1000, ENTITY_SIZE))
+    free_entities = sorted(all_cells - entity_cells - split_cells)
+    free_extras = sorted(
+        half
+        for cell in split_cells
+        for half in (cell, cell + EXTRA_SIZE)
+        if half not in extras
+    )
+
+    for offset, record in entities.items():
+        payload[offset:offset + ENTITY_SIZE] = record
+    for offset, record in extras.items():
+        payload[offset:offset + EXTRA_SIZE] = record
+    for index, offset in enumerate(free_entities):
+        next_offset = free_entities[index + 1] if index + 1 < len(free_entities) else 0
+        struct.pack_into("<I", payload, offset, next_offset)
+    for index, offset in enumerate(free_extras):
+        next_offset = free_extras[index + 1] if index + 1 < len(free_extras) else 0
+        struct.pack_into("<I", payload, offset + 4, next_offset)
+
+    payload[:PAGE_HEADER_SIZE] = _page(
+        end_entity=free_entities[0] if free_entities else 0,
+        end_trigger=free_extras[0] if free_extras else 0,
+        entity_count=len(entities),
+        trigger_count=len(extras),
+        heads=heads,
+    )
+    return bytes(payload)
 
 
 class NonfixedHeaderTests(unittest.TestCase):
@@ -223,6 +268,18 @@ class NonfixedPageChainTests(unittest.TestCase):
         assert chunk is not None
         self.assertEqual([p.offset for p in chunk.pages], [0, 0x1000])
 
+    def test_legacy_cumulative_page_count_is_not_summed(self) -> None:
+        # Older savegame pages can store cumulative counts: the first page's
+        # 2 already includes the tail page's 1.
+        data = bytearray(self.data)
+        region = U9Nonfixed(bytes(data))
+        struct.pack_into("<I", data, region.header_size + 0x14, 2)
+        chunk = U9Nonfixed(bytes(data)).chunk(0, 0)
+        assert chunk is not None
+        self.assertEqual(len(chunk.entities), 2)
+        self.assertEqual(chunk.declared_entity_count, 2)
+        self.assertTrue(chunk.is_complete)
+
 
 class NonfixedNextEntityWidthTests(unittest.TestCase):
     """next_entity is a uint32, not a uint16 plus an unknown uint16."""
@@ -330,6 +387,68 @@ class NonfixedExtraDataTests(unittest.TestCase):
         chunk = region.chunk(0, 0)
         assert chunk is not None
         self.assertIsNone(region.extra_data(chunk.entities[0]))
+
+
+class NonfixedAllocatorTests(unittest.TestCase):
+    def setUp(self) -> None:
+        heads = [0] * BUCKET_COUNT
+        heads[1] = PAGE_HEADER_SIZE
+        payload = _allocator_payload(
+            entities={
+                0x60: _entity(x=10, y=20, type_index=100, extra=0xA0),
+                0x80: _entity(x=2000, y=3000, type_index=200),
+            },
+            extras={0xA0: _extra(2, (66, 62, 0), (1000, 2000, 0))},
+            heads=heads,
+        )
+        self.data = _header(2, 2, [1, 0, 0, 0], payload_size=len(payload)) + payload
+
+    def test_decodes_allocator_and_unlinked_entity(self) -> None:
+        chunk = U9Nonfixed(self.data).chunk(0, 0)
+        assert chunk is not None
+        self.assertEqual([entity.type_index for entity in chunk.entities], [100])
+        self.assertEqual([entity.type_index for entity in chunk.unlinked_entities], [200])
+        self.assertEqual(len(chunk.allocated_entities), 2)
+        self.assertTrue(chunk.is_complete)
+        self.assertTrue(chunk.allocation_is_complete)
+
+    def test_decodes_all_extra_data_not_only_references(self) -> None:
+        region = U9Nonfixed(self.data)
+        chunk = region.chunk(0, 0)
+        assert chunk is not None
+        self.assertEqual(len(chunk.extra_data_records), 1)
+        self.assertEqual(chunk.extra_data_records[0].args, [(66, 1000), (62, 2000)])
+        self.assertEqual(region.extra_data_records(), list(chunk.extra_data_records))
+
+    def test_free_lists_account_for_every_half_cell(self) -> None:
+        chunk = U9Nonfixed(self.data).chunk(0, 0)
+        assert chunk is not None
+        self.assertEqual(len(chunk.free_entity_offsets), 122)
+        self.assertEqual(chunk.free_extra_data_offsets, (0xB0,))
+        self.assertEqual(
+            2 * len(chunk.allocated_entities)
+            + len(chunk.extra_data_records)
+            + 2 * len(chunk.free_entity_offsets)
+            + len(chunk.free_extra_data_offsets),
+            250,
+        )
+
+    def test_page_uses_corrected_names_with_compatibility_aliases(self) -> None:
+        page = U9Nonfixed(self.data).pages(0)[0]
+        self.assertEqual(page.free_entity_head, page.end_entity_offset)
+        self.assertEqual(page.free_extra_data_head, page.end_trigger_offset)
+        self.assertEqual(page.extra_data_count, page.trigger_count)
+        self.assertEqual(page.reserved_bucket_head, 0)
+        self.assertEqual(len(page.spatial_bucket_heads), 16)
+
+    def test_spatial_bucket_is_4_by_4_row_major(self) -> None:
+        chunk = U9Nonfixed(self.data).chunk(0, 0)
+        assert chunk is not None
+        self.assertEqual(chunk.entities[0].spatial_bucket, 1)
+        self.assertEqual(chunk.unlinked_entities[0].spatial_bucket, 10)
+
+    def test_lossless_source_round_trip(self) -> None:
+        self.assertEqual(U9Nonfixed(self.data).to_bytes(), self.data)
 
 
 class NonfixedRotationTests(unittest.TestCase):

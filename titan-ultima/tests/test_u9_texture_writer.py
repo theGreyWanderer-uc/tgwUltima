@@ -16,9 +16,20 @@ import struct
 import unittest
 
 from titan.u9.palette import U9Palette
-from titan.u9.texture import COMPRESSION_BC1, bc1_size, decode_frame
+from titan.u9.texture import (
+    COMPRESSION_BC1,
+    FORMAT_ALPHA_8,
+    FORMAT_ALPHA_INTENSITY_44,
+    FORMAT_P8,
+    INTENSITY_FLAG,
+    SELECTOR_ARGB_1555,
+    bc1_size,
+    decode_frame,
+)
 from titan.u9.texture_writer import (
     U9TextureWriteError,
+    encode_alpha8,
+    encode_alpha_intensity_44,
     encode_bc1,
     encode_paletted,
     encode_rgb565,
@@ -72,6 +83,27 @@ class EncoderTests(unittest.TestCase):
         )
         self.assertEqual(out, bytes((1, 3)))
 
+    def test_paletted_maps_transparent_pixels_to_index_254(self) -> None:
+        out = encode_paletted(bytes((10, 20, 30, 0)), _palette())
+        self.assertEqual(out, bytes((254,)))
+
+    def test_paletted_keeps_opaque_duplicate_of_key_opaque(self) -> None:
+        raw = bytearray(1024)
+        raw[247 * 4 : 247 * 4 + 3] = bytes((128, 128, 128))
+        raw[254 * 4 : 254 * 4 + 3] = bytes((128, 128, 128))
+        out = encode_paletted(
+            bytes((128, 128, 128, 255)), U9Palette(bytes(raw))
+        )
+        self.assertEqual(out, bytes((247,)))
+
+    def test_alpha8_uses_the_alpha_channel(self) -> None:
+        rgba = bytes((10, 20, 30, 4, 50, 60, 70, 200))
+        self.assertEqual(encode_alpha8(rgba), bytes((4, 200)))
+
+    def test_alpha_intensity_44_packs_alpha_high_and_intensity_low(self) -> None:
+        rgba = bytes((0, 0, 0, 255, 255, 255, 255, 0))
+        self.assertEqual(encode_alpha_intensity_44(rgba), bytes((0xF0, 0x0F)))
+
     def test_bc1_block_size_is_eight_bytes_per_4x4(self) -> None:
         self.assertEqual(len(encode_bc1(_solid(4, 4, (10, 20, 30, 255)), 4, 4)), 8)
         self.assertEqual(len(encode_bc1(_solid(8, 8, (10, 20, 30, 255)), 8, 8)), 32)
@@ -102,6 +134,22 @@ class FrameEncodingTests(unittest.TestCase):
     def test_detects_paletted_by_payload_length(self) -> None:
         entry = _entry(4, 4, bytes(16))
         self.assertEqual(frame_encoding(entry), "paletted")
+
+    def test_selector_distinguishes_the_three_8_bit_formats(self) -> None:
+        entry = _entry(4, 4, bytes(16), flags=INTENSITY_FLAG)
+        self.assertEqual(frame_encoding(entry), "alpha8")
+        self.assertEqual(
+            frame_encoding(entry, selector=FORMAT_ALPHA_INTENSITY_44),
+            "alpha_intensity44",
+        )
+        self.assertEqual(frame_encoding(entry, selector=FORMAT_P8), "paletted")
+
+    def test_selector_overrides_16_bit_transparency_flag(self) -> None:
+        entry = _entry(4, 4, bytes(32), flags=0x100)
+        self.assertEqual(frame_encoding(entry, selector=FORMAT_P8), "rgb565")
+        self.assertEqual(
+            frame_encoding(entry, selector=SELECTOR_ARGB_1555), "rgba5551"
+        )
 
     def test_detects_rgb565_and_rgba5551_by_the_transparency_flag(self) -> None:
         self.assertEqual(frame_encoding(_entry(4, 4, bytes(32))), "rgb565")
@@ -146,6 +194,34 @@ class ReplaceFrameTests(unittest.TestCase):
         )
         frame = decode_frame(patched, 0, _palette())
         self.assertEqual(frame.pixels_rgba[:4], bytes((0, 255, 0, 255)))
+
+    def test_alpha8_round_trip_does_not_need_a_palette(self) -> None:
+        source = bytes(range(16))
+        entry = _entry(4, 4, source, flags=INTENSITY_FLAG)
+        decoded = decode_frame(entry, selector=FORMAT_ALPHA_8)
+        patched = replace_frame(
+            entry,
+            0,
+            decoded.pixels_rgba,
+            4,
+            4,
+            selector=FORMAT_ALPHA_8,
+        )
+        self.assertEqual(patched, entry)
+
+    def test_alpha_intensity_44_round_trip_is_lossless(self) -> None:
+        source = bytes((0xF0, 0x0F, 0x77, 0xA3)) * 4
+        entry = _entry(4, 4, source, flags=INTENSITY_FLAG)
+        decoded = decode_frame(entry, selector=FORMAT_ALPHA_INTENSITY_44)
+        patched = replace_frame(
+            entry,
+            0,
+            decoded.pixels_rgba,
+            4,
+            4,
+            selector=FORMAT_ALPHA_INTENSITY_44,
+        )
+        self.assertEqual(patched, entry)
 
     def test_size_mismatch_is_refused(self) -> None:
         entry = _entry(8, 8, bytes(128))

@@ -23,12 +23,12 @@ or a 2D-only UI icon that no material ever references at all.
 :func:`used_texture_ids` computes the "claimed by a mesh" set by
 parsing every model in ``sappear.flx``; :func:`icon_entry_indices`
 returns a texture archive's used entries with that set subtracted --
-the "unclaimed" 2D icon candidates. Real data: 5,044 distinct
-texture_ids are claimed this way (matching the count already recorded
-in ``mesh_export``'s own module docstring), leaving 1,553 of
+the "unclaimed" 2D icon candidates. Real data: 5,054 distinct
+texture_ids are claimed this way, leaving 1,549 of
 ``bitmapsh.flx``'s 6,597 used entries as icon candidates -- including
 the full spell-rune cluster (568-641) confirmed by direct visual
-inspection.
+inspection.  The alternate indexed model records are included in the claimed
+set as well.
 
 **Known limitation, confirmed not just theorized**: this is a "claimed
 vs. unclaimed" split, not a true icon/material classifier -- an entry
@@ -78,7 +78,7 @@ def _texture_ids_for_model(model: U9Model) -> set[int]:
 
 
 def used_texture_ids(sappear: U9FlxArchive) -> set[int]:
-    """Every ``texture_id`` referenced by a non-invisible material in any parseable ``sappear.flx`` model."""
+    """Every non-invisible ``texture_id`` referenced by a ``sappear.flx`` model."""
     ids: set[int] = set()
     for model_id in sappear.used_entry_indices():
         blob = sappear.read_entry(model_id)

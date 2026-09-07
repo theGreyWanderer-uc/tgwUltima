@@ -192,12 +192,19 @@ U9 support is newer than U8/U7 and includes FLX archives, `TYPENAME.FLX`,
 mono and stereo, and EA MicroTalk speech), `anim.flx` skeletal clips, and 3D
 model + texture export from `static/sappear.flx`.
 
+The [U9 format completeness index](reference/u9/u9_format_status.md) separates
+complete format support from structurally complete readers whose remaining
+questions concern field or gameplay semantics.
+
 | Area | Coverage | Quick example |
 |---|---|---|
 | Archives | List/extract any U9 `.flx`/`.FLX` archive | `titan u9 flx-list sound/Speech.flx` |
 | Metadata | Decode `TYPENAME.FLX` type-ID → name pairs | `titan u9 typename-dump static/TYPENAME.FLX` |
 | Sound and speech | Decode `Speech.flx`/`sfx.flx`/`music.flx` to WAV (PCM, mono/stereo ADPCM, EA MicroTalk) | `titan u9 sound-extract sound/Speech.flx -o speech_wav/` |
-| 3D models and textures | Export `sappear.flx` models (limb hierarchy, LODs, materials) to textured OBJ+MTL+PNG or geometry-only STL, with real palette colors for 8-bit textures, optional naming via `TYPES.DAT`/`TYPENAME.FLX` (e.g. `model_01805_lord-british`), and two auto-generated preview renders, front and back (needs the optional `pyvista` package) | `titan u9 model-export static/sappear.flx 2 -t static/bitmap16.flx -o model_2/` |
+| Palette | Inspect `ankh.pal`, its exact index-254 transparency key and duplicate slots; export a PNG swatch plus complete text table | `titan u9 palette-export static/ankh.pal -o palette/` |
+| Texture archives | Parse headers/directories/row tables and export any frame or stored mip from `bitmap*.flx`; the same reader handles all 6,898 pre-baked terrain panels in `Texture8.*`/`texture16.*` | `titan u9 texture-export static/Texture8.9 1087 -p static/ankh.pal -o panels/` |
+| Terrain | Losslessly parse `terrain.*` grids/chunks and environment headers; decode or build packed height, hole, UV rotation, split, frame and texture points; inspect/export placed terrain | `titan u9 terrain-info static/terrain.9` |
+| 3D models and textures | Parse every `sappear.flx` model, including hierarchical and alternate indexed-polygon records, with lossless source-byte round-trip and separately exposed mount geometry; export render meshes to textured OBJ+MTL+PNG or geometry-only STL, with optional naming and previews | `titan u9 model-export static/sappear.flx 2 -t static/bitmap16.flx -o model_2/` |
 | Animation clips | Parse every `anim.flx` clip's source range/path, part-ID manifest, named part tracks, timestamped quaternion/position/scale frames, and raw suffix records | `titan u9 animation-show static/anim.flx 172 --part 1 -n 10` |
 | 2D UI icons | List/export the standalone 2D icons (spell-rune sigils, item icons, ...) mixed into the same `bitmap16.flx`/`bitmapC.flx`/`bitmapsh.flx` archives as 3D model textures -- identified as the entries no `sappear.flx` model ever references, kept in a separate module/command group/output dir from the mesh commands above | `titan u9 icon-export-all static/sappear.flx static/bitmapsh.flx -p static/ankh.pal -o icon_export/` |
 
@@ -398,10 +405,20 @@ titan u9 sound-extract sound/sfx.flx -o sfx_wav/
 titan u9 sound-extract sound/music.flx -o music_wav/
 ```
 
+### U9 Palette Inspection and Export
+
+```bash
+# Inspect layout, exact transparency semantics, and repeated colour slots.
+titan u9 palette-info static/ankh.pal --duplicates
+
+# Write a 16x16 RGB swatch and a complete RGB/reserved/alpha text inventory.
+titan u9 palette-export static/ankh.pal -o palette/
+```
+
 ### U9 3D Model Export
 
 ```bash
-# Inspect a model's limb/LOD/material/texture summary first.
+# Inspect record type plus limb/LOD/render/mount/material/texture counts first.
 titan u9 model-info static/sappear.flx 2
 
 # Export a textured OBJ (+ MTL + PNG textures) -- bitmap16.flx covers every
@@ -415,6 +432,32 @@ titan u9 model-export static/sappear.flx 2 -t static/bitmapsh.flx -p static/ankh
 
 # Geometry-only STL, no textures or preview needed.
 titan u9 model-export static/sappear.flx 2 -f stl --no-preview -o model_2_stl/
+```
+
+### U9 Texture Inspection and Export
+
+```bash
+# Inspect the decoded set/frame headers and every stored mip size.
+titan u9 texture-info static/bitmap16.flx 568
+
+# Export one of the game's own stored mip levels.
+titan u9 texture-export static/bitmap16.flx 568 --mip 2 -o textures/
+
+# Texture8/texture16 terrain-panel files use the same entry format.
+titan u9 texture-export static/Texture8.9 1087 -p static/ankh.pal -o panels/
+```
+
+### U9 Terrain Inspection and Export
+
+```bash
+# Includes signed water level, floating wave amplitude and raw region flags.
+titan u9 terrain-info static/terrain.9
+
+# Inspect the UV orientation encoded at each point in a placed chunk.
+titan u9 terrain-chunk static/terrain.9 -t 12,20 -f uv-rotation
+
+# Count textures across the placed terrain surface, not orphaned chunk data.
+titan u9 terrain-textures static/terrain.9 --sdinfo static/sdInfo16.flx
 ```
 
 ---

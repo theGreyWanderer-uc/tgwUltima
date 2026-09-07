@@ -69,7 +69,11 @@ class TriggerRecordTests(unittest.TestCase):
     def test_opcode_is_the_low_byte_not_the_word(self) -> None:
         # 0x1A1B, 0x181B and 0x0E1B are all opcode 0x1B with differing arg0;
         # reading word 0 as the opcode would make them three opcodes.
-        body = _record(0x1B, 26, 679, 9413) + _record(0x1B, 24, 679, 9925) + _record(0x1B, 14, 3660, 8839)
+        body = (
+            _record(0x1B, 26, 679, 9413)
+            + _record(0x1B, 24, 679, 9925)
+            + _record(0x1B, 14, 3660, 8839)
+        )
         triggers = U9Triggers(_archive({1: body + TERMINATOR}))
         trigger = triggers.trigger(1)
         assert trigger is not None
@@ -94,7 +98,22 @@ class TriggerTerminationTests(unittest.TestCase):
         assert trigger is not None
         self.assertEqual(len(trigger.records), 1)
         self.assertEqual(trigger.slack_records, 2)
+        self.assertEqual([r.entry_offset for r in trigger.all_records], [0, 6, 12, 18])
+        self.assertEqual([r.opcode for r in trigger.slack], [0x00, 0x1F])
+        self.assertEqual(trigger.to_bytes(), blob)
         self.assertTrue(trigger.terminated)
+
+    def test_activity_reference_splits_arg2_into_independent_bytes(self) -> None:
+        blob = _record(0x31, 0x10, 166, 0xAB02) + TERMINATOR
+        trigger = U9Triggers(_archive({1: blob})).trigger(1)
+        assert trigger is not None
+        record = trigger.records[0]
+        self.assertEqual(record.activity_reference, (166, 2))
+        self.assertEqual(record.arg2_low, 2)
+        self.assertEqual(record.arg2_high, 0xAB)
+        self.assertEqual(record.to_bytes(), blob[:RECORD_SIZE])
+        assert trigger.terminator is not None
+        self.assertEqual(trigger.terminator.entry_offset, RECORD_SIZE)
 
     def test_leading_terminator_is_an_empty_trigger(self) -> None:
         blob = TERMINATOR + _record(0x00) + _record(0x00)

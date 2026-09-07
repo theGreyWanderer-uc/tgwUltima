@@ -1,9 +1,8 @@
 """Tests for titan.u9.texture's bitmap FLX texture decoder.
 
-Fixtures are hand-built minimal texture-set entries (no mip chain,
-1-2 pixels) so the exact expected RGBA bytes can be computed by hand
-from the known 565/5551/monochrome bit layouts -- see each test's
-comment for the arithmetic. Broader validation against real game
+Fixtures are hand-built minimal texture-set entries so the exact expected RGBA
+bytes can be computed by hand from the known 565/5551/monochrome bit layouts;
+see each test's comment for the arithmetic. Broader validation against real game
 archives (correct dimensions, and a visually-confirmed "default"
 placeholder texture, a fire sprite with correct alpha, and a
 grayscale variant) is cited in the module docstring, not repeated here
@@ -24,13 +23,23 @@ from titan.u9.texture import (
     SELECTOR_ARGB_1555,
     U9TextureError,
     decode_frame,
+    mip_dimensions,
+    parse_texture_set,
 )
 
 TEXTURE_SET_HEADER_SIZE = 0x10
 FRAME_HEADER_SIZE = 0x14
 
 
-def _build_entry(width: int, height: int, mip_count: int, unknown1: int, pixel_bytes: bytes) -> bytes:
+def _build_entry(
+    width: int,
+    height: int,
+    mip_count: int,
+    unknown1: int,
+    pixel_bytes: bytes,
+    *,
+    set_unknown: int = 0,
+) -> bytes:
     frame_header = struct.pack("<HH", unknown1, 0x6000) + struct.pack("<IIII", width, height, 0, 0)
     frame_header += b"\x00" * (4 * height)  # row-offset table, unused by the decoder
     frame_data = frame_header + pixel_bytes
@@ -38,7 +47,9 @@ def _build_entry(width: int, height: int, mip_count: int, unknown1: int, pixel_b
     frame_count = 1
     frame_offset = TEXTURE_SET_HEADER_SIZE + frame_count * 8  # directly follows the frame directory
     frame_dir = struct.pack("<II", frame_offset, len(frame_data))
-    header = struct.pack("<HHHH", width, mip_count, height, 0) + struct.pack("<II", frame_count, 0)
+    header = struct.pack("<HHHH", width, mip_count, height, 0) + struct.pack(
+        "<II", frame_count, set_unknown
+    )
     return header + frame_dir + frame_data
 
 
@@ -106,6 +117,20 @@ class DecodeFramePalettedTests(unittest.TestCase):
         frame = decode_frame(entry)
         self.assertEqual(frame.pixels_rgba, bytes([64, 64, 64, 255]))
 
+    def test_only_index_254_is_transparent(self) -> None:
+        palette_data = bytearray(256 * 4)
+        palette_data[247 * 4 : 247 * 4 + 3] = bytes((128, 128, 128))
+        palette_data[254 * 4 : 254 * 4 + 3] = bytes((128, 128, 128))
+        entry = _build_entry(2, 1, 0, 0, bytes((247, 254)))
+        frame = decode_frame(entry, palette=U9Palette(bytes(palette_data)))
+        self.assertEqual(frame.pixels_rgba[:4], bytes((128, 128, 128, 255)))
+        self.assertEqual(frame.pixels_rgba[4:], bytes((128, 128, 128, 0)))
+
+    def test_transparency_key_survives_grayscale_fallback(self) -> None:
+        entry = _build_entry(1, 1, 0, 0, bytes((254,)))
+        frame = decode_frame(entry)
+        self.assertEqual(frame.pixels_rgba, bytes((254, 254, 254, 0)))
+
 
 class DecodeFrameEdgeCaseTests(unittest.TestCase):
     def test_frame_index_out_of_range_raises(self) -> None:
@@ -147,6 +172,69 @@ class DecodeFrameEdgeCaseTests(unittest.TestCase):
         struct.pack_into("<H", entry, 0x06, 9)
         with self.assertRaises(U9TextureError):
             decode_frame(bytes(entry))
+
+
+class TextureStructureTests(unittest.TestCase):
+    def test_parses_set_frame_and_row_table_metadata(self) -> None:
+        entry = _build_entry(
+            width=2,
+            height=2,
+            mip_count=0,
+            unknown1=0x00D1,
+            pixel_bytes=bytes(4),
+            set_unknown=0x00066000,
+        )
+        texture_set = parse_texture_set(entry)
+        self.assertEqual((texture_set.frame_width, texture_set.frame_height), (2, 2))
+        self.assertEqual(texture_set.frame_count, 1)
+        self.assertEqual(texture_set.unknown, 0x00066000)
+        self.assertEqual(texture_set.frames[0].flags, 0x00D1)
+        self.assertEqual(texture_set.frames[0].unknown_word, 0x6000)
+        self.assertEqual(texture_set.frames[0].row_offsets, (0, 0))
+
+    def test_mip_dimensions_halves_each_axis_and_floors_at_one(self) -> None:
+        self.assertEqual(mip_dimensions(7, 5, 3), ((7, 5), (3, 2), (1, 1), (1, 1)))
+
+    def test_frame_range_must_stay_inside_entry(self) -> None:
+        entry = bytearray(_build_entry(1, 1, 0, 0, bytes((0,))))
+        struct.pack_into("<I", entry, 0x14, 1000)
+        with self.assertRaisesRegex(U9TextureError, "lies outside"):
+            parse_texture_set(bytes(entry))
+
+
+class MipLevelTests(unittest.TestCase):
+    def test_decodes_stored_8_bit_mip(self) -> None:
+        payload = bytes(4 * 4) + bytes((7,)) * (2 * 2) + bytes((9,))
+        entry = _build_entry(4, 4, 2, 0, payload)
+        level = decode_frame(entry, mip_level=1)
+        self.assertEqual((level.width, level.height, level.mip_level), (2, 2, 1))
+        self.assertEqual(level.pixels_rgba, bytes((7, 7, 7, 255)) * 4)
+
+    def test_decodes_stored_rgb565_mip(self) -> None:
+        red = struct.pack("<H", 0xF800)
+        green = struct.pack("<H", 0x07E0)
+        blue = struct.pack("<H", 0x001F)
+        payload = red * (4 * 4) + green * (2 * 2) + blue
+        entry = _build_entry(4, 4, 2, 0, payload)
+        level = decode_frame(entry, selector=FORMAT_P8, mip_level=2)
+        self.assertEqual((level.width, level.height, level.mip_level), (1, 1, 2))
+        self.assertEqual(level.pixels_rgba, bytes((0, 0, 255, 255)))
+
+    def test_decodes_stored_bc1_mip(self) -> None:
+        black = struct.pack("<HHI", 0, 0, 0)
+        red = struct.pack("<HHI", 0xF800, 0xF800, 0)
+        green = struct.pack("<HHI", 0x07E0, 0x07E0, 0)
+        payload = black * 4 + red + green
+        entry = bytearray(_build_entry(8, 8, 2, 0, payload))
+        struct.pack_into("<H", entry, 0x06, 1)
+        level = decode_frame(bytes(entry), mip_level=2)
+        self.assertEqual((level.width, level.height, level.mip_level), (2, 2, 2))
+        self.assertEqual(level.pixels_rgba, bytes((0, 255, 0, 255)) * 4)
+
+    def test_mip_level_out_of_range_raises(self) -> None:
+        entry = _build_entry(2, 2, 0, 0, bytes(4))
+        with self.assertRaisesRegex(U9TextureError, "mip_level 1 out of range"):
+            decode_frame(entry, mip_level=1)
 
 
 class IntensityMaskTests(unittest.TestCase):

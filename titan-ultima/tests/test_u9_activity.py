@@ -34,7 +34,9 @@ def _step(opcode: int, operands: bytes = b"\x00" * 8) -> bytes:
 TERMINATOR = _step(0xFF)
 
 
-def _record(ordinal: int, name: str, steps: list[bytes], padding: bytes = b"\x00") -> bytes:
+def _record(
+    ordinal: int, name: str, steps: list[bytes], padding: bytes = b"\x00"
+) -> bytes:
     raw = name.encode() + b"\x00"
     field = (raw + padding * NAME_FIELD_SIZE)[:NAME_FIELD_SIZE]
     return bytes([ordinal]) + field + b"".join(steps) + TERMINATOR
@@ -42,7 +44,9 @@ def _record(ordinal: int, name: str, steps: list[bytes], padding: bytes = b"\x00
 
 def _entry(records: list[bytes], count: int | None = None) -> bytes:
     body = b"".join(records)
-    return struct.pack("<II", len(records) if count is None else count, len(body)) + body
+    return (
+        struct.pack("<II", len(records) if count is None else count, len(body)) + body
+    )
 
 
 def _archive(entries: dict[int, bytes], count: int = 8) -> U9FlxArchive:
@@ -67,10 +71,14 @@ def _archive(entries: dict[int, bytes], count: int = 8) -> U9FlxArchive:
 
 class ActivityRecordTests(unittest.TestCase):
     def test_parses_records_and_steps(self) -> None:
-        entry = _entry([
-            _record(1, "Sequence 1", [_step(0x04, bytes([0x1F]))]),
-            _record(2, "After Yew", [_step(0x03, b"\xb4\xcc\x09"), _step(0x0A, b"\x01")]),
-        ])
+        entry = _entry(
+            [
+                _record(1, "Sequence 1", [_step(0x04, bytes([0x1F]))]),
+                _record(
+                    2, "After Yew", [_step(0x03, b"\xb4\xcc\x09"), _step(0x0A, b"\x01")]
+                ),
+            ]
+        )
         activities = U9Activities(_archive({1: entry}))
         activity = activities.activity(1)
         assert activity is not None
@@ -78,7 +86,12 @@ class ActivityRecordTests(unittest.TestCase):
         self.assertEqual(activity.names, ["Sequence 1", "After Yew"])
         self.assertEqual([len(r.steps) for r in activity.records], [1, 2])
         self.assertEqual(activity.records[1].opcodes, [0x03, 0x0A])
-        self.assertEqual(activity.records[0].steps[0].operands, b"\x1f\x00\x00\x00\x00\x00\x00\x00")
+        self.assertEqual(
+            activity.records[0].steps[0].operands, b"\x1f\x00\x00\x00\x00\x00\x00\x00"
+        )
+        self.assertEqual(activity.records[0].entry_offset, 8)
+        self.assertEqual(activity.records[0].steps[0].entry_offset, 24)
+        self.assertEqual(activity.to_bytes(), entry)
 
     def test_body_is_consumed_exactly(self) -> None:
         entry = _entry([_record(1, "Stand", [_step(0x01)])])
@@ -119,6 +132,11 @@ class ActivityNameFieldTests(unittest.TestCase):
         activity = U9Activities(_archive({1: entry})).activity(1)
         assert activity is not None
         self.assertEqual(activity.records[0].name, "Idle")
+        self.assertEqual(
+            activity.records[0].raw_name_field,
+            (b"Idle\x00" + b"\xcd" * NAME_FIELD_SIZE)[:NAME_FIELD_SIZE],
+        )
+        self.assertEqual(activity.to_bytes(), entry)
 
     def test_stale_text_in_padding_is_not_read(self) -> None:
         # One shipped record's padding still reads "me" behind "Idle".
@@ -148,16 +166,34 @@ class ActivityOrdinalTests(unittest.TestCase):
         self.assertTrue(activity.is_complete)
 
     def test_gapped_ordinals_are_accepted(self) -> None:
-        entry = _entry([
-            _record(1, "Idle", [_step(0x04)]),
-            _record(2, "Sailing", [_step(0x04)]),
-            _record(12, "To LBC", [_step(0x03)]),
-            _record(13, "teleport", [_step(0x03)]),
-        ])
+        entry = _entry(
+            [
+                _record(1, "Idle", [_step(0x04)]),
+                _record(2, "Sailing", [_step(0x04)]),
+                _record(12, "To LBC", [_step(0x03)]),
+                _record(13, "teleport", [_step(0x03)]),
+            ]
+        )
         activity = U9Activities(_archive({1: entry})).activity(1)
         assert activity is not None
         self.assertEqual([r.ordinal for r in activity.records], [1, 2, 12, 13])
         self.assertTrue(activity.is_complete)
+
+
+class ActivityOperandTests(unittest.TestCase):
+    def test_unknown_operands_have_parallel_integer_views(self) -> None:
+        operands = struct.pack("<HHHH", 0x1234, 0x5678, 0x9ABC, 0xDEF0)
+        entry = _entry([_record(1, "Walk", [_step(0x01, operands)])])
+        activity = U9Activities(_archive({1: entry})).activity(1)
+        assert activity is not None
+        step = activity.records[0].steps[0]
+        self.assertEqual(step.operands_u16, (0x1234, 0x5678, 0x9ABC, 0xDEF0))
+        self.assertEqual(step.operands_u32, (0x56781234, 0xDEF09ABC))
+        self.assertEqual(step.movement_points, (0x1234, 0x5678))
+        self.assertEqual(step.to_bytes(), _step(0x01, operands))
+        terminator = activity.records[0].terminator
+        assert terminator is not None
+        self.assertEqual(terminator.entry_offset, 33)
 
 
 class ActivityArchiveTests(unittest.TestCase):
@@ -166,10 +202,12 @@ class ActivityArchiveTests(unittest.TestCase):
             _archive(
                 {
                     1: _entry([_record(1, "Sequence 1", [_step(0x04)])]),
-                    3: _entry([
-                        _record(1, "Stand", [_step(0x03), _step(0x0A)]),
-                        _record(2, "Loiter", [_step(0x03)]),
-                    ]),
+                    3: _entry(
+                        [
+                            _record(1, "Stand", [_step(0x03), _step(0x0A)]),
+                            _record(2, "Loiter", [_step(0x03)]),
+                        ]
+                    ),
                 }
             )
         )
@@ -203,6 +241,16 @@ class ActivityArchiveTests(unittest.TestCase):
 
 
 class ActivityValidationTests(unittest.TestCase):
+    def test_trailing_and_post_payload_bytes_are_preserved(self) -> None:
+        record = _record(1, "Stand", [])
+        entry = struct.pack("<II", 1, len(record) + 2) + record + b"xy" + b"post"
+        activity = U9Activities(_archive({1: entry})).activity(1)
+        assert activity is not None
+        self.assertEqual(activity.trailing_data, b"xy")
+        self.assertEqual(activity.post_payload_data, b"post")
+        self.assertFalse(activity.is_complete)
+        self.assertEqual(activity.to_bytes(), entry)
+
     def test_unterminated_record_is_reported_not_hidden(self) -> None:
         # The pre-patch original's entry 76 is exactly this shape; the
         # v1.19H patch deletes it.

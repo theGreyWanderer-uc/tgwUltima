@@ -1,6 +1,7 @@
 """
-Texture (bitmap) reader for Ultima 9: Ascension's model texture archives:
-``static/bitmap16.flx``, ``static/bitmapC.flx``, and ``static/bitmapsh.flx``.
+Texture reader for Ultima 9: Ascension's model/UI texture archives
+(``static/bitmap16.flx``, ``static/bitmapC.flx``, ``static/bitmapsh.flx``) and
+pre-baked terrain panels (``Texture8.*`` and ``texture16.*``).
 
 Ported from the real, open-source Blender importer
 ``Chevluh/Ultima-9-Blender-Importer``'s ``ultimaModelImporter.py``
@@ -39,15 +40,13 @@ per-frame header::
 
 Pixel data immediately follows the row-offset table (at
 ``+0x14 + 4*height``). It contains the base-resolution image followed
-by a full mip chain (progressively quartered), but -- matching the
-reference importer's own behavior -- only the base ``width*height``
-pixels are read here; the mip tail is simply left unconsumed.
+by a full mip chain. :func:`decode_frame` reads any requested stored level;
+zero is the base and positive values select progressively halved mips.
 
 Bits per pixel is not stored directly. It is inferred by comparing the frame's
 recorded byte length against the byte length a full 8-bit (1 byte/pixel) mip
-chain would occupy at this width/height/mip-count: if they match the frame is
-one byte per texel, otherwise it is 16-bit (565 when the transparency flag is
-clear, 5551 when set).
+chain would occupy at this width/height/mip-count: one-byte and two-byte totals
+are accepted exactly, and any other length is rejected rather than guessed.
 
 **One byte per texel is three different formats**, and the length test cannot
 tell them apart:
@@ -92,7 +91,13 @@ one another: ``bitmapsh.flx`` is 8-bit, ``bitmap16.flx`` 16-bit and
 ``bitmapC.flx`` BC1. Masks are shared verbatim across all three rather than
 re-encoded, which is why ``bitmap16`` and ``bitmapC`` carry exactly the same
 3,476 8-bit frames -- every one of them a mask. ``ankh.pal`` is therefore needed
-by ``bitmapsh.flx`` alone.
+by ``bitmapsh.flx`` alone. Paletted index 254 is an exact transparency key;
+its RGB-identical index 247 remains opaque.
+
+The terrain-panel entries are the same structure, not a separate raster
+format. All 6,898 shipped entries parse exactly: one 64x64 frame, no mips,
+8-bit palette indices or RGB565. What older notes called a 292-byte opaque
+prefix is the ordinary frame header and 64-entry row table.
 """
 
 from __future__ import annotations
@@ -104,18 +109,23 @@ __all__ = [
     "FORMAT_P8",
     "SELECTOR_ARGB_1555",
     "INTENSITY_FLAG",
+    "PALETTE_TRANSPARENCY_INDEX",
     "COMPRESSION_NONE",
     "U9TextureError",
     "U9TextureFrame",
+    "U9TextureFrameInfo",
+    "U9TextureSet",
     "bc1_size",
     "decode_frame",
+    "mip_dimensions",
+    "parse_texture_set",
 ]
 
 import struct
 from dataclasses import dataclass
 from typing import Optional
 
-from titan.u9.palette import U9Palette
+from titan.u9.palette import PALETTE_TRANSPARENCY_INDEX, U9Palette
 
 TEXTURE_SET_HEADER_SIZE = 0x10
 FRAME_DIR_ENTRY_SIZE = 0x08
@@ -187,14 +197,62 @@ class U9TextureError(Exception):
 
 
 @dataclass(frozen=True)
+class U9TextureFrameInfo:
+    """Structural metadata for one frame, without decoding its pixels."""
+
+    index: int
+    offset: int
+    length: int
+    flags: int
+    unknown_word: int
+    width: int
+    height: int
+    unknown3: int
+    unknown4: int
+    row_offsets: tuple[int, ...]
+
+    @property
+    def header_size(self) -> int:
+        """Frame header plus the per-row offset table, in bytes."""
+        return FRAME_HEADER_SIZE + 4 * self.height
+
+    @property
+    def pixel_data_offset(self) -> int:
+        """Absolute offset of the base image within the FLX entry bytes."""
+        return self.offset + self.header_size
+
+    @property
+    def is_transparent(self) -> bool:
+        return bool(self.flags & 0x100)
+
+
+@dataclass(frozen=True)
+class U9TextureSet:
+    """Parsed texture-set and frame metadata from one FLX entry."""
+
+    frame_width: int
+    mip_count: int
+    frame_height: int
+    compression: int
+    frame_count: int
+    unknown: int
+    frames: tuple[U9TextureFrameInfo, ...]
+
+
+@dataclass(frozen=True)
 class U9TextureFrame:
-    """One decoded texture frame: base-resolution RGBA pixels, row-major, top-to-bottom."""
+    """One decoded texture surface: RGBA pixels, row-major, top-to-bottom."""
 
     width: int
     height: int
     pixels_rgba: bytes
     """``width * height * 4`` bytes, one byte per channel, 0-255."""
     is_transparent: bool
+    """Frame-header bit 8, not a scan of decoded alpha values.
+
+    A paletted surface can contain transparent index 254 while this remains
+    false because the two mechanisms are independent.
+    """
     is_intensity: bool = False
     """True when this was an 8-bit ALPHA_8 mask -- see :data:`INTENSITY_FLAG`.
 
@@ -202,6 +260,113 @@ class U9TextureFrame:
     so it is visible in a plain viewer, and any palette passed to
     :func:`decode_frame` was deliberately ignored.
     """
+    mip_level: int = 0
+    """Zero for the base image; positive values identify stored mip levels."""
+
+
+def parse_texture_set(entry_data: bytes) -> U9TextureSet:
+    """Parse one texture FLX entry's headers, directory, and row tables.
+
+    This structure is shared by ``bitmap*.flx`` and the extensionless-FLX
+    terrain-panel archives ``Texture8.*``/``texture16.*``.
+    """
+    if len(entry_data) < TEXTURE_SET_HEADER_SIZE:
+        raise U9TextureError(
+            f"data too small for a texture-set header: {len(entry_data)} bytes"
+        )
+
+    frame_width, mip_count, frame_height, compression = struct.unpack_from(
+        "<4H", entry_data, 0x00
+    )
+    frame_count, unknown = struct.unpack_from("<2I", entry_data, 0x08)
+    directory_end = TEXTURE_SET_HEADER_SIZE + frame_count * FRAME_DIR_ENTRY_SIZE
+    if directory_end > len(entry_data):
+        raise U9TextureError(
+            f"truncated frame directory: {frame_count} entries need {directory_end} "
+            f"bytes, data is {len(entry_data)} bytes"
+        )
+
+    frames = []
+    for index in range(frame_count):
+        dir_pos = TEXTURE_SET_HEADER_SIZE + index * FRAME_DIR_ENTRY_SIZE
+        frame_offset, frame_length = struct.unpack_from("<2I", entry_data, dir_pos)
+        frame_end = frame_offset + frame_length
+        if frame_offset < directory_end or frame_end > len(entry_data):
+            raise U9TextureError(
+                f"frame {index} range {frame_offset}..{frame_end} lies outside "
+                f"its header/directory or {len(entry_data)}-byte entry"
+            )
+        if frame_length < FRAME_HEADER_SIZE:
+            raise U9TextureError(
+                f"frame {index} is only {frame_length} bytes; need at least "
+                f"{FRAME_HEADER_SIZE} for its header"
+            )
+
+        try:
+            flags, unknown_word = struct.unpack_from("<2H", entry_data, frame_offset)
+            width, height, unknown3, unknown4 = struct.unpack_from(
+                "<4I", entry_data, frame_offset + 4
+            )
+        except struct.error as error:
+            raise U9TextureError(f"malformed frame {index} header: {error}") from error
+        if width == 0 or height == 0:
+            raise U9TextureError(
+                f"frame {index} has invalid dimensions {width}x{height}"
+            )
+
+        header_size = FRAME_HEADER_SIZE + 4 * height
+        if header_size > frame_length:
+            raise U9TextureError(
+                f"frame {index} row table needs {header_size} bytes, frame is "
+                f"{frame_length} bytes"
+            )
+        try:
+            row_offsets = struct.unpack_from(
+                f"<{height}I", entry_data, frame_offset + FRAME_HEADER_SIZE
+            )
+        except struct.error as error:
+            raise U9TextureError(
+                f"malformed frame {index} row table: {error}"
+            ) from error
+
+        frames.append(
+            U9TextureFrameInfo(
+                index=index,
+                offset=frame_offset,
+                length=frame_length,
+                flags=flags,
+                unknown_word=unknown_word,
+                width=width,
+                height=height,
+                unknown3=unknown3,
+                unknown4=unknown4,
+                row_offsets=row_offsets,
+            )
+        )
+
+    return U9TextureSet(
+        frame_width=frame_width,
+        mip_count=mip_count,
+        frame_height=frame_height,
+        compression=compression,
+        frame_count=frame_count,
+        unknown=unknown,
+        frames=tuple(frames),
+    )
+
+
+def mip_dimensions(
+    width: int, height: int, mip_count: int
+) -> tuple[tuple[int, int], ...]:
+    """Return base dimensions followed by every declared stored mip level."""
+    if width <= 0 or height <= 0:
+        raise U9TextureError(f"invalid texture dimensions {width}x{height}")
+    dimensions = [(width, height)]
+    for _ in range(mip_count):
+        width = max(1, width // 2)
+        height = max(1, height // 2)
+        dimensions.append((width, height))
+    return tuple(dimensions)
 
 
 def decode_frame(
@@ -210,6 +375,7 @@ def decode_frame(
     palette: Optional[U9Palette] = None,
     *,
     selector: Optional[int] = None,
+    mip_level: int = 0,
 ) -> U9TextureFrame:
     """
     Decode one frame from a texture archive's FLX entry bytes.
@@ -219,18 +385,18 @@ def decode_frame(
     ignore it entirely. Without one, paletted frames fall back to flat
     grayscale.
 
-    ``selector`` is the engine's pixel-format byte, from
+    ``mip_level`` selects the base image (zero) or one of the stored,
+    progressively halved surfaces. ``selector`` is the engine's pixel-format byte, from
     :attr:`titan.u9.sdinfo.U9SdInfoRecord.format_selector` on the ``sdInfo``
     archive matching this one. Supply it and one-byte-per-texel frames are
     decoded the way the engine decodes them; omit it and
     :data:`INTENSITY_FLAG` stands in, which cannot separate ``ALPHA_8`` from
     ``ALPHA_INTENSITY_44``.
     """
-    if len(entry_data) < TEXTURE_SET_HEADER_SIZE:
-        raise U9TextureError(f"data too small for a texture-set header: {len(entry_data)} bytes")
-
-    _frame_width, mip_count, _frame_height, compression = struct.unpack_from("<4H", entry_data, 0x00)
-    frame_count = struct.unpack_from("<I", entry_data, 0x08)[0]
+    texture_set = parse_texture_set(entry_data)
+    mip_count = texture_set.mip_count
+    compression = texture_set.compression
+    frame_count = texture_set.frame_count
 
     if compression not in (COMPRESSION_NONE, COMPRESSION_BC1):
         raise U9TextureError(
@@ -240,42 +406,60 @@ def decode_frame(
         )
 
     if not (0 <= frame_index < frame_count):
-        raise U9TextureError(f"frame_index {frame_index} out of range (0..{frame_count - 1})")
+        raise U9TextureError(
+            f"frame_index {frame_index} out of range (0..{frame_count - 1})"
+        )
+    if not (0 <= mip_level <= mip_count):
+        raise U9TextureError(f"mip_level {mip_level} out of range (0..{mip_count})")
 
-    dir_pos = TEXTURE_SET_HEADER_SIZE + frame_index * FRAME_DIR_ENTRY_SIZE
-    try:
-        frame_offset, frame_length = struct.unpack_from("<2I", entry_data, dir_pos)
-
-        unknown1, _unknown2 = struct.unpack_from("<2H", entry_data, frame_offset)
-        width, height, _u3, _u4 = struct.unpack_from("<4I", entry_data, frame_offset + 4)
-    except struct.error as e:
-        raise U9TextureError(f"malformed frame directory/header: {e}") from e
-
-    is_transparent = (unknown1 >> 8) & 1 == 1
-    pixel_data_start = frame_offset + FRAME_HEADER_SIZE + 4 * height
+    frame_info = texture_set.frames[frame_index]
+    unknown1 = frame_info.flags
+    width = frame_info.width
+    height = frame_info.height
+    frame_length = frame_info.length
+    is_transparent = frame_info.is_transparent
+    pixel_data_start = frame_info.pixel_data_offset
+    dimensions = mip_dimensions(width, height, mip_count)
 
     if compression == COMPRESSION_BC1:
-        needed = bc1_size(width, height)
-        if pixel_data_start + needed > len(entry_data):
+        level_sizes = tuple(
+            bc1_size(level_width, level_height)
+            for level_width, level_height in dimensions
+        )
+        payload_length = frame_length - frame_info.header_size
+        expected_length = sum(level_sizes)
+        if payload_length != expected_length:
             raise U9TextureError(
-                f"BC1 data truncated: frame needs {needed} bytes at offset "
-                f"{pixel_data_start}, entry is {len(entry_data)} bytes"
+                f"BC1 payload size mismatch: frame has {payload_length} bytes, "
+                f"declared levels need {expected_length}"
             )
+        pixel_data_start += sum(level_sizes[:mip_level])
+        width, height = dimensions[mip_level]
         return U9TextureFrame(
             width=width,
             height=height,
             pixels_rgba=_decode_bc1(entry_data, pixel_data_start, width, height),
             is_transparent=is_transparent,
             is_intensity=False,
+            mip_level=mip_level,
         )
 
-    header_size = FRAME_HEADER_SIZE + 4 * height
-    mip_sample_count = float(width * height)
-    total_sample_count = mip_sample_count
-    for _ in range(mip_count):
-        mip_sample_count /= 4
-        total_sample_count += mip_sample_count
-    is_8bit = (frame_length - header_size) == total_sample_count
+    level_sample_counts = tuple(
+        level_width * level_height for level_width, level_height in dimensions
+    )
+    total_sample_count = sum(level_sample_counts)
+    payload_length = frame_length - frame_info.header_size
+    if payload_length == total_sample_count:
+        is_8bit = True
+        bytes_per_pixel = 1
+    elif payload_length == total_sample_count * 2:
+        is_8bit = False
+        bytes_per_pixel = 2
+    else:
+        raise U9TextureError(
+            f"raw payload size mismatch: frame has {payload_length} bytes, expected "
+            f"{total_sample_count} for 8-bit or {total_sample_count * 2} for 16-bit levels"
+        )
     # Only meaningful for 8-bit frames: the same bit on a 16-bit frame is not a
     # format selector, and reporting it as one would mislabel 12,439 of them.
     if not is_8bit:
@@ -297,6 +481,8 @@ def decode_frame(
     else:
         sixteen_bit_is_1555 = selector == SELECTOR_ARGB_1555
 
+    pixel_data_start += sum(level_sample_counts[:mip_level]) * bytes_per_pixel
+    width, height = dimensions[mip_level]
     pixel_count = width * height
 
     # The 8-bit paths index bytes directly, so a short buffer would raise a bare
@@ -312,13 +498,21 @@ def decode_frame(
     try:
         if is_8bit:
             if eight_bit_format == FORMAT_ALPHA_INTENSITY_44:
-                pixels_rgba = _decode_alpha_intensity_44(entry_data, pixel_data_start, pixel_count)
+                pixels_rgba = _decode_alpha_intensity_44(
+                    entry_data, pixel_data_start, pixel_count
+                )
             elif eight_bit_format == FORMAT_ALPHA_8:
-                pixels_rgba = _decode_intensity(entry_data, pixel_data_start, pixel_count)
+                pixels_rgba = _decode_intensity(
+                    entry_data, pixel_data_start, pixel_count
+                )
             elif palette is not None:
-                pixels_rgba = _decode_paletted(entry_data, pixel_data_start, pixel_count, palette)
+                pixels_rgba = _decode_paletted(
+                    entry_data, pixel_data_start, pixel_count, palette
+                )
             else:
-                pixels_rgba = _decode_monochrome(entry_data, pixel_data_start, pixel_count)
+                pixels_rgba = _decode_monochrome(
+                    entry_data, pixel_data_start, pixel_count
+                )
         elif sixteen_bit_is_1555:
             pixels_rgba = _decode_5551(entry_data, pixel_data_start, pixel_count)
         else:
@@ -332,6 +526,7 @@ def decode_frame(
         pixels_rgba=pixels_rgba,
         is_transparent=is_transparent,
         is_intensity=is_intensity,
+        mip_level=mip_level,
     )
 
 
@@ -342,18 +537,43 @@ def _bc1_palette(c0: int, c1: int) -> tuple[list[tuple[int, int, int]], list[int
     three colours and its fourth index is transparent black, which is how BC1
     carries one bit of alpha.
     """
-    a = ((c0 >> 11) & 0x1F) * 255 // 31, ((c0 >> 5) & 0x3F) * 255 // 63, (c0 & 0x1F) * 255 // 31
-    b = ((c1 >> 11) & 0x1F) * 255 // 31, ((c1 >> 5) & 0x3F) * 255 // 63, (c1 & 0x1F) * 255 // 31
+    a = (
+        ((c0 >> 11) & 0x1F) * 255 // 31,
+        ((c0 >> 5) & 0x3F) * 255 // 63,
+        (c0 & 0x1F) * 255 // 31,
+    )
+    b = (
+        ((c1 >> 11) & 0x1F) * 255 // 31,
+        ((c1 >> 5) & 0x3F) * 255 // 63,
+        (c1 & 0x1F) * 255 // 31,
+    )
     if c0 > c1:
         return (
-            [a, b,
-             tuple((2 * a[k] + b[k]) // 3 for k in range(3)),
-             tuple((a[k] + 2 * b[k]) // 3 for k in range(3))],
+            [
+                a,
+                b,
+                _mix_rgb(a, b, 2, 1, 3),
+                _mix_rgb(a, b, 1, 2, 3),
+            ],
             [255, 255, 255, 255],
         )
     return (
-        [a, b, tuple((a[k] + b[k]) // 2 for k in range(3)), (0, 0, 0)],
+        [a, b, _mix_rgb(a, b, 1, 1, 2), (0, 0, 0)],
         [255, 255, 255, 0],
+    )
+
+
+def _mix_rgb(
+    first: tuple[int, int, int],
+    second: tuple[int, int, int],
+    first_weight: int,
+    second_weight: int,
+    divisor: int,
+) -> tuple[int, int, int]:
+    return (
+        (first_weight * first[0] + second_weight * second[0]) // divisor,
+        (first_weight * first[1] + second_weight * second[1]) // divisor,
+        (first_weight * first[2] + second_weight * second[2]) // divisor,
     )
 
 
@@ -391,7 +611,12 @@ def _decode_alpha_intensity_44(data: bytes, start: int, count: int) -> bytes:
     for i in range(count):
         v = data[start + i]
         intensity = (v & 0x0F) * 17
-        out[i * 4 : i * 4 + 4] = (intensity, intensity, intensity, ((v >> 4) & 0x0F) * 17)
+        out[i * 4 : i * 4 + 4] = (
+            intensity,
+            intensity,
+            intensity,
+            ((v >> 4) & 0x0F) * 17,
+        )
     return bytes(out)
 
 
@@ -417,7 +642,8 @@ def _decode_monochrome(data: bytes, start: int, count: int) -> bytes:
     out = bytearray(count * 4)
     for i in range(count):
         v = data[start + i]
-        out[i * 4 : i * 4 + 4] = (v, v, v, 255)
+        alpha = 0 if v == PALETTE_TRANSPARENCY_INDEX else 255
+        out[i * 4 : i * 4 + 4] = (v, v, v, alpha)
     return bytes(out)
 
 
@@ -425,8 +651,10 @@ def _decode_paletted(data: bytes, start: int, count: int, palette: U9Palette) ->
     out = bytearray(count * 4)
     colors = palette.colors
     for i in range(count):
-        r, g, b = colors[data[start + i]]
-        out[i * 4 : i * 4 + 4] = (r, g, b, 255)
+        index = data[start + i]
+        r, g, b = colors[index]
+        alpha = 0 if index == PALETTE_TRANSPARENCY_INDEX else 255
+        out[i * 4 : i * 4 + 4] = (r, g, b, alpha)
     return bytes(out)
 
 

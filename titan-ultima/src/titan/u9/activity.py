@@ -18,7 +18,7 @@ Each record is self-delimiting::
 and each step is::
 
     0x00  opcode     u8
-    0x01  operands   8 bytes  -- not yet split into fields
+    0x01  operands   8 bytes
 
 All integers are little-endian.
 
@@ -74,6 +74,12 @@ zero throughout. Both halves are declared points in all 156 such steps
 ``Sequence 4`` (51554 -> 51823) are exact mirrors, the cemetery-to-pub round
 trip his patch notes describe.
 
+For reverse engineering, every record and step carries its byte offset
+relative to the start of the FLX entry. Raw name padding, terminator
+operands, trailing payload bytes, and bytes beyond the declared payload are
+preserved. :meth:`U9Activity.to_bytes` therefore reproduces the original
+entry exactly, including malformed or uninitialised data.
+
 Example::
 
     from titan.u9.activity import U9Activities
@@ -122,10 +128,38 @@ class U9ActivityStep:
 
     opcode: int
     operands: bytes
+    entry_offset: int = 0
 
     @property
     def is_terminator(self) -> bool:
         return self.opcode == TERMINATOR_OPCODE
+
+    @property
+    def operands_u16(self) -> tuple[int, int, int, int]:
+        """The raw operand bytes viewed as four little-endian words."""
+        return struct.unpack("<4H", self.operands)
+
+    @property
+    def operands_u32(self) -> tuple[int, int]:
+        """The raw operand bytes viewed as two little-endian double words."""
+        return struct.unpack("<2I", self.operands)
+
+    @property
+    def movement_points(self) -> tuple[int, int] | None:
+        """Known source/destination highway points for opcodes 1 and 2."""
+        if self.opcode not in (0x01, 0x02):
+            return None
+        values = self.operands_u16
+        return values[0], values[1]
+
+    def to_bytes(self) -> bytes:
+        """Encode this step in its exact nine-byte disk layout."""
+        if len(self.operands) != 8:
+            raise U9ActivityError(
+                f"opcode 0x{self.opcode:02X}: expected 8 operand bytes, "
+                f"got {len(self.operands)}"
+            )
+        return bytes((self.opcode,)) + self.operands
 
 
 @dataclass(frozen=True)
@@ -136,10 +170,26 @@ class U9ActivityRecord:
     name: str
     steps: tuple[U9ActivityStep, ...]
     terminated: bool
+    entry_offset: int = 0
+    raw_name_field: bytes = b""
+    terminator: U9ActivityStep | None = None
 
     @property
     def opcodes(self) -> list[int]:
         return [s.opcode for s in self.steps]
+
+    def to_bytes(self) -> bytes:
+        """Encode the record while preserving its original name padding."""
+        if self.raw_name_field:
+            name_field = self.raw_name_field
+        else:
+            encoded = self.name.encode("ascii", errors="replace")[: NAME_FIELD_SIZE - 1]
+            name_field = (encoded + b"\x00").ljust(NAME_FIELD_SIZE, b"\x00")
+        result = bytes((self.ordinal,)) + name_field
+        result += b"".join(step.to_bytes() for step in self.steps)
+        if self.terminator is not None:
+            result += self.terminator.to_bytes()
+        return result
 
 
 @dataclass(frozen=True)
@@ -151,6 +201,9 @@ class U9Activity:
     payload_length: int
     records: tuple[U9ActivityRecord, ...]
     trailing_bytes: int
+    trailing_data: bytes = b""
+    post_payload_data: bytes = b""
+    raw_data: bytes = b""
 
     @property
     def is_complete(self) -> bool:
@@ -158,12 +211,25 @@ class U9Activity:
         return (
             len(self.records) == self.declared_record_count
             and self.trailing_bytes == 0
+            and not self.post_payload_data
             and all(r.terminated for r in self.records)
         )
 
     @property
     def names(self) -> list[str]:
         return [r.name for r in self.records]
+
+    def to_bytes(self) -> bytes:
+        """Return the complete original FLX-entry payload byte for byte."""
+        if self.raw_data:
+            return self.raw_data
+        body = b"".join(record.to_bytes() for record in self.records)
+        body += self.trailing_data
+        return (
+            struct.pack("<II", self.declared_record_count, self.payload_length)
+            + body
+            + self.post_payload_data
+        )
 
 
 class U9Activities:
@@ -188,6 +254,7 @@ class U9Activities:
         return self._archive.used_entry_indices()
 
     def _read_record(self, body: bytes, pos: int) -> tuple[U9ActivityRecord, int]:
+        record_offset = HEADER_SIZE + pos
         ordinal = body[pos]
         raw_name = body[pos + 1 : pos + 1 + NAME_FIELD_SIZE]
         # Everything past the NUL is uninitialised padding, never data.
@@ -196,17 +263,30 @@ class U9Activities:
 
         steps: list[U9ActivityStep] = []
         terminated = False
+        terminator = None
         while pos + STEP_SIZE <= len(body):
             opcode = body[pos]
+            step = U9ActivityStep(
+                opcode=opcode,
+                operands=body[pos + 1 : pos + STEP_SIZE],
+                entry_offset=HEADER_SIZE + pos,
+            )
             if opcode == TERMINATOR_OPCODE:
                 terminated = True
+                terminator = step
                 pos += STEP_SIZE
                 break
-            steps.append(U9ActivityStep(opcode=opcode, operands=body[pos + 1 : pos + STEP_SIZE]))
+            steps.append(step)
             pos += STEP_SIZE
         return (
             U9ActivityRecord(
-                ordinal=ordinal, name=name, steps=tuple(steps), terminated=terminated
+                ordinal=ordinal,
+                name=name,
+                steps=tuple(steps),
+                terminated=terminated,
+                entry_offset=record_offset,
+                raw_name_field=raw_name,
+                terminator=terminator,
             ),
             pos,
         )
@@ -249,6 +329,9 @@ class U9Activities:
             payload_length=payload_length,
             records=tuple(records),
             trailing_bytes=len(body) - pos,
+            trailing_data=body[pos:],
+            post_payload_data=blob[HEADER_SIZE + payload_length :],
+            raw_data=blob,
         )
 
     def activities(self) -> list[U9Activity]:

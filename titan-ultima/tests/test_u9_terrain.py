@@ -15,14 +15,21 @@ to get right or every point lands in the wrong place:
 from __future__ import annotations
 
 import struct
+import tempfile
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
+from types import SimpleNamespace
 
+from titan.u9.cli import cmd_terrain_textures
 from titan.u9.terrain import (
     CHUNK_SIZE,
     HEADER_SIZE,
     POINTS_PER_CHUNK,
     U9Terrain,
+    U9TerrainChunk,
     U9TerrainError,
+    U9TerrainPoint,
 )
 
 
@@ -30,8 +37,8 @@ def _point(
     *,
     height: int = 0,
     hole: bool = False,
-    flag13: bool = False,
-    flag14: bool = False,
+    swap_uv: bool = False,
+    mirror_uv: bool = False,
     split: bool = False,
     frame: int = 0,
     spare: bool = False,
@@ -40,8 +47,8 @@ def _point(
     return (
         (height & 0xFFF)
         | (int(hole) << 12)
-        | (int(flag13) << 13)
-        | (int(flag14) << 14)
+        | (int(swap_uv) << 13)
+        | (int(mirror_uv) << 14)
         | (int(split) << 15)
         | ((frame & 0x1F) << 16)
         | (int(spare) << 21)
@@ -62,12 +69,17 @@ def _build(
     chunks: list[bytes],
     *,
     name: str = "Test Region",
+    water_level: int = 0,
+    wave_amplitude: float = 0.0,
+    flags: int = 0,
     declared: int | None = None,
     slack: bytes = b"",
 ) -> bytes:
     head = bytearray(HEADER_SIZE)
     struct.pack_into("<II", head, 0x00, width, height)
-    head[0x08 : 0x08 + len(name)] = name.encode("latin-1")
+    encoded_name = name.encode("cp1252")
+    head[0x08 : 0x08 + len(encoded_name)] = encoded_name
+    struct.pack_into("<ifI", head, 0x88, water_level, wave_amplitude, flags)
     struct.pack_into("<I", head, 0x94, len(chunks) if declared is None else declared)
     body = struct.pack(f"<{len(tiles)}H", *tiles) if tiles else b""
     return bytes(head) + body + b"".join(chunks) + slack
@@ -83,8 +95,26 @@ class TerrainHeaderTests(unittest.TestCase):
         self.assertEqual((region.world_width, region.world_height), (32, 16))
 
     def test_region_name_is_read(self) -> None:
-        region = U9Terrain(_build(16, 16, [0], [_chunk()], name="Ethereal Void"))
-        self.assertEqual(region.name, "Ethereal Void")
+        region = U9Terrain(
+            _build(16, 16, [0], [_chunk()], name="Avatar’s House")
+        )
+        self.assertEqual(region.name, "Avatar’s House")
+
+    def test_environment_header_fields_are_typed(self) -> None:
+        region = U9Terrain(
+            _build(
+                16,
+                16,
+                [0],
+                [_chunk()],
+                water_level=-12,
+                wave_amplitude=1.625,
+                flags=0x4E,
+            )
+        )
+        self.assertEqual(region.water_level, -12)
+        self.assertAlmostEqual(region.wave_amplitude, 1.625)
+        self.assertEqual(region.flags, 0x4E)
 
     def test_rejects_short_data(self) -> None:
         with self.assertRaises(U9TerrainError):
@@ -133,7 +163,13 @@ class TerrainPointTests(unittest.TestCase):
         self.values = [
             _point(height=1750, texture=936, frame=17, hole=True, split=True),
             _point(height=0, texture=0, frame=0),
-            _point(height=4095, texture=1023, frame=31, flag13=True, flag14=True),
+            _point(
+                height=4095,
+                texture=1023,
+                frame=31,
+                swap_uv=True,
+                mirror_uv=True,
+            ),
         ]
         self.region = U9Terrain(_build(16, 16, [0], [_chunk(self.values)]))
 
@@ -164,7 +200,48 @@ class TerrainPointTests(unittest.TestCase):
         point = self.region.chunk(0).point(2, 0)
         self.assertEqual(point.height, 4095)
         self.assertEqual(point.frame, 31)
+        self.assertTrue(point.swap_uv)
+        self.assertTrue(point.mirror_uv)
+        self.assertEqual(point.uv_rotation_quarter_turns, 3)
+        self.assertEqual(point.uv_rotation_degrees, 270)
         self.assertEqual(point.unknown_flags, (True, True))
+
+    def test_uv_flag_combinations_encode_quarter_turns(self) -> None:
+        self.assertEqual(U9TerrainPoint.build().uv_rotation_degrees, 0)
+        self.assertEqual(
+            U9TerrainPoint.build(swap_uv=True).uv_rotation_degrees, 90
+        )
+        self.assertEqual(
+            U9TerrainPoint.build(mirror_uv=True).uv_rotation_degrees, 180
+        )
+        self.assertEqual(
+            U9TerrainPoint.build(swap_uv=True, mirror_uv=True).uv_rotation_degrees,
+            270,
+        )
+
+    def test_point_builder_round_trips_every_field(self) -> None:
+        point = U9TerrainPoint.build(
+            x=7,
+            y=9,
+            height=4095,
+            is_hole=True,
+            swap_uv=True,
+            mirror_uv=True,
+            is_split=True,
+            frame=31,
+            texture=1023,
+            spare_bit_set=True,
+        )
+        self.assertEqual(point.value, 0xFFFFFFFF)
+        self.assertEqual(point.to_bytes(), b"\xff\xff\xff\xff")
+
+    def test_point_builder_rejects_out_of_range_fields(self) -> None:
+        with self.assertRaises(U9TerrainError):
+            U9TerrainPoint.build(height=4096)
+        with self.assertRaises(U9TerrainError):
+            U9TerrainPoint.build(frame=32)
+        with self.assertRaises(U9TerrainError):
+            U9TerrainPoint.build(texture=1024)
 
     def test_helpers_match_the_decoded_points(self) -> None:
         chunk = self.region.chunk(0)
@@ -199,7 +276,22 @@ class TerrainTileTests(unittest.TestCase):
 
     def test_chunks_are_shared_between_tiles(self) -> None:
         self.assertEqual(self.region.shared_tile_count(), 2)
+        self.assertEqual(self.region.duplicate_tile_reference_count(), 2)
+        self.assertEqual(self.region.tiles_using_shared_chunks(), 4)
         self.assertEqual(self.region.referenced_chunks(), {0, 2})
+
+    def test_texture_histogram_counts_placed_tiles_not_stored_chunks(self) -> None:
+        histogram = self.region.texture_histogram()
+        self.assertEqual(histogram, {0: 1024})
+
+    def test_texture_histogram_excludes_orphans_and_honours_sharing(self) -> None:
+        chunks = [
+            _chunk(fill=_point(texture=10)),
+            _chunk(fill=_point(texture=99)),
+            _chunk(fill=_point(texture=20)),
+        ]
+        region = U9Terrain(_build(32, 32, [0, 2, 2, 0], chunks))
+        self.assertEqual(region.texture_histogram(), {10: 512, 20: 512})
 
     def test_chunks_no_tile_points_at_are_reported(self) -> None:
         self.assertEqual(self.region.unused_chunks(), [1])
@@ -256,11 +348,132 @@ class TerrainSlackTests(unittest.TestCase):
         self.assertFalse(region.is_truncated)
         self.assertEqual(region.slack_bytes, CHUNK_SIZE * 2)
 
-    def test_missing_chunks_are_reported_not_invented(self) -> None:
-        region = U9Terrain(_build(16, 16, [0], [_chunk()], declared=9))
-        self.assertEqual(region.chunk_count, 1)
-        self.assertTrue(region.is_truncated)
-        self.assertEqual(region.slack_bytes, 0)
+    def test_missing_chunks_in_a_nonempty_region_are_rejected(self) -> None:
+        with self.assertRaises(U9TerrainError):
+            U9Terrain(_build(16, 16, [0], [_chunk()], declared=9))
+
+    def test_non_word_aligned_slack_is_rejected(self) -> None:
+        with self.assertRaises(U9TerrainError):
+            U9Terrain(_build(16, 16, [0], [_chunk()], slack=b"x"))
+
+
+class TerrainSerializationTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.source = _build(
+            16,
+            16,
+            [0],
+            [_chunk(fill=_point(height=12, texture=34))],
+            water_level=-12,
+            wave_amplitude=2.5,
+            flags=0x35,
+            slack=struct.pack("<I", 0x12345678),
+        )
+        self.region = U9Terrain(self.source)
+
+    def test_exact_round_trip_preserves_slack(self) -> None:
+        self.assertEqual(self.region.to_bytes(), self.source)
+        self.assertEqual(self.region.slack_data, struct.pack("<I", 0x12345678))
+        self.assertEqual(self.region.to_bytes(include_slack=False), self.source[:-4])
+
+    def test_chunk_serialization_and_replacement(self) -> None:
+        chunk = self.region.chunk(0)
+        point = U9TerrainPoint.build(height=999, texture=88, swap_uv=True)
+        replacement = chunk.replace_point(3, 4, point)
+        self.assertEqual(len(replacement.to_bytes()), CHUNK_SIZE)
+
+        edited = self.region.replace_chunk(0, replacement)
+        changed = edited.chunk(0).point(3, 4)
+        self.assertEqual(changed.height, 999)
+        self.assertEqual(changed.texture, 88)
+        self.assertTrue(changed.swap_uv)
+        self.assertEqual(edited.slack_data, self.region.slack_data)
+
+    def test_chunk_requires_exactly_256_words(self) -> None:
+        with self.assertRaises(U9TerrainError):
+            U9TerrainChunk(index=0, values=(0,))
+
+    def test_builds_a_complete_region_from_decoded_values(self) -> None:
+        chunk = U9TerrainChunk(
+            index=0,
+            values=(_point(height=123, texture=45),) * POINTS_PER_CHUNK,
+        )
+        region = U9Terrain.build(
+            width=16,
+            height=16,
+            tiles=[0],
+            chunks=[chunk],
+            name="Builder’s Map",
+            water_level=-20,
+            wave_amplitude=0.5,
+            flags=3,
+        )
+        self.assertEqual(region.name, "Builder’s Map")
+        self.assertEqual(region.water_level, -20)
+        self.assertEqual(region.wave_amplitude, 0.5)
+        self.assertEqual(region.height_at(15, 15), 123)
+        self.assertEqual(U9Terrain(region.to_bytes()).to_bytes(), region.to_bytes())
+
+    def test_replace_tile_redirects_only_the_selected_placement(self) -> None:
+        chunks = [
+            U9TerrainChunk(index=0, values=(_point(height=1),) * POINTS_PER_CHUNK),
+            U9TerrainChunk(index=1, values=(_point(height=2),) * POINTS_PER_CHUNK),
+        ]
+        region = U9Terrain.build(
+            width=32,
+            height=16,
+            tiles=[0, 0],
+            chunks=chunks,
+        )
+        edited = region.replace_tile(1, 0, 1)
+        self.assertEqual(region.height_at(16, 0), 1)
+        self.assertEqual(edited.height_at(0, 0), 1)
+        self.assertEqual(edited.height_at(16, 0), 2)
+
+    def test_write_can_omit_stale_trailing_words(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = f"{directory}/terrain.1"
+            self.region.write(path, include_slack=False)
+            with open(path, "rb") as file:
+                written = file.read()
+        self.assertEqual(written, self.source[:-4])
+
+    def test_builder_rejects_a_wrong_tile_count(self) -> None:
+        with self.assertRaises(U9TerrainError):
+            U9Terrain.build(width=16, height=16, tiles=[], chunks=[])
+
+
+class TerrainValidationTests(unittest.TestCase):
+    def test_rejects_tile_reference_outside_declared_chunks(self) -> None:
+        with self.assertRaises(U9TerrainError):
+            U9Terrain(_build(16, 16, [1], [_chunk()]))
+
+
+class TerrainCliTests(unittest.TestCase):
+    def test_texture_report_counts_the_placed_surface(self) -> None:
+        data = _build(
+            32,
+            32,
+            [0, 1, 1, 0],
+            [
+                _chunk(fill=_point(texture=10)),
+                _chunk(fill=_point(texture=20)),
+                _chunk(fill=_point(texture=99)),
+            ],
+            declared=3,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = f"{directory}/terrain.1"
+            with open(path, "wb") as file:
+                file.write(data)
+            output = StringIO()
+            with redirect_stdout(output):
+                result = cmd_terrain_textures(
+                    SimpleNamespace(file=path, sdinfo=None, limit=None)
+                )
+        self.assertEqual(result, 0)
+        self.assertIn("1024 point(s)", output.getvalue())
+        self.assertNotIn("       99", output.getvalue())
 
 
 if __name__ == "__main__":

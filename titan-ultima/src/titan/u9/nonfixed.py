@@ -1,99 +1,37 @@
-"""
-``runtime/nonfixed.%d`` reader for Ultima 9: Ascension.
+"""Reader for Ultima IX ``runtime/nonfixed.%d`` region files.
 
-These files hold U9's *dynamic* world data -- the objects whose state the
-game may change and write back, as opposed to the immutable geometry in
-``static/``. One file per region, ``%d`` in 0..239 with gaps.
+These files contain runtime-mutable world objects. A region is a row-major
+grid of 4096-unit chunks. Each populated chunk owns one or more 4 KiB pages;
+the bytes after each 0x60-byte page header form a shared allocator containing
+125 32-byte cells. A cell holds either one entity or two 16-byte extra-data
+records.
 
-A region is a ``width`` x ``height`` grid of 4096-unit-square chunks. Each
-populated chunk owns a linked list of 4 KiB pages, and each page holds a
-pool of 32-byte entity records plus 16-byte extra-data blocks. Byte-for-byte::
+All offsets after the file header are relative to the end of that header.
+Chunk-table and ``next_page`` values are the only biased offsets: stored
+``value`` means ``value - 1`` and zero means absent.
 
-    File header
-    0x00  unknown[5]        u32 x 5  -- [3] is a payload-size watermark
-    0x14  width             u32      -- region width in chunks
-    0x18  height            u32      -- region height in chunks
-    0x1C  unknown           u32      -- always 1
-    0x20  chunk_table       u32 x width*height, row-major
-    ...   unknown           u32      -- allocation cursor
+The page allocator is fully accounted for by::
 
-Header size is therefore ``36 + 4*width*height``. **Every other offset in
-the format is relative to the end of this header**; this module calls those
-"region-relative" and stores them as-is.
+    2 * entity_count + extra_data_count
+      + 2 * free_entity_count + free_extra_data_count == 250
 
-``chunk_table[cy*width + cx]`` and ``next_page`` are **biased by one**: a
-stored ``v`` means offset ``v - 1``, and a stored ``0`` means "none". No
-other offset in the format carries that bias::
+The identity holds on every one of 2,839 shipped pages checked. The two page
+header fields previously called ``end_entity_offset`` and
+``end_trigger_offset`` are actually free-list heads. Entity free nodes link
+through byte 0; 16-byte free nodes link through byte 4.
 
-    Page header (0x60 bytes)
-    0x00  next_page           u32  -- biased by one, 0 = end of chain
-    0x04  end_entity_offset   u32
-    0x08  end_trigger_offset  u32
-    0x0C  base_x              u32  -- == chunk_x * 4096
-    0x10  base_y              u32  -- == chunk_y * 4096
-    0x14  entity_count        u32  -- entities in THIS page, not the chunk
-    0x18  trigger_count       u32
-    0x1C  bucket_heads        u32 x 17 -- heads of the entity linked lists
+The first bucket-head word is reserved and always zero in the corpus. The
+remaining 16 heads are the chunk's 4x4 spatial index, in row-major order. An
+entity at local ``(x, y)`` belongs to bucket
+``1 + (y // 1024) * 4 + x // 1024``. Only a chunk's first page contains the
+live heads; later-page copies are stale.
 
-    Entity (0x20 bytes)
-    0x00  next_entity         u32  -- region-relative, 0 = end of list
-    0x04  offset_x            u16  -- relative to the page's base_x
-    0x06  offset_y            u16  -- relative to the page's base_y
-    0x08  z                   u16
-    0x0A  type_index          u16  -- static/TYPES.DAT, static/TYPENAME.FLX
-    0x0C  rotation            i16 x 4 -- quaternion, 0.16 fixed point
-    0x14  flags               u32
-    0x18  mesh_index          u16  -- static/sappear.flx
-    0x1A  trigger_id          u16
-    0x1C  extra_data_offset   u32  -- region-relative, 0 = none
-
-    Extra data (0x10 bytes)
-    0x00  arg_count           u8   -- 1..3
-    0x01  arg_types           u8 x 3 -- 0 for unused slots
-    0x04  values              u32 x 3
-
-Entities cannot be enumerated by striding the pool: extra-data blocks are
-16-byte aligned and interleave with the 32-byte entities, so a stride scan
-reads some of them as entity-shaped garbage. Enumerate by walking the 17
-``bucket_heads`` of the chunk's **first** page through ``next_entity``
-instead -- see :meth:`U9Nonfixed.chunk`.
-
-Starting point was the community-documented layout; every field above was
-then verified against 166 real region files (2,791 chunks, 3,198 pages,
-96,995 entities, 34,586 extra-data blocks) from a GOG 1.19 install and the
-pristine v1.19H patch originals. Two things came out different from the
-published documentation:
-
-* ``next_entity`` is a ``u32``, not a ``u16`` followed by an unknown ``u16``.
-  The high half is zero only while the target sits in the first 64 KiB, so
-  the 16-bit reading looks fine on small regions and fails on large ones.
-  Reading it as ``u32`` takes chunk enumeration from 51.2% to 95.4% exact
-  and walked-position validity from 99.5% to 100.0000%.
-* The one-based bias applies to the chunk table too, which the documentation
-  notes only for ``next_page``.
-
-``base_x``/``base_y`` equal ``(chunk_x, chunk_y) * 4096`` on 3,198 of 3,198
-pages, which is what pins the header, the row-major table order, the bias
-and the page walk down simultaneously.
-
-**Known limitation.** The bucket walk recovers the declared entity count
-exactly for 95.4% of chunks. Every residual is an *undershoot* -- fewer
-entities than declared, never more, never out of bounds -- so a caller may
-see an incomplete chunk but never an invented entity.
-:attr:`U9Chunk.is_complete` reports it per chunk.
-
-Triggers are counted but not decoded; their record layout is unknown.
-
-Example::
-
-    from titan.u9.nonfixed import U9Nonfixed
-
-    region = U9Nonfixed.from_file("runtime/nonfixed.22")
-    print(region.width, region.height)          # 2 2
-    chunk = region.chunk(1, 0)
-    print(chunk.declared_entity_count)           # 76
-    for entity in chunk.entities:
-        print(entity.world_x, entity.world_y, entity.type_index)
+Some allocated entity records are not linked into that spatial index. They
+are retained records rather than parser omissions: the free lists and the
+allocator equation prove their allocation state. :attr:`U9Chunk.entities`
+contains spatially indexed entities for compatibility, while
+:attr:`U9Chunk.unlinked_entities` and :attr:`U9Chunk.allocated_entities`
+expose the rest.
 """
 
 from __future__ import annotations
@@ -111,12 +49,12 @@ import os
 import struct
 from dataclasses import dataclass
 
-FIXED_HEADER_SIZE = 0x20
 WIDTH_OFFSET = 0x14
 HEIGHT_OFFSET = 0x18
 TABLE_OFFSET = 0x20
 TRAILER_SIZE = 4
 
+PAGE_SIZE = 0x1000
 PAGE_HEADER_SIZE = 0x60
 PAGE_HEADER_STRUCT = "<7I"
 BUCKET_COUNT = 17
@@ -127,12 +65,11 @@ ENTITY_STRUCT = "<IHHHH4hIHHI"
 
 EXTRA_SIZE = 0x10
 EXTRA_STRUCT = "<B3B3I"
+FREE_EXTRA_LINK_OFFSET = 4
 
 CHUNK_SPAN = 4096
+BUCKET_SPAN = CHUNK_SPAN // 4
 QUATERNION_SCALE = 32767.0
-
-# Regions observed in real data are square and small; this only guards
-# against reading a wild width/height out of a non-nonfixed file.
 MAX_GRID_DIM = 256
 
 
@@ -142,7 +79,7 @@ class U9NonfixedError(Exception):
 
 @dataclass(frozen=True)
 class U9ExtraData:
-    """One 16-byte extra-data block hanging off an entity."""
+    """One allocated 16-byte entity property/argument record."""
 
     offset: int
     arg_count: int
@@ -151,13 +88,13 @@ class U9ExtraData:
 
     @property
     def args(self) -> list[tuple[int, int]]:
-        """The ``(type, value)`` pairs actually in use, per ``arg_count``."""
+        """Return the ``(type, value)`` pairs in use."""
         return [(self.arg_types[i], self.values[i]) for i in range(min(self.arg_count, 3))]
 
 
 @dataclass(frozen=True)
 class U9Entity:
-    """One 32-byte dynamic object record."""
+    """One allocated 32-byte dynamic-object record."""
 
     offset: int
     next_entity: int
@@ -182,10 +119,20 @@ class U9Entity:
         return self.base_y + self.offset_y
 
     @property
+    def spatial_bucket(self) -> int:
+        """The 1..16 page-header bucket selected by this local position."""
+        return 1 + (self.offset_y // BUCKET_SPAN) * 4 + self.offset_x // BUCKET_SPAN
+
+    @property
     def quaternion(self) -> tuple[float, float, float, float]:
-        """``rotation`` as floats -- the stored 0.16 fixed point over 32767."""
+        """Return ``rotation`` as floating-point 0.16 fixed-point values."""
         x, y, z, w = self.rotation
-        return (x / QUATERNION_SCALE, y / QUATERNION_SCALE, z / QUATERNION_SCALE, w / QUATERNION_SCALE)
+        return (
+            x / QUATERNION_SCALE,
+            y / QUATERNION_SCALE,
+            z / QUATERNION_SCALE,
+            w / QUATERNION_SCALE,
+        )
 
     @property
     def has_extra_data(self) -> bool:
@@ -194,22 +141,47 @@ class U9Entity:
 
 @dataclass(frozen=True)
 class U9Page:
-    """One 4 KiB page header in a chunk's page chain."""
+    """One 4 KiB allocator page in a chunk's page chain."""
 
     offset: int
     next_page: int
-    end_entity_offset: int
-    end_trigger_offset: int
+    free_entity_head: int
+    free_extra_data_head: int
     base_x: int
     base_y: int
     entity_count: int
-    trigger_count: int
+    extra_data_count: int
     bucket_heads: tuple[int, ...]
+
+    @property
+    def reserved_bucket_head(self) -> int:
+        """The unused first word in ``bucket_heads`` (zero in shipped data)."""
+        return self.bucket_heads[0]
+
+    @property
+    def spatial_bucket_heads(self) -> tuple[int, ...]:
+        """The 16 row-major heads for the chunk's 4x4 spatial grid."""
+        return self.bucket_heads[1:]
+
+    @property
+    def end_entity_offset(self) -> int:
+        """Deprecated alias for :attr:`free_entity_head`."""
+        return self.free_entity_head
+
+    @property
+    def end_trigger_offset(self) -> int:
+        """Deprecated alias for :attr:`free_extra_data_head`."""
+        return self.free_extra_data_head
+
+    @property
+    def trigger_count(self) -> int:
+        """Deprecated alias for :attr:`extra_data_count`."""
+        return self.extra_data_count
 
 
 @dataclass(frozen=True)
 class U9Chunk:
-    """One populated chunk: its page chain and the entities walked from it."""
+    """One populated chunk and its decoded page allocations."""
 
     index: int
     chunk_x: int
@@ -218,24 +190,48 @@ class U9Chunk:
     base_y: int
     pages: tuple[U9Page, ...]
     entities: tuple[U9Entity, ...]
+    unlinked_entities: tuple[U9Entity, ...] = ()
+    extra_data_records: tuple[U9ExtraData, ...] = ()
+    free_entity_offsets: tuple[int, ...] = ()
+    free_extra_data_offsets: tuple[int, ...] = ()
+    entity_slots_complete: bool = False
+    extra_data_slots_complete: bool = False
+    stored_entity_count: int | None = None
+    stored_extra_data_count: int | None = None
+
+    @property
+    def allocated_entities(self) -> tuple[U9Entity, ...]:
+        """All allocated entities, whether or not the spatial index links them."""
+        return tuple(sorted((*self.entities, *self.unlinked_entities), key=lambda e: e.offset))
 
     @property
     def declared_entity_count(self) -> int:
-        """Sum of ``entity_count`` over the chunk's pages -- the expected total."""
-        return sum(p.entity_count for p in self.pages)
+        """The effective entity allocation count stored for this chunk."""
+        if self.stored_entity_count is not None:
+            return self.stored_entity_count
+        return sum(page.entity_count for page in self.pages)
+
+    @property
+    def extra_data_count(self) -> int:
+        """The effective extra-data allocation count stored for this chunk."""
+        if self.stored_extra_data_count is not None:
+            return self.stored_extra_data_count
+        return sum(page.extra_data_count for page in self.pages)
 
     @property
     def trigger_count(self) -> int:
-        return sum(p.trigger_count for p in self.pages)
+        """Deprecated alias for :attr:`extra_data_count`."""
+        return self.extra_data_count
 
     @property
     def is_complete(self) -> bool:
-        """True when the bucket walk recovered every declared entity.
+        """Whether every declared 32-byte entity allocation was decoded."""
+        return self.entity_slots_complete
 
-        False means the walk undershot; see the module docstring. It never
-        means extra or invalid entities were produced.
-        """
-        return len(self.entities) == self.declared_entity_count
+    @property
+    def allocation_is_complete(self) -> bool:
+        """Whether both entity and extra-data allocation counts were decoded."""
+        return self.entity_slots_complete and self.extra_data_slots_complete
 
 
 class U9Nonfixed:
@@ -260,21 +256,24 @@ class U9Nonfixed:
 
         self._data = data
         self.unknown = struct.unpack_from("<5I", data, 0)
-        self.chunk_table = struct.unpack_from(f"<{self.width * self.height}I", data, TABLE_OFFSET)
+        self.chunk_table = struct.unpack_from(
+            f"<{self.width * self.height}I", data, TABLE_OFFSET
+        )
         self.trailer = struct.unpack_from("<I", data, self.header_size - TRAILER_SIZE)[0]
-
-        # Advisory only: 0 on empty regions that still carry a preallocated
-        # payload, and larger than the file in at least one shipped region.
         self.declared_payload_size = self.unknown[3]
 
     @classmethod
     def from_file(cls, filepath: str | os.PathLike[str]) -> U9Nonfixed:
-        with open(filepath, "rb") as f:
-            return cls(f.read())
+        with open(filepath, "rb") as file:
+            return cls(file.read())
+
+    def to_bytes(self) -> bytes:
+        """Return the source bytes exactly, including allocator slack."""
+        return self._data
 
     @property
     def payload_size(self) -> int:
-        """Bytes after the header -- the region-relative address space."""
+        """Bytes after the header: the region-relative address space."""
         return len(self._data) - self.header_size
 
     @property
@@ -285,17 +284,16 @@ class U9Nonfixed:
         return 0 <= rel and rel + size <= self.payload_size
 
     def used_chunk_indices(self) -> list[int]:
-        """Indices of chunks that have a page chain."""
-        return [i for i, v in enumerate(self.chunk_table) if v != 0]
+        """Return chunk-table indices that own a page chain."""
+        return [index for index, value in enumerate(self.chunk_table) if value != 0]
 
     def pages(self, index: int) -> list[U9Page]:
-        """The page chain for one chunk index, first page first."""
+        """Return one chunk's page chain, first page first."""
         if index < 0 or index >= self.num_chunks:
             raise U9NonfixedError(f"chunk index {index} out of range (0..{self.num_chunks - 1})")
 
         result: list[U9Page] = []
         seen: set[int] = set()
-        # Chunk table and next_page are both biased by one.
         value = self.chunk_table[index]
         while value:
             rel = value - 1
@@ -303,20 +301,20 @@ class U9Nonfixed:
                 break
             seen.add(rel)
             base = self.header_size + rel
-            next_page, end_ent, end_trg, base_x, base_y, n_ent, n_trg = struct.unpack_from(
-                PAGE_HEADER_STRUCT, self._data, base
+            next_page, free_entity, free_extra, base_x, base_y, entities, extras = (
+                struct.unpack_from(PAGE_HEADER_STRUCT, self._data, base)
             )
             heads = struct.unpack_from(f"<{BUCKET_COUNT}I", self._data, base + BUCKET_OFFSET)
             result.append(
                 U9Page(
                     offset=rel,
                     next_page=next_page,
-                    end_entity_offset=end_ent,
-                    end_trigger_offset=end_trg,
+                    free_entity_head=free_entity,
+                    free_extra_data_head=free_extra,
                     base_x=base_x,
                     base_y=base_y,
-                    entity_count=n_ent,
-                    trigger_count=n_trg,
+                    entity_count=entities,
+                    extra_data_count=extras,
                     bucket_heads=heads,
                 )
             )
@@ -324,25 +322,134 @@ class U9Nonfixed:
         return result
 
     def _read_entity(self, rel: int, base_x: int, base_y: int) -> U9Entity:
-        f = struct.unpack_from(ENTITY_STRUCT, self._data, self.header_size + rel)
+        fields = struct.unpack_from(ENTITY_STRUCT, self._data, self.header_size + rel)
         return U9Entity(
             offset=rel,
-            next_entity=f[0],
-            offset_x=f[1],
-            offset_y=f[2],
-            z=f[3],
-            type_index=f[4],
-            rotation=(f[5], f[6], f[7], f[8]),
-            flags=f[9],
-            mesh_index=f[10],
-            trigger_id=f[11],
-            extra_data_offset=f[12],
+            next_entity=fields[0],
+            offset_x=fields[1],
+            offset_y=fields[2],
+            z=fields[3],
+            type_index=fields[4],
+            rotation=(fields[5], fields[6], fields[7], fields[8]),
+            flags=fields[9],
+            mesh_index=fields[10],
+            trigger_id=fields[11],
+            extra_data_offset=fields[12],
             base_x=base_x,
             base_y=base_y,
         )
 
+    def _read_extra_data(self, rel: int) -> U9ExtraData:
+        fields = struct.unpack_from(EXTRA_STRUCT, self._data, self.header_size + rel)
+        return U9ExtraData(
+            offset=rel,
+            arg_count=fields[0],
+            arg_types=(fields[1], fields[2], fields[3]),
+            values=(fields[4], fields[5], fields[6]),
+        )
+
+    def _looks_like_extra_data(self, rel: int) -> bool:
+        if not self._in_payload(rel, EXTRA_SIZE):
+            return False
+        arg_count, type_0, type_1, type_2 = struct.unpack_from(
+            "<4B", self._data, self.header_size + rel
+        )
+        arg_types = (type_0, type_1, type_2)
+        return 1 <= arg_count <= 3 and all(value == 0 for value in arg_types[arg_count:])
+
+    def _walk_free_list(
+        self, page: U9Page, head: int, *, size: int, link_offset: int
+    ) -> tuple[tuple[int, ...], bool]:
+        """Walk one page-local allocator free list and validate every link."""
+        offsets: list[int] = []
+        seen: set[int] = set()
+        rel = head
+        page_start = page.offset + PAGE_HEADER_SIZE
+        page_end = page.offset + PAGE_SIZE
+        while rel:
+            if (
+                rel in seen
+                or rel < page_start
+                or rel + size > page_end
+                or (rel - page_start) % size != 0
+                or not self._in_payload(rel, size)
+            ):
+                return tuple(offsets), False
+            seen.add(rel)
+            offsets.append(rel)
+            rel = struct.unpack_from("<I", self._data, self.header_size + rel + link_offset)[0]
+        return tuple(offsets), True
+
+    def _page_allocations(
+        self,
+        page: U9Page,
+        base_x: int,
+        base_y: int,
+    ) -> tuple[
+        tuple[U9Entity, ...],
+        tuple[U9ExtraData, ...],
+        tuple[int, ...],
+        tuple[int, ...],
+        bool,
+    ]:
+        free_entities, entity_free_list_valid = self._walk_free_list(
+            page, page.free_entity_head, size=ENTITY_SIZE, link_offset=0
+        )
+        free_extras, extra_free_list_valid = self._walk_free_list(
+            page,
+            page.free_extra_data_head,
+            size=EXTRA_SIZE,
+            link_offset=FREE_EXTRA_LINK_OFFSET,
+        )
+        if not self._in_payload(page.offset, PAGE_SIZE):
+            return (), (), free_entities, free_extras, False
+
+        free_entity_set = set(free_entities)
+        free_extra_set = set(free_extras)
+        entities: list[U9Entity] = []
+        extras: list[U9ExtraData] = []
+
+        for rel in range(
+            page.offset + PAGE_HEADER_SIZE,
+            page.offset + PAGE_SIZE,
+            ENTITY_SIZE,
+        ):
+            if rel in free_entity_set:
+                continue
+            halves = (rel, rel + EXTRA_SIZE)
+            half_is_extra = tuple(
+                half in free_extra_set or self._looks_like_extra_data(half) for half in halves
+            )
+            if all(half_is_extra):
+                extras.extend(
+                    self._read_extra_data(half) for half in halves if half not in free_extra_set
+                )
+            else:
+                entities.append(self._read_entity(rel, base_x, base_y))
+
+        valid = (
+            entity_free_list_valid
+            and extra_free_list_valid
+            and len(entities) == page.entity_count
+            and len(extras) == page.extra_data_count
+            and (
+                2 * len(entities)
+                + len(extras)
+                + 2 * len(free_entities)
+                + len(free_extras)
+                == 250
+            )
+        )
+        return (
+            tuple(entities),
+            tuple(extras),
+            free_entities,
+            free_extras,
+            valid,
+        )
+
     def chunk(self, chunk_x: int, chunk_y: int) -> U9Chunk | None:
-        """One chunk by grid coordinate, or ``None`` if it holds no pages."""
+        """Return one chunk by grid coordinate, or ``None`` when empty."""
         if not (0 <= chunk_x < self.width and 0 <= chunk_y < self.height):
             raise U9NonfixedError(
                 f"chunk ({chunk_x}, {chunk_y}) out of range for a {self.width}x{self.height} region"
@@ -350,17 +457,17 @@ class U9Nonfixed:
         return self.chunk_at(chunk_y * self.width + chunk_x)
 
     def chunk_at(self, index: int) -> U9Chunk | None:
-        """One chunk by table index, or ``None`` if it holds no pages."""
+        """Return one chunk by table index, or ``None`` when empty."""
         pages = self.pages(index)
         if not pages:
             return None
 
         base_x, base_y = pages[0].base_x, pages[0].base_y
 
-        # Only the first page carries the chunk's live list heads; later
-        # pages' arrays are stale. Walk each head through next_entity,
-        # de-duplicating across buckets and guarding against cycles.
-        entities: list[U9Entity] = []
+        # Only the first page has the live spatial heads. Include the raw
+        # reserved head defensively for hand-built or previously documented
+        # files, although it is zero throughout the shipped corpus.
+        indexed: list[U9Entity] = []
         seen: set[int] = set()
         for head in pages[0].bucket_heads:
             rel = head
@@ -371,10 +478,104 @@ class U9Nonfixed:
                 local.add(rel)
                 seen.add(rel)
                 entity = self._read_entity(rel, base_x, base_y)
-                entities.append(entity)
+                indexed.append(entity)
                 rel = entity.next_entity
+        indexed.sort(key=lambda entity: entity.offset)
 
-        entities.sort(key=lambda e: e.offset)
+        allocated_by_offset: dict[int, U9Entity] = {}
+        extra_by_offset: dict[int, U9ExtraData] = {}
+        free_entities: list[int] = []
+        free_extras: list[int] = []
+        page_entities_by_offset: dict[int, list[U9Entity]] = {
+            page.offset: [] for page in pages
+        }
+        for entity in indexed:
+            page_offset = entity.offset // PAGE_SIZE * PAGE_SIZE
+            if page_offset in page_entities_by_offset:
+                page_entities_by_offset[page_offset].append(entity)
+
+        allocator_pages: set[int] = set()
+        for page in pages:
+            page_entities, page_extras, page_free_entities, page_free_extras, valid = (
+                self._page_allocations(page, base_x, base_y)
+            )
+            free_entities.extend(page_free_entities)
+            free_extras.extend(page_free_extras)
+
+            indexed_offsets_on_page = {
+                entity.offset for entity in page_entities_by_offset[page.offset]
+            }
+            scanned_offsets = {entity.offset for entity in page_entities}
+            if valid and indexed_offsets_on_page <= scanned_offsets:
+                allocator_pages.add(page.offset)
+                allocated_by_offset.update((entity.offset, entity) for entity in page_entities)
+                extra_by_offset.update((extra.offset, extra) for extra in page_extras)
+            else:
+                # Older savegame pages may retain correct spatial lists and
+                # counts but omit allocator free-list state. Do not mistake
+                # their stale cell contents for allocations.
+                allocated_by_offset.update(
+                    (entity.offset, entity)
+                    for entity in page_entities_by_offset[page.offset]
+                )
+
+        # A spatial chain may legally cross a page boundary; retain indexed
+        # records even when a compact fixture omits that page from next_page.
+        for entity in indexed:
+            allocated_by_offset.setdefault(entity.offset, entity)
+
+        def effective_stored_count(field: str, known_legacy_records: int) -> int:
+            """Combine exact pages with cumulative headers from older saves."""
+            exact = sum(
+                getattr(page, field)
+                for page in pages
+                if page.offset in allocator_pages
+            )
+            legacy_values = [
+                getattr(page, field)
+                for page in pages
+                if page.offset not in allocator_pages
+            ]
+            if not legacy_values:
+                return exact
+            largest = max(legacy_values)
+            # Old savegame pages carry cumulative chunk counts. Compact test
+            # fixtures and damaged modern pages may instead carry per-page
+            # counts; if the maximum cannot cover known records, use the sum.
+            legacy = largest if largest >= known_legacy_records else sum(legacy_values)
+            return exact + legacy
+
+        indexed_offsets = {entity.offset for entity in indexed}
+        known_legacy_entities = sum(
+            len(page_entities_by_offset[page.offset])
+            for page in pages
+            if page.offset not in allocator_pages
+        )
+        stored_entity_count = effective_stored_count(
+            "entity_count", known_legacy_entities
+        )
+        entity_slots_complete = len(allocated_by_offset) == stored_entity_count
+        unlinked = tuple(
+            entity
+            for offset, entity in sorted(allocated_by_offset.items())
+            if offset not in indexed_offsets
+        )
+
+        # Preserve directly referenced records on legacy savegame pages that
+        # do not serialize usable allocator free lists.
+        for entity in allocated_by_offset.values():
+            extra = self.extra_data(entity)
+            if extra is not None:
+                extra_by_offset.setdefault(extra.offset, extra)
+        known_legacy_extras = sum(
+            extra.offset // PAGE_SIZE * PAGE_SIZE not in allocator_pages
+            for extra in extra_by_offset.values()
+        )
+        stored_extra_data_count = effective_stored_count(
+            "extra_data_count", known_legacy_extras
+        )
+        extra_slots_complete = len(extra_by_offset) == stored_extra_data_count
+
         return U9Chunk(
             index=index,
             chunk_x=index % self.width,
@@ -382,11 +583,19 @@ class U9Nonfixed:
             base_x=base_x,
             base_y=base_y,
             pages=tuple(pages),
-            entities=tuple(entities),
+            entities=tuple(indexed),
+            unlinked_entities=unlinked,
+            extra_data_records=tuple(extra for _, extra in sorted(extra_by_offset.items())),
+            free_entity_offsets=tuple(sorted(free_entities)),
+            free_extra_data_offsets=tuple(sorted(free_extras)),
+            entity_slots_complete=entity_slots_complete,
+            extra_data_slots_complete=extra_slots_complete,
+            stored_entity_count=stored_entity_count,
+            stored_extra_data_count=stored_extra_data_count,
         )
 
     def chunks(self) -> list[U9Chunk]:
-        """Every populated chunk, in table order."""
+        """Return every populated chunk in table order."""
         result = []
         for index in self.used_chunk_indices():
             chunk = self.chunk_at(index)
@@ -395,18 +604,20 @@ class U9Nonfixed:
         return result
 
     def entities(self) -> list[U9Entity]:
-        """Every entity in the region, chunk by chunk."""
-        return [e for chunk in self.chunks() for e in chunk.entities]
+        """Return spatially indexed entities from every chunk."""
+        return [entity for chunk in self.chunks() for entity in chunk.entities]
+
+    def allocated_entities(self) -> list[U9Entity]:
+        """Return every allocated entity, including unlinked records."""
+        return [entity for chunk in self.chunks() for entity in chunk.allocated_entities]
+
+    def extra_data_records(self) -> list[U9ExtraData]:
+        """Return every allocated 16-byte extra-data record."""
+        return [extra for chunk in self.chunks() for extra in chunk.extra_data_records]
 
     def extra_data(self, entity: U9Entity) -> U9ExtraData | None:
-        """Decode an entity's extra-data block, or ``None`` if it has none."""
+        """Decode the record referenced by an entity, or ``None`` if invalid."""
         rel = entity.extra_data_offset
-        if not rel or not self._in_payload(rel, EXTRA_SIZE):
+        if not rel or not self._looks_like_extra_data(rel):
             return None
-        f = struct.unpack_from(EXTRA_STRUCT, self._data, self.header_size + rel)
-        return U9ExtraData(
-            offset=rel,
-            arg_count=f[0],
-            arg_types=(f[1], f[2], f[3]),
-            values=(f[4], f[5], f[6]),
-        )
+        return self._read_extra_data(rel)

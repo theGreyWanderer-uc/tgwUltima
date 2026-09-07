@@ -14,8 +14,12 @@ from titan.u9.cli import (
     cmd_flx_extract,
     cmd_flx_extract_all,
     cmd_flx_list,
+    cmd_palette_export,
+    cmd_palette_info,
     cmd_sound_extract_pcm,
     cmd_sound_list,
+    cmd_texture_export,
+    cmd_texture_info,
     cmd_typename_dump,
 )
 
@@ -49,6 +53,11 @@ def _build_flx(comment: bytes, entries_data: list[bytes | None]) -> bytes:
     return bytes(header) + bytes(directory) + bytes(payload)
 
 
+def _build_u9_palette(colors: list[tuple[int, int, int]]) -> bytes:
+    """Build the 256 four-byte RGB+reserved entries used by ankh.pal."""
+    return b"".join(bytes((*color, 0)) for color in colors)
+
+
 def _typename_entry(name: str | None) -> bytes:
     header = struct.pack("<IH", 0, MARKER)
     if name is None:
@@ -75,6 +84,18 @@ def _sound_entry(
     struct.pack_into("<I", header, 0x34, num_channels)
     struct.pack_into("<I", header, 0x38, encoding_type)
     return bytes(header) + payload
+
+
+def _texture_entry() -> bytes:
+    """A 2x2 8-bit base image plus a stored 1x1 mip."""
+    width = height = 2
+    payload = bytes((1, 2, 3, 4, 9))
+    frame_header = struct.pack("<2H4I", 0x00D1, 0x6000, width, height, 0, 0)
+    row_table = struct.pack("<2I", 28, 30)
+    frame_data = frame_header + row_table + payload
+    set_header = struct.pack("<4H2I", width, 1, height, 0, 1, 0x00066000)
+    directory = struct.pack("<2I", 0x18, len(frame_data))
+    return set_header + directory + frame_data
 
 
 class FlxCliCommandTests(unittest.TestCase):
@@ -224,6 +245,103 @@ class PaletteDiscoveryTests(unittest.TestCase):
 
     def test_no_archive_path_returns_none(self) -> None:
         self.assertEqual(_find_palette(None, None), (None, False))
+
+
+class PaletteCliCommandTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.palette_path = os.path.join(self.tmpdir.name, "ankh.pal")
+        colors = [(index, index, index) for index in range(256)]
+        colors[254] = colors[247]
+        with open(self.palette_path, "wb") as file:
+            file.write(_build_u9_palette(colors))
+
+    def tearDown(self) -> None:
+        self.tmpdir.cleanup()
+
+    def test_palette_info_reports_duplicate_summary(self) -> None:
+        result = cmd_palette_info(
+            SimpleNamespace(file=self.palette_path, duplicates=True)
+        )
+        self.assertEqual(result, 0)
+
+    def test_palette_export_writes_swatch_and_text(self) -> None:
+        output = os.path.join(self.tmpdir.name, "out")
+        result = cmd_palette_export(
+            SimpleNamespace(file=self.palette_path, output=output, swatch_size=2)
+        )
+        self.assertEqual(result, 0)
+        self.assertTrue(os.path.isfile(os.path.join(output, "ankh_palette.png")))
+        text_path = os.path.join(output, "ankh_palette.txt")
+        self.assertTrue(os.path.isfile(text_path))
+        with open(text_path, encoding="utf-8") as file:
+            text = file.read()
+        self.assertIn("254    247  247  247", text)
+        self.assertIn("      0      0  #F7F7F7", text)
+
+    def test_palette_commands_reject_bad_input(self) -> None:
+        missing = os.path.join(self.tmpdir.name, "missing.pal")
+        self.assertEqual(
+            cmd_palette_info(SimpleNamespace(file=missing, duplicates=False)),
+            1,
+        )
+        self.assertEqual(
+            cmd_palette_export(
+                SimpleNamespace(
+                    file=self.palette_path,
+                    output=self.tmpdir.name,
+                    swatch_size=0,
+                )
+            ),
+            1,
+        )
+
+
+class TextureCliCommandTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.archive_path = os.path.join(self.tmpdir.name, "Texture8.14")
+        with open(self.archive_path, "wb") as file:
+            file.write(_build_flx(b"terrain panels", [_texture_entry()]))
+
+    def tearDown(self) -> None:
+        self.tmpdir.cleanup()
+
+    def test_texture_info_accepts_terrain_panel_archive(self) -> None:
+        result = cmd_texture_info(
+            SimpleNamespace(textures=self.archive_path, entry_id=0)
+        )
+        self.assertEqual(result, 0)
+
+    def test_texture_export_writes_selected_mip(self) -> None:
+        output = os.path.join(self.tmpdir.name, "out")
+        result = cmd_texture_export(
+            SimpleNamespace(
+                textures=self.archive_path,
+                entry_id=0,
+                frame=0,
+                mip_level=1,
+                palette=None,
+                output=output,
+            )
+        )
+        self.assertEqual(result, 0)
+        self.assertTrue(
+            os.path.isfile(os.path.join(output, "texture_00000_frame_000_mip_01.png"))
+        )
+
+    def test_texture_export_rejects_missing_mip(self) -> None:
+        result = cmd_texture_export(
+            SimpleNamespace(
+                textures=self.archive_path,
+                entry_id=0,
+                frame=0,
+                mip_level=2,
+                palette=None,
+                output=self.tmpdir.name,
+            )
+        )
+        self.assertEqual(result, 1)
 
 
 if __name__ == "__main__":

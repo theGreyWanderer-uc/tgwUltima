@@ -14,356 +14,66 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Added
 
-- **U9 animation clip reader:** added `titan.u9.animation`, a complete parser
-  for all 857 used entries in `static/anim.flx`: inclusive source-frame ranges,
-  LightWave source paths, part-ID manifests, 23,333 named part tracks,
-  1,310,139 timestamped quaternion/position/scale frames, and 937 raw suffix
-  triples. Added `titan u9 animation-list` and `animation-show`. An
-  archive-wide structural pass resolved both uncertainties in the earlier
-  single-entry notes: a part has no extra word before its frame array, and a
-  44-byte frame begins with `time_ms` before its quaternion, position, and
-  scale. Every entry and part consumes exactly, every manifest matches its
-  part IDs, all quaternions are unit length within 0.001, and every scale is
-  exactly one. Documented in
-  `reference/u9/anim/u9_anim_flx_reference.md`; model-to-clip selection,
-  opaque header-tail words, and suffix semantics remain open.
+- **U9 world-region formats:** added readers and inspection commands for
+  `static/fixed.<region>` and `runtime/nonfixed.<region>`, including complete
+  allocator-aware enumeration of indexed and unlinked nonfixed entities.
+  Added a lossless `static/terrain.<region>` reader/writer with tile, chunk,
+  height, water, UV, texture, and export tools.
 
-- **U9 runtime region support:** added `titan.u9.nonfixed`, a reader for
-  `runtime/nonfixed.<region>` -- Ultima 9's dynamic world data, holding the
-  objects whose state the game can change and write back. Decodes the region
-  chunk grid, each chunk's page chain, the 32-byte entity records (position,
-  elevation, type, quaternion rotation, flags, mesh, trigger) and their
-  16-byte extra-data blocks. Added `titan u9 nonfixed-info`,
-  `nonfixed-chunks`, `nonfixed-entities` and `nonfixed-diff`; the last
-  compares two regions entity by entity and reports field-level edits, so a
-  patched region can be read against its original. The format was verified
-  against 166 real region files and is documented in
-  `reference/u9/nonfixed/u9_nonfixed_reference.md`, including two corrections
-  to the published community documentation: `nextEntity` is a `uint32` rather
-  than a `uint16` plus an unknown `uint16`, and the chunk table carries the
-  same one-based offset bias as `nextPage`. Entity enumeration recovers the
-  declared count exactly for 95.4% of chunks; every residual is an undershoot,
-  never an invented entity, and `U9Chunk.is_complete` reports it per chunk.
-  Trigger records are counted but not decoded.
+- **U9 models and animation:** completed `sappear.flx` parsing for ordinary and
+  indexed-polygon records, including mount geometry, material metadata,
+  validation, and exact record round-trips. Added the `anim.flx` clip reader
+  and `animation-list`/`animation-show` commands with lossless preservation
+  of still-unknown fields.
 
-- **U9 static world geometry:** added `titan.u9.fixed`, a reader for
-  `static/fixed.<region>` — the immovable objects that `runtime/nonfixed` does
-  not cover, so the two together are the whole map. Decodes the chunk grid, each
-  chunk's page chain and the 24-byte object records (reference, chunk-relative
-  position, elevation, type, quaternion, flags). Added `titan u9 fixed-info`,
-  `fixed-chunks`, `fixed-objects` and `fixed-types`. Verified against 164 region
-  files — 2,815 chunks, 3,315 pages, 106,454 objects — with every page base on
-  the 4096 grid, every object position inside its chunk, and every rotation a
-  normalised quaternion. Documented in
-  `reference/u9/fixed/u9_fixed_reference.md`, including two corrections to the
-  published community documentation: an object's rotation is **four** `int16`
-  components, not three plus a `uint16` flags field (normalised on 100% read as
-  four, 10.7% read as three), and the chunk table is **not** in `[x + y*width]`
-  order — only 1 of 2,815 chunks lands where that predicts, so grid position has
-  to come from the page's own base.
+- **U9 textures, metadata, and palettes:** added texture-set metadata, stored
+  mip decoding, terrain-panel support, BC1/DXT1 decoding, PNG replacement, and
+  correct P_8, ALPHA_8, ALPHA_INTENSITY_44, RGB565, and ARGB1555 handling.
+  Added lossless `ankh.pal` inspection/export and `sdInfo*.flx`
+  list/show/verify commands.
 
-- **U9 BC1 texture support and PNG import:** `static/bitmapC.flx`'s
-  `compression = 1` is **BC1/DXT1**, not the unknown format previously recorded
-  here — confirmed on real data (payload length matches a BC1 base plus mip
-  chain on 2,029 of 2,029 sampled frames) and cross-checked against `u9ed`,
-  which decodes it with `BCnEncoder.Net`. `titan.u9.texture` now decodes it, so
-  `bitmapC.flx` went from **14% readable to 100%** — roughly 122 MB of texture
-  data that titan previously rejected. Added `titan.u9.texture_writer`, which
-  encodes RGB565, RGBA5551, 8-bit paletted and BC1, and replaces one frame's
-  pixels in place; and `titan u9 texture-import`, which drops a same-size PNG
-  into a given entry and frame. Round-trip on real archives is **lossless for
-  RGB565 and 8-bit paletted (RMSE 0.00)** and 2.77 RMSE mean for BC1, which is
-  lossy by construction; the patched entry is always exactly as long as the
-  original, so the four undecoded header fields and the row offset table are
-  carried through untouched. Documented in
-  `reference/u9/texture/u9_bitmap_flx_reference.md`.
+- **U9 FLX writing:** added `flx-pack` and `flx-repack` for building and
+  verifying U9 archives while preserving declared entry contents.
 
-- **U9 FLX packing:** added `titan.u9.flx_writer`, the counterpart to
-  `titan.u9.flx_archive` — U9's container format can now be written as well as
-  read, so an archive can be unpacked, edited and packed back. Added
-  `titan u9 flx-pack` (build an archive from the `NNNNN.bin` files
-  `flx-extract-all` produces) and `titan u9 flx-repack` (rebuild an archive,
-  optionally swapping entries, and verify the result). Header conventions were
-  measured across all 25 shipped archives, which agree exactly: `unknown1` is 0,
-  `unknown2` is 2, both size fields hold the total file size, the reserved block
-  at `0x60` is constant, and payload starts flush against the directory with no
-  gaps and no alignment. Round-tripping every shipped archive gives **19 of 25
-  byte-identical, 6 content-equivalent, 0 broken**; each of the six shrinks by
-  exactly its count of bytes no directory entry points at (`treedat.flx` is 38%
-  dead space), with zero overlapping bytes anywhere, so a rebuild is lossless
-  for everything an archive declares. Documented in
-  `reference/u9/flx/u9_flx_container_reference.md`. This writes the container
-  only — re-encoding a decoded texture or model back into an entry still has no
-  implementation.
+- **U9 trigger and activity research:** added lossless `triggers.flx` and
+  `activity.flx` readers, opcode reports, known trigger-to-activity and
+  activity-to-highway links, and `script-research-export`. A Ghidra header,
+  executable anchors, evidence exports, and decompilation brief prepare the
+  remaining opcode analysis.
 
-- **U9 books and signs:** added `titan.u9.books`, a reader for
-  `static/BOOKS-EN.FLX` — every readable object in the game that is not spoken
-  dialogue: books, scrolls, signs, plaques, banners and quest note strings.
-  Decodes the `u32`-length title and body of all 460 used entries, strips the
-  backtick markup and splits pages. Added `titan u9 books-list`, `books-show`,
-  `books-search` and `books-export`. Documented in
-  `reference/u9/books/u9_books_reference.md`, including two things a reader has
-  to get right: the archive is **single-byte** text, not the UTF-16LE that
-  `text.flx` and `misctext.flx` use — decoded as UTF-16 the prose comes out as
-  CJK rather than failing loudly — and entry 160, `161: DestardSecret`, is a
-  19,456-byte **Microsoft Word document** that was imported into the archive in
-  place of its prose and shipped that way, so it is flagged by OLE2 magic number
-  rather than rendered as text.
+- **U9 NPCs and navigation:** added `NPC.FLX` inspection, comparison, and CSV
+  export, including embedded savegame NPC tables and the decoded
+  `pool_handle` field. Added `highway.dat` point, route, lookup, and graph
+  support used by NPC activity analysis.
 
-- **U9 terrain height maps:** added `titan.u9.terrain`, a reader for
-  `static/terrain.<region>` — the ground surface under the world, completing the
-  region trio with `static/fixed` and `runtime/nonfixed`. Decodes the header,
-  the tile grid, chunk sharing and the packed 32-bit points (height, hole flag,
-  quad split, animation frame, ground texture). Added `titan u9 terrain-info`,
-  `terrain-tiles`, `terrain-chunk`, `terrain-textures`, `terrain-heightmap` and
-  `terrain-export`. Verified against all 168 shipped region files — 50,780
-  chunks, 55,908 tiles, 12,999,680 points — with every tile index inside its
-  file's chunk count, every point texture resolving to an `sdInfo16.flx` record,
-  every frame inside that record's frame count, and every region's tile grid
-  exactly twice its `fixed` chunk grid on 164 of 164. Rendering `terrain.9` as a
-  greyscale height map produces a recognisable map of Britannia. Documented in
-  `reference/u9/terrain/u9_terrain_reference.md`, including three corrections to
-  the published community documentation: `texture` is a **10**-bit field rather
-  than the documented `uint9` (shipped regions reach index 936, which a 9-bit
-  read truncates), `frame` is **5** bits rather than the documented six-bit span
-  (bit 21 is set on none of the 13 million shipped points), and bit 15 is not a
-  free flag but the quadrangle split direction, set on `(x + y)` odd for 99.5%
-  of points.
+- **U9 books and text:** added list, show, search, and export workflows for
+  `BOOKS-EN.FLX`, `text.flx`, and `misctext.flx`, including page markup,
+  conversation block grouping, and safe handling of non-text book entries.
 
-- **U9 text archives:** added `titan.u9.text`, a reader for `static/text.flx`
-  and `static/misctext.flx` — one NUL-terminated UTF-16LE string per FLX entry,
-  decoding cleanly on all 7,996 used entries across both files. `text.flx`
-  additionally groups into 266 blocks delimited by `BEGIN FILE` markers naming
-  Origin's conversation source files, 90% of which match an NPC name in
-  `runtime/NPC.FLX`; the remainder are locations. Added `titan u9 text-list`,
-  `text-blocks`, `text-search` and `text-export`. Documented in
-  `reference/u9/text/u9_text_reference.md`, including the two things that shape
-  a reader: there is no closing `END FILE` marker, so a block runs to the next
-  `BEGIN`, and `misctext.flx` has no markers at all, so block grouping degrades
-  to an empty list rather than inventing one.
-
-- **U9 texture metadata:** added `titan.u9.sdinfo`, a reader for the
-  `static/sdInfo*.flx` tables — one per `bitmap*.flx` archive and index-parallel
-  to it, giving frame-0 dimensions, largest-frame dimensions, frame count and
-  mip levels for every texture **without decoding pixels**. Added
-  `titan u9 sdinfo-list`, `sdinfo-show` and `sdinfo-verify`; the last
-  cross-checks a table against its partner archive and exits non-zero on any
-  shortfall. No community documentation covers these files; the layout was
-  established by correlation and all four decoded fields reproduce on 100% of
-  entries in all three pairs (19,772 records). Documented in
-  `reference/u9/sdinfo/u9_sdinfo_reference.md`, including the trap that sank the
-  first draft: two fields carry a flag in their high half, and reading
-  `frame count` whole rather than masked matches on only 13.5% of `sdInfoC.flx`.
-
-- **U9 NPC pool handle decoded, and NPC CSV export:** the `u32` at NPC record
-  offset `0x00` is a **byte offset into the region's live object pool**, not the
-  unknown identifier it was first documented as. Disassembly of `u9.exe` puts
-  the first read at `0x004CD6E0`, resolving `*(void **)(pool + 0x34) + handle`;
-  pool elements are 32 bytes, which is why every value is a multiple of 32.
-  `U9Npc.unknown_id` is therefore renamed **`pool_handle`**, read as a `u32`
-  rather than a `u16`, and joined by `pool_index` and `is_placed`. Added
-  `titan u9 npc-csv`, which exports every record as CSV — decoded fields as
-  named columns plus the full 316-byte record as hex, so nothing is lost.
-  Also decodes the `u32` at `0x48` as `flags` — a bitfield the engine tests
-  (`& 0x800` at four sites), 15 distinct values over 250 of 352 records, with
-  bit 27 implying a non-zero combat value on all 64 records that carry it. No
-  bit is given a name; the field is exposed raw.
-  Corrected in `reference/u9/nonfixed/`: the entity `type_index` field is a
-  **global object id** whose sub-512 range is the NPC-record space, not an NPC
-  index as such.
-
-- **U9 NPC table:** added `titan.u9.npc`, a reader for `runtime/NPC.FLX` — the
-  only U9 FLX archive whose single used entry is a flat record array, 352 NPCs
-  of 316 bytes each, indexed so that the record index is also the activity set
-  index. Decodes name, gender, health, mana, `class_id`, combat value, region,
-  world position and scale. Added `titan u9 npc-list`, `npc-show`,
-  `npc-classes` and `npc-diff`; all four also read the live copy of the array
-  that a savegame embeds in `processes.dat` and `u9game*.sav`, located by
-  signature since its offset is not fixed. Documented in
-  `reference/u9/npc/u9_npc_reference.md`, including a correction to the
-  published community documentation — the record is **316 bytes, not 323**;
-  323 leaves 120 bytes over and lands every field on noise, while 316 divides
-  the payload exactly and validates every documented field offset. Comparing
-  the shipped table against a savegame separates static identity from runtime
-  state, and shows that NPCs which walk land exactly on `highway.dat`
-  navigation points.
-- **U9 NPC activity sequences:** added `titan.u9.activity`, a container reader
-  for `static/activity.flx`, the named behaviour scripts an NPC runs. Decodes
-  each entry into records of `u8 ordinal`, a fixed-width 15-byte name field,
-  and a list of 9-byte steps ending at a `0xFF` step; all 214 used entries
-  parse with their bodies consumed exactly, yielding 617 records and 617
-  terminators. Added `titan u9 activity-list`, `activity-show` and
-  `activity-opcodes`. Of the 12 step opcodes, `0x01` and `0x02` are decoded --
-  they move an NPC between two `highway.dat` navigation points, verified on
-  156 of 156 steps; the rest are deliberately left alone rather than guessed.
-  Documented in `reference/u9/activity/u9_activity_reference.md`, including the
-  two findings that make the format parse at all: the name field is fixed width
-  rather than a bare C string (its padding is uninitialised memory, which is
-  what defeats a forward-scanning parser), and the record `ordinal` is a label
-  that need not start at 1 or run without gaps.
-- **U9 trigger scripts:** added `titan.u9.triggers`, a container reader for
-  `static/triggers.flx`, where the FLX entry index is the trigger ID carried by
-  runtime entities. Decodes each trigger into its 6-byte
-  `opcode / arg0 / arg1 / arg2` records, ending at the first `0xFF` opcode and
-  reporting stale records behind that terminator as slack rather than decoding
-  them. Added `titan u9 trigger-list`, `trigger-show` and `trigger-opcodes`.
-  Of the 90 opcodes, only `0x31` is decoded -- it runs an NPC activity record,
-  naming an `activity.flx` set in `arg1` and a record ordinal in `arg2`'s low
-  byte, resolving in 500 of 506 steps (98.8%). The other 89 are deliberately
-  left alone rather than guessed; `trigger-opcodes` reports their frequency as
-  a starting point. Documented in
-  `reference/u9/triggers/u9_triggers_reference.md`, including why the opcode is
-  the low byte rather than the leading `u16` and why the terminator must be
-  matched on that byte.
-- **U9 NPC navigation graph:** added `titan.u9.highway`, a reader for
-  `static/highway.dat` -- the highway-point graph and precomputed routes U9
-  uses for NPC navigation, the game's analogue of Ultima 7's patheggs. Decodes
-  the point table (trigger ID plus absolute world position) and the
-  variable-length route records (endpoints, node path, route distance), and
-  exposes route lookup and an undirected adjacency graph. Added
-  `titan u9 highway-info`, `highway-points` and `highway-routes`. Documented in
-  `reference/u9/highway/u9_highway_reference.md`, including the correlation
-  that identifies what a highway node physically is: 815 of the 817 points have
-  an entity of type 1134 -- unnamed in `TYPENAME.FLX`, i.e. an invisible marker
-  -- at exactly the declared coordinates, which also independently validates
-  the `nonfixed` reader's world-coordinate arithmetic against a separate file.
-- **Sparse U7 mod-patch rendering:** `titan u7 map-render` now detects sparse
-  Exult mod `patch/SHAPES.VGA` archives and fills their empty records in memory
-  from the selected BG or SI base archive. Base assets are resolved from the
-  `--game` configuration or the nearest game-install `STATIC` directory, and
-  the base palette is used when the patch does not provide one. Populated
-  patch records remain authoritative, no archive is rewritten, and complete
-  base-game archives retain the existing direct rendering behavior.
+- **Sparse U7 mod-patch rendering:** `titan u7 map-render` now fills empty
+  records in sparse patch `SHAPES.VGA` archives from the configured BG or SI
+  base archive without modifying either source.
 
 ### Fixed
 
-- **`titan.u9.flx_archive` accepted almost any file as an FLX archive.** The
-  reader validated nothing beyond a minimum length, so it parsed **570 of the
-  595 files** in a game install — `ddraw.dll`, `3DfxSpl2.dll`, `ConfigINI.exe`
-  and assorted `.ini` and `.txt` among them — producing a directory of garbage
-  offsets rather than an error. It now checks the format word at `0x54`, which
-  is 2 in every shipped archive, along with a plausible entry count and a
-  directory that fits the data. That accepts exactly the **41** real archives
-  and rejects the other 554. The check is deliberately structural rather than
-  cosmetic: the space-filled comment would have worked equally well as a
-  signature on shipped data, but requiring it would reject archives
-  `titan.u9.flx_writer` produces with a comment of their own. Same class of
-  false-accept as the earlier `titan.u9.types_dat` bug.
+- **Strict U9 file detection:** `flx_archive` now rejects non-FLX files using
+  structural header and directory checks, while `types_dat` requires the
+  exact `TYPES.DAT` layout.
 
-  Applying the signature also identified **16 FLX archives with no `.flx`
-  extension**: `Texture8.9`/`.14` and `texture16.9`/`.14`, plus twelve dialect
-  variants of the game's text — `Mbrk`, `Tbrk` and `Tnbrk` with `.br`, `.fn`,
-  `.ns` and `.vl` suffixes. The `Mbrk.*` files hold 340 entries each, matching
-  `misctext.flx`, and the `Tbrk.*` files 7,656, matching `text.flx`; they are
-  the same UTF-16LE format and `titan.u9.text` reads them as they are. Where
-  `misctext.flx` has *"The gate is locked."*, `Mbrk.br` has *"Zee gete-a is
-  lucked."* and `Mbrk.fn` *"The gate does be lokked."*
+- **Correct 8-bit texture selection:** texture tools now use the matching
+  `sdInfo` selector to distinguish paletted, alpha-mask, and alpha-intensity
+  data, automatically discover `ankh.pal`, and warn when no palette is
+  available.
 
-- **8-bit texture frames are three formats, and the selector is in `sdInfo`.**
-  One byte per texel covers `P_8` (palette indices), `ALPHA_8` (a coverage mask
-  whose colour comes from the vertex) and `ALPHA_INTENSITY_44` (4-bit alpha plus
-  4-bit intensity), and a payload-length test sees all three as simply "8-bit".
-  The engine's discriminator turns out to be present in the shipped data:
-  **`sdInfo` field 0, byte 1**, now exposed as
-  `U9SdInfoRecord.format_selector` and accepted by `decode_frame` as
-  `selector`. `icon-export`, `icon-export-all`, `model-export`,
-  `model-export-all` and `texture-import` find the matching `sdInfo` archive
-  beside the bitmap archive automatically. Verified against an independent
-  classification: on `bitmapsh.flx`, the only archive holding both kinds, the
-  byte separates them perfectly, including on the 1,629 entries where it
-  disagrees with the frame-header flags. Without an `sdInfo` the reader falls
-  back to frame-flags bit 9, which agrees on all 22,724 shipped 8-bit frames
-  about mask-versus-paletted but cannot separate the two mask formats — so the
-  42 `ALPHA_INTENSITY_44` frames (`bitmapsh` entries 1025, 2070, 3190) decoded
-  as flat masks until now.
+- **Reliable texture and icon export:** truncated 8-bit frames now raise
+  `U9TextureError`, and multi-frame icon exports include the frame number
+  instead of overwriting earlier frames.
 
-- **8-bit texture frames are two formats, and every one was decoded as
-  paletted.** One byte per texel covers both **P_8** (palette indices) and
-  **ALPHA_8** (an intensity mask whose colour comes from the vertex), and the
-  engine tells them apart with a descriptor selector that is not in the archive
-  — so the payload-length test that identifies "8-bit" cannot identify *which*
-  8-bit. Running `ankh.pal` over a mask produces rainbow confetti; sparkles,
-  lightning and the pentagram glow were all affected. `decode_frame` now treats
-  bit 9 (`0x200`) of the frame-header flags as the discriminator, which
-  separates shipped data cleanly (mean step ~5 between adjacent texel values
-  with the bit set, ~22 without), and reports the outcome as
-  `U9TextureFrame.is_intensity`. Masks decode with coverage in alpha, mirrored
-  into RGB so they stay visible. **10,470 of 22,724 8-bit frames are masks**, so
-  `ankh.pal` is needed by `bitmapsh.flx` alone — every 8-bit frame in
-  `bitmap16.flx` and `bitmapC.flx` is a mask, which is why those two archives
-  carry exactly the same 3,476 of them. Not to be confused with a `U9Material`'s
-  own `0x200`, which selects point over bilinear filtering.
-
-- **8-bit textures decoded as scrambled greyscale unless a palette was passed
-  by hand.** `static/ankh.pal` sits beside every texture archive, but the CLI
-  only used it when `-p/--palette` was given; without it, `decode_frame` fell
-  back to treating the raw palette index as a grey level. That fallback is not
-  merely desaturated but structurally wrong, because `ankh.pal` is ordered by
-  hue rather than brightness — index 10 is a bright lavender `(179, 132, 233)`
-  and rendered as grey level 10, very nearly black. The result keeps the image's
-  shapes, so it reads as a real low-detail greyscale asset rather than an error.
-  A whole-game bulk extraction was published with all **6,597 `bitmapsh.flx`
-  entries** wrong this way, and with `bitmapsh` being 99.1% 8-bit the archive
-  looked like a greyscale set. `icon-export`, `icon-export-all`, `model-export`,
-  `model-export-all` and `texture-import` now find `ankh.pal` next to the
-  archive automatically, report which palette they used, and warn when they
-  decode without one. `-p` still overrides.
-
-- **`titan u9 icon-export` overwrote its own output across frames.** The
-  output file was named `icon_<entry>.png` with no frame index, so exporting a
-  second frame of the same entry replaced the first instead of sitting beside
-  it — silently, and most visibly on the animated entries that hold ten or
-  twenty frames. Output is now `icon_<entry>_frame_<n>.png`.
-
-- **`titan.u9.flx_archive` documented the comment field as NUL-padded.** All 25
-  shipped archives space-pad it (`0x20`). Read-only, so nothing behaved wrongly,
-  but a writer following the docstring would have produced a visible diff
-  against every original.
-
-- **`titan.u9.mesh_export` collapsed limbs that share a `limb_id`.**
-  `_world_matrices` resolved world transforms into a dict keyed by `limb_id`,
-  but three shipped `sappear.flx` models reuse an id across limbs carrying
-  different transforms, so the dict kept only the last and every copy was
-  placed at that one's position. Model 775's three `limb_id=91` limbs, stored
-  at (-49.6, 27.2, 0), (30.4, 44.8, 0) and (22.4, -25.6, 0), all exported at
-  the third; models 217 and 1296 were affected the same way. Matrices are now
-  keyed by the limb's index, with a parent named by a duplicated id resolving
-  to the first limb carrying it. Verified against all 3,764 archive entries.
-
-- **`titan.u9.texture` raised `IndexError` past its own error contract.** The
-  8-bit decode paths index bytes directly rather than going through
-  `struct.unpack_from`, and the guard around them caught only `struct.error`,
-  so a truncated 8-bit frame escaped as a bare `IndexError` while a truncated
-  16-bit frame correctly raised `U9TextureError`. `bitmapsh.flx` is entirely
-  8-bit, so this was the common path rather than a corner: any caller catching
-  `U9TextureError` to skip a bad entry crashed instead. `decode_frame` now
-  bounds-checks the pixel buffer before decoding.
-
-- **`titan.u9.model_naming` produced labels long enough to break exports.**
-  `label_for_model` joined every name claimed for a model, and model 766 -- a
-  scroll claimed by ten map types -- came back with 155 characters. Since
-  `model-export-all` writes `<outdir>/<stem>/<stem>.obj`, putting the stem in
-  the path twice, that cleared Windows' 260-character path limit on its own; a
-  single `model-export` already produced a 286-character path. Labels are now
-  capped at `MAX_LABEL_LENGTH` (64), cut back to a hyphen so they never end
-  mid-word, with the cap overridable per call. The zero-padded model id that
-  callers pair with the label keeps stems unique: all 1,706 named models still
-  resolve to distinct stems.
-
-- **`titan.u9.types_dat` accepted files that were not `TYPES.DAT`.** The reader
-  validated nothing and silently discarded a trailing partial record, so any
-  file at least 24 bytes long parsed as some number of nonsense records --
-  `static/highway.dat` came back as 776 of them. It now requires the exact
-  131,080-byte layout (`8 + 16*8192`) and raises the new `U9TypesDatError`
-  otherwise. Across the 545 U9 data files in this project's game copy, 544 are
-  now rejected and only the real `TYPES.DAT` is accepted; a looser
-  whole-number-of-records rule would still have admitted 144 of them, since
-  every `terrain.*` file happens to be a multiple of 16 plus 8 bytes. Model
-  export commands treat naming as optional decoration and now warn and continue
-  unnamed rather than failing.
+- **Reliable model export:** transforms are keyed by limb index so duplicate
+  `limb_id` values no longer collapse geometry, and generated model labels are
+  length-limited for Windows-compatible export paths.
 
 ---
-
 ## [0.7.5]
 
 ### Added
@@ -425,313 +135,62 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Added
 
-- **UU2 native-resolution sizing for any view:** `titan uw2 map-3d --native`
-  sizes a render so no floor tile in the region falls below the 64 pixels a
-  `T64.TR` texture actually has. The plan view answers this by arithmetic, being
-  parallel and square-on; every other preset looks at the floor from an angle,
-  which foreshortens it by `sin(elevation)` - 26% at `south`, 51% at `iso-ne` -
-  and under perspective the far side of the map is smaller again, so a tilted
-  view needs a *larger* image than the plan to hold the same detail. Rather than
-  model VTK's camera fit, the projection is measured at a small probe size with
-  no geometry in it and scaled from there. A view too shallow to reach native
-  within a 16384-pixel edge is refused with an explanation rather than
-  attempted: at the 11 degrees of `low-s` the floor simply cannot hold its
-  detail. Losslessness is still the plan view's alone - perspective resamples
-  whatever the resolution - but undersampling need not be.
+- **Flexible UU2 map views:** 3D rendering gained native-resolution sizing,
+  lossless orthographic `plan`, square-on `south`/`low-s` cameras, flat
+  `map-grid` diagnostics, and `map-stack` world cutaways.
 
-- **UU2 square-on southern views:** added `south` and `low-s` to
-  `titan uw2 map-3d`. Every other 3D preset takes a corner bearing, which turns
-  a room 45 degrees away from the shape it has on the plan. These stand due
-  south and look north, so north stays up and rooms keep their plan outline
-  while walls stand up and height reads. `south` sits 48 degrees above the map -
-  steep enough to see over near walls into the rooms behind, shallow enough for
-  height to tell; `low-s` drops to 11 degrees, matching the existing `low-ne`
-  and `low-nw` eye-level presets.
+- **UU2 map and texture diagnostics:** added `texture-catalog`,
+  `texture-usage`, and `map-verify`, plus `terrain-export` and contact
+  sheets for terrain and shape archives.
 
-- **UU2 lossless map plans:** added a `plan` camera view to `titan uw2 map-3d`,
-  an orthographic straight-down projection sized from the tile region at the
-  native 64 pixels per tile - the side of a `T64.TR` texture, one of which maps
-  across exactly one tile. Every open tile comes back byte-identical to its
-  source texture; verified across all 290 unoccupied tiles of Castle Britannia.
-  Exactness needs both the parallel projection and unlit shading, since the
-  light kit scales sampled texel colour to about 0.94. `--plan-scale` renders
-  whole multiples, which stay lossless but add no detail. The perspective views,
-  `top` included, are unchanged and cannot be pixel-exact in principle: surfaces
-  at varying angles and distances give a texel a non-uniform pixel footprint.
-- **UU2 texture names and usage:** added `titan uw2 texture-catalog`, joining
-  `STRINGS.PAK` block 10 descriptions to `TERRAIN.DAT` properties for all 256
-  `T64.TR` textures (wall at the texture's own string index, floor at
-  `510 - texture_id`), and `titan uw2 texture-usage`, reporting per-level tile
-  coordinates by floor, wall, and both ceiling rules. Both read original files
-  directly, and wire up the previously unused `titan.uw2.strings` decoder.
-- **UU2 map verification:** added `titan uw2 map-verify` to smoke-check
-  `LEV.ARK`: the 320-block table, per-slot block sizes, a full decode of every
-  populated slot, and the `0x7c06` marker histogram. Failures are collected
-  rather than raised, and it exits non-zero so it can gate a pipeline.
-- **UU2 doors in 3D scenes:** 259 doors across 34 levels, previously skipped.
-  Each is one scene object with separately named frame and panel parts: frame
-  from model `0x01`, leaf from `0x0E` (or `0x0F` secret). Panels take one of
-  the level's six door textures; secret doors wear their tile's wall texture.
-  Hinged doors swing about the edge `doordir` selects, which also reverses the
-  direction; portcullises rise instead. `UW2.EXE` has no portcullis model, so
-  its bars are reconstructed and flagged `door_geometry: reconstructed`. Open,
-  portcullis, secret, swing, lift, and `doordir` are recorded for exporters.
-- **UU2 door swing direction decoded:** object word 0 bit 13 is the door swing
-  direction and was not parsed at all. It is now exposed as `doordir` on every
-  decoded object record.
-- **UU2 owner-coloured beds:** bed bedding now takes its instance colours -
-  quilt `4 * owner + 5`, pillow `4 * owner`, masked to a byte so high owners
-  wrap as the game does. The quilt and pillow share one executable colour
-  group and are told apart by position along the bed.
-- **UU2 special object classes in 3D scenes:** `map-3d-render` and
-  `map-3d-export` now place bridges, the `0x16E`/`0x16F` texture-map walls,
-  `0x170`-`0x17F` wall controls, levers, switches, and writing - 1,047
-  instances across 42 levels that previously fell through as skips. Bridges
-  take an object texture or a level **floor** mapping entry from `flags`;
-  special walls take a **wall** entry named by `owner`.
-- **UU2 sign text and instance metadata:** writing objects now carry their
-  decoded prefix and readable message (`The plaque reads: LIBRARY`) in scene
-  and GLB manifest metadata, resolved from `STRINGS.PAK` block 8. Placed
-  objects also record their texture source and index, wall-mounted and
-  removable-wall markers, trigger links, and the enchantment flag.
-- **UU2 flat diagnostic grids:** added `titan uw2 map-grid`, a top-down view
-  with no projection and no wall height, so a tile's screen box follows only
-  its coordinates. Draws floor textures clipped to diagonal triangles, outlines
-  every side not shared with an open neighbour, and marks diagonal hypotenuses
-  and doors at their in-tile offset and heading, with display/raw/both labels.
-- **UU2 stacked world cutaways:** added `titan uw2 map-stack` to render each
-  world's levels as one vertically stacked scene, first level on top and each
-  lower level dropped by `--stack-gap`, with optional per-level `--stagger-x`
-  and `--stagger-y` and a `--world` slug filter.
-- **UU2 terrain texture export:** added `titan uw2 terrain-export` for
-  `T64.TR` PNGs with optional nearest-neighbour `--scale`, and a
-  `--contact-sheet` flag on both it and `uw2 shape-batch`. Contact-sheet cells
-  are sized to the largest image and smaller images centred, so ragged archives
-  such as `TMOBJ.GR` stay aligned.
-- **Combined U7 shape frame report:** added `titan u7 shape-frame-report` to
-  export every record and frame from a U7 shape Flex archive as CSV or JSON.
-  The report keeps Exult Studio Origin X/Y, top-left-relative drawing
-  hotspots, and `WIHH.DAT` weapon attachment coordinates in distinct columns;
-  it auto-discovers a sibling `WIHH.DAT` or accepts an explicit path.
+- **Expanded UU2 3D scenes:** doors, portcullises, bridges, texture-mapped
+  walls, wall controls, levers, switches, and writing now render and export.
+  Scene metadata includes door state and direction, sign text, texture sources,
+  trigger links, wall mounting, removable walls, and enchantment state.
+
+- **UU2 instance-aware rendering:** added owner-coloured beds and the decoded
+  door-swing bit, with special-object placement and appearance carried into
+  scene and GLB metadata.
+
+- **Combined U7 shape-frame reports:** added `titan u7 shape-frame-report`
+  with CSV/JSON output that keeps frame origins, drawing hotspots, and
+  `WIHH.DAT` weapon attachment coordinates distinct.
 
 ### Changed
 
-- **UU2 3D map render controls:** `map-3d-render` gained the `low-ne`/`low-nw`
-  low-angle presets, repeatable `--slot`, non-square `--width`/`--height`,
-  `--zoom`, `--fit-margin`, `--supersample` with `--downsample-filter`,
-  `--texture-filter nearest` with `--texture-scale` for crisp pixel art,
-  `--name-files`, and `--backend`. Without PyVista, `auto` now falls back to a
-  Pillow preview with a warning instead of failing. Default output is
-  pixel-identical.
-- **UU2 ceiling-texture rule is selectable:** `map-3d-render` and
-  `map-3d-export` accept `--ceiling-source runtime|ua`, exposing the
-  UnderworldAdventures `mapping[32]` interpretation that the geometry layer
-  already supported but nothing could reach. The two rules disagree on every
-  level. Both commands also accept `--z-scale`, which now scales placed object
-  and sprite heights alongside terrain rather than only terrain.
-- **U7 frame origin convention:** `U7Shape.Frame` now exposes
-  `origin_x`/`origin_y` using `xright`/`ybelow` convention.
-  Explicit top-left-relative drawing-anchor helpers replace the ambiguous
-  `xoff`/`yoff` fields while preserving existing SHP/VGA binary placement.
-- **U7 weapon attachment terminology:** WIHH.DAT values are now identified as
-  weapon attachment coordinates (`attachment_x`/`attachment_y`) and kept
-  clearly separate from SHP frame origins in the API, CSV output, CLI help,
-  and documentation.
-- **Configured U7 shape-import palettes:** `titan u7 shape-import` now accepts
-  `--game bg|si` and uses that game's `titan.toml` palette when `--palette` is
-  omitted. An explicit `--palette` continues to take precedence.
+- **Expanded UU2 render controls:** `map-3d-render` gained additional camera
+  presets, slot and output-size selection, zoom, fit margin, supersampling,
+  texture filtering/scaling, backend choice, and a Pillow fallback. Ceiling
+  texture rules and vertical scale are now selectable for rendering and export.
+
+- **Clearer U7 coordinate workflows:** shape frames now expose explicit origin
+  and top-left drawing-anchor helpers, while `WIHH.DAT` uses weapon-attachment
+  terminology. `shape-import` can select BG or SI and discover its configured
+  palette automatically.
 
 ### Fixed
 
-- **UU2 model colours: a slot past the model's table is the engine's to fill.**
-  A model's nodes name a slot in its own small colour table, and several reach
-  past the end of it. Wrapping the index round was wrong; palette 0 suits every
-  model that does it except the one where it shows. The large blackrock gem asks
-  a two-entry table for slots 3 and 12 to 16 because its colours come from quest
-  state, not the model: each facet is `0x52` until its bit is set in quest 130,
-  then `0x4D`, with `0x4F` on the one game variable 6 points at
-  (UnderworldGodot, `objects/largeblackrockgem.cs`). `0x4C` to `0x52` is a blue
-  ramp. A map render has no save game, so the gem is drawn as it stands at the
-  start, every facet `0x52`. It was white before, and briefly black.
-- **UU2 chests were grey.** The chest declares two colours, a warm brown
-  `0x8E` and a grey `0xCA`, and its face nodes call the grey twenty-one times
-  and the brown once. In the game it is brown, and nothing on the placed object
-  can be choosing: all forty chests in the shipped levels carry `flags` and
-  `owner` of zero. There is no texture path either - the model is 112 flat faces
-  with no UVs, and `TMOBJ.GR` holds no chest surface. Nor does any palette in
-  `PALS.DAT` make `0xCA` warm without recolouring the rest of the game. The
-  chest is now drawn in the colour it declares first, its shading unchanged, so
-  it keeps the lighter lid and darker sides. Recorded rather than decoded: the
-  executable says otherwise, and UnderworldAdventures' table agrees with the
-  executable but shares our arithmetic, so it is not a second opinion.
-  UnderworldGodot gives its chest a brown body, by hand.
-- **UU2 Gouraud-shaded model faces were drawn at one flat colour.** A model
-  defines a vertex shading table (`0x00D4`) giving every vertex its own step
-  down the colour's ramp, and `0x00D6` switches the following faces onto it.
-  Fourteen of the thirty-two models do this, covering 1035 of the 1205
-  flat-shaded faces in the set, so ignoring it dropped most of the modelling:
-  boulders were smooth grey blobs, the shrine a silhouette, a barrel had no
-  staves. Faces now carry a colour per corner, and 90% of them have corners at
-  different steps. `_part_arrays` already gives each triangle three fresh points
-  rather than sharing corners between faces, so the colours line up with it
-  without re-indexing; a part still names one material, which every face that
-  is not shaded keeps using, and which holds the mean for anything that can take
-  only one colour per face. PyVista draws them as point scalars, the GLB export
-  as `COLOR_0`, and the software fallback averages the corners since it fills
-  whole polygons. A moongate is a single quad with a bright middle, which now
-  reads as the gradient it is rather than a flat panel. `0x002E`, which the
-  format notes switches the shading back off, is honoured. The shading works on
-  whatever colour the face ends up wearing: an instance can replace the model's,
-  and taking the corners from the model's instead turned Castle Britannia's
-  owner-coloured beds blue and gave blue moongates a red gradient. Where the
-  replacement is a point on a ramp, as a gate's link colour is, it shades; where
-  it is an exact entry, as an owner's is, the face stays flat.
-- **UU2 executable models were drawn flat, losing their shading.** A face's
-  colour node carries a shade in the word after the colour, which we read and
-  threw away: "the same calculations and palette indexing rules apply here" as
-  for the Gouraud table, per `uw-formats.txt`. The palette runs in short
-  darkening ramps, so the shade is simply the next entries along - grey `0xCA`
-  falls from 96 to 24 over five steps, the chair's brown `0x8F` from 132 to 44 -
-  and faces of one model use different steps. A chest spans six of them, which
-  is why it read as a flat silhouette instead of a box with a lid; benches lost
-  their planking and chairs their depth. Faces are now shaded as the model asks.
-  A ramp is a handful of entries long and nothing marks where one ends, so a
-  step that would lighten the colour has run off the end - three faces of the
-  arrow do - and keeps its base colour. An instance colour, bedding from its
-  owner or a moongate from its link, is an exact entry rather than a point on a
-  ramp, so it replaces the shaded colour rather than being stepped itself.
-- **UU2 moongates take their colour from the placed object.** Every one was
-  rendering the same, because the model's own colour table has nothing to say
-  about it: a gate is tinted by its link field, `link - 512`, as UnderworldGodot
-  reads it (`objects/moongate.cs`). The shipped gates use the whole spectrum the
-  Ethereal Void needs - red `0x21`, blue `0x4F`, yellow `0x10`, orange `0x2D`,
-  purple `0x5A` and `0x5B`, green `0xAB`, white `0xC2` - so the Yellow Zone's
-  gates are yellow and the Colour Zone carries seven different ones. The index
-  is recorded on the object as `moongate_palette_index`.
-- **UU2 table surfaces ignored their flags.** A table's flags choose the top:
-  `32` and `34` are planking, `33` marble, `35` stone. We pinned every table to
-  `32`, so the thirty of the game's seventy-four that ask for something else
-  were all planked. Paintings and pillars already varied correctly.
-- **UU2 moongates were black.** The moongate is the only model whose info entry
-  sets the top bit of its header byte, and the only one whose first colour byte
-  is `0x00` - a placeholder rather than "black", which we read literally. It
-  stands for palette index `0x21`, the one entry in `PALS.DAT` that reads
-  `(212, 16, 36)` in palettes 0, 2, 3, 4 and 7 but `(24, 44, 188)` in 5 and 6:
-  the red moongate and the blue one, from a single model and a single index. 73
-  gates across the Ethereal Void. The value is recorded rather than decoded -
-  the executable gives no derivation for it - and it matches the table
-  UnderworldAdventures transcribed by hand. Which palette a level chooses is
-  still not modelled, so all 73 render red for now.
-- **UU2 wall panels were drawn a quarter of their size.** Class `0x016E` took the
-  quarter-tile quad at executable slot `0x14`, so a wall hanging built from
-  stacked panels came out as fragments with gaps between them - Castle
-  Britannia's throne room hangs its two ankh banners either side of the stained
-  glass this way. Both special texture-map classes are one tile square and one
-  tile high, as UA draws them (`RenderTmapObject`: `dir *= 0.5` to each side,
-  `pos.z` to `pos.z + 1.0`), and the shipped levels only work out that way: the
-  banners are stacked 32 height units apart, the same spacing as the `0x016F`
-  stained glass beside them, which meets end to end only at a whole tile each.
-  `0x016E` now takes the full-tile slot `0x16` as well. 335 panels across 36
-  levels. Levers, switches and writing keep the quarter-tile quad, which is the
-  right size for them.
-- **UU2 floors, ceilings and walls were drawn upside down in 3D.** Both
-  consumers of a scene turn `v` over before sampling - the renderer through
-  `texture.flip_y`, the GLB export through trimesh - so a surface's `v` has to
-  be written in that sense, and terrain never was. Floor `v` came straight from
-  the world `y`, putting image row 0 at the north edge of the tile when it
-  belongs to the south; wall `v` was measured down from the ceiling, hanging the
-  foot of the image from it. On the noise-like stonework that fills most of UU2
-  neither shows. Two things gave it away: the pentagram inlaid across four floor
-  tiles in the Ethereal Void and Scintillus Academy, textures 236 to 239, which
-  only resolves into one figure the right way up, and ice wall 51, whose ground
-  detail sat at the ceiling. This also settles a disagreement between pipelines,
-  since the 2.5D renderers have always turned floor textures over. Executable
-  models, doors and sprites were already correct and are untouched.
-- **UU2 bridges and doorways sat a fraction off their own tile.** Both span a
-  whole tile, so the tile is their position, but they were centred on the
-  object's sub-tile cell - leaving the whole span about 1/16 of a tile out.
-  Bridges were the single largest source of geometry crossing into walls, 7.4
-  of 19.0 tiles-squared across the game. UW2 places both from the tile:
-  underworldexporter's `RenderBridge` discards the computed position for
-  `ObjectTileX * 1.2f + 1.2f / 2f`, and its door case never reads `xpos`/`ypos`.
-  Bridge overlap is now zero; doors keep only the half panel thickness that sits
-  in the opening by construction.
-- **UU2 loose scenery no longer hangs over the wall beside it.** Objects are
-  drawn centred on their sub-tile cell at full size, and UW2 puts a fifth of all
-  sub-tile coordinates hard against a tile edge, so half a table or a book landed
-  inside the wall. The game never had to care - it is only seen from inside the
-  room - but a top-down plan shows it, and the orthographic `plan` view made it
-  plain by drawing wall tiles as empty space. Renders now shift such objects the
-  smallest distance that clears the wall, dropping overlap from 11.0 to 4.2
-  tiles-squared. Only genuinely solid neighbours push, so an object on the
-  boundary between two open tiles stays put, unlike underworldexporter's
-  `WallAdjust`, which nudges on the sub-tile value alone. Wall fixtures - shelves,
-  paintings, levers, writing - are shifted too: the move is only ever the depth of
-  the overhang, so they end up flush against the wall face instead of through it.
-  Only a door is left alone, its leaf standing in the opening. The offset is
-  recorded on the object and applied when drawing, so a GLB export still carries
-  the placement `LEV.ARK` holds.
-- **UU2 render framing no longer moves when an object does.** The camera was
-  fitted with `reset_camera()`, which frames the actors, so shifting one item a
-  fraction of a tile re-fit the camera and moved every pixel in the output -
-  a placement change of 0.06 tiles displaced a whole render by 6 px and made
-  49% of its pixels differ. Framing now comes from the tile region the caller
-  asked for, which nothing in the data can perturb; the same comparison moves
-  0 px and differs only in the 2.7% of pixels the objects actually occupy.
-- **UU2 sub-tile placement is shared by all sixteen call sites.** They had
-  disagreed - most read `xpos / 8`, two used a `+0.5` approximation - so the
-  2.5D and 3D renderers placed the same object differently. One
-  `sub_tile_fraction` helper now serves them all. It applies no bias: the `0xF`
-  UW2 adds when expanding a tile and `xpos` into a live coordinate belongs to
-  collision, not to where static scenery is drawn, and applying it pushed wall
-  furniture through the wall. The shipped levels sit on the plain eighth grid -
-  a bed runs 25.25 to 25.75, the shelf at its head 25.75 to 26.00, the wall face
-  at 26.00 - each piece meeting the next exactly.
-- **UU2 wall decals hang on the wall face rather than near it.** A lever, switch,
-  pull chain, writing or special wall panel took both coordinates from its
-  sub-tile cell, leaving it up to 1/16 of a tile off the wall it is fixed to. The
-  coordinate across the wall now comes from the tile edge the object's heading
-  names, as UA's `RenderDecal` does, set back by the 1/16 the decal's own quad
-  stands outward. All 689 decals on a square heading now sit exactly on their
-  wall plane, where none did before. The heading-to-wall mapping is confirmed
-  against the shipped levels.
-- **UU2 sprites are no longer drawn upside down.** Every sprite billboard, in
-  every 3D view and every exported GLB, was mirrored vertically. Both consumers
-  flip `v` before sampling - the renderer through `texture.flip_y`, the GLB
-  export through trimesh's glTF conversion - but the sprite quads put `v=0` on
-  their top edge, so it sampled the source image's bottom row. The upper edge
-  now takes `v=1`. Terrain and executable models were already correct: terrain
-  UVs come from the geometry and model UVs are written as `1.0 - v`. Most items
-  are small and near-symmetric, which is why it went unseen; anything with clear
-  vertical structure, such as plants and hanging objects, was visibly inverted.
-- **UU2 ceiling-height bridges no longer roof a ceiling-less render.** A bridge
-  can stand in for the fixed ceiling - Castle Britannia roofs its courtyard with
-  a five-by-five grid at `zpos` 127 against a ceiling of 128 - so placing them
-  hid the courtyard and its fountain. Bridges at ceiling height now follow
-  `--include-ceilings` like the ceiling planes do. The data separates cleanly:
-  deck bridges top out at `zpos` 104, and the 43 that act as ceiling sit at 121
-  or 127, so walkway bridges are unaffected.
-- **UU2 open portcullises no longer float above the wall.** A placed door
-  carries its raise in `zpos` - both open forms sit 24 height units above their
-  tile floor, every closed one exactly on it - so adding the animation lift on
-  top counted the rise twice. They now retract into the ceiling recess. The
-  lift still applies to a portcullis stopped part-way, which no level contains.
-- **UU2 model faces are no longer filled across concave outlines.** Faces were
-  fanned from the first vertex, valid only for convex polygons; a bed's side
-  outline traces up one post, along the rail and back underneath, so fanning
-  filled the notch and welded the posts to the frame. Faces are now ear-clipped.
-  Eight of the thirty-two models were mis-shaped - bench, boulder, large
-  boulder, arrow, shrine, chest, chair, bed - and now show their real gaps and
-  legs. `map-render` is unchanged; its default `--model-style icons` draws
-  sprites, not executable geometry.
-- **UU2 model colour tables were truncated.** A model info entry holds a count
-  plus up to four palette indices, but only three were read. The bed declares
-  four and references all four, so sixteen of its triangles were painted with
-  the frame's colour instead of the bedding's. Of the thirty-two models, only
-  the bed is affected.
+- **UU2 model geometry and shading:** executable models now retain face and
+  Gouraud shading, correctly triangulate concave faces, and read all four model
+  colour-table entries.
+
+- **UU2 model and instance colours:** corrected chest, moongate, table,
+  owner-coloured bed, and quest-state blackrock-gem appearance, including
+  instance-selected colours and safe handling of colour slots supplied at
+  runtime.
+
+- **UU2 scene placement:** unified sub-tile placement, aligned bridges and
+  doorways to their tiles, placed wall decals on their wall planes, kept loose
+  scenery out of adjacent walls, and made camera framing independent of object
+  adjustments.
+
+- **UU2 texture orientation:** corrected vertically inverted floors, ceilings,
+  walls, and sprite billboards in 3D renders and GLB exports.
+
+- **UU2 special-object state:** corrected full-size wall panels, ceiling-height
+  bridge visibility, and open portcullis height.
 
 ---
-
 ## [0.7.3]
 
 ### Added
@@ -839,8 +298,8 @@ This project uses [Semantic Versioning](https://semver.org/):
   entry a 3D model material actually references is a real surface
   texture, so the complement, entries no model ever references, is
   a solid (if not provably exhaustive) set of icon candidates. Real
-  data: 5,044 distinct texture_ids are claimed by `sappear.flx`
-  models, leaving 1,553 of `bitmapsh.flx`'s 6,597 used entries as icon
+  data: 5,054 distinct texture_ids are claimed by `sappear.flx`
+  models, leaving 1,549 of `bitmapsh.flx`'s 6,597 used entries as icon
   candidates, including a confirmed spell-rune-sigil cluster
   (entries 568-641). Kept logically separate from existing mesh/texture
   commands: its own module (`titan.u9.icon`), its own `icon-*` CLI
@@ -899,11 +358,11 @@ This project uses [Semantic Versioning](https://semver.org/):
     exporters that flatten the limb hierarchy to world space (STL is
     geometry-only by format limitation; OBJ carries full materials and
     textures). Checked against every real entry in this project's test
-    copy of the game: 3,748/3,764 models parse (16 are genuinely
-    corrupt upstream data, matching a model the reference importer's
-    own author already flags as broken); of those, 3,657 export
-    successfully and the remaining 91 have no visible geometry to
-    export, for example collision-only placeholders. All 5,044 distinct
+    copy of the game: the initial hierarchical reader parsed 3,748/3,764
+    models; the remaining 16 were later identified as alternate indexed
+    records. Of those initially parsed, 3,657 export successfully and the
+    remaining 91 have no visible geometry to export, for example
+    collision-only placeholders. All initially found 5,044 distinct
     textures referenced across every model resolved successfully from
     `bitmap16.flx` alone. OBJ UVs are flipped (`1.0 - v`) to match
     OBJ/OpenGL's texture-space convention, the opposite of the source

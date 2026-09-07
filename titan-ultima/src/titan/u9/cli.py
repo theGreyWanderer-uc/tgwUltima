@@ -39,12 +39,23 @@ from titan.u9.model import U9Model, U9ModelError
 from titan.u9.model_naming import label_for_model, names_for_model
 from titan.u9.nonfixed import U9Nonfixed, U9NonfixedError
 from titan.u9.npc import NO_CLASS, U9NpcError, U9Npcs
-from titan.u9.palette import U9Palette, U9PaletteError
+from titan.u9.palette import (
+    EXPECTED_SIZE as U9_PALETTE_SIZE,
+    PALETTE_TRANSPARENCY_INDEX,
+    U9Palette,
+    U9PaletteError,
+)
 from titan.u9.sdinfo import U9SdInfo, U9SdInfoError
+from titan.u9.script_research import export_script_research_bundle
 from titan.u9.sound import U9SoundRecord, U9SoundRecordError
 from titan.u9.text import U9TextArchive, U9TextError
 from titan.u9.terrain import U9Terrain, U9TerrainError
-from titan.u9.texture import U9TextureError, decode_frame
+from titan.u9.texture import (
+    U9TextureError,
+    decode_frame,
+    mip_dimensions,
+    parse_texture_set,
+)
 from titan.u9.texture_writer import (
     U9TextureWriteError,
     frame_encoding,
@@ -60,7 +71,7 @@ from titan.u9.types_dat import U9TypesDat, U9TypesDatError
 
 u9_app = typer.Typer(
     name="u9",
-    help="Ultima 9: Ascension — FLX archive, sound, 3D model, world, script, and navigation commands.",
+    help="Ultima 9: Ascension — archive, palette, texture, sound, model, world, script, and navigation commands.",
     no_args_is_help=True,
     pretty_exceptions_enable=False,
 )
@@ -69,6 +80,7 @@ u9_app = typer.Typer(
 # ============================================================================
 # CLI COMMANDS — FLX
 # ============================================================================
+
 
 def cmd_flx_list(args: SimpleNamespace) -> int:
     """List an Ultima 9 FLX archive's directory entries."""
@@ -109,7 +121,10 @@ def cmd_flx_extract(args: SimpleNamespace) -> int:
         return 1
 
     if args.index < 0 or args.index >= archive.num_entries:
-        print(f"ERROR: Index {args.index} out of range (0..{archive.num_entries - 1})", file=sys.stderr)
+        print(
+            f"ERROR: Index {args.index} out of range (0..{archive.num_entries - 1})",
+            file=sys.stderr,
+        )
         return 1
 
     data = archive.read_entry(args.index)
@@ -156,6 +171,7 @@ def cmd_flx_extract_all(args: SimpleNamespace) -> int:
 # CLI COMMANDS — TYPENAME
 # ============================================================================
 
+
 def cmd_typename_dump(args: SimpleNamespace) -> int:
     """Dump type-ID -> display-name pairs from static/TYPENAME.FLX."""
     filepath = args.file
@@ -179,8 +195,99 @@ def cmd_typename_dump(args: SimpleNamespace) -> int:
 
 
 # ============================================================================
+# CLI COMMANDS -- PALETTE (ankh.pal)
+# ============================================================================
+
+
+def cmd_palette_info(args: SimpleNamespace) -> int:
+    """Inspect the layout and colour statistics of a U9 ankh.pal file."""
+    if not os.path.isfile(args.file):
+        print(f"ERROR: File not found: {args.file}", file=sys.stderr)
+        return 1
+    try:
+        palette = U9Palette.from_file(args.file)
+    except (OSError, U9PaletteError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+
+    file_size = os.path.getsize(args.file)
+    distinct = len(set(palette.colors))
+    duplicate_groups = palette.duplicate_groups()
+    duplicate_entries = sum(len(indices) - 1 for _, indices in duplicate_groups)
+    nonzero_reserved = sum(value != 0 for value in palette.reserved)
+    transparency = palette.color_for(PALETTE_TRANSPARENCY_INDEX)
+
+    print(f"{args.file} -- Ultima IX palette")
+    print(f"  File size       : {file_size} bytes")
+    print("  Layout          : 256 x 4 bytes (R, G, B, reserved)")
+    print(f"  Colours         : 256 entries, {distinct} distinct")
+    print(
+        f"  Duplicates      : {duplicate_entries} repeated entries in "
+        f"{len(duplicate_groups)} colour groups"
+    )
+    print(f"  Reserved bytes  : {nonzero_reserved} non-zero")
+    print(
+        f"  Transparency    : index {PALETTE_TRANSPARENCY_INDEX} "
+        f"#{transparency[0]:02X}{transparency[1]:02X}{transparency[2]:02X}"
+    )
+    if file_size > U9_PALETTE_SIZE:
+        print(f"  Trailing data   : {file_size - U9_PALETTE_SIZE} bytes")
+    if args.duplicates:
+        print("\nRepeated colours:")
+        for color, indices in duplicate_groups:
+            index_text = ", ".join(str(index) for index in indices)
+            print(
+                f"  #{color[0]:02X}{color[1]:02X}{color[2]:02X} "
+                f"{color!s:<17} indices {index_text}"
+            )
+    return 0
+
+
+def cmd_palette_export(args: SimpleNamespace) -> int:
+    """Export a U9 palette as a PNG swatch and lossless text table."""
+    if not os.path.isfile(args.file):
+        print(f"ERROR: File not found: {args.file}", file=sys.stderr)
+        return 1
+    if args.swatch_size <= 0:
+        print("ERROR: --swatch-size must be greater than zero", file=sys.stderr)
+        return 1
+    try:
+        palette = U9Palette.from_file(args.file)
+    except (OSError, U9PaletteError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+
+    outdir = args.output or "."
+    os.makedirs(outdir, exist_ok=True)
+    base = Path(args.file).stem
+    image_path = os.path.join(outdir, f"{base}_palette.png")
+    text_path = os.path.join(outdir, f"{base}_palette.txt")
+
+    palette.to_pil_image(args.swatch_size).save(image_path)
+    with open(text_path, "w", encoding="utf-8", newline="\n") as file:
+        file.write(f"# Ultima IX palette from {args.file}\n")
+        file.write(
+            "# The fourth byte is reserved, not alpha. Texture index 254 is transparent.\n"
+        )
+        file.write("# Index    R    G    B  Reserved  Alpha  Hex\n")
+        for index, ((r, g, b), reserved) in enumerate(
+            zip(palette.colors, palette.reserved)
+        ):
+            alpha = palette.rgba_for(index)[3]
+            file.write(
+                f"{index:3d}    {r:3d}  {g:3d}  {b:3d}      "
+                f"{reserved:3d}    {alpha:3d}  #{r:02X}{g:02X}{b:02X}\n"
+            )
+
+    print(f"Palette swatch saved: {image_path}  (256 colors, 16x16 grid)")
+    print(f"Palette text dump: {text_path}")
+    return 0
+
+
+# ============================================================================
 # CLI COMMANDS — SOUND
 # ============================================================================
+
 
 def cmd_sound_list(args: SimpleNamespace) -> int:
     """List sound record headers (id, description, format, encoding) in a sound/*.flx archive."""
@@ -196,7 +303,9 @@ def cmd_sound_list(args: SimpleNamespace) -> int:
         return 1
 
     print(f"{filepath} — {archive.num_entries} entries")
-    print(f"{'Idx':>6}  {'Freq':>6}  {'Bits':>4}  {'Ch':>2}  {'Encoding':<14}  {'Bytes':>9}  Description")
+    print(
+        f"{'Idx':>6}  {'Freq':>6}  {'Bits':>4}  {'Ch':>2}  {'Encoding':<14}  {'Bytes':>9}  Description"
+    )
     print("-" * 80)
     parsed = 0
     for index in archive.used_entry_indices():
@@ -211,7 +320,9 @@ def cmd_sound_list(args: SimpleNamespace) -> int:
             f"{record.num_channels:>2}  {record.encoding_name:<14}  {len(record.payload):>9}  "
             f"{record.description}"
         )
-    print(f"\n{parsed}/{len(archive.used_entry_indices())} entries parsed as sound records")
+    print(
+        f"\n{parsed}/{len(archive.used_entry_indices())} entries parsed as sound records"
+    )
     return 0
 
 
@@ -242,14 +353,18 @@ def cmd_sound_extract_pcm(args: SimpleNamespace) -> int:
         if not record.is_pcm:
             skipped_encoding += 1
             continue
-        out_path = os.path.join(outdir, f"{index:05d}_{record.description or record.sound_id}.wav")
+        out_path = os.path.join(
+            outdir, f"{index:05d}_{record.description or record.sound_id}.wav"
+        )
         with open(out_path, "wb") as f:
             f.write(record.to_wav_bytes())
         extracted += 1
 
     print(f"Extracted {extracted} PCM entries -> {outdir}/")
     if skipped_encoding:
-        print(f"  ({skipped_encoding} entries skipped: not PCM-encoded, would need codec decoding first)")
+        print(
+            f"  ({skipped_encoding} entries skipped: not PCM-encoded, would need codec decoding first)"
+        )
     return 0
 
 
@@ -286,12 +401,16 @@ def cmd_sound_extract(args: SimpleNamespace) -> int:
             skipped[reason] = skipped.get(reason, 0) + 1
             continue
 
-        out_path = os.path.join(outdir, f"{index:05d}_{record.description or record.sound_id}.wav")
+        out_path = os.path.join(
+            outdir, f"{index:05d}_{record.description or record.sound_id}.wav"
+        )
         with open(out_path, "wb") as f:
             f.write(wav_bytes)
         extracted += 1
 
-    print(f"Extracted {extracted}/{len(archive.used_entry_indices())} entries -> {outdir}/")
+    print(
+        f"Extracted {extracted}/{len(archive.used_entry_indices())} entries -> {outdir}/"
+    )
     for reason, count in sorted(skipped.items(), key=lambda kv: -kv[1]):
         print(f"  ({count} skipped: {reason})")
     return 0
@@ -301,10 +420,13 @@ def cmd_sound_extract(args: SimpleNamespace) -> int:
 # CLI COMMANDS — MODELS (sappear.flx)
 # ============================================================================
 
+
 def _load_model(sappear_file: str, model_id: int) -> U9Model:
     archive = U9FlxArchive.from_file(sappear_file)
     if model_id < 0 or model_id >= archive.num_entries:
-        raise U9ModelError(f"model_id {model_id} out of range (0..{archive.num_entries - 1})")
+        raise U9ModelError(
+            f"model_id {model_id} out of range (0..{archive.num_entries - 1})"
+        )
     blob = archive.read_entry(model_id)
     if not blob:
         raise U9ModelError(f"model_id {model_id} is an empty/unused archive slot")
@@ -323,7 +445,10 @@ def _load_naming(types_path: Optional[str], typenames_path: Optional[str]):
     try:
         return U9TypesDat.from_file(types_path), U9TypeNames.from_file(typenames_path)
     except (U9TypesDatError, U9FlxArchiveError, OSError) as e:
-        print(f"WARNING: could not load type names ({e}); continuing without them", file=sys.stderr)
+        print(
+            f"WARNING: could not load type names ({e}); continuing without them",
+            file=sys.stderr,
+        )
         return None
 
 
@@ -348,12 +473,17 @@ def cmd_model_info(args: SimpleNamespace) -> int:
         else:
             print(f"model {model.model_id}: no named type claims this model")
 
-    print(f"model {model.model_id}: {len(model.limbs)} limb(s)")
+    print(
+        f"model {model.model_id}: {len(model.limbs)} limb(s), {model.record_format} record"
+    )
     print(f"  bounds: {model.min_bounds} .. {model.max_bounds}")
     print(f"  sphere: center={model.sphere_center} radius={model.sphere_radius:.2f}")
     print(f"  lod_thresholds: {model.lod_thresholds}")
     print()
-    print(f"{'Limb':>6}  {'Parent':>6}  {'Root':>5}  {'Position':<30}  LOD triangle/vertex/material counts (texture IDs)")
+    print(
+        f"{'Limb':>6}  {'Parent':>6}  {'Root':>5}  {'Position':<30}  "
+        "LOD render t/v/m [+ mount mt/mv] (texture IDs)"
+    )
     print("-" * 100)
     for limb in model.limbs:
         lod_summaries = []
@@ -361,9 +491,17 @@ def cmd_model_info(args: SimpleNamespace) -> int:
             if lod is None:
                 lod_summaries.append("-")
                 continue
-            tex_ids = sorted({m.texture_id for m in lod.materials if not m.is_invisible})
+            tex_ids = sorted(
+                {m.texture_id for m in lod.materials if not m.is_invisible}
+            )
+            mounts = (
+                f" + {len(lod.mount_triangles)}mt/{len(lod.mount_vertices)}mv"
+                if lod.mount_triangles or lod.mount_vertices
+                else ""
+            )
             lod_summaries.append(
-                f"{len(lod.triangles)}t/{len(lod.vertices)}v/{len(lod.materials)}m {tex_ids}"
+                f"{len(lod.triangles)}t/{len(lod.vertices)}v/{len(lod.materials)}m"
+                f"{mounts} {tex_ids}"
             )
         pos = tuple(round(v, 2) for v in limb.position)
         print(
@@ -376,7 +514,9 @@ def cmd_model_info(args: SimpleNamespace) -> int:
 PALETTE_FILENAME = "ankh.pal"
 
 
-def _find_palette(explicit: Optional[str], beside: Optional[str]) -> tuple[Optional[str], bool]:
+def _find_palette(
+    explicit: Optional[str], beside: Optional[str]
+) -> tuple[Optional[str], bool]:
     """Resolve which palette file to use.
 
     Returns ``(path, was_auto_discovered)``. An explicit ``-p`` always wins.
@@ -400,13 +540,17 @@ def _find_palette(explicit: Optional[str], beside: Optional[str]) -> tuple[Optio
     return None, False
 
 
-def _load_palette(explicit: Optional[str], beside: Optional[str], *, quiet: bool = False):
+def _load_palette(
+    explicit: Optional[str], beside: Optional[str], *, quiet: bool = False
+):
     """Load the palette for a decode, reporting where it came from."""
     path, auto = _find_palette(explicit, beside)
     if path is None:
         if not quiet:
-            print(f"  NOTE: no {PALETTE_FILENAME} found next to the archive; 8-bit frames "
-                  f"will decode as scrambled greyscale. Pass -p to supply one.")
+            print(
+                f"  NOTE: no {PALETTE_FILENAME} found next to the archive; 8-bit frames "
+                f"will decode as scrambled greyscale. Pass -p to supply one."
+            )
         return None
     try:
         palette = U9Palette.from_file(path)
@@ -446,15 +590,19 @@ def _load_selectors(textures_path: Optional[str], *, quiet: bool = False) -> dic
     match = next((n for n in entries if n.lower() == partner.lower()), None)
     if match is None:
         if not quiet:
-            print(f"  NOTE: no {partner} beside the archive; ALPHA_INTENSITY_44 frames "
-                  f"will decode as plain masks.")
+            print(
+                f"  NOTE: no {partner} beside the archive; ALPHA_INTENSITY_44 frames "
+                f"will decode as plain masks."
+            )
         return {}
     try:
         info = U9SdInfo.from_file(os.path.join(directory, match))
     except (U9SdInfoError, OSError):
         return {}
     if not quiet:
-        print(f"  Format table    : {os.path.join(directory, match)} (found automatically)")
+        print(
+            f"  Format table    : {os.path.join(directory, match)} (found automatically)"
+        )
     return {r.index: r.format_selector for r in info.records()}
 
 
@@ -468,8 +616,9 @@ def _make_texture_resolver(textures_path: Optional[str], palette_path: Optional[
     def resolver(texture_id: int, frame: int):
         try:
             blob = texture_archive.read_entry(texture_id)
-            return decode_frame(blob, frame, palette=palette,
-                                selector=selectors.get(texture_id))
+            return decode_frame(
+                blob, frame, palette=palette, selector=selectors.get(texture_id)
+            )
         except (U9FlxArchiveError, U9TextureError):
             return None
 
@@ -519,7 +668,9 @@ def cmd_model_export(args: SimpleNamespace) -> int:
     wrote = []
     try:
         if args.format in ("obj", "both"):
-            export_obj(model, base + ".obj", lod_level=args.lod, texture_resolver=resolver)
+            export_obj(
+                model, base + ".obj", lod_level=args.lod, texture_resolver=resolver
+            )
             wrote.append(base + ".obj")
         if args.format in ("stl", "both"):
             export_stl(model, base + ".stl", lod_level=args.lod)
@@ -551,7 +702,15 @@ def _generate_preview(outdir: str) -> None:
         print(f"  (skipped preview: {e})")
 
 
-def _export_all_one(model_id: int, blob: bytes, outdir: str, resolver, naming, args: SimpleNamespace, stats: Counter) -> None:
+def _export_all_one(
+    model_id: int,
+    blob: bytes,
+    outdir: str,
+    resolver,
+    naming,
+    args: SimpleNamespace,
+    stats: Counter,
+) -> None:
     """One model's worth of ``model-export-all`` work: parse, export, preview. Updates ``stats`` in place."""
     try:
         model = U9Model.parse(blob, model_id=model_id)
@@ -569,7 +728,9 @@ def _export_all_one(model_id: int, blob: bytes, outdir: str, resolver, naming, a
 
     try:
         if args.format in ("obj", "both"):
-            export_obj(model, base + ".obj", lod_level=args.lod, texture_resolver=resolver)
+            export_obj(
+                model, base + ".obj", lod_level=args.lod, texture_resolver=resolver
+            )
         if args.format in ("stl", "both"):
             export_stl(model, base + ".stl", lod_level=args.lod)
         stats["exported"] += 1
@@ -578,7 +739,11 @@ def _export_all_one(model_id: int, blob: bytes, outdir: str, resolver, naming, a
         os.rmdir(model_dir)  # nothing was written into it
         return
 
-    if not args.preview or args.format not in ("obj", "both") or stats["preview_unavailable"]:
+    if (
+        not args.preview
+        or args.format not in ("obj", "both")
+        or stats["preview_unavailable"]
+    ):
         return
     from titan.u9.preview import PreviewError, PreviewUnavailableError, render_preview
 
@@ -596,8 +761,12 @@ def cmd_model_export_all(args: SimpleNamespace) -> int:
     """Export every used model in a sappear.flx archive, same options as model-export, one subfolder each."""
     error = _validate_model_export_args(
         SimpleNamespace(
-            format=args.format, file=args.file, textures=args.textures, palette=args.palette,
-            types=args.types, typenames=args.typenames,
+            format=args.format,
+            file=args.file,
+            textures=args.textures,
+            palette=args.palette,
+            types=args.types,
+            typenames=args.typenames,
         )
     )
     if error:
@@ -621,11 +790,19 @@ def cmd_model_export_all(args: SimpleNamespace) -> int:
     for i, model_id in enumerate(used):
         if i % 200 == 0:
             print(f"  ... {i}/{len(used)}", flush=True)
-        _export_all_one(model_id, archive.read_entry(model_id), outdir, resolver, naming, args, stats)
+        _export_all_one(
+            model_id,
+            archive.read_entry(model_id),
+            outdir,
+            resolver,
+            naming,
+            args,
+            stats,
+        )
 
     print()
     print(f"total used models: {len(used)}")
-    print(f"parse failures (corrupt entries): {stats['parse_fail']}")
+    print(f"parse failures: {stats['parse_fail']}")
     print(f"no visible geometry: {stats['no_geometry']}")
     print(f"exported: {stats['exported']} -> {outdir}/")
     print(f"  of which named: {stats['named']}")
@@ -639,6 +816,7 @@ def cmd_model_export_all(args: SimpleNamespace) -> int:
 # CLI COMMANDS — 2D UI ICONS (bitmap16.flx/bitmapC.flx/bitmapsh.flx entries
 # not referenced by any sappear.flx model -- see titan.u9.icon)
 # ============================================================================
+
 
 def cmd_icon_list(args: SimpleNamespace) -> int:
     """List candidate 2D UI icon entries in a texture archive -- not referenced by any 3D model material."""
@@ -676,6 +854,123 @@ def cmd_icon_list(args: SimpleNamespace) -> int:
     return 0
 
 
+def cmd_texture_info(args: SimpleNamespace) -> int:
+    """Inspect one texture-set entry without decoding its pixels."""
+    if not os.path.isfile(args.textures):
+        print(f"ERROR: File not found: {args.textures}", file=sys.stderr)
+        return 1
+    try:
+        archive = U9FlxArchive.from_file(args.textures)
+    except U9FlxArchiveError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+    if not (0 <= args.entry_id < archive.num_entries):
+        print(
+            f"ERROR: entry_id {args.entry_id} out of range (0..{archive.num_entries - 1})",
+            file=sys.stderr,
+        )
+        return 1
+    blob = archive.read_entry(args.entry_id)
+    if not blob:
+        print(
+            f"ERROR: entry {args.entry_id} is an empty/unused archive slot",
+            file=sys.stderr,
+        )
+        return 1
+
+    try:
+        texture_set = parse_texture_set(blob)
+    except U9TextureError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+
+    compression = {0: "raw", 1: "BC1/DXT1"}.get(
+        texture_set.compression, f"unknown ({texture_set.compression})"
+    )
+    print(f"{args.textures} -- entry {args.entry_id}")
+    print(f"  Max dimensions : {texture_set.frame_width}x{texture_set.frame_height}")
+    print(f"  Frames         : {texture_set.frame_count}")
+    print(f"  Mip levels     : {texture_set.mip_count} additional")
+    print(f"  Compression    : {compression}")
+    print(f"  Header 0x0C    : {texture_set.unknown:#010x}")
+    print(
+        f"{'Frame':>5}  {'Size':<11}  {'Encoding':<10}  {'Offset':>8}  {'Length':>8}  Flags"
+    )
+    print("-" * 69)
+    selectors = _load_selectors(args.textures)
+    for frame in texture_set.frames:
+        try:
+            encoding = frame_encoding(
+                blob, frame.index, selector=selectors.get(args.entry_id)
+            )
+        except U9TextureWriteError:
+            encoding = "?"
+        dimensions = mip_dimensions(frame.width, frame.height, texture_set.mip_count)
+        sizes = "/".join(f"{width}x{height}" for width, height in dimensions)
+        print(
+            f"{frame.index:>5}  {sizes:<11}  {encoding:<10}  {frame.offset:>8}  "
+            f"{frame.length:>8}  {frame.flags:#06x}/{frame.unknown_word:#06x}"
+        )
+    return 0
+
+
+def cmd_texture_export(args: SimpleNamespace) -> int:
+    """Export any bitmap or terrain-panel texture surface to PNG."""
+    if not os.path.isfile(args.textures):
+        print(f"ERROR: File not found: {args.textures}", file=sys.stderr)
+        return 1
+    if args.palette and not os.path.isfile(args.palette):
+        print(f"ERROR: Palette file not found: {args.palette}", file=sys.stderr)
+        return 1
+    try:
+        archive = U9FlxArchive.from_file(args.textures)
+    except U9FlxArchiveError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+    if not (0 <= args.entry_id < archive.num_entries):
+        print(
+            f"ERROR: entry_id {args.entry_id} out of range (0..{archive.num_entries - 1})",
+            file=sys.stderr,
+        )
+        return 1
+    blob = archive.read_entry(args.entry_id)
+    if not blob:
+        print(
+            f"ERROR: entry {args.entry_id} is an empty/unused archive slot",
+            file=sys.stderr,
+        )
+        return 1
+
+    palette = _load_palette(args.palette, args.textures)
+    selectors = _load_selectors(args.textures)
+    try:
+        surface = decode_frame(
+            blob,
+            args.frame,
+            palette=palette,
+            selector=selectors.get(args.entry_id),
+            mip_level=args.mip_level,
+        )
+    except U9TextureError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+
+    outdir = args.output or "."
+    os.makedirs(outdir, exist_ok=True)
+    out_path = os.path.join(
+        outdir,
+        f"texture_{args.entry_id:05d}_frame_{args.frame:03d}_mip_{args.mip_level:02d}.png",
+    )
+    Image.frombytes("RGBA", (surface.width, surface.height), surface.pixels_rgba).save(
+        out_path
+    )
+    print(
+        f"Exported entry {args.entry_id} frame {args.frame} mip {args.mip_level} "
+        f"({surface.width}x{surface.height}) -> {out_path}"
+    )
+    return 0
+
+
 def cmd_icon_export(args: SimpleNamespace) -> int:
     """Export one texture archive entry to PNG, regardless of whether any 3D model references it."""
     if not os.path.isfile(args.textures):
@@ -692,19 +987,26 @@ def cmd_icon_export(args: SimpleNamespace) -> int:
         return 1
 
     if args.entry_id < 0 or args.entry_id >= archive.num_entries:
-        print(f"ERROR: entry_id {args.entry_id} out of range (0..{archive.num_entries - 1})", file=sys.stderr)
+        print(
+            f"ERROR: entry_id {args.entry_id} out of range (0..{archive.num_entries - 1})",
+            file=sys.stderr,
+        )
         return 1
 
     blob = archive.read_entry(args.entry_id)
     if not blob:
-        print(f"ERROR: entry {args.entry_id} is an empty/unused archive slot", file=sys.stderr)
+        print(
+            f"ERROR: entry {args.entry_id} is an empty/unused archive slot",
+            file=sys.stderr,
+        )
         return 1
 
     palette = _load_palette(args.palette, args.textures)
     selectors = _load_selectors(args.textures)
     try:
-        frame = decode_frame(blob, args.frame, palette=palette,
-                             selector=selectors.get(args.entry_id))
+        frame = decode_frame(
+            blob, args.frame, palette=palette, selector=selectors.get(args.entry_id)
+        )
     except U9TextureError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
@@ -714,10 +1016,16 @@ def cmd_icon_export(args: SimpleNamespace) -> int:
     # The frame index belongs in the name: an entry can hold many frames, and
     # naming them all after the entry alone made a second export overwrite the
     # first instead of sitting beside it.
-    out_path = os.path.join(outdir, f"icon_{args.entry_id:05d}_frame_{args.frame:03d}.png")
-    Image.frombytes("RGBA", (frame.width, frame.height), frame.pixels_rgba).save(out_path)
-    print(f"Exported entry {args.entry_id} frame {args.frame} "
-          f"({frame.width}x{frame.height}) -> {out_path}")
+    out_path = os.path.join(
+        outdir, f"icon_{args.entry_id:05d}_frame_{args.frame:03d}.png"
+    )
+    Image.frombytes("RGBA", (frame.width, frame.height), frame.pixels_rgba).save(
+        out_path
+    )
+    print(
+        f"Exported entry {args.entry_id} frame {args.frame} "
+        f"({frame.width}x{frame.height}) -> {out_path}"
+    )
     return 0
 
 
@@ -763,13 +1071,14 @@ def cmd_icon_export_all(args: SimpleNamespace) -> int:
 
     print(f"Exported {exported}/{len(icon_ids)} candidate icons -> {outdir}/")
     if failed:
-        print(f"  ({failed} skipped: decode failed, likely unsupported bitmapC.flx compression)")
+        print(f"  ({failed} skipped: malformed or undecodable texture entry)")
     return 0
 
 
 # ============================================================================
 # CLI COMMANDS — RUNTIME NONFIXED REGIONS (runtime/nonfixed.%d)
 # ============================================================================
+
 
 def _load_region(filepath: str) -> Optional[U9Nonfixed]:
     """Open a nonfixed region file, reporting the reason on failure."""
@@ -794,33 +1103,42 @@ def _load_typenames(path: Optional[str]) -> Optional[U9TypeNames]:
 
 
 def cmd_nonfixed_info(args: SimpleNamespace) -> int:
-    """Summarize one runtime/nonfixed.%d region: grid, pages, entities, triggers."""
+    """Summarize a runtime region's pages, entities, and shared allocator."""
     region = _load_region(args.file)
     if region is None:
         return 1
 
     chunks = region.chunks()
     pages = sum(len(c.pages) for c in chunks)
-    entities = sum(len(c.entities) for c in chunks)
-    declared = sum(c.declared_entity_count for c in chunks)
-    triggers = sum(c.trigger_count for c in chunks)
-    extras = sum(1 for c in chunks for e in c.entities if e.has_extra_data)
-    incomplete = [c for c in chunks if not c.is_complete]
+    indexed = sum(len(c.entities) for c in chunks)
+    allocated = sum(len(c.allocated_entities) for c in chunks)
+    unlinked = sum(len(c.unlinked_entities) for c in chunks)
+    extras = sum(len(c.extra_data_records) for c in chunks)
+    referenced_extras = len(
+        {
+            e.extra_data_offset
+            for c in chunks
+            for e in c.allocated_entities
+            if e.extra_data_offset
+        }
+    )
+    incomplete = [c for c in chunks if not c.allocation_is_complete]
 
     print(f"{args.file} -- {region.width}x{region.height} chunk region")
     print(f"  Header          : {region.header_size} bytes")
-    print(f"  Payload         : {region.payload_size} bytes (watermark {region.declared_payload_size})")
+    print(
+        f"  Payload         : {region.payload_size} bytes (watermark {region.declared_payload_size})"
+    )
     print(f"  Populated chunks: {len(chunks)} of {region.num_chunks}")
     print(f"  Pages           : {pages}")
-    print(f"  Entities        : {entities} walked, {declared} declared")
-    print(f"  Triggers        : {triggers} (record layout not decoded)")
-    print(f"  Extra-data      : {extras} entities carry a block")
+    print(f"  Entities        : {indexed} spatially indexed, {allocated} allocated")
+    print(f"  Unlinked records: {unlinked}")
+    print(f"  Extra-data      : {extras} allocated, {referenced_extras} referenced")
+    print(f"  Allocator       : {'complete' if not incomplete else 'incomplete'}")
     if incomplete:
-        missing = declared - entities
         print(
-            f"  NOTE: {len(incomplete)} chunk(s) undershot by {missing} entit"
-            f"{'y' if missing == 1 else 'ies'}. Enumeration can miss entities; "
-            "it never invents them."
+            f"  NOTE: {len(incomplete)} chunk(s) contain truncated or inconsistent "
+            "allocator data."
         )
     return 0
 
@@ -833,15 +1151,19 @@ def cmd_nonfixed_chunks(args: SimpleNamespace) -> int:
 
     chunks = region.chunks()
     print(f"{args.file} -- {len(chunks)} populated chunk(s) of {region.num_chunks}")
-    print(f"{'Idx':>5}  {'Grid':<9}  {'Base (x,y)':<15}  {'Pages':>5}  {'Ents':>6}  {'Decl':>6}  {'Trig':>5}  Full")
-    print("-" * 74)
+    print(
+        f"{'Idx':>5}  {'Grid':<9}  {'Base (x,y)':<15}  {'Pages':>5}  "
+        f"{'Index':>6}  {'Alloc':>6}  {'Loose':>5}  {'Extra':>5}  Full"
+    )
+    print("-" * 88)
     for c in chunks:
         grid = f"{c.chunk_x},{c.chunk_y}"
         base = f"{c.base_x},{c.base_y}"
-        flag = "yes" if c.is_complete else f"-{c.declared_entity_count - len(c.entities)}"
+        flag = "yes" if c.allocation_is_complete else "no"
         print(
             f"{c.index:>5}  {grid:<9}  {base:<15}  {len(c.pages):>5}  "
-            f"{len(c.entities):>6}  {c.declared_entity_count:>6}  {c.trigger_count:>5}  {flag}"
+            f"{len(c.entities):>6}  {len(c.allocated_entities):>6}  "
+            f"{len(c.unlinked_entities):>5}  {len(c.extra_data_records):>5}  {flag}"
         )
     return 0
 
@@ -871,21 +1193,32 @@ def cmd_nonfixed_entities(args: SimpleNamespace) -> int:
         chunks = region.chunks()
 
     names = _load_typenames(args.typenames)
-    rows = [(c, e) for c in chunks for e in c.entities]
+    include_unlinked = getattr(args, "include_unlinked", False)
+    rows = []
+    for chunk in chunks:
+        unlinked_offsets = {entity.offset for entity in chunk.unlinked_entities}
+        selected = chunk.allocated_entities if include_unlinked else chunk.entities
+        rows.extend(
+            (chunk, entity, "unlinked" if entity.offset in unlinked_offsets else "indexed")
+            for entity in selected
+        )
     shown = rows[: args.limit] if args.limit else rows
 
     print(f"{args.file} -- {len(rows)} entit{'y' if len(rows) == 1 else 'ies'}")
-    header = f"{'Offset':>8}  {'Chunk':<7}  {'World (x,y,z)':<20}  {'Type':>5}  {'Mesh':>5}  {'Trig':>5}  {'Extra':>7}"
+    header = (
+        f"{'Offset':>8}  {'Chunk':<7}  {'State':<8}  {'World (x,y,z)':<20}  "
+        f"{'Type':>5}  {'Mesh':>5}  {'Trig':>5}  {'Extra':>7}"
+    )
     if names:
         header += "  Name"
     print(header)
     print("-" * (len(header) + 8))
-    for c, e in shown:
+    for c, e, state in shown:
         grid = f"{c.chunk_x},{c.chunk_y}"
         pos = f"{e.world_x},{e.world_y},{e.z}"
         extra = f"{e.extra_data_offset:#07x}" if e.has_extra_data else "-"
         line = (
-            f"{e.offset:>#8x}  {grid:<7}  {pos:<20}  {e.type_index:>5}  "
+            f"{e.offset:>#8x}  {grid:<7}  {state:<8}  {pos:<20}  {e.type_index:>5}  "
             f"{e.mesh_index:>5}  {e.trigger_id:>5}  {extra:>7}"
         )
         if names:
@@ -928,9 +1261,7 @@ def cmd_nonfixed_diff(args: SimpleNamespace) -> int:
 
     def index(region):
         return {
-            (c.index, e.offset): (c, e)
-            for c in region.chunks()
-            for e in c.entities
+            (c.index, e.offset): (c, e) for c in region.chunks() for e in c.entities
         }
 
     a, b = index(left), index(right)
@@ -982,6 +1313,7 @@ def cmd_nonfixed_diff(args: SimpleNamespace) -> int:
 # CLI COMMANDS — HIGHWAY NAVIGATION GRAPH (static/highway.dat)
 # ============================================================================
 
+
 def _load_highway(filepath: str) -> Optional[U9Highway]:
     """Open static/highway.dat, reporting the reason on failure."""
     if not os.path.isfile(filepath):
@@ -1008,21 +1340,35 @@ def cmd_highway_info(args: SimpleNamespace) -> int:
     ids = [p.trigger_id for p in highway.points]
 
     print(f"{args.file} -- U9 highway navigation graph")
-    print(f"  Points          : {len(highway.points)} of {highway.declared_point_count} declared")
-    print(f"  Routes          : {len(highway.routes)} of {highway.declared_route_count} declared")
-    print(f"  Route block     : {highway.route_bytes} bytes, {highway.route_bytes_consumed} consumed")
+    print(
+        f"  Points          : {len(highway.points)} of {highway.declared_point_count} declared"
+    )
+    print(
+        f"  Routes          : {len(highway.routes)} of {highway.declared_route_count} declared"
+    )
+    print(
+        f"  Route block     : {highway.route_bytes} bytes, {highway.route_bytes_consumed} consumed"
+    )
     if ids:
         print(f"  Trigger IDs     : {min(ids)}..{max(ids)}")
         print(f"  World extent    : x {min(xs)}..{max(xs)}, y {min(ys)}..{max(ys)}")
-    print(f"  Connectivity    : {len(adjacency)} point(s) appear in a route, {edges} edge(s)")
+    print(
+        f"  Connectivity    : {len(adjacency)} point(s) appear in a route, {edges} edge(s)"
+    )
     if highway.routes:
         longest = max(highway.routes, key=lambda r: r.path_length)
-        print(f"  Longest route   : {longest.start_trigger_id} -> {longest.last_trigger_id}, "
-              f"{longest.path_length} nodes, distance {longest.route_distance}")
+        print(
+            f"  Longest route   : {longest.start_trigger_id} -> {longest.last_trigger_id}, "
+            f"{longest.path_length} nodes, distance {longest.route_distance}"
+        )
     if unknown:
-        print(f"  WARNING: {len(unknown)} route node(s) have no declared point: {unknown[:10]}")
+        print(
+            f"  WARNING: {len(unknown)} route node(s) have no declared point: {unknown[:10]}"
+        )
     if not highway.is_complete:
-        print("  WARNING: file did not parse completely -- truncated or not a highway.dat")
+        print(
+            "  WARNING: file did not parse completely -- truncated or not a highway.dat"
+        )
     print("  Points are keyed by trigger ID; the world markers are entities of")
     print("  type 1134 -- see 'titan u9 nonfixed-entities'.")
     return 0
@@ -1063,7 +1409,9 @@ def cmd_highway_routes(args: SimpleNamespace) -> int:
     if highway is None:
         return 1
 
-    routes = highway.routes_through(args.id) if args.id is not None else list(highway.routes)
+    routes = (
+        highway.routes_through(args.id) if args.id is not None else list(highway.routes)
+    )
     if args.id is not None and not routes:
         print(f"No route visits trigger ID {args.id}.")
         return 0
@@ -1221,6 +1569,7 @@ def cmd_animation_show(args: SimpleNamespace) -> int:
 # CLI COMMANDS — TRIGGER SCRIPTS (static/triggers.flx)
 # ============================================================================
 
+
 def _load_triggers(filepath: str) -> Optional[U9Triggers]:
     """Open static/triggers.flx, reporting the reason on failure."""
     if not os.path.isfile(filepath):
@@ -1250,7 +1599,9 @@ def cmd_trigger_list(args: SimpleNamespace) -> int:
     shown = entries[: args.limit] if args.limit else entries
 
     empty = sum(1 for t in triggers.triggers() if t.is_empty)
-    print(f"{args.file} -- {len(entries)} trigger(s) of {triggers.num_entries} slots ({empty} empty)")
+    print(
+        f"{args.file} -- {len(entries)} trigger(s) of {triggers.num_entries} slots ({empty} empty)"
+    )
     print(f"{'TriggerID':>10}  {'Records':>7}  {'Slack':>5}  {'Term':>5}  Opcodes")
     print("-" * 66)
     for t in shown:
@@ -1258,7 +1609,9 @@ def cmd_trigger_list(args: SimpleNamespace) -> int:
         ops = " ".join(f"{o:#04x}" for o in t.opcodes[:6])
         if len(t.opcodes) > 6:
             ops += " ..."
-        print(f"{t.trigger_id:>10}  {len(t.records):>7}  {t.slack_records:>5}  {term:>5}  {ops}")
+        print(
+            f"{t.trigger_id:>10}  {len(t.records):>7}  {t.slack_records:>5}  {term:>5}  {ops}"
+        )
     if args.limit and len(entries) > args.limit:
         print(f"... ({len(entries) - args.limit} more; raise --limit to see more)")
     return 0
@@ -1284,14 +1637,20 @@ def cmd_trigger_show(args: SimpleNamespace) -> int:
     if trigger.is_empty:
         print("  (empty -- the terminator is the first record)")
     if not trigger.terminated:
-        print("  WARNING: no 0xFF terminator; the record list runs to the end of the entry")
+        print(
+            "  WARNING: no 0xFF terminator; the record list runs to the end of the entry"
+        )
     if trigger.slack_records:
-        print(f"  {trigger.slack_records} stale record(s) after the terminator, not decoded")
+        print(
+            f"  {trigger.slack_records} stale record(s) after the terminator (preserved)"
+        )
     if trigger.records:
         print(f"  {'#':>3}  {'Opcode':>6}  {'Arg0':>5}  {'Arg1':>6}  {'Arg2':>6}")
         print("  " + "-" * 38)
         for index, r in enumerate(trigger.records):
-            print(f"  {index:>3}  {r.opcode:>#6x}  {r.arg0:>5}  {r.arg1:>6}  {r.arg2:>6}")
+            print(
+                f"  {index:>3}  {r.opcode:>#6x}  {r.arg0:>5}  {r.arg1:>6}  {r.arg2:>6}"
+            )
     print("  Opcode 0x31 runs an activity record; the other 89 are not decoded.")
     return 0
 
@@ -1327,6 +1686,7 @@ def cmd_trigger_opcodes(args: SimpleNamespace) -> int:
 # CLI COMMANDS — NPC ACTIVITY SEQUENCES (static/activity.flx)
 # ============================================================================
 
+
 def _load_activities(filepath: str) -> Optional[U9Activities]:
     """Open static/activity.flx, reporting the reason on failure."""
     if not os.path.isfile(filepath):
@@ -1353,7 +1713,9 @@ def cmd_activity_list(args: SimpleNamespace) -> int:
         return 1
 
     shown = entries[: args.limit] if args.limit else entries
-    print(f"{args.file} -- {len(entries)} activity set(s) of {activities.num_entries} slots")
+    print(
+        f"{args.file} -- {len(entries)} activity set(s) of {activities.num_entries} slots"
+    )
     if incomplete:
         print(f"  entries that did not parse cleanly: {incomplete}")
     print(f"{'ID':>5}  {'Records':>7}  {'Steps':>5}  Names")
@@ -1386,19 +1748,29 @@ def cmd_activity_show(args: SimpleNamespace) -> int:
         return 0
 
     print(f"{args.file} -- activity {activity.activity_id}")
-    print(f"  {len(activity.records)} of {activity.declared_record_count} declared record(s), "
-          f"{activity.payload_length}-byte payload")
+    print(
+        f"  {len(activity.records)} of {activity.declared_record_count} declared record(s), "
+        f"{activity.payload_length}-byte payload"
+    )
     if activity.trailing_bytes:
-        print(f"  WARNING: {activity.trailing_bytes} byte(s) left over after the last record")
+        print(
+            f"  WARNING: {activity.trailing_bytes} byte(s) left over after the last record"
+        )
     for record in activity.records:
         print(f"  [{record.ordinal}] {record.name}")
         if not record.terminated:
-            print("       WARNING: no 0xFF step; the record runs to the end of the entry")
+            print(
+                "       WARNING: no 0xFF step; the record runs to the end of the entry"
+            )
         for index, step in enumerate(record.steps):
-            print(f"       {index:>2}  opcode {step.opcode:#04x}  {step.operands.hex(' ')}")
+            print(
+                f"       {index:>2}  opcode {step.opcode:#04x}  {step.operands.hex(' ')}"
+            )
         if not record.steps:
             print("       (no steps)")
-    print("  Opcodes 0x01/0x02 move between highway points; the other ten are not decoded.")
+    print(
+        "  Opcodes 0x01/0x02 move between highway points; the other ten are not decoded."
+    )
     return 0
 
 
@@ -1416,8 +1788,10 @@ def cmd_activity_opcodes(args: SimpleNamespace) -> int:
         return 1
 
     total = sum(opcodes.values())
-    print(f"{args.file} -- {total} step(s), {len(opcodes)} distinct opcode(s), "
-          f"{len(names)} distinct name(s)")
+    print(
+        f"{args.file} -- {total} step(s), {len(opcodes)} distinct opcode(s), "
+        f"{len(names)} distinct name(s)"
+    )
     print(f"{'Opcode':>7}  {'Count':>7}  {'Share':>7}")
     print("-" * 26)
     for opcode, count in opcodes.most_common():
@@ -1430,9 +1804,37 @@ def cmd_activity_opcodes(args: SimpleNamespace) -> int:
     return 0
 
 
+def cmd_script_research_export(args: SimpleNamespace) -> int:
+    """Export trigger/activity evidence tables for Ghidra analysis."""
+    triggers = _load_triggers(args.triggers)
+    activities = _load_activities(args.activities)
+    if triggers is None or activities is None:
+        return 1
+
+    try:
+        paths = export_script_research_bundle(
+            triggers,
+            activities,
+            args.output,
+            source_files={
+                "triggers": args.triggers,
+                "activities": args.activities,
+            },
+        )
+    except (OSError, U9TriggersError, U9ActivityError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+
+    print(f"Wrote {len(paths)} Ghidra research file(s) to {args.output}")
+    for path in paths:
+        print(f"  {path}")
+    return 0
+
+
 # ============================================================================
 # CLI COMMANDS — NPC TABLE (runtime/NPC.FLX, and a savegame's live copy)
 # ============================================================================
+
 
 def _load_npcs(filepath: str, from_save: bool) -> Optional[U9Npcs]:
     """Open runtime/NPC.FLX, or the live array inside a savegame file."""
@@ -1464,14 +1866,18 @@ def cmd_npc_list(args: SimpleNamespace) -> int:
     shown = rows[: args.limit] if args.limit else rows
 
     print(f"{args.file} -- {len(rows)} NPC(s) of {len(npcs)} record(s)")
-    print(f"{'Idx':>5}  {'Name':<24} {'G':>1}  {'Class':>5}  {'Region':>6}  "
-          f"{'HP':>5}  {'Mana':>5}  Position")
+    print(
+        f"{'Idx':>5}  {'Name':<24} {'G':>1}  {'Class':>5}  {'Region':>6}  "
+        f"{'HP':>5}  {'Mana':>5}  Position"
+    )
     print("-" * 90)
     for n in shown:
         cls = "-" if not n.has_class else str(n.class_id)
-        print(f"{n.index:>5}  {n.name:<24} {'F' if n.is_female else 'M'}  {cls:>5}  "
-              f"{n.region:>6}  {n.health_max:>5}  {n.mana_max:>5}  "
-              f"{n.x},{n.y},{n.z}")
+        print(
+            f"{n.index:>5}  {n.name:<24} {'F' if n.is_female else 'M'}  {cls:>5}  "
+            f"{n.region:>6}  {n.health_max:>5}  {n.mana_max:>5}  "
+            f"{n.x},{n.y},{n.z}"
+        )
     if args.limit and len(rows) > args.limit:
         print(f"... ({len(rows) - args.limit} more; raise --limit to see more)")
     return 0
@@ -1500,7 +1906,9 @@ def cmd_npc_show(args: SimpleNamespace) -> int:
     print(f"  Position    : {n.x}, {n.y}, {n.z}")
     print(f"  Scale       : {n.scale[0]}%, {n.scale[1]}%, {n.scale[2]}%")
     if n.has_pool_object:
-        print(f"  Pool handle : {n.pool_handle} (element {n.pool_index} of the region object pool)")
+        print(
+            f"  Pool handle : {n.pool_handle} (element {n.pool_index} of the region object pool)"
+        )
     elif n.is_slot_used:
         print("  Pool handle : 1 -- slot allocated, no pool object yet")
     else:
@@ -1542,44 +1950,84 @@ def cmd_npc_csv(args: SimpleNamespace) -> int:
     os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
 
     header = [
-        "index", "name", "gender", "sex",
-        "health_current", "health_max", "health_max2",
-        "mana_current", "mana_max", "mana_max2",
-        "class_id", "flags", "combat_value",
-        "region", "x", "y", "z",
-        "scale_x", "scale_y", "scale_z",
-        "pool_handle", "pool_index",
+        "index",
+        "name",
+        "gender",
+        "sex",
+        "health_current",
+        "health_max",
+        "health_max2",
+        "mana_current",
+        "mana_max",
+        "mana_max2",
+        "class_id",
+        "flags",
+        "combat_value",
+        "region",
+        "x",
+        "y",
+        "z",
+        "scale_x",
+        "scale_y",
+        "scale_z",
+        "pool_handle",
+        "pool_index",
         # Undecoded but genuinely varying; kept as named columns so they can be
         # correlated without re-slicing the raw bytes.
-        "unk_0x4e", "unk_0x56", "unk_0xb0", "unk_0xc4", "unk_0xc8",
+        "unk_0x4e",
+        "unk_0x56",
+        "unk_0xb0",
+        "unk_0xc4",
+        "unk_0xc8",
         "raw_hex",
     ]
     with open(out_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(header)
         for n in rows:
-            writer.writerow([
-                n.index, n.name, n.gender, "female" if n.is_female else "male",
-                n.health_current, n.health_max, n.health_max2,
-                n.mana_current, n.mana_max, n.mana_max2,
-                n.class_id if n.has_class else "", f"{n.flags:#010x}", n.combat_value,
-                n.region, n.x, n.y, n.z,
-                n.scale[0], n.scale[1], n.scale[2],
-                n.pool_handle, n.pool_index,
-                struct.unpack_from("<H", n.raw, 0x4E)[0],
-                struct.unpack_from("<H", n.raw, 0x56)[0],
-                struct.unpack_from("<I", n.raw, 0xB0)[0],
-                struct.unpack_from("<H", n.raw, 0xC4)[0],
-                n.raw[0xC8],
-                n.raw.hex(),
-            ])
+            writer.writerow(
+                [
+                    n.index,
+                    n.name,
+                    n.gender,
+                    "female" if n.is_female else "male",
+                    n.health_current,
+                    n.health_max,
+                    n.health_max2,
+                    n.mana_current,
+                    n.mana_max,
+                    n.mana_max2,
+                    n.class_id if n.has_class else "",
+                    f"{n.flags:#010x}",
+                    n.combat_value,
+                    n.region,
+                    n.x,
+                    n.y,
+                    n.z,
+                    n.scale[0],
+                    n.scale[1],
+                    n.scale[2],
+                    n.pool_handle,
+                    n.pool_index,
+                    struct.unpack_from("<H", n.raw, 0x4E)[0],
+                    struct.unpack_from("<H", n.raw, 0x56)[0],
+                    struct.unpack_from("<I", n.raw, 0xB0)[0],
+                    struct.unpack_from("<H", n.raw, 0xC4)[0],
+                    n.raw[0xC8],
+                    n.raw.hex(),
+                ]
+            )
 
     print(f"{args.file} -- wrote {len(rows)} NPC row(s) -> {out_path}")
-    print(f"  {len(header)} columns; raw_hex carries the full {len(rows[0].raw) if rows else 0}-byte record")
+    print(
+        f"  {len(header)} columns; raw_hex carries the full {len(rows[0].raw) if rows else 0}-byte record"
+    )
     if not args.all:
         blank = len(npcs) - len(rows)
         if blank:
-            print(f"  {blank} unnamed/blank slot(s) omitted; pass --all to include them")
+            print(
+                f"  {blank} unnamed/blank slot(s) omitted; pass --all to include them"
+            )
     return 0
 
 
@@ -1593,10 +2041,12 @@ def cmd_npc_diff(args: SimpleNamespace) -> int:
     print(f"{args.file}\n{args.save_file}")
     print(f"  {len(left)} authored record(s) vs {len(right)} live record(s)")
     if len(right) > len(left):
-        spawned = [n.name for n in list(right)[len(left):] if n.name]
-        print(f"  {len(right) - len(left)} extra live slot(s), {len(spawned)} named "
-              f"(runtime-spawned): {', '.join(spawned[:8])}"
-              + (", ..." if len(spawned) > 8 else ""))
+        spawned = [n.name for n in list(right)[len(left) :] if n.name]
+        print(
+            f"  {len(right) - len(left)} extra live slot(s), {len(spawned)} named "
+            f"(runtime-spawned): {', '.join(spawned[:8])}"
+            + (", ..." if len(spawned) > 8 else "")
+        )
 
     changed = left.changed_fields(right)
     print(f"  {len(changed)} byte offset(s) differ across the shared records:")
@@ -1604,19 +2054,23 @@ def cmd_npc_diff(args: SimpleNamespace) -> int:
         print(f"      {offset:#06x}  {count} NPC(s)")
 
     moved = [
-        (a, b) for a, b in zip(left, right)
+        (a, b)
+        for a, b in zip(left, right)
         if (a.region, a.x, a.y, a.z) != (b.region, b.x, b.y, b.z)
     ]
     print(f"  {len(moved)} NPC(s) moved:")
     for a, b in moved[: args.limit or len(moved)]:
-        print(f"      {a.name:<16} region {a.region} {a.x},{a.y},{a.z}"
-              f"  ->  region {b.region} {b.x},{b.y},{b.z}")
+        print(
+            f"      {a.name:<16} region {a.region} {a.x},{a.y},{a.z}"
+            f"  ->  region {b.region} {b.x},{b.y},{b.z}"
+        )
     return 0
 
 
 # ============================================================================
 # CLI COMMANDS — TEXTURE METADATA (static/sdInfo*.flx)
 # ============================================================================
+
 
 def _load_sdinfo(filepath: str) -> Optional[U9SdInfo]:
     """Open a static/sdInfo*.flx table, reporting the reason on failure."""
@@ -1655,9 +2109,11 @@ def cmd_sdinfo_list(args: SimpleNamespace) -> int:
             notes.append("frames differ in size")
         if not r.is_power_of_two:
             notes.append("not power of two")
-        print(f"{r.index:>6}  {f'{r.width}x{r.height}':<11}  "
-              f"{f'{r.max_width}x{r.max_height}':<11}  {r.frame_count:>6}  "
-              f"{r.mip_levels:>4}  {', '.join(notes)}")
+        print(
+            f"{r.index:>6}  {f'{r.width}x{r.height}':<11}  "
+            f"{f'{r.max_width}x{r.max_height}':<11}  {r.frame_count:>6}  "
+            f"{r.mip_levels:>4}  {', '.join(notes)}"
+        )
     if args.limit and len(rows) > args.limit:
         print(f"... ({len(rows) - args.limit} more; raise --limit to see more)")
     return 0
@@ -1682,8 +2138,10 @@ def cmd_sdinfo_show(args: SimpleNamespace) -> int:
     print(f"  Max frame   : {r.max_width} x {r.max_height}")
     print(f"  Frames      : {r.frame_count}")
     print(f"  Mip levels  : {r.mip_levels}")
-    print(f"  log2 dims   : {r.log2_width}, {r.log2_height}"
-          f"{'' if r.is_power_of_two else '  (dimensions are not powers of two)'}")
+    print(
+        f"  log2 dims   : {r.log2_width}, {r.log2_height}"
+        f"{'' if r.is_power_of_two else '  (dimensions are not powers of two)'}"
+    )
     print(f"  Flags       : mip {r.flag:#06x}, frame {r.frame_flag:#06x}")
     print("  Raw dwords  : " + " ".join(f"{v:#010x}" for v in r.fields))
     print("  Dwords 0, 3, 4, 7 and 8 are not decoded.")
@@ -1709,18 +2167,28 @@ def cmd_sdinfo_verify(args: SimpleNamespace) -> int:
     print(f"{args.textures}")
     print(f"  Same index set : {'yes' if counts['same_index_set'] else 'NO'}")
     print(f"  Compared       : {total} entries")
-    for key, label in (("max_dims", "max dimensions"),
-                       ("frame_count", "frame count"),
-                       ("mip_levels", "mip levels")):
+    for key, label in (
+        ("max_dims", "max dimensions"),
+        ("frame_count", "frame count"),
+        ("mip_levels", "mip levels"),
+    ):
         n = counts[key]
         flag = "" if n == total else "   <-- MISMATCH"
-        print(f"  {label:<15}: {n}/{total} ({100 * n / total if total else 0:.1f}%){flag}")
-    return 0 if total and all(counts[k] == total for k in ("max_dims", "frame_count", "mip_levels")) else 1
+        print(
+            f"  {label:<15}: {n}/{total} ({100 * n / total if total else 0:.1f}%){flag}"
+        )
+    return (
+        0
+        if total
+        and all(counts[k] == total for k in ("max_dims", "frame_count", "mip_levels"))
+        else 1
+    )
 
 
 # ============================================================================
 # CLI COMMANDS — TEXT ARCHIVES (static/text.flx, static/misctext.flx)
 # ============================================================================
+
 
 def _load_text(filepath: str) -> Optional[U9TextArchive]:
     """Open a UTF-16 text archive, reporting the reason on failure."""
@@ -1750,8 +2218,10 @@ def cmd_text_list(args: SimpleNamespace) -> int:
             print(f"{args.file} -- block {block.name!r}, {len(rows)} line(s)")
         else:
             rows = [e for e in text.entries() if args.markers or not e.is_file_marker]
-            print(f"{args.file} -- {len(rows)} entr{'y' if len(rows) == 1 else 'ies'} "
-                  f"of {len(text)} used")
+            print(
+                f"{args.file} -- {len(rows)} entr{'y' if len(rows) == 1 else 'ies'} "
+                f"of {len(text)} used"
+            )
     except U9TextError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
@@ -1776,8 +2246,10 @@ def cmd_text_blocks(args: SimpleNamespace) -> int:
         return 1
 
     if not blocks:
-        print(f"{args.file} -- no BEGIN FILE markers; this archive is a flat list "
-              f"of {len(text)} strings")
+        print(
+            f"{args.file} -- no BEGIN FILE markers; this archive is a flat list "
+            f"of {len(text)} strings"
+        )
         return 0
 
     blocks.sort(key=lambda b: -len(b) if args.by_size else b.marker_index)
@@ -1840,7 +2312,9 @@ def cmd_text_export(args: SimpleNamespace) -> int:
         writer = csv.writer(f)
         writer.writerow(["index", "block", "is_file_marker", "text"])
         for e in entries:
-            writer.writerow([e.index, owner.get(e.index, ""), int(e.is_file_marker), e.text])
+            writer.writerow(
+                [e.index, owner.get(e.index, ""), int(e.is_file_marker), e.text]
+            )
     print(f"{args.file} -- wrote {len(entries)} row(s) -> {out_path}")
     return 0
 
@@ -1848,6 +2322,7 @@ def cmd_text_export(args: SimpleNamespace) -> int:
 # ============================================================================
 # CLI COMMANDS — STATIC WORLD GEOMETRY (static/fixed.%d)
 # ============================================================================
+
 
 def _load_fixed(filepath: str) -> Optional[U9Fixed]:
     """Open a static/fixed.<region> file, reporting the reason on failure."""
@@ -1874,8 +2349,10 @@ def cmd_fixed_info(args: SimpleNamespace) -> int:
 
     print(f"{args.file} -- {region.width}x{region.height} chunk region")
     print(f"  Header          : {region.header_size} bytes (0x20 + 4*w*h)")
-    print(f"  Payload         : {region.payload_size} bytes "
-          f"(watermark {region.declared_payload_size})")
+    print(
+        f"  Payload         : {region.payload_size} bytes "
+        f"(watermark {region.declared_payload_size})"
+    )
     print(f"  Populated chunks: {len(chunks)} of {region.num_chunks}")
     print(f"  Pages           : {pages} ({chained} chunk(s) span more than one)")
     print(f"  Objects         : {objects}")
@@ -1898,8 +2375,10 @@ def cmd_fixed_chunks(args: SimpleNamespace) -> int:
     print(f"{'Slot':>5}  {'Grid':<9}  {'Base (x,y)':<15}  {'Pages':>5}  {'Objects':>7}")
     print("-" * 54)
     for c in shown:
-        print(f"{c.table_index:>5}  {f'{c.chunk_x},{c.chunk_y}':<9}  "
-              f"{f'{c.base_x},{c.base_y}':<15}  {len(c.pages):>5}  {len(c.objects):>7}")
+        print(
+            f"{c.table_index:>5}  {f'{c.chunk_x},{c.chunk_y}':<9}  "
+            f"{f'{c.base_x},{c.base_y}':<15}  {len(c.pages):>5}  {len(c.objects):>7}"
+        )
     if args.limit and len(chunks) > args.limit:
         print(f"... ({len(chunks) - args.limit} more; raise --limit to see more)")
     return 0
@@ -1936,16 +2415,20 @@ def cmd_fixed_objects(args: SimpleNamespace) -> int:
     shown = rows[: args.limit] if args.limit else rows
 
     print(f"{args.file} -- {len(rows)} object(s)")
-    header = (f"{'Offset':>8}  {'Chunk':<7}  {'World (x,y,z)':<20}  {'Type':>5}  "
-              f"{'Flags':>10}")
+    header = (
+        f"{'Offset':>8}  {'Chunk':<7}  {'World (x,y,z)':<20}  {'Type':>5}  "
+        f"{'Flags':>10}"
+    )
     if names:
         header += "  Name"
     print(header)
     print("-" * (len(header) + 8))
     for c, o in shown:
-        line = (f"{o.offset:>#8x}  {f'{c.chunk_x},{c.chunk_y}':<7}  "
-                f"{f'{o.world_x},{o.world_y},{o.z}':<20}  {o.type_index:>5}  "
-                f"{o.flags:>#10x}")
+        line = (
+            f"{o.offset:>#8x}  {f'{c.chunk_x},{c.chunk_y}':<7}  "
+            f"{f'{o.world_x},{o.world_y},{o.z}':<20}  {o.type_index:>5}  "
+            f"{o.flags:>#10x}"
+        )
         if names:
             line += f"  {names.name_for(o.type_index) or ''}"
         print(line)
@@ -1977,6 +2460,7 @@ def cmd_fixed_types(args: SimpleNamespace) -> int:
 # CLI COMMANDS -- TERRAIN HEIGHT MAP (static/terrain.%d)
 # ============================================================================
 
+
 def _load_terrain(filepath: str) -> Optional[U9Terrain]:
     """Open a static/terrain.<region> file, reporting the reason on failure."""
     if not os.path.isfile(filepath):
@@ -1990,12 +2474,15 @@ def _load_terrain(filepath: str) -> Optional[U9Terrain]:
 
 
 def cmd_terrain_info(args: SimpleNamespace) -> int:
-    """Summarize one region height map: grid, chunk sharing and height range."""
+    """Summarize one region height map, including its environment header."""
     region = _load_terrain(args.file)
     if region is None:
         return 1
 
     print(f"{args.file} -- {region.name or '(unnamed)'}")
+    print(f"  Water level     : {region.water_level}")
+    print(f"  Wave amplitude  : {region.wave_amplitude:g}")
+    print(f"  Region flags    : 0x{region.flags:08x}")
     if region.is_empty:
         print("  Unused region slot: a bare header, no tile grid and no chunks.")
         print(f"  Header still declares {region.declared_chunk_count} chunk(s).")
@@ -2003,13 +2490,19 @@ def cmd_terrain_info(args: SimpleNamespace) -> int:
 
     low, high = region.height_range()
     unused = len(region.unused_chunks())
-    shared = region.shared_tile_count()
+    duplicates = region.duplicate_tile_reference_count()
+    shared = region.tiles_using_shared_chunks()
     print(f"  Points          : {region.width}x{region.height}")
     print(f"  World coords    : {region.world_width}x{region.world_height}")
-    print(f"  Tiles           : {region.tile_width}x{region.tile_height} "
-          f"({region.tile_count} total, {shared} sharing a chunk)")
-    print(f"  Chunks          : {region.chunk_count} "
-          f"(declared {region.declared_chunk_count}, {unused} referenced by no tile)")
+    print(
+        f"  Tiles           : {region.tile_width}x{region.tile_height} "
+        f"({region.tile_count} total, {shared} use shared chunks, "
+        f"{duplicates} duplicate references)"
+    )
+    print(
+        f"  Chunks          : {region.chunk_count} "
+        f"(declared {region.declared_chunk_count}, {unused} referenced by no tile)"
+    )
     print(f"  Height range    : {low}..{high}")
     if region.slack_bytes:
         print(f"  Trailing slack  : {region.slack_bytes} bytes past the last chunk")
@@ -2025,8 +2518,10 @@ def cmd_terrain_tiles(args: SimpleNamespace) -> int:
         print(f"{args.file} -- unused region slot, no tile grid.")
         return 0
 
-    print(f"{args.file} -- {region.tile_width}x{region.tile_height} tiles "
-          f"over {region.chunk_count} chunk(s)")
+    print(
+        f"{args.file} -- {region.tile_width}x{region.tile_height} tiles "
+        f"over {region.chunk_count} chunk(s)"
+    )
     width = max(3, len(str(max(region.tiles))))
     for tile_y in range(region.tile_height):
         base = tile_y * region.tile_width
@@ -2036,7 +2531,7 @@ def cmd_terrain_tiles(args: SimpleNamespace) -> int:
 
 
 def cmd_terrain_chunk(args: SimpleNamespace) -> int:
-    """Dump one chunk's 16x16 points, as height, texture or frame."""
+    """Dump one decoded field from a chunk's 16x16 points."""
     region = _load_terrain(args.file)
     if region is None:
         return 1
@@ -2045,7 +2540,9 @@ def cmd_terrain_chunk(args: SimpleNamespace) -> int:
             try:
                 tile_x, tile_y = (int(v) for v in args.tile.split(",", 1))
             except ValueError:
-                print(f"ERROR: --tile expects 'X,Y', got {args.tile!r}", file=sys.stderr)
+                print(
+                    f"ERROR: --tile expects 'X,Y', got {args.tile!r}", file=sys.stderr
+                )
                 return 1
             index = region.tile(tile_x, tile_y)
         else:
@@ -2061,13 +2558,21 @@ def cmd_terrain_chunk(args: SimpleNamespace) -> int:
         "texture": lambda p: p.texture,
         "frame": lambda p: p.frame,
         "hole": lambda p: int(p.is_hole),
+        "swap": lambda p: int(p.swap_uv),
+        "mirror": lambda p: int(p.mirror_uv),
+        "uv-rotation": lambda p: p.uv_rotation_degrees,
+        "split": lambda p: int(p.is_split),
+        "spare": lambda p: int(p.spare_bit_set),
+        "raw": lambda p: p.value,
     }[field]
     points = chunk.points()
     values = [pick(p) for p in points]
     holes = sum(1 for p in points if p.is_hole)
 
-    print(f"{args.file} -- chunk {index}, {field} "
-          f"({'flat' if chunk.is_flat else 'varied'}, {holes} hole point(s))")
+    print(
+        f"{args.file} -- chunk {index}, {field} "
+        f"({'flat' if chunk.is_flat else 'varied'}, {holes} hole point(s))"
+    )
     width = max(2, len(str(max(values))))
     for y in range(16):
         row = values[y * 16 : (y + 1) * 16]
@@ -2084,9 +2589,7 @@ def cmd_terrain_textures(args: SimpleNamespace) -> int:
         print(f"{args.file} -- unused region slot, no chunks.")
         return 0
 
-    histogram: Counter = Counter()
-    for chunk in region.chunks():
-        histogram.update(chunk.textures())
+    histogram = region.texture_histogram()
     total = sum(histogram.values())
 
     info = None
@@ -2106,8 +2609,11 @@ def cmd_terrain_textures(args: SimpleNamespace) -> int:
         line = f"{texture:>8}  {count:>9}  {100 * count / total:>6.2f}%"
         if info:
             record = records.get(texture)
-            line += (f"  {f'{record.width}x{record.height}':>9}  {record.frame_count:>6}"
-                     if record else f"  {'--':>9}  {'--':>6}")
+            line += (
+                f"  {f'{record.width}x{record.height}':>9}  {record.frame_count:>6}"
+                if record
+                else f"  {'--':>9}  {'--':>6}"
+            )
         print(line)
     if args.limit and len(histogram) > args.limit:
         print(f"... ({len(histogram) - args.limit} more; raise --limit to see more)")
@@ -2137,8 +2643,10 @@ def cmd_terrain_heightmap(args: SimpleNamespace) -> int:
     directory = os.path.dirname(os.path.abspath(out_path))
     os.makedirs(directory, exist_ok=True)
     image.save(out_path)
-    print(f"{args.file} -- {region.width}x{region.height}, heights {low}..{high} "
-          f"-> {out_path}")
+    print(
+        f"{args.file} -- {region.width}x{region.height}, heights {low}..{high} "
+        f"-> {out_path}"
+    )
     return 0
 
 
@@ -2157,21 +2665,48 @@ def cmd_terrain_export(args: SimpleNamespace) -> int:
     written = 0
     with open(out_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerow([
-            "x", "y", "tile_x", "tile_y", "chunk", "height", "hole",
-            "split", "frame", "texture", "flag13", "flag14", "raw",
-        ])
+        writer.writerow(
+            [
+                "x",
+                "y",
+                "tile_x",
+                "tile_y",
+                "chunk",
+                "height",
+                "hole",
+                "swap_uv",
+                "mirror_uv",
+                "uv_rotation_degrees",
+                "split",
+                "frame",
+                "texture",
+                "spare",
+                "raw",
+            ]
+        )
         for tile_y in range(region.tile_height):
             for tile_x in range(region.tile_width):
                 index = region.tile(tile_x, tile_y)
                 for point in region.chunk(index).points():
-                    flag13, flag14 = point.unknown_flags
-                    writer.writerow([
-                        tile_x * 16 + point.x, tile_y * 16 + point.y,
-                        tile_x, tile_y, index, point.height, int(point.is_hole),
-                        int(point.is_split), point.frame, point.texture,
-                        int(flag13), int(flag14), point.value,
-                    ])
+                    writer.writerow(
+                        [
+                            tile_x * 16 + point.x,
+                            tile_y * 16 + point.y,
+                            tile_x,
+                            tile_y,
+                            index,
+                            point.height,
+                            int(point.is_hole),
+                            int(point.swap_uv),
+                            int(point.mirror_uv),
+                            point.uv_rotation_degrees,
+                            int(point.is_split),
+                            point.frame,
+                            point.texture,
+                            int(point.spare_bit_set),
+                            point.value,
+                        ]
+                    )
                     written += 1
     print(f"{args.file} -- wrote {written} point(s) -> {out_path}")
     return 0
@@ -2180,6 +2715,7 @@ def cmd_terrain_export(args: SimpleNamespace) -> int:
 # ============================================================================
 # CLI COMMANDS -- BOOKS AND SIGNS (static/BOOKS-EN.FLX)
 # ============================================================================
+
 
 def _load_books(filepath: str) -> Optional[U9Books]:
     """Open a BOOKS-*.FLX archive, reporting the reason on failure."""
@@ -2208,13 +2744,17 @@ def cmd_books_list(args: SimpleNamespace) -> int:
         rows.sort(key=lambda b: -len(b))
     shown = rows[: args.limit] if args.limit else rows
 
-    print(f"{args.file} -- {len(rows)} entr{'y' if len(rows) == 1 else 'ies'} "
-          f"of {books.num_entries} slots")
+    print(
+        f"{args.file} -- {len(rows)} entr{'y' if len(rows) == 1 else 'ies'} "
+        f"of {books.num_entries} slots"
+    )
     print(f"{'Id':>5}  {'Bytes':>7}  {'Pages':>5}  Name")
     print("-" * 60)
     for book in shown:
         note = "  [embedded document]" if book.is_embedded_document else ""
-        print(f"{book.book_id:>5}  {len(book):>7}  {len(book.pages):>5}  {book.name}{note}")
+        print(
+            f"{book.book_id:>5}  {len(book):>7}  {len(book.pages):>5}  {book.name}{note}"
+        )
     if args.limit and len(rows) > args.limit:
         print(f"... ({len(rows) - args.limit} more; raise --limit to see more)")
     return 0
@@ -2276,7 +2816,9 @@ def cmd_books_search(args: SimpleNamespace) -> int:
             snippet = book.name
         else:
             start = max(0, at - 30)
-            snippet = ("..." if start else "") + text[start : at + len(needle) + 40].strip()
+            snippet = ("..." if start else "") + text[
+                start : at + len(needle) + 40
+            ].strip()
         print(f"{book.book_id:>5}  {book.name[:28]:<28}  {snippet}")
     if args.limit and len(hits) > args.limit:
         print(f"... ({len(hits) - args.limit} more; raise --limit to see more)")
@@ -2298,15 +2840,31 @@ def cmd_books_export(args: SimpleNamespace) -> int:
     os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
     with open(out_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerow(["id", "index", "name", "bytes", "pages", "fonts",
-                         "is_embedded_document", "text"])
+        writer.writerow(
+            [
+                "id",
+                "index",
+                "name",
+                "bytes",
+                "pages",
+                "fonts",
+                "is_embedded_document",
+                "text",
+            ]
+        )
         for book in rows:
-            writer.writerow([
-                book.book_id, book.index, book.name, len(book), len(book.pages),
-                " ".join(str(v) for v in book.fonts),
-                int(book.is_embedded_document),
-                "" if book.is_embedded_document else book.text,
-            ])
+            writer.writerow(
+                [
+                    book.book_id,
+                    book.index,
+                    book.name,
+                    len(book),
+                    len(book.pages),
+                    " ".join(str(v) for v in book.fonts),
+                    int(book.is_embedded_document),
+                    "" if book.is_embedded_document else book.text,
+                ]
+            )
     print(f"{args.file} -- wrote {len(rows)} row(s) -> {out_path}")
     return 0
 
@@ -2346,13 +2904,17 @@ def cmd_flx_pack(args: SimpleNamespace) -> int:
     if entries is None:
         return 1
     try:
-        written = write_flx(args.output, entries, count=args.count, comment=args.comment)
+        written = write_flx(
+            args.output, entries, count=args.count, comment=args.comment
+        )
     except U9FlxWriteError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
     slots = args.count if args.count is not None else max(entries) + 1
-    print(f"Packed {len(entries)} entr{'y' if len(entries) == 1 else 'ies'} "
-          f"into {slots} slot(s) -> {args.output} ({written} bytes)")
+    print(
+        f"Packed {len(entries)} entr{'y' if len(entries) == 1 else 'ies'} "
+        f"into {slots} slot(s) -> {args.output} ({written} bytes)"
+    )
     if args.count is None:
         print("  Slot count was inferred. Pass --count to match an original archive.")
     return 0
@@ -2393,13 +2955,19 @@ def cmd_flx_repack(args: SimpleNamespace) -> int:
     with open(out_path, "wb") as f:
         f.write(data)
 
-    print(f"{args.file} -- {len(archive.used_entry_indices())} used of "
-          f"{archive.num_entries} slot(s)")
+    print(
+        f"{args.file} -- {len(archive.used_entry_indices())} used of "
+        f"{archive.num_entries} slot(s)"
+    )
     if replacements:
-        print(f"  Replaced        : {len(replacements)} entr"
-              f"{'y' if len(replacements) == 1 else 'ies'}")
-    print(f"  Written         : {out_path} ({len(data)} bytes, "
-          f"{len(data) - len(original):+d})")
+        print(
+            f"  Replaced        : {len(replacements)} entr"
+            f"{'y' if len(replacements) == 1 else 'ies'}"
+        )
+    print(
+        f"  Written         : {out_path} ({len(data)} bytes, "
+        f"{len(data) - len(original):+d})"
+    )
     if not replacements:
         print(f"  Byte-identical  : {'yes' if identical else 'no'}")
         print(f"  Same contents   : {'yes' if equivalent else 'NO -- THIS IS A BUG'}")
@@ -2410,8 +2978,9 @@ def cmd_flx_repack(args: SimpleNamespace) -> int:
 
 
 # ============================================================================
-# CLI COMMANDS -- TEXTURE IMPORT (PNG -> bitmap*.flx)
+# CLI COMMANDS -- TEXTURE IMPORT (PNG -> bitmap/terrain-panel FLX)
 # ============================================================================
+
 
 def cmd_texture_import(args: SimpleNamespace) -> int:
     """Replace one texture frame with a PNG of the same size."""
@@ -2430,21 +2999,34 @@ def cmd_texture_import(args: SimpleNamespace) -> int:
         return 1
 
     if not (0 <= args.entry_id < archive.num_entries):
-        print(f"ERROR: entry_id {args.entry_id} out of range "
-              f"(0..{archive.num_entries - 1})", file=sys.stderr)
+        print(
+            f"ERROR: entry_id {args.entry_id} out of range "
+            f"(0..{archive.num_entries - 1})",
+            file=sys.stderr,
+        )
         return 1
     blob = archive.read_entry(args.entry_id)
     if not blob:
-        print(f"ERROR: entry {args.entry_id} is an unused archive slot", file=sys.stderr)
+        print(
+            f"ERROR: entry {args.entry_id} is an unused archive slot", file=sys.stderr
+        )
         return 1
 
     image = Image.open(args.image).convert("RGBA")
     palette = _load_palette(args.palette, args.textures)
+    selectors = _load_selectors(args.textures)
+    selector = selectors.get(args.entry_id)
 
     try:
-        encoding = frame_encoding(blob, args.frame)
+        encoding = frame_encoding(blob, args.frame, selector=selector)
         patched = replace_frame(
-            blob, args.frame, image.tobytes(), image.width, image.height, palette=palette
+            blob,
+            args.frame,
+            image.tobytes(),
+            image.width,
+            image.height,
+            palette=palette,
+            selector=selector,
         )
     except (U9TextureWriteError, struct.error) as e:
         print(f"ERROR: {e}", file=sys.stderr)
@@ -2460,14 +3042,20 @@ def cmd_texture_import(args: SimpleNamespace) -> int:
     with open(out_path, "wb") as f:
         f.write(data)
 
-    print(f"{args.image} ({image.width}x{image.height}) -> "
-          f"{Path(args.textures).name} entry {args.entry_id} frame {args.frame}")
+    print(
+        f"{args.image} ({image.width}x{image.height}) -> "
+        f"{Path(args.textures).name} entry {args.entry_id} frame {args.frame}"
+    )
     print(f"  Encoding        : {encoding}")
-    print(f"  Entry length    : {len(patched)} bytes (unchanged: "
-          f"{'yes' if len(patched) == len(blob) else 'NO'})")
+    print(
+        f"  Entry length    : {len(patched)} bytes (unchanged: "
+        f"{'yes' if len(patched) == len(blob) else 'NO'})"
+    )
     print(f"  Written         : {out_path} ({len(data)} bytes)")
     if encoding == "bc1":
-        print("  BC1 is lossy by design; re-encoding will not reproduce the original bytes.")
+        print(
+            "  BC1 is lossy by design; re-encoding will not reproduce the original bytes."
+        )
     if encoding == "paletted" and palette is None:
         print("  WARNING: no --palette given for an 8-bit frame.")
     print("  The other quality tiers still hold the old image -- see the reference doc")
@@ -2478,6 +3066,7 @@ def cmd_texture_import(args: SimpleNamespace) -> int:
 # ============================================================================
 # Typer command wrappers
 # ============================================================================
+
 
 @u9_app.command("flx-list")
 def flx_list_cmd(
@@ -2492,18 +3081,24 @@ def flx_extract_cmd(
     file: Annotated[str, typer.Argument(help="Path to a U9 .flx/.FLX file")],
     index: Annotated[int, typer.Argument(help="Entry index to extract")],
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output directory"),
+        Optional[str],
+        typer.Option("-o", "--output", help="Output directory"),
     ] = None,
 ) -> None:
     """Extract one entry from an Ultima 9 FLX archive."""
-    raise SystemExit(cmd_flx_extract(SimpleNamespace(file=file, index=index, output=output)))
+    raise SystemExit(
+        cmd_flx_extract(SimpleNamespace(file=file, index=index, output=output))
+    )
 
 
 @u9_app.command("flx-extract-all")
 def flx_extract_all_cmd(
     file: Annotated[str, typer.Argument(help="Path to a U9 .flx/.FLX file")],
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output directory (default: <file>_entries/)"),
+        Optional[str],
+        typer.Option(
+            "-o", "--output", help="Output directory (default: <file>_entries/)"
+        ),
     ] = None,
 ) -> None:
     """Extract every used entry from an Ultima 9 FLX archive."""
@@ -2518,6 +3113,44 @@ def typename_dump_cmd(
     raise SystemExit(cmd_typename_dump(SimpleNamespace(file=file)))
 
 
+@u9_app.command("palette-info")
+def palette_info_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/ankh.pal")],
+    duplicates: Annotated[
+        bool,
+        typer.Option(
+            "-d", "--duplicates", help="List every repeated colour and its indices"
+        ),
+    ] = False,
+) -> None:
+    """Inspect a U9 ankh.pal colour table and its duplicate entries."""
+    raise SystemExit(
+        cmd_palette_info(SimpleNamespace(file=file, duplicates=duplicates))
+    )
+
+
+@u9_app.command("palette-export")
+def palette_export_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/ankh.pal")],
+    output: Annotated[
+        Optional[str],
+        typer.Option(
+            "-o", "--output", help="Output directory (default: current directory)"
+        ),
+    ] = None,
+    swatch_size: Annotated[
+        int,
+        typer.Option("--swatch-size", help="Pixel size of each colour square"),
+    ] = 16,
+) -> None:
+    """Export a U9 palette as a 16x16 PNG swatch and text table."""
+    raise SystemExit(
+        cmd_palette_export(
+            SimpleNamespace(file=file, output=output, swatch_size=swatch_size)
+        )
+    )
+
+
 @u9_app.command("sound-list")
 def sound_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to a U9 sound/*.flx file")],
@@ -2530,7 +3163,8 @@ def sound_list_cmd(
 def sound_extract_pcm_cmd(
     file: Annotated[str, typer.Argument(help="Path to a U9 sound/*.flx file")],
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output directory (default: <file>_wav/)"),
+        Optional[str],
+        typer.Option("-o", "--output", help="Output directory (default: <file>_wav/)"),
     ] = None,
 ) -> None:
     """Extract every PCM-encoded entry in a sound archive as a playable WAV."""
@@ -2541,7 +3175,8 @@ def sound_extract_pcm_cmd(
 def sound_extract_cmd(
     file: Annotated[str, typer.Argument(help="Path to a U9 sound/*.flx file")],
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output directory (default: <file>_wav/)"),
+        Optional[str],
+        typer.Option("-o", "--output", help="Output directory (default: <file>_wav/)"),
     ] = None,
 ) -> None:
     """Extract every entry this project can decode (PCM, mono/stereo ADPCM, mono EA MicroTalk) as WAV."""
@@ -2554,16 +3189,26 @@ def model_info_cmd(
     model_id: Annotated[int, typer.Argument(help="Model ID (0-7999) to inspect")],
     types: Annotated[
         Optional[str],
-        typer.Option("--types", help="Path to static/TYPES.DAT (with --typenames, shows possible name(s))"),
+        typer.Option(
+            "--types",
+            help="Path to static/TYPES.DAT (with --typenames, shows possible name(s))",
+        ),
     ] = None,
     typenames: Annotated[
         Optional[str],
-        typer.Option("--typenames", help="Path to static/TYPENAME.FLX (with --types, shows possible name(s))"),
+        typer.Option(
+            "--typenames",
+            help="Path to static/TYPENAME.FLX (with --types, shows possible name(s))",
+        ),
     ] = None,
 ) -> None:
     """Print a model's limb/LOD/material/texture summary."""
     raise SystemExit(
-        cmd_model_info(SimpleNamespace(file=file, model_id=model_id, types=types, typenames=typenames))
+        cmd_model_info(
+            SimpleNamespace(
+                file=file, model_id=model_id, types=types, typenames=typenames
+            )
+        )
     )
 
 
@@ -2574,7 +3219,8 @@ def model_export_cmd(
     textures: Annotated[
         Optional[str],
         typer.Option(
-            "-t", "--textures",
+            "-t",
+            "--textures",
             help="Path to a texture archive: bitmap16.flx, bitmapsh.flx or "
             "bitmapC.flx -- all three decode, and hold the same textures",
         ),
@@ -2582,26 +3228,34 @@ def model_export_cmd(
     palette: Annotated[
         Optional[str],
         typer.Option(
-            "-p", "--palette",
+            "-p",
+            "--palette",
             help="Path to static/ankh.pal -- colors 8-bit textures (default: flat grayscale)",
         ),
     ] = None,
     types: Annotated[
         Optional[str],
         typer.Option(
-            "--types", help="Path to static/TYPES.DAT (with --typenames, names the output folder/files)"
+            "--types",
+            help="Path to static/TYPES.DAT (with --typenames, names the output folder/files)",
         ),
     ] = None,
     typenames: Annotated[
         Optional[str],
         typer.Option(
-            "--typenames", help="Path to static/TYPENAME.FLX (with --types, names the output folder/files)"
+            "--typenames",
+            help="Path to static/TYPENAME.FLX (with --types, names the output folder/files)",
         ),
     ] = None,
     lod: Annotated[int, typer.Option("--lod", help="LOD level to export")] = 0,
-    fmt: Annotated[str, typer.Option("-f", "--format", help="obj, stl, or both")] = "obj",
+    fmt: Annotated[
+        str, typer.Option("-f", "--format", help="obj, stl, or both")
+    ] = "obj",
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output directory (default: model_<id>[_<name>]/)"),
+        Optional[str],
+        typer.Option(
+            "-o", "--output", help="Output directory (default: model_<id>[_<name>]/)"
+        ),
     ] = None,
     preview: Annotated[
         bool,
@@ -2615,8 +3269,16 @@ def model_export_cmd(
     raise SystemExit(
         cmd_model_export(
             SimpleNamespace(
-                file=file, model_id=model_id, textures=textures, palette=palette, types=types,
-                typenames=typenames, lod=lod, format=fmt, output=output, preview=preview,
+                file=file,
+                model_id=model_id,
+                textures=textures,
+                palette=palette,
+                types=types,
+                typenames=typenames,
+                lod=lod,
+                format=fmt,
+                output=output,
+                preview=preview,
             )
         )
     )
@@ -2628,7 +3290,8 @@ def model_export_all_cmd(
     textures: Annotated[
         Optional[str],
         typer.Option(
-            "-t", "--textures",
+            "-t",
+            "--textures",
             help="Path to a texture archive: bitmap16.flx, bitmapsh.flx or "
             "bitmapC.flx -- all three decode, and hold the same textures",
         ),
@@ -2636,26 +3299,34 @@ def model_export_all_cmd(
     palette: Annotated[
         Optional[str],
         typer.Option(
-            "-p", "--palette",
+            "-p",
+            "--palette",
             help="Path to static/ankh.pal -- colors 8-bit textures (default: flat grayscale)",
         ),
     ] = None,
     types: Annotated[
         Optional[str],
         typer.Option(
-            "--types", help="Path to static/TYPES.DAT (with --typenames, names each output folder/files)"
+            "--types",
+            help="Path to static/TYPES.DAT (with --typenames, names each output folder/files)",
         ),
     ] = None,
     typenames: Annotated[
         Optional[str],
         typer.Option(
-            "--typenames", help="Path to static/TYPENAME.FLX (with --types, names each output folder/files)"
+            "--typenames",
+            help="Path to static/TYPENAME.FLX (with --types, names each output folder/files)",
         ),
     ] = None,
     lod: Annotated[int, typer.Option("--lod", help="LOD level to export")] = 0,
-    fmt: Annotated[str, typer.Option("-f", "--format", help="obj, stl, or both")] = "obj",
+    fmt: Annotated[
+        str, typer.Option("-f", "--format", help="obj, stl, or both")
+    ] = "obj",
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output directory (default: model_export/)"),
+        Optional[str],
+        typer.Option(
+            "-o", "--output", help="Output directory (default: model_export/)"
+        ),
     ] = None,
     preview: Annotated[
         bool,
@@ -2669,8 +3340,76 @@ def model_export_all_cmd(
     raise SystemExit(
         cmd_model_export_all(
             SimpleNamespace(
-                file=file, textures=textures, palette=palette, types=types,
-                typenames=typenames, lod=lod, format=fmt, output=output, preview=preview,
+                file=file,
+                textures=textures,
+                palette=palette,
+                types=types,
+                typenames=typenames,
+                lod=lod,
+                format=fmt,
+                output=output,
+                preview=preview,
+            )
+        )
+    )
+
+
+@u9_app.command("texture-info")
+def texture_info_cmd(
+    textures: Annotated[
+        str,
+        typer.Argument(
+            help="Texture FLX: bitmap*.flx, Texture8.<region>, or texture16.<region>"
+        ),
+    ],
+    entry_id: Annotated[int, typer.Argument(help="Texture-set entry ID to inspect")],
+) -> None:
+    """Inspect one U9 bitmap or terrain-panel texture entry."""
+    raise SystemExit(
+        cmd_texture_info(SimpleNamespace(textures=textures, entry_id=entry_id))
+    )
+
+
+@u9_app.command("texture-export")
+def texture_export_cmd(
+    textures: Annotated[
+        str,
+        typer.Argument(
+            help="Texture FLX: bitmap*.flx, Texture8.<region>, or texture16.<region>"
+        ),
+    ],
+    entry_id: Annotated[int, typer.Argument(help="Texture-set entry ID to export")],
+    frame: Annotated[
+        int, typer.Option("--frame", help="Frame index within the entry")
+    ] = 0,
+    mip_level: Annotated[
+        int, typer.Option("--mip", help="Stored mip level: 0 is the base image")
+    ] = 0,
+    palette: Annotated[
+        Optional[str],
+        typer.Option(
+            "-p",
+            "--palette",
+            help="Path to static/ankh.pal for 8-bit palette indices",
+        ),
+    ] = None,
+    output: Annotated[
+        Optional[str],
+        typer.Option(
+            "-o", "--output", help="Output directory (default: current directory)"
+        ),
+    ] = None,
+) -> None:
+    """Export any U9 bitmap or terrain-panel texture surface to PNG."""
+    raise SystemExit(
+        cmd_texture_export(
+            SimpleNamespace(
+                textures=textures,
+                entry_id=entry_id,
+                frame=frame,
+                mip_level=mip_level,
+                palette=palette,
+                output=output,
             )
         )
     )
@@ -2681,36 +3420,58 @@ def icon_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/sappear.flx")],
     textures: Annotated[
         str,
-        typer.Argument(help="Path to a texture archive, e.g. bitmap16.flx or bitmapsh.flx"),
+        typer.Argument(
+            help="Path to a texture archive, e.g. bitmap16.flx or bitmapsh.flx"
+        ),
     ],
-    limit: Annotated[int, typer.Option("--limit", help="Max rows to print (0 = unlimited)")] = 200,
+    limit: Annotated[
+        int, typer.Option("--limit", help="Max rows to print (0 = unlimited)")
+    ] = 200,
 ) -> None:
     """List candidate 2D UI icon entries (see titan.u9.icon) not referenced by any 3D model material."""
-    raise SystemExit(cmd_icon_list(SimpleNamespace(file=file, textures=textures, limit=limit)))
+    raise SystemExit(
+        cmd_icon_list(SimpleNamespace(file=file, textures=textures, limit=limit))
+    )
 
 
 @u9_app.command("icon-export")
 def icon_export_cmd(
     textures: Annotated[
         str,
-        typer.Argument(help="Path to a texture archive, e.g. bitmap16.flx or bitmapsh.flx"),
+        typer.Argument(
+            help="Path to a texture archive, e.g. bitmap16.flx or bitmapsh.flx"
+        ),
     ],
     entry_id: Annotated[int, typer.Argument(help="Entry ID (0-7999) to export")],
-    frame: Annotated[int, typer.Option("--frame", help="Frame index within the entry")] = 0,
+    frame: Annotated[
+        int, typer.Option("--frame", help="Frame index within the entry")
+    ] = 0,
     palette: Annotated[
         Optional[str],
         typer.Option(
-            "-p", "--palette",
+            "-p",
+            "--palette",
             help="Path to static/ankh.pal -- colors 8-bit textures (default: flat grayscale)",
         ),
     ] = None,
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output directory (default: current directory)"),
+        Optional[str],
+        typer.Option(
+            "-o", "--output", help="Output directory (default: current directory)"
+        ),
     ] = None,
 ) -> None:
     """Export one texture archive entry to PNG, regardless of whether any 3D model references it."""
     raise SystemExit(
-        cmd_icon_export(SimpleNamespace(textures=textures, entry_id=entry_id, frame=frame, palette=palette, output=output))
+        cmd_icon_export(
+            SimpleNamespace(
+                textures=textures,
+                entry_id=entry_id,
+                frame=frame,
+                palette=palette,
+                output=output,
+            )
+        )
     )
 
 
@@ -2719,36 +3480,48 @@ def icon_export_all_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/sappear.flx")],
     textures: Annotated[
         str,
-        typer.Argument(help="Path to a texture archive, e.g. bitmap16.flx or bitmapsh.flx"),
+        typer.Argument(
+            help="Path to a texture archive, e.g. bitmap16.flx or bitmapsh.flx"
+        ),
     ],
     palette: Annotated[
         Optional[str],
         typer.Option(
-            "-p", "--palette",
+            "-p",
+            "--palette",
             help="Path to static/ankh.pal -- colors 8-bit textures (default: flat grayscale)",
         ),
     ] = None,
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output directory (default: icon_export/)"),
+        Optional[str],
+        typer.Option("-o", "--output", help="Output directory (default: icon_export/)"),
     ] = None,
 ) -> None:
     """Batch-export every candidate 2D UI icon (see titan.u9.icon) not referenced by any 3D model."""
     raise SystemExit(
-        cmd_icon_export_all(SimpleNamespace(file=file, textures=textures, palette=palette, output=output))
+        cmd_icon_export_all(
+            SimpleNamespace(
+                file=file, textures=textures, palette=palette, output=output
+            )
+        )
     )
 
 
 @u9_app.command("nonfixed-info")
 def nonfixed_info_cmd(
-    file: Annotated[str, typer.Argument(help="Path to a runtime/nonfixed.<region> file")],
+    file: Annotated[
+        str, typer.Argument(help="Path to a runtime/nonfixed.<region> file")
+    ],
 ) -> None:
-    """Summarize a U9 runtime region: chunk grid, pages, entities, triggers."""
+    """Summarize a U9 runtime region and its page allocator."""
     raise SystemExit(cmd_nonfixed_info(SimpleNamespace(file=file)))
 
 
 @u9_app.command("nonfixed-chunks")
 def nonfixed_chunks_cmd(
-    file: Annotated[str, typer.Argument(help="Path to a runtime/nonfixed.<region> file")],
+    file: Annotated[
+        str, typer.Argument(help="Path to a runtime/nonfixed.<region> file")
+    ],
 ) -> None:
     """List every populated chunk in a U9 runtime region with its counts."""
     raise SystemExit(cmd_nonfixed_chunks(SimpleNamespace(file=file)))
@@ -2756,20 +3529,42 @@ def nonfixed_chunks_cmd(
 
 @u9_app.command("nonfixed-entities")
 def nonfixed_entities_cmd(
-    file: Annotated[str, typer.Argument(help="Path to a runtime/nonfixed.<region> file")],
+    file: Annotated[
+        str, typer.Argument(help="Path to a runtime/nonfixed.<region> file")
+    ],
     chunk: Annotated[
-        Optional[str], typer.Option("-c", "--chunk", help="Restrict to one chunk, as 'X,Y'"),
+        Optional[str],
+        typer.Option("-c", "--chunk", help="Restrict to one chunk, as 'X,Y'"),
     ] = None,
     typenames: Annotated[
-        Optional[str], typer.Option("-t", "--typenames", help="Path to static/TYPENAME.FLX for object names"),
+        Optional[str],
+        typer.Option(
+            "-t", "--typenames", help="Path to static/TYPENAME.FLX for object names"
+        ),
     ] = None,
     limit: Annotated[
-        Optional[int], typer.Option("-n", "--limit", help="Maximum rows to print"),
+        Optional[int],
+        typer.Option("-n", "--limit", help="Maximum rows to print"),
     ] = None,
+    include_unlinked: Annotated[
+        bool,
+        typer.Option(
+            "--include-unlinked",
+            help="Include allocated records absent from the live spatial index",
+        ),
+    ] = False,
 ) -> None:
     """List the dynamic objects stored in a U9 runtime region."""
     raise SystemExit(
-        cmd_nonfixed_entities(SimpleNamespace(file=file, chunk=chunk, typenames=typenames, limit=limit))
+        cmd_nonfixed_entities(
+            SimpleNamespace(
+                file=file,
+                chunk=chunk,
+                typenames=typenames,
+                limit=limit,
+                include_unlinked=include_unlinked,
+            )
+        )
     )
 
 
@@ -2778,11 +3573,16 @@ def nonfixed_diff_cmd(
     left: Annotated[str, typer.Argument(help="First runtime/nonfixed.<region> file")],
     right: Annotated[str, typer.Argument(help="Second runtime/nonfixed.<region> file")],
     typenames: Annotated[
-        Optional[str], typer.Option("-t", "--typenames", help="Path to static/TYPENAME.FLX for object names"),
+        Optional[str],
+        typer.Option(
+            "-t", "--typenames", help="Path to static/TYPENAME.FLX for object names"
+        ),
     ] = None,
 ) -> None:
     """Compare two U9 runtime regions entity by entity (e.g. patched vs original)."""
-    raise SystemExit(cmd_nonfixed_diff(SimpleNamespace(left=left, right=right, typenames=typenames)))
+    raise SystemExit(
+        cmd_nonfixed_diff(SimpleNamespace(left=left, right=right, typenames=typenames))
+    )
 
 
 @u9_app.command("highway-info")
@@ -2797,10 +3597,12 @@ def highway_info_cmd(
 def highway_points_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/highway.dat")],
     id: Annotated[
-        Optional[int], typer.Option("-i", "--id", help="Show only the point with this trigger ID"),
+        Optional[int],
+        typer.Option("-i", "--id", help="Show only the point with this trigger ID"),
     ] = None,
     limit: Annotated[
-        Optional[int], typer.Option("-n", "--limit", help="Maximum rows to print"),
+        Optional[int],
+        typer.Option("-n", "--limit", help="Maximum rows to print"),
     ] = None,
 ) -> None:
     """List U9 highway navigation points and their world positions."""
@@ -2811,17 +3613,22 @@ def highway_points_cmd(
 def highway_routes_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/highway.dat")],
     id: Annotated[
-        Optional[int], typer.Option("-i", "--id", help="Only routes visiting this trigger ID"),
+        Optional[int],
+        typer.Option("-i", "--id", help="Only routes visiting this trigger ID"),
     ] = None,
     paths: Annotated[
-        bool, typer.Option("-p", "--paths", help="Print each route's full node path"),
+        bool,
+        typer.Option("-p", "--paths", help="Print each route's full node path"),
     ] = False,
     limit: Annotated[
-        Optional[int], typer.Option("-n", "--limit", help="Maximum routes to print"),
+        Optional[int],
+        typer.Option("-n", "--limit", help="Maximum routes to print"),
     ] = None,
 ) -> None:
     """List the precomputed routes through the U9 highway graph."""
-    raise SystemExit(cmd_highway_routes(SimpleNamespace(file=file, id=id, paths=paths, limit=limit)))
+    raise SystemExit(
+        cmd_highway_routes(SimpleNamespace(file=file, id=id, paths=paths, limit=limit))
+    )
 
 
 @u9_app.command("animation-list")
@@ -2859,10 +3666,12 @@ def animation_show_cmd(
 def trigger_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/triggers.flx")],
     all: Annotated[
-        bool, typer.Option("-a", "--all", help="Include empty triggers"),
+        bool,
+        typer.Option("-a", "--all", help="Include empty triggers"),
     ] = False,
     limit: Annotated[
-        Optional[int], typer.Option("-n", "--limit", help="Maximum rows to print"),
+        Optional[int],
+        typer.Option("-n", "--limit", help="Maximum rows to print"),
     ] = None,
 ) -> None:
     """List U9 trigger scripts; the trigger ID is the FLX entry index."""
@@ -2872,7 +3681,9 @@ def trigger_list_cmd(
 @u9_app.command("trigger-show")
 def trigger_show_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/triggers.flx")],
-    id: Annotated[int, typer.Argument(help="Trigger ID, as carried by a runtime entity")],
+    id: Annotated[
+        int, typer.Argument(help="Trigger ID, as carried by a runtime entity")
+    ],
 ) -> None:
     """Dump one U9 trigger script's records."""
     raise SystemExit(cmd_trigger_show(SimpleNamespace(file=file, id=id)))
@@ -2882,7 +3693,8 @@ def trigger_show_cmd(
 def trigger_opcodes_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/triggers.flx")],
     limit: Annotated[
-        Optional[int], typer.Option("-n", "--limit", help="Maximum opcodes to print"),
+        Optional[int],
+        typer.Option("-n", "--limit", help="Maximum opcodes to print"),
     ] = None,
 ) -> None:
     """Report trigger opcode frequency across the whole archive."""
@@ -2893,7 +3705,8 @@ def trigger_opcodes_cmd(
 def activity_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/activity.flx")],
     limit: Annotated[
-        Optional[int], typer.Option("-n", "--limit", help="Maximum rows to print"),
+        Optional[int],
+        typer.Option("-n", "--limit", help="Maximum rows to print"),
     ] = None,
 ) -> None:
     """List U9 NPC activity sets and the named sequences they hold."""
@@ -2913,39 +3726,95 @@ def activity_show_cmd(
 def activity_opcodes_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/activity.flx")],
     limit: Annotated[
-        Optional[int], typer.Option("-n", "--limit", help="Maximum names to print"),
+        Optional[int],
+        typer.Option("-n", "--limit", help="Maximum names to print"),
     ] = None,
 ) -> None:
     """Report U9 activity step-opcode and sequence-name frequency."""
     raise SystemExit(cmd_activity_opcodes(SimpleNamespace(file=file, limit=limit)))
 
 
+@u9_app.command("script-research-export")
+def script_research_export_cmd(
+    triggers: Annotated[str, typer.Argument(help="Path to static/triggers.flx")],
+    activities: Annotated[str, typer.Argument(help="Path to static/activity.flx")],
+    output: Annotated[
+        str,
+        typer.Option(
+            "-o", "--output", help="Directory for CSV and JSON evidence tables"
+        ),
+    ] = "u9-script-research",
+) -> None:
+    """Export lossless trigger/activity evidence tables for Ghidra research."""
+    raise SystemExit(
+        cmd_script_research_export(
+            SimpleNamespace(
+                triggers=triggers,
+                activities=activities,
+                output=output,
+            )
+        )
+    )
+
+
 @u9_app.command("npc-list")
 def npc_list_cmd(
-    file: Annotated[str, typer.Argument(help="Path to runtime/NPC.FLX, or a savegame file with --save")],
+    file: Annotated[
+        str,
+        typer.Argument(help="Path to runtime/NPC.FLX, or a savegame file with --save"),
+    ],
     save: Annotated[
-        bool, typer.Option("-s", "--save", help="Read the live array from a savegame processes.dat / .sav"),
+        bool,
+        typer.Option(
+            "-s",
+            "--save",
+            help="Read the live array from a savegame processes.dat / .sav",
+        ),
     ] = False,
     region: Annotated[
-        Optional[int], typer.Option("-r", "--region", help="Only NPCs in this region"),
+        Optional[int],
+        typer.Option("-r", "--region", help="Only NPCs in this region"),
     ] = None,
     npc_class: Annotated[
-        Optional[int], typer.Option("-c", "--class", help="Only NPCs with this class_id"),
+        Optional[int],
+        typer.Option("-c", "--class", help="Only NPCs with this class_id"),
     ] = None,
-    all: Annotated[bool, typer.Option("-a", "--all", help="Include unnamed/empty slots")] = False,
-    limit: Annotated[Optional[int], typer.Option("-n", "--limit", help="Maximum rows to print")] = None,
+    all: Annotated[
+        bool, typer.Option("-a", "--all", help="Include unnamed/empty slots")
+    ] = False,
+    limit: Annotated[
+        Optional[int], typer.Option("-n", "--limit", help="Maximum rows to print")
+    ] = None,
 ) -> None:
     """List U9 NPC records; the record index is also the activity set index."""
-    raise SystemExit(cmd_npc_list(SimpleNamespace(
-        file=file, save=save, region=region, npc_class=npc_class, all=all, limit=limit)))
+    raise SystemExit(
+        cmd_npc_list(
+            SimpleNamespace(
+                file=file,
+                save=save,
+                region=region,
+                npc_class=npc_class,
+                all=all,
+                limit=limit,
+            )
+        )
+    )
 
 
 @u9_app.command("npc-show")
 def npc_show_cmd(
-    file: Annotated[str, typer.Argument(help="Path to runtime/NPC.FLX, or a savegame file with --save")],
+    file: Annotated[
+        str,
+        typer.Argument(help="Path to runtime/NPC.FLX, or a savegame file with --save"),
+    ],
     index: Annotated[int, typer.Argument(help="NPC record index")],
     save: Annotated[
-        bool, typer.Option("-s", "--save", help="Read the live array from a savegame processes.dat / .sav"),
+        bool,
+        typer.Option(
+            "-s",
+            "--save",
+            help="Read the live array from a savegame processes.dat / .sav",
+        ),
     ] = False,
 ) -> None:
     """Print one U9 NPC record's decoded fields."""
@@ -2954,59 +3823,102 @@ def npc_show_cmd(
 
 @u9_app.command("npc-classes")
 def npc_classes_cmd(
-    file: Annotated[str, typer.Argument(help="Path to runtime/NPC.FLX, or a savegame file with --save")],
+    file: Annotated[
+        str,
+        typer.Argument(help="Path to runtime/NPC.FLX, or a savegame file with --save"),
+    ],
     save: Annotated[
-        bool, typer.Option("-s", "--save", help="Read the live array from a savegame processes.dat / .sav"),
+        bool,
+        typer.Option(
+            "-s",
+            "--save",
+            help="Read the live array from a savegame processes.dat / .sav",
+        ),
     ] = False,
     members: Annotated[
-        int, typer.Option("-m", "--members", help="Member names to preview per class"),
+        int,
+        typer.Option("-m", "--members", help="Member names to preview per class"),
     ] = 8,
 ) -> None:
     """Group U9 NPCs by class_id and preview each group's members."""
-    raise SystemExit(cmd_npc_classes(SimpleNamespace(file=file, save=save, members=members)))
+    raise SystemExit(
+        cmd_npc_classes(SimpleNamespace(file=file, save=save, members=members))
+    )
 
 
 @u9_app.command("npc-diff")
 def npc_diff_cmd(
     file: Annotated[str, typer.Argument(help="Path to the shipped runtime/NPC.FLX")],
-    save_file: Annotated[str, typer.Argument(help="Path to a savegame processes.dat or u9game*.sav")],
-    limit: Annotated[Optional[int], typer.Option("-n", "--limit", help="Maximum moved NPCs to print")] = None,
+    save_file: Annotated[
+        str, typer.Argument(help="Path to a savegame processes.dat or u9game*.sav")
+    ],
+    limit: Annotated[
+        Optional[int], typer.Option("-n", "--limit", help="Maximum moved NPCs to print")
+    ] = None,
 ) -> None:
     """Compare the shipped U9 NPC table against a savegame's live copy."""
-    raise SystemExit(cmd_npc_diff(SimpleNamespace(file=file, save_file=save_file, limit=limit)))
+    raise SystemExit(
+        cmd_npc_diff(SimpleNamespace(file=file, save_file=save_file, limit=limit))
+    )
 
 
 @u9_app.command("npc-csv")
 def npc_csv_cmd(
-    file: Annotated[str, typer.Argument(help="Path to runtime/NPC.FLX, or a savegame file with --save")],
+    file: Annotated[
+        str,
+        typer.Argument(help="Path to runtime/NPC.FLX, or a savegame file with --save"),
+    ],
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output CSV path (default: <file>_npcs.csv)"),
+        Optional[str],
+        typer.Option(
+            "-o", "--output", help="Output CSV path (default: <file>_npcs.csv)"
+        ),
     ] = None,
     save: Annotated[
-        bool, typer.Option("-s", "--save", help="Read the live array from a savegame processes.dat / .sav"),
+        bool,
+        typer.Option(
+            "-s",
+            "--save",
+            help="Read the live array from a savegame processes.dat / .sav",
+        ),
     ] = False,
-    all: Annotated[bool, typer.Option("-a", "--all", help="Include unnamed/blank slots")] = False,
+    all: Annotated[
+        bool, typer.Option("-a", "--all", help="Include unnamed/blank slots")
+    ] = False,
 ) -> None:
     """Export every U9 NPC record to CSV, decoded fields plus the raw record."""
-    raise SystemExit(cmd_npc_csv(SimpleNamespace(file=file, output=output, save=save, all=all)))
+    raise SystemExit(
+        cmd_npc_csv(SimpleNamespace(file=file, output=output, save=save, all=all))
+    )
 
 
 @u9_app.command("sdinfo-list")
 def sdinfo_list_cmd(
-    file: Annotated[str, typer.Argument(help="Path to static/sdInfo.flx, sdInfo16.flx or sdInfoC.flx")],
+    file: Annotated[
+        str,
+        typer.Argument(help="Path to static/sdInfo.flx, sdInfo16.flx or sdInfoC.flx"),
+    ],
     animated: Annotated[
-        bool, typer.Option("-a", "--animated", help="Only textures with more than one frame"),
+        bool,
+        typer.Option("-a", "--animated", help="Only textures with more than one frame"),
     ] = False,
-    limit: Annotated[Optional[int], typer.Option("-n", "--limit", help="Maximum rows to print")] = None,
+    limit: Annotated[
+        Optional[int], typer.Option("-n", "--limit", help="Maximum rows to print")
+    ] = None,
 ) -> None:
     """List U9 texture metadata: dimensions, frame count and mip levels."""
-    raise SystemExit(cmd_sdinfo_list(SimpleNamespace(file=file, animated=animated, limit=limit)))
+    raise SystemExit(
+        cmd_sdinfo_list(SimpleNamespace(file=file, animated=animated, limit=limit))
+    )
 
 
 @u9_app.command("sdinfo-show")
 def sdinfo_show_cmd(
     file: Annotated[str, typer.Argument(help="Path to a static/sdInfo*.flx table")],
-    index: Annotated[int, typer.Argument(help="Texture index -- the same index as in the bitmap archive")],
+    index: Annotated[
+        int,
+        typer.Argument(help="Texture index -- the same index as in the bitmap archive"),
+    ],
 ) -> None:
     """Print one U9 texture's metadata record."""
     raise SystemExit(cmd_sdinfo_show(SimpleNamespace(file=file, index=index)))
@@ -3015,7 +3927,9 @@ def sdinfo_show_cmd(
 @u9_app.command("sdinfo-verify")
 def sdinfo_verify_cmd(
     file: Annotated[str, typer.Argument(help="Path to a static/sdInfo*.flx table")],
-    textures: Annotated[str, typer.Argument(help="Path to its partner bitmap*.flx archive")],
+    textures: Annotated[
+        str, typer.Argument(help="Path to its partner bitmap*.flx archive")
+    ],
 ) -> None:
     """Cross-check a U9 texture metadata table against its bitmap archive."""
     raise SystemExit(cmd_sdinfo_verify(SimpleNamespace(file=file, textures=textures)))
@@ -3023,44 +3937,79 @@ def sdinfo_verify_cmd(
 
 @u9_app.command("text-list")
 def text_list_cmd(
-    file: Annotated[str, typer.Argument(help="Path to static/text.flx or static/misctext.flx")],
+    file: Annotated[
+        str, typer.Argument(help="Path to static/text.flx or static/misctext.flx")
+    ],
     block: Annotated[
-        Optional[str], typer.Option("-b", "--block", help="Only one source block, by name (e.g. Raven)"),
+        Optional[str],
+        typer.Option(
+            "-b", "--block", help="Only one source block, by name (e.g. Raven)"
+        ),
     ] = None,
-    markers: Annotated[bool, typer.Option("-m", "--markers", help="Include BEGIN FILE markers")] = False,
-    limit: Annotated[Optional[int], typer.Option("-n", "--limit", help="Maximum lines to print")] = None,
+    markers: Annotated[
+        bool, typer.Option("-m", "--markers", help="Include BEGIN FILE markers")
+    ] = False,
+    limit: Annotated[
+        Optional[int], typer.Option("-n", "--limit", help="Maximum lines to print")
+    ] = None,
 ) -> None:
     """Print strings from a U9 text archive."""
-    raise SystemExit(cmd_text_list(SimpleNamespace(file=file, block=block, markers=markers, limit=limit)))
+    raise SystemExit(
+        cmd_text_list(
+            SimpleNamespace(file=file, block=block, markers=markers, limit=limit)
+        )
+    )
 
 
 @u9_app.command("text-blocks")
 def text_blocks_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/text.flx")],
-    by_size: Annotated[bool, typer.Option("-s", "--by-size", help="Order by line count, largest first")] = False,
-    limit: Annotated[Optional[int], typer.Option("-n", "--limit", help="Maximum blocks to print")] = None,
+    by_size: Annotated[
+        bool, typer.Option("-s", "--by-size", help="Order by line count, largest first")
+    ] = False,
+    limit: Annotated[
+        Optional[int], typer.Option("-n", "--limit", help="Maximum blocks to print")
+    ] = None,
 ) -> None:
     """List the source-file blocks in a U9 text archive."""
-    raise SystemExit(cmd_text_blocks(SimpleNamespace(file=file, by_size=by_size, limit=limit)))
+    raise SystemExit(
+        cmd_text_blocks(SimpleNamespace(file=file, by_size=by_size, limit=limit))
+    )
 
 
 @u9_app.command("text-search")
 def text_search_cmd(
-    file: Annotated[str, typer.Argument(help="Path to static/text.flx or static/misctext.flx")],
+    file: Annotated[
+        str, typer.Argument(help="Path to static/text.flx or static/misctext.flx")
+    ],
     needle: Annotated[str, typer.Argument(help="Substring to look for")],
-    case_sensitive: Annotated[bool, typer.Option("-c", "--case-sensitive", help="Match case exactly")] = False,
-    limit: Annotated[Optional[int], typer.Option("-n", "--limit", help="Maximum matches to print")] = None,
+    case_sensitive: Annotated[
+        bool, typer.Option("-c", "--case-sensitive", help="Match case exactly")
+    ] = False,
+    limit: Annotated[
+        Optional[int], typer.Option("-n", "--limit", help="Maximum matches to print")
+    ] = None,
 ) -> None:
     """Search a U9 text archive, showing which block each match belongs to."""
-    raise SystemExit(cmd_text_search(SimpleNamespace(
-        file=file, needle=needle, case_sensitive=case_sensitive, limit=limit)))
+    raise SystemExit(
+        cmd_text_search(
+            SimpleNamespace(
+                file=file, needle=needle, case_sensitive=case_sensitive, limit=limit
+            )
+        )
+    )
 
 
 @u9_app.command("text-export")
 def text_export_cmd(
-    file: Annotated[str, typer.Argument(help="Path to static/text.flx or static/misctext.flx")],
+    file: Annotated[
+        str, typer.Argument(help="Path to static/text.flx or static/misctext.flx")
+    ],
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output CSV path (default: <file>_text.csv)"),
+        Optional[str],
+        typer.Option(
+            "-o", "--output", help="Output CSV path (default: <file>_text.csv)"
+        ),
     ] = None,
 ) -> None:
     """Export a U9 text archive to CSV."""
@@ -3078,38 +4027,68 @@ def fixed_info_cmd(
 @u9_app.command("fixed-chunks")
 def fixed_chunks_cmd(
     file: Annotated[str, typer.Argument(help="Path to a static/fixed.<region> file")],
-    by_grid: Annotated[bool, typer.Option("-g", "--by-grid", help="Order by grid position, not table slot")] = False,
-    limit: Annotated[Optional[int], typer.Option("-n", "--limit", help="Maximum rows to print")] = None,
+    by_grid: Annotated[
+        bool,
+        typer.Option("-g", "--by-grid", help="Order by grid position, not table slot"),
+    ] = False,
+    limit: Annotated[
+        Optional[int], typer.Option("-n", "--limit", help="Maximum rows to print")
+    ] = None,
 ) -> None:
     """List the populated chunks in a U9 static region."""
-    raise SystemExit(cmd_fixed_chunks(SimpleNamespace(file=file, by_grid=by_grid, limit=limit)))
+    raise SystemExit(
+        cmd_fixed_chunks(SimpleNamespace(file=file, by_grid=by_grid, limit=limit))
+    )
 
 
 @u9_app.command("fixed-objects")
 def fixed_objects_cmd(
     file: Annotated[str, typer.Argument(help="Path to a static/fixed.<region> file")],
-    chunk: Annotated[Optional[str], typer.Option("-c", "--chunk", help="Restrict to one chunk, as 'X,Y'")] = None,
-    type: Annotated[Optional[int], typer.Option("-t", "--type", help="Only objects of this type index")] = None,
-    typenames: Annotated[
-        Optional[str], typer.Option("--typenames", help="Path to static/TYPENAME.FLX for object names"),
+    chunk: Annotated[
+        Optional[str],
+        typer.Option("-c", "--chunk", help="Restrict to one chunk, as 'X,Y'"),
     ] = None,
-    limit: Annotated[Optional[int], typer.Option("-n", "--limit", help="Maximum rows to print")] = None,
+    type: Annotated[
+        Optional[int],
+        typer.Option("-t", "--type", help="Only objects of this type index"),
+    ] = None,
+    typenames: Annotated[
+        Optional[str],
+        typer.Option(
+            "--typenames", help="Path to static/TYPENAME.FLX for object names"
+        ),
+    ] = None,
+    limit: Annotated[
+        Optional[int], typer.Option("-n", "--limit", help="Maximum rows to print")
+    ] = None,
 ) -> None:
     """List the immovable objects in a U9 static region."""
-    raise SystemExit(cmd_fixed_objects(SimpleNamespace(
-        file=file, chunk=chunk, type=type, typenames=typenames, limit=limit)))
+    raise SystemExit(
+        cmd_fixed_objects(
+            SimpleNamespace(
+                file=file, chunk=chunk, type=type, typenames=typenames, limit=limit
+            )
+        )
+    )
 
 
 @u9_app.command("fixed-types")
 def fixed_types_cmd(
     file: Annotated[str, typer.Argument(help="Path to a static/fixed.<region> file")],
     typenames: Annotated[
-        Optional[str], typer.Option("--typenames", help="Path to static/TYPENAME.FLX for object names"),
+        Optional[str],
+        typer.Option(
+            "--typenames", help="Path to static/TYPENAME.FLX for object names"
+        ),
     ] = None,
-    limit: Annotated[Optional[int], typer.Option("-n", "--limit", help="Maximum types to print")] = None,
+    limit: Annotated[
+        Optional[int], typer.Option("-n", "--limit", help="Maximum types to print")
+    ] = None,
 ) -> None:
     """Report which object types a U9 static region uses."""
-    raise SystemExit(cmd_fixed_types(SimpleNamespace(file=file, typenames=typenames, limit=limit)))
+    raise SystemExit(
+        cmd_fixed_types(SimpleNamespace(file=file, typenames=typenames, limit=limit))
+    )
 
 
 @u9_app.command("terrain-info")
@@ -3131,52 +4110,93 @@ def terrain_tiles_cmd(
 @u9_app.command("terrain-chunk")
 def terrain_chunk_cmd(
     file: Annotated[str, typer.Argument(help="Path to a static/terrain.<region> file")],
-    index: Annotated[Optional[int], typer.Option("-i", "--index", help="Chunk index to dump")] = None,
+    index: Annotated[
+        Optional[int], typer.Option("-i", "--index", help="Chunk index to dump")
+    ] = None,
     tile: Annotated[
-        Optional[str], typer.Option("-t", "--tile", help="Dump the chunk a tile uses, as 'X,Y'"),
+        Optional[str],
+        typer.Option("-t", "--tile", help="Dump the chunk a tile uses, as 'X,Y'"),
     ] = None,
     field: Annotated[
-        str, typer.Option("-f", "--field", help="Which field to show: height, texture, frame or hole"),
+        str,
+        typer.Option(
+            "-f",
+            "--field",
+            help=(
+                "Field: height, texture, frame, hole, swap, mirror, "
+                "uv-rotation, split, spare or raw"
+            ),
+        ),
     ] = "height",
 ) -> None:
     """Dump one 16x16 chunk of a U9 region height map."""
-    if field not in ("height", "texture", "frame", "hole"):
-        print(f"ERROR: --field must be height, texture, frame or hole, got {field!r}",
-              file=sys.stderr)
+    choices = (
+        "height",
+        "texture",
+        "frame",
+        "hole",
+        "swap",
+        "mirror",
+        "uv-rotation",
+        "split",
+        "spare",
+        "raw",
+    )
+    if field not in choices:
+        print(
+            f"ERROR: --field must be {', '.join(choices)}, got {field!r}",
+            file=sys.stderr,
+        )
         raise SystemExit(1)
-    raise SystemExit(cmd_terrain_chunk(SimpleNamespace(
-        file=file, index=index, tile=tile, field=field)))
+    raise SystemExit(
+        cmd_terrain_chunk(
+            SimpleNamespace(file=file, index=index, tile=tile, field=field)
+        )
+    )
 
 
 @u9_app.command("terrain-textures")
 def terrain_textures_cmd(
     file: Annotated[str, typer.Argument(help="Path to a static/terrain.<region> file")],
     sdinfo: Annotated[
-        Optional[str], typer.Option("--sdinfo", help="Path to a matching static/sdInfo*.flx for sizes"),
+        Optional[str],
+        typer.Option(
+            "--sdinfo", help="Path to a matching static/sdInfo*.flx for sizes"
+        ),
     ] = None,
-    limit: Annotated[Optional[int], typer.Option("-n", "--limit", help="Maximum textures to print")] = None,
+    limit: Annotated[
+        Optional[int], typer.Option("-n", "--limit", help="Maximum textures to print")
+    ] = None,
 ) -> None:
     """Report which ground textures a U9 region paints with."""
-    raise SystemExit(cmd_terrain_textures(SimpleNamespace(file=file, sdinfo=sdinfo, limit=limit)))
+    raise SystemExit(
+        cmd_terrain_textures(SimpleNamespace(file=file, sdinfo=sdinfo, limit=limit))
+    )
 
 
 @u9_app.command("terrain-heightmap")
 def terrain_heightmap_cmd(
     file: Annotated[str, typer.Argument(help="Path to a static/terrain.<region> file")],
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output PNG path"),
+        Optional[str],
+        typer.Option("-o", "--output", help="Output PNG path"),
     ] = None,
-    scale: Annotated[int, typer.Option("-s", "--scale", help="Nearest-neighbour magnification")] = 1,
+    scale: Annotated[
+        int, typer.Option("-s", "--scale", help="Nearest-neighbour magnification")
+    ] = 1,
 ) -> None:
     """Render a U9 region height map to a greyscale PNG."""
-    raise SystemExit(cmd_terrain_heightmap(SimpleNamespace(file=file, output=output, scale=scale)))
+    raise SystemExit(
+        cmd_terrain_heightmap(SimpleNamespace(file=file, output=output, scale=scale))
+    )
 
 
 @u9_app.command("terrain-export")
 def terrain_export_cmd(
     file: Annotated[str, typer.Argument(help="Path to a static/terrain.<region> file")],
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output CSV path"),
+        Optional[str],
+        typer.Option("-o", "--output", help="Output CSV path"),
     ] = None,
 ) -> None:
     """Export every point of a U9 region height map to CSV."""
@@ -3186,19 +4206,28 @@ def terrain_export_cmd(
 @u9_app.command("books-list")
 def books_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/BOOKS-EN.FLX")],
-    by_size: Annotated[bool, typer.Option("-s", "--by-size", help="Order by body size, largest first")] = False,
-    limit: Annotated[Optional[int], typer.Option("-n", "--limit", help="Maximum rows to print")] = None,
+    by_size: Annotated[
+        bool, typer.Option("-s", "--by-size", help="Order by body size, largest first")
+    ] = False,
+    limit: Annotated[
+        Optional[int], typer.Option("-n", "--limit", help="Maximum rows to print")
+    ] = None,
 ) -> None:
     """List the books, scrolls and signs in a U9 book archive."""
-    raise SystemExit(cmd_books_list(SimpleNamespace(file=file, by_size=by_size, limit=limit)))
+    raise SystemExit(
+        cmd_books_list(SimpleNamespace(file=file, by_size=by_size, limit=limit))
+    )
 
 
 @u9_app.command("books-show")
 def books_show_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/BOOKS-EN.FLX")],
-    id: Annotated[int, typer.Option("-i", "--id", help="Book id, as shown by books-list")] = 1,
+    id: Annotated[
+        int, typer.Option("-i", "--id", help="Book id, as shown by books-list")
+    ] = 1,
     name: Annotated[
-        Optional[str], typer.Option("-b", "--name", help="Look the book up by name instead"),
+        Optional[str],
+        typer.Option("-b", "--name", help="Look the book up by name instead"),
     ] = None,
 ) -> None:
     """Print one U9 book's text."""
@@ -3209,19 +4238,29 @@ def books_show_cmd(
 def books_search_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/BOOKS-EN.FLX")],
     needle: Annotated[str, typer.Argument(help="Substring to look for")],
-    case_sensitive: Annotated[bool, typer.Option("-c", "--case-sensitive", help="Match case exactly")] = False,
-    limit: Annotated[Optional[int], typer.Option("-n", "--limit", help="Maximum matches to print")] = None,
+    case_sensitive: Annotated[
+        bool, typer.Option("-c", "--case-sensitive", help="Match case exactly")
+    ] = False,
+    limit: Annotated[
+        Optional[int], typer.Option("-n", "--limit", help="Maximum matches to print")
+    ] = None,
 ) -> None:
     """Search a U9 book archive, showing the matching passage."""
-    raise SystemExit(cmd_books_search(SimpleNamespace(
-        file=file, needle=needle, case_sensitive=case_sensitive, limit=limit)))
+    raise SystemExit(
+        cmd_books_search(
+            SimpleNamespace(
+                file=file, needle=needle, case_sensitive=case_sensitive, limit=limit
+            )
+        )
+    )
 
 
 @u9_app.command("books-export")
 def books_export_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/BOOKS-EN.FLX")],
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output CSV path"),
+        Optional[str],
+        typer.Option("-o", "--output", help="Output CSV path"),
     ] = None,
 ) -> None:
     """Export a U9 book archive to CSV."""
@@ -3230,51 +4269,91 @@ def books_export_cmd(
 
 @u9_app.command("flx-pack")
 def flx_pack_cmd(
-    directory: Annotated[str, typer.Argument(help="Directory of NNNNN.bin entry files")],
+    directory: Annotated[
+        str, typer.Argument(help="Directory of NNNNN.bin entry files")
+    ],
     output: Annotated[str, typer.Argument(help="Output .flx path")],
     count: Annotated[
-        Optional[int], typer.Option("-c", "--count", help="Directory slot count (default: smallest that fits)"),
+        Optional[int],
+        typer.Option(
+            "-c", "--count", help="Directory slot count (default: smallest that fits)"
+        ),
     ] = None,
     comment: Annotated[
-        Optional[str], typer.Option("--comment", help="ASCII comment, max 76 bytes"),
+        Optional[str],
+        typer.Option("--comment", help="ASCII comment, max 76 bytes"),
     ] = None,
 ) -> None:
     """Build a U9 FLX archive from extracted entry files."""
-    raise SystemExit(cmd_flx_pack(SimpleNamespace(
-        directory=directory, output=output, count=count, comment=comment)))
+    raise SystemExit(
+        cmd_flx_pack(
+            SimpleNamespace(
+                directory=directory, output=output, count=count, comment=comment
+            )
+        )
+    )
 
 
 @u9_app.command("flx-repack")
 def flx_repack_cmd(
     file: Annotated[str, typer.Argument(help="Path to an existing U9 FLX archive")],
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output path (default: <stem>_repacked.flx)"),
+        Optional[str],
+        typer.Option(
+            "-o", "--output", help="Output path (default: <stem>_repacked.flx)"
+        ),
     ] = None,
     replace: Annotated[
-        Optional[str], typer.Option("-r", "--replace", help="Directory of NNNNN.bin files to swap in"),
+        Optional[str],
+        typer.Option("-r", "--replace", help="Directory of NNNNN.bin files to swap in"),
     ] = None,
 ) -> None:
     """Rebuild a U9 FLX archive, optionally replacing entries, and verify it."""
-    raise SystemExit(cmd_flx_repack(SimpleNamespace(file=file, output=output, replace=replace)))
+    raise SystemExit(
+        cmd_flx_repack(SimpleNamespace(file=file, output=output, replace=replace))
+    )
 
 
 @u9_app.command("texture-import")
 def texture_import_cmd(
     textures: Annotated[
-        str, typer.Argument(help="Path to a texture archive: bitmap16.flx, bitmapsh.flx or bitmapC.flx"),
+        str,
+        typer.Argument(
+            help="Texture FLX: bitmap*.flx, Texture8.<region>, or texture16.<region>"
+        ),
     ],
     entry_id: Annotated[int, typer.Argument(help="Entry ID to replace")],
-    image: Annotated[str, typer.Argument(help="PNG to import; must match the frame's size exactly")],
-    frame: Annotated[int, typer.Option("--frame", help="Frame index within the entry")] = 0,
+    image: Annotated[
+        str, typer.Argument(help="PNG to import; must match the frame's size exactly")
+    ],
+    frame: Annotated[
+        int, typer.Option("--frame", help="Frame index within the entry")
+    ] = 0,
     palette: Annotated[
         Optional[str],
-        typer.Option("-p", "--palette", help="Path to static/ankh.pal -- required for 8-bit frames"),
+        typer.Option(
+            "-p",
+            "--palette",
+            help="Path to static/ankh.pal -- required for 8-bit frames",
+        ),
     ] = None,
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output archive path (default: <stem>_patched.flx)"),
+        Optional[str],
+        typer.Option(
+            "-o", "--output", help="Output archive path (default: <stem>_patched.flx)"
+        ),
     ] = None,
 ) -> None:
     """Replace one U9 texture frame with a same-size PNG."""
-    raise SystemExit(cmd_texture_import(SimpleNamespace(
-        textures=textures, entry_id=entry_id, image=image, frame=frame,
-        palette=palette, output=output)))
+    raise SystemExit(
+        cmd_texture_import(
+            SimpleNamespace(
+                textures=textures,
+                entry_id=entry_id,
+                image=image,
+                frame=frame,
+                palette=palette,
+                output=output,
+            )
+        )
+    )

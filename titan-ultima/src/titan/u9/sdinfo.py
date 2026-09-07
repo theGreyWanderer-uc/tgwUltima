@@ -16,7 +16,8 @@ metadata                textures                entries
 
 Every used entry is exactly 48 bytes -- twelve little-endian ``u32``::
 
-    [0]   unknown
+    [0]   packed/partial: byte1 = engine pixel-format selector;
+                         bytes 0, 2 and 3 remain unknown
     [1]   packed: byte0 = log2(width), byte1 = log2(height),
                   byte2 = 0, byte3 = frame_count - 1
     [2]   low u16  = mip level count; high u16 = a flag
@@ -59,9 +60,10 @@ whole rather than masked is a trap: ``sdInfoC.flx`` sets ``[11]``'s high bit on
 5,687 of 6,576 entries, so an unmasked read matches the frame count on only
 13.5% of them while the masked read matches all 6,576.
 
-``[0]``, ``[3]``, ``[4]``, ``[7]`` and ``[8]`` are not decoded. They were
-tested against frame offsets, frame lengths, entry byte length, the
-compression field and the per-frame transparency flag; none correlates.
+Bytes 0, 2 and 3 of ``[0]``, plus ``[3]``, ``[4]``, ``[7]`` and ``[8]``, are
+not decoded. They were tested against frame offsets, frame lengths, entry byte
+length, the compression field and the per-frame transparency flag; none
+correlates. ``[0]`` byte 1 is exposed as :attr:`U9SdInfoRecord.format_selector`.
 
 Example::
 
@@ -176,7 +178,9 @@ class U9SdInfo:
     def record(self, index: int) -> U9SdInfoRecord | None:
         """One record by texture index, or ``None`` if that slot is unused."""
         if index < 0 or index >= self.num_entries:
-            raise U9SdInfoError(f"index {index} out of range (0..{self.num_entries - 1})")
+            raise U9SdInfoError(
+                f"index {index} out of range (0..{self.num_entries - 1})"
+            )
         blob = self._archive.read_entry(index)
         if not blob:
             return None

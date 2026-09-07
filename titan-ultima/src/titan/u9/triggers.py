@@ -17,9 +17,10 @@ whose opcode is ``0xFF``::
 Records after the terminator are slack -- an FLX entry keeps whatever
 length it was allocated, so a trigger that shrank leaves stale records
 behind. 361 entries are *empty* triggers whose first record is already the
-terminator, several of those with slack after it. This reader stops at the
-first ``0xFF`` and reports the leftovers as
-:attr:`U9Trigger.slack_records` rather than decoding them.
+terminator, several of those with slack after it. The semantic instruction
+stream stops at the first ``0xFF``, but the terminator, slack records and
+entry-relative byte offsets are retained for binary research and exact
+round trips.
 
 **Opcode semantics are almost entirely undecoded.** 90 distinct opcodes
 appear across the 20,000-odd body records; this module exposes the record
@@ -111,10 +112,32 @@ class U9TriggerRecord:
     arg0: int
     arg1: int
     arg2: int
+    entry_offset: int = 0
 
     @property
     def is_terminator(self) -> bool:
         return self.opcode == TERMINATOR_OPCODE
+
+    @property
+    def arg2_low(self) -> int:
+        """Low byte of ``arg2``; the activity ordinal for opcode ``0x31``."""
+        return self.arg2 & 0xFF
+
+    @property
+    def arg2_high(self) -> int:
+        """High byte of ``arg2``, kept separate during opcode research."""
+        return self.arg2 >> 8
+
+    @property
+    def activity_reference(self) -> tuple[int, int] | None:
+        """Known ``(activity_id, ordinal)`` reference, or ``None``."""
+        if self.opcode != 0x31:
+            return None
+        return self.arg1, self.arg2_low
+
+    def to_bytes(self) -> bytes:
+        """Encode this instruction in its exact six-byte disk layout."""
+        return struct.pack(RECORD_STRUCT, self.opcode, self.arg0, self.arg1, self.arg2)
 
 
 @dataclass(frozen=True)
@@ -125,6 +148,9 @@ class U9Trigger:
     records: tuple[U9TriggerRecord, ...]
     slack_records: int
     terminated: bool
+    terminator: U9TriggerRecord | None = None
+    slack: tuple[U9TriggerRecord, ...] = ()
+    raw_data: bytes = b""
 
     @property
     def is_empty(self) -> bool:
@@ -134,6 +160,19 @@ class U9Trigger:
     @property
     def opcodes(self) -> list[int]:
         return [r.opcode for r in self.records]
+
+    @property
+    def all_records(self) -> tuple[U9TriggerRecord, ...]:
+        """Body, terminator, and stale records in their original order."""
+        if self.terminator is None:
+            return self.records
+        return self.records + (self.terminator,) + self.slack
+
+    def to_bytes(self) -> bytes:
+        """Return the complete original FLX-entry payload byte for byte."""
+        if self.raw_data:
+            return self.raw_data
+        return b"".join(record.to_bytes() for record in self.all_records)
 
 
 class U9Triggers:
@@ -176,14 +215,38 @@ class U9Triggers:
         terminated = False
         count = len(blob) // RECORD_SIZE
         for index in range(count):
-            record = U9TriggerRecord(*struct.unpack_from(RECORD_STRUCT, blob, index * RECORD_SIZE))
+            offset = index * RECORD_SIZE
+            fields = struct.unpack_from(RECORD_STRUCT, blob, offset)
+            record = U9TriggerRecord(
+                opcode=fields[0],
+                arg0=fields[1],
+                arg1=fields[2],
+                arg2=fields[3],
+                entry_offset=offset,
+            )
             if record.is_terminator:
                 terminated = True
+                slack_records = []
+                for slack_offset in range(offset + RECORD_SIZE, len(blob), RECORD_SIZE):
+                    slack_fields = struct.unpack_from(RECORD_STRUCT, blob, slack_offset)
+                    slack_records.append(
+                        U9TriggerRecord(
+                            opcode=slack_fields[0],
+                            arg0=slack_fields[1],
+                            arg1=slack_fields[2],
+                            arg2=slack_fields[3],
+                            entry_offset=slack_offset,
+                        )
+                    )
+                slack = tuple(slack_records)
                 return U9Trigger(
                     trigger_id=trigger_id,
                     records=tuple(records),
-                    slack_records=count - index - 1,
+                    slack_records=len(slack),
                     terminated=True,
+                    terminator=record,
+                    slack=slack,
+                    raw_data=blob,
                 )
             records.append(record)
         return U9Trigger(
@@ -191,6 +254,7 @@ class U9Triggers:
             records=tuple(records),
             slack_records=0,
             terminated=terminated,
+            raw_data=blob,
         )
 
     def triggers(self) -> list[U9Trigger]:

@@ -2,10 +2,10 @@
 3D model (mesh) reader for Ultima 9: Ascension's ``static/sappear.flx``.
 
 Each used entry in ``sappear.flx`` (3,764 of 8,000 directory slots in
-this project's test copy of the game) is one **model**: a hierarchy of
-rigid **limbs** (body parts/pieces, not a modern vertex-skinned
-skeleton -- see below), each with its own mesh at up to 4 levels of
-detail (LOD).
+this project's test copy of the game) is one **model**. Most use a hierarchy
+of rigid **limbs** (body parts/pieces, not a modern vertex-skinned skeleton --
+see below), each with its own mesh at up to 4 levels of detail (LOD). Sixteen
+use the alternate indexed-polygon record described below.
 
 Ported and reverse-engineered from the real, open-source Blender
 importer ``Chevluh/Ultima-9-Blender-Importer``'s
@@ -55,15 +55,13 @@ table itself ends at byte 152, and its one limb's header offset is
 throughout development here as a cross-check that each field was being
 read at the right size/position.
 
-Validated by parsing all 3,764 real entries in this project's test
-copy of ``sappear.flx``: 3,748 parse cleanly (including a 927-vertex,
-1,264-triangle, 86-limb model), and exactly 16 raise :class:`U9ModelError`
-with a nonsensical ``submesh_count``/``lod_count`` (e.g. model 536 reads
-``submesh_count=169, lod_count=845`` from a 2,139-byte entry -- more
-than 500KB of offset table alone couldn't possibly fit). These are
-genuinely corrupt/placeholder archive entries, not a parser bug: model
-536 is the exact same entry the reference importer's own author flags
-with ``#mesh 536 crashes`` in ``ImportSingleModel()``.
+Validated against all 3,764 used entries in this project's test copy of
+``sappear.flx``.  Most entries use the hierarchical format above.  Sixteen
+start with a 169-byte (``0xA9``) header and use an alternate indexed-polygon
+layout; :meth:`U9Model.parse` recognises both.  The alternate face records can
+hold triangles or quads.  Quads are triangulated for the normal ``limbs`` API,
+while their original four-corner form remains available in
+``U9Model.indexed_faces``.
 """
 
 from __future__ import annotations
@@ -73,14 +71,16 @@ __all__ = [
     "U9ModelError",
     "U9Limb",
     "U9SubmeshLod",
+    "U9IndexedFace",
     "U9Triangle",
     "U9TriangleCorner",
     "U9Material",
     "INVISIBLE_TEXTURE_ID",
 ]
 
+import math
 import struct
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 Vec2 = tuple[float, float]
 Vec3 = tuple[float, float, float]
@@ -93,6 +93,10 @@ FACE_RECORD_SIZE = 0x7C
 CORNER_RECORD_SIZE = 0x1C
 MATERIAL_RECORD_SIZE = 0x18
 VERTEX_RECORD_SIZE = 0x0C
+
+INDEXED_HEADER_SIZE = 0xA9
+INDEXED_FACE_RECORD_SIZE = 0x34
+INDEXED_CORNER_RECORD_SIZE = 0x18
 
 INVISIBLE_TEXTURE_ID = 0xFFFF
 
@@ -117,6 +121,9 @@ class U9TriangleCorner:
     vertex_index: int
     normal: Vec3
     uv: Vec2
+    point_offset: int = 0
+    """Ordinary records store a redundant vertex-byte offset here.  Indexed
+    records store a relative pointer to the vertex record instead."""
 
 
 @dataclass(frozen=True)
@@ -135,6 +142,32 @@ class U9Triangle:
     face_normal: Vec3
     color: tuple[int, int, int, int]
     """RGBA, each 0-255. Real data: model 0's faces are all (200, 200, 200, 255)."""
+    flags: int = 0
+    flags2: int = 0
+    plane_w: float = 0.0
+    raw_material: int = 0
+    collision: bytes = b"\x00" * 8
+
+
+@dataclass(frozen=True)
+class U9IndexedFace:
+    """Original triangle or quad from an alternate ``0xA9`` model record."""
+
+    corners: tuple[U9TriangleCorner, ...]
+    corner_offsets: tuple[int, int, int, int]
+    """The four relative pointers exactly as stored; zero marks no fourth corner."""
+    corner_indices: tuple[int, ...]
+    """The resolved indices into the record's corner section."""
+    flags: int
+    face_normal: Vec3
+    plane_w: float
+    raw_material: int
+    color: tuple[int, int, int, int]
+    collision: bytes
+
+    @property
+    def is_quad(self) -> bool:
+        return len(self.corners) == 4
 
 
 #: Bits of :attr:`U9Material.render_flags` (the u16 at material +0x04).
@@ -234,10 +267,33 @@ class U9Material:
     anim_end: int
     cur_frame: int
     anim_speed: int
+    animation_type: int = 0
+    playback_direction: int = 0
+    animation_timer: int = 0
 
     @property
     def is_invisible(self) -> bool:
         return self.texture_id == INVISIBLE_TEXTURE_ID
+
+    @property
+    def is_chromakey(self) -> bool:
+        return bool(self.render_flags & MATERIAL_FLAG_CHROMAKEY)
+
+    @property
+    def is_sorted(self) -> bool:
+        return bool(self.render_flags & MATERIAL_FLAG_SORTED_POOL)
+
+    @property
+    def is_additive(self) -> bool:
+        return bool(self.render_flags & MATERIAL_FLAG_ADDITIVE)
+
+    @property
+    def clamps_s(self) -> bool:
+        return bool(self.render_flags & MATERIAL_FLAG_CLAMP_S)
+
+    @property
+    def clamps_t(self) -> bool:
+        return bool(self.render_flags & MATERIAL_FLAG_CLAMP_T)
 
 
 @dataclass(frozen=True)
@@ -252,6 +308,21 @@ class U9SubmeshLod:
     sphere_radius: float
     min_bounds: Vec3
     max_bounds: Vec3
+    mount_vertices: tuple[Vec3, ...] = ()
+    mount_triangles: tuple[U9Triangle, ...] = ()
+    mesh_size: int = 0
+    flags: int = 0
+    unknown_08: int = 0
+    unknown_34: int = 0
+    unknown_38: int = 0
+    max_face_count: int = 0
+    face_offset: int = 0
+    mount_face_offset: int = 0
+    vertex_offset: int = 0
+    mount_vertex_offset: int = 0
+    material_offset: int = 0
+    sorted_face_offsets: tuple[int, int, int, int] = (0, 0, 0, 0)
+    unknown_78: int = 0
 
 
 @dataclass(frozen=True)
@@ -310,21 +381,57 @@ class U9Model:
     lod_thresholds: tuple[int, int, int, int]
     center_of_mass: Vec3
     limbs: tuple[U9Limb, ...]
+    unknown_2c: float = 0.0
+    mass_or_volume: float = 0.0
+    inertia_matrix: tuple[
+        float, float, float, float, float, float, float, float, float
+    ] = (
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    )
+    unknown_8c: float = 0.0
+    record_format: str = "hierarchical"
+    indexed_faces: tuple[U9IndexedFace, ...] = ()
+    alternate_header: bytes = b""
+    trailing_data: bytes = b""
+    _raw_data: bytes = field(default=b"", repr=False, compare=False)
 
     @classmethod
     def parse(cls, data: bytes, model_id: int = 0) -> U9Model:
+        if (
+            len(data) >= 4
+            and struct.unpack_from("<I", data, 0)[0] == INDEXED_HEADER_SIZE
+        ):
+            return _parse_indexed_model(data, model_id)
         if len(data) < MODEL_HEADER_SIZE:
-            raise U9ModelError(f"data too small for a model header: {len(data)} bytes (need {MODEL_HEADER_SIZE})")
+            raise U9ModelError(
+                f"data too small for a model header: {len(data)} bytes (need {MODEL_HEADER_SIZE})"
+            )
 
         submesh_count, lod_count = struct.unpack_from("<II", data, 0x00)
+        table_size = submesh_count * (lod_count + 1) * 4
+        _require_range(data, MODEL_HEADER_SIZE, table_size, "limb offset table")
         cylinder_base_center = struct.unpack_from("<3f", data, 0x08)
-        cylinder_base_height, cylinder_base_radius = struct.unpack_from("<2f", data, 0x14)
+        cylinder_base_height, cylinder_base_radius = struct.unpack_from(
+            "<2f", data, 0x14
+        )
         sphere_center = struct.unpack_from("<3f", data, 0x1C)
         sphere_radius = struct.unpack_from("<f", data, 0x28)[0]
+        unknown_2c = struct.unpack_from("<f", data, 0x2C)[0]
         min_bounds = struct.unpack_from("<3f", data, 0x30)
         max_bounds = struct.unpack_from("<3f", data, 0x3C)
         lod_thresholds = struct.unpack_from("<4I", data, 0x48)
         center_of_mass = struct.unpack_from("<3f", data, 0x58)
+        mass_or_volume = struct.unpack_from("<f", data, 0x64)[0]
+        inertia_matrix = struct.unpack_from("<9f", data, 0x68)
+        unknown_8c = struct.unpack_from("<f", data, 0x8C)[0]
 
         try:
             offset = MODEL_HEADER_SIZE
@@ -338,12 +445,15 @@ class U9Model:
 
             limbs = []
             for header_off, lod_offs in limb_descs:
+                _require_range(data, header_off, LIMB_HEADER_SIZE, "limb header")
                 limb_id, parent_id = struct.unpack_from("<II", data, header_off)
                 scale = struct.unpack_from("<3f", data, header_off + 0x08)
                 position = struct.unpack_from("<3f", data, header_off + 0x14)
                 qw, qx, qy, qz = struct.unpack_from("<4f", data, header_off + 0x20)
 
-                lods = tuple(_parse_lod(data, lod_off, i) for i, lod_off in enumerate(lod_offs))
+                lods = tuple(
+                    _parse_lod(data, lod_off, i) for i, lod_off in enumerate(lod_offs)
+                )
                 limbs.append(
                     U9Limb(
                         limb_id=limb_id,
@@ -355,7 +465,9 @@ class U9Model:
                     )
                 )
         except struct.error as e:
-            raise U9ModelError(f"malformed model record (model_id={model_id}): {e}") from e
+            raise U9ModelError(
+                f"malformed model record (model_id={model_id}): {e}"
+            ) from e
 
         return cls(
             model_id=model_id,
@@ -369,49 +481,126 @@ class U9Model:
             lod_thresholds=lod_thresholds,
             center_of_mass=center_of_mass,
             limbs=tuple(limbs),
+            unknown_2c=unknown_2c,
+            mass_or_volume=mass_or_volume,
+            inertia_matrix=inertia_matrix,
+            unknown_8c=unknown_8c,
+            _raw_data=data,
         )
+
+    def to_bytes(self) -> bytes:
+        """Return the exact source record bytes, including fields not decoded yet."""
+        if not self._raw_data:
+            raise U9ModelError(
+                "model was constructed in memory and has no source bytes"
+            )
+        return self._raw_data
 
 
 def _parse_lod(data: bytes, start: int, lod_index: int) -> U9SubmeshLod | None:
+    _require_range(data, start, 4, f"LOD {lod_index} size")
     mesh_size = struct.unpack_from("<I", data, start)[0]
     if mesh_size == 0:
         return None
+    _require_range(data, start, LOD_HEADER_SIZE, f"LOD {lod_index} header")
+    _require_range(data, start, mesh_size + 4, f"LOD {lod_index} declared mesh")
 
+    flags, unknown_08 = struct.unpack_from("<2I", data, start + 0x04)
     sphere_center = struct.unpack_from("<3f", data, start + 0x0C)
     sphere_radius = struct.unpack_from("<f", data, start + 0x18)[0]
     min_bounds = struct.unpack_from("<3f", data, start + 0x1C)
     max_bounds = struct.unpack_from("<3f", data, start + 0x28)
-    face_count, _mount_face_count, vertex_count, _mount_vertex_count, _max_face_count, material_count = (
-        struct.unpack_from("<6I", data, start + 0x3C)
+    unknown_34, unknown_38 = struct.unpack_from("<2I", data, start + 0x34)
+    (
+        face_count,
+        mount_face_count,
+        vertex_count,
+        mount_vertex_count,
+        max_face_count,
+        material_count,
+    ) = struct.unpack_from("<6I", data, start + 0x3C)
+    face_off, mount_face_off, vertex_off, mount_vertex_off, material_off = (
+        struct.unpack_from("<5I", data, start + 0x54)
     )
-    face_off, _mount_face_off, vertex_off, _mount_vertex_off, material_off = struct.unpack_from(
-        "<5I", data, start + 0x54
+    sorted_face_offsets = struct.unpack_from("<4I", data, start + 0x68)
+    unknown_78 = struct.unpack_from("<I", data, start + 0x78)[0]
+
+    faces_start = _array_start(
+        data, start, face_off, face_count, FACE_RECORD_SIZE, "faces"
+    )
+    raw_faces = tuple(
+        _parse_face(data, faces_start + i * FACE_RECORD_SIZE) for i in range(face_count)
     )
 
-    faces_start = start + face_off + 4
-    raw_faces = [_parse_face(data, faces_start + i * FACE_RECORD_SIZE) for i in range(face_count)]
-
-    verts_start = start + vertex_off + 4
+    verts_start = _array_start(
+        data, start, vertex_off, vertex_count, VERTEX_RECORD_SIZE, "vertices"
+    )
     vertices = tuple(
-        struct.unpack_from("<3f", data, verts_start + i * VERTEX_RECORD_SIZE) for i in range(vertex_count)
+        struct.unpack_from("<3f", data, verts_start + i * VERTEX_RECORD_SIZE)
+        for i in range(vertex_count)
     )
 
-    mats_start = start + material_off + 4
-    materials = tuple(_parse_material(data, mats_start + i * MATERIAL_RECORD_SIZE) for i in range(material_count))
+    mount_faces_start = _array_start(
+        data,
+        start,
+        mount_face_off,
+        mount_face_count,
+        FACE_RECORD_SIZE,
+        "mount faces",
+    )
+    mount_faces = tuple(
+        _parse_face(data, mount_faces_start + i * FACE_RECORD_SIZE)
+        for i in range(mount_face_count)
+    )
+    mount_verts_start = _array_start(
+        data,
+        start,
+        mount_vertex_off,
+        mount_vertex_count,
+        VERTEX_RECORD_SIZE,
+        "mount vertices",
+    )
+    mount_vertices = tuple(
+        struct.unpack_from("<3f", data, mount_verts_start + i * VERTEX_RECORD_SIZE)
+        for i in range(mount_vertex_count)
+    )
 
-    face_material_index = [0] * face_count
+    mats_start = _array_start(
+        data, start, material_off, material_count, MATERIAL_RECORD_SIZE, "materials"
+    )
+    materials = tuple(
+        _parse_material(data, mats_start + i * MATERIAL_RECORD_SIZE)
+        for i in range(material_count)
+    )
+
+    face_material_index = [-1] * face_count
     for mat_idx, mat in enumerate(materials):
         for f in range(mat.first_face, mat.first_face + mat.face_count):
-            if 0 <= f < face_count:
-                face_material_index[f] = mat_idx
+            if not 0 <= f < face_count:
+                raise U9ModelError(
+                    f"material {mat_idx} face range {mat.first_face}.."
+                    f"{mat.first_face + mat.face_count} exceeds {face_count} faces"
+                )
+            if face_material_index[f] != -1:
+                raise U9ModelError(f"face {f} is covered by more than one material")
+            face_material_index[f] = mat_idx
+
+    missing = next(
+        (
+            i
+            for i, material_index in enumerate(face_material_index)
+            if material_index < 0
+        ),
+        None,
+    )
+    if missing is not None:
+        raise U9ModelError(f"face {missing} is not covered by any material")
+
+    _validate_face_indices(raw_faces, len(vertices), "face")
+    _validate_face_indices(mount_faces, len(mount_vertices), "mount face")
 
     triangles = tuple(
-        U9Triangle(
-            corners=raw_face[0],
-            material_index=face_material_index[i],
-            face_normal=raw_face[1],
-            color=raw_face[2],
-        )
+        _with_material(raw_face, face_material_index[i])
         for i, raw_face in enumerate(raw_faces)
     )
 
@@ -424,31 +613,70 @@ def _parse_lod(data: bytes, start: int, lod_index: int) -> U9SubmeshLod | None:
         sphere_radius=sphere_radius,
         min_bounds=min_bounds,
         max_bounds=max_bounds,
+        mount_vertices=mount_vertices,
+        mount_triangles=mount_faces,
+        mesh_size=mesh_size,
+        flags=flags,
+        unknown_08=unknown_08,
+        unknown_34=unknown_34,
+        unknown_38=unknown_38,
+        max_face_count=max_face_count,
+        face_offset=face_off,
+        mount_face_offset=mount_face_off,
+        vertex_offset=vertex_off,
+        mount_vertex_offset=mount_vertex_off,
+        material_offset=material_off,
+        sorted_face_offsets=sorted_face_offsets,
+        unknown_78=unknown_78,
     )
 
 
-def _parse_face(
-    data: bytes, pos: int
-) -> tuple[tuple[U9TriangleCorner, U9TriangleCorner, U9TriangleCorner], Vec3, tuple[int, int, int, int]]:
+def _parse_face(data: bytes, pos: int) -> U9Triangle:
+    _require_range(data, pos, FACE_RECORD_SIZE, "face record")
     corners = tuple(_parse_corner(data, pos + i * CORNER_RECORD_SIZE) for i in range(3))
+    flags, flags2 = struct.unpack_from("<2I", data, pos + 0x54)
     normal = struct.unpack_from("<3f", data, pos + 0x5C)
+    plane_w = struct.unpack_from("<f", data, pos + 0x68)[0]
+    raw_material = struct.unpack_from("<I", data, pos + 0x6C)[0]
     color = struct.unpack_from("<4B", data, pos + 0x70)
-    return corners, normal, color  # type: ignore[return-value]
+    collision = data[pos + 0x74 : pos + 0x7C]
+    return U9Triangle(
+        corners=corners,  # type: ignore[arg-type]
+        material_index=-1,
+        face_normal=normal,
+        color=color,
+        flags=flags,
+        flags2=flags2,
+        plane_w=plane_w,
+        raw_material=raw_material,
+        collision=collision,
+    )
 
 
 def _parse_corner(data: bytes, pos: int) -> U9TriangleCorner:
-    vertex_index = struct.unpack_from("<I", data, pos)[0]
-    # pos+4: byte offset of the vertex -- redundant with vertex_index, unused here.
+    vertex_index, point_offset = struct.unpack_from("<2I", data, pos)
     normal = struct.unpack_from("<3f", data, pos + 0x08)
     uv = struct.unpack_from("<2f", data, pos + 0x14)
-    return U9TriangleCorner(vertex_index=vertex_index, normal=normal, uv=uv)
+    return U9TriangleCorner(
+        vertex_index=vertex_index, normal=normal, uv=uv, point_offset=point_offset
+    )
 
 
 def _parse_material(data: bytes, pos: int) -> U9Material:
-    tex_id, flags_02, render_flags, flags_06, first_face, face_count = struct.unpack_from("<6H", data, pos)
-    default_alpha, modified_alpha, anim_start, anim_end, cur_frame, anim_speed, _anim_type, _playback = (
-        struct.unpack_from("<8B", data, pos + 12)
+    tex_id, flags_02, render_flags, flags_06, first_face, face_count = (
+        struct.unpack_from("<6H", data, pos)
     )
+    (
+        default_alpha,
+        modified_alpha,
+        anim_start,
+        anim_end,
+        cur_frame,
+        anim_speed,
+        anim_type,
+        playback,
+    ) = struct.unpack_from("<8B", data, pos + 12)
+    animation_timer = struct.unpack_from("<I", data, pos + 0x14)[0]
     return U9Material(
         texture_id=tex_id,
         flags_02=flags_02,
@@ -462,4 +690,304 @@ def _parse_material(data: bytes, pos: int) -> U9Material:
         anim_end=anim_end,
         cur_frame=cur_frame,
         anim_speed=anim_speed,
+        animation_type=anim_type,
+        playback_direction=playback,
+        animation_timer=animation_timer,
     )
+
+
+def _require_range(data: bytes, start: int, size: int, label: str) -> None:
+    if start < 0 or size < 0 or start > len(data) or size > len(data) - start:
+        raise U9ModelError(
+            f"{label} range {start:#x}..{start + size:#x} exceeds {len(data):#x}-byte record"
+        )
+
+
+def _array_start(
+    data: bytes,
+    record_start: int,
+    relative_offset: int,
+    count: int,
+    item_size: int,
+    label: str,
+) -> int:
+    if count == 0:
+        return record_start
+    if relative_offset < LOD_HEADER_SIZE:
+        raise U9ModelError(
+            f"{label} offset {relative_offset:#x} points inside the LOD header"
+        )
+    result = record_start + relative_offset + 4
+    _require_range(data, result, count * item_size, label)
+    return result
+
+
+def _with_material(triangle: U9Triangle, material_index: int) -> U9Triangle:
+    return U9Triangle(
+        corners=triangle.corners,
+        material_index=material_index,
+        face_normal=triangle.face_normal,
+        color=triangle.color,
+        flags=triangle.flags,
+        flags2=triangle.flags2,
+        plane_w=triangle.plane_w,
+        raw_material=triangle.raw_material,
+        collision=triangle.collision,
+    )
+
+
+def _validate_face_indices(
+    faces: tuple[U9Triangle, ...], vertex_count: int, label: str
+) -> None:
+    for face_index, face in enumerate(faces):
+        for corner_index, corner in enumerate(face.corners):
+            if corner.vertex_index >= vertex_count:
+                raise U9ModelError(
+                    f"{label} {face_index} corner {corner_index} references vertex "
+                    f"{corner.vertex_index}, but only {vertex_count} vertices exist"
+                )
+
+
+def _parse_indexed_model(data: bytes, model_id: int) -> U9Model:
+    _require_range(data, 0, INDEXED_HEADER_SIZE, "indexed model header")
+    corner_start, vertex_start, trailing_start = struct.unpack_from("<3I", data, 0x04)
+    face_count, corner_count, vertex_count = struct.unpack_from("<3I", data, 0x10)
+
+    expected_corner_start = INDEXED_HEADER_SIZE + face_count * INDEXED_FACE_RECORD_SIZE
+    expected_vertex_start = corner_start + corner_count * INDEXED_CORNER_RECORD_SIZE
+    expected_trailing_start = vertex_start + vertex_count * VERTEX_RECORD_SIZE
+    if corner_start != expected_corner_start:
+        raise U9ModelError(
+            f"indexed corner offset is {corner_start:#x}, expected {expected_corner_start:#x}"
+        )
+    if vertex_start != expected_vertex_start:
+        raise U9ModelError(
+            f"indexed vertex offset is {vertex_start:#x}, expected {expected_vertex_start:#x}"
+        )
+    if trailing_start != expected_trailing_start:
+        raise U9ModelError(
+            f"indexed trailing offset is {trailing_start:#x}, expected {expected_trailing_start:#x}"
+        )
+    _require_range(
+        data,
+        INDEXED_HEADER_SIZE,
+        face_count * INDEXED_FACE_RECORD_SIZE,
+        "indexed faces",
+    )
+    _require_range(
+        data, corner_start, corner_count * INDEXED_CORNER_RECORD_SIZE, "indexed corners"
+    )
+    _require_range(
+        data, vertex_start, vertex_count * VERTEX_RECORD_SIZE, "indexed vertices"
+    )
+    _require_range(data, trailing_start, 0, "indexed trailing data")
+
+    vertices = tuple(
+        struct.unpack_from("<3f", data, vertex_start + i * VERTEX_RECORD_SIZE)
+        for i in range(vertex_count)
+    )
+    corners = tuple(
+        _parse_indexed_corner(
+            data,
+            corner_start + i * INDEXED_CORNER_RECORD_SIZE,
+            vertex_start,
+            vertex_count,
+        )
+        for i in range(corner_count)
+    )
+    used_vertices = {corner.vertex_index for corner in corners}
+    if used_vertices != set(range(vertex_count)):
+        raise U9ModelError("indexed vertex table contains unreferenced records")
+
+    indexed_faces = tuple(
+        _parse_indexed_face(
+            data,
+            INDEXED_HEADER_SIZE + i * INDEXED_FACE_RECORD_SIZE,
+            corner_start,
+            corners,
+        )
+        for i in range(face_count)
+    )
+    used_corners = {corner for face in indexed_faces for corner in face.corner_indices}
+    expected_corners = set(range(corner_count))
+    if used_corners != expected_corners:
+        raise U9ModelError(
+            "indexed corner table contains unreferenced or duplicate-address records"
+        )
+
+    texture_ids = tuple(dict.fromkeys(face.raw_material for face in indexed_faces))
+    if any(texture_id > 0xFFFF for texture_id in texture_ids):
+        raise U9ModelError("indexed face material does not fit a texture ID")
+    material_indices = {
+        texture_id: index for index, texture_id in enumerate(texture_ids)
+    }
+    materials = tuple(
+        U9Material(
+            texture_id=texture_id,
+            flags_02=0,
+            render_flags=0,
+            flags_06=0,
+            first_face=0,
+            face_count=0,
+            default_alpha=0xFF,
+            modified_alpha=0xFF,
+            anim_start=0,
+            anim_end=0,
+            cur_frame=0,
+            anim_speed=0,
+        )
+        for texture_id in texture_ids
+    )
+    triangles = tuple(
+        triangle
+        for face in indexed_faces
+        for triangle in _triangulate_indexed_face(
+            face, material_indices[face.raw_material]
+        )
+    )
+    min_bounds, max_bounds, sphere_center, sphere_radius = _geometry_bounds(vertices)
+    lod = U9SubmeshLod(
+        lod_index=0,
+        vertices=vertices,
+        triangles=triangles,
+        materials=materials,
+        sphere_center=sphere_center,
+        sphere_radius=sphere_radius,
+        min_bounds=min_bounds,
+        max_bounds=max_bounds,
+        mesh_size=len(data),
+        max_face_count=len(triangles),
+    )
+    limb = U9Limb(
+        limb_id=0,
+        parent_id=0,
+        scale=(1.0, 1.0, 1.0),
+        position=(0.0, 0.0, 0.0),
+        rotation=(1.0, 0.0, 0.0, 0.0),
+        lods=(lod,),
+    )
+    return U9Model(
+        model_id=model_id,
+        cylinder_base_center=(0.0, 0.0, 0.0),
+        cylinder_base_height=0.0,
+        cylinder_base_radius=0.0,
+        sphere_center=sphere_center,
+        sphere_radius=sphere_radius,
+        min_bounds=min_bounds,
+        max_bounds=max_bounds,
+        lod_thresholds=(0, 0, 0, 0),
+        center_of_mass=(0.0, 0.0, 0.0),
+        limbs=(limb,),
+        record_format="indexed",
+        indexed_faces=indexed_faces,
+        alternate_header=data[:INDEXED_HEADER_SIZE],
+        trailing_data=data[trailing_start:],
+        _raw_data=data,
+    )
+
+
+def _parse_indexed_corner(
+    data: bytes, pos: int, vertex_start: int, vertex_count: int
+) -> U9TriangleCorner:
+    point_offset = struct.unpack_from("<I", data, pos)[0]
+    vertex_pos = pos + point_offset
+    delta = vertex_pos - vertex_start
+    if (
+        delta < 0
+        or delta % VERTEX_RECORD_SIZE
+        or delta // VERTEX_RECORD_SIZE >= vertex_count
+    ):
+        raise U9ModelError(
+            f"indexed corner at {pos:#x} has invalid vertex pointer {point_offset:#x}"
+        )
+    normal = struct.unpack_from("<3f", data, pos + 0x04)
+    uv = struct.unpack_from("<2f", data, pos + 0x10)
+    return U9TriangleCorner(
+        vertex_index=delta // VERTEX_RECORD_SIZE,
+        normal=normal,
+        uv=uv,
+        point_offset=point_offset,
+    )
+
+
+def _parse_indexed_face(
+    data: bytes,
+    pos: int,
+    corner_start: int,
+    corners: tuple[U9TriangleCorner, ...],
+) -> U9IndexedFace:
+    relative_offsets = struct.unpack_from("<4I", data, pos)
+    if 0 in relative_offsets[:3]:
+        raise U9ModelError(f"indexed face at {pos:#x} has a missing triangle corner")
+    resolved_corners = []
+    corner_indices = []
+    for relative_offset in relative_offsets:
+        if relative_offset == 0:
+            continue
+        corner_pos = pos + relative_offset
+        delta = corner_pos - corner_start
+        if delta < 0 or delta % INDEXED_CORNER_RECORD_SIZE:
+            raise U9ModelError(
+                f"indexed face at {pos:#x} has invalid corner pointer {relative_offset:#x}"
+            )
+        corner_index = delta // INDEXED_CORNER_RECORD_SIZE
+        if corner_index >= len(corners):
+            raise U9ModelError(
+                f"indexed face at {pos:#x} points beyond the corner table"
+            )
+        resolved_corners.append(corners[corner_index])
+        corner_indices.append(corner_index)
+
+    flags = struct.unpack_from("<I", data, pos + 0x10)[0]
+    face_normal = struct.unpack_from("<3f", data, pos + 0x14)
+    plane_w = struct.unpack_from("<f", data, pos + 0x20)[0]
+    raw_material = struct.unpack_from("<I", data, pos + 0x24)[0]
+    color = struct.unpack_from("<4B", data, pos + 0x28)
+    collision = data[pos + 0x2C : pos + 0x34]
+    return U9IndexedFace(
+        corners=tuple(resolved_corners),
+        corner_offsets=relative_offsets,
+        corner_indices=tuple(corner_indices),
+        flags=flags,
+        face_normal=face_normal,
+        plane_w=plane_w,
+        raw_material=raw_material,
+        color=color,
+        collision=collision,
+    )
+
+
+def _triangulate_indexed_face(
+    face: U9IndexedFace, material_index: int
+) -> tuple[U9Triangle, ...]:
+    corner_sets = (
+        (face.corners[:3],)
+        if not face.is_quad
+        else (face.corners[:3], (face.corners[0], *face.corners[2:4]))
+    )
+    return tuple(
+        U9Triangle(
+            corners=corners,  # type: ignore[arg-type]
+            material_index=material_index,
+            face_normal=face.face_normal,
+            color=face.color,
+            flags=face.flags,
+            plane_w=face.plane_w,
+            raw_material=face.raw_material,
+            collision=face.collision,
+        )
+        for corners in corner_sets
+    )
+
+
+def _geometry_bounds(vertices: tuple[Vec3, ...]) -> tuple[Vec3, Vec3, Vec3, float]:
+    if not vertices:
+        zero = (0.0, 0.0, 0.0)
+        return zero, zero, zero, 0.0
+    min_bounds = tuple(min(vertex[axis] for vertex in vertices) for axis in range(3))
+    max_bounds = tuple(max(vertex[axis] for vertex in vertices) for axis in range(3))
+    center = tuple(
+        (minimum + maximum) / 2.0 for minimum, maximum in zip(min_bounds, max_bounds)
+    )
+    radius = max(math.dist(center, vertex) for vertex in vertices)
+    return min_bounds, max_bounds, center, radius  # type: ignore[return-value]

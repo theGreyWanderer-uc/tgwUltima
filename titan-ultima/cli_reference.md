@@ -4004,15 +4004,71 @@ titan u9 sound-extract sound/music.flx -o music_wav/
 
 ---
 
+### Palette commands
+
+---
+
+#### `u9 palette-info`
+
+Inspect `static/ankh.pal` without exporting it. Reports its byte layout,
+distinct and duplicate colour counts, non-zero reserved fourth bytes, and the
+exact index-254 texture transparency key. `--duplicates` also prints every
+repeated RGB value and all of its indices.
+
+```
+titan u9 palette-info <file> [-d|--duplicates]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/ankh.pal` |
+| `-d`, `--duplicates` | List every repeated colour and its indices |
+
+```bash
+titan u9 palette-info static/ankh.pal --duplicates
+```
+
+---
+
+#### `u9 palette-export`
+
+Export `static/ankh.pal` as a 16x16 RGB PNG swatch and a complete text table.
+The table includes each index's RGB, preserved reserved fourth byte, texture
+alpha, and hex colour. Only index 254 has texture alpha zero; the stored fourth
+byte is not alpha and remains zero in the shipped file.
+
+```
+titan u9 palette-export <file> [-o DIR] [--swatch-size N]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/ankh.pal` |
+| `-o DIR`, `--output DIR` | Output directory (default: current directory) |
+| `--swatch-size N` | Pixel width and height of each colour square (default: `16`) |
+
+```bash
+titan u9 palette-export static/ankh.pal -o palette/
+```
+
+The Python API additionally supports exact parse/write round trips with
+`U9Palette.to_bytes()`, creation through `U9Palette.from_colors()`, RGBA lookup,
+duplicate inventory, flat-RGB export, swatch rendering, and nearest-colour
+quantization.
+
+---
+
 ### 3D model commands
 
 ---
 
 #### `u9 model-info`
 
-Print a model's limb/LOD/material/texture summary: header bounds,
-sphere, LOD thresholds, and a per-limb table (parent, root, position,
-plus each LOD's triangle/vertex/material counts and texture IDs). With
+Print a model's record type and limb/LOD/material/texture summary: header
+bounds, sphere, LOD thresholds, and a per-limb table (parent, root, position,
+plus each LOD's render and mount triangle/vertex counts, material count, and
+texture IDs). Both ordinary hierarchical records and the alternate `0xA9`
+indexed-polygon records are supported. With
 `--types`/`--typenames` both given, also prints any possible name(s)
 for the model (see `titan.u9.model_naming`'s module docstring for why
 there can be zero, one, or several).
@@ -4044,7 +4100,8 @@ rotated 180 degrees. There's no way to know a model's actual "front"
 direction from the exported data alone, but the default angle
 consistently turned out to be a rear-ish view on the humanoid models
 checked, so the rotated shot reliably ends up front-ish instead --
-hence the naming. The limb hierarchy is flattened to one shared world
+hence the naming. All 3,764 used records are parseable; alternate quads are
+triangulated for export. The limb hierarchy is flattened to one shared world
 space (OBJ/STL have no node/parent concept); winding is reversed by
 default to match real stored face normals (see
 `titan.u9.mesh_export`'s module docstring). STL is geometry-only by
@@ -4134,6 +4191,62 @@ titan u9 model-export-all static/sappear.flx -t static/bitmap16.flx -p static/an
 
 ---
 
+#### `u9 texture-info`
+
+Inspect one texture-set entry without decoding its pixels. This exposes the
+set header, frame directory, per-frame header flags, row-table-backed sizes,
+encoding, and every stored mip dimension. It accepts the three `bitmap*.flx`
+archives and the extensionless-FLX terrain panels `Texture8.<region>` and
+`texture16.<region>`.
+
+```
+titan u9 texture-info <textures> <entry_id>
+```
+
+| Argument | Description |
+|----------|-------------|
+| `textures` | `bitmap*.flx`, `Texture8.<region>`, or `texture16.<region>` |
+| `entry_id` | Texture-set entry ID to inspect |
+
+**Examples**
+
+```bash
+titan u9 texture-info static/bitmap16.flx 568
+titan u9 texture-info static/Texture8.9 1087
+```
+
+---
+
+#### `u9 texture-export`
+
+Export any texture frame or one of its stored mip levels to RGBA PNG. The
+8-bit archives need `ankh.pal` for their real colours; it is discovered
+automatically when beside the archive. Paletted index 254 exports with zero
+alpha while its RGB-identical index 247 remains opaque.
+
+```
+titan u9 texture-export <textures> <entry_id> [--frame N] [--mip N]
+                        [-p PALETTE] [-o DIR]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `textures` | `bitmap*.flx`, `Texture8.<region>`, or `texture16.<region>` |
+| `entry_id` | Texture-set entry ID to export |
+| `--frame N` | Frame index within the entry (default: `0`) |
+| `--mip N` | Stored mip level; `0` is the base image (default: `0`) |
+| `-p FILE`, `--palette FILE` | Path to `static/ankh.pal` for 8-bit palette indices |
+| `-o DIR`, `--output DIR` | Output directory (default: current directory) |
+
+**Examples**
+
+```bash
+titan u9 texture-export static/bitmapC.flx 568 --mip 2 -o textures/
+titan u9 texture-export static/Texture8.9 1087 -p static/ankh.pal -o panels/
+```
+
+---
+
 #### `u9 icon-list`
 
 List candidate 2D UI icon entries in a texture archive: entries **not**
@@ -4219,17 +4332,16 @@ position, type, mesh, rotation, flags and trigger association.
 
 These commands read that format. The parser is verified against 166 real
 region files; see `reference/u9/nonfixed/u9_nonfixed_reference.md` for the
-byte layout, the verification evidence, and the one known limitation
-(entity enumeration recovers 95.4% of chunks exactly, and every residual
-is an undershoot -- never an invented entity).
-
-Triggers are counted but not decoded; their record layout is unknown.
+byte layout and allocator evidence. All 3,198 pages balance exactly across
+entity, extra-data, and free slots. The live 4x4 spatial index names 96,995
+entities; allocator enumeration additionally exposes 436 unlinked records.
 
 ---
 
 #### `u9 nonfixed-info`
 
-Summarize one region: chunk grid, page count, entity and trigger totals.
+Summarize one region: chunk grid, page count, spatial/allocated entity totals,
+extra-data totals, and allocator consistency.
 
 ```
 titan u9 nonfixed-info <file>
@@ -4244,15 +4356,16 @@ titan u9 nonfixed-info <file>
 titan u9 nonfixed-info runtime/nonfixed.22
 ```
 
-Reports a `NOTE:` line when the entity walk undershot a chunk's declared
-count.
+Reports a `NOTE:` line only when a truncated or inconsistent page prevents
+the allocator from balancing.
 
 ---
 
 #### `u9 nonfixed-chunks`
 
 List every populated chunk with its grid position, base coordinate, page
-count, entity count and whether enumeration was complete.
+count, spatially indexed and allocated entity counts, unlinked count,
+extra-data count, and allocator completeness.
 
 ```
 titan u9 nonfixed-chunks <file>
@@ -4267,8 +4380,8 @@ titan u9 nonfixed-chunks <file>
 titan u9 nonfixed-chunks runtime/nonfixed.22
 ```
 
-The `Full` column shows `yes`, or the shortfall (e.g. `-2`) when the walk
-found fewer entities than the page headers declare.
+The `Full` column shows whether both allocator record classes balance against
+the page headers and free lists.
 
 ---
 
@@ -4278,7 +4391,7 @@ List the dynamic objects in a region, optionally restricted to one chunk
 and optionally named from `static/TYPENAME.FLX`.
 
 ```
-titan u9 nonfixed-entities <file> [-c X,Y] [-t TYPENAME.FLX] [-n LIMIT]
+titan u9 nonfixed-entities <file> [-c X,Y] [-t TYPENAME.FLX] [-n LIMIT] [--include-unlinked]
 ```
 
 | Argument | Description |
@@ -4287,6 +4400,7 @@ titan u9 nonfixed-entities <file> [-c X,Y] [-t TYPENAME.FLX] [-n LIMIT]
 | `-c X,Y`, `--chunk X,Y` | Restrict to one chunk by grid coordinate |
 | `-t FILE`, `--typenames FILE` | Path to `static/TYPENAME.FLX` -- adds a `Name` column |
 | `-n N`, `--limit N` | Maximum rows to print |
+| `--include-unlinked` | Include allocated records absent from the live spatial index |
 
 **Example**
 ```bash
@@ -4294,7 +4408,8 @@ titan u9 nonfixed-entities runtime/nonfixed.22 -c 1,0 -t static/TYPENAME.FLX -n 
 ```
 
 Positions are world coordinates -- the chunk's base plus the entity's
-stored offset.
+stored offset. The `State` column distinguishes `indexed` objects from the
+retained `unlinked` records shown by `--include-unlinked`.
 
 ---
 
@@ -4437,7 +4552,8 @@ associates a world object with the script that fires for it.
 
 A trigger body is a list of 6-byte `opcode / arg0 / arg1 / arg2` records ending
 at the first record whose opcode is `0xFF`. Records after that terminator are
-slack left behind by a trigger that shrank, and are not decoded.
+slack left behind by a trigger that shrank. Titan excludes them from the
+semantic body while preserving their bytes and offsets for research.
 
 **Opcode meanings are not decoded.** These commands expose the record stream
 and container structure so the language can be worked out incrementally; see
@@ -4677,6 +4793,36 @@ titan u9 activity-opcodes <file> [-n LIMIT]
 **Example**
 ```bash
 titan u9 activity-opcodes static/activity.flx
+```
+
+---
+
+#### `u9 script-research-export`
+
+Export lossless trigger/activity evidence tables for Ghidra analysis.
+
+```
+titan u9 script-research-export <triggers> <activities> [-o DIRECTORY]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `triggers` | Path to `static/triggers.flx` |
+| `activities` | Path to `static/activity.flx` |
+| `-o DIR`, `--output DIR` | Output directory (default `u9-script-research`) |
+
+The command writes occurrence CSVs (including terminators, slack, raw operands,
+and entry-relative byte offsets), opcode summaries, resolved opcode-`0x31`
+trigger/activity links, and a JSON manifest containing source hashes and corpus
+counts. Unknown activity operands are shown simultaneously as bytes, four
+little-endian `u16` values, and two little-endian `u32` values; these views are
+research aids, not claimed semantics.
+
+**Example**
+```bash
+titan u9 script-research-export \
+  static/triggers.flx static/activity.flx \
+  -o u9-script-research
 ```
 
 ---
@@ -5088,9 +5234,9 @@ show a bare type index.
 #### `u9 texture-import`
 
 Replace one texture frame with a PNG of the same size. The image is encoded the
-way that frame already was — BC1, RGB565, RGBA5551 or 8-bit paletted — and
-spliced in place, so the entry keeps its exact length and every undecoded
-header field is preserved.
+way that frame already was — BC1, RGB565, RGBA5551, 8-bit paletted, ALPHA_8,
+or ALPHA_INTENSITY_44 — and spliced in place, so the entry keeps its exact
+length and every undecoded header field is preserved.
 
 ```
 titan u9 texture-import <archive> <entry_id> <image.png> [--frame N] [-p ankh.pal] [-o OUT.flx]
@@ -5098,7 +5244,7 @@ titan u9 texture-import <archive> <entry_id> <image.png> [--frame N] [-p ankh.pa
 
 | Argument | Description |
 |----------|-------------|
-| `archive` | `bitmap16.flx`, `bitmapsh.flx` or `bitmapC.flx` |
+| `archive` | `bitmap16.flx`, `bitmapsh.flx`, `bitmapC.flx`, `Texture8.<region>`, or `texture16.<region>` |
 | `entry_id` | Entry to replace |
 | `image.png` | PNG; **must match the frame's dimensions exactly** |
 | `--frame N` | Frame index within the entry (default 0) |
@@ -5107,14 +5253,15 @@ titan u9 texture-import <archive> <entry_id> <image.png> [--frame N] [-p ankh.pa
 
 **Example**
 ```bash
-titan u9 icon-export static/bitmapC.flx 1 -o work/
-# edit work/icon_00001_frame_000.png
-titan u9 texture-import static/bitmapC.flx 1 work/icon_00001_frame_000.png -o bitmapC.flx
+titan u9 texture-export static/bitmapC.flx 1 -o work/
+# edit work/texture_00001_frame_000_mip_00.png
+titan u9 texture-import static/bitmapC.flx 1 work/texture_00001_frame_000_mip_00.png -o bitmapC.flx
 ```
 
-RGB565 and 8-bit paletted round-trip losslessly. BC1 is lossy by construction
-(2.77 RMSE mean on real frames). Mip levels are regenerated, so a patched entry
-is never byte-identical to the original even when the image is unchanged.
+RGB565, 8-bit paletted, ALPHA_8, and ALPHA_INTENSITY_44 round-trip losslessly
+from Titan-decoded pixels. BC1 is lossy by construction (2.77 RMSE mean on real
+frames). Mip levels are regenerated, so a patched entry is not byte-identical
+to the original even when the base image is unchanged.
 
 The three archives are the game's texture-quality tiers: replacing a texture in
 one leaves the other two holding the old image.
@@ -5122,7 +5269,7 @@ one leaves the other two holding the old image.
 ---
 
 **Palettes and format tables are found automatically.** Every command that
-decodes texture data looks beside the archive it is reading for two companions
+reads or writes texture data looks beside the archive for two companions
 the game keeps there, and reports which it used:
 
 * `ankh.pal` -- without it, 8-bit paletted frames decode as scrambled greyscale
@@ -5306,15 +5453,21 @@ map, one file per region, alongside that region's `static/fixed` and
 The region is a grid of 16×16-point **tiles**, each covering 8×8 world
 coordinates, and each tile names a **chunk** of 256 packed 32-bit points.
 Chunks are shared: a quarter of tiles point at a chunk another tile also uses,
-which is how flat expanses are stored once. Each point packs a 12-bit height, a
-hole flag, a quad split direction, a 5-bit animation frame and a 10-bit ground
-texture index. See `reference/u9/terrain/u9_terrain_reference.md`.
+which is how flat expanses are stored once. The header includes a signed water
+level, floating-point wave amplitude and raw region flags. Each point packs a
+12-bit height, hole flag, two-bit UV quarter-turn, quad split direction, 5-bit
+animation frame and 10-bit ground texture index. The library can construct a
+region, serialize an unchanged file byte-identically, redirect tiles and
+replace validated points/chunks while preserving shared-chunk semantics and
+trailing stale data. See
+`reference/u9/terrain/u9_terrain_reference.md`.
 
 ---
 
 #### `u9 terrain-info`
 
-Summarize one region: point and tile grids, chunk sharing and height range.
+Summarize one region: environment header, point and tile grids, chunk sharing
+and height range.
 
 ```
 titan u9 terrain-info <file>
@@ -5356,7 +5509,7 @@ titan u9 terrain-chunk <file> [-i INDEX | -t X,Y] [-f FIELD]
 | `file` | Path to a `static/terrain.<region>` file |
 | `-i N`, `--index N` | Chunk index to dump (default 0) |
 | `-t X,Y`, `--tile X,Y` | Dump the chunk that tile (X, Y) uses instead |
-| `-f F`, `--field F` | `height` (default), `texture`, `frame` or `hole` |
+| `-f F`, `--field F` | `height` (default), `texture`, `frame`, `hole`, `swap`, `mirror`, `uv-rotation`, `split`, `spare` or `raw` |
 
 **Example**
 ```bash
@@ -5384,8 +5537,10 @@ titan u9 terrain-textures <file> [--sdinfo sdInfo16.flx] [-n LIMIT]
 titan u9 terrain-textures static/terrain.9 --sdinfo static/sdInfo16.flx -n 20
 ```
 
-Texture indices address `static/bitmap8.flx` or `bitmap16.flx`, index-parallel
-to the `sdInfo` archive of the same width.
+Texture indices address the active `static/bitmapsh.flx` or `bitmap16.flx`,
+index-parallel to the `sdInfo` archive of the same width. Counts cover the placed point grid:
+shared chunks count once per tile placement, while unreferenced chunk templates
+do not count.
 
 ---
 
@@ -5414,7 +5569,8 @@ titan u9 terrain-heightmap static/terrain.9 -o britannia.png
 #### `u9 terrain-export`
 
 Export every point of a region to CSV: region and tile coordinates, chunk
-index, height, hole and split flags, frame, texture and the raw word.
+index, height, hole, UV swap/mirror and rotation, split and spare flags, frame,
+texture and the raw word.
 
 ```
 titan u9 terrain-export <file> [-o OUT.csv]
@@ -5676,12 +5832,16 @@ A value on the command line always wins.
 | `u9 flx-extract` | Extract one entry from a U9 FLX archive |
 | `u9 flx-extract-all` | Extract every used entry from a U9 FLX archive |
 | `u9 typename-dump` | Dump type-ID → display-name pairs from `TYPENAME.FLX` |
+| `u9 palette-info` | Inspect `ankh.pal` layout, duplicates, reserved bytes, and transparency key |
+| `u9 palette-export` | Export `ankh.pal` as a PNG swatch and complete text table |
 | `u9 sound-list` | List sound record headers in a `sound/*.flx` archive |
 | `u9 sound-extract-pcm` | Extract PCM-encoded entries from a `sound/*.flx` archive as WAV |
 | `u9 sound-extract` | Extract every decodable entry (PCM/ADPCM/EA MicroTalk) as WAV |
 | `u9 model-info` | Print a model's limb/LOD/material/texture summary |
 | `u9 model-export` | Export one model to OBJ+MTL(+PNG textures) and/or STL |
 | `u9 model-export-all` | Batch version of `model-export`, over every used model in a `sappear.flx` |
+| `u9 texture-info` | Inspect one bitmap or terrain-panel texture set |
+| `u9 texture-export` | Export one texture frame or stored mip to PNG |
 | `u9 animation-list` | List `anim.flx` clips with timing, part counts and source paths |
 | `u9 animation-show` | Show one animation clip or dump one part's transform frames |
 | `u9 icon-list` | List candidate 2D UI icon entries not referenced by any 3D model |

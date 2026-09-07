@@ -41,7 +41,11 @@ from titan.u9.adpcm import decode_stereo, decode_mono as decode_adpcm_mono
 
 from __future__ import annotations
 
-from titan.u9.adpcm import AdpcmDecodeError, decode_mono as decode_adpcm_mono, decode_stereo
+from titan.u9.adpcm import (
+    AdpcmDecodeError,
+    decode_mono as decode_adpcm_mono,
+    decode_stereo,
+)
 from titan.u9.animation import (
     U9Animation,
     U9AnimationError,
@@ -69,8 +73,12 @@ from titan.u9.flx_writer import (
 from titan.u9.highway import U9Highway, U9HighwayError, U9HighwayPoint, U9HighwayRoute
 from titan.u9.icon import icon_entry_indices, used_texture_ids
 from titan.u9.mesh_export import MeshExportError, export_obj, export_stl
-from titan.u9.microtalk import MicroTalkDecodeError, decode_mono as decode_microtalk_mono
+from titan.u9.microtalk import (
+    MicroTalkDecodeError,
+    decode_mono as decode_microtalk_mono,
+)
 from titan.u9.model import (
+    U9IndexedFace,
     U9Limb,
     U9Material,
     U9Model,
@@ -89,9 +97,10 @@ from titan.u9.nonfixed import (
     U9Page,
 )
 from titan.u9.npc import U9Npc, U9NpcError, U9Npcs
-from titan.u9.palette import U9Palette, U9PaletteError
+from titan.u9.palette import PALETTE_TRANSPARENCY_INDEX, U9Palette, U9PaletteError
 from titan.u9.preview import PreviewError, PreviewUnavailableError, render_preview
 from titan.u9.sdinfo import U9SdInfo, U9SdInfoError, U9SdInfoRecord
+from titan.u9.script_research import export_script_research_bundle
 from titan.u9.sound import U9SoundRecord, U9SoundRecordError
 from titan.u9.terrain import (
     U9Terrain,
@@ -100,9 +109,19 @@ from titan.u9.terrain import (
     U9TerrainPoint,
 )
 from titan.u9.text import U9TextArchive, U9TextBlock, U9TextEntry, U9TextError
-from titan.u9.texture import U9TextureError, U9TextureFrame, decode_frame
+from titan.u9.texture import (
+    U9TextureError,
+    U9TextureFrame,
+    U9TextureFrameInfo,
+    U9TextureSet,
+    decode_frame,
+    mip_dimensions,
+    parse_texture_set,
+)
 from titan.u9.texture_writer import (
     U9TextureWriteError,
+    encode_alpha8,
+    encode_alpha_intensity_44,
     encode_bc1,
     frame_encoding,
     replace_frame,
@@ -138,14 +157,22 @@ __all__ = [
     "U9Model",
     "U9ModelError",
     "U9Limb",
+    "U9IndexedFace",
     "U9SubmeshLod",
     "U9Triangle",
     "U9TriangleCorner",
     "U9Material",
     "decode_frame",
+    "PALETTE_TRANSPARENCY_INDEX",
+    "mip_dimensions",
+    "parse_texture_set",
     "U9TextureFrame",
+    "U9TextureFrameInfo",
+    "U9TextureSet",
     "U9TextureError",
     "U9TextureWriteError",
+    "encode_alpha8",
+    "encode_alpha_intensity_44",
     "encode_bc1",
     "frame_encoding",
     "replace_frame",
@@ -172,6 +199,7 @@ __all__ = [
     "U9ActivityError",
     "U9ActivityRecord",
     "U9ActivityStep",
+    "export_script_research_bundle",
     "U9Triggers",
     "U9TriggersError",
     "U9Trigger",
