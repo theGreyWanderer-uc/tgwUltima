@@ -46,6 +46,10 @@ Type 0 (PCM), type 1 (ADPCM, mono or stereo), and mono type 2 (EA
 MicroTalk) can all be decoded to a playable WAV -- see
 :meth:`U9SoundRecord.to_wav_bytes`.
 
+For editing, :mod:`titan.u9.sound_writer` accepts compatible PCM WAV input or
+native encoded payload/record bytes. Titan does not currently encode EA-XA
+ADPCM or EA MicroTalk.
+
 Example::
 
     from titan.u9.flx_archive import U9FlxArchive

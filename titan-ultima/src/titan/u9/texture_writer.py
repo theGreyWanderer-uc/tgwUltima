@@ -1,13 +1,14 @@
 """
 Texture encoder for Ultima 9: Ascension -- the inverse of :mod:`titan.u9.texture`.
 
-Replaces the pixels of one frame in a ``bitmap*.flx`` or terrain-panel
+Replaces the pixels of one or more frames in a ``bitmap*.flx`` or terrain-panel
 ``Texture8.*``/``texture16.*`` entry with new image data, so a PNG can be
 dropped into a texture slot. The counterpart to
 :mod:`titan.u9.flx_writer`, which packs the resulting entries back into an
 archive.
 
-**Same size, same encoding.** :func:`replace_frame` requires the incoming image
+**Same size, same encoding.** :func:`replace_frame` and :func:`replace_frames`
+require each incoming image
 to match the frame it replaces, and re-encodes it the way that frame was
 already encoded. That is a deliberate restriction, and it buys a strong
 guarantee: the replacement payload is byte-for-byte the same *length* as the
@@ -69,9 +70,11 @@ __all__ = [
     "encode_rgba5551",
     "frame_encoding",
     "replace_frame",
+    "replace_frames",
 ]
 
 import struct
+from collections.abc import Mapping
 from typing import Optional
 
 from titan.u9.palette import U9Palette
@@ -421,6 +424,38 @@ def replace_frame(
     out = bytearray(entry_data)
     out[start : start + payload_size] = payload
     return bytes(out)
+
+
+def replace_frames(
+    entry_data: bytes,
+    replacements: Mapping[int, tuple[bytes, int, int]],
+    *,
+    palette: Optional[U9Palette] = None,
+    selector: Optional[int] = None,
+) -> bytes:
+    """Return an entry with multiple existing texture frames replaced atomically.
+
+    Each mapping value is ``(rgba, width, height)``. Frame indices, dimensions,
+    encodings, and encoded lengths retain :func:`replace_frame`'s validation.
+    If any replacement is invalid, this function raises without returning a
+    partially patched entry.
+    """
+    if not replacements:
+        raise U9TextureWriteError("texture frame batch has no replacements")
+
+    patched = entry_data
+    for frame_index in sorted(replacements):
+        rgba, width, height = replacements[frame_index]
+        patched = replace_frame(
+            patched,
+            frame_index,
+            rgba,
+            width,
+            height,
+            palette=palette,
+            selector=selector,
+        )
+    return patched
 
 
 def bc1_payload_size(width: int, height: int, mip_count: int) -> int:

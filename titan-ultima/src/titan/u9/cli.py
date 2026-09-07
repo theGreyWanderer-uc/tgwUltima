@@ -22,6 +22,14 @@ import typer
 from PIL import Image
 
 from titan.u9.activity import U9Activities, U9ActivityError
+from titan.u9.asset_reports import (
+    MODEL_REPORT_COLUMNS,
+    TEXTURE_REPORT_COLUMNS,
+    U9AssetReportError,
+    build_model_material_report,
+    build_texture_frame_report,
+    write_dynamic_report,
+)
 from titan.u9.animation import U9AnimationError, U9Animations
 from titan.u9.books import U9Books, U9BooksError
 from titan.u9.flx_archive import U9FlxArchive, U9FlxArchiveError
@@ -48,6 +56,16 @@ from titan.u9.palette import (
 from titan.u9.sdinfo import U9SdInfo, U9SdInfoError
 from titan.u9.script_research import export_script_research_bundle
 from titan.u9.sound import U9SoundRecord, U9SoundRecordError
+from titan.u9.sound_report import (
+    SOUND_REPORT_COLUMNS,
+    U9SoundReportError,
+    build_sound_metadata_report,
+)
+from titan.u9.sound_writer import (
+    U9SoundWriteError,
+    discover_sound_replacements,
+    replace_sound_record_from_source,
+)
 from titan.u9.text import U9TextArchive, U9TextError
 from titan.u9.terrain import U9Terrain, U9TerrainError
 from titan.u9.texture import (
@@ -59,7 +77,7 @@ from titan.u9.texture import (
 from titan.u9.texture_writer import (
     U9TextureWriteError,
     frame_encoding,
-    replace_frame,
+    replace_frames,
 )
 from titan.u9.triggers import U9Triggers, U9TriggersError
 from titan.u9.typename import U9TypeNames
@@ -369,7 +387,7 @@ def cmd_sound_extract_pcm(args: SimpleNamespace) -> int:
 
 
 def cmd_sound_extract(args: SimpleNamespace) -> int:
-    """Extract every entry this project can decode (PCM, mono/stereo ADPCM, mono EA MicroTalk) as WAV."""
+    """Extract decoded WAV, native payload, or complete record data."""
     filepath = args.file
     if not os.path.isfile(filepath):
         print(f"ERROR: File not found: {filepath}", file=sys.stderr)
@@ -381,38 +399,173 @@ def cmd_sound_extract(args: SimpleNamespace) -> int:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
 
-    outdir = args.output or f"{Path(filepath).stem}_wav"
+    output_format = getattr(args, "format", "wav")
+    if output_format not in {"wav", "payload", "record"}:
+        print("ERROR: format must be wav, payload, or record", file=sys.stderr)
+        return 1
+    requested_entry = getattr(args, "entry", None)
+    if requested_entry is not None and not 0 <= requested_entry < archive.num_entries:
+        print(
+            f"ERROR: entry {requested_entry} out of range (0..{archive.num_entries - 1})",
+            file=sys.stderr,
+        )
+        return 1
+
+    suffix = "wav" if output_format == "wav" else output_format
+    outdir = args.output or f"{Path(filepath).stem}_{suffix}"
     os.makedirs(outdir, exist_ok=True)
 
     extracted = 0
     skipped: dict[str, int] = {}
-    for index in archive.used_entry_indices():
+    indices = (
+        [requested_entry]
+        if requested_entry is not None
+        else archive.used_entry_indices()
+    )
+    for index in indices:
         blob = archive.read_entry(index)
+        if not blob:
+            skipped["empty slot"] = skipped.get("empty slot", 0) + 1
+            continue
         try:
             record = U9SoundRecord.parse(blob)
         except U9SoundRecordError:
             skipped["malformed record"] = skipped.get("malformed record", 0) + 1
             continue
 
-        try:
-            wav_bytes = record.to_wav_bytes()
-        except U9SoundRecordError:
-            reason = f"{record.encoding_name}, {record.num_channels}ch"
-            skipped[reason] = skipped.get(reason, 0) + 1
-            continue
+        if output_format == "wav":
+            try:
+                output_bytes = record.to_wav_bytes()
+            except U9SoundRecordError:
+                reason = f"{record.encoding_name}, {record.num_channels}ch"
+                skipped[reason] = skipped.get(reason, 0) + 1
+                continue
+            extension = ".wav"
+        elif output_format == "payload":
+            output_bytes = record.payload
+            extension = ".payload.bin"
+        else:
+            output_bytes = blob
+            extension = ".record.bin"
 
-        out_path = os.path.join(
-            outdir, f"{index:05d}_{record.description or record.sound_id}.wav"
-        )
+        label = re.sub(r"[^A-Za-z0-9._-]+", "_", record.description).strip("._")
+        out_path = os.path.join(outdir, f"{index:05d}_{label or record.sound_id}{extension}")
         with open(out_path, "wb") as f:
-            f.write(wav_bytes)
+            f.write(output_bytes)
         extracted += 1
 
     print(
-        f"Extracted {extracted}/{len(archive.used_entry_indices())} entries -> {outdir}/"
+        f"Extracted {extracted}/{len(indices)} {output_format} entr{'y' if len(indices) == 1 else 'ies'} -> {outdir}/"
     )
     for reason, count in sorted(skipped.items(), key=lambda kv: -kv[1]):
         print(f"  ({count} skipped: {reason})")
+    return 0
+
+
+def cmd_sound_report(args: SimpleNamespace) -> int:
+    """Write dynamic metadata for one or all U9 audio archives."""
+    try:
+        rows, warnings = build_sound_metadata_report(
+            args.source, entry_id=getattr(args, "entry", None)
+        )
+        output = write_dynamic_report(
+            rows,
+            args.output,
+            args.format,
+            preferred_columns=SOUND_REPORT_COLUMNS,
+        )
+    except (U9SoundReportError, U9AssetReportError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+    print(f"Wrote {len(rows)} sound metadata row(s) -> {output}")
+    for warning in warnings:
+        print(f"WARNING: {warning}", file=sys.stderr)
+    return 0
+
+
+def _write_sound_archive(
+    archive_path: str,
+    replacements: dict[int, bytes],
+    output: str | None,
+) -> tuple[Path, int]:
+    archive = U9FlxArchive.from_file(archive_path)
+    patched = repack(archive, replacements)
+    destination = Path(output or f"{Path(archive_path).stem}_patched.flx").resolve()
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(patched)
+    return destination, len(patched)
+
+
+def cmd_sound_import(args: SimpleNamespace) -> int:
+    """Replace one existing U9 sound record from WAV or native binary data."""
+    if not os.path.isfile(args.archive):
+        print(f"ERROR: Archive not found: {args.archive}", file=sys.stderr)
+        return 1
+    try:
+        archive = U9FlxArchive.from_file(args.archive)
+        if not 0 <= args.entry_id < archive.num_entries:
+            raise U9SoundWriteError(
+                f"entry {args.entry_id} out of range (0..{archive.num_entries - 1})"
+            )
+        current = archive.read_entry(args.entry_id)
+        if not current:
+            raise U9SoundWriteError(f"entry {args.entry_id} is an unused slot")
+        replacement = replace_sound_record_from_source(
+            current,
+            args.audio,
+            expected_entry_id=args.entry_id,
+            description=getattr(args, "description", None),
+        )
+        destination, output_size = _write_sound_archive(
+            args.archive, {args.entry_id: replacement}, args.output
+        )
+    except (OSError, U9FlxArchiveError, U9FlxWriteError, U9SoundWriteError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+
+    print(f"Replaced sound entry {args.entry_id} from {args.audio}")
+    print(f"  Record length: {len(current)} -> {len(replacement)} bytes")
+    print(f"  Written      : {destination} ({output_size} bytes)")
+    if Path(args.audio).suffix.casefold() == ".wav" and Path(args.archive).stem.casefold() == "music":
+        print("  WARNING: shipped music is ADPCM; PCM music playback needs in-game testing.")
+    return 0
+
+
+def cmd_sound_import_batch(args: SimpleNamespace) -> int:
+    """Validate and replace multiple sound slots, then repack the archive once."""
+    if not os.path.isfile(args.archive):
+        print(f"ERROR: Archive not found: {args.archive}", file=sys.stderr)
+        return 1
+    try:
+        archive = U9FlxArchive.from_file(args.archive)
+        sources = discover_sound_replacements(args.directory)
+        replacements: dict[int, bytes] = {}
+        for entry_id, source in sources.items():
+            if not 0 <= entry_id < archive.num_entries:
+                raise U9SoundWriteError(
+                    f"entry {entry_id} from {source.name} is outside "
+                    f"0..{archive.num_entries - 1}"
+                )
+            current = archive.read_entry(entry_id)
+            if not current:
+                raise U9SoundWriteError(f"entry {entry_id} is an unused slot")
+            replacements[entry_id] = replace_sound_record_from_source(
+                current, source, expected_entry_id=entry_id
+            )
+        destination, output_size = _write_sound_archive(
+            args.archive, replacements, args.output
+        )
+    except (OSError, U9FlxArchiveError, U9FlxWriteError, U9SoundWriteError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+
+    print(f"Replaced {len(replacements)} sound record(s) from {args.directory}")
+    print(f"  Entries : {', '.join(str(value) for value in sorted(replacements))}")
+    print(f"  Written : {destination} ({output_size} bytes)")
+    if Path(args.archive).stem.casefold() == "music" and any(
+        source.suffix.casefold() == ".wav" for source in sources.values()
+    ):
+        print("  WARNING: shipped music is ADPCM; PCM music playback needs in-game testing.")
     return 0
 
 
@@ -508,6 +661,32 @@ def cmd_model_info(args: SimpleNamespace) -> int:
             f"{limb.limb_id:>6}  {limb.parent_id:>6}  {str(limb.is_root):>5}  {str(pos):<30}  "
             + " | ".join(lod_summaries)
         )
+    return 0
+
+
+def cmd_model_material_report(args: SimpleNamespace) -> int:
+    """Export model/material metadata joined to every discovered texture tier."""
+    try:
+        rows, warnings = build_model_material_report(
+            args.source,
+            model_id=getattr(args, "model", None),
+            textures_path=getattr(args, "textures", None),
+            types_path=getattr(args, "types", None),
+            typenames_path=getattr(args, "typenames", None),
+            only=getattr(args, "only", None),
+        )
+        output = write_dynamic_report(
+            rows,
+            args.output,
+            args.format,
+            preferred_columns=MODEL_REPORT_COLUMNS,
+        )
+    except (U9AssetReportError, OSError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+    for warning in warnings:
+        print(f"WARNING: {warning}", file=sys.stderr)
+    print(f"Wrote {len(rows)} model/material row(s) to {output}")
     return 0
 
 
@@ -914,6 +1093,32 @@ def cmd_texture_info(args: SimpleNamespace) -> int:
     return 0
 
 
+def cmd_texture_frame_report(args: SimpleNamespace) -> int:
+    """Export frame metadata with optional sdInfo/model animation evidence."""
+    try:
+        rows, warnings = build_texture_frame_report(
+            args.source,
+            entry_id=getattr(args, "entry", None),
+            sappear_path=getattr(args, "sappear", None),
+            types_path=getattr(args, "types", None),
+            typenames_path=getattr(args, "typenames", None),
+            only=getattr(args, "only", None),
+        )
+        output = write_dynamic_report(
+            rows,
+            args.output,
+            args.format,
+            preferred_columns=TEXTURE_REPORT_COLUMNS,
+        )
+    except (U9AssetReportError, OSError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+    for warning in warnings:
+        print(f"WARNING: {warning}", file=sys.stderr)
+    print(f"Wrote {len(rows)} texture frame row(s) to {output}")
+    return 0
+
+
 def cmd_texture_export(args: SimpleNamespace) -> int:
     """Export any bitmap or terrain-panel texture surface to PNG."""
     if not os.path.isfile(args.textures):
@@ -1199,7 +1404,11 @@ def cmd_nonfixed_entities(args: SimpleNamespace) -> int:
         unlinked_offsets = {entity.offset for entity in chunk.unlinked_entities}
         selected = chunk.allocated_entities if include_unlinked else chunk.entities
         rows.extend(
-            (chunk, entity, "unlinked" if entity.offset in unlinked_offsets else "indexed")
+            (
+                chunk,
+                entity,
+                "unlinked" if entity.offset in unlinked_offsets else "indexed",
+            )
             for entity in selected
         )
     shown = rows[: args.limit] if args.limit else rows
@@ -2982,14 +3191,70 @@ def cmd_flx_repack(args: SimpleNamespace) -> int:
 # ============================================================================
 
 
+_NUMBERED_TEXTURE_FRAME_PATTERN = re.compile(
+    r"^(?P<frame_index>[0-9]+)\.png$", re.IGNORECASE
+)
+
+
+def _numbered_texture_frame_paths(directory: str | Path) -> list[tuple[int, Path]]:
+    """Find ``N.png`` files and return their numeric frame indices in order."""
+    source_dir = Path(directory)
+    if not source_dir.is_dir():
+        raise ValueError(f"Texture batch import directory not found: {source_dir}")
+
+    indexed_paths: dict[int, Path] = {}
+    for path in source_dir.iterdir():
+        if not path.is_file() or path.suffix.lower() != ".png":
+            continue
+        match = _NUMBERED_TEXTURE_FRAME_PATTERN.fullmatch(path.name)
+        if match is None:
+            raise ValueError(
+                "Texture batch import PNG filenames must be numeric frame indices; "
+                f"found {path.name!r}"
+            )
+        frame_index = int(match.group("frame_index"))
+        previous = indexed_paths.get(frame_index)
+        if previous is not None:
+            raise ValueError(
+                "Texture batch import has duplicate frame index "
+                f"{frame_index}: {previous.name!r} and {path.name!r}"
+            )
+        indexed_paths[frame_index] = path
+
+    if not indexed_paths:
+        raise ValueError(f"Texture batch import found no N.png files in: {source_dir}")
+    return sorted(indexed_paths.items())
+
+
 def cmd_texture_import(args: SimpleNamespace) -> int:
-    """Replace one texture frame with a PNG of the same size."""
-    for label, path in (("Archive", args.textures), ("Image", args.image)):
-        if not os.path.isfile(path):
-            print(f"ERROR: {label} not found: {path}", file=sys.stderr)
-            return 1
+    """Replace one or more existing texture frames with same-size PNGs."""
+    image_path = getattr(args, "image", None)
+    frames_dir = getattr(args, "frames_dir", None)
+    if bool(image_path) == bool(frames_dir):
+        print(
+            "ERROR: Texture import requires either IMAGE or --frames-dir, not both",
+            file=sys.stderr,
+        )
+        return 1
+    if not os.path.isfile(args.textures):
+        print(f"ERROR: Archive not found: {args.textures}", file=sys.stderr)
+        return 1
+    if image_path and not os.path.isfile(image_path):
+        print(f"ERROR: Image not found: {image_path}", file=sys.stderr)
+        return 1
     if args.palette and not os.path.isfile(args.palette):
         print(f"ERROR: Palette file not found: {args.palette}", file=sys.stderr)
+        return 1
+
+    try:
+        if image_path:
+            frame_paths = [(args.frame, Path(image_path))]
+        else:
+            if frames_dir is None:
+                raise ValueError("Texture batch import directory was not provided")
+            frame_paths = _numbered_texture_frame_paths(frames_dir)
+    except (OSError, ValueError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
         return 1
 
     try:
@@ -3012,23 +3277,27 @@ def cmd_texture_import(args: SimpleNamespace) -> int:
         )
         return 1
 
-    image = Image.open(args.image).convert("RGBA")
     palette = _load_palette(args.palette, args.textures)
     selectors = _load_selectors(args.textures)
     selector = selectors.get(args.entry_id)
 
     try:
-        encoding = frame_encoding(blob, args.frame, selector=selector)
-        patched = replace_frame(
+        replacements: dict[int, tuple[bytes, int, int]] = {}
+        encodings: dict[int, str] = {}
+        for frame_index, path in frame_paths:
+            with Image.open(path) as source_image:
+                image = source_image.convert("RGBA")
+            replacements[frame_index] = (image.tobytes(), image.width, image.height)
+            encodings[frame_index] = frame_encoding(
+                blob, frame_index, selector=selector
+            )
+        patched = replace_frames(
             blob,
-            args.frame,
-            image.tobytes(),
-            image.width,
-            image.height,
+            replacements,
             palette=palette,
             selector=selector,
         )
-    except (U9TextureWriteError, struct.error) as e:
+    except (OSError, U9TextureWriteError, struct.error) as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
 
@@ -3042,21 +3311,34 @@ def cmd_texture_import(args: SimpleNamespace) -> int:
     with open(out_path, "wb") as f:
         f.write(data)
 
-    print(
-        f"{args.image} ({image.width}x{image.height}) -> "
-        f"{Path(args.textures).name} entry {args.entry_id} frame {args.frame}"
+    if image_path:
+        _rgba, width, height = replacements[args.frame]
+        print(
+            f"{image_path} ({width}x{height}) -> "
+            f"{Path(args.textures).name} entry {args.entry_id} frame {args.frame}"
+        )
+    else:
+        frame_indices = ", ".join(str(index) for index in sorted(replacements))
+        print(
+            f"{len(replacements)} PNG frame(s) from {frames_dir} -> "
+            f"{Path(args.textures).name} entry {args.entry_id}"
+        )
+        print(f"  Frame indices   : {frame_indices}")
+    encoding_counts = Counter(encodings.values())
+    encoding_summary = ", ".join(
+        f"{encoding} ({count})" for encoding, count in sorted(encoding_counts.items())
     )
-    print(f"  Encoding        : {encoding}")
+    print(f"  Encoding(s)     : {encoding_summary}")
     print(
         f"  Entry length    : {len(patched)} bytes (unchanged: "
         f"{'yes' if len(patched) == len(blob) else 'NO'})"
     )
     print(f"  Written         : {out_path} ({len(data)} bytes)")
-    if encoding == "bc1":
+    if "bc1" in encoding_counts:
         print(
             "  BC1 is lossy by design; re-encoding will not reproduce the original bytes."
         )
-    if encoding == "paletted" and palette is None:
+    if "paletted" in encoding_counts and palette is None:
         print("  WARNING: no --palette given for an 8-bit frame.")
     print("  The other quality tiers still hold the old image -- see the reference doc")
     print("  on which archive the game loads for a given texture-detail setting.")
@@ -3178,9 +3460,107 @@ def sound_extract_cmd(
         Optional[str],
         typer.Option("-o", "--output", help="Output directory (default: <file>_wav/)"),
     ] = None,
+    entry: Annotated[
+        Optional[int],
+        typer.Option("--entry", help="Extract only this FLX entry ID"),
+    ] = None,
+    format: Annotated[
+        str,
+        typer.Option("-f", "--format", help="wav, payload, or record"),
+    ] = "wav",
 ) -> None:
-    """Extract every entry this project can decode (PCM, mono/stereo ADPCM, mono EA MicroTalk) as WAV."""
-    raise SystemExit(cmd_sound_extract(SimpleNamespace(file=file, output=output)))
+    """Extract decoded WAV, native payload, or complete U9 sound records."""
+    raise SystemExit(
+        cmd_sound_extract(
+            SimpleNamespace(file=file, output=output, entry=entry, format=format)
+        )
+    )
+
+
+@u9_app.command("sound-report")
+def sound_report_cmd(
+    source: Annotated[
+        str,
+        typer.Argument(help="Audio FLX file, sound directory, or unpacked data root"),
+    ],
+    output: Annotated[
+        str,
+        typer.Option("-o", "--output", help="Output CSV or JSON report path"),
+    ],
+    entry: Annotated[
+        Optional[int],
+        typer.Option("--entry", help="Limit each discovered archive to one entry ID"),
+    ] = None,
+    format: Annotated[
+        str,
+        typer.Option("-f", "--format", help="csv or json"),
+    ] = "csv",
+) -> None:
+    """Export dynamic record sizes, codecs, duration, and SFX-template links."""
+    raise SystemExit(
+        cmd_sound_report(
+            SimpleNamespace(
+                source=source, output=output, entry=entry, format=format
+            )
+        )
+    )
+
+
+@u9_app.command("sound-import")
+def sound_import_cmd(
+    archive: Annotated[str, typer.Argument(help="Target Speech/sfx/music FLX")],
+    entry_id: Annotated[int, typer.Argument(help="Existing entry ID to replace")],
+    audio: Annotated[
+        str,
+        typer.Argument(help="PCM WAV, native .payload.bin, or complete .record.bin"),
+    ],
+    output: Annotated[
+        Optional[str],
+        typer.Option(
+            "-o", "--output", help="Output archive (default: <stem>_patched.flx)"
+        ),
+    ] = None,
+    description: Annotated[
+        Optional[str],
+        typer.Option("--description", help="Replacement record description for WAV input"),
+    ] = None,
+) -> None:
+    """Replace one existing U9 sound record and rebuild its FLX archive."""
+    raise SystemExit(
+        cmd_sound_import(
+            SimpleNamespace(
+                archive=archive,
+                entry_id=entry_id,
+                audio=audio,
+                output=output,
+                description=description,
+            )
+        )
+    )
+
+
+@u9_app.command("sound-import-batch")
+def sound_import_batch_cmd(
+    archive: Annotated[str, typer.Argument(help="Target Speech/sfx/music FLX")],
+    directory: Annotated[
+        str,
+        typer.Argument(
+            help="Directory of <entry>[_label].wav/.payload.bin/.record.bin files"
+        ),
+    ],
+    output: Annotated[
+        Optional[str],
+        typer.Option(
+            "-o", "--output", help="Output archive (default: <stem>_patched.flx)"
+        ),
+    ] = None,
+) -> None:
+    """Replace many existing sound records and repack the FLX once."""
+    raise SystemExit(
+        cmd_sound_import_batch(
+            SimpleNamespace(archive=archive, directory=directory, output=output)
+        )
+    )
 
 
 @u9_app.command("model-info")
@@ -3207,6 +3587,63 @@ def model_info_cmd(
         cmd_model_info(
             SimpleNamespace(
                 file=file, model_id=model_id, types=types, typenames=typenames
+            )
+        )
+    )
+
+
+@u9_app.command("model-material-report")
+def model_material_report_cmd(
+    source: Annotated[
+        str,
+        typer.Argument(help="Path to static/sappear.flx or its static directory"),
+    ],
+    output: Annotated[
+        str,
+        typer.Option("-o", "--output", help="Output CSV or JSON report path"),
+    ],
+    model: Annotated[
+        Optional[int],
+        typer.Option("--model", help="Limit the report to one model ID"),
+    ] = None,
+    textures: Annotated[
+        Optional[str],
+        typer.Option(
+            "--textures",
+            help="Texture archive or directory (default: beside sappear.flx)",
+        ),
+    ] = None,
+    types: Annotated[
+        Optional[str],
+        typer.Option("--types", help="Optional path to static/TYPES.DAT"),
+    ] = None,
+    typenames: Annotated[
+        Optional[str],
+        typer.Option("--typenames", help="Optional path to static/TYPENAME.FLX"),
+    ] = None,
+    fmt: Annotated[
+        str,
+        typer.Option("-f", "--format", help="Report format: csv or json"),
+    ] = "csv",
+    only: Annotated[
+        Optional[str],
+        typer.Option(
+            "--only", help="Filter: animated, textured, unresolved, or errors"
+        ),
+    ] = None,
+) -> None:
+    """Export model materials and their per-tier texture/animation metadata."""
+    raise SystemExit(
+        cmd_model_material_report(
+            SimpleNamespace(
+                source=source,
+                output=output,
+                model=model,
+                textures=textures,
+                types=types,
+                typenames=typenames,
+                format=fmt,
+                only=only,
             )
         )
     )
@@ -3367,6 +3804,64 @@ def texture_info_cmd(
     """Inspect one U9 bitmap or terrain-panel texture entry."""
     raise SystemExit(
         cmd_texture_info(SimpleNamespace(textures=textures, entry_id=entry_id))
+    )
+
+
+@u9_app.command("texture-frame-report")
+def texture_frame_report_cmd(
+    source: Annotated[
+        str,
+        typer.Argument(help="Texture archive or static directory containing all tiers"),
+    ],
+    output: Annotated[
+        str,
+        typer.Option("-o", "--output", help="Output CSV or JSON report path"),
+    ],
+    entry: Annotated[
+        Optional[int],
+        typer.Option("--entry", help="Limit the report to one texture entry ID"),
+    ] = None,
+    sappear: Annotated[
+        Optional[str],
+        typer.Option(
+            "--sappear",
+            help="Optional sappear.flx path for model-backed animation evidence",
+        ),
+    ] = None,
+    types: Annotated[
+        Optional[str],
+        typer.Option("--types", help="Optional path to static/TYPES.DAT"),
+    ] = None,
+    typenames: Annotated[
+        Optional[str],
+        typer.Option("--typenames", help="Optional path to static/TYPENAME.FLX"),
+    ] = None,
+    fmt: Annotated[
+        str,
+        typer.Option("-f", "--format", help="Report format: csv or json"),
+    ] = "csv",
+    only: Annotated[
+        Optional[str],
+        typer.Option(
+            "--only",
+            help="Filter: animated, multiframe, static, unresolved, or errors",
+        ),
+    ] = None,
+) -> None:
+    """Export per-frame texture metadata with discovered companion-file fields."""
+    raise SystemExit(
+        cmd_texture_frame_report(
+            SimpleNamespace(
+                source=source,
+                output=output,
+                entry=entry,
+                sappear=sappear,
+                types=types,
+                typenames=typenames,
+                format=fmt,
+                only=only,
+            )
+        )
     )
 
 
@@ -4324,11 +4819,20 @@ def texture_import_cmd(
     ],
     entry_id: Annotated[int, typer.Argument(help="Entry ID to replace")],
     image: Annotated[
-        str, typer.Argument(help="PNG to import; must match the frame's size exactly")
-    ],
+        Optional[str],
+        typer.Argument(help="One PNG to import; omit when using --frames-dir"),
+    ] = None,
     frame: Annotated[
-        int, typer.Option("--frame", help="Frame index within the entry")
+        int,
+        typer.Option("--frame", help="Frame index for the single IMAGE workflow"),
     ] = 0,
+    frames_dir: Annotated[
+        Optional[str],
+        typer.Option(
+            "--frames-dir",
+            help="Batch import N.png files, mapping each number to its frame index",
+        ),
+    ] = None,
     palette: Annotated[
         Optional[str],
         typer.Option(
@@ -4344,7 +4848,7 @@ def texture_import_cmd(
         ),
     ] = None,
 ) -> None:
-    """Replace one U9 texture frame with a same-size PNG."""
+    """Replace existing U9 texture frames with one PNG or numbered PNGs."""
     raise SystemExit(
         cmd_texture_import(
             SimpleNamespace(
@@ -4352,6 +4856,7 @@ def texture_import_cmd(
                 entry_id=entry_id,
                 image=image,
                 frame=frame,
+                frames_dir=frames_dir,
                 palette=palette,
                 output=output,
             )

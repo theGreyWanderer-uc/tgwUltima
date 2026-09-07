@@ -188,9 +188,9 @@ for the full command list.
 ### Ultima 9 (early)
 
 U9 support is newer than U8/U7 and includes FLX archives, `TYPENAME.FLX`,
-`sound/*.flx` (`Speech.flx`, `sfx.flx`, `music.flx`) decoding (EA-XA ADPCM,
-mono and stereo, and EA MicroTalk speech), `anim.flx` skeletal clips, and 3D
-model + texture export from `static/sappear.flx`.
+`sound/*.flx` (`Speech.flx`, `sfx.flx`, `music.flx`) decoding and metadata,
+PCM/native-record replacement, `anim.flx` skeletal clips, and 3D model +
+texture export from `static/sappear.flx`.
 
 The [U9 format completeness index](reference/u9/u9_format_status.md) separates
 complete format support from structurally complete readers whose remaining
@@ -200,7 +200,7 @@ questions concern field or gameplay semantics.
 |---|---|---|
 | Archives | List/extract any U9 `.flx`/`.FLX` archive | `titan u9 flx-list sound/Speech.flx` |
 | Metadata | Decode `TYPENAME.FLX` type-ID → name pairs | `titan u9 typename-dump static/TYPENAME.FLX` |
-| Sound and speech | Decode `Speech.flx`/`sfx.flx`/`music.flx` to WAV (PCM, mono/stereo ADPCM, EA MicroTalk) | `titan u9 sound-extract sound/Speech.flx -o speech_wav/` |
+| Sound and speech | Decode audio to WAV; report sizes/codecs/SFX links; replace one or many records from compatible PCM WAV or native data | `titan u9 sound-report sound/ -o sounds.csv` |
 | Palette | Inspect `ankh.pal`, its exact index-254 transparency key and duplicate slots; export a PNG swatch plus complete text table | `titan u9 palette-export static/ankh.pal -o palette/` |
 | Texture archives | Parse headers/directories/row tables and export any frame or stored mip from `bitmap*.flx`; the same reader handles all 6,898 pre-baked terrain panels in `Texture8.*`/`texture16.*` | `titan u9 texture-export static/Texture8.9 1087 -p static/ankh.pal -o panels/` |
 | Terrain | Losslessly parse `terrain.*` grids/chunks and environment headers; decode or build packed height, hole, UV rotation, split, frame and texture points; inspect/export placed terrain | `titan u9 terrain-info static/terrain.9` |
@@ -403,6 +403,12 @@ titan u9 sound-list sound/Speech.flx
 titan u9 sound-extract sound/Speech.flx -o speech_wav/
 titan u9 sound-extract sound/sfx.flx -o sfx_wav/
 titan u9 sound-extract sound/music.flx -o music_wav/
+
+# Report all audio metadata and SFX-template links.
+titan u9 sound-report sound/ -o u9_sound_records.csv
+
+# Replace TV sound 1322 from 22,050 Hz, 16-bit mono PCM WAV into a new FLX.
+titan u9 sound-import sound/sfx.flx 1322 1322_EASports.wav -o sfx_patched.flx
 ```
 
 ### U9 Palette Inspection and Export
@@ -420,6 +426,10 @@ titan u9 palette-export static/ankh.pal -o palette/
 ```bash
 # Inspect record type plus limb/LOD/render/mount/material/texture counts first.
 titan u9 model-info static/sappear.flx 2
+
+# Export every material field and join texture metadata from all tiers found
+# in the static directory. Limit to one model with --model when desired.
+titan u9 model-material-report static --model 3306 -o television_materials.csv
 
 # Export a textured OBJ (+ MTL + PNG textures) -- bitmap16.flx covers every
 # real texture referenced by any model in this project's test copy of the game.
@@ -439,6 +449,10 @@ titan u9 model-export static/sappear.flx 2 -f stl --no-preview -o model_2_stl/
 ```bash
 # Inspect the decoded set/frame headers and every stored mip size.
 titan u9 texture-info static/bitmap16.flx 568
+
+# Export dynamic frame metadata across all three tiers. Matching sdInfo,
+# sappear material animation evidence, and model names are auto-discovered.
+titan u9 texture-frame-report static --entry 7344 -o television_frames.csv
 
 # Export one of the game's own stored mip levels.
 titan u9 texture-export static/bitmap16.flx 568 --mip 2 -o textures/

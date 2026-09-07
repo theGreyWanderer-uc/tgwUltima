@@ -8,6 +8,8 @@ import tempfile
 import unittest
 from types import SimpleNamespace
 
+from PIL import Image
+
 from titan.u9.cli import (
     PALETTE_FILENAME,
     _find_palette,
@@ -19,6 +21,7 @@ from titan.u9.cli import (
     cmd_sound_extract_pcm,
     cmd_sound_list,
     cmd_texture_export,
+    cmd_texture_import,
     cmd_texture_info,
     cmd_typename_dump,
 )
@@ -86,16 +89,22 @@ def _sound_entry(
     return bytes(header) + payload
 
 
-def _texture_entry() -> bytes:
-    """A 2x2 8-bit base image plus a stored 1x1 mip."""
+def _texture_entry(frame_count: int = 1) -> bytes:
+    """One or more 2x2 8-bit images, each with a stored 1x1 mip."""
     width = height = 2
-    payload = bytes((1, 2, 3, 4, 9))
-    frame_header = struct.pack("<2H4I", 0x00D1, 0x6000, width, height, 0, 0)
-    row_table = struct.pack("<2I", 28, 30)
-    frame_data = frame_header + row_table + payload
-    set_header = struct.pack("<4H2I", width, 1, height, 0, 1, 0x00066000)
-    directory = struct.pack("<2I", 0x18, len(frame_data))
-    return set_header + directory + frame_data
+    set_header = struct.pack("<4H2I", width, 1, height, 0, frame_count, 0x00066000)
+    frame_offset = len(set_header) + frame_count * 8
+    directory = bytearray()
+    frames = bytearray()
+    for frame_index in range(frame_count):
+        payload = bytes((1, 2, 3, 4, 9))
+        frame_header = struct.pack("<2H4I", 0x00D1, 0x6000, width, height, 0, 0)
+        row_table = struct.pack("<2I", 28, 30)
+        frame_data = frame_header + row_table + payload
+        directory += struct.pack("<2I", frame_offset, len(frame_data))
+        frames += frame_data
+        frame_offset += len(frame_data)
+    return set_header + directory + frames
 
 
 class FlxCliCommandTests(unittest.TestCase):
@@ -302,7 +311,11 @@ class TextureCliCommandTests(unittest.TestCase):
         self.tmpdir = tempfile.TemporaryDirectory()
         self.archive_path = os.path.join(self.tmpdir.name, "Texture8.14")
         with open(self.archive_path, "wb") as file:
-            file.write(_build_flx(b"terrain panels", [_texture_entry()]))
+            file.write(_build_flx(b"terrain panels", [_texture_entry(3)]))
+        colors = [(index, index, index) for index in range(256)]
+        colors[254] = colors[247]
+        with open(os.path.join(self.tmpdir.name, PALETTE_FILENAME), "wb") as file:
+            file.write(_build_u9_palette(colors))
 
     def tearDown(self) -> None:
         self.tmpdir.cleanup()
@@ -342,6 +355,75 @@ class TextureCliCommandTests(unittest.TestCase):
             )
         )
         self.assertEqual(result, 1)
+
+    def test_texture_import_keeps_single_image_workflow(self) -> None:
+        image_path = os.path.join(self.tmpdir.name, "replacement.png")
+        output_path = os.path.join(self.tmpdir.name, "single.flx")
+        Image.new("RGBA", (2, 2), (80, 80, 80, 255)).save(image_path)
+
+        result = cmd_texture_import(
+            SimpleNamespace(
+                textures=self.archive_path,
+                entry_id=0,
+                image=image_path,
+                frames_dir=None,
+                frame=1,
+                palette=None,
+                output=output_path,
+            )
+        )
+
+        self.assertEqual(result, 0)
+        self.assertTrue(os.path.isfile(output_path))
+
+    def test_texture_import_batches_numbered_png_frames(self) -> None:
+        frames_dir = os.path.join(self.tmpdir.name, "sourceframes")
+        os.makedirs(frames_dir)
+        Image.new("RGBA", (2, 2), (20, 20, 20, 255)).save(
+            os.path.join(frames_dir, "0.png")
+        )
+        Image.new("RGBA", (2, 2), (200, 200, 200, 255)).save(
+            os.path.join(frames_dir, "2.png")
+        )
+        output_path = os.path.join(self.tmpdir.name, "batch.flx")
+
+        result = cmd_texture_import(
+            SimpleNamespace(
+                textures=self.archive_path,
+                entry_id=0,
+                image=None,
+                frames_dir=frames_dir,
+                frame=0,
+                palette=None,
+                output=output_path,
+            )
+        )
+
+        self.assertEqual(result, 0)
+        self.assertTrue(os.path.isfile(output_path))
+
+    def test_texture_import_rejects_nonnumeric_batch_png(self) -> None:
+        frames_dir = os.path.join(self.tmpdir.name, "badframes")
+        os.makedirs(frames_dir)
+        Image.new("RGBA", (2, 2), (20, 20, 20, 255)).save(
+            os.path.join(frames_dir, "frame.png")
+        )
+        output_path = os.path.join(self.tmpdir.name, "should_not_exist.flx")
+
+        result = cmd_texture_import(
+            SimpleNamespace(
+                textures=self.archive_path,
+                entry_id=0,
+                image=None,
+                frames_dir=frames_dir,
+                frame=0,
+                palette=None,
+                output=output_path,
+            )
+        )
+
+        self.assertEqual(result, 1)
+        self.assertFalse(os.path.exists(output_path))
 
 
 if __name__ == "__main__":

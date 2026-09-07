@@ -23,17 +23,22 @@ This project uses [Semantic Versioning](https://semver.org/):
 - **U9 models and animation:** completed `sappear.flx` parsing for ordinary and
   indexed-polygon records, including mount geometry, material metadata,
   validation, and exact record round-trips. Added the `anim.flx` clip reader
-  and `animation-list`/`animation-show` commands with lossless preservation
-  of still-unknown fields.
+  and animation inspection, plus dynamic model/material-to-texture CSV/JSON
+  reports.
 
 - **U9 textures, metadata, and palettes:** added texture-set metadata, stored
-  mip decoding, terrain-panel support, BC1/DXT1 decoding, PNG replacement, and
-  correct P_8, ALPHA_8, ALPHA_INTENSITY_44, RGB565, and ARGB1555 handling.
+  mip decoding, terrain-panel support, BC1/DXT1 decoding, single/batch PNG
+  replacement, and correct P_8, ALPHA_8, ALPHA_INTENSITY_44, RGB565, and
+  ARGB1555 handling.
   Added lossless `ankh.pal` inspection/export and `sdInfo*.flx`
-  list/show/verify commands.
+  inspection plus dynamic per-tier frame and animation-evidence reports.
 
 - **U9 FLX writing:** added `flx-pack` and `flx-repack` for building and
   verifying U9 archives while preserving declared entry contents.
+
+- **U9 audio editing:** added dynamic CSV/JSON metadata for speech, SFX, and
+  music (including SFX-template links), single/raw extraction, and safe
+  single/batch FLX replacement from compatible PCM WAV or native record data.
 
 - **U9 trigger and activity research:** added lossless `triggers.flx` and
   `activity.flx` readers, opcode reports, known trigger-to-activity and

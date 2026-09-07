@@ -8,9 +8,8 @@ directory-of-blobs container U9 uses throughout ``static/``, ``sound/`` and
 This writes the **container only**. Entry payloads are passed through
 byte-for-byte: repacking `text.flx`, `BOOKS-EN.FLX` or `sappear.flx` needs
 nothing more, because their entries are opaque blobs as far as the container is
-concerned. Re-encoding a *decoded* texture back into an entry is a separate
-problem and is not solved here -- see :mod:`titan.u9.texture`, which decodes but
-does not encode.
+concerned. Re-encoding decoded content is handled by payload-specific writers,
+including :mod:`titan.u9.texture_writer` and :mod:`titan.u9.sound_writer`.
 
 Header conventions were measured across all 25 shipped archives, which agree
 exactly::

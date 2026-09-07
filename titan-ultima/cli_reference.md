@@ -3975,20 +3975,20 @@ titan u9 sound-extract-pcm sound/sfx.flx -o sfx_pcm_wav/
 
 #### `u9 sound-extract`
 
-Extract every entry this project can decode -- PCM, mono/stereo ADPCM
-(EA-XA), and mono EA MicroTalk (speech) -- as a playable WAV. This is
-the recommended command for `Speech.flx`/`sfx.flx`/`music.flx`; it
-decodes every entry type currently supported and reports a per-reason
-count of anything skipped.
+Extract decoded WAV, native codec payload, or complete U9 sound records. WAV
+supports PCM, mono/stereo EA-XA ADPCM, and mono EA MicroTalk. Native output is
+useful for lossless replacement when Titan has no encoder for the codec.
 
 ```
-titan u9 sound-extract <file> [-o DIR]
+titan u9 sound-extract <file> [-o DIR] [--entry ID] [-f wav|payload|record]
 ```
 
 | Argument | Description |
 |----------|-------------|
 | `file` | Path to a U9 `sound/*.flx` file |
 | `-o DIR`, `--output DIR` | Output directory (default: `<file>_wav/`) |
+| `--entry ID` | Extract only one FLX entry |
+| `-f`, `--format` | `wav` (default), `payload`, or `record` |
 
 **Examples**
 ```bash
@@ -4000,6 +4000,75 @@ titan u9 sound-extract sound/sfx.flx -o sfx_wav/
 
 # All 40 music.flx entries decode (stereo ADPCM)
 titan u9 sound-extract sound/music.flx -o music_wav/
+
+# Preserve entry 1322's native ADPCM payload or complete record
+titan u9 sound-extract sound/sfx.flx --entry 1322 -f payload -o native/
+titan u9 sound-extract sound/sfx.flx --entry 1322 -f record -o records/
+```
+
+---
+
+#### `u9 sound-report`
+
+Export record sizes, payload lengths, codecs, sample counts, durations, and
+dynamic companion metadata to CSV or JSON. A sound directory reports
+`Speech.flx`, `sfx.flx`, and `music.flx` together. When `SFXTMPL.FLX`,
+`sfxassoc.flx`, `sfxcat.flx`, and `TYPENAME.FLX` are discoverable, the report
+adds template/action/category and object-type links.
+
+```
+titan u9 sound-report <source> -o FILE [-f csv|json] [--entry ID]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `source` | One audio FLX, its `sound/` directory, or a root containing `sound/` |
+| `-o FILE`, `--output FILE` | Required CSV or JSON destination |
+| `--entry ID` | Limit each discovered archive to one entry ID |
+| `-f`, `--format` | `csv` (default) or `json` |
+
+```bash
+titan u9 sound-report sound/ -o u9_sound_records.csv
+titan u9 sound-report sound/sfx.flx --entry 1322 -o sound_1322.csv
+```
+
+---
+
+#### `u9 sound-import`
+
+Replace one existing audio record and write a rebuilt FLX copy. Input may be a
+compatible uncompressed PCM WAV, a native `.payload.bin`, or a complete
+`.record.bin`. WAV must be signed 16-bit little-endian PCM at the target's
+existing rate and channel count (22,050 Hz in all shipped records). WAV import
+is disabled for MicroTalk speech because Titan has no MicroTalk encoder.
+
+```
+titan u9 sound-import <archive> <entry-id> <audio> [-o FILE] [--description TEXT]
+```
+
+```bash
+ffmpeg -i replacement.ext -ar 22050 -ac 1 -c:a pcm_s16le 1322_EASports.wav
+titan u9 sound-import sound/sfx.flx 1322 1322_EASports.wav -o sfx_patched.flx
+```
+
+The default output is `<stem>_patched.flx`; Titan does not overwrite the
+source. WAV creates a type-0 PCM record. This encoding is proven in `sfx.flx`;
+PCM replacement of shipped ADPCM-only music still requires in-game testing.
+
+---
+
+#### `u9 sound-import-batch`
+
+Validate multiple replacement files, then rebuild the target FLX once. Files
+must begin with the numeric target entry ID, for example `1322.wav`,
+`1322_EASports.payload.bin`, or `1322_EASports.record.bin`.
+
+```
+titan u9 sound-import-batch <archive> <directory> [-o FILE]
+```
+
+```bash
+titan u9 sound-import-batch sound/sfx.flx replacements/ -o sfx_patched.flx
 ```
 
 ---
@@ -4087,6 +4156,49 @@ titan u9 model-info <file> <model_id> [--types TYPES] [--typenames TYPENAMES]
 **Example**
 ```bash
 titan u9 model-info static/sappear.flx 2 --types static/TYPES.DAT --typenames static/TYPENAME.FLX
+```
+
+---
+
+#### `u9 model-material-report`
+
+Export one row per model limb/LOD/material and join each `texture_id` to every
+texture tier found beside `sappear.flx`. Pass either `sappear.flx` or its
+`static` directory. `--model` limits the scan to one model.
+
+The CSV schema is discovery-driven. Core model/material columns always lead;
+model bounds, limb transforms, LOD metadata, and raw material fields follow.
+For each texture archive actually found, a corresponding `texture_<tier>_*`
+column family is added with presence, frame count, dimensions, encoding,
+compression, mip, and matching `sdInfo` data. Model names are added only when
+both `TYPES.DAT` and `TYPENAME.FLX` are available. JSON contains the same row
+dictionaries with lists retained as arrays.
+
+Changing material ranges are reported as `confirmed` only when the range fits
+every readable texture tier. Missing textures and out-of-range declarations
+remain visible as `missing-texture` or `invalid-range` rather than being
+dropped.
+
+```
+titan u9 model-material-report <source> -o REPORT [-f csv|json]
+    [--model ID] [--textures PATH] [--types FILE] [--typenames FILE]
+    [--only animated|textured|unresolved|errors]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `source` | Path to `static/sappear.flx` or its `static` directory |
+| `-o FILE`, `--output FILE` | Required CSV or JSON destination |
+| `-f`, `--format` | `csv` (default) or `json` |
+| `--model ID` | Limit output to one model ID |
+| `--textures PATH` | Texture archive or directory; defaults to the directory beside `sappear.flx` |
+| `--types FILE` | Optional `TYPES.DAT` override |
+| `--typenames FILE` | Optional `TYPENAME.FLX` override |
+| `--only VALUE` | Keep only `animated`, `textured`, `unresolved`, or `errors` rows |
+
+```bash
+# One model, with all three texture tiers and naming helpers auto-discovered.
+titan u9 model-material-report static --model 3306 -o television_materials.csv
 ```
 
 ---
@@ -4213,6 +4325,49 @@ titan u9 texture-info <textures> <entry_id>
 ```bash
 titan u9 texture-info static/bitmap16.flx 568
 titan u9 texture-info static/Texture8.9 1087
+```
+
+---
+
+#### `u9 texture-frame-report`
+
+Export one row per stored texture frame. A single `bitmap*.flx` source reports
+that archive; a `static` directory discovers `bitmapsh.flx`, `bitmap16.flx`,
+and `bitmapC.flx` and reports all available tiers. `--entry` limits the report
+to one index while retaining one row for each tier and frame.
+
+The CSV columns are the deterministic union of data actually found. Core FLX,
+texture-set, and frame fields lead the file. Matching `sdInfo*.flx` fields,
+including all twelve raw descriptor words, appear only when that helper is
+available. If `sappear.flx` is available, model/material references, animation
+ranges, and optional indirect model names are added.
+
+`confirmed` means a model material declares a changing range that fits the
+stored frames. A multi-frame entry without such playback evidence is
+`multiframe-unresolved`; multiple stored frames alone are not treated as proof
+that the game automatically plays them. Malformed and empty explicitly
+selected entries produce diagnostic rows.
+
+```
+titan u9 texture-frame-report <source> -o REPORT [-f csv|json]
+    [--entry ID] [--sappear FILE] [--types FILE] [--typenames FILE]
+    [--only animated|multiframe|static|unresolved|errors]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `source` | One texture archive or a directory containing the texture tiers |
+| `-o FILE`, `--output FILE` | Required CSV or JSON destination |
+| `-f`, `--format` | `csv` (default) or `json` |
+| `--entry ID` | Limit output to one FLX entry ID |
+| `--sappear FILE` | Optional `sappear.flx` override for material-backed animation evidence |
+| `--types FILE` | Optional `TYPES.DAT` override used with `--typenames` |
+| `--typenames FILE` | Optional `TYPENAME.FLX` override used with `--types` |
+| `--only VALUE` | Keep only the requested animation/diagnostic category |
+
+```bash
+# Produces 30 rows for the ten-frame TV across all three shipped tiers.
+titan u9 texture-frame-report static --entry 7344 -o television_frames.csv
 ```
 
 ---
@@ -5233,21 +5388,23 @@ show a bare type index.
 
 #### `u9 texture-import`
 
-Replace one texture frame with a PNG of the same size. The image is encoded the
-way that frame already was — BC1, RGB565, RGBA5551, 8-bit paletted, ALPHA_8,
-or ALPHA_INTENSITY_44 — and spliced in place, so the entry keeps its exact
-length and every undecoded header field is preserved.
+Replace one texture frame, or a batch of numbered frames, with same-size PNGs.
+Each image is encoded the way that frame already was — BC1, RGB565, RGBA5551,
+8-bit paletted, ALPHA_8, or ALPHA_INTENSITY_44 — and spliced in place, so the
+entry keeps its exact length and every undecoded header field is preserved.
 
 ```
 titan u9 texture-import <archive> <entry_id> <image.png> [--frame N] [-p ankh.pal] [-o OUT.flx]
+titan u9 texture-import <archive> <entry_id> --frames-dir <directory> [-p ankh.pal] [-o OUT.flx]
 ```
 
 | Argument | Description |
 |----------|-------------|
 | `archive` | `bitmap16.flx`, `bitmapsh.flx`, `bitmapC.flx`, `Texture8.<region>`, or `texture16.<region>` |
 | `entry_id` | Entry to replace |
-| `image.png` | PNG; **must match the frame's dimensions exactly** |
-| `--frame N` | Frame index within the entry (default 0) |
+| `image.png` | One PNG; omit when using `--frames-dir` |
+| `--frame N` | Frame index for the single-image workflow (default 0) |
+| `--frames-dir DIR` | Batch-import `N.png`, mapping `N` to that existing frame index |
 | `-p FILE`, `--palette FILE` | `static/ankh.pal` — found automatically when it sits beside the archive; pass this to override |
 | `-o FILE`, `--output FILE` | Output archive (default: `<stem>_patched.flx`) |
 
@@ -5256,7 +5413,16 @@ titan u9 texture-import <archive> <entry_id> <image.png> [--frame N] [-p ankh.pa
 titan u9 texture-export static/bitmapC.flx 1 -o work/
 # edit work/texture_00001_frame_000_mip_00.png
 titan u9 texture-import static/bitmapC.flx 1 work/texture_00001_frame_000_mip_00.png -o bitmapC.flx
+
+# Replace existing frames from sourceframes/0.png, sourceframes/1.png, ...
+titan u9 texture-import static/bitmapC.flx 1 --frames-dir sourceframes -o bitmapC.flx
 ```
+
+Batch PNG names must consist only of a decimal frame index and `.png` (the
+extension is case-insensitive). Missing indices are allowed, making partial
+batch replacement possible. Every named index must already exist; this command
+does not add frames or enlarge the texture entry. All images are validated and
+encoded before the output archive is written.
 
 RGB565, 8-bit paletted, ALPHA_8, and ALPHA_INTENSITY_44 round-trip losslessly
 from Titan-decoded pixels. BC1 is lossy by construction (2.77 RMSE mean on real
@@ -5836,11 +6002,16 @@ A value on the command line always wins.
 | `u9 palette-export` | Export `ankh.pal` as a PNG swatch and complete text table |
 | `u9 sound-list` | List sound record headers in a `sound/*.flx` archive |
 | `u9 sound-extract-pcm` | Extract PCM-encoded entries from a `sound/*.flx` archive as WAV |
-| `u9 sound-extract` | Extract every decodable entry (PCM/ADPCM/EA MicroTalk) as WAV |
+| `u9 sound-extract` | Extract decoded WAV, native payload, or complete record data |
+| `u9 sound-report` | Export dynamic audio record and SFX-link metadata to CSV/JSON |
+| `u9 sound-import` | Replace one sound entry from compatible WAV/native data |
+| `u9 sound-import-batch` | Replace many sound entries and repack once |
 | `u9 model-info` | Print a model's limb/LOD/material/texture summary |
+| `u9 model-material-report` | Export dynamic model/material-to-texture metadata as CSV or JSON |
 | `u9 model-export` | Export one model to OBJ+MTL(+PNG textures) and/or STL |
 | `u9 model-export-all` | Batch version of `model-export`, over every used model in a `sappear.flx` |
 | `u9 texture-info` | Inspect one bitmap or terrain-panel texture set |
+| `u9 texture-frame-report` | Export dynamic per-tier/per-frame metadata and animation evidence |
 | `u9 texture-export` | Export one texture frame or stored mip to PNG |
 | `u9 animation-list` | List `anim.flx` clips with timing, part counts and source paths |
 | `u9 animation-show` | Show one animation clip or dump one part's transform frames |

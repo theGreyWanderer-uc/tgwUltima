@@ -36,6 +36,7 @@ from titan.u9.texture_writer import (
     encode_rgba5551,
     frame_encoding,
     replace_frame,
+    replace_frames,
 )
 
 
@@ -59,6 +60,25 @@ def _entry(width: int, height: int, payload: bytes, *, compression: int = 0,
     frame_length = len(frame_header) + len(row_table) + len(payload)
     directory = struct.pack("<2I", frame_offset, frame_length)
     return header + directory + frame_header + row_table + payload
+
+
+def _multi_frame_entry(width: int, height: int, payloads: list[bytes]) -> bytes:
+    """Texture set whose same-format frames have independent payloads."""
+    header = struct.pack("<4HII", width, 0, height, 0, len(payloads), 0)
+    frame_offset = len(header) + len(payloads) * 8
+    directory = bytearray()
+    frames = bytearray()
+    for payload in payloads:
+        frame_header = struct.pack("<2H4I", 0, 0x6000, width, height, 0, 0)
+        row_table = b"".join(
+            struct.pack("<I", 0x14 + 4 * height + row * width * 2)
+            for row in range(height)
+        )
+        frame = frame_header + row_table + payload
+        directory += struct.pack("<2I", frame_offset, len(frame))
+        frames += frame
+        frame_offset += len(frame)
+    return header + directory + frames
 
 
 def _solid(width: int, height: int, rgba: tuple[int, int, int, int]) -> bytes:
@@ -242,6 +262,32 @@ class ReplaceFrameTests(unittest.TestCase):
     def test_truncated_entry_raises(self) -> None:
         with self.assertRaises(U9TextureWriteError):
             replace_frame(b"\x00" * 8, 0, b"", 0, 0)
+
+    def test_batch_replaces_every_requested_frame(self) -> None:
+        entry = _multi_frame_entry(4, 4, [bytes(32), bytes(32), bytes(32)])
+        patched = replace_frames(
+            entry,
+            {
+                0: (_solid(4, 4, (255, 0, 0, 255)), 4, 4),
+                2: (_solid(4, 4, (0, 0, 255, 255)), 4, 4),
+            },
+        )
+
+        self.assertEqual(
+            decode_frame(patched, 0).pixels_rgba[:4], bytes((255, 0, 0, 255))
+        )
+        self.assertEqual(
+            decode_frame(patched, 1).pixels_rgba,
+            _solid(4, 4, (0, 0, 0, 255)),
+        )
+        self.assertEqual(
+            decode_frame(patched, 2).pixels_rgba[:4], bytes((0, 0, 255, 255))
+        )
+        self.assertEqual(len(patched), len(entry))
+
+    def test_batch_rejects_an_empty_replacement_map(self) -> None:
+        with self.assertRaisesRegex(U9TextureWriteError, "no replacements"):
+            replace_frames(_entry(4, 4, bytes(32)), {})
 
 
 class MipChainTests(unittest.TestCase):
