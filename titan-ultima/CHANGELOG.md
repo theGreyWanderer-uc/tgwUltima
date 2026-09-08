@@ -18,7 +18,14 @@ This project uses [Semantic Versioning](https://semver.org/):
   `static/fixed.<region>` and `runtime/nonfixed.<region>`, including complete
   allocator-aware enumeration of indexed and unlinked nonfixed entities.
   Added a lossless `static/terrain.<region>` reader/writer with tile, chunk,
-  height, water, UV, texture, and export tools.
+  height, water, UV, texture, and export tools, plus textured bird's-eye region
+  rendering with the map-wide water surface, distinct fixed/nonfixed
+  authored-placement diagnostics, depth-tested textured `sappear.flx` meshes,
+  and transformed model-bound footprints with source/type/model filters, an embedded
+  legend, and raw-versus-displayed coverage counts. Added numerically ordered,
+  labelled multi-region atlases with optional cell, tile-coordinate and
+  chunk-reference overlays, 28-pixel-per-cell inspection previews, and bounded
+  Y-up GLB export with shared model meshes and JSON evidence manifests.
 
 - **U9 models and animation:** completed `sappear.flx` parsing for ordinary and
   indexed-polygon records, including mount geometry, material metadata,

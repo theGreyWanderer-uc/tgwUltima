@@ -146,11 +146,7 @@ class U9FixedObject:
 
     @property
     def quaternion(self) -> tuple[float, float, float, float]:
-        """``rotation`` as floats -- the stored 0.16 fixed point over 32767.
-
-        The stored form is a *conjugated* quaternion, so a consumer wanting a
-        conventional one negates x, y and z.
-        """
+        """Return the stored native-U9 X/Y/Z/W quaternion as floats."""
         x, y, z, w = self.rotation
         return (
             x / QUATERNION_SCALE,
@@ -197,7 +193,9 @@ class U9Fixed:
 
     def __init__(self, data: bytes) -> None:
         if len(data) < TABLE_OFFSET:
-            raise U9FixedError(f"data too small to contain a fixed header: {len(data)} bytes")
+            raise U9FixedError(
+                f"data too small to contain a fixed header: {len(data)} bytes"
+            )
 
         self.width, self.height = struct.unpack_from("<II", data, WIDTH_OFFSET)
         if not (1 <= self.width <= MAX_GRID_DIM and 1 <= self.height <= MAX_GRID_DIM):
@@ -218,7 +216,9 @@ class U9Fixed:
         )
         # Advisory: it disagrees with the real payload on 10 of 164 shipped
         # files, the same way nonfixed's watermark does.
-        self.declared_payload_size = struct.unpack_from("<I", data, PAYLOAD_SIZE_OFFSET)[0]
+        self.declared_payload_size = struct.unpack_from(
+            "<I", data, PAYLOAD_SIZE_OFFSET
+        )[0]
 
     @classmethod
     def from_file(cls, filepath: str | os.PathLike[str]) -> U9Fixed:

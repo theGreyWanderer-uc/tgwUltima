@@ -20,9 +20,9 @@ import unittest
 
 from titan.u9.mesh_export import (
     MeshExportError,
-    _world_matrices,
     export_obj,
     export_stl,
+    model_limb_world_matrices,
 )
 from titan.u9.model import (
     INVISIBLE_TEXTURE_ID,
@@ -52,11 +52,20 @@ def _material(texture_id: int, first_face: int = 0, face_count: int = 1) -> U9Ma
     )
 
 
-def _triangle(indices=(0, 1, 2), material_index=0, normal=(0.0, 0.0, 1.0)) -> U9Triangle:
-    corners = tuple(
-        U9TriangleCorner(vertex_index=i, normal=normal, uv=(float(j), 0.0)) for j, i in enumerate(indices)
+def _triangle(
+    indices=(0, 1, 2), material_index=0, normal=(0.0, 0.0, 1.0)
+) -> U9Triangle:
+    parsed_corners = tuple(
+        U9TriangleCorner(vertex_index=i, normal=normal, uv=(float(j), 0.0))
+        for j, i in enumerate(indices)
     )
-    return U9Triangle(corners=corners, material_index=material_index, face_normal=normal, color=(255, 255, 255, 255))
+    corners = (parsed_corners[0], parsed_corners[1], parsed_corners[2])
+    return U9Triangle(
+        corners=corners,
+        material_index=material_index,
+        face_normal=normal,
+        color=(255, 255, 255, 255),
+    )
 
 
 def _model_header_defaults(model_id: int, limbs) -> U9Model:
@@ -96,7 +105,8 @@ def _parse_obj_positions(path: str) -> list[tuple[float, float, float]]:
     with open(path, encoding="ascii") as f:
         for line in f:
             if line.startswith("v "):
-                positions.append(tuple(float(x) for x in line.split()[1:4]))
+                values = tuple(float(x) for x in line.split()[1:4])
+                positions.append((values[0], values[1], values[2]))
     return positions
 
 
@@ -134,21 +144,33 @@ class ExportObjWorldSpaceTests(unittest.TestCase):
         out_path = self._export_tmp_obj(model)
         positions = _parse_obj_positions(out_path)
         # scale defaults to 1/40; local (1,0,0) + world offset (10,0,0) -> (11,0,0)/40
-        self.assertIn((11.0 / 40, 0.0, 0.0), [tuple(round(c, 6) for c in p) for p in positions])
+        self.assertIn(
+            (11.0 / 40, 0.0, 0.0), [tuple(round(c, 6) for c in p) for p in positions]
+        )
 
     def test_child_limb_inherits_parent_translation(self) -> None:
         parent = U9Limb(
-            limb_id=1, parent_id=1, scale=(1.0, 1.0, 1.0), position=(10.0, 0.0, 0.0),
-            rotation=(1.0, 0.0, 0.0, 0.0), lods=(None,),
+            limb_id=1,
+            parent_id=1,
+            scale=(1.0, 1.0, 1.0),
+            position=(10.0, 0.0, 0.0),
+            rotation=(1.0, 0.0, 0.0, 0.0),
+            lods=(None,),
         )
         child = U9Limb(
-            limb_id=2, parent_id=1, scale=(1.0, 1.0, 1.0), position=(0.0, 5.0, 0.0),
-            rotation=(1.0, 0.0, 0.0, 0.0), lods=(_single_triangle_lod(texture_id=5),),
+            limb_id=2,
+            parent_id=1,
+            scale=(1.0, 1.0, 1.0),
+            position=(0.0, 5.0, 0.0),
+            rotation=(1.0, 0.0, 0.0, 0.0),
+            lods=(_single_triangle_lod(texture_id=5),),
         )
         model = _model_header_defaults(2, [parent, child])
 
         out_path = self._export_tmp_obj(model)
-        positions = [tuple(round(c, 6) for c in p) for p in _parse_obj_positions(out_path)]
+        positions = [
+            tuple(round(c, 6) for c in p) for p in _parse_obj_positions(out_path)
+        ]
         # child local (0,0,0) -> world (10,5,0) -> scaled /40
         self.assertIn((10.0 / 40, 5.0 / 40, 0.0), positions)
 
@@ -164,8 +186,12 @@ class ExportObjWorldSpaceTests(unittest.TestCase):
 class ExportObjWindingTests(unittest.TestCase):
     def test_default_reverses_winding(self) -> None:
         limb = U9Limb(
-            limb_id=1, parent_id=1, scale=(1.0, 1.0, 1.0), position=(0.0, 0.0, 0.0),
-            rotation=(1.0, 0.0, 0.0, 0.0), lods=(_single_triangle_lod(texture_id=5),),
+            limb_id=1,
+            parent_id=1,
+            scale=(1.0, 1.0, 1.0),
+            position=(0.0, 0.0, 0.0),
+            rotation=(1.0, 0.0, 0.0, 0.0),
+            lods=(_single_triangle_lod(texture_id=5),),
         )
         model = _model_header_defaults(1, [limb])
         import tempfile
@@ -181,12 +207,16 @@ class ExportObjWindingTests(unittest.TestCase):
         # order is independent per file, so comparing raw index numbers isn't meaningful).
         reversed_positions = _parse_obj_positions(reversed_path)
         raw_positions = _parse_obj_positions(raw_path)
-        reversed_face = [reversed_positions[i - 1] for i in _parse_obj_faces(reversed_path)[0]]
+        reversed_face = [
+            reversed_positions[i - 1] for i in _parse_obj_faces(reversed_path)[0]
+        ]
         raw_face = [raw_positions[i - 1] for i in _parse_obj_faces(raw_path)[0]]
 
         # source corner order is (vtx0, vtx1, vtx2); reversed swaps to (vtx0, vtx2, vtx1).
         self.assertEqual(raw_face, [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)])
-        self.assertEqual(reversed_face, [(0.0, 0.0, 0.0), (0.0, 1.0, 0.0), (1.0, 0.0, 0.0)])
+        self.assertEqual(
+            reversed_face, [(0.0, 0.0, 0.0), (0.0, 1.0, 0.0), (1.0, 0.0, 0.0)]
+        )
 
 
 class ExportObjUvFlipTests(unittest.TestCase):
@@ -205,16 +235,28 @@ class ExportObjUvFlipTests(unittest.TestCase):
             U9TriangleCorner(vertex_index=2, normal=(0.0, 0.0, 1.0), uv=(0.0, 1.0)),
         )
         triangle = U9Triangle(
-            corners=corners, material_index=0, face_normal=(0.0, 0.0, 1.0), color=(255, 255, 255, 255)
+            corners=corners,
+            material_index=0,
+            face_normal=(0.0, 0.0, 1.0),
+            color=(255, 255, 255, 255),
         )
         lod = U9SubmeshLod(
-            lod_index=0, vertices=vertices, triangles=(triangle,), materials=(_material(5),),
-            sphere_center=(0.0, 0.0, 0.0), sphere_radius=1.0,
-            min_bounds=(0.0, 0.0, 0.0), max_bounds=(1.0, 1.0, 0.0),
+            lod_index=0,
+            vertices=vertices,
+            triangles=(triangle,),
+            materials=(_material(5),),
+            sphere_center=(0.0, 0.0, 0.0),
+            sphere_radius=1.0,
+            min_bounds=(0.0, 0.0, 0.0),
+            max_bounds=(1.0, 1.0, 0.0),
         )
         limb = U9Limb(
-            limb_id=1, parent_id=1, scale=(1.0, 1.0, 1.0), position=(0.0, 0.0, 0.0),
-            rotation=(1.0, 0.0, 0.0, 0.0), lods=(lod,),
+            limb_id=1,
+            parent_id=1,
+            scale=(1.0, 1.0, 1.0),
+            position=(0.0, 0.0, 0.0),
+            rotation=(1.0, 0.0, 0.0, 0.0),
+            lods=(lod,),
         )
         model = _model_header_defaults(1, [limb])
 
@@ -233,12 +275,20 @@ class ExportInvisibleMaterialTests(unittest.TestCase):
         invisible_lod = _single_triangle_lod(texture_id=INVISIBLE_TEXTURE_ID)
 
         visible_limb = U9Limb(
-            limb_id=1, parent_id=1, scale=(1.0, 1.0, 1.0), position=(0.0, 0.0, 0.0),
-            rotation=(1.0, 0.0, 0.0, 0.0), lods=(visible_lod,),
+            limb_id=1,
+            parent_id=1,
+            scale=(1.0, 1.0, 1.0),
+            position=(0.0, 0.0, 0.0),
+            rotation=(1.0, 0.0, 0.0, 0.0),
+            lods=(visible_lod,),
         )
         invisible_limb = U9Limb(
-            limb_id=2, parent_id=1, scale=(1.0, 1.0, 1.0), position=(5.0, 0.0, 0.0),
-            rotation=(1.0, 0.0, 0.0, 0.0), lods=(invisible_lod,),
+            limb_id=2,
+            parent_id=1,
+            scale=(1.0, 1.0, 1.0),
+            position=(5.0, 0.0, 0.0),
+            rotation=(1.0, 0.0, 0.0, 0.0),
+            lods=(invisible_lod,),
         )
         model = _model_header_defaults(1, [visible_limb, invisible_limb])
 
@@ -251,8 +301,12 @@ class ExportInvisibleMaterialTests(unittest.TestCase):
 
     def test_only_invisible_geometry_raises(self) -> None:
         limb = U9Limb(
-            limb_id=1, parent_id=1, scale=(1.0, 1.0, 1.0), position=(0.0, 0.0, 0.0),
-            rotation=(1.0, 0.0, 0.0, 0.0), lods=(_single_triangle_lod(texture_id=INVISIBLE_TEXTURE_ID),),
+            limb_id=1,
+            parent_id=1,
+            scale=(1.0, 1.0, 1.0),
+            position=(0.0, 0.0, 0.0),
+            rotation=(1.0, 0.0, 0.0, 0.0),
+            lods=(_single_triangle_lod(texture_id=INVISIBLE_TEXTURE_ID),),
         )
         model = _model_header_defaults(1, [limb])
 
@@ -266,8 +320,12 @@ class ExportInvisibleMaterialTests(unittest.TestCase):
 class ExportStlTests(unittest.TestCase):
     def test_binary_stl_triangle_count_and_bounds(self) -> None:
         limb = U9Limb(
-            limb_id=1, parent_id=1, scale=(1.0, 1.0, 1.0), position=(0.0, 0.0, 0.0),
-            rotation=(1.0, 0.0, 0.0, 0.0), lods=(_single_triangle_lod(texture_id=5),),
+            limb_id=1,
+            parent_id=1,
+            scale=(1.0, 1.0, 1.0),
+            position=(0.0, 0.0, 0.0),
+            rotation=(1.0, 0.0, 0.0, 0.0),
+            lods=(_single_triangle_lod(texture_id=5),),
         )
         model = _model_header_defaults(1, [limb])
 
@@ -304,17 +362,31 @@ class DuplicateLimbIdRegressionTests(unittest.TestCase):
     def _duplicate_id_model(self) -> U9Model:
         # two limbs, same limb_id, different translations, both roots
         limbs = [
-            U9Limb(limb_id=7, parent_id=7, scale=(1.0, 1.0, 1.0), position=(10.0, 0.0, 0.0),
-                   rotation=(1.0, 0.0, 0.0, 0.0), lods=(_single_triangle_lod(1),)),
-            U9Limb(limb_id=7, parent_id=7, scale=(1.0, 1.0, 1.0), position=(0.0, 20.0, 0.0),
-                   rotation=(1.0, 0.0, 0.0, 0.0), lods=(_single_triangle_lod(1),)),
+            U9Limb(
+                limb_id=7,
+                parent_id=7,
+                scale=(1.0, 1.0, 1.0),
+                position=(10.0, 0.0, 0.0),
+                rotation=(1.0, 0.0, 0.0, 0.0),
+                lods=(_single_triangle_lod(1),),
+            ),
+            U9Limb(
+                limb_id=7,
+                parent_id=7,
+                scale=(1.0, 1.0, 1.0),
+                position=(0.0, 20.0, 0.0),
+                rotation=(1.0, 0.0, 0.0, 0.0),
+                lods=(_single_triangle_lod(1),),
+            ),
         ]
         return _model_header_defaults(775, limbs)
 
     def test_duplicate_ids_keep_their_own_transforms(self) -> None:
-        matrices = _world_matrices(self._duplicate_id_model())
+        matrices = model_limb_world_matrices(self._duplicate_id_model())
         self.assertEqual(len(matrices), 2)
-        translations = [(matrices[i][3], matrices[i][7], matrices[i][11]) for i in (0, 1)]
+        translations = [
+            (matrices[i][3], matrices[i][7], matrices[i][11]) for i in (0, 1)
+        ]
         self.assertEqual(translations, [(10.0, 0.0, 0.0), (0.0, 20.0, 0.0)])
 
     def test_export_does_not_collapse_duplicate_limbs(self) -> None:
@@ -329,16 +401,36 @@ class DuplicateLimbIdRegressionTests(unittest.TestCase):
 
     def test_parent_named_by_a_duplicated_id_resolves_to_the_first(self) -> None:
         limbs = [
-            U9Limb(limb_id=3, parent_id=3, scale=(1.0, 1.0, 1.0), position=(5.0, 0.0, 0.0),
-                   rotation=(1.0, 0.0, 0.0, 0.0), lods=(_single_triangle_lod(1),)),
-            U9Limb(limb_id=3, parent_id=3, scale=(1.0, 1.0, 1.0), position=(0.0, 9.0, 0.0),
-                   rotation=(1.0, 0.0, 0.0, 0.0), lods=(_single_triangle_lod(1),)),
-            U9Limb(limb_id=4, parent_id=3, scale=(1.0, 1.0, 1.0), position=(1.0, 0.0, 0.0),
-                   rotation=(1.0, 0.0, 0.0, 0.0), lods=(_single_triangle_lod(1),)),
+            U9Limb(
+                limb_id=3,
+                parent_id=3,
+                scale=(1.0, 1.0, 1.0),
+                position=(5.0, 0.0, 0.0),
+                rotation=(1.0, 0.0, 0.0, 0.0),
+                lods=(_single_triangle_lod(1),),
+            ),
+            U9Limb(
+                limb_id=3,
+                parent_id=3,
+                scale=(1.0, 1.0, 1.0),
+                position=(0.0, 9.0, 0.0),
+                rotation=(1.0, 0.0, 0.0, 0.0),
+                lods=(_single_triangle_lod(1),),
+            ),
+            U9Limb(
+                limb_id=4,
+                parent_id=3,
+                scale=(1.0, 1.0, 1.0),
+                position=(1.0, 0.0, 0.0),
+                rotation=(1.0, 0.0, 0.0, 0.0),
+                lods=(_single_triangle_lod(1),),
+            ),
         ]
-        matrices = _world_matrices(_model_header_defaults(1, limbs))
+        matrices = model_limb_world_matrices(_model_header_defaults(1, limbs))
         # child of "limb 3" rides the *first* limb 3 (5,0,0), not the second
-        self.assertEqual((matrices[2][3], matrices[2][7], matrices[2][11]), (6.0, 0.0, 0.0))
+        self.assertEqual(
+            (matrices[2][3], matrices[2][7], matrices[2][11]), (6.0, 0.0, 0.0)
+        )
 
 
 class ImplicitRootRegressionTests(unittest.TestCase):
@@ -351,20 +443,40 @@ class ImplicitRootRegressionTests(unittest.TestCase):
 
     def test_missing_parent_falls_back_to_the_local_transform(self) -> None:
         limbs = [
-            U9Limb(limb_id=1, parent_id=0, scale=(1.0, 1.0, 1.0), position=(3.0, 4.0, 5.0),
-                   rotation=(1.0, 0.0, 0.0, 0.0), lods=(_single_triangle_lod(1),)),
+            U9Limb(
+                limb_id=1,
+                parent_id=0,
+                scale=(1.0, 1.0, 1.0),
+                position=(3.0, 4.0, 5.0),
+                rotation=(1.0, 0.0, 0.0, 0.0),
+                lods=(_single_triangle_lod(1),),
+            ),
         ]
-        matrices = _world_matrices(_model_header_defaults(2, limbs))
-        self.assertEqual((matrices[0][3], matrices[0][7], matrices[0][11]), (3.0, 4.0, 5.0))
+        matrices = model_limb_world_matrices(_model_header_defaults(2, limbs))
+        self.assertEqual(
+            (matrices[0][3], matrices[0][7], matrices[0][11]), (3.0, 4.0, 5.0)
+        )
 
     def test_parent_cycle_still_terminates(self) -> None:
         limbs = [
-            U9Limb(limb_id=1, parent_id=2, scale=(1.0, 1.0, 1.0), position=(1.0, 0.0, 0.0),
-                   rotation=(1.0, 0.0, 0.0, 0.0), lods=(_single_triangle_lod(1),)),
-            U9Limb(limb_id=2, parent_id=1, scale=(1.0, 1.0, 1.0), position=(0.0, 1.0, 0.0),
-                   rotation=(1.0, 0.0, 0.0, 0.0), lods=(_single_triangle_lod(1),)),
+            U9Limb(
+                limb_id=1,
+                parent_id=2,
+                scale=(1.0, 1.0, 1.0),
+                position=(1.0, 0.0, 0.0),
+                rotation=(1.0, 0.0, 0.0, 0.0),
+                lods=(_single_triangle_lod(1),),
+            ),
+            U9Limb(
+                limb_id=2,
+                parent_id=1,
+                scale=(1.0, 1.0, 1.0),
+                position=(0.0, 1.0, 0.0),
+                rotation=(1.0, 0.0, 0.0, 0.0),
+                lods=(_single_triangle_lod(1),),
+            ),
         ]
-        matrices = _world_matrices(_model_header_defaults(3, limbs))
+        matrices = model_limb_world_matrices(_model_header_defaults(3, limbs))
         self.assertEqual(len(matrices), 2)
 
 

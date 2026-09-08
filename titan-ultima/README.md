@@ -39,8 +39,9 @@ Optional:
 
 - `pyvista` plus VTK (`pip install pyvista`) — used by `titan uw2
   model-render`, `uw2 map-3d-render`, and U9 preview rendering.
-- `trimesh` (`pip install trimesh`) — used by `titan uw2 map-3d-export` to
-  write GLB. UU2 standalone `model-export` needs neither optional package.
+- `trimesh` (`pip install trimesh`) — used by `titan uw2 map-3d-export` and
+  `titan u9 map-export-glb` to write GLB. Standalone OBJ/STL model export does
+  not require it.
 
 ---
 
@@ -203,7 +204,7 @@ questions concern field or gameplay semantics.
 | Sound and speech | Decode audio to WAV; report sizes/codecs/SFX links; replace one or many records from compatible PCM WAV or native data | `titan u9 sound-report sound/ -o sounds.csv` |
 | Palette | Inspect `ankh.pal`, its exact index-254 transparency key and duplicate slots; export a PNG swatch plus complete text table | `titan u9 palette-export static/ankh.pal -o palette/` |
 | Texture archives | Parse headers/directories/row tables and export any frame or stored mip from `bitmap*.flx`; the same reader handles all 6,898 pre-baked terrain panels in `Texture8.*`/`texture16.*` | `titan u9 texture-export static/Texture8.9 1087 -p static/ankh.pal -o panels/` |
-| Terrain | Losslessly parse `terrain.*` grids/chunks and environment headers; decode or build packed height, hole, UV rotation, split, frame and texture points; inspect/export placed terrain | `titan u9 terrain-info static/terrain.9` |
+| Terrain and region maps | Losslessly parse `terrain.*` grids/chunks and environment headers; render textured bird's-eye maps with water, depth-tested model meshes, filterable footprints, and exact cell/tile/chunk-ID grids; catalogue every region in a labelled numeric atlas; export bounded Y-up GLB scenes with shared repeated-model meshes | `titan u9 map-atlas static/ --runtime runtime/ --region 9 --pixels-per-cell 8 --objects -o britannia/` |
 | 3D models and textures | Parse every `sappear.flx` model, including hierarchical and alternate indexed-polygon records, with lossless source-byte round-trip and separately exposed mount geometry; export render meshes to textured OBJ+MTL+PNG or geometry-only STL, with optional naming and previews | `titan u9 model-export static/sappear.flx 2 -t static/bitmap16.flx -o model_2/` |
 | Animation clips | Parse every `anim.flx` clip's source range/path, part-ID manifest, named part tracks, timestamped quaternion/position/scale frames, and raw suffix records | `titan u9 animation-show static/anim.flx 172 --part 1 -n 10` |
 | 2D UI icons | List/export the standalone 2D icons (spell-rune sigils, item icons, ...) mixed into the same `bitmap16.flx`/`bitmapC.flx`/`bitmapsh.flx` archives as 3D model textures -- identified as the entries no `sappear.flx` model ever references, kept in a separate module/command group/output dir from the mesh commands above | `titan u9 icon-export-all static/sappear.flx static/bitmapsh.flx -p static/ankh.pal -o icon_export/` |

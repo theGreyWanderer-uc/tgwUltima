@@ -34,7 +34,10 @@ from titan.u9.adpcm import decode_stereo, decode_mono as decode_adpcm_mono
     from titan.u9.types_dat import U9TypesDat
     from titan.u9.model_naming import label_for_model
     from titan.u9.nonfixed import U9Nonfixed
+    from titan.u9.object_placement import resolve_region_object_placements
     from titan.u9.palette import U9Palette
+    from titan.u9.region_scene import U9RegionScene
+    from titan.u9.map_render import render_region_map
     from titan.u9.preview import render_preview  # optional, needs `pip install pyvista`
     from titan.u9.icon import icon_entry_indices
 """
@@ -72,7 +75,15 @@ from titan.u9.flx_writer import (
 )
 from titan.u9.highway import U9Highway, U9HighwayError, U9HighwayPoint, U9HighwayRoute
 from titan.u9.icon import icon_entry_indices, used_texture_ids
-from titan.u9.mesh_export import MeshExportError, export_obj, export_stl
+from titan.u9.mesh_export import (
+    MeshExportError,
+    U9ModelMeshTriangle,
+    U9ModelMeshVertex,
+    export_obj,
+    export_stl,
+    flatten_model_triangles,
+    model_limb_world_matrices,
+)
 from titan.u9.microtalk import (
     MicroTalkDecodeError,
     decode_mono as decode_microtalk_mono,
@@ -88,6 +99,25 @@ from titan.u9.model import (
     U9TriangleCorner,
 )
 from titan.u9.model_naming import label_for_model, names_for_model, slugify
+from titan.u9.map_atlas import (
+    U9MapAtlasDiagnostics,
+    U9MapAtlasError,
+    U9MapAtlasRegionRecord,
+    U9MapAtlasResult,
+    U9RegionFiles,
+    discover_region_files,
+    render_map_atlas,
+)
+from titan.u9.map_render import (
+    U9_WATER_TEXTURE_ID,
+    U9MapRenderDiagnostics,
+    U9MapRenderError,
+    U9MapRenderResult,
+    U9MapTextureSource,
+    U9ObjectTextureProvider,
+    U9TerrainTextureProvider,
+    render_region_map,
+)
 from titan.u9.nonfixed import (
     U9Chunk,
     U9Entity,
@@ -96,8 +126,52 @@ from titan.u9.nonfixed import (
     U9NonfixedError,
     U9Page,
 )
+from titan.u9.object_placement import (
+    U9ModelBounds,
+    U9ModelBoundsLookup,
+    U9ModelBoundsProvider,
+    U9ModelLookup,
+    U9ModelProvider,
+    U9ObjectFootprintFilter,
+    U9ObjectPlacementDiagnostics,
+    U9ObjectPlacementError,
+    U9ObjectPlacementResolution,
+    U9ObjectPlacementResult,
+    U9SappearModelBounds,
+    U9SappearModelSource,
+    object_scale_from_extra_data,
+    project_model_bounds_footprint,
+    resolve_region_object_placements,
+)
+from titan.u9.object_raster import (
+    U9ObjectRasterDiagnostics,
+    U9ObjectRasterError,
+    rasterize_object_meshes,
+)
 from titan.u9.npc import U9Npc, U9NpcError, U9Npcs
 from titan.u9.palette import PALETTE_TRANSPARENCY_INDEX, U9Palette, U9PaletteError
+from titan.u9.region_scene import (
+    FIXED_CHUNK_TERRAIN_POINTS,
+    REGION_CHUNK_TERRAIN_POINTS,
+    TERRAIN_HEIGHT_WORLD_Z,
+    TERRAIN_POINT_WORLD_XY,
+    U9FixedPlacement,
+    U9NonfixedPlacement,
+    U9RegionScene,
+    U9RegionSceneDiagnostics,
+    U9RegionSceneError,
+    U9TerrainCell,
+    U9WorldPosition,
+)
+from titan.u9.region_glb import (
+    DEFAULT_U9_GLB_SCALE,
+    U9CellRegion,
+    U9GlbExportDiagnostics,
+    U9GlbExportError,
+    U9GlbObjectRecord,
+    U9RegionGlbResult,
+    export_region_glb,
+)
 from titan.u9.preview import PreviewError, PreviewUnavailableError, render_preview
 from titan.u9.sdinfo import U9SdInfo, U9SdInfoError, U9SdInfoRecord
 from titan.u9.script_research import export_script_research_bundle
@@ -179,6 +253,10 @@ __all__ = [
     "export_obj",
     "export_stl",
     "MeshExportError",
+    "U9ModelMeshTriangle",
+    "U9ModelMeshVertex",
+    "flatten_model_triangles",
+    "model_limb_world_matrices",
     "U9TypesDat",
     "U9TypesDatError",
     "U9TypeRecord",
@@ -227,8 +305,59 @@ __all__ = [
     "U9Page",
     "U9Entity",
     "U9ExtraData",
+    "U9ModelBounds",
+    "U9ModelBoundsLookup",
+    "U9ModelBoundsProvider",
+    "U9ModelLookup",
+    "U9ModelProvider",
+    "U9ObjectFootprintFilter",
+    "U9ObjectPlacementDiagnostics",
+    "U9ObjectPlacementError",
+    "U9ObjectPlacementResolution",
+    "U9ObjectPlacementResult",
+    "U9SappearModelBounds",
+    "U9SappearModelSource",
+    "object_scale_from_extra_data",
+    "project_model_bounds_footprint",
+    "resolve_region_object_placements",
     "U9Palette",
     "U9PaletteError",
+    "U9RegionScene",
+    "U9RegionSceneError",
+    "U9RegionSceneDiagnostics",
+    "U9TerrainCell",
+    "U9FixedPlacement",
+    "U9NonfixedPlacement",
+    "U9WorldPosition",
+    "TERRAIN_POINT_WORLD_XY",
+    "TERRAIN_HEIGHT_WORLD_Z",
+    "FIXED_CHUNK_TERRAIN_POINTS",
+    "REGION_CHUNK_TERRAIN_POINTS",
+    "DEFAULT_U9_GLB_SCALE",
+    "U9CellRegion",
+    "U9GlbExportDiagnostics",
+    "U9GlbExportError",
+    "U9GlbObjectRecord",
+    "U9RegionGlbResult",
+    "export_region_glb",
+    "U9MapTextureSource",
+    "U9_WATER_TEXTURE_ID",
+    "U9TerrainTextureProvider",
+    "U9ObjectTextureProvider",
+    "U9MapRenderError",
+    "U9MapRenderDiagnostics",
+    "U9MapRenderResult",
+    "render_region_map",
+    "U9ObjectRasterDiagnostics",
+    "U9ObjectRasterError",
+    "rasterize_object_meshes",
+    "U9MapAtlasDiagnostics",
+    "U9MapAtlasError",
+    "U9MapAtlasRegionRecord",
+    "U9MapAtlasResult",
+    "U9RegionFiles",
+    "discover_region_files",
+    "render_map_atlas",
     "render_preview",
     "PreviewError",
     "PreviewUnavailableError",

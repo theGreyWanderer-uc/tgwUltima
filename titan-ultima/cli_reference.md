@@ -5744,6 +5744,244 @@ titan u9 terrain-export <file> [-o OUT.csv]
 
 ---
 
+#### `u9 map-render`
+
+Render one complete terrain region as a textured bird's-eye PNG. Texture
+frames are decoded through the matching palette and `sdInfo` format selectors;
+UV quarter-turns, holes and world-scale hillshade are applied. Optional
+matching `fixed.<region>` and `nonfixed.<region>` files add distinct static and
+authored-runtime object markers with bounds and chunk-alignment checks. An
+optional model-aware layer resolves fixed types through `TYPES.DAT`, uses the
+direct nonfixed `mesh_index`, and draws each rotated/scaled `sappear.flx` mesh
+as textured, depth-tested triangles with `--objects`, or draws its bounding-box
+footprint with `--object-footprints`. Footprints default to outline rendering and an
+embedded key; repeatable type/model filters and a fixed/nonfixed source filter
+make dense regions inspectable without discarding full resolution evidence.
+The map-wide water surface uses the terrain header's signed `water_level` and
+tiles `bitmap16.flx` entry 49 above terrain triangles at or below that raw Z.
+
+```
+titan u9 map-render <terrain> [--textures bitmap16.flx]
+  [--fixed fixed.N] [--nonfixed nonfixed.N]
+  [--objects] [--object-lod N]
+  [--object-footprints] [--models sappear.flx] [--types TYPES.DAT]
+  [--object-source all|fixed|nonfixed]
+  [--object-type ID ...] [--object-model ID ...]
+  [--object-footprint-style outline|fill]
+  [--object-legend | --no-object-legend]
+  [-p ankh.pal] [--sdinfo sdInfo16.flx]
+  [--pixels-per-cell 1..32] [--hillshade | --no-hillshade]
+  [--water | --no-water] [--water-frame N]
+  [--fixed-markers | --no-fixed-markers]
+  [--nonfixed-markers | --no-nonfixed-markers]
+  [--include-unlinked-nonfixed] [-o OUT.png]
+```
+
+`bitmap16.flx`, `ankh.pal` and `sdInfo16.flx` are found automatically when
+they sit beside the terrain file. With `--objects` or `--object-footprints`, `sappear.flx`
+and the `TYPES.DAT` needed by fixed objects are discovered there as well. The
+command also writes a JSON report beside
+the PNG containing texture-decode coverage, hole count, object bounds,
+chunk-position mismatches, unlinked nonfixed allocations, incomplete allocator
+chunks, model-resolution counts, and missing or malformed model IDs. It also
+separates all resolved footprints from those displayed or filtered out, lists
+the displayed model IDs, and records every active footprint option, along with
+the water level, wave-amplitude field,
+selected frame, and visible water cells/pixels. Missing textures are shown as
+magenta diagnostic tiles and listed in that report; Titan does not synthesize
+replacement ground.
+
+`--objects` uses an orthographic direct-overhead Z buffer. It flattens model
+limb hierarchies, applies each placement's quaternion and scale, samples the
+authored material frame, and tests object pixels against terrain, water and
+other objects. The JSON reports selected/drawn placements, distinct drawn
+models, considered/visible triangles, pixel writes, and missing model texture
+frames. LOD 0 is the default because many U9 models do not carry every lower
+detail level. Perfectly vertical faces have no area in this overhead view;
+use `u9 map-export-glb` when full 3D inspection is required.
+
+**Example**
+
+```bash
+titan u9 map-render static/terrain.9 --fixed static/fixed.9 \
+  --nonfixed runtime/nonfixed.9 --object-footprints \
+  --object-source fixed --object-model 561 --object-footprint-style fill \
+  --pixels-per-cell 2 -o britannia_model_561.png
+```
+
+`--object-type` and `--object-model` may each be repeated; when both are
+present an object must match both filters. `--object-type` tests the stored
+type index in either object source. Empty filter lists mean all IDs. The legend
+reports exact fixed, indexed-nonfixed and included-unlinked counts plus the
+resolved/shown/filtered totals. Use `--no-object-legend` for clean downstream
+compositing.
+
+The renderer uses canonical raw U9 coordinates: 128 X/Y units per terrain
+cell and four Z units per terrain height unit. `--flip-y` is enabled by default
+to match the functioning Forgotten World editor's presentation transform; use
+`--no-flip-y` to retain increasing U9 Y in increasing image rows.
+
+Water is enabled by default. `--water-frame` selects one of water texture 49's
+16 stored frames for a static map; it does not claim a gameplay animation
+speed. `--no-water` retains a ground/seabed diagnostic render. Shoreline
+coverage is depth-tested per output pixel against the terrain's selected
+triangles, and terrain holes expose the lower water surface as separate meshes
+do in the functioning editor. Local type-3030 water-marker reshaping and wave
+animation are not applied yet.
+
+Indexed nonfixed entities are cyan. Allocated records absent from the spatial
+index are excluded by default because their lifecycle meaning is unresolved;
+`--include-unlinked-nonfixed` draws them in gold. These positions are authored
+placements. Moving actors may have different live positions held in memory,
+so a savegame `nonfixed.N` overlay must not be read as an exact live-actor map.
+
+Model footprints use the model header's full 3D bounds, transform all eight
+corners by the placement quaternion and nonfixed scale properties, then draw
+the convex X/Y hull beneath the optional anchor marker. Fixed footprints are
+orange-red, indexed nonfixed footprints are cyan, and explicitly included
+unlinked footprints are gold. Use `--no-fixed-markers --no-nonfixed-markers`
+for a footprint-only diagnostic.
+
+---
+
+#### `u9 map-atlas`
+
+Discover every `terrain.N` in a static directory, pair matching `fixed.N` and
+runtime `nonfixed.N` files case-insensitively, and render a labelled contact
+sheet plus one full PNG per region. Regions are sorted by numeric ID; Titan
+does not infer geographic adjacency from those IDs.
+
+```
+titan u9 map-atlas <static-directory> [--runtime runtime-directory]
+  [--region ID ...] [--textures bitmap16.flx]
+  [--columns N] [--thumbnail-size N] [--pixels-per-cell 1..32]
+  [--cell-grid] [--tile-grid] [--tile-coordinates] [--chunk-labels]
+  [--objects] [--object-lod N]
+  [--object-footprints] [--models sappear.flx] [--types TYPES.DAT]
+  [--strict] [-o OUTPUT-DIRECTORY] [--metadata atlas.json]
+```
+
+The default output directory is `u9_map_atlas/`. It contains `atlas.png`,
+`atlas.json`, and `regions/region_NNN.png`. The JSON manifest retains every
+source path, render option, region name and dimensions, water/object/texture
+diagnostic, and any per-region error. By default a malformed region becomes a
+labelled error card so the rest of a large batch survives; `--strict` stops on
+the first error. Repeat `--region` to make a focused atlas. The water,
+hillshade, textured-object, marker, unlinked-nonfixed, footprint, filter, and Y-axis options
+match `u9 map-render`.
+
+Full region previews default to 28 pixels per terrain cell. Britannia's
+1024x1024 cell grid therefore writes as 28,672x28,672 pixels; each 16x16-cell
+tile/chunk-placement boundary remains aligned at an exact 448-pixel interval.
+The contact-sheet card size is independent and remains 224 pixels by default.
+Use `--pixels-per-cell` to select a smaller preview scale for exploratory
+batches. The manifest records the chosen value under
+`layout.pixels_per_cell`. A 28,672-pixel RGBA render requires several GiB of
+working memory even when its compressed PNG is much smaller.
+The contact-sheet title and enabled grid legend entries wrap to the available
+sheet width, so focused one-column atlases do not clip their header text.
+
+Grid annotations are independent and disabled by default. `--cell-grid` draws
+cyan boundaries around individual terrain cells. `--tile-grid` draws magenta
+boundaries around each 16x16-cell tile placement; this is also the physical
+footprint of the terrain chunk selected by that tile. `--tile-coordinates`
+writes both the stored tile coordinate (`Ttile_x,tile_y`) and its first covered
+cell (`Ccell_x,cell_y`) in green at the tile's top-left. Thus
+`T63,0 / C1008,0` covers X cells 1008..1023 and ends at boundary 1024. The
+values remain stored coordinates when `--flip-y` changes screen position.
+`--chunk-labels` writes the selected stored chunk record ID in gold at the tile
+centre; it is an ID such as `5158`, not a coordinate or count. Contact cards
+state both dimensions, for example `1024x1024 cells = 64x64 tiles`. Cell lines
+and tile coordinates require `--pixels-per-cell 4` or greater, and chunk labels
+need at least 2. The 28-pixel default retains substantially more of each source
+texture and grid interior.
+On heavily downscaled contact-sheet cards only the coarser tile grid can remain
+legible; the full `regions/region_NNN.png` previews retain all requested detail.
+The manifest records each switch, spacing, colour, and label meaning.
+
+**Example**
+
+```powershell
+titan u9 map-atlas static `
+  --runtime runtime `
+  --region 9 --region 22 `
+  --pixels-per-cell 28 --cell-grid --tile-grid `
+  --tile-coordinates --chunk-labels `
+  --columns 2 -o region_atlas
+```
+
+`--objects` adds the actual textured `sappear.flx` triangles using the same
+direct-overhead depth-tested backend as `map-render`. At eight pixels per cell,
+Britannia is an exact 8192x8192 draft. The 28-pixel default produces
+28,672x28,672 terrain previews, but combining that scale with object meshes is
+not recommended until the raster backend is tiled because its color and depth
+buffers require several GiB.
+
+---
+
+#### `u9 map-export-glb`
+
+Export textured terrain, the global water surface, and supplied fixed/nonfixed
+models as a standard Y-up binary glTF scene. A JSON manifest beside the GLB
+records source files, geometry counts, the complete model-resolution result,
+crop/filter selection, missing textures/models, and every named object node.
+Repeated placements reference shared glTF mesh payloads while retaining their
+own node transforms and manifest records.
+
+```
+titan u9 map-export-glb <terrain> [--textures bitmap16.flx]
+  [--fixed fixed.N] [--nonfixed nonfixed.N]
+  [--models sappear.flx] [--types TYPES.DAT]
+  [--cell-region x0,y0,x1,y1]
+  [--terrain | --no-terrain] [--water | --no-water]
+  [--water-frame N] [--objects | --no-objects]
+  [--object-source all|fixed|nonfixed]
+  [--object-type ID ...] [--object-model ID ...]
+  [--include-unlinked-nonfixed] [--lod N]
+  [--coordinate-scale 0.025] [-o OUT.glb] [--metadata OUT.json]
+```
+
+`--cell-region` is a half-open terrain-cell rectangle: `x0,y0` is included and
+`x1,y1` is excluded. Omitting it exports the complete region. A bounded
+rectangle remains useful for manageable viewer load times and texture counts.
+Object cropping tests the authored placement anchor; geometry may extend
+beyond the rectangle and is not clipped.
+
+Native U9 `(x, y, z)` becomes local GLB `(x, z, -y)`, with the crop origin
+removed and `--coordinate-scale 0.025` by default. This is the functioning
+editor's Y-up presentation and the same `1/40` scale used by `u9 model-export`.
+Terrain preserves holes, diagonal splits, texture frames and UV quarter-turns.
+Water is a separately textured plane at the signed header `water_level`, so a
+3D viewer's depth buffer naturally hides it below higher terrain.
+
+Fixed models resolve through `TYPES.DAT`; nonfixed models use their direct
+`mesh_index`. Limb hierarchy, corrected winding and UV V orientation, authored
+rotation, and scale properties are applied. Invisible materials are omitted.
+Each distinct model/LOD/effective-material group is written once and referenced
+by every matching placement-part node using core glTF mesh reuse; no optional
+instancing extension is required. The manifest reports unique mesh counts
+separately from geometry-bearing node counts.
+Core glTF has no exact additive blend mode, so additive U9 materials use an
+emissive alpha-blended PBR approximation. Model animation and local type-3030
+water reshaping remain outside this static bind-pose baseline.
+
+The command requires the optional `trimesh` package. `bitmap16.flx`,
+`ankh.pal`, `sdInfo16.flx`, `sappear.flx`, and fixed-object `TYPES.DAT` are
+auto-discovered beside the terrain file when possible. Any missing texture is
+made visibly magenta and listed in the manifest.
+
+**Example**
+
+```powershell
+titan u9 map-export-glb static/terrain.9 `
+  --fixed static/FIXED.9 `
+  --nonfixed runtime/nonfixed.9 `
+  --cell-region '448,480,480,512' `
+  -o britannia_crop.glb
+```
+
+---
+
 ## Ultima Online Classic Client commands (`titan uo`)
 
 All commands below are invoked as `titan uo <command>`. They read an installed
@@ -6010,6 +6248,9 @@ A value on the command line always wins.
 | `u9 model-material-report` | Export dynamic model/material-to-texture metadata as CSV or JSON |
 | `u9 model-export` | Export one model to OBJ+MTL(+PNG textures) and/or STL |
 | `u9 model-export-all` | Batch version of `model-export`, over every used model in a `sappear.flx` |
+| `u9 map-render` | Render textured terrain, water, depth-tested model meshes, anchors, and footprints to PNG+JSON |
+| `u9 map-atlas` | Catalogue numbered terrain/fixed/nonfixed regions as labelled PNG previews plus JSON, with optional meshes and exact grids |
+| `u9 map-export-glb` | Export bounded textured terrain/water/object scenes to GLB+JSON |
 | `u9 texture-info` | Inspect one bitmap or terrain-panel texture set |
 | `u9 texture-frame-report` | Export dynamic per-tier/per-frame metadata and animation evidence |
 | `u9 texture-export` | Export one texture frame or stored mip to PNG |
