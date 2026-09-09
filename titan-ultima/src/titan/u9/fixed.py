@@ -29,11 +29,12 @@ same bias::
 
     Page (0x1000 bytes)
     0x00  next_page          u32  -- biased by one, 0 = end of chain
-    0x04  end_object_offset  u32  -- region-relative
+    0x04  free_list_head     u32  -- region-relative, 0 = no free slots
     0x08  zero               u32
     0x0C  base_x             u32  -- chunk origin, always a multiple of 4096
     0x10  base_y             u32
-    0x14  unknown            u32 x 19
+    0x14  live_count         u32
+    0x18  unknown            u32 x 18
     0x60  objects            24 bytes each
 
     Object (0x18 bytes)
@@ -47,18 +48,19 @@ same bias::
 
 All integers are little-endian.
 
-Verified against 164 real region files -- 2,815 chunks, 3,315 pages, 99,215
-objects:
+Verified against 164 real region files -- 2,815 chunks, 3,315 pages, 152,383
+live objects:
 
 * every page's ``base_x``/``base_y`` is a multiple of 4096 (2,815/2,815 first
   pages), and every page in a chunk's chain repeats that chunk's origin
   (2,815/2,815);
-* every object's ``x`` and ``y`` is below 4096 (99,215/99,215), so they really
+* every object's ``x`` and ``y`` is below 4096 (152,383/152,383), so they really
   are chunk-relative;
-* every object's four rotation components form a **normalised** quaternion
-  (99,215/99,215).
+* reading four rotation components produces the expected near-unit quaternion
+  on 152,382/152,383 live objects at a 1% squared-norm tolerance; reading only
+  three reaches that tolerance on just 12,686/152,383.
 
-Two corrections to the published community documentation came out of that:
+Three corrections to the published community documentation came out of that:
 
 * The Ultima Codex documents ``0x12`` as a ``uint16`` **flags** field and the
   rotation as three components. It is the quaternion's fourth component. Taken
@@ -73,12 +75,43 @@ Two corrections to the published community documentation came out of that:
   the sharpest difference from nonfixed, whose table *is* row-major on
   3,198/3,198 pages.
 
-Object count per page comes from ``end_object_offset``:
-``(end - page_offset - 0x60) / 24``. That divides exactly on 2,814 of 2,815
-pages and always yields 0..166, which is the most a 4 KiB page holds. The
-``u32`` at ``0x14`` looks like a count and is not one -- it matches the derived
-figure on only 55% of pages and the chain total on 52%, so it is left
-undecoded rather than trusted.
+Objects are a **sparse** array over the page's 166 slots, not a run.
+
+``0x04`` is the head of a free list, not the end of the objects. Each free
+record's first dword -- the field this reader calls ``reference`` -- is the next
+link, both region-relative. ``u9.exe`` builds the list in ``FUN_004D1C30``::
+
+    page = record & 0xFFFFF000
+    record[0x00]   = page[0x04]          # reference = old head
+    page[0x04]     = record - base       # head = this record
+    page[0x14]    -= 1                   # live count
+
+So ``(head - page_offset - 0x60) / 24`` measures the distance to the *first free
+slot*. It divides cleanly on 2,814 of 2,815 pages because the head is always on
+a slot boundary, and on a page where nothing was ever freed it does equal the
+object count -- but on any page with a hole it truncates, silently dropping
+every object past it. Comparing actual slot identities on ``fixed.9``, that old
+interpretation omits 5,294 live objects across 168 pages and also misreads 1,880
+free slots as live across 124 pages. Correct enumeration therefore changes the
+total from 14,204 to 17,618, including both Region 9 roofs the earlier
+missing-roof investigation concluded were absent from the file.
+
+``page[0x14]`` **is** the live count. Its documented 55% agreement with the
+derived figure was the symptom, not a reason to distrust it: the two agree only
+where nothing was freed.
+
+Correct enumeration is to walk the free list and take every slot it did not
+visit. Verified on ``fixed.9``: the walk terminates cleanly on **354 of 354**
+pages and ``166 - len(free)`` equals ``page[0x14]`` on every one of them. The
+free list covers unused slots too, including those never yet allocated, exactly
+as ``nonfixed``'s 250-cell identity does.
+
+A count alone is not a usable bound either, because the array is sparse: a live
+object sits at slot 100 on a page whose live count is 52.
+
+If the walk does not validate -- a malformed link, a cycle, or a total that
+disagrees with ``page[0x14]`` -- this reader falls back to the old derived span
+so that odd or synthetic pages still read.
 
 Example::
 
@@ -110,6 +143,8 @@ PAGE_HEADER_STRUCT = "<6I"
 
 OBJECT_SIZE = 0x18
 OBJECT_STRUCT = "<I4H4hI"
+
+FREE_LIST_HEAD_OFFSET = 0x04
 
 CHUNK_SPAN = 4096
 QUATERNION_SCALE = 32767.0
@@ -163,9 +198,23 @@ class U9FixedPage:
     offset: int
     next_page: int
     end_object_offset: int
+    """Raw ``page+0x04``. This is the free-list head; the name is kept for
+    compatibility. It is *not* the end of the object array."""
     base_x: int
     base_y: int
     object_count: int
+    live_count: int = 0
+    """Raw ``page+0x14``, the engine's own count of live objects."""
+    live_slots: tuple[int, ...] = ()
+    """Occupied slot indices. Sparse: not necessarily ``range(object_count)``."""
+    free_list_walked: bool = False
+    """True when the free list validated against ``live_count``. False means
+    this page fell back to the old ``end_object_offset`` span."""
+
+    @property
+    def free_list_head(self) -> int:
+        """Region-relative free-list head; preferred over the compatibility name."""
+        return self.end_object_offset
 
 
 @dataclass(frozen=True)
@@ -240,6 +289,45 @@ class U9Fixed:
     def _in_payload(self, rel: int, size: int) -> bool:
         return 0 <= rel and rel + size <= self.payload_size
 
+    def _free_slots(self, rel: int) -> set[int] | None:
+        """Slot indices on this page's free list, or ``None`` if unwalkable.
+
+        ``page+0x04`` is the head and each free record's first dword is the next
+        link, both region-relative, terminating at zero. Anything that is not a
+        slot boundary, runs out of the page, or revisits a slot means this is
+        not a free list we understand, and the caller falls back.
+        """
+        base = self.header_size + rel
+        (head,) = struct.unpack_from("<I", self._data, base + FREE_LIST_HEAD_OFFSET)
+        out: set[int] = set()
+        while head:
+            offset = head - rel - PAGE_HEADER_SIZE
+            if offset < 0 or offset % OBJECT_SIZE:
+                return None
+            index = offset // OBJECT_SIZE
+            if index >= MAX_OBJECTS_PER_PAGE or index in out:
+                return None
+            record = rel + PAGE_HEADER_SIZE + index * OBJECT_SIZE
+            if not self._in_payload(record, OBJECT_SIZE):
+                return None
+            out.add(index)
+            (head,) = struct.unpack_from("<I", self._data, self.header_size + record)
+        return out
+
+    def _live_slots(
+        self, rel: int, free_head: int, live_count: int
+    ) -> tuple[tuple[int, ...], bool]:
+        """Occupied slots on a page, and whether the free list was trusted."""
+        free = self._free_slots(rel)
+        if free is not None and MAX_OBJECTS_PER_PAGE - len(free) == live_count:
+            return tuple(i for i in range(MAX_OBJECTS_PER_PAGE) if i not in free), True
+
+        # Fall back to the historical span. Wrong on any page with a hole, but
+        # it is what synthetic and malformed pages still read correctly under.
+        span = free_head - rel - PAGE_HEADER_SIZE
+        count = span // OBJECT_SIZE if free_head and span >= 0 else 0
+        return tuple(range(min(count, MAX_OBJECTS_PER_PAGE))), False
+
     def pages(self, table_index: int) -> list[U9FixedPage]:
         """The page chain for one table slot, first page first."""
         if table_index < 0 or table_index >= self.num_chunks:
@@ -255,19 +343,21 @@ class U9Fixed:
                 break
             seen.add(rel)
             base = self.header_size + rel
-            next_page, end_obj, _zero, base_x, base_y, _unknown = struct.unpack_from(
-                PAGE_HEADER_STRUCT, self._data, base
+            next_page, free_head, _zero, base_x, base_y, live_count = (
+                struct.unpack_from(PAGE_HEADER_STRUCT, self._data, base)
             )
-            span = end_obj - rel - PAGE_HEADER_SIZE
-            count = span // OBJECT_SIZE if end_obj and span >= 0 else 0
+            slots, walked = self._live_slots(rel, free_head, live_count)
             out.append(
                 U9FixedPage(
                     offset=rel,
                     next_page=next_page,
-                    end_object_offset=end_obj,
+                    end_object_offset=free_head,
                     base_x=base_x,
                     base_y=base_y,
-                    object_count=min(count, MAX_OBJECTS_PER_PAGE),
+                    object_count=len(slots),
+                    live_count=live_count,
+                    live_slots=slots,
+                    free_list_walked=walked,
                 )
             )
             value = next_page
@@ -298,7 +388,7 @@ class U9Fixed:
         objects: list[U9FixedObject] = []
         for page in pages:
             start = page.offset + PAGE_HEADER_SIZE
-            for i in range(page.object_count):
+            for i in page.live_slots:
                 rel = start + i * OBJECT_SIZE
                 if not self._in_payload(rel, OBJECT_SIZE):
                     break

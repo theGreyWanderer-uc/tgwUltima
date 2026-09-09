@@ -1,17 +1,17 @@
 """Tests for titan.u9.fixed's static/fixed.%d decoder.
 
 Fixtures match the layout verified against 164 real region files (2,815
-chunks, 3,315 pages, 106,454 objects). The properties pinned down here are the
-ones that separate this format from its sibling ``nonfixed``, and the ones the
-published documentation gets wrong:
+chunks, 3,315 pages, 152,383 live objects). The properties pinned down here are
+the ones that separate this format from its sibling ``nonfixed``, and the ones
+the published documentation gets wrong:
 
 * the header is ``0x20 + 4*w*h``, one field shorter at each end than nonfixed;
 * the chunk table is **not** row-major, so a chunk's grid position has to come
   from its page's base, not from the table slot;
 * an object's rotation is **four** ``int16`` components, not three plus a
   flags word;
-* the object count comes from ``end_object_offset``, not from the ``u32`` at
-  page offset ``0x14`` that looks like a count and is not one.
+* page offset ``0x04`` heads a free-slot list and page offset ``0x14`` is the
+  live-object count, so occupied slots are sparse rather than a dense prefix.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ import struct
 import unittest
 
 from titan.u9.fixed import (
+    MAX_OBJECTS_PER_PAGE,
     OBJECT_SIZE,
     PAGE_HEADER_SIZE,
     U9Fixed,
@@ -49,13 +50,57 @@ def _page(
     objects: list[bytes],
     page_offset: int,
     next_page: int = 0,
-    fake_count: int = 0,
 ) -> bytes:
-    end = page_offset + PAGE_HEADER_SIZE + len(objects) * OBJECT_SIZE
-    header = struct.pack("<6I", next_page, end, 0, base_x, base_y, fake_count)
-    header += b"\x00" * (PAGE_HEADER_SIZE - len(header))
-    body = b"".join(objects)
-    return header + body
+    """Build a real-sized page with a dense live prefix and valid free list."""
+    return _sparse_page(
+        base_x=base_x,
+        base_y=base_y,
+        live_objects=dict(enumerate(objects)),
+        page_offset=page_offset,
+        next_page=next_page,
+    )
+
+
+def _sparse_page(
+    *,
+    base_x: int,
+    base_y: int,
+    live_objects: dict[int, bytes],
+    page_offset: int,
+    next_page: int = 0,
+) -> bytes:
+    """Build one real-sized page whose unused slots form the free list."""
+    if any(not 0 <= slot < MAX_OBJECTS_PER_PAGE for slot in live_objects):
+        raise ValueError("live object slot outside the 166-slot page")
+    page = bytearray(0x1000)
+    free_slots = [i for i in range(MAX_OBJECTS_PER_PAGE) if i not in live_objects]
+    free_head = (
+        page_offset + PAGE_HEADER_SIZE + free_slots[0] * OBJECT_SIZE
+        if free_slots
+        else 0
+    )
+    struct.pack_into(
+        "<6I",
+        page,
+        0,
+        next_page,
+        free_head,
+        0,
+        base_x,
+        base_y,
+        len(live_objects),
+    )
+    for slot, record in live_objects.items():
+        start = PAGE_HEADER_SIZE + slot * OBJECT_SIZE
+        page[start : start + OBJECT_SIZE] = record
+    for index, slot in enumerate(free_slots):
+        next_free = (
+            page_offset + PAGE_HEADER_SIZE + free_slots[index + 1] * OBJECT_SIZE
+            if index + 1 < len(free_slots)
+            else 0
+        )
+        struct.pack_into("<I", page, PAGE_HEADER_SIZE + slot * OBJECT_SIZE, next_free)
+    return bytes(page)
 
 
 def _build(width: int, height: int, table: list[int], payload: bytes) -> bytes:
@@ -99,9 +144,22 @@ class FixedHeaderTests(unittest.TestCase):
 class FixedObjectTests(unittest.TestCase):
     def setUp(self) -> None:
         objects = [
-            _object(reference=0x20A8, x=1852, y=3964, z=2469, type_index=642,
-                    rotation=(0, 0, 12539, -32768), flags=0x300033),
-            _object(x=100, y=200, z=300, type_index=2836, rotation=(16383, 16383, 16383, 16383)),
+            _object(
+                reference=0x20A8,
+                x=1852,
+                y=3964,
+                z=2469,
+                type_index=642,
+                rotation=(0, 0, 12539, -32768),
+                flags=0x300033,
+            ),
+            _object(
+                x=100,
+                y=200,
+                z=300,
+                type_index=2836,
+                rotation=(16383, 16383, 16383, 16383),
+            ),
         ]
         payload = _page(base_x=4096, base_y=0, objects=objects, page_offset=0)
         # table is one-based, and slot 0 need not be chunk (0,0)
@@ -140,15 +198,21 @@ class FixedChunkTests(unittest.TestCase):
 
     def setUp(self) -> None:
         a = _page(base_x=4096, base_y=0, objects=[_object(x=1)], page_offset=0)
-        b = _page(base_x=0, base_y=4096, objects=[_object(x=2), _object(x=3)],
-                  page_offset=len(a))
+        b = _page(
+            base_x=0,
+            base_y=4096,
+            objects=[_object(x=2), _object(x=3)],
+            page_offset=len(a),
+        )
         # slot 0 -> chunk (1,0), slot 1 -> chunk (0,1): deliberately not row-major
         self.region = U9Fixed(_build(2, 2, [1, len(a) + 1, 0, 0], a + b))
 
     def test_grid_position_comes_from_the_base_not_the_slot(self) -> None:
         chunks = self.region.chunks()
-        self.assertEqual([(c.table_index, c.chunk_x, c.chunk_y) for c in chunks],
-                         [(0, 1, 0), (1, 0, 1)])
+        self.assertEqual(
+            [(c.table_index, c.chunk_x, c.chunk_y) for c in chunks],
+            [(0, 1, 0), (1, 0, 1)],
+        )
 
     def test_lookup_by_grid_finds_the_right_slot(self) -> None:
         chunk = self.region.chunk(0, 1)
@@ -167,10 +231,16 @@ class FixedChunkTests(unittest.TestCase):
 
 class FixedPageChainTests(unittest.TestCase):
     def setUp(self) -> None:
-        second = _page(base_x=4096, base_y=4096, objects=[_object(x=9)],
-                       page_offset=0x1000)
-        first = _page(base_x=4096, base_y=4096, objects=[_object(x=7), _object(x=8)],
-                      page_offset=0, next_page=0x1000 + 1)
+        second = _page(
+            base_x=4096, base_y=4096, objects=[_object(x=9)], page_offset=0x1000
+        )
+        first = _page(
+            base_x=4096,
+            base_y=4096,
+            objects=[_object(x=7), _object(x=8)],
+            page_offset=0,
+            next_page=0x1000 + 1,
+        )
         payload = first + b"\x00" * (0x1000 - len(first)) + second
         self.data = _build(2, 2, [1, 0, 0, 0], payload)
 
@@ -195,25 +265,38 @@ class FixedPageChainTests(unittest.TestCase):
 
 
 class FixedCountTests(unittest.TestCase):
-    def test_count_comes_from_end_offset_not_the_field_that_looks_like_one(self) -> None:
-        # The u32 at page offset 0x14 matches the real count on only 55% of
-        # shipped pages, so the reader derives the count from end_object_offset.
-        payload = _page(base_x=0, base_y=0, objects=[_object(x=1), _object(x=2)],
-                        page_offset=0, fake_count=99)
+    def test_sparse_slots_come_from_free_list_complement(self) -> None:
+        # Slot zero is free while live objects sit later in the page. Treating
+        # the free-list head as an end offset would incorrectly return zero.
+        payload = _sparse_page(
+            base_x=0,
+            base_y=0,
+            live_objects={43: _object(x=43), 100: _object(x=100)},
+            page_offset=0,
+        )
         chunk = U9Fixed(_build(2, 2, [1, 0, 0, 0], payload)).chunk_at(0)
         assert chunk is not None
+        self.assertTrue(chunk.pages[0].free_list_walked)
+        self.assertEqual(chunk.pages[0].free_list_head, PAGE_HEADER_SIZE)
+        self.assertEqual(chunk.pages[0].live_count, 2)
+        self.assertEqual(chunk.pages[0].live_slots, (43, 100))
         self.assertEqual(chunk.pages[0].object_count, 2)
+        self.assertEqual([obj.x for obj in chunk.objects], [43, 100])
         self.assertEqual(len(chunk.objects), 2)
 
-    def test_zero_end_offset_yields_no_objects(self) -> None:
-        header = struct.pack("<6I", 0, 0, 0, 0, 0, 0) + b"\x00" * (PAGE_HEADER_SIZE - 24)
+    def test_empty_synthetic_page_yields_no_objects(self) -> None:
+        header = struct.pack("<6I", 0, 0, 0, 0, 0, 0) + b"\x00" * (
+            PAGE_HEADER_SIZE - 24
+        )
         chunk = U9Fixed(_build(2, 2, [1, 0, 0, 0], header)).chunk_at(0)
         assert chunk is not None
         self.assertEqual(chunk.objects, ())
 
-    def test_count_is_capped_at_a_page(self) -> None:
+    def test_malformed_fallback_count_is_capped_at_a_page(self) -> None:
         # 0x60 + 166*24 is as much as a 4 KiB page holds.
-        header = struct.pack("<6I", 0, 0xFFFF, 0, 0, 0, 0) + b"\x00" * (PAGE_HEADER_SIZE - 24)
+        header = struct.pack("<6I", 0, 0xFFFF, 0, 0, 0, 0) + b"\x00" * (
+            PAGE_HEADER_SIZE - 24
+        )
         region = U9Fixed(_build(2, 2, [1, 0, 0, 0], header + b"\x00" * 0x4000))
         chunk = region.chunk_at(0)
         assert chunk is not None
