@@ -109,6 +109,7 @@ from titan.u9.map_atlas import (
     render_map_atlas,
 )
 from titan.u9.map_render import (
+    TOPDOWN_RESOLUTION_PRESETS,
     U9_WATER_TEXTURE_ID,
     U9MapRenderDiagnostics,
     U9MapRenderError,
@@ -117,6 +118,7 @@ from titan.u9.map_render import (
     U9ObjectTextureProvider,
     U9TerrainTextureProvider,
     render_region_map,
+    resolve_topdown_pixels_per_cell,
 )
 from titan.u9.nonfixed import (
     U9Chunk,
@@ -171,6 +173,21 @@ from titan.u9.region_glb import (
     U9GlbObjectRecord,
     U9RegionGlbResult,
     export_region_glb,
+)
+from titan.u9.region_vtk import (
+    ANTI_ALIASING_MODES,
+    MAX_VTK_RENDER_EDGE,
+    SOUTH_HIGH_CAMERA_OFFSET,
+    TEXTURE_FILTERS,
+    VTK_RESOLUTION_PRESETS,
+    U9OrthographicCamera,
+    U9VtkRenderDiagnostics,
+    U9VtkRenderError,
+    U9VtkRenderResult,
+    U9VtkUnavailableError,
+    fit_south_high_orthographic_camera,
+    render_region_glb,
+    resolve_vtk_render_size,
 )
 from titan.u9.preview import PreviewError, PreviewUnavailableError, render_preview
 from titan.u9.sdinfo import U9SdInfo, U9SdInfoError, U9SdInfoRecord
@@ -340,6 +357,21 @@ __all__ = [
     "U9GlbObjectRecord",
     "U9RegionGlbResult",
     "export_region_glb",
+    "ANTI_ALIASING_MODES",
+    "MAX_VTK_RENDER_EDGE",
+    "SOUTH_HIGH_CAMERA_OFFSET",
+    "TEXTURE_FILTERS",
+    "U9OrthographicCamera",
+    "U9VtkRenderDiagnostics",
+    "U9VtkRenderError",
+    "U9VtkRenderResult",
+    "U9VtkUnavailableError",
+    "fit_south_high_orthographic_camera",
+    "render_region_glb",
+    "resolve_vtk_render_size",
+    "VTK_RESOLUTION_PRESETS",
+    "TOPDOWN_RESOLUTION_PRESETS",
+    "resolve_topdown_pixels_per_cell",
     "U9MapTextureSource",
     "U9_WATER_TEXTURE_ID",
     "U9TerrainTextureProvider",

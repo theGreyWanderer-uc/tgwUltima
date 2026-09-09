@@ -8,14 +8,35 @@ import unittest
 from PIL import Image
 
 from titan.u9.map_render import (
+    TOPDOWN_RESOLUTION_PRESETS,
     U9MapRenderError,
     _format_legend_ids,
     render_region_map,
+    resolve_topdown_pixels_per_cell,
 )
 from titan.u9.nonfixed import U9Nonfixed
 from titan.u9.object_placement import U9ModelBounds, U9ModelBoundsLookup
 from titan.u9.region_scene import U9RegionScene
 from titan.u9.terrain import HEADER_SIZE, POINTS_PER_CHUNK, U9Terrain, U9TerrainPoint
+
+
+class TopDownResolutionPresetTests(unittest.TestCase):
+    def test_presets_are_exact_percentages_of_full_region_detail(self) -> None:
+        self.assertEqual(
+            TOPDOWN_RESOLUTION_PRESETS,
+            {"full": 28, "75": 21, "50": 14, "25": 7},
+        )
+        self.assertEqual(resolve_topdown_pixels_per_cell(), 28)
+        self.assertEqual(resolve_topdown_pixels_per_cell("75"), 21)
+        self.assertEqual(resolve_topdown_pixels_per_cell("50"), 14)
+        self.assertEqual(resolve_topdown_pixels_per_cell("25"), 7)
+
+    def test_explicit_pixels_override_the_named_preset(self) -> None:
+        self.assertEqual(resolve_topdown_pixels_per_cell("25", 8), 8)
+        with self.assertRaises(U9MapRenderError):
+            resolve_topdown_pixels_per_cell("full", 33)
+        with self.assertRaises(U9MapRenderError):
+            resolve_topdown_pixels_per_cell("unknown")
 
 
 def _terrain(

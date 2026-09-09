@@ -5770,7 +5770,8 @@ titan u9 map-render <terrain> [--textures bitmap16.flx]
   [--object-footprint-style outline|fill]
   [--object-legend | --no-object-legend]
   [-p ankh.pal] [--sdinfo sdInfo16.flx]
-  [--pixels-per-cell 1..32] [--hillshade | --no-hillshade]
+  [--resolution full|75|50|25] [--pixels-per-cell 1..32]
+  [--hillshade | --no-hillshade]
   [--water | --no-water] [--water-frame N]
   [--fixed-markers | --no-fixed-markers]
   [--nonfixed-markers | --no-nonfixed-markers]
@@ -5790,6 +5791,11 @@ the water level, wave-amplitude field,
 selected frame, and visible water cells/pixels. Missing textures are shown as
 magenta diagnostic tiles and listed in that report; Titan does not synthesize
 replacement ground.
+
+The default `--resolution full` uses 28 pixels per terrain cell, producing a
+28,672x28,672 Region 9 image. The `75`, `50`, and `25` presets use 21, 14, and
+7 pixels per cell, producing 21,504x21,504, 14,336x14,336, and 7,168x7,168
+Region 9 images. An explicit `--pixels-per-cell` value overrides the preset.
 
 `--objects` uses an orthographic direct-overhead Z buffer. It flattens model
 limb hierarchies, applies each placement's quaternion and scale, samples the
@@ -5854,7 +5860,8 @@ does not infer geographic adjacency from those IDs.
 ```
 titan u9 map-atlas <static-directory> [--runtime runtime-directory]
   [--region ID ...] [--textures bitmap16.flx]
-  [--columns N] [--thumbnail-size N] [--pixels-per-cell 1..32]
+  [--columns N] [--thumbnail-size N]
+  [--resolution full|75|50|25] [--pixels-per-cell 1..32]
   [--cell-grid] [--tile-grid] [--tile-coordinates] [--chunk-labels]
   [--objects] [--object-lod N]
   [--object-footprints] [--models sappear.flx] [--types TYPES.DAT]
@@ -5878,6 +5885,9 @@ Use `--pixels-per-cell` to select a smaller preview scale for exploratory
 batches. The manifest records the chosen value under
 `layout.pixels_per_cell`. A 28,672-pixel RGBA render requires several GiB of
 working memory even when its compressed PNG is much smaller.
+The equivalent named scales are `--resolution full`, `75`, `50`, and `25`,
+mapping to 28, 21, 14, and 7 pixels per cell. `--pixels-per-cell` remains an
+explicit override.
 The contact-sheet title and enabled grid legend entries wrap to the available
 sheet width, so focused one-column atlases do not clip their header text.
 
@@ -5978,6 +5988,56 @@ titan u9 map-export-glb static/terrain.9 `
   --nonfixed runtime/nonfixed.9 `
   --cell-region '448,480,480,512' `
   -o britannia_crop.glb
+```
+
+---
+
+#### `u9 map-render-3d`
+
+Render a reusable Titan U9 region GLB through VTK/OpenGL with the due-south,
+approximately 48-degree `south-high` camera. The camera uses parallel
+(orthographic) projection: real terrain and model geometry remains 3D, but
+objects do not shrink with distance across the atlas.
+
+```
+titan u9 map-render-3d <scene.glb>
+  [--resolution full|half]
+  [--width 1..16384] [--height 1..16384]
+  [--fit-margin N]
+  [--anti-aliasing none|fxaa|ssaa]
+  [--texture-filter nearest|linear]
+  [--lighting | --no-lighting]
+  [--ambient-strength 0..1] [--headlight-intensity N]
+  [--background COLOR] [--background-top COLOR]
+  [-o OUT.png] [--metadata OUT.json]
+```
+
+The scene should come from `u9 map-export-glb`; keeping scene construction and
+rendering separate makes camera rerenders cheap and guarantees that VTK uses
+the exporter’s canonical terrain, water, fixed/nonfixed placement, transform,
+material, and model-instancing rules. Textures use mipmaps and anisotropic
+filtering. The JSON manifest records camera values, projected bounds, actor
+and texture counts, package versions, the render-window class, and OpenGL
+capabilities including the selected GPU.
+Lighting combines VTK's light kit with a white camera headlight and an ambient
+material contribution; `--ambient-strength` and `--headlight-intensity` tune
+those two additions for dark source textures.
+`--resolution full` is the default 16,384x16,384 VTK window; `half` selects
+8,192x8,192. Supplying either `--width` or `--height` creates a square custom
+render at that edge, while supplying both allows an explicit rectangular
+window.
+
+PyVista and VTK are optional dependencies. Install them with
+`pip install pyvista vtk`. The current 16,384-pixel edge guard matches the
+practical single-window limit used by Titan's VTK renderers; larger future
+outputs require overlapping camera tiles and stitching.
+
+**Example**
+
+```powershell
+titan u9 map-render-3d region9_britannia.glb `
+  --width 8192 --height 8192 `
+  -o region9_britannia_south_high_8192.png
 ```
 
 ---
@@ -6251,6 +6311,7 @@ A value on the command line always wins.
 | `u9 map-render` | Render textured terrain, water, depth-tested model meshes, anchors, and footprints to PNG+JSON |
 | `u9 map-atlas` | Catalogue numbered terrain/fixed/nonfixed regions as labelled PNG previews plus JSON, with optional meshes and exact grids |
 | `u9 map-export-glb` | Export bounded textured terrain/water/object scenes to GLB+JSON |
+| `u9 map-render-3d` | Render a U9 region GLB through VTK/OpenGL with the south-high orthographic camera |
 | `u9 texture-info` | Inspect one bitmap or terrain-panel texture set |
 | `u9 texture-frame-report` | Export dynamic per-tier/per-frame metadata and animation evidence |
 | `u9 texture-export` | Export one texture frame or stored mip to PNG |

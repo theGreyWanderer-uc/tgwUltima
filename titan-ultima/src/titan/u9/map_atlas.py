@@ -24,6 +24,7 @@ from PIL import Image, ImageDraw, ImageFont
 from titan.u9.fixed import U9FixedError
 from titan.u9.map_render import (
     MAX_MAP_PIXELS_PER_CELL,
+    TOPDOWN_RESOLUTION_PRESETS,
     U9MapRenderError,
     U9ObjectTextureProvider,
     U9TerrainTextureProvider,
@@ -45,7 +46,7 @@ _CELL_GRID_RGBA = (48, 220, 255, 96)
 _TILE_GRID_RGBA = (255, 64, 192, 208)
 _TILE_COORDINATE_RGBA = (64, 255, 128, 255)
 _CHUNK_LABEL_RGBA = (255, 216, 64, 255)
-DEFAULT_ATLAS_PIXELS_PER_CELL = 28
+DEFAULT_ATLAS_PIXELS_PER_CELL = TOPDOWN_RESOLUTION_PRESETS["full"]
 
 
 class U9MapAtlasError(Exception):

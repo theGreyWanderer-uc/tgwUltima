@@ -47,7 +47,6 @@ from titan.u9.mesh_export import MeshExportError, export_obj, export_stl
 from titan.u9.model import U9Model, U9ModelError
 from titan.u9.model_naming import label_for_model, names_for_model
 from titan.u9.map_atlas import (
-    DEFAULT_ATLAS_PIXELS_PER_CELL,
     U9MapAtlasError,
     discover_region_files,
     render_map_atlas,
@@ -57,6 +56,7 @@ from titan.u9.map_render import (
     U9MapRenderError,
     U9MapTextureSource,
     render_region_map,
+    resolve_topdown_pixels_per_cell,
 )
 from titan.u9.nonfixed import U9Nonfixed, U9NonfixedError
 from titan.u9.object_placement import (
@@ -77,6 +77,12 @@ from titan.u9.region_glb import (
     U9CellRegion,
     U9GlbExportError,
     export_region_glb,
+)
+from titan.u9.region_vtk import (
+    MAX_VTK_RENDER_EDGE,
+    U9VtkRenderError,
+    render_region_glb,
+    resolve_vtk_render_size,
 )
 from titan.u9.sdinfo import U9SdInfo, U9SdInfoError
 from titan.u9.script_research import export_script_research_bundle
@@ -2968,6 +2974,16 @@ def cmd_terrain_export(args: SimpleNamespace) -> int:
 
 def cmd_map_atlas(args: SimpleNamespace) -> int:
     """Render a labelled, numerically ordered catalogue of U9 regions."""
+    resolution = getattr(args, "resolution", "full")
+    explicit_pixels = getattr(args, "pixels_per_cell", None)
+    try:
+        args.pixels_per_cell = resolve_topdown_pixels_per_cell(
+            resolution, explicit_pixels
+        )
+    except U9MapRenderError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+    effective_resolution = "custom" if explicit_pixels is not None else resolution
     object_meshes = getattr(args, "objects", False)
     object_lod = getattr(args, "object_lod", 0)
     needs_models = args.object_footprints or object_meshes
@@ -3109,6 +3125,7 @@ def cmd_map_atlas(args: SimpleNamespace) -> int:
         "types": str(Path(types_path).resolve()) if types_path else None,
     }
     manifest["rendering"] = {
+        "resolution": effective_resolution,
         "pixels_per_cell": args.pixels_per_cell,
         "hillshade": args.hillshade,
         "hillshade_strength": args.hillshade_strength,
@@ -3162,6 +3179,16 @@ def cmd_map_atlas(args: SimpleNamespace) -> int:
 
 def cmd_map_render(args: SimpleNamespace) -> int:
     """Render terrain with decoded textures and optional object placements."""
+    resolution = getattr(args, "resolution", "full")
+    explicit_pixels = getattr(args, "pixels_per_cell", None)
+    try:
+        args.pixels_per_cell = resolve_topdown_pixels_per_cell(
+            resolution, explicit_pixels
+        )
+    except U9MapRenderError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+    effective_resolution = "custom" if explicit_pixels is not None else resolution
     object_meshes = getattr(args, "objects", False)
     object_lod = getattr(args, "object_lod", 0)
     object_footprints = getattr(args, "object_footprints", False)
@@ -3303,6 +3330,7 @@ def cmd_map_render(args: SimpleNamespace) -> int:
     report = result.diagnostics.to_dict()
     report.update(
         {
+            "resolution": effective_resolution,
             "terrain_file": str(Path(args.terrain).resolve()),
             "fixed_file": str(Path(args.fixed).resolve()) if args.fixed else None,
             "nonfixed_file": (
@@ -3601,6 +3629,73 @@ def cmd_map_export_glb(args: SimpleNamespace) -> int:
             f"  Missing textures : {len(diagnostics.missing_texture_keys)} "
             "(magenta fallback; see manifest)"
         )
+    return 0
+
+
+def cmd_map_render_3d(args: SimpleNamespace) -> int:
+    """Render a Titan U9 region GLB with the south-high orthographic camera."""
+    scene = Path(args.scene)
+    if not scene.is_file():
+        print(f"ERROR: Scene GLB not found: {scene}", file=sys.stderr)
+        return 1
+    output = (
+        Path(args.output)
+        if args.output
+        else scene.with_name(f"{scene.stem}_south_high.png")
+    )
+    try:
+        width, height = resolve_vtk_render_size(
+            getattr(args, "resolution", "full"),
+            getattr(args, "width", None),
+            getattr(args, "height", None),
+        )
+        result = render_region_glb(
+            scene,
+            output,
+            width=width,
+            height=height,
+            fit_margin=args.fit_margin,
+            anti_aliasing=args.anti_aliasing,
+            texture_filter=args.texture_filter,
+            lighting=args.lighting,
+            ambient_strength=args.ambient_strength,
+            headlight_intensity=args.headlight_intensity,
+            background=args.background,
+            background_top=args.background_top,
+        )
+    except (OSError, U9VtkRenderError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+
+    metadata = Path(args.metadata) if args.metadata else output.with_suffix(".json")
+    metadata.parent.mkdir(parents=True, exist_ok=True)
+    manifest = result.manifest()
+    manifest["sources"] = {"scene_glb": str(scene.resolve())}
+    manifest["rendering"] = {
+        "resolution": (
+            "custom"
+            if getattr(args, "width", None) is not None
+            or getattr(args, "height", None) is not None
+            else getattr(args, "resolution", "full")
+        )
+    }
+    with metadata.open("w", encoding="utf-8") as file:
+        json.dump(manifest, file, indent=2)
+        file.write("\n")
+
+    diagnostics = result.diagnostics
+    print(f"Rendered {scene.name} -> {result.image_path}")
+    print(f"  Manifest         : {metadata}")
+    print(f"  View/projection  : {diagnostics.view} / {diagnostics.projection}")
+    print(f"  Output           : {diagnostics.width}x{diagnostics.height}")
+    print(
+        f"  Actors/textured  : {diagnostics.actor_count}/"
+        f"{diagnostics.textured_actor_count}"
+    )
+    print(
+        f"  Renderer         : VTK {diagnostics.vtk_version} / "
+        f"{diagnostics.render_window_class}"
+    )
     return 0
 
 
@@ -5444,15 +5539,22 @@ def map_atlas_cmd(
             help="Region ID to render (repeatable; default: every terrain.N)",
         ),
     ] = None,
+    resolution: Annotated[
+        Literal["full", "75", "50", "25"],
+        typer.Option(
+            "--resolution",
+            help="2D scale preset: full=28, 75=21, 50=14, 25=7 pixels/cell",
+        ),
+    ] = "full",
     pixels_per_cell: Annotated[
-        int,
+        Optional[int],
         typer.Option(
             "--pixels-per-cell",
             min=1,
             max=MAX_MAP_PIXELS_PER_CELL,
-            help="Full preview detail per 128-unit terrain cell",
+            help="Explicit detail override for --resolution",
         ),
-    ] = DEFAULT_ATLAS_PIXELS_PER_CELL,
+    ] = None,
     thumbnail_size: Annotated[
         int,
         typer.Option(
@@ -5624,6 +5726,7 @@ def map_atlas_cmd(
                 output=output,
                 metadata=metadata,
                 region_ids=region_ids,
+                resolution=resolution,
                 pixels_per_cell=pixels_per_cell,
                 thumbnail_size=thumbnail_size,
                 columns=columns,
@@ -5708,15 +5811,22 @@ def map_render_cmd(
         Optional[str],
         typer.Option("--metadata", help="Output JSON path (default: beside PNG)"),
     ] = None,
+    resolution: Annotated[
+        Literal["full", "75", "50", "25"],
+        typer.Option(
+            "--resolution",
+            help="2D scale preset: full=28, 75=21, 50=14, 25=7 pixels/cell",
+        ),
+    ] = "full",
     pixels_per_cell: Annotated[
-        int,
+        Optional[int],
         typer.Option(
             "--pixels-per-cell",
             min=1,
             max=MAX_MAP_PIXELS_PER_CELL,
-            help="Output detail per 128-unit terrain cell",
+            help="Explicit detail override for --resolution",
         ),
-    ] = 1,
+    ] = None,
     hillshade: Annotated[
         bool,
         typer.Option("--hillshade/--no-hillshade", help="Shade decoded terrain relief"),
@@ -5859,6 +5969,7 @@ def map_render_cmd(
                 sdinfo=sdinfo,
                 output=output,
                 metadata=metadata,
+                resolution=resolution,
                 pixels_per_cell=pixels_per_cell,
                 hillshade=hillshade,
                 hillshade_strength=hillshade_strength,
@@ -6016,6 +6127,123 @@ def map_export_glb_cmd(
                 object_model=object_model,
                 lod=lod,
                 coordinate_scale=coordinate_scale,
+            )
+        )
+    )
+
+
+@u9_app.command("map-render-3d")
+def map_render_3d_cmd(
+    scene: Annotated[
+        str,
+        typer.Argument(help="Titan map-export-glb scene to render"),
+    ],
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Output PNG path"),
+    ] = None,
+    metadata: Annotated[
+        Optional[str],
+        typer.Option("--metadata", help="Output JSON manifest (default: beside PNG)"),
+    ] = None,
+    resolution: Annotated[
+        Literal["full", "half"],
+        typer.Option(
+            "--resolution",
+            help="Square output preset: full=16384, half=8192",
+        ),
+    ] = "full",
+    width: Annotated[
+        Optional[int],
+        typer.Option(
+            "--width",
+            min=1,
+            max=MAX_VTK_RENDER_EDGE,
+            help="Explicit width override; omitted dimension follows it",
+        ),
+    ] = None,
+    height: Annotated[
+        Optional[int],
+        typer.Option(
+            "--height",
+            min=1,
+            max=MAX_VTK_RENDER_EDGE,
+            help="Explicit height override; omitted dimension follows it",
+        ),
+    ] = None,
+    fit_margin: Annotated[
+        float,
+        typer.Option(
+            "--fit-margin",
+            min=1.0,
+            help="Padding around projected scene bounds",
+        ),
+    ] = 1.04,
+    anti_aliasing: Annotated[
+        Literal["none", "fxaa", "ssaa"],
+        typer.Option(
+            "--anti-aliasing",
+            help="VTK anti-aliasing mode",
+        ),
+    ] = "fxaa",
+    texture_filter: Annotated[
+        Literal["nearest", "linear"],
+        typer.Option(
+            "--texture-filter",
+            help="Texture sampling filter (mipmaps remain enabled)",
+        ),
+    ] = "linear",
+    lighting: Annotated[
+        bool,
+        typer.Option(
+            "--lighting/--no-lighting",
+            help="Apply VTK's light kit to the imported materials",
+        ),
+    ] = True,
+    ambient_strength: Annotated[
+        float,
+        typer.Option(
+            "--ambient-strength",
+            min=0.0,
+            max=1.0,
+            help="Ambient material contribution when lighting is enabled",
+        ),
+    ] = 0.3,
+    headlight_intensity: Annotated[
+        float,
+        typer.Option(
+            "--headlight-intensity",
+            min=0.0,
+            help="White camera-headlight intensity",
+        ),
+    ] = 1.25,
+    background: Annotated[
+        str,
+        typer.Option("--background", help="Bottom background colour"),
+    ] = "#0c1118",
+    background_top: Annotated[
+        str,
+        typer.Option("--background-top", help="Top background colour"),
+    ] = "#526171",
+) -> None:
+    """Render a U9 GLB with the south-high orthographic VTK/OpenGL view."""
+    raise SystemExit(
+        cmd_map_render_3d(
+            SimpleNamespace(
+                scene=scene,
+                output=output,
+                metadata=metadata,
+                resolution=resolution,
+                width=width,
+                height=height,
+                fit_margin=fit_margin,
+                anti_aliasing=anti_aliasing,
+                texture_filter=texture_filter,
+                lighting=lighting,
+                ambient_strength=ambient_strength,
+                headlight_intensity=headlight_intensity,
+                background=background,
+                background_top=background_top,
             )
         )
     )

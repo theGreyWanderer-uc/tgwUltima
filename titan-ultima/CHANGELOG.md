@@ -14,53 +14,21 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Added
 
-- **U9 world-region formats:** added readers and inspection commands for
-  `static/fixed.<region>` and `runtime/nonfixed.<region>`, including complete
-  allocator-aware enumeration of indexed and unlinked nonfixed entities.
-  Added a lossless `static/terrain.<region>` reader/writer with tile, chunk,
-  height, water, UV, texture, and export tools, plus textured bird's-eye region
-  rendering with the map-wide water surface, distinct fixed/nonfixed
-  authored-placement diagnostics, depth-tested textured `sappear.flx` meshes,
-  and transformed model-bound footprints with source/type/model filters, an embedded
-  legend, and raw-versus-displayed coverage counts. Added numerically ordered,
-  labelled multi-region atlases with optional cell, tile-coordinate and
-  chunk-reference overlays, 28-pixel-per-cell inspection previews, and bounded
-  Y-up GLB export with shared model meshes and JSON evidence manifests.
+- **U9 world and maps:** added terrain, fixed/nonfixed placement, water, and
+  object readers; textured 2D maps and atlases with grids; shared-mesh GLB
+  export; and VTK/OpenGL south-high rendering with named resolution presets.
 
-- **U9 models and animation:** completed `sappear.flx` parsing for ordinary and
-  indexed-polygon records, including mount geometry, material metadata,
-  validation, and exact record round-trips. Added the `anim.flx` clip reader
-  and animation inspection, plus dynamic model/material-to-texture CSV/JSON
-  reports.
+- **U9 models, animation, textures, and palettes:** completed `sappear.flx`
+  model parsing and round-trips, `anim.flx` inspection, material reports,
+  texture decoding/replacement, terrain panels, and `ankh.pal`/`sdInfo`
+  tooling.
 
-- **U9 textures, metadata, and palettes:** added texture-set metadata, stored
-  mip decoding, terrain-panel support, BC1/DXT1 decoding, single/batch PNG
-  replacement, and correct P_8, ALPHA_8, ALPHA_INTENSITY_44, RGB565, and
-  ARGB1555 handling.
-  Added lossless `ankh.pal` inspection/export and `sdInfo*.flx`
-  inspection plus dynamic per-tier frame and animation-evidence reports.
+- **U9 archives and audio:** added FLX pack/repack, audio metadata and link
+  reports, WAV/native extraction, and safe single/batch sound replacement.
 
-- **U9 FLX writing:** added `flx-pack` and `flx-repack` for building and
-  verifying U9 archives while preserving declared entry contents.
-
-- **U9 audio editing:** added dynamic CSV/JSON metadata for speech, SFX, and
-  music (including SFX-template links), single/raw extraction, and safe
-  single/batch FLX replacement from compatible PCM WAV or native record data.
-
-- **U9 trigger and activity research:** added lossless `triggers.flx` and
-  `activity.flx` readers, opcode reports, known trigger-to-activity and
-  activity-to-highway links, and `script-research-export`. A Ghidra header,
-  executable anchors, evidence exports, and decompilation brief prepare the
-  remaining opcode analysis.
-
-- **U9 NPCs and navigation:** added `NPC.FLX` inspection, comparison, and CSV
-  export, including embedded savegame NPC tables and the decoded
-  `pool_handle` field. Added `highway.dat` point, route, lookup, and graph
-  support used by NPC activity analysis.
-
-- **U9 books and text:** added list, show, search, and export workflows for
-  `BOOKS-EN.FLX`, `text.flx`, and `misctext.flx`, including page markup,
-  conversation block grouping, and safe handling of non-text book entries.
+- **U9 scripts and world data:** added trigger/activity readers and Ghidra
+  research exports, NPC/savegame and highway tooling, and book/text search and
+  export commands.
 
 - **Sparse U7 mod-patch rendering:** `titan u7 map-render` now fills empty
   records in sparse patch `SHAPES.VGA` archives from the configured BG or SI
@@ -68,22 +36,10 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Fixed
 
-- **Strict U9 file detection:** `flx_archive` now rejects non-FLX files using
-  structural header and directory checks, while `types_dat` requires the
-  exact `TYPES.DAT` layout.
-
-- **Correct 8-bit texture selection:** texture tools now use the matching
-  `sdInfo` selector to distinguish paletted, alpha-mask, and alpha-intensity
-  data, automatically discover `ankh.pal`, and warn when no palette is
-  available.
-
-- **Reliable texture and icon export:** truncated 8-bit frames now raise
-  `U9TextureError`, and multi-frame icon exports include the frame number
-  instead of overwriting earlier frames.
-
-- **Reliable model export:** transforms are keyed by limb index so duplicate
-  `limb_id` values no longer collapse geometry, and generated model labels are
-  length-limited for Windows-compatible export paths.
+- **U9 parsing and export correctness:** tightened FLX/`TYPES.DAT` detection,
+  fixed sparse `fixed.*` page enumeration and 8-bit `sdInfo` selection, and
+  hardened truncated texture, multi-frame icon, duplicate-limb, and Windows
+  path handling.
 
 ---
 ## [0.7.5]

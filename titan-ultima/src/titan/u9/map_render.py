@@ -4,6 +4,7 @@ from __future__ import annotations
 
 __all__ = [
     "MAX_MAP_PIXELS_PER_CELL",
+    "TOPDOWN_RESOLUTION_PRESETS",
     "U9_WATER_TEXTURE_ID",
     "U9MapRenderDiagnostics",
     "U9MapRenderError",
@@ -12,6 +13,7 @@ __all__ = [
     "U9ObjectTextureProvider",
     "U9TerrainTextureProvider",
     "render_region_map",
+    "resolve_topdown_pixels_per_cell",
 ]
 
 import math
@@ -42,6 +44,13 @@ from titan.u9.types_dat import U9TypesDat
 
 _TEXTURE_KEY_COUNT = 1024 * 32 * 4
 MAX_MAP_PIXELS_PER_CELL = 32
+TOPDOWN_RESOLUTION_PRESETS = {
+    "full": 28,
+    "75": 21,
+    "50": 14,
+    "25": 7,
+}
+"""Named 2D scales; percentages are relative to the 28-pixel baseline."""
 # Texture set used by U9's separate map-wide water surface.
 U9_WATER_TEXTURE_ID = 49
 _SDINFO_NAMES = {
@@ -53,6 +62,25 @@ _SDINFO_NAMES = {
 
 class U9MapRenderError(Exception):
     """Raised when a U9 region map cannot be rendered faithfully."""
+
+
+def resolve_topdown_pixels_per_cell(
+    resolution: str = "full", pixels_per_cell: int | None = None
+) -> int:
+    """Resolve a named 2D output scale, allowing an explicit detail override."""
+    if pixels_per_cell is not None:
+        if not 1 <= pixels_per_cell <= MAX_MAP_PIXELS_PER_CELL:
+            raise U9MapRenderError(
+                f"pixels_per_cell must be from 1 to {MAX_MAP_PIXELS_PER_CELL}"
+            )
+        return pixels_per_cell
+    try:
+        return TOPDOWN_RESOLUTION_PRESETS[resolution]
+    except KeyError as error:
+        choices = ", ".join(TOPDOWN_RESOLUTION_PRESETS)
+        raise U9MapRenderError(
+            f"top-down resolution must be one of {choices}, got {resolution!r}"
+        ) from error
 
 
 class U9TerrainTextureProvider(Protocol):
