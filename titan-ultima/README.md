@@ -435,7 +435,8 @@ titan u9 palette-export static/ankh.pal -o palette/
 titan u9 model-info static/sappear.flx 2
 
 # Export every material field and join texture metadata from all tiers found
-# in the static directory. Limit to one model with --model when desired.
+# in the static directory, including invalid UV counts per material row. Limit
+# to one model with --model or use --only errors when desired.
 titan u9 model-material-report static --model 3306 -o television_materials.csv
 
 # Export a textured OBJ (+ MTL + PNG textures) -- bitmap16.flx covers every

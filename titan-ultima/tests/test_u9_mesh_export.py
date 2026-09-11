@@ -268,6 +268,49 @@ class ExportObjUvFlipTests(unittest.TestCase):
         written_uvs = set(_parse_obj_uvs(out_path))
         self.assertEqual(written_uvs, {(0.0, 0.9), (1.0, 0.75), (0.0, 0.0)})
 
+    def test_nonfinite_uv_uses_valid_obj_fallback(self) -> None:
+        lod = _single_triangle_lod(texture_id=5)
+        bad_corner = U9TriangleCorner(
+            vertex_index=0,
+            normal=(0.0, 0.0, 1.0),
+            uv=(float("nan"), float("nan")),
+        )
+        triangle = lod.triangles[0]
+        bad_triangle = U9Triangle(
+            corners=(bad_corner, triangle.corners[1], triangle.corners[2]),
+            material_index=triangle.material_index,
+            face_normal=triangle.face_normal,
+            color=triangle.color,
+        )
+        bad_lod = U9SubmeshLod(
+            lod_index=lod.lod_index,
+            vertices=lod.vertices,
+            triangles=(bad_triangle,),
+            materials=lod.materials,
+            sphere_center=lod.sphere_center,
+            sphere_radius=lod.sphere_radius,
+            min_bounds=lod.min_bounds,
+            max_bounds=lod.max_bounds,
+        )
+        limb = U9Limb(
+            limb_id=1,
+            parent_id=1,
+            scale=(1.0, 1.0, 1.0),
+            position=(0.0, 0.0, 0.0),
+            rotation=(1.0, 0.0, 0.0, 0.0),
+            lods=(bad_lod,),
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = os.path.join(directory, "sanitized.obj")
+            export_obj(_model_header_defaults(1, [limb]), output, scale=1.0)
+            with open(output, encoding="ascii") as stream:
+                contents = stream.read()
+            written_uvs = _parse_obj_uvs(output)
+
+        self.assertNotIn("nan", contents.casefold())
+        self.assertIn((0.0, 0.0), written_uvs)
+
 
 class ExportInvisibleMaterialTests(unittest.TestCase):
     def test_invisible_material_faces_excluded(self) -> None:

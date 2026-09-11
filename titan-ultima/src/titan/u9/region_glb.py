@@ -10,6 +10,7 @@ from __future__ import annotations
 
 __all__ = [
     "DEFAULT_U9_GLB_SCALE",
+    "U9_WATER_SURFACE_EPSILON",
     "U9CellRegion",
     "U9GlbExportDiagnostics",
     "U9GlbExportError",
@@ -20,6 +21,7 @@ __all__ = [
 
 from collections import defaultdict
 from dataclasses import asdict, dataclass, field
+import math
 from pathlib import Path
 from typing import Any, cast
 
@@ -45,6 +47,9 @@ from titan.u9.types_dat import U9TypesDat
 
 DEFAULT_U9_GLB_SCALE = 1.0 / 40.0
 """GLB units per native U9 unit, matching Titan's standalone model exports."""
+
+U9_WATER_SURFACE_EPSILON = 0.5
+"""Native world-Z offset that makes water win against sea-level terrain."""
 
 
 class U9GlbExportError(Exception):
@@ -140,6 +145,8 @@ class U9GlbExportDiagnostics:
     terrain_materials: int
     water_enabled: bool
     water_level: int
+    water_surface_z: float
+    water_surface_epsilon: float
     water_triangles: int
     objects_enabled: bool
     object_footprints_resolved_total: int
@@ -149,6 +156,8 @@ class U9GlbExportDiagnostics:
     object_parts_exported: int
     object_meshes_exported: int
     object_triangles: int
+    object_uv_corners_sanitized: int
+    object_model_ids_with_sanitized_uvs: tuple[int, ...]
     objects_without_visible_geometry: int
     object_model_ids_exported: tuple[int, ...]
     object_model_ids_without_visible_geometry: tuple[int, ...]
@@ -388,7 +397,10 @@ def _add_water_geometry(
     x1 = region.x1 * TERRAIN_POINT_WORLD_XY
     y0 = region.y0 * TERRAIN_POINT_WORLD_XY
     y1 = region.y1 * TERRAIN_POINT_WORLD_XY
-    height = float(scene.terrain.water_level)
+    # The 2D renderer deliberately lets water win when terrain equals sea level.
+    # A coincident GLB quad instead depth-fights with those terrain triangles, so
+    # preserve the source level in diagnostics while lifting only render geometry.
+    height = float(scene.terrain.water_level) + U9_WATER_SURFACE_EPSILON
     positions = tuple(
         _glb_position(point, region, scale)
         for point in (
@@ -484,16 +496,28 @@ def _object_material(
 
 def _object_buffers(
     triangles: tuple[U9ModelMeshTriangle, ...],
-) -> dict[tuple[object, ...], tuple[U9Material | None, _MeshBuffers]]:
+) -> tuple[
+    dict[tuple[object, ...], tuple[U9Material | None, _MeshBuffers]],
+    int,
+]:
     groups: dict[tuple[object, ...], tuple[U9Material | None, _MeshBuffers]] = {}
+    sanitized_uv_corners = 0
     for triangle in triangles:
         material = triangle[0].material
         first, second, third = triangle
         positions = tuple(corner.position for corner in (first, second, third))
         normals = tuple(corner.normal for corner in (first, second, third))
-        uvs = tuple(
-            (corner.uv[0], 1.0 - corner.uv[1]) for corner in (first, second, third)
-        )
+        uvs_list: list[tuple[float, float]] = []
+        for corner in (first, second, third):
+            if all(math.isfinite(value) for value in corner.uv):
+                uvs_list.append((corner.uv[0], 1.0 - corner.uv[1]))
+            else:
+                # Some shipped models use NaN UVs on faces that the original
+                # renderer can still draw. glTF JSON forbids non-finite accessor
+                # bounds, so retain the geometry with a deterministic texel.
+                uvs_list.append((0.0, 0.0))
+                sanitized_uv_corners += 1
+        uvs = tuple(uvs_list)
         material_key = _object_material_key(material)
         group = groups.get(material_key)
         if group is None:
@@ -504,7 +528,7 @@ def _object_buffers(
             (uvs[0], uvs[1], uvs[2]),
             (normals[0], normals[1], normals[2]),
         )
-    return groups
+    return groups, sanitized_uv_corners
 
 
 def _object_node_transform(
@@ -550,10 +574,22 @@ def _add_object_geometry(
     lod_level: int,
     missing_textures: set[str],
     used_names: dict[str, int],
-) -> tuple[tuple[U9GlbObjectRecord, ...], int, int, int, int, tuple[int, ...]]:
+) -> tuple[
+    tuple[U9GlbObjectRecord, ...],
+    int,
+    int,
+    int,
+    int,
+    tuple[int, ...],
+    int,
+    tuple[int, ...],
+]:
     model_group_cache: dict[
         int,
-        tuple[tuple[tuple[object, ...], U9Material | None, _MeshBuffers], ...],
+        tuple[
+            tuple[tuple[tuple[object, ...], U9Material | None, _MeshBuffers], ...],
+            int,
+        ],
     ] = {}
     geometry_cache: dict[tuple[object, ...], str] = {}
     material_cache: dict[tuple[object, ...], object] = {}
@@ -562,23 +598,33 @@ def _add_object_geometry(
     no_geometry_ids: set[int] = set()
     part_count = 0
     triangle_count = 0
+    sanitized_uv_corners = 0
+    sanitized_uv_model_ids: set[int] = set()
     for placement in placements:
         if placement.model_id is None:
             continue
-        groups = model_group_cache.get(placement.model_id)
-        if groups is None:
+        cached_model = model_group_cache.get(placement.model_id)
+        if cached_model is None:
             lookup = models.model(placement.model_id)
             triangles = (
                 flatten_model_triangles(lookup.model, lod_level)
                 if lookup.model is not None
                 else ()
             )
-            buffers = _object_buffers(triangles)
+            buffers, model_sanitized_uv_corners = _object_buffers(triangles)
             groups = tuple(
                 (material_key, material, buffer)
                 for material_key, (material, buffer) in buffers.items()
             )
-            model_group_cache[placement.model_id] = groups
+            model_group_cache[placement.model_id] = (
+                groups,
+                model_sanitized_uv_corners,
+            )
+            sanitized_uv_corners += model_sanitized_uv_corners
+            if model_sanitized_uv_corners:
+                sanitized_uv_model_ids.add(placement.model_id)
+        else:
+            groups, _ = cached_model
         if not groups:
             no_geometry += 1
             no_geometry_ids.add(placement.model_id)
@@ -652,6 +698,8 @@ def _add_object_geometry(
         len(geometry_cache),
         triangle_count,
         tuple(sorted(no_geometry_ids)),
+        sanitized_uv_corners,
+        tuple(sorted(sanitized_uv_model_ids)),
     )
 
 
@@ -741,6 +789,8 @@ def export_region_glb(
     object_meshes = 0
     object_triangles = 0
     no_geometry_ids: tuple[int, ...] = ()
+    sanitized_uv_corners = 0
+    sanitized_uv_model_ids: tuple[int, ...] = ()
     resolution_diagnostics = None
     if include_objects and has_object_input and object_models is not None:
         resolutions = resolve_region_object_placements(
@@ -761,6 +811,8 @@ def export_region_glb(
             object_meshes,
             object_triangles,
             no_geometry_ids,
+            sanitized_uv_corners,
+            sanitized_uv_model_ids,
         ) = _add_object_geometry(
             trimesh,
             exported,
@@ -800,6 +852,8 @@ def export_region_glb(
         terrain_materials=terrain_materials,
         water_enabled=include_water,
         water_level=scene.terrain.water_level,
+        water_surface_z=(float(scene.terrain.water_level) + U9_WATER_SURFACE_EPSILON),
+        water_surface_epsilon=U9_WATER_SURFACE_EPSILON,
         water_triangles=water_triangles,
         objects_enabled=include_objects and has_object_input,
         object_footprints_resolved_total=resolved_total,
@@ -809,6 +863,8 @@ def export_region_glb(
         object_parts_exported=object_parts,
         object_meshes_exported=object_meshes,
         object_triangles=object_triangles,
+        object_uv_corners_sanitized=sanitized_uv_corners,
+        object_model_ids_with_sanitized_uvs=sanitized_uv_model_ids,
         objects_without_visible_geometry=no_geometry,
         object_model_ids_exported=tuple(
             sorted({item.model_id for item in object_records})

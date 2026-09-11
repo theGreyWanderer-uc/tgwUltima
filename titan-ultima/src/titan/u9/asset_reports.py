@@ -20,6 +20,7 @@ __all__ = [
 
 import csv
 import json
+import math
 import re
 from collections import defaultdict
 from dataclasses import dataclass
@@ -59,6 +60,7 @@ class _MaterialReference:
     lod_index: int
     material_index: int
     lod_fields: dict[str, Any]
+    nonfinite_uv_corner_count: int
     material: U9Material
 
 
@@ -101,6 +103,7 @@ MODEL_REPORT_COLUMNS = [
     "parent_limb_id",
     "lod_index",
     "material_index",
+    "nonfinite_uv_corner_count",
     "texture_id",
     "material_animation_status",
     "anim_start",
@@ -283,6 +286,12 @@ def _read_material_references(
             for lod_index, lod in enumerate(limb.lods):
                 if lod is None:
                     continue
+                material_nonfinite_uv_corners: dict[int, int] = defaultdict(int)
+                for triangle in lod.triangles:
+                    material_nonfinite_uv_corners[triangle.material_index] += sum(
+                        not all(math.isfinite(value) for value in corner.uv)
+                        for corner in triangle.corners
+                    )
                 for material_index, material in enumerate(lod.materials):
                     material_count += 1
                     references.append(
@@ -348,6 +357,9 @@ def _read_material_references(
                                 "lod_sorted_face_offsets": lod.sorted_face_offsets,
                                 "lod_unknown_78": f"0x{lod.unknown_78:08x}",
                             },
+                            nonfinite_uv_corner_count=(
+                                material_nonfinite_uv_corners[material_index]
+                            ),
                             material=material,
                         )
                     )
@@ -664,6 +676,7 @@ def _base_model_row(
         "lod_index": reference.lod_index,
         "material_index": reference.material_index,
         **reference.lod_fields,
+        "nonfinite_uv_corner_count": reference.nonfinite_uv_corner_count,
         "texture_id": material.texture_id,
         "is_invisible": material.is_invisible,
         "first_face": material.first_face,
@@ -685,7 +698,6 @@ def _base_model_row(
         "animation_type": material.animation_type,
         "playback_direction": material.playback_direction,
         "animation_timer": material.animation_timer,
-        "has_changing_animation_range": _material_is_animated(material),
     }
 
 
@@ -779,7 +791,7 @@ def _passes_model_filter(row: dict[str, Any], only: str | None) -> bool:
         return True
     status = row.get("material_animation_status")
     if only == "animated":
-        return bool(row.get("has_changing_animation_range"))
+        return int(row.get("anim_end", 0)) > int(row.get("anim_start", 0))
     if only == "textured":
         return row.get("texture_id") not in {None, INVISIBLE_TEXTURE_ID}
     if only == "unresolved":
@@ -790,10 +802,15 @@ def _passes_model_filter(row: dict[str, Any], only: str | None) -> bool:
             "missing-texture",
         }
     if only == "errors":
-        return row.get("model_status") == "parse-error" or status in {
-            "invalid-range",
-            "missing-texture",
-        }
+        return (
+            row.get("model_status") == "parse-error"
+            or bool(row.get("nonfinite_uv_corner_count"))
+            or status
+            in {
+                "invalid-range",
+                "missing-texture",
+            }
+        )
     raise U9AssetReportError(
         "model --only must be animated, textured, unresolved, or errors"
     )
@@ -903,7 +920,6 @@ def build_model_material_report(
             row["animation_evidence"] = (
                 "material does not declare a changing frame range"
             )
-        row["texture_tier_frame_counts"] = present_counts
         row["texture_tier_frame_counts_match"] = len(set(present_counts)) <= 1
 
     rows.extend(diagnostics)

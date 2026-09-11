@@ -92,23 +92,26 @@ def _limb_header() -> bytes:
     )
 
 
-def _corner(vertex_index: int) -> bytes:
+def _corner(vertex_index: int, uv: tuple[float, float] = (0.0, 0.0)) -> bytes:
     return (
         struct.pack("<II", vertex_index, 0)
         + struct.pack("<3f", 0, 0, 1)
-        + struct.pack("<2f", 0, 0)
+        + struct.pack("<2f", *uv)
     )
 
 
-def _face() -> bytes:
-    data = b"".join(_corner(index) for index in range(3))
+def _face(*, nonfinite_uv: bool = False) -> bytes:
+    data = b"".join(
+        _corner(index, (float("nan"), float("nan")) if nonfinite_uv else (0.0, 0.0))
+        for index in range(3)
+    )
     data += struct.pack("<II3ffI", 0, 0, 0, 0, 1, 0, 0)
     data += bytes((255, 255, 255, 255)) + b"\x00" * 8
     return data
 
 
-def _animated_model(texture_id: int) -> bytes:
-    face = _face()
+def _animated_model(texture_id: int, *, nonfinite_uv: bool = False) -> bytes:
+    face = _face(nonfinite_uv=nonfinite_uv)
     vertices = b"".join(
         struct.pack("<3f", *vertex)
         for vertex in ((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0))
@@ -198,6 +201,32 @@ class AssetReportIntegrationTests(unittest.TestCase):
         self.assertEqual(row["texture_16_frame_count"], 2)
         self.assertEqual(row["texture_16_encodings"], ["rgb565"])
         self.assertNotIn("texture_sh_frame_count", row)
+        self.assertEqual(row["nonfinite_uv_corner_count"], 0)
+        self.assertNotIn("has_changing_animation_range", row)
+        self.assertNotIn("texture_tier_frame_counts", row)
+
+        animated_rows, _ = build_model_material_report(
+            self.static,
+            model_id=0,
+            only="animated",
+        )
+        self.assertEqual(len(animated_rows), 1)
+
+    def test_model_report_counts_nonfinite_uvs_for_material_row(self) -> None:
+        (self.static / "sappear.flx").write_bytes(
+            _build_flx([_animated_model(texture_id=1, nonfinite_uv=True)])
+        )
+
+        rows, warnings = build_model_material_report(
+            self.static,
+            model_id=0,
+            only="errors",
+        )
+
+        self.assertEqual(warnings, [])
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row["nonfinite_uv_corner_count"], 3)
 
 
 if __name__ == "__main__":

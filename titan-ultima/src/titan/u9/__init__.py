@@ -167,6 +167,7 @@ from titan.u9.region_scene import (
 )
 from titan.u9.region_glb import (
     DEFAULT_U9_GLB_SCALE,
+    U9_WATER_SURFACE_EPSILON,
     U9CellRegion,
     U9GlbExportDiagnostics,
     U9GlbExportError,
@@ -351,6 +352,7 @@ __all__ = [
     "FIXED_CHUNK_TERRAIN_POINTS",
     "REGION_CHUNK_TERRAIN_POINTS",
     "DEFAULT_U9_GLB_SCALE",
+    "U9_WATER_SURFACE_EPSILON",
     "U9CellRegion",
     "U9GlbExportDiagnostics",
     "U9GlbExportError",

@@ -4168,6 +4168,8 @@ texture tier found beside `sappear.flx`. Pass either `sappear.flx` or its
 
 The CSV schema is discovery-driven. Core model/material columns always lead;
 model bounds, limb transforms, LOD metadata, and raw material fields follow.
+Each material row also reports its `nonfinite_uv_corner_count`; `--only errors`
+includes rows with affected corners.
 For each texture archive actually found, a corresponding `texture_<tier>_*`
 column family is added with presence, frame count, dimensions, encoding,
 compression, mip, and matching `sdInfo` data. Model names are added only when

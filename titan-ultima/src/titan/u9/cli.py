@@ -10,6 +10,7 @@ __all__ = ["u9_app"]
 
 import csv
 import json
+import math
 import os
 import re
 import struct
@@ -705,6 +706,20 @@ def cmd_model_info(args: SimpleNamespace) -> int:
         print(
             f"{limb.limb_id:>6}  {limb.parent_id:>6}  {str(limb.is_root):>5}  {str(pos):<30}  "
             + " | ".join(lod_summaries)
+        )
+    nonfinite_uv_corners = sum(
+        not all(math.isfinite(value) for value in corner.uv)
+        for limb in model.limbs
+        for lod in limb.lods
+        if lod is not None
+        for triangle in lod.triangles
+        for corner in triangle.corners
+    )
+    if nonfinite_uv_corners:
+        print()
+        print(
+            f"  WARNING: {nonfinite_uv_corners} triangle corner(s) contain "
+            "non-finite UVs; Titan substitutes (0, 0) during OBJ/GLB export."
         )
     return 0
 
@@ -3634,7 +3649,9 @@ def cmd_map_export_glb(args: SimpleNamespace) -> int:
     )
     if diagnostics.water_enabled:
         print(
-            f"  Water            : Z {diagnostics.water_level}, "
+            f"  Water            : surface Z {diagnostics.water_surface_z:g} "
+            f"(source {diagnostics.water_level}, "
+            f"epsilon +{diagnostics.water_surface_epsilon:g}), "
             f"{diagnostics.water_triangles} triangle(s)"
         )
     if diagnostics.objects_enabled:
@@ -3651,6 +3668,11 @@ def cmd_map_export_glb(args: SimpleNamespace) -> int:
             f"  Object meshes    : {diagnostics.object_meshes_exported} shared mesh(es) / "
             f"{diagnostics.object_parts_exported} placement part node(s)"
         )
+        if diagnostics.object_uv_corners_sanitized:
+            print(
+                f"  Sanitized UVs    : {diagnostics.object_uv_corners_sanitized} corner(s) "
+                f"in model(s) {diagnostics.object_model_ids_with_sanitized_uvs}"
+            )
     print(
         f"  Scene geometry   : {diagnostics.geometry_meshes} mesh(es) / "
         f"{diagnostics.geometry_nodes} node(s)"

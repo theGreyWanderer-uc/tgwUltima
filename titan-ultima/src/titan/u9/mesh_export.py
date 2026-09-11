@@ -79,6 +79,7 @@ __all__ = [
     "model_limb_world_matrices",
 ]
 
+import math
 import os
 import struct
 from dataclasses import dataclass
@@ -297,7 +298,11 @@ def _build_obj_tables(
             pos = (v.position[0] * scale, v.position[1] * scale, v.position[2] * scale)
             # OBJ/OpenGL texture-space convention is V=0 at the bottom of the image;
             # the raw parsed UV is V=0 at the top (see module docstring) -- flip here.
-            obj_uv = (v.uv[0], 1.0 - v.uv[1])
+            obj_uv = (
+                (v.uv[0], 1.0 - v.uv[1])
+                if all(math.isfinite(value) for value in v.uv)
+                else (0.0, 0.0)
+            )
             face_indices.append(index_of(pos, positions, position_index))
             face_indices.append(index_of(obj_uv, uvs, uv_index))
             face_indices.append(index_of(v.normal, normals, normal_index))

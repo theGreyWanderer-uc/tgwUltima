@@ -28,19 +28,21 @@ from titan.u9.object_placement import (
     U9ObjectFootprintFilter,
 )
 from titan.u9.region_glb import (
+    DEFAULT_U9_GLB_SCALE,
     U9CellRegion,
     U9GlbExportError,
+    U9_WATER_SURFACE_EPSILON,
     export_region_glb,
 )
 from titan.u9.region_scene import U9RegionScene
 from titan.u9.terrain import HEADER_SIZE, POINTS_PER_CHUNK, U9Terrain, U9TerrainPoint
 
 
-def _terrain() -> U9Terrain:
+def _terrain(*, water_level: int = 30) -> U9Terrain:
     point = U9TerrainPoint.build(height=10, texture=1).value
     head = bytearray(HEADER_SIZE)
     struct.pack_into("<II", head, 0, 32, 32)
-    struct.pack_into("<i", head, 0x88, 30)
+    struct.pack_into("<i", head, 0x88, water_level)
     struct.pack_into("<I", head, 0x94, 1)
     return U9Terrain(
         bytes(head)
@@ -95,9 +97,9 @@ def _material() -> U9Material:
     )
 
 
-def _model() -> U9Model:
+def _model(*, first_uv: tuple[float, float] = (0.0, 0.0)) -> U9Model:
     corners = (
-        U9TriangleCorner(0, (0.0, 0.0, 1.0), (0.0, 0.0)),
+        U9TriangleCorner(0, (0.0, 0.0, 1.0), first_uv),
         U9TriangleCorner(1, (0.0, 0.0, 1.0), (1.0, 0.0)),
         U9TriangleCorner(2, (0.0, 0.0, 1.0), (0.0, 1.0)),
     )
@@ -153,8 +155,8 @@ class FakeTextureSource(U9MapTextureSource):
 
 
 class FakeModelProvider:
-    def __init__(self) -> None:
-        self.parsed_model = _model()
+    def __init__(self, *, first_uv: tuple[float, float] = (0.0, 0.0)) -> None:
+        self.parsed_model = _model(first_uv=first_uv)
 
     def model_bounds(self, model_id: int) -> U9ModelBoundsLookup:
         if model_id != 1210:
@@ -211,6 +213,36 @@ class RegionGlbTests(unittest.TestCase):
                 (0, 0, 4, 4),
             )
 
+    def test_water_surface_is_offset_above_equal_height_terrain(self) -> None:
+        import trimesh
+
+        scene = U9RegionScene(_terrain(water_level=40))
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "sea-level.glb"
+            result = export_region_glb(
+                scene,
+                FakeTextureSource(),
+                output,
+                cell_region=U9CellRegion(0, 0, 4, 4),
+            )
+            loaded = cast(Any, trimesh.load(output, force="scene"))
+
+        water = next(
+            geometry
+            for name, geometry in loaded.geometry.items()
+            if "water_surface" in name
+        )
+        expected_native_z = 40 + U9_WATER_SURFACE_EPSILON
+        np.testing.assert_allclose(
+            water.vertices[:, 1], expected_native_z * DEFAULT_U9_GLB_SCALE
+        )
+        self.assertEqual(result.diagnostics.water_level, 40)
+        self.assertEqual(result.diagnostics.water_surface_z, expected_native_z)
+        self.assertEqual(
+            result.diagnostics.water_surface_epsilon,
+            U9_WATER_SURFACE_EPSILON,
+        )
+
     def test_repeated_objects_share_mesh_with_distinct_placement_nodes(self) -> None:
         import trimesh
 
@@ -249,6 +281,27 @@ class RegionGlbTests(unittest.TestCase):
         self.assertEqual(len(result.objects[1].node_names), 1)
         self.assertNotEqual(
             result.objects[0].node_names[0], result.objects[1].node_names[0]
+        )
+
+    def test_nonfinite_object_uv_is_sanitized_for_valid_gltf(self) -> None:
+        scene = U9RegionScene(_terrain(), nonfixed=_nonfixed())
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "sanitized.glb"
+            result = export_region_glb(
+                scene,
+                FakeTextureSource(),
+                output,
+                cell_region=U9CellRegion(0, 0, 4, 4),
+                include_terrain=False,
+                include_water=False,
+                object_models=FakeModelProvider(first_uv=(float("nan"), float("nan"))),
+            )
+
+            self.assertNotIn(b"NaN", output.read_bytes())
+        self.assertEqual(result.diagnostics.object_uv_corners_sanitized, 1)
+        self.assertEqual(
+            result.diagnostics.object_model_ids_with_sanitized_uvs,
+            (1210,),
         )
 
     def test_object_filters_and_anchor_crop_preserve_resolution_counts(self) -> None:

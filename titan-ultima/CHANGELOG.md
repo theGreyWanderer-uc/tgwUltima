@@ -39,7 +39,7 @@ This project uses [Semantic Versioning](https://semver.org/):
 - **U9 parsing and export correctness:** tightened FLX/`TYPES.DAT` detection,
   fixed sparse `fixed.*` page enumeration and 8-bit `sdInfo` selection, and
   hardened truncated texture, multi-frame icon, duplicate-limb, and Windows
-  path handling.
+  path handling; fixed GLB sea-level depth fighting and non-finite model UVs.
 
 ---
 ## [0.7.5]
