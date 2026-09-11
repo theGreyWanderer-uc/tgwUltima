@@ -19,9 +19,9 @@ This project uses [Semantic Versioning](https://semver.org/):
   export; and VTK/OpenGL south-high rendering with named resolution presets.
 
 - **U9 models, animation, textures, and palettes:** completed `sappear.flx`
-  model parsing and round-trips, `anim.flx` inspection, material reports,
-  texture decoding/replacement, terrain panels, and `ankh.pal`/`sdInfo`
-  tooling.
+  model parsing and round-trips, `anim.flx` inspection and registry-backed
+  model candidate reports, material reports, texture decoding/replacement,
+  terrain panels, and `ankh.pal`/`sdInfo` tooling.
 
 - **U9 archives and audio:** added FLX pack/repack, audio metadata and link
   reports, WAV/native extraction, and safe single/batch sound replacement.

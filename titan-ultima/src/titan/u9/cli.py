@@ -32,6 +32,11 @@ from titan.u9.asset_reports import (
     write_dynamic_report,
 )
 from titan.u9.animation import U9AnimationError, U9Animations
+from titan.u9.animation_model_report import (
+    ANIMATION_MODEL_REPORT_COLUMNS,
+    U9AnimationModelReportError,
+    build_animation_model_report,
+)
 from titan.u9.books import U9Books, U9BooksError
 from titan.u9.flx_archive import U9FlxArchive, U9FlxArchiveError
 from titan.u9.flx_writer import (
@@ -1822,6 +1827,32 @@ def cmd_animation_show(args: SimpleNamespace) -> int:
             for a, b, c in (suffix.values for suffix in animation.suffixes)
         )
         print(f"  Raw suffixes    : {suffixes}")
+    return 0
+
+
+def cmd_animation_model_report(args: SimpleNamespace) -> int:
+    """Export named clips and their registry-backed structural model candidates."""
+    try:
+        rows, warnings = build_animation_model_report(
+            args.file,
+            animation_id=getattr(args, "animation", None),
+            sappear_path=getattr(args, "sappear", None),
+            registry_path=getattr(args, "registry", None),
+            types_path=getattr(args, "types", None),
+            typenames_path=getattr(args, "typenames", None),
+        )
+        output = write_dynamic_report(
+            rows,
+            args.output,
+            args.format,
+            preferred_columns=ANIMATION_MODEL_REPORT_COLUMNS,
+        )
+    except (U9AnimationModelReportError, U9AssetReportError, OSError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+    for warning in warnings:
+        print(f"WARNING: {warning}", file=sys.stderr)
+    print(f"Wrote {len(rows)} animation/model row(s) to {output}")
     return 0
 
 
@@ -4932,6 +4963,64 @@ def animation_show_cmd(
     """Show one U9 animation's structure or one part's transform frames."""
     raise SystemExit(
         cmd_animation_show(SimpleNamespace(file=file, id=id, part=part, limit=limit))
+    )
+
+
+@u9_app.command("animation-model-report")
+def animation_model_report_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
+    output: Annotated[
+        str,
+        typer.Option("-o", "--output", help="Output CSV or JSON report path"),
+    ],
+    animation: Annotated[
+        Optional[int],
+        typer.Option("--animation", help="Limit the report to one animation ID"),
+    ] = None,
+    sappear: Annotated[
+        Optional[str],
+        typer.Option(
+            "--sappear",
+            help="sappear.flx path (default: beside anim.flx)",
+        ),
+    ] = None,
+    registry: Annotated[
+        Optional[str],
+        typer.Option(
+            "--registry",
+            help="registry.txt path (default: beside anim.flx)",
+        ),
+    ] = None,
+    types: Annotated[
+        Optional[str],
+        typer.Option("--types", help="TYPES.DAT path (default: beside anim.flx)"),
+    ] = None,
+    typenames: Annotated[
+        Optional[str],
+        typer.Option(
+            "--typenames",
+            help="TYPENAME.FLX path (default: beside anim.flx)",
+        ),
+    ] = None,
+    fmt: Annotated[
+        str,
+        typer.Option("-f", "--format", help="Report format: csv or json"),
+    ] = "csv",
+) -> None:
+    """Export named animation clips and compatible model/type candidates."""
+    raise SystemExit(
+        cmd_animation_model_report(
+            SimpleNamespace(
+                file=file,
+                output=output,
+                animation=animation,
+                sappear=sappear,
+                registry=registry,
+                types=types,
+                typenames=typenames,
+                format=fmt,
+            )
+        )
     )
 
 

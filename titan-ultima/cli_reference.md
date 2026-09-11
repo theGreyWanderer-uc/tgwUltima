@@ -4803,8 +4803,9 @@ entry. Each clip has its LightWave source path and inclusive source-frame
 range, a part-ID manifest, named part tracks, and timestamped quaternion,
 position, and scale transforms. All 857 used entries parse and consume exactly.
 
-The archive does not use `sappear.flx` model IDs as animation IDs, and Titan
-does not yet resolve which clip family a model selects. See
+The archive does not use `sappear.flx` model IDs as animation IDs. Titan can
+now rank registry-backed structural model candidates and source-name evidence,
+but it does not claim those candidates are the engine's runtime binding. See
 `reference/u9/anim/u9_anim_flx_reference.md` for the verified layout and open
 linkage questions.
 
@@ -4856,6 +4857,44 @@ The second form identifies part 1 as `BIP01` and prints frames as
 `time_ms`, quaternion `(w,x,y,z)`, position `(x,y,z)`, and scale `(x,y,z)`.
 Suffix records are displayed as raw integer triples because their semantics
 are not yet known.
+
+---
+
+#### `u9 animation-model-report`
+
+Export one row per used animation clip, joining `anim.flx`, `registry.txt`,
+`sappear.flx`, `TYPES.DAT`, and `TYPENAME.FLX`. The CSV/JSON includes source
+family/action hints, timing, tracks, authoring-only nodes, structural model
+candidates, model/type/usecode metadata, candidate ambiguity, and a targeted
+Ghidra question. Companion files are found beside `anim.flx` unless overridden.
+
+```
+titan u9 animation-model-report <anim.flx> -o <report.csv> [options]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/anim.flx` |
+| `-o PATH`, `--output PATH` | Required CSV or JSON output path |
+| `--animation ID` | Limit the report to one animation ID |
+| `--sappear PATH` | Override the companion `sappear.flx` path |
+| `--registry PATH` | Override the companion `registry.txt` path |
+| `--types PATH` | Override the companion `TYPES.DAT` path |
+| `--typenames PATH` | Override the companion `TYPENAME.FLX` path |
+| `-f FORMAT`, `--format FORMAT` | `csv` (default) or `json` |
+
+**Examples**
+```bash
+titan u9 animation-model-report static/anim.flx -o animation_models.csv
+titan u9 animation-model-report static/anim.flx --animation 172 -o avatar_idle.json -f json
+```
+
+`full-structural` means that one model contains every clip track ID known to
+occur as a model limb anywhere in the shipped archive. `partial-best` is only
+the maximum overlap after no full candidate was found. Source-path/name matches
+are a second evidence layer. Neither result proves runtime selection; the
+`runtime_binding_status` remains `unresolved` until engine tables or code are
+traced.
 
 ---
 
@@ -6317,6 +6356,7 @@ A value on the command line always wins.
 | `u9 texture-export` | Export one texture frame or stored mip to PNG |
 | `u9 animation-list` | List `anim.flx` clips with timing, part counts and source paths |
 | `u9 animation-show` | Show one animation clip or dump one part's transform frames |
+| `u9 animation-model-report` | Join clips, registry nodes, structural model candidates, types, usecode IDs, and Ghidra questions to CSV/JSON |
 | `u9 icon-list` | List candidate 2D UI icon entries not referenced by any 3D model |
 | `u9 icon-export` | Export one texture archive entry to PNG, regardless of mesh usage |
 | `u9 icon-export-all` | Batch-export every candidate 2D UI icon to PNG |
