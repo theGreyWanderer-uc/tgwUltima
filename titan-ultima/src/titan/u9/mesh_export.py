@@ -54,32 +54,47 @@ geometry only.
 
 **Static bind pose only (minor, cosmetic)**: both exporters use each
 limb's single stored transform (see :class:`titan.u9.model.U9Limb`),
-not a real animated/posed configuration (``static/anim.flx`` isn't
-implemented -- see ``reference/u9/anim/u9_anim_flx_reference.md`` for
-exploratory notes). This can leave a small sub-mesh in an unposed
-resting position (e.g. not tucked/folded the way it would be
-mid-animation). Note: an earlier version of this docstring attributed
-a dragon wing's hand/claw sub-mesh showing a patch of the shared
-atlas's face graphic to *this* limitation -- that was wrong. That
-symptom was actually the UV V-flip bug above (the wing's claw
-happened to sample a UV region that, unflipped, landed on the face
-texture); it's gone as of the V-flip fix, confirmed by re-rendering
-model 3623. Genuine bind-pose-only effects are limb *positioning*
-only and never change which texture region a triangle samples.
+not a real animated/posed configuration. :mod:`titan.u9.animation` parses
+``static/anim.flx``, but the model-to-clip link and animated export are not
+implemented. This can leave a small sub-mesh in an unposed resting position
+(e.g. not tucked/folded the way it would be mid-animation). Note: an earlier
+version of this docstring attributed a dragon wing's hand/claw sub-mesh showing
+a patch of the shared atlas's face graphic to *this* limitation -- that was
+wrong. That symptom was actually the UV V-flip bug above (the wing's claw
+happened to sample a UV region that, unflipped, landed on the face texture);
+it's gone as of the V-flip fix, confirmed by re-rendering model 3623. Genuine
+bind-pose-only effects are limb *positioning* only and never change which
+texture region a triangle samples.
 """
 
 from __future__ import annotations
 
-__all__ = ["export_obj", "export_stl", "MeshExportError"]
+__all__ = [
+    "MeshExportError",
+    "U9ModelMeshTriangle",
+    "U9ModelMeshVertex",
+    "export_obj",
+    "export_stl",
+    "flatten_model_triangles",
+    "model_limb_world_matrices",
+]
 
+import math
 import os
 import struct
 from dataclasses import dataclass
 from typing import Callable, Optional
 
-from titan.u9.model import U9Model
+from titan.u9.model import U9Material, U9Model
 from titan.u9.texture import U9TextureFrame
-from titan.u9.transform import IDENTITY, Mat4, mat4_multiply, mat4_trs, transform_normal, transform_point
+from titan.u9.transform import (
+    IDENTITY,
+    Mat4,
+    mat4_multiply,
+    mat4_trs,
+    transform_normal,
+    transform_point,
+)
 
 Vec3 = tuple[float, float, float]
 TextureResolver = Callable[[int, int], Optional[U9TextureFrame]]
@@ -91,69 +106,107 @@ class MeshExportError(Exception):
 
 
 @dataclass(frozen=True)
-class _FlatVertex:
+class U9ModelMeshVertex:
+    """One bind-pose model corner with its resolved material."""
+
     position: Vec3
     normal: Vec3
     uv: tuple[float, float]
-    material_key: tuple[int, int]  # (texture_id, cur_frame)
+    material: U9Material | None
+
+    @property
+    def material_key(self) -> tuple[int, int]:
+        """Return the OBJ-compatible texture ID and current-frame key."""
+        if self.material is None:
+            return (0xFFFF, 0)
+        return (self.material.texture_id, self.material.cur_frame)
 
 
-def _world_matrices(model: U9Model) -> dict[int, Mat4]:
-    """Resolve each limb's world matrix by walking its parent chain (memoized, cycle-safe)."""
-    by_id = {limb.limb_id: limb for limb in model.limbs}
+U9ModelMeshTriangle = tuple[U9ModelMeshVertex, U9ModelMeshVertex, U9ModelMeshVertex]
+"""One visible bind-pose model triangle in flattened model coordinates."""
+
+
+def model_limb_world_matrices(model: U9Model) -> dict[int, Mat4]:
+    """Resolve each limb's world matrix by walking its parent chain (memoized, cycle-safe).
+
+    Keyed by the limb's **index** in ``model.limbs``, not by ``limb_id``: three
+    shipped models (217, 775, 1296) reuse a ``limb_id`` across limbs that carry
+    different transforms, so an id-keyed map keeps only the last and collapses
+    every copy onto its position.
+
+    A parent is still named by ``limb_id``; where an id is duplicated the first
+    limb carrying it is taken as the parent. A ``parent_id`` naming no stored
+    limb -- 505 shipped models point at limb 0, an implicit root that is never
+    written out -- resolves to identity, leaving the limb at its own local
+    transform.
+    """
+    first_index_for_id: dict[int, int] = {}
+    for index, limb in enumerate(model.limbs):
+        first_index_for_id.setdefault(limb.limb_id, index)
+
     resolved: dict[int, Mat4] = {}
 
-    def resolve(limb_id: int, _visiting: frozenset[int] = frozenset()) -> Mat4:
-        if limb_id in resolved:
-            return resolved[limb_id]
-        limb = by_id.get(limb_id)
-        if limb is None:
-            return IDENTITY
+    def resolve(index: int, _visiting: frozenset[int] = frozenset()) -> Mat4:
+        if index in resolved:
+            return resolved[index]
+        limb = model.limbs[index]
 
         local = mat4_trs(limb.position, limb.rotation, limb.scale)
-        if limb.is_root or limb.parent_id in _visiting or limb.parent_id not in by_id:
+        parent_index = first_index_for_id.get(limb.parent_id)
+        if limb.is_root or parent_index is None or parent_index in _visiting:
             world = local
         else:
-            parent_world = resolve(limb.parent_id, _visiting | {limb_id})
+            parent_world = resolve(parent_index, _visiting | {index})
             world = mat4_multiply(parent_world, local)
 
-        resolved[limb_id] = world
+        resolved[index] = world
         return world
 
-    for limb in model.limbs:
-        resolve(limb.limb_id)
+    for index in range(len(model.limbs)):
+        resolve(index)
     return resolved
 
 
-def _flatten(model: U9Model, lod_level: int, reverse_winding: bool) -> list[tuple[_FlatVertex, _FlatVertex, _FlatVertex]]:
-    world_matrices = _world_matrices(model)
-    triangles: list[tuple[_FlatVertex, _FlatVertex, _FlatVertex]] = []
+def flatten_model_triangles(
+    model: U9Model,
+    lod_level: int = 0,
+    reverse_winding: bool = True,
+) -> tuple[U9ModelMeshTriangle, ...]:
+    """Flatten visible model geometry to bind-pose model coordinates."""
+    world_matrices = model_limb_world_matrices(model)
+    triangles: list[U9ModelMeshTriangle] = []
 
-    for limb in model.limbs:
+    for limb_index, limb in enumerate(model.limbs):
         if lod_level >= len(limb.lods):
             continue
         lod = limb.lods[lod_level]
         if lod is None:
             continue
-        world = world_matrices.get(limb.limb_id, IDENTITY)
+        world = world_matrices.get(limb_index, IDENTITY)
 
         for tri in lod.triangles:
             material = lod.materials[tri.material_index] if lod.materials else None
             if material is not None and material.is_invisible:
                 continue
-            material_key = (material.texture_id, material.cur_frame) if material is not None else (0xFFFF, 0)
 
             flat_corners = []
             for corner in tri.corners:
                 pos = transform_point(world, lod.vertices[corner.vertex_index])
                 normal = transform_normal(world, corner.normal)
-                flat_corners.append(_FlatVertex(position=pos, normal=normal, uv=corner.uv, material_key=material_key))
+                flat_corners.append(
+                    U9ModelMeshVertex(
+                        position=pos,
+                        normal=normal,
+                        uv=corner.uv,
+                        material=material,
+                    )
+                )
 
             if reverse_winding:
                 flat_corners = [flat_corners[0], flat_corners[2], flat_corners[1]]
             triangles.append((flat_corners[0], flat_corners[1], flat_corners[2]))
 
-    return triangles
+    return tuple(triangles)
 
 
 def _material_name(texture_id: int, frame: int) -> str:
@@ -179,9 +232,11 @@ def export_obj(
     :func:`titan.u9.texture.decode_frame`) -- return ``None`` for a
     material to fall back to an untextured (flat alpha) MTL entry.
     """
-    triangles = _flatten(model, lod_level, reverse_winding)
+    triangles = flatten_model_triangles(model, lod_level, reverse_winding)
     if not triangles:
-        raise MeshExportError(f"model {model.model_id} has no visible geometry at LOD {lod_level}")
+        raise MeshExportError(
+            f"model {model.model_id} has no visible geometry at LOD {lod_level}"
+        )
 
     base = os.path.splitext(output_path)[0]
     mtl_path = base + ".mtl"
@@ -190,7 +245,9 @@ def export_obj(
     positions, uvs, normals, faces_by_material = _build_obj_tables(triangles, scale)
 
     with open(output_path, "w", encoding="ascii", errors="replace") as f:
-        f.write(f"# Exported by titan u9 model-export (model {model.model_id}, LOD {lod_level})\n")
+        f.write(
+            f"# Exported by titan u9 model-export (model {model.model_id}, LOD {lod_level})\n"
+        )
         f.write(f"mtllib {mtl_name}\n")
         for p in positions:
             f.write(f"v {p[0]:.6f} {p[1]:.6f} {p[2]:.6f}\n")
@@ -210,8 +267,13 @@ _ObjFace = tuple[int, int, int, int, int, int, int, int, int]
 
 
 def _build_obj_tables(
-    triangles: list[tuple[_FlatVertex, _FlatVertex, _FlatVertex]], scale: float
-) -> tuple[list[Vec3], list[tuple[float, float]], list[Vec3], dict[tuple[int, int], list[_ObjFace]]]:
+    triangles: tuple[U9ModelMeshTriangle, ...], scale: float
+) -> tuple[
+    list[Vec3],
+    list[tuple[float, float]],
+    list[Vec3],
+    dict[tuple[int, int], list[_ObjFace]],
+]:
     """Build deduplicated, 1-based-indexed OBJ position/uv/normal tables plus per-material face lists."""
     positions: list[Vec3] = []
     normals: list[Vec3] = []
@@ -236,7 +298,11 @@ def _build_obj_tables(
             pos = (v.position[0] * scale, v.position[1] * scale, v.position[2] * scale)
             # OBJ/OpenGL texture-space convention is V=0 at the bottom of the image;
             # the raw parsed UV is V=0 at the top (see module docstring) -- flip here.
-            obj_uv = (v.uv[0], 1.0 - v.uv[1])
+            obj_uv = (
+                (v.uv[0], 1.0 - v.uv[1])
+                if all(math.isfinite(value) for value in v.uv)
+                else (0.0, 0.0)
+            )
             face_indices.append(index_of(pos, positions, position_index))
             face_indices.append(index_of(obj_uv, uvs, uv_index))
             face_indices.append(index_of(v.normal, normals, normal_index))
@@ -245,7 +311,9 @@ def _build_obj_tables(
     return positions, uvs, normals, faces_by_material
 
 
-def _write_mtl(mtl_path: str, keys, texture_resolver: Optional[TextureResolver]) -> None:
+def _write_mtl(
+    mtl_path: str, keys, texture_resolver: Optional[TextureResolver]
+) -> None:
     from PIL import Image
 
     base_dir = os.path.dirname(mtl_path)
@@ -261,13 +329,19 @@ def _write_mtl(mtl_path: str, keys, texture_resolver: Optional[TextureResolver])
                 f.write("\n")
                 continue
 
-            frame_data = texture_resolver(texture_id, frame) if texture_resolver is not None else None
+            frame_data = (
+                texture_resolver(texture_id, frame)
+                if texture_resolver is not None
+                else None
+            )
             if frame_data is None:
                 f.write("\n")
                 continue
 
             png_name = f"{name}.png"
-            img = Image.frombytes("RGBA", (frame_data.width, frame_data.height), frame_data.pixels_rgba)
+            img = Image.frombytes(
+                "RGBA", (frame_data.width, frame_data.height), frame_data.pixels_rgba
+            )
             img.save(os.path.join(base_dir, png_name))
             f.write(f"map_Kd {png_name}\n\n")
 
@@ -285,9 +359,11 @@ def export_stl(
     Export ``model`` to STL: flattened, world-space, geometry-only
     (STL has no material/UV/hierarchy concept -- see module docstring).
     """
-    triangles = _flatten(model, lod_level, reverse_winding)
+    triangles = flatten_model_triangles(model, lod_level, reverse_winding)
     if not triangles:
-        raise MeshExportError(f"model {model.model_id} has no visible geometry at LOD {lod_level}")
+        raise MeshExportError(
+            f"model {model.model_id} has no visible geometry at LOD {lod_level}"
+        )
 
     if binary:
         with open(output_path, "wb") as f:
@@ -297,15 +373,26 @@ def export_stl(
                 nx, ny, nz = a.normal
                 f.write(struct.pack("<3f", nx, ny, nz))
                 for v in (a, b, c):
-                    f.write(struct.pack("<3f", v.position[0] * scale, v.position[1] * scale, v.position[2] * scale))
+                    f.write(
+                        struct.pack(
+                            "<3f",
+                            v.position[0] * scale,
+                            v.position[1] * scale,
+                            v.position[2] * scale,
+                        )
+                    )
                 f.write(struct.pack("<H", 0))
     else:
         with open(output_path, "w", encoding="ascii", errors="replace") as f:
             f.write(f"solid model_{model.model_id}\n")
             for a, b, c in triangles:
-                f.write(f"facet normal {a.normal[0]:.6f} {a.normal[1]:.6f} {a.normal[2]:.6f}\n")
+                f.write(
+                    f"facet normal {a.normal[0]:.6f} {a.normal[1]:.6f} {a.normal[2]:.6f}\n"
+                )
                 f.write("outer loop\n")
                 for v in (a, b, c):
-                    f.write(f"vertex {v.position[0]*scale:.6f} {v.position[1]*scale:.6f} {v.position[2]*scale:.6f}\n")
+                    f.write(
+                        f"vertex {v.position[0] * scale:.6f} {v.position[1] * scale:.6f} {v.position[2] * scale:.6f}\n"
+                    )
                 f.write("endloop\nendfacet\n")
             f.write(f"endsolid model_{model.model_id}\n")

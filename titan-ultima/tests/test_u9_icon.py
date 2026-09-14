@@ -39,7 +39,7 @@ from titan.u9.model import (
 
 def _material(texture_id: int) -> U9Material:
     return U9Material(
-        texture_id=texture_id, subtexture_count=0, first_face=0, face_count=1,
+        texture_id=texture_id, flags_02=0, render_flags=0, flags_06=0, first_face=0, face_count=1,
         default_alpha=255, modified_alpha=255, anim_start=0, anim_end=0, cur_frame=0, anim_speed=0,
     )
 
@@ -177,6 +177,7 @@ def _build_flx(entries_data: list[bytes | None]) -> bytes:
     dir_size = count * 8
     header = bytearray(DIR_OFFSET)
     struct.pack_into("<I", header, 0x50, count)
+    struct.pack_into("<I", header, 0x54, 2)  # FLX format-version word
 
     payload = bytearray()
     dir_entries: list[tuple[int, int]] = []

@@ -8,12 +8,21 @@ import tempfile
 import unittest
 from types import SimpleNamespace
 
+from PIL import Image
+
 from titan.u9.cli import (
+    PALETTE_FILENAME,
+    _find_palette,
     cmd_flx_extract,
     cmd_flx_extract_all,
     cmd_flx_list,
+    cmd_palette_export,
+    cmd_palette_info,
     cmd_sound_extract_pcm,
     cmd_sound_list,
+    cmd_texture_export,
+    cmd_texture_import,
+    cmd_texture_info,
     cmd_typename_dump,
 )
 
@@ -27,6 +36,7 @@ def _build_flx(comment: bytes, entries_data: list[bytes | None]) -> bytes:
     header = bytearray(DIR_OFFSET)
     header[0:len(comment)] = comment
     struct.pack_into("<I", header, 0x50, count)
+    struct.pack_into("<I", header, 0x54, 2)  # FLX format-version word
 
     payload = bytearray()
     dir_entries: list[tuple[int, int]] = []
@@ -44,6 +54,11 @@ def _build_flx(comment: bytes, entries_data: list[bytes | None]) -> bytes:
         directory += struct.pack("<II", offset, length)
 
     return bytes(header) + bytes(directory) + bytes(payload)
+
+
+def _build_u9_palette(colors: list[tuple[int, int, int]]) -> bytes:
+    """Build the 256 four-byte RGB+reserved entries used by ankh.pal."""
+    return b"".join(bytes((*color, 0)) for color in colors)
 
 
 def _typename_entry(name: str | None) -> bytes:
@@ -72,6 +87,24 @@ def _sound_entry(
     struct.pack_into("<I", header, 0x34, num_channels)
     struct.pack_into("<I", header, 0x38, encoding_type)
     return bytes(header) + payload
+
+
+def _texture_entry(frame_count: int = 1) -> bytes:
+    """One or more 2x2 8-bit images, each with a stored 1x1 mip."""
+    width = height = 2
+    set_header = struct.pack("<4H2I", width, 1, height, 0, frame_count, 0x00066000)
+    frame_offset = len(set_header) + frame_count * 8
+    directory = bytearray()
+    frames = bytearray()
+    for frame_index in range(frame_count):
+        payload = bytes((1, 2, 3, 4, 9))
+        frame_header = struct.pack("<2H4I", 0x00D1, 0x6000, width, height, 0, 0)
+        row_table = struct.pack("<2I", 28, 30)
+        frame_data = frame_header + row_table + payload
+        directory += struct.pack("<2I", frame_offset, len(frame_data))
+        frames += frame_data
+        frame_offset += len(frame_data)
+    return set_header + directory + frames
 
 
 class FlxCliCommandTests(unittest.TestCase):
@@ -165,6 +198,232 @@ class SoundCliCommandTests(unittest.TestCase):
         written = os.listdir(outdir)
         self.assertEqual(len(written), 1)
         self.assertIn("pcm_one.wav", written[0])
+
+
+class PaletteDiscoveryTests(unittest.TestCase):
+    """``ankh.pal`` sits beside the archive, so it is found without being asked for.
+
+    Decoding an 8-bit frame with no palette does not fail -- it silently
+    produces a scrambled greyscale image, because the palette is ordered by hue
+    rather than by brightness. A whole-game extraction was published with all
+    6,597 ``bitmapsh.flx`` entries wrong that way, which is why discovery is
+    automatic rather than merely warned about.
+    """
+
+    @staticmethod
+    def _touch(*paths: str) -> None:
+        for path in paths:
+            with open(path, "wb") as f:
+                f.write(b"x")
+
+    def test_finds_the_palette_beside_the_archive(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = os.path.join(tmp, "bitmapsh.flx")
+            palette = os.path.join(tmp, PALETTE_FILENAME)
+            self._touch(archive, palette)
+            found, auto = _find_palette(None, archive)
+            self.assertEqual(found, palette)
+            self.assertTrue(auto)
+
+    def test_match_is_case_insensitive(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = os.path.join(tmp, "bitmapsh.flx")
+            self._touch(archive, os.path.join(tmp, "ANKH.PAL"))
+            found, auto = _find_palette(None, archive)
+            self.assertIsNotNone(found)
+            self.assertTrue(auto)
+
+    def test_explicit_palette_wins_over_discovery(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = os.path.join(tmp, "bitmapsh.flx")
+            chosen = os.path.join(tmp, "other.pal")
+            self._touch(archive, os.path.join(tmp, PALETTE_FILENAME), chosen)
+            found, auto = _find_palette(chosen, archive)
+            self.assertEqual(found, chosen)
+            self.assertFalse(auto)
+
+    def test_no_palette_beside_the_archive_returns_none(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = os.path.join(tmp, "bitmapsh.flx")
+            self._touch(archive)
+            self.assertEqual(_find_palette(None, archive), (None, False))
+
+    def test_missing_directory_is_not_an_error(self) -> None:
+        missing = os.path.join(tempfile.gettempdir(), "no_such_titan_dir", "x.flx")
+        self.assertEqual(_find_palette(None, missing), (None, False))
+
+    def test_no_archive_path_returns_none(self) -> None:
+        self.assertEqual(_find_palette(None, None), (None, False))
+
+
+class PaletteCliCommandTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.palette_path = os.path.join(self.tmpdir.name, "ankh.pal")
+        colors = [(index, index, index) for index in range(256)]
+        colors[254] = colors[247]
+        with open(self.palette_path, "wb") as file:
+            file.write(_build_u9_palette(colors))
+
+    def tearDown(self) -> None:
+        self.tmpdir.cleanup()
+
+    def test_palette_info_reports_duplicate_summary(self) -> None:
+        result = cmd_palette_info(
+            SimpleNamespace(file=self.palette_path, duplicates=True)
+        )
+        self.assertEqual(result, 0)
+
+    def test_palette_export_writes_swatch_and_text(self) -> None:
+        output = os.path.join(self.tmpdir.name, "out")
+        result = cmd_palette_export(
+            SimpleNamespace(file=self.palette_path, output=output, swatch_size=2)
+        )
+        self.assertEqual(result, 0)
+        self.assertTrue(os.path.isfile(os.path.join(output, "ankh_palette.png")))
+        text_path = os.path.join(output, "ankh_palette.txt")
+        self.assertTrue(os.path.isfile(text_path))
+        with open(text_path, encoding="utf-8") as file:
+            text = file.read()
+        self.assertIn("254    247  247  247", text)
+        self.assertIn("      0      0  #F7F7F7", text)
+
+    def test_palette_commands_reject_bad_input(self) -> None:
+        missing = os.path.join(self.tmpdir.name, "missing.pal")
+        self.assertEqual(
+            cmd_palette_info(SimpleNamespace(file=missing, duplicates=False)),
+            1,
+        )
+        self.assertEqual(
+            cmd_palette_export(
+                SimpleNamespace(
+                    file=self.palette_path,
+                    output=self.tmpdir.name,
+                    swatch_size=0,
+                )
+            ),
+            1,
+        )
+
+
+class TextureCliCommandTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.archive_path = os.path.join(self.tmpdir.name, "Texture8.14")
+        with open(self.archive_path, "wb") as file:
+            file.write(_build_flx(b"terrain panels", [_texture_entry(3)]))
+        colors = [(index, index, index) for index in range(256)]
+        colors[254] = colors[247]
+        with open(os.path.join(self.tmpdir.name, PALETTE_FILENAME), "wb") as file:
+            file.write(_build_u9_palette(colors))
+
+    def tearDown(self) -> None:
+        self.tmpdir.cleanup()
+
+    def test_texture_info_accepts_terrain_panel_archive(self) -> None:
+        result = cmd_texture_info(
+            SimpleNamespace(textures=self.archive_path, entry_id=0)
+        )
+        self.assertEqual(result, 0)
+
+    def test_texture_export_writes_selected_mip(self) -> None:
+        output = os.path.join(self.tmpdir.name, "out")
+        result = cmd_texture_export(
+            SimpleNamespace(
+                textures=self.archive_path,
+                entry_id=0,
+                frame=0,
+                mip_level=1,
+                palette=None,
+                output=output,
+            )
+        )
+        self.assertEqual(result, 0)
+        self.assertTrue(
+            os.path.isfile(os.path.join(output, "texture_00000_frame_000_mip_01.png"))
+        )
+
+    def test_texture_export_rejects_missing_mip(self) -> None:
+        result = cmd_texture_export(
+            SimpleNamespace(
+                textures=self.archive_path,
+                entry_id=0,
+                frame=0,
+                mip_level=2,
+                palette=None,
+                output=self.tmpdir.name,
+            )
+        )
+        self.assertEqual(result, 1)
+
+    def test_texture_import_keeps_single_image_workflow(self) -> None:
+        image_path = os.path.join(self.tmpdir.name, "replacement.png")
+        output_path = os.path.join(self.tmpdir.name, "single.flx")
+        Image.new("RGBA", (2, 2), (80, 80, 80, 255)).save(image_path)
+
+        result = cmd_texture_import(
+            SimpleNamespace(
+                textures=self.archive_path,
+                entry_id=0,
+                image=image_path,
+                frames_dir=None,
+                frame=1,
+                palette=None,
+                output=output_path,
+            )
+        )
+
+        self.assertEqual(result, 0)
+        self.assertTrue(os.path.isfile(output_path))
+
+    def test_texture_import_batches_numbered_png_frames(self) -> None:
+        frames_dir = os.path.join(self.tmpdir.name, "sourceframes")
+        os.makedirs(frames_dir)
+        Image.new("RGBA", (2, 2), (20, 20, 20, 255)).save(
+            os.path.join(frames_dir, "0.png")
+        )
+        Image.new("RGBA", (2, 2), (200, 200, 200, 255)).save(
+            os.path.join(frames_dir, "2.png")
+        )
+        output_path = os.path.join(self.tmpdir.name, "batch.flx")
+
+        result = cmd_texture_import(
+            SimpleNamespace(
+                textures=self.archive_path,
+                entry_id=0,
+                image=None,
+                frames_dir=frames_dir,
+                frame=0,
+                palette=None,
+                output=output_path,
+            )
+        )
+
+        self.assertEqual(result, 0)
+        self.assertTrue(os.path.isfile(output_path))
+
+    def test_texture_import_rejects_nonnumeric_batch_png(self) -> None:
+        frames_dir = os.path.join(self.tmpdir.name, "badframes")
+        os.makedirs(frames_dir)
+        Image.new("RGBA", (2, 2), (20, 20, 20, 255)).save(
+            os.path.join(frames_dir, "frame.png")
+        )
+        output_path = os.path.join(self.tmpdir.name, "should_not_exist.flx")
+
+        result = cmd_texture_import(
+            SimpleNamespace(
+                textures=self.archive_path,
+                entry_id=0,
+                image=None,
+                frames_dir=frames_dir,
+                frame=0,
+                palette=None,
+                output=output_path,
+            )
+        )
+
+        self.assertEqual(result, 1)
+        self.assertFalse(os.path.exists(output_path))
 
 
 if __name__ == "__main__":

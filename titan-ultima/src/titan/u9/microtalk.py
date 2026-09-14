@@ -40,10 +40,10 @@ non-multiple-of-432) sample count from that 4-byte field is used to
 trim the final frame's excess.
 
 Validated against 104 real, known-good (compressed payload -> decoded
-WAV) pairs recovered from a previous export of this project
-(``u9data/u9_output/exampleWav/``), matched to their source ``Speech.flx``
-entries by description field: after fixing a transcription bug in the
-first port (the post-subframe adaptive-codebook refresh copied
+WAV) pairs recovered from a previous export of this project, matched to
+their source ``Speech.flx`` entries by description field: after fixing
+a transcription bug in the first port (the post-subframe
+adaptive-codebook refresh copied
 ``samples[0:324]`` instead of the reference's ``samples[108:432]``,
 which produced bit-identical output for the first two frames --
 adaptive-codebook lookups only start reading meaningfully-wrong history
