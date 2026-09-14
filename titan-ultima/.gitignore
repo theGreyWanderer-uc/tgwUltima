@@ -30,6 +30,7 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+release-dist-*/
 *.whl
 
 # Pre-refactor backups

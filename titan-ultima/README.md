@@ -40,9 +40,9 @@ Optional:
 - `pyvista` plus VTK (`pip install pyvista`) — used by `titan uw2
   model-render`, `uw2 map-3d-render`, U9 preview rendering, and
   `u9 map-render-3d`.
-- `trimesh` (`pip install trimesh`) — used by `titan uw2 map-3d-export` and
-  `titan u9 map-export-glb` to write GLB. Standalone OBJ/STL model export does
-  not require it.
+- `trimesh` (`pip install "titan-ultima[glb]"`) — used by `titan uw2
+  map-3d-export` and `titan u9 map-export-glb` to write GLB. Standalone OBJ/STL
+  model export does not require it.
 
 ---
 

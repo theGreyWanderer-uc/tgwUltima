@@ -156,7 +156,7 @@ jobs:
 
       - name: Install Titan (editable) for tests
         working-directory: titan-ultima
-        run: pip install -e . pytest
+        run: pip install -e ".[glb]" pytest
 
       - name: Run Titan tests
         working-directory: titan-ultima
