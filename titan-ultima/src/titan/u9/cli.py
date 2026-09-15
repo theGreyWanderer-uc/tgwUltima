@@ -39,6 +39,11 @@ from titan.u9.animation_model_report import (
     build_animation_model_report,
 )
 from titan.u9.animation_pose import U9AnimationPoseError, pose_model
+from titan.u9.animated_model_bundle import (
+    DEFAULT_ANIMATED_MODEL_SCALE,
+    U9AnimatedModelBundleError,
+    export_animated_model_bundle,
+)
 from titan.u9.books import U9Books, U9BooksError
 from titan.u9.flx_archive import U9FlxArchive, U9FlxArchiveError
 from titan.u9.flx_writer import (
@@ -67,6 +72,7 @@ from titan.u9.map_render import (
     resolve_topdown_pixels_per_cell,
 )
 from titan.u9.nonfixed import U9Nonfixed, U9NonfixedError
+from titan.u9.node_registry import U9NodeRegistry, U9NodeRegistryError
 from titan.u9.object_placement import (
     U9ObjectFootprintFilter,
     U9ObjectPlacementError,
@@ -1807,9 +1813,9 @@ def cmd_animation_show(args: SimpleNamespace) -> int:
         print(
             f"  Motion          : {motion_ids.name(animation.animation_id) or '(unmapped)'}"
         )
-    print(f"  Source          : {animation.source_name}")
+    print(f"  Authoring path  : {animation.source_name}")
     print(
-        f"  Source frames   : {animation.start_frame}..{animation.end_frame} "
+        f"  Authoring frames: {animation.start_frame}..{animation.end_frame} "
         f"({animation.frame_count} total)"
     )
     print(
@@ -1982,6 +1988,96 @@ def cmd_animation_pose_export(args: SimpleNamespace) -> int:
         print("  (no --textures given: OBJ materials have no images)")
     if args.preview:
         _generate_preview(outdir)
+    return 0
+
+
+def cmd_animation_bundle_export(args: SimpleNamespace) -> int:
+    """Export one complete rigid hierarchy, clip sidecar, and animated GLB."""
+    for label, path in (
+        ("Animation archive", args.animations),
+        ("Model archive", args.sappear),
+        ("Texture archive", args.textures),
+        ("Palette", args.palette),
+        ("Node registry", args.registry),
+        ("Ghidra motion-ID table", args.motion_ids),
+    ):
+        if path is not None and not Path(path).is_file():
+            print(f"ERROR: {label} not found: {path}", file=sys.stderr)
+            return 1
+
+    animations = _load_animations(args.animations)
+    if animations is None:
+        return 1
+    motion_ids = _load_motion_ids(args.motion_ids)
+    if args.motion_ids is not None and motion_ids is None:
+        return 1
+
+    registry_path = Path(args.registry) if args.registry else None
+    if registry_path is None:
+        registry_path = _find_case_insensitive_file(
+            Path(args.animations).resolve().parent, "registry.txt"
+        )
+    try:
+        registry = (
+            U9NodeRegistry.from_file(registry_path)
+            if registry_path is not None
+            else None
+        )
+        animation = animations.animation(args.animation_id)
+        if animation is None:
+            raise U9AnimatedModelBundleError(
+                f"animation {args.animation_id} is an unused archive slot"
+            )
+        model = _load_model(args.sappear, args.model_id)
+        palette_path, _ = _find_palette(args.palette, args.textures)
+        texture_resolver = _make_texture_resolver(args.textures, palette_path)
+        motion_name = (
+            motion_ids.name(args.animation_id) if motion_ids is not None else None
+        )
+        output = args.output or (
+            f"model_{args.model_id:05d}_animation_{args.animation_id:05d}_bundle"
+        )
+        result = export_animated_model_bundle(
+            model,
+            animation,
+            output,
+            model_archive_path=args.sappear,
+            animation_archive_path=args.animations,
+            registry=registry,
+            registry_path=registry_path,
+            motion_name=motion_name,
+            motion_table_path=args.motion_ids,
+            texture_resolver=texture_resolver,
+            texture_archive_path=args.textures,
+            palette_path=palette_path,
+            lod_level=args.lod,
+            coordinate_scale=args.coordinate_scale,
+            include_glb=args.glb,
+        )
+    except (
+        OSError,
+        U9AnimationError,
+        U9AnimatedModelBundleError,
+        U9FlxArchiveError,
+        U9ModelError,
+        U9NodeRegistryError,
+    ) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+
+    print(
+        f"Exported model {args.model_id} with animation {args.animation_id} "
+        f"(LOD {args.lod}) -> {output}/"
+    )
+    print(f"  Sidecar         : {result.sidecar_path}")
+    print(f"  Limb meshes     : {result.mesh_count}/{result.part_count}")
+    print(f"  Animation tracks: {result.track_count}")
+    print(f"  Matched tracks  : {result.matched_track_count}")
+    print(f"  Authoring-only  : {result.authoring_only_track_count}")
+    if result.glb_path is not None:
+        print(f"  Animated GLB    : {result.glb_path}")
+    if args.textures is None:
+        print("  (no --textures given: exported materials have no images)")
     return 0
 
 
@@ -5083,7 +5179,7 @@ def animation_list_cmd(
         typer.Option("-n", "--limit", help="Maximum rows to print"),
     ] = None,
 ) -> None:
-    """List U9 animation clips, source paths, frame counts and animated parts."""
+    """List U9 animation clips, authoring paths, frame counts and animated parts."""
     raise SystemExit(
         cmd_animation_list(
             SimpleNamespace(file=file, motion_ids=motion_ids, limit=limit)
@@ -5237,6 +5333,69 @@ def animation_pose_export_cmd(
                 format=fmt,
                 output=output,
                 preview=preview,
+            )
+        )
+    )
+
+
+@u9_app.command("animation-bundle-export")
+def animation_bundle_export_cmd(
+    animations: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
+    animation_id: Annotated[int, typer.Argument(help="Animation/FLX entry ID")],
+    sappear: Annotated[str, typer.Argument(help="Path to static/sappear.flx")],
+    model_id: Annotated[int, typer.Argument(help="Hierarchical model ID")],
+    registry: Annotated[
+        Optional[str],
+        typer.Option(
+            "--registry",
+            help="registry.txt path (default: beside the animation archive)",
+        ),
+    ] = None,
+    motion_ids: Annotated[
+        Optional[str],
+        typer.Option("--motion-ids", help="Ghidra motion-ID table for original name"),
+    ] = None,
+    textures: Annotated[
+        Optional[str],
+        typer.Option("-t", "--textures", help="Optional U9 bitmap texture FLX"),
+    ] = None,
+    palette: Annotated[
+        Optional[str],
+        typer.Option("-p", "--palette", help="Optional static/ankh.pal"),
+    ] = None,
+    lod: Annotated[int, typer.Option("--lod", help="LOD level to export")] = 0,
+    coordinate_scale: Annotated[
+        float,
+        typer.Option(
+            "--coordinate-scale",
+            help="GLB units per native U9 model unit",
+        ),
+    ] = DEFAULT_ANIMATED_MODEL_SCALE,
+    glb: Annotated[
+        bool,
+        typer.Option("--glb/--no-glb", help="Also write the animated GLB"),
+    ] = True,
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Output bundle directory"),
+    ] = None,
+) -> None:
+    """Export local limb meshes, exact U9 tracks, and an animated GLB."""
+    raise SystemExit(
+        cmd_animation_bundle_export(
+            SimpleNamespace(
+                animations=animations,
+                animation_id=animation_id,
+                sappear=sappear,
+                model_id=model_id,
+                registry=registry,
+                motion_ids=motion_ids,
+                textures=textures,
+                palette=palette,
+                lod=lod,
+                coordinate_scale=coordinate_scale,
+                glb=glb,
+                output=output,
             )
         )
     )

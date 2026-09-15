@@ -63,6 +63,14 @@ from titan.u9.animation_pose import (
     U9AnimationPoseResult,
     pose_model,
 )
+from titan.u9.animated_model_bundle import (
+    ANIMATED_MODEL_BUNDLE_SCHEMA,
+    ANIMATED_MODEL_BUNDLE_SCHEMA_VERSION,
+    DEFAULT_ANIMATED_MODEL_SCALE,
+    U9AnimatedModelBundleError,
+    U9AnimatedModelBundleResult,
+    export_animated_model_bundle,
+)
 from titan.u9.books import U9Book, U9Books, U9BooksError
 from titan.u9.fixed import (
     U9Fixed,
@@ -85,9 +93,11 @@ from titan.u9.mesh_export import (
     MeshExportError,
     U9ModelMeshTriangle,
     U9ModelMeshVertex,
+    export_limb_obj,
     export_obj,
     export_stl,
     flatten_model_triangles,
+    limb_local_triangles,
     model_limb_world_matrices,
 )
 from titan.u9.microtalk import (
@@ -255,6 +265,12 @@ __all__ = [
     "U9AnimationPoseError",
     "U9AnimationPoseResult",
     "pose_model",
+    "ANIMATED_MODEL_BUNDLE_SCHEMA",
+    "ANIMATED_MODEL_BUNDLE_SCHEMA_VERSION",
+    "DEFAULT_ANIMATED_MODEL_SCALE",
+    "U9AnimatedModelBundleError",
+    "U9AnimatedModelBundleResult",
+    "export_animated_model_bundle",
     "U9MotionId",
     "U9MotionIds",
     "U9MotionIdsError",
@@ -283,11 +299,13 @@ __all__ = [
     "frame_encoding",
     "replace_frame",
     "export_obj",
+    "export_limb_obj",
     "export_stl",
     "MeshExportError",
     "U9ModelMeshTriangle",
     "U9ModelMeshVertex",
     "flatten_model_triangles",
+    "limb_local_triangles",
     "model_limb_world_matrices",
     "U9TypesDat",
     "U9TypesDatError",

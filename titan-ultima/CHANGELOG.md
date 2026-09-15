@@ -16,7 +16,9 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 - **U9 animation semantics and posed export:** added optional original clip
   names from Ghidra data, typed animation events, interpolation matching the
-  Ghidra decompile, and explicit single-clip rigid-limb OBJ/STL pose export.
+  Ghidra decompile, explicit single-clip rigid-limb OBJ/STL pose export, and
+  versioned animated-model bundles with local limb meshes, exact tracks,
+  hierarchy/material metadata, archive hashes, and generated animated GLB.
 
 ## [0.7.6]
 

@@ -56,8 +56,10 @@ geometry only.
 limb transforms the supplied model carries. A model parsed directly from
 ``sappear.flx`` therefore exports its bind pose; :mod:`titan.u9.animation_pose`
 can first produce a copy with an explicitly selected ``anim.flx`` clip sampled
-at one time. Automatic model/state-to-clip selection and time-based animated
-interchange are not implemented. A bind-pose export can leave a small sub-mesh
+at one time. :mod:`titan.u9.animated_model_bundle` retains separate limb meshes
+and exact clip tracks while producing a time-based rigid-node GLB. Automatic
+model/state-to-clip selection and layered controller playback are not
+implemented. A bind-pose export can leave a small sub-mesh
 in an unposed resting position
 (e.g. not tucked/folded the way it would be mid-animation). Note: an earlier
 version of this docstring attributed a dragon wing's hand/claw sub-mesh showing
@@ -75,9 +77,11 @@ __all__ = [
     "MeshExportError",
     "U9ModelMeshTriangle",
     "U9ModelMeshVertex",
+    "export_limb_obj",
     "export_obj",
     "export_stl",
     "flatten_model_triangles",
+    "limb_local_triangles",
     "model_limb_world_matrices",
 ]
 
@@ -87,7 +91,7 @@ import struct
 from dataclasses import dataclass
 from typing import Callable, Optional
 
-from titan.u9.model import U9Material, U9Model
+from titan.u9.model import U9Limb, U9Material, U9Model
 from titan.u9.texture import U9TextureFrame
 from titan.u9.transform import (
     IDENTITY,
@@ -211,6 +215,38 @@ def flatten_model_triangles(
     return tuple(triangles)
 
 
+def limb_local_triangles(
+    limb: U9Limb,
+    lod_level: int = 0,
+    reverse_winding: bool = True,
+) -> tuple[U9ModelMeshTriangle, ...]:
+    """Return one limb's visible triangles without applying its node transform."""
+    if lod_level < 0 or lod_level >= len(limb.lods):
+        return ()
+    lod = limb.lods[lod_level]
+    if lod is None:
+        return ()
+
+    triangles: list[U9ModelMeshTriangle] = []
+    for triangle in lod.triangles:
+        material = lod.materials[triangle.material_index] if lod.materials else None
+        if material is not None and material.is_invisible:
+            continue
+        corners = [
+            U9ModelMeshVertex(
+                position=lod.vertices[corner.vertex_index],
+                normal=corner.normal,
+                uv=corner.uv,
+                material=material,
+            )
+            for corner in triangle.corners
+        ]
+        if reverse_winding:
+            corners = [corners[0], corners[2], corners[1]]
+        triangles.append((corners[0], corners[1], corners[2]))
+    return tuple(triangles)
+
+
 def _material_name(texture_id: int, frame: int) -> str:
     return f"tex_{texture_id}_{frame}" if texture_id != 0xFFFF else "untextured"
 
@@ -240,16 +276,63 @@ def export_obj(
             f"model {model.model_id} has no visible geometry at LOD {lod_level}"
         )
 
+    _write_obj_triangles(
+        triangles,
+        output_path,
+        scale=scale,
+        texture_resolver=texture_resolver,
+        comment=f"model {model.model_id}, LOD {lod_level}",
+    )
+
+
+def export_limb_obj(
+    model: U9Model,
+    limb_index: int,
+    output_path: str,
+    *,
+    lod_level: int = 0,
+    scale: float = 1.0,
+    reverse_winding: bool = True,
+    texture_resolver: Optional[TextureResolver] = None,
+) -> None:
+    """Export one rigid limb in mesh-local coordinates to OBJ/MTL/PNG."""
+    if limb_index < 0 or limb_index >= len(model.limbs):
+        raise MeshExportError(f"model {model.model_id} has no limb index {limb_index}")
+    limb = model.limbs[limb_index]
+    triangles = limb_local_triangles(limb, lod_level, reverse_winding)
+    if not triangles:
+        raise MeshExportError(
+            f"model {model.model_id} limb index {limb_index} has no visible "
+            f"geometry at LOD {lod_level}"
+        )
+    _write_obj_triangles(
+        triangles,
+        output_path,
+        scale=scale,
+        texture_resolver=texture_resolver,
+        comment=(
+            f"model {model.model_id}, limb index {limb_index}, "
+            f"part ID {limb.limb_id}, LOD {lod_level}, local coordinates"
+        ),
+    )
+
+
+def _write_obj_triangles(
+    triangles: tuple[U9ModelMeshTriangle, ...],
+    output_path: str,
+    *,
+    scale: float,
+    texture_resolver: Optional[TextureResolver],
+    comment: str,
+) -> None:
+    """Write already-resolved triangles to one OBJ and its companion assets."""
     base = os.path.splitext(output_path)[0]
     mtl_path = base + ".mtl"
     mtl_name = os.path.basename(mtl_path)
-
     positions, uvs, normals, faces_by_material = _build_obj_tables(triangles, scale)
 
     with open(output_path, "w", encoding="ascii", errors="replace") as f:
-        f.write(
-            f"# Exported by titan u9 model-export (model {model.model_id}, LOD {lod_level})\n"
-        )
+        f.write(f"# Exported by titan u9 model-export ({comment})\n")
         f.write(f"mtllib {mtl_name}\n")
         for p in positions:
             f.write(f"v {p[0]:.6f} {p[1]:.6f} {p[2]:.6f}\n")

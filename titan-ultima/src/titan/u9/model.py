@@ -338,7 +338,9 @@ class U9Limb:
     Real animation (``static/anim.flx``) applies runtime-selected per-frame
     transforms. :mod:`titan.u9.animation_pose` can sample and apply an
     explicitly selected clip, but automatic model/state-to-clip selection and
-    animated interchange export are not implemented. Even when applied,
+    layered controller composition are not implemented.
+    :mod:`titan.u9.animated_model_bundle` exports the complete rigid hierarchy,
+    exact clip tracks, and a generated animated GLB. Even when applied,
     animation only repositions
     limbs rigidly -- it can't change a triangle's UV mapping, so it's
     irrelevant to texture-placement oddities on a given sub-mesh, only

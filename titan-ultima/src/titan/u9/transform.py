@@ -10,9 +10,9 @@ space first; this module does that.
 
 Matrix convention: 4x4, row-major, applied to **row vectors on the
 right** (``p' = M @ p``), composed as ``M = T @ R @ S`` per limb --
-i.e. a point is scaled first, then rotated, then translated. This
-matches how the reference importer (``ultimaModelImporter.py``)
-applies each limb's transform in Blender (``location``, then
+i.e. a point is scaled first, then rotated, then translated. This matches the
+established Blender hierarchy behavior used by Titan's verified exports
+(``location``, then
 ``rotation_quaternion``, then ``scale``, as independent TRS channels
 on a parented object -- Blender composes parented object transforms
 the same T*R*S way). A limb's world matrix is its parent's world
@@ -28,7 +28,14 @@ differently), which the model format explicitly allows (see
 
 from __future__ import annotations
 
-__all__ = ["Mat4", "IDENTITY", "mat4_trs", "mat4_multiply", "transform_point", "transform_normal"]
+__all__ = [
+    "Mat4",
+    "IDENTITY",
+    "mat4_trs",
+    "mat4_multiply",
+    "transform_point",
+    "transform_normal",
+]
 
 import math
 
@@ -81,7 +88,9 @@ def mat4_multiply(a: Mat4, b: Mat4) -> Mat4:
     result = [0.0] * 16
     for row in range(4):
         for col in range(4):
-            result[row * 4 + col] = sum(a[row * 4 + k] * b[k * 4 + col] for k in range(4))
+            result[row * 4 + col] = sum(
+                a[row * 4 + k] * b[k * 4 + col] for k in range(4)
+            )
     return tuple(result)  # type: ignore[return-value]
 
 

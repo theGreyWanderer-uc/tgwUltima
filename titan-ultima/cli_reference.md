@@ -4801,7 +4801,7 @@ terminator.
 ### Animation clip commands
 
 `static/anim.flx` stores one reusable skeletal transform clip per used FLX
-entry. Each clip has its LightWave source path and inclusive source-frame
+entry. Each clip has its LightWave authoring path and inclusive authoring-frame
 range, a part-ID manifest, named part tracks, and timestamped quaternion,
 position, and scale transforms. All 857 used entries parse and consume exactly.
 
@@ -4839,7 +4839,7 @@ titan u9 animation-list static/anim.flx -n 20
 
 #### `u9 animation-show`
 
-Show one clip's source timing and part list, or dump one part's transform
+Show one clip's authoring timing and part list, or dump one part's transform
 frames with `--part`.
 
 ```
@@ -4870,7 +4870,7 @@ by the Ghidra decompile, and parameter.
 #### `u9 animation-model-report`
 
 Export one row per used animation clip, joining `anim.flx`, `registry.txt`,
-`sappear.flx`, `TYPES.DAT`, and `TYPENAME.FLX`. The CSV/JSON includes source
+`sappear.flx`, `TYPES.DAT`, and `TYPENAME.FLX`. The CSV/JSON includes authoring
 family/action hints, timing, tracks, authoring-only nodes, structural model
 candidates, model/type/usecode metadata, typed events, optional original
 motion symbols, candidate ambiguity, and a targeted Ghidra question. Companion
@@ -4900,7 +4900,7 @@ titan u9 animation-model-report static/anim.flx --animation 172 --motion-ids ghi
 
 `full-structural` means that one model contains every clip track ID known to
 occur as a model limb anywhere in the shipped archive. `partial-best` is only
-the maximum overlap after no full candidate was found. Source-path/name matches
+the maximum overlap after no full candidate was found. Authoring-path/name matches
 are a second evidence layer. Neither result proves runtime selection; the
 `runtime_binding_status` remains `unresolved` until engine tables or code are
 traced.
@@ -4939,7 +4939,54 @@ titan u9 animation-pose-export static/anim.flx 172 static/sappear.flx 3223 \
 
 This is a single-clip static pose, not the full layered game controller. Actor
 state selection, upper/lower locksets, transition blending, root-axis masks,
-reverse playback, event dispatch and animated GLTF/GLB remain future layers.
+reverse playback and event dispatch remain future layers.
+
+---
+
+#### `u9 animation-bundle-export`
+
+Export one selected hierarchical model and animation as a portable inspection
+bundle. Every visible limb at the selected LOD becomes a separate OBJ in native
+limb-local coordinates. The versioned JSON sidecar is authoritative and keeps
+all model parts, parent IDs, resolved parent indices, pivots, rest transforms,
+all clip keys, the full part registry, original timestamps, interpolation and
+runtime-application rules, root motion, events, material metadata, and SHA-256
+input hashes. Tracks without a matching model limb remain in the JSON as
+`authoring_only`.
+
+The command also writes an animated Y-up GLB by default. Its rigid node tree
+uses `(x,y,z) -> (x,z,-y)` and the same `1/40` scale as other Titan U9 GLB
+exports. Matched rotations animate their limb nodes, `PELVIS`/`HIPS`
+translation remains local, and implicit-root translation is placed on a
+separate root-motion node. The JSON retains the exact U9 quaternion order and
+interpolation rule because GLB importers may reinterpret quaternion
+interpolation.
+
+```
+titan u9 animation-bundle-export <anim.flx> <animation-id> <sappear.flx> <model-id> [options]
+```
+
+| Option | Description |
+|---|---|
+| `--registry PATH` | Node-name registry; discovered beside the animation archive by default |
+| `--motion-ids PATH` | Ghidra motion-ID table providing the original clip name |
+| `-t PATH`, `--textures PATH` | Optional U9 bitmap texture archive |
+| `-p PATH`, `--palette PATH` | Optional `ankh.pal` for 8-bit textures |
+| `--lod N` | Model LOD, default 0 |
+| `--coordinate-scale N` | GLB units per native U9 model unit, default `0.025` |
+| `--glb` / `--no-glb` | Toggle generated animated GLB output; default on |
+| `-o DIR`, `--output DIR` | Output bundle directory |
+
+```bash
+titan u9 animation-bundle-export static/anim.flx 172 static/sappear.flx 3223 \
+  --registry static/registry.txt \
+  -t static/bitmap16.flx -p static/ankh.pal -o avatar_bundle/
+```
+
+The GLB is a generated presentation of the known single-clip runtime path. The
+sidecar remains the loss-minimizing interchange record. Actor/state selection,
+layered controller composition, locksets, transition blending, root-axis masks,
+reverse playback and event dispatch are still unresolved.
 
 ---
 
@@ -6399,10 +6446,11 @@ A value on the command line always wins.
 | `u9 texture-info` | Inspect one bitmap or terrain-panel texture set |
 | `u9 texture-frame-report` | Export dynamic per-tier/per-frame metadata and animation evidence |
 | `u9 texture-export` | Export one texture frame or stored mip to PNG |
-| `u9 animation-list` | List `anim.flx` clips with timing, part counts and source paths |
+| `u9 animation-list` | List `anim.flx` clips with timing, part counts and authoring paths |
 | `u9 animation-show` | Show one animation clip or dump one part's transform frames |
 | `u9 animation-model-report` | Join clips, registry nodes, structural model candidates, types, usecode IDs, and Ghidra questions to CSV/JSON |
 | `u9 animation-pose-export` | Sample a selected clip on a hierarchical model and export the static rigid-limb pose |
+| `u9 animation-bundle-export` | Export local limb meshes, a versioned exact-track JSON sidecar, and an animated rigid-node GLB |
 | `u9 icon-list` | List candidate 2D UI icon entries not referenced by any 3D model |
 | `u9 icon-export` | Export one texture archive entry to PNG, regardless of mesh usage |
 | `u9 icon-export-all` | Batch-export every candidate 2D UI icon to PNG |
