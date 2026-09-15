@@ -22,6 +22,7 @@ from typing import Any
 from titan.u9.animation import U9Animation, U9AnimationError, U9Animations
 from titan.u9.flx_archive import U9FlxArchive, U9FlxArchiveError
 from titan.u9.model import U9Model, U9ModelError
+from titan.u9.motion_ids import U9MotionIds, U9MotionIdsError
 from titan.u9.node_registry import U9NodeRegistry, U9NodeRegistryError
 from titan.u9.typename import U9TypeNames
 from titan.u9.types_dat import U9TypeRecord, U9TypesDat, U9TypesDatError
@@ -34,6 +35,9 @@ class U9AnimationModelReportError(Exception):
 ANIMATION_MODEL_REPORT_COLUMNS = [
     "animation_archive",
     "animation_id",
+    "motion_name",
+    "motion_family",
+    "motion_id_status",
     "animation_label",
     "source_path",
     "source_asset_group",
@@ -52,8 +56,8 @@ ANIMATION_MODEL_REPORT_COLUMNS = [
     "part_count",
     "part_ids",
     "part_names",
-    "suffix_count",
-    "suffix_values",
+    "event_count",
+    "events",
     "registry_status",
     "registry_name_match_count",
     "registry_name_mismatches",
@@ -287,18 +291,18 @@ def _read_model_metadata(
     return models, warnings
 
 
-def _canonical_name(value: str) -> str:
+def _normalized_name(value: str) -> str:
     return "".join(re.findall(r"[a-z0-9]+", value.casefold()))
 
 
 def _name_matches_actor_hint(name: str, actor_hint: str) -> bool:
     if actor_hint in _GENERIC_ACTOR_HINTS:
         return False
-    hint = _canonical_name(actor_hint)
-    canonical = _canonical_name(name)
-    if not hint or not canonical:
+    hint = _normalized_name(actor_hint)
+    normalized = _normalized_name(name)
+    if not hint or not normalized:
         return False
-    if hint in canonical or canonical in hint:
+    if hint in normalized or normalized in hint:
         return True
     words = [
         word
@@ -373,7 +377,11 @@ def _registry_fields(
     }
 
 
-def _ghidra_fields(candidate_status: str, candidate_count: int) -> dict[str, Any]:
+def _ghidra_fields(
+    candidate_status: str,
+    candidate_count: int,
+    has_motion_name: bool,
+) -> dict[str, Any]:
     if candidate_status == "partial-best":
         priority = "high-part-mismatch"
         question = (
@@ -407,7 +415,10 @@ def _ghidra_fields(candidate_status: str, candidate_count: int) -> dict[str, Any
     return {
         "runtime_binding_status": "unresolved",
         "runtime_binding_evidence": (
-            "source-path naming and registry-backed structural compatibility only"
+            "original motion ID/name, authoring-path naming, and registry-backed "
+            "structural compatibility; actor/state selection unresolved"
+            if has_motion_name
+            else "authoring-path naming and registry-backed structural compatibility only"
         ),
         "ghidra_priority": priority,
         "ghidra_question": question,
@@ -417,6 +428,7 @@ def _ghidra_fields(candidate_status: str, candidate_count: int) -> dict[str, Any
 def _animation_report_row(
     animation_path: Path,
     animation: U9Animation,
+    motion_ids: U9MotionIds | None,
     registry: U9NodeRegistry | None,
     models: list[_ModelMetadata],
     all_model_limb_ids: frozenset[int],
@@ -472,9 +484,21 @@ def _animation_report_row(
         for model in candidates
     ]
     source_name_ids = {model.model_id for model in source_name_candidates}
+    motion = (
+        motion_ids.motion(animation.animation_id) if motion_ids is not None else None
+    )
     row: dict[str, Any] = {
         "animation_archive": str(animation_path),
         "animation_id": animation.animation_id,
+        "motion_name": motion.name if motion is not None else None,
+        "motion_family": motion.family if motion is not None else None,
+        "motion_id_status": (
+            "confirmed"
+            if motion is not None
+            else "unmapped"
+            if motion_ids
+            else "unavailable"
+        ),
         "animation_label": hints.label,
         "source_path": animation.source_name,
         "source_asset_group": hints.asset_group,
@@ -493,8 +517,16 @@ def _animation_report_row(
         "part_count": len(animation.parts),
         "part_ids": list(animation.part_ids),
         "part_names": [part.name for part in animation.parts],
-        "suffix_count": len(animation.suffixes),
-        "suffix_values": [suffix.values for suffix in animation.suffixes],
+        "event_count": len(animation.events),
+        "events": [
+            {
+                "time_ms": event.time_ms,
+                "type": event.event_type,
+                "name": event.event_name,
+                "parameter": event.parameter,
+            }
+            for event in animation.events
+        ],
         "model_track_count": len(model_track_ids),
         "model_track_ids": sorted(model_track_ids),
         "authoring_only_track_count": len(authoring_only_ids),
@@ -524,7 +556,7 @@ def _animation_report_row(
         ],
     }
     row.update(_registry_fields(animation, registry))
-    row.update(_ghidra_fields(candidate_status, candidate_count))
+    row.update(_ghidra_fields(candidate_status, candidate_count, motion is not None))
     return row
 
 
@@ -536,13 +568,35 @@ def build_animation_model_report(
     registry_path: str | Path | None = None,
     types_path: str | Path | None = None,
     typenames_path: str | Path | None = None,
+    motion_ids_path: str | Path | None = None,
 ) -> tuple[list[dict[str, Any]], list[str]]:
     """Join animation names/tracks to registry-backed structural model candidates."""
     animation_path = _required_file(animation_file, "anim.flx")
     directory = animation_path.parent
     warnings: list[str] = []
+    motion_ids: U9MotionIds | None = None
+    if motion_ids_path is not None:
+        motion_file = _required_file(motion_ids_path, "Ghidra motion-ID table")
+        try:
+            motion_ids = U9MotionIds.from_file(motion_file)
+        except U9MotionIdsError as error:
+            raise U9AnimationModelReportError(str(error)) from error
     try:
         animations = U9Animations.from_file(animation_path)
+        used_animation_ids = animations.used_animation_ids()
+        if motion_ids is not None:
+            missing_motion_ids = motion_ids.missing_animation_ids(used_animation_ids)
+            unused_motion_ids = motion_ids.unused_motion_ids(used_animation_ids)
+            if missing_motion_ids:
+                warnings.append(
+                    f"Ghidra motion-ID table does not name {len(missing_motion_ids)} used "
+                    f"animation ID(s): {missing_motion_ids}"
+                )
+            if unused_motion_ids:
+                warnings.append(
+                    f"Ghidra motion-ID table names {len(unused_motion_ids)} unused animation "
+                    f"ID(s): {unused_motion_ids}"
+                )
         if animation_id is None:
             clips = animations.animations()
         else:
@@ -590,6 +644,7 @@ def build_animation_model_report(
         _animation_report_row(
             animation_path,
             animation,
+            motion_ids,
             registry,
             models,
             all_model_limb_ids,

@@ -9,7 +9,13 @@ import unittest
 from types import SimpleNamespace
 from typing import cast
 
-from titan.u9.animation import U9Animation, U9AnimationError, U9Animations
+from titan.u9.animation import (
+    U9Animation,
+    U9AnimationError,
+    U9AnimationFrame,
+    U9AnimationPart,
+    U9Animations,
+)
 from titan.u9.cli import cmd_animation_list, cmd_animation_show
 from titan.u9.flx_archive import U9FlxArchive
 
@@ -67,7 +73,7 @@ def _entry(
     if suffixes is None:
         suffixes = [(33, 4, 2)]
 
-    source = b"u:\\art\\motions\\test.lws"
+    source = b"u:\\art\\motions\\test"
     total_frames = end_frame - start_frame + 1
     header_words = part_ids + [0xDEADBEEF, 0]
     return b"".join(
@@ -120,7 +126,7 @@ class AnimationRecordTests(unittest.TestCase):
     def setUp(self) -> None:
         self.animations = U9Animations(_archive({3: _entry()}))
 
-    def test_parses_header_parts_frames_and_suffixes(self) -> None:
+    def test_parses_header_parts_frames_and_events(self) -> None:
         animation = cast(U9Animation, self.animations.animation(3))
 
         self.assertEqual(animation.animation_id, 3)
@@ -128,11 +134,16 @@ class AnimationRecordTests(unittest.TestCase):
         self.assertEqual(animation.frame_count, 2)
         self.assertEqual(animation.source_fps, 30)
         self.assertEqual(animation.frame_interval_ms, 33)
-        self.assertEqual(animation.source_name, r"u:\art\motions\test.lws")
+        self.assertEqual(animation.source_name, r"u:\art\motions\test")
         self.assertEqual(animation.header_words[:2], (1, 15))
         self.assertEqual(animation.part_ids, (1, 15))
         self.assertEqual([part.name for part in animation.parts], ["ROOT", "HEAD"])
         self.assertEqual(animation.suffixes[0].values, (33, 4, 2))
+        self.assertEqual(animation.part_registry, animation.header_words)
+        self.assertEqual(animation.events, animation.suffixes)
+        self.assertEqual(animation.events[0].time_ms, 33)
+        self.assertEqual(animation.events[0].event_name, "footstep")
+        self.assertEqual(animation.events[0].parameter, 2)
 
     def test_frame_order_is_time_rotation_position_scale(self) -> None:
         animation = cast(U9Animation, self.animations.animation(3))
@@ -169,6 +180,18 @@ class AnimationRecordTests(unittest.TestCase):
         self.assertIsNotNone(head)
         self.assertEqual(head.name if head is not None else None, "HEAD")
         self.assertIsNone(animation.part(999))
+
+    def test_part_sample_clamps_and_interpolates_transforms(self) -> None:
+        animation = cast(U9Animation, self.animations.animation(3))
+        root = cast(U9AnimationPart, animation.part(1))
+        before = cast(U9AnimationFrame, root.sample(-1))
+        after = cast(U9AnimationFrame, root.sample(100))
+        sampled = cast(U9AnimationFrame, root.sample(16))
+        self.assertEqual(before.time_ms, 0)
+        self.assertEqual(after.time_ms, 33)
+        self.assertEqual(sampled.time_ms, 16)
+        self.assertAlmostEqual(sampled.position[0], 1.0 + 3.0 * 16.0 / 33.0)
+        self.assertAlmostEqual(sum(value * value for value in sampled.rotation), 1.0)
 
 
 class AnimationArchiveTests(unittest.TestCase):

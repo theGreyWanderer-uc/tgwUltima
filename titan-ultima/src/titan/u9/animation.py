@@ -2,9 +2,8 @@
 ``static/anim.flx`` reader for Ultima 9: Ascension.
 
 Each used FLX entry is one animation clip. The entry stores its original
-LightWave scene path, an opaque header-word block whose prefix is a part-ID
-manifest, one transform track per animated part, and zero or more opaque
-suffix triples::
+LightWave scene path, a fixed-capacity part registry, one transform track per
+animated part, and zero or more typed animation events::
 
     0x00  animation_id       u32  -- same as the FLX entry index
     0x04  start_frame        u32  -- inclusive LightWave source-frame number
@@ -14,12 +13,12 @@ suffix triples::
     0x14  frame_interval_ms  u32  -- 33 in every shipped entry
     0x18  source_name_length u32
     0x1C  source_name        ASCII[source_name_length], not NUL-terminated
-          header_word_count  u32
-          header_words       u32[header_word_count]
+          registry_size      u32
+          part_registry      u32[registry_size]
           part_count         u32
           parts              part[part_count]
-          suffix_count       u32
-          suffixes           u32[3][suffix_count]
+          event_count        u32
+          events             event[event_count]
 
 A part is ``u32 part_id``, a length-prefixed ASCII name, ``u32 frame_count``,
 then that many 44-byte frames. There is no extra word between ``frame_count``
@@ -34,12 +33,17 @@ This order matters. Reading the first word as a float and the last as time
 turns the real timestamps into denormals and reports the final ``1.0`` scale
 component as the constant integer 1065353216.
 
+An event is ``u32 time_ms, u32 type, u32 parameter``.  The type values are
+``1=loop``, ``2=contact``, ``3=sound_effect``, ``4=footstep`` and
+``8=end_of_animation`` in the shipped archive.
+
 Verified against all 857 used entries in the shipped 4,000-slot archive:
 every entry consumes exactly, all 1,310,139 frames are finite and carry a
 unit quaternion, every part in a clip has the declared frame count and the
-same timestamps, and every header manifest prefix exactly matches the stored
-part IDs. Header words after that prefix and suffix-triple semantics remain
-unknown, so both are preserved without speculative names.
+same timestamps, and every registry prefix exactly matches the stored part
+IDs. Registry slots after that prefix are retained because the original
+runtime loads the complete fixed-capacity array even though only the prefix is
+active.
 
 Example::
 
@@ -56,6 +60,7 @@ from __future__ import annotations
 __all__ = [
     "U9Animation",
     "U9AnimationError",
+    "U9AnimationEvent",
     "U9AnimationFrame",
     "U9AnimationPart",
     "U9AnimationSuffix",
@@ -65,6 +70,7 @@ __all__ = [
 import math
 import os
 import struct
+from bisect import bisect_left
 from dataclasses import dataclass
 
 from titan.u9.flx_archive import U9FlxArchive, U9FlxArchiveError
@@ -75,6 +81,18 @@ FRAME_STRUCT = "<I10f"
 FRAME_SIZE = struct.calcsize(FRAME_STRUCT)
 SUFFIX_STRUCT = "<III"
 SUFFIX_SIZE = struct.calcsize(SUFFIX_STRUCT)
+
+EVENT_TYPE_NAMES = {
+    0: "none",
+    1: "loop",
+    2: "contact",
+    3: "sound_effect",
+    4: "footstep",
+    5: "cycle_start",
+    6: "cycle_ramp_up",
+    7: "cycle_ramp_down",
+    8: "end_of_animation",
+}
 
 
 class U9AnimationError(Exception):
@@ -103,12 +121,65 @@ class U9AnimationPart:
     def frame_count(self) -> int:
         return len(self.frames)
 
+    def sample(self, time_ms: int) -> U9AnimationFrame | None:
+        """Sample this track using the runtime's clamped interpolation rules.
+
+        Rotation uses spherical interpolation and position uses linear
+        interpolation. Scale is retained and interpolated for completeness,
+        although the shipped runtime animation controller does not apply it.
+        """
+        if not self.frames:
+            return None
+        times = tuple(frame.time_ms for frame in self.frames)
+        index = bisect_left(times, time_ms)
+        if index <= 0:
+            return self.frames[0]
+        if index >= len(self.frames):
+            return self.frames[-1]
+        right = self.frames[index]
+        if right.time_ms == time_ms:
+            return right
+        left = self.frames[index - 1]
+        span = right.time_ms - left.time_ms
+        if span <= 0:
+            return right
+        amount = (time_ms - left.time_ms) / span
+        return U9AnimationFrame(
+            time_ms=time_ms,
+            rotation=_slerp(left.rotation, right.rotation, amount),
+            position=_lerp3(left.position, right.position, amount),
+            scale=_lerp3(left.scale, right.scale, amount),
+        )
+
 
 @dataclass(frozen=True)
 class U9AnimationSuffix:
-    """One still-undecoded three-word record after the part tracks."""
+    """One animation event after the part tracks.
+
+    The historical class name is retained for API compatibility. New callers
+    should use the :data:`U9AnimationEvent` alias or ``animation.events``.
+    """
 
     values: tuple[int, int, int]
+
+    @property
+    def time_ms(self) -> int:
+        return self.values[0]
+
+    @property
+    def event_type(self) -> int:
+        return self.values[1]
+
+    @property
+    def parameter(self) -> int:
+        return self.values[2]
+
+    @property
+    def event_name(self) -> str:
+        return EVENT_TYPE_NAMES.get(self.event_type, f"unknown_{self.event_type}")
+
+
+U9AnimationEvent = U9AnimationSuffix
 
 
 @dataclass(frozen=True)
@@ -137,6 +208,16 @@ class U9Animation:
             (frame.time_ms for part in self.parts for frame in part.frames),
             default=0,
         )
+
+    @property
+    def part_registry(self) -> tuple[int, ...]:
+        """Runtime channel registry array, including unused capacity slots."""
+        return self.header_words
+
+    @property
+    def events(self) -> tuple[U9AnimationEvent, ...]:
+        """Typed animation events (historically exposed as ``suffixes``)."""
+        return self.suffixes
 
     def part(self, part_id: int) -> U9AnimationPart | None:
         """Return the part with this ID, or ``None`` when it is absent."""
@@ -181,19 +262,17 @@ class U9Animation:
         )
         source_name = source_raw.decode("ascii", errors="replace")
 
-        header_word_count, pos = _read_u32(data, pos, animation_id, "header-word count")
-        header_size = header_word_count * 4
-        header_raw, pos = _read_bytes(
+        registry_size, pos = _read_u32(data, pos, animation_id, "part-registry size")
+        registry_bytes = registry_size * 4
+        registry_raw, pos = _read_bytes(
             data,
             pos,
-            header_size,
+            registry_bytes,
             animation_id,
-            "header-word block",
+            "part-registry block",
         )
         header_words = (
-            struct.unpack(f"<{header_word_count}I", header_raw)
-            if header_word_count
-            else ()
+            struct.unpack(f"<{registry_size}I", registry_raw) if registry_size else ()
         )
 
         part_count, pos = _read_u32(data, pos, animation_id, "part count")
@@ -215,23 +294,23 @@ class U9Animation:
                 f"does not match parsed parts {part_ids}"
             )
 
-        suffix_count, pos = _read_u32(data, pos, animation_id, "suffix count")
-        suffix_bytes = suffix_count * SUFFIX_SIZE
-        suffix_raw, pos = _read_bytes(
+        event_count, pos = _read_u32(data, pos, animation_id, "event count")
+        event_bytes = event_count * SUFFIX_SIZE
+        event_raw, pos = _read_bytes(
             data,
             pos,
-            suffix_bytes,
+            event_bytes,
             animation_id,
-            "suffix records",
+            "animation events",
         )
         if pos != len(data):
             raise U9AnimationError(
                 f"animation {animation_id}: {len(data) - pos} trailing byte(s) "
-                "after the suffix records"
+                "after the animation events"
             )
         suffixes = tuple(
             U9AnimationSuffix(values=values)
-            for values in struct.iter_unpack(SUFFIX_STRUCT, suffix_raw)
+            for values in struct.iter_unpack(SUFFIX_STRUCT, event_raw)
         )
 
         return cls(
@@ -380,3 +459,58 @@ def _read_part(
         )
 
     return U9AnimationPart(part_id=part_id, name=name, frames=tuple(frames)), pos
+
+
+def _lerp3(
+    left: tuple[float, float, float],
+    right: tuple[float, float, float],
+    amount: float,
+) -> tuple[float, float, float]:
+    return (
+        left[0] + (right[0] - left[0]) * amount,
+        left[1] + (right[1] - left[1]) * amount,
+        left[2] + (right[2] - left[2]) * amount,
+    )
+
+
+def _slerp(
+    left: tuple[float, float, float, float],
+    right: tuple[float, float, float, float],
+    amount: float,
+) -> tuple[float, float, float, float]:
+    """Interpolate WXYZ quaternions without changing their stored hemisphere.
+
+    Ultima IX's ``slerp`` does not negate the destination when the dot product
+    is negative, so this intentionally does not apply the common shortest-path
+    rewrite. The near-opposite fallback is only defensive; it is not reached by
+    the shipped animation corpus at adjacent sample times.
+    """
+    dot = max(-1.0, min(1.0, sum(a * b for a, b in zip(left, right, strict=True))))
+    if 1.0 - dot <= 1e-6:
+        values = tuple(a + (b - a) * amount for a, b in zip(left, right, strict=True))
+    elif dot + 1.0 <= 1e-6:
+        orthogonal = (left[3], -left[2], left[1], -left[0])
+        source_weight = math.sin((1.0 - amount) * math.pi / 2.0)
+        target_weight = math.sin(amount * math.pi / 2.0)
+        values = tuple(
+            a * source_weight + b * target_weight
+            for a, b in zip(left, orthogonal, strict=True)
+        )
+    else:
+        angle = math.acos(dot)
+        sine = math.sin(angle)
+        source_weight = math.sin((1.0 - amount) * angle) / sine
+        target_weight = math.sin(amount * angle) / sine
+        values = tuple(
+            a * source_weight + b * target_weight
+            for a, b in zip(left, right, strict=True)
+        )
+    magnitude = math.sqrt(sum(value * value for value in values))
+    if magnitude == 0.0:
+        return left
+    return (
+        values[0] / magnitude,
+        values[1] / magnitude,
+        values[2] / magnitude,
+        values[3] / magnitude,
+    )

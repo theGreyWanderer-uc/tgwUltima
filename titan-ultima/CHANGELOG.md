@@ -10,6 +10,14 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **U9 animation semantics and posed export:** added optional original clip
+  names from Ghidra data, typed animation events, interpolation matching the
+  Ghidra decompile, and explicit single-clip rigid-limb OBJ/STL pose export.
+
 ## [0.7.6]
 
 ### Added
@@ -686,10 +694,10 @@ This project uses [Semantic Versioning](https://semver.org/):
   `npc.dat` / `GAMEDAT` data and `titan u7 schedule-dump` for loose
   `schedule.dat`, including automatic sibling `npc.dat` name resolution.
 - **U7 TFA reference output and notes:** added
-  `u7 typeflag-dump --format detail` output plus source-checked parser notes
+  `u7 typeflag-dump --format detail` output plus implementation-checked parser notes
   for `TFA.DAT`, `SHPDIMS.DAT`, `WGTVOL.DAT`, `OCCLUDE.DAT`, shape classes,
   and BG/SI animation nibbles.
-- **U7 Exult runtime source discovery:** `titan setup` now records live
+- **U7 Exult runtime path discovery:** `titan setup` now records live
   Exult profile `GAMEDAT` paths when initialized, detects mod
   `patch/initgame.dat` archives, and `u7 gamedat-info --mod NAME` can inspect
   configured/user-profile mod sources.
@@ -718,7 +726,7 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Correction
 
-- The U7 Exult runtime source discovery note above was incomplete: Exult
+- The U7 Exult runtime path discovery note above was incomplete: Exult
   stores initialized base-game and mod runtime files under its profile data
   folders, not only under the installed game or mod directories. The expanded
   setup/path handling is tracked in `0.6.5`.

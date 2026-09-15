@@ -54,7 +54,7 @@ def _animation_entry() -> bytes:
         _animation_part(99, "CAMERA"),
     ]
     part_ids = (1, 15, 99)
-    source = rb"u:\art\motions\humanoid\idle\lws\breathe_avatar.lws"
+    source = rb"u:\art\motions\humanoid\idle\lws\breathe_avatar"
     header_words = part_ids + (0,)
     return b"".join(
         [
@@ -64,7 +64,8 @@ def _animation_entry() -> bytes:
             struct.pack(f"<{len(header_words)}I", *header_words),
             struct.pack("<I", len(part_data)),
             *part_data,
-            struct.pack("<I", 0),
+            struct.pack("<I", 1),
+            struct.pack("<III", 33, 4, 2),
         ]
     )
 
@@ -129,12 +130,19 @@ class AnimationModelReportTests(unittest.TestCase):
         (self.static / "TYPES.DAT").write_bytes(_types_dat())
         typename = struct.pack("<IH", 0, 0x1B81) + b"Avatar\x00"
         (self.static / "TYPENAME.FLX").write_bytes(_build_flx([None, typename]))
+        (self.static / "ghidra_motion_ids.txt").write_text(
+            "enum {\nHUMANOID_IDLE_BREATHE_AVATAR = 3,\n};\n",
+            encoding="ascii",
+        )
 
     def tearDown(self) -> None:
         self.temp.cleanup()
 
     def test_report_joins_registry_model_type_and_source_name_evidence(self) -> None:
-        rows, warnings = build_animation_model_report(self.static / "anim.flx")
+        rows, warnings = build_animation_model_report(
+            self.static / "anim.flx",
+            motion_ids_path=self.static / "ghidra_motion_ids.txt",
+        )
 
         self.assertEqual(warnings, [])
         self.assertEqual(len(rows), 1)
@@ -142,6 +150,11 @@ class AnimationModelReportTests(unittest.TestCase):
         self.assertEqual(row["animation_id"], 3)
         self.assertEqual(row["animation_label"], "humanoid/idle/breathe_avatar")
         self.assertEqual(row["action_hint"], "breathe")
+        self.assertEqual(row["motion_name"], "HUMANOID_IDLE_BREATHE_AVATAR")
+        self.assertEqual(row["motion_family"], "humanoid")
+        self.assertEqual(row["motion_id_status"], "confirmed")
+        self.assertEqual(row["event_count"], 1)
+        self.assertEqual(row["events"][0]["name"], "footstep")
         self.assertEqual(row["registry_status"], "complete")
         self.assertEqual(row["registry_name_match_count"], 3)
         self.assertEqual(row["model_track_ids"], [1, 15])
@@ -167,6 +180,7 @@ class AnimationModelReportTests(unittest.TestCase):
                 registry=None,
                 types=None,
                 typenames=None,
+                motion_ids=str(self.static / "ghidra_motion_ids.txt"),
                 format="csv",
             )
         )
@@ -176,6 +190,8 @@ class AnimationModelReportTests(unittest.TestCase):
             rows = list(csv.DictReader(stream))
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["animation_id"], "3")
+        self.assertEqual(rows[0]["motion_name"], "HUMANOID_IDLE_BREATHE_AVATAR")
+        self.assertEqual(rows[0]["event_count"], "1")
         self.assertEqual(rows[0]["candidate_status"], "full-structural")
 
 

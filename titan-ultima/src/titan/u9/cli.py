@@ -38,6 +38,7 @@ from titan.u9.animation_model_report import (
     U9AnimationModelReportError,
     build_animation_model_report,
 )
+from titan.u9.animation_pose import U9AnimationPoseError, pose_model
 from titan.u9.books import U9Books, U9BooksError
 from titan.u9.flx_archive import U9FlxArchive, U9FlxArchiveError
 from titan.u9.flx_writer import (
@@ -52,6 +53,7 @@ from titan.u9.icon import icon_entry_indices
 from titan.u9.mesh_export import MeshExportError, export_obj, export_stl
 from titan.u9.model import U9Model, U9ModelError
 from titan.u9.model_naming import label_for_model, names_for_model
+from titan.u9.motion_ids import U9MotionIds, U9MotionIdsError
 from titan.u9.map_atlas import (
     U9MapAtlasError,
     discover_region_files,
@@ -1727,10 +1729,25 @@ def _load_animations(filepath: str) -> Optional[U9Animations]:
         return None
 
 
+def _load_motion_ids(filepath: Optional[str]) -> Optional[U9MotionIds]:
+    """Read an optional Ghidra-derived motion-ID table."""
+    if filepath is None:
+        return None
+    try:
+        return U9MotionIds.from_file(filepath)
+    except U9MotionIdsError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return None
+
+
 def cmd_animation_list(args: SimpleNamespace) -> int:
-    """List animation clips with their frame, part and suffix counts."""
+    """List animation clips with their frame, part and event counts."""
     animations = _load_animations(args.file)
     if animations is None:
+        return 1
+    motion_path = getattr(args, "motion_ids", None)
+    motion_ids = _load_motion_ids(motion_path)
+    if motion_path is not None and motion_ids is None:
         return 1
 
     animation_ids = animations.used_animation_ids()
@@ -1740,9 +1757,10 @@ def cmd_animation_list(args: SimpleNamespace) -> int:
         f"of {animations.num_entries} slots"
     )
     print(
-        f"{'ID':>5}  {'Frames':>6}  {'Parts':>5}  {'Last ms':>8}  {'Suffix':>6}  Source"
+        f"{'ID':>5}  {'Frames':>6}  {'Parts':>5}  {'Last ms':>8}  "
+        f"{'Events':>6}  {'Motion':<42}  Authoring path"
     )
-    print("-" * 96)
+    print("-" * 142)
     for animation_id in shown:
         try:
             animation = animations.animation(animation_id)
@@ -1751,10 +1769,12 @@ def cmd_animation_list(args: SimpleNamespace) -> int:
             return 1
         if animation is None:
             continue
+        motion_name = motion_ids.name(animation_id) if motion_ids is not None else ""
         print(
             f"{animation.animation_id:>5}  {animation.frame_count:>6}  "
             f"{len(animation.parts):>5}  {animation.duration_ms:>8}  "
-            f"{len(animation.suffixes):>6}  {animation.source_name}"
+            f"{len(animation.events):>6}  {motion_name or '-':<42}  "
+            f"{animation.source_name}"
         )
     if args.limit and len(animation_ids) > args.limit:
         print(
@@ -1768,6 +1788,10 @@ def cmd_animation_show(args: SimpleNamespace) -> int:
     animations = _load_animations(args.file)
     if animations is None:
         return 1
+    motion_path = getattr(args, "motion_ids", None)
+    motion_ids = _load_motion_ids(motion_path)
+    if motion_path is not None and motion_ids is None:
+        return 1
 
     try:
         animation = animations.animation(args.id)
@@ -1779,6 +1803,10 @@ def cmd_animation_show(args: SimpleNamespace) -> int:
         return 0
 
     print(f"{args.file} -- animation {animation.animation_id}")
+    if motion_ids is not None:
+        print(
+            f"  Motion          : {motion_ids.name(animation.animation_id) or '(unmapped)'}"
+        )
     print(f"  Source          : {animation.source_name}")
     print(
         f"  Source frames   : {animation.start_frame}..{animation.end_frame} "
@@ -1788,9 +1816,10 @@ def cmd_animation_show(args: SimpleNamespace) -> int:
         f"  Timing          : {animation.source_fps} fps, "
         f"{animation.frame_interval_ms} nominal ms, last timestamp {animation.duration_ms} ms"
     )
+    event_label = "event" if len(animation.events) == 1 else "events"
     print(
-        f"  Structure       : {len(animation.header_words)} header words, "
-        f"{len(animation.parts)} parts, {len(animation.suffixes)} suffix records"
+        f"  Structure       : {len(animation.part_registry)} registry slots, "
+        f"{len(animation.parts)} parts, {len(animation.events)} {event_label}"
     )
 
     if args.part is None:
@@ -1836,12 +1865,14 @@ def cmd_animation_show(args: SimpleNamespace) -> int:
                 "raise --limit to see more)"
             )
 
-    if animation.suffixes:
-        suffixes = " ".join(
-            f"({a}, {b}, {c})"
-            for a, b, c in (suffix.values for suffix in animation.suffixes)
-        )
-        print(f"  Raw suffixes    : {suffixes}")
+    if animation.events:
+        print(f"  {'Event ms':>8}  {'Type':>4}  {'Name':<18}  Parameter")
+        print("  " + "-" * 50)
+        for event in animation.events:
+            print(
+                f"  {event.time_ms:>8}  {event.event_type:>4}  "
+                f"{event.event_name:<18}  {event.parameter}"
+            )
     return 0
 
 
@@ -1855,6 +1886,7 @@ def cmd_animation_model_report(args: SimpleNamespace) -> int:
             registry_path=getattr(args, "registry", None),
             types_path=getattr(args, "types", None),
             typenames_path=getattr(args, "typenames", None),
+            motion_ids_path=getattr(args, "motion_ids", None),
         )
         output = write_dynamic_report(
             rows,
@@ -1868,6 +1900,88 @@ def cmd_animation_model_report(args: SimpleNamespace) -> int:
     for warning in warnings:
         print(f"WARNING: {warning}", file=sys.stderr)
     print(f"Wrote {len(rows)} animation/model row(s) to {output}")
+    return 0
+
+
+def cmd_animation_pose_export(args: SimpleNamespace) -> int:
+    """Export one hierarchical model posed by one animation at a given time."""
+    error = _validate_model_export_args(
+        SimpleNamespace(
+            format=args.format,
+            file=args.sappear,
+            textures=args.textures,
+            palette=args.palette,
+            types=None,
+            typenames=None,
+        )
+    )
+    if error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+    animations = _load_animations(args.animations)
+    if animations is None:
+        return 1
+    motion_path = getattr(args, "motion_ids", None)
+    motion_ids = _load_motion_ids(motion_path)
+    if motion_path is not None and motion_ids is None:
+        return 1
+
+    try:
+        animation = animations.animation(args.animation_id)
+        if animation is None:
+            raise U9AnimationPoseError(
+                f"animation {args.animation_id} is an unused anim.flx slot"
+            )
+        model = _load_model(args.sappear, args.model_id)
+        result = pose_model(model, animation, args.time_ms)
+        resolver = _make_texture_resolver(args.textures, args.palette)
+        motion_name = (
+            motion_ids.name(args.animation_id) if motion_ids is not None else None
+        )
+        motion_label = f"_{motion_name.casefold()}" if motion_name else ""
+        stem = (
+            f"animation_{args.animation_id:05d}{motion_label}_"
+            f"model_{args.model_id:05d}_{args.time_ms:06d}ms"
+        )
+        outdir = args.output or stem
+        os.makedirs(outdir, exist_ok=True)
+        base = os.path.join(outdir, stem)
+        wrote = []
+        if args.format in ("obj", "both"):
+            export_obj(
+                result.model,
+                base + ".obj",
+                lod_level=args.lod,
+                texture_resolver=resolver,
+            )
+            wrote.append(base + ".obj")
+        if args.format in ("stl", "both"):
+            export_stl(result.model, base + ".stl", lod_level=args.lod)
+            wrote.append(base + ".stl")
+    except (
+        U9AnimationError,
+        U9AnimationPoseError,
+        U9FlxArchiveError,
+        U9ModelError,
+        MeshExportError,
+    ) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+
+    print(
+        f"Exported animation {args.animation_id} on model {args.model_id} "
+        f"at {args.time_ms} ms (LOD {args.lod}) -> {outdir}/"
+    )
+    for path in wrote:
+        print(f"  {path}")
+    print(f"  Matched parts   : {len(result.matched_part_ids)}")
+    print(f"  Authoring-only  : {list(result.authoring_only_part_ids)}")
+    print(f"  Model-only      : {list(result.model_only_limb_ids)}")
+    print(f"  Root motion     : {result.root_motion_delta}")
+    if args.format in ("obj", "both") and resolver is None:
+        print("  (no --textures given: OBJ materials have no images)")
+    if args.preview:
+        _generate_preview(outdir)
     return 0
 
 
@@ -4960,19 +5074,31 @@ def highway_routes_cmd(
 @u9_app.command("animation-list")
 def animation_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
+    motion_ids: Annotated[
+        Optional[str],
+        typer.Option("--motion-ids", help="Ghidra motion-ID table for original names"),
+    ] = None,
     limit: Annotated[
         Optional[int],
         typer.Option("-n", "--limit", help="Maximum rows to print"),
     ] = None,
 ) -> None:
     """List U9 animation clips, source paths, frame counts and animated parts."""
-    raise SystemExit(cmd_animation_list(SimpleNamespace(file=file, limit=limit)))
+    raise SystemExit(
+        cmd_animation_list(
+            SimpleNamespace(file=file, motion_ids=motion_ids, limit=limit)
+        )
+    )
 
 
 @u9_app.command("animation-show")
 def animation_show_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
     id: Annotated[int, typer.Argument(help="Animation ID (the FLX entry index)")],
+    motion_ids: Annotated[
+        Optional[str],
+        typer.Option("--motion-ids", help="Ghidra motion-ID table for original name"),
+    ] = None,
     part: Annotated[
         Optional[int],
         typer.Option("-p", "--part", help="Dump transform frames for this part ID"),
@@ -4984,7 +5110,15 @@ def animation_show_cmd(
 ) -> None:
     """Show one U9 animation's structure or one part's transform frames."""
     raise SystemExit(
-        cmd_animation_show(SimpleNamespace(file=file, id=id, part=part, limit=limit))
+        cmd_animation_show(
+            SimpleNamespace(
+                file=file,
+                id=id,
+                motion_ids=motion_ids,
+                part=part,
+                limit=limit,
+            )
+        )
     )
 
 
@@ -5024,6 +5158,10 @@ def animation_model_report_cmd(
             help="TYPENAME.FLX path (default: beside anim.flx)",
         ),
     ] = None,
+    motion_ids: Annotated[
+        Optional[str],
+        typer.Option("--motion-ids", help="Ghidra motion-ID table for original names"),
+    ] = None,
     fmt: Annotated[
         str,
         typer.Option("-f", "--format", help="Report format: csv or json"),
@@ -5040,7 +5178,65 @@ def animation_model_report_cmd(
                 registry=registry,
                 types=types,
                 typenames=typenames,
+                motion_ids=motion_ids,
                 format=fmt,
+            )
+        )
+    )
+
+
+@u9_app.command("animation-pose-export")
+def animation_pose_export_cmd(
+    animations: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
+    animation_id: Annotated[int, typer.Argument(help="Animation/FLX entry ID")],
+    sappear: Annotated[str, typer.Argument(help="Path to static/sappear.flx")],
+    model_id: Annotated[int, typer.Argument(help="Hierarchical model ID")],
+    time_ms: Annotated[
+        int,
+        typer.Option("--time-ms", help="Clip time to sample in milliseconds"),
+    ] = 0,
+    motion_ids: Annotated[
+        Optional[str],
+        typer.Option("--motion-ids", help="Ghidra motion-ID table for output naming"),
+    ] = None,
+    textures: Annotated[
+        Optional[str],
+        typer.Option("-t", "--textures", help="Optional U9 bitmap texture FLX"),
+    ] = None,
+    palette: Annotated[
+        Optional[str],
+        typer.Option("-p", "--palette", help="Optional static/ankh.pal"),
+    ] = None,
+    lod: Annotated[int, typer.Option("--lod", help="LOD level to export")] = 0,
+    fmt: Annotated[
+        str,
+        typer.Option("-f", "--format", help="obj, stl, or both"),
+    ] = "obj",
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Output directory"),
+    ] = None,
+    preview: Annotated[
+        bool,
+        typer.Option("--preview/--no-preview", help="Also render preview.png"),
+    ] = True,
+) -> None:
+    """Export one runtime-compatible rigid-limb animation pose."""
+    raise SystemExit(
+        cmd_animation_pose_export(
+            SimpleNamespace(
+                animations=animations,
+                animation_id=animation_id,
+                sappear=sappear,
+                model_id=model_id,
+                time_ms=time_ms,
+                motion_ids=motion_ids,
+                textures=textures,
+                palette=palette,
+                lod=lod,
+                format=fmt,
+                output=output,
+                preview=preview,
             )
         )
     )

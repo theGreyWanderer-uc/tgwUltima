@@ -3,7 +3,7 @@ Ultima 9 subpackage.
 
 Modules for Ultima 9: Ascension file formats.
 
-Canonical imports::
+Common imports::
 
     from titan.u9.activity import U9Activities
     from titan.u9.animation import U9Animations
@@ -52,10 +52,16 @@ from titan.u9.adpcm import (
 from titan.u9.animation import (
     U9Animation,
     U9AnimationError,
+    U9AnimationEvent,
     U9AnimationFrame,
     U9AnimationPart,
     U9Animations,
     U9AnimationSuffix,
+)
+from titan.u9.animation_pose import (
+    U9AnimationPoseError,
+    U9AnimationPoseResult,
+    pose_model,
 )
 from titan.u9.books import U9Book, U9Books, U9BooksError
 from titan.u9.fixed import (
@@ -99,6 +105,7 @@ from titan.u9.model import (
     U9TriangleCorner,
 )
 from titan.u9.model_naming import label_for_model, names_for_model, slugify
+from titan.u9.motion_ids import U9MotionId, U9MotionIds, U9MotionIdsError
 from titan.u9.map_atlas import (
     U9MapAtlasDiagnostics,
     U9MapAtlasError,
@@ -240,10 +247,17 @@ __all__ = [
     "AdpcmDecodeError",
     "U9Animation",
     "U9AnimationError",
+    "U9AnimationEvent",
     "U9AnimationFrame",
     "U9AnimationPart",
     "U9Animations",
     "U9AnimationSuffix",
+    "U9AnimationPoseError",
+    "U9AnimationPoseResult",
+    "pose_model",
+    "U9MotionId",
+    "U9MotionIds",
+    "U9MotionIdsError",
     "decode_microtalk_mono",
     "MicroTalkDecodeError",
     "U9Model",

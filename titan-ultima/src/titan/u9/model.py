@@ -7,19 +7,13 @@ of rigid **limbs** (body parts/pieces, not a modern vertex-skinned skeleton --
 see below), each with its own mesh at up to 4 levels of detail (LOD). Sixteen
 use the alternate indexed-polygon record described below.
 
-Ported and reverse-engineered from the real, open-source Blender
-importer ``Chevluh/Ultima-9-Blender-Importer``'s
-``ultimaModelImporter.py`` (found locally at
-``D:\\_Repos\\_UltimaIX\\Ultima-9-Blender-Importer``) -- **not** from a
-prior ChatGPT-generated research summary the user also supplied, which
-claimed several byte offsets that turned out to be wrong when checked
-against the real importer source (e.g. it placed the limb quaternion
-at +0x18, but the real importer places it at +0x20, after a full
-12-byte ``Position`` vec3 the summary's offsets didn't leave room for).
-Every offset below was additionally cross-checked field-by-field
-against real game data (model ID 0, a simple debug cube: 1 limb, 1 LOD,
-8 vertices, 12 faces, 1 material) before being trusted -- see each
-dataclass's docstring for the specific real values that confirmed it.
+The layout was checked against Ghidra data and the game corpus rather than a
+prior generated research summary whose offsets proved incorrect. For example,
+the summary placed the limb quaternion at +0x18, while the verified layout puts
+it at +0x20 after the complete 12-byte ``Position`` vector. Every offset below
+was additionally cross-checked field-by-field against real game data (model ID
+0, a simple debug cube: 1 limb, 1 LOD, 8 vertices, 12 faces, 1 material) before
+being trusted. Each dataclass documents the real values that confirmed it.
 
 Model record layout (all offsets relative to the start of the FLX
 entry's own bytes, i.e. ``U9FlxArchive.read_entry(model_id)``)::
@@ -341,10 +335,11 @@ class U9Limb:
     ``position``/``rotation``/``scale`` are this model's only stored
     transform for the limb -- a static "bind pose", not necessarily the
     pose the creature is meant to be seen in during real gameplay.
-    Real animation (``static/anim.flx``) would apply its own per-frame
-    transform on top of/instead of this one. :mod:`titan.u9.animation`
-    parses those tracks, but model-to-clip selection and animated export
-    are not implemented. Even when applied, animation only repositions
+    Real animation (``static/anim.flx``) applies runtime-selected per-frame
+    transforms. :mod:`titan.u9.animation_pose` can sample and apply an
+    explicitly selected clip, but automatic model/state-to-clip selection and
+    animated interchange export are not implemented. Even when applied,
+    animation only repositions
     limbs rigidly -- it can't change a triangle's UV mapping, so it's
     irrelevant to texture-placement oddities on a given sub-mesh, only
     to pose/motion.
