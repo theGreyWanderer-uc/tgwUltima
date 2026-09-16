@@ -151,6 +151,27 @@ def _read_glb_json(path: Path) -> dict[str, Any]:
     return json.loads(data[20 : 20 + json_length].decode("utf-8"))
 
 
+def _read_glb_float_accessor(
+    path: Path, document: dict[str, Any], accessor_index: int
+) -> tuple[tuple[float, ...], ...]:
+    data = path.read_bytes()
+    json_length = struct.unpack_from("<I", data, 12)[0]
+    binary_header_offset = 20 + json_length
+    binary_length, chunk_type = struct.unpack_from("<I4s", data, binary_header_offset)
+    if chunk_type != b"BIN\x00":
+        raise ValueError("test GLB has no binary chunk")
+    binary = data[binary_header_offset + 8 : binary_header_offset + 8 + binary_length]
+    accessor = document["accessors"][accessor_index]
+    view = document["bufferViews"][accessor["bufferView"]]
+    widths = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4}
+    width = widths[accessor["type"]]
+    offset = view.get("byteOffset", 0) + accessor.get("byteOffset", 0)
+    values = struct.unpack_from(f"<{accessor['count'] * width}f", binary, offset)
+    return tuple(
+        tuple(values[index : index + width]) for index in range(0, len(values), width)
+    )
+
+
 class AnimatedModelBundleTests(unittest.TestCase):
     def test_sidecar_preserves_hierarchy_tracks_events_materials_and_hashes(
         self,
@@ -242,6 +263,35 @@ class AnimatedModelBundleTests(unittest.TestCase):
             self.assertIn({"node": 2, "path": "rotation"}, targets)
             self.assertIn({"node": 2, "path": "translation"}, targets)
             self.assertNotIn({"node": 3, "path": "rotation"}, targets)
+
+    def test_glb_preserves_top_left_u9_texture_coordinates(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            model_archive = root / "model.bin"
+            animation_archive = root / "animation.bin"
+            model_archive.write_bytes(b"model")
+            animation_archive.write_bytes(b"animation")
+            result = export_animated_model_bundle(
+                _model(),
+                _animation(),
+                root / "bundle",
+                model_archive_path=model_archive,
+                animation_archive_path=animation_archive,
+            )
+
+            self.assertIsNotNone(result.glb_path)
+            glb_path = result.glb_path
+            if glb_path is None:
+                self.fail("animated GLB was not written")
+            document = _read_glb_json(glb_path)
+            accessor_index = document["meshes"][0]["primitives"][0]["attributes"][
+                "TEXCOORD_0"
+            ]
+
+            self.assertEqual(
+                _read_glb_float_accessor(glb_path, document, accessor_index),
+                ((0.0, 0.0), (0.0, 1.0), (1.0, 0.0)),
+            )
 
     def test_rejects_models_without_an_animatable_shared_hierarchy(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

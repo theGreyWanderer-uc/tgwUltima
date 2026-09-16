@@ -644,7 +644,7 @@ def _add_limb_mesh(
                 positions.append(_native_position(corner.position, coordinate_scale))
                 normals.append(_native_direction(corner.normal))
                 uvs.append(
-                    (corner.uv[0], 1.0 - corner.uv[1])
+                    corner.uv
                     if all(math.isfinite(value) for value in corner.uv)
                     else (0.0, 0.0)
                 )
