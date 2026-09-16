@@ -13,7 +13,9 @@ __all__ = [
     "DEFAULT_ANIMATED_MODEL_SCALE",
     "U9AnimatedModelBundleError",
     "U9AnimatedModelBundleResult",
+    "U9AnimatedModelLibraryResult",
     "export_animated_model_bundle",
+    "export_animated_model_library",
 ]
 
 import hashlib
@@ -69,6 +71,21 @@ class U9AnimatedModelBundleResult:
     authoring_only_track_count: int
 
 
+@dataclass(frozen=True)
+class U9AnimatedModelLibraryResult:
+    """Paths and aggregate counts written by one multi-clip actor library."""
+
+    sidecar_path: Path
+    glb_path: Path | None
+    limb_mesh_paths: tuple[Path, ...]
+    clip_count: int
+    part_count: int
+    mesh_count: int
+    total_track_count: int
+    total_matched_track_count: int
+    total_authoring_only_track_count: int
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -96,10 +113,13 @@ def _safe_name(value: str) -> str:
 
 def _part_names(
     model: U9Model,
-    animation: U9Animation,
+    animations: Sequence[U9Animation],
     registry: U9NodeRegistry | None,
 ) -> tuple[str, ...]:
-    animation_names = {part.part_id: part.name for part in animation.parts}
+    animation_names: dict[int, str] = {}
+    for animation in animations:
+        for part in animation.parts:
+            animation_names.setdefault(part.part_id, part.name)
     return tuple(
         (
             registry.name_for(limb.limb_id)
@@ -226,17 +246,113 @@ def _track_record(
     }
 
 
-def _sidecar_document(
+def _clip_record(
     model: U9Model,
     animation: U9Animation,
+    motion_name: str | None,
+    *,
+    indices_by_id: dict[int, list[int]],
+    root_part_index: int | None,
+    catalogue: dict[str, object] | None,
+) -> dict[str, object]:
+    tracks = [
+        _track_record(
+            part,
+            tuple(indices_by_id.get(part.part_id, ())),
+            root_part_index,
+        )
+        for part in animation.parts
+    ]
+    root_track = (
+        animation.part(model.limbs[root_part_index].limb_id)
+        if root_part_index is not None
+        else None
+    )
+    record: dict[str, object] = {
+        "animation_id": animation.animation_id,
+        "original_motion_name": motion_name,
+        "authoring_path": animation.source_name,
+        "frame_range": {
+            "start": animation.start_frame,
+            "end": animation.end_frame,
+            "count": animation.frame_count,
+        },
+        "timing": {
+            "fps": animation.source_fps,
+            "nominal_frame_interval_ms": animation.frame_interval_ms,
+            "duration_ms": animation.duration_ms,
+        },
+        "part_registry": list(animation.part_registry),
+        "interpolation": {
+            "rotation": "spherical; destination hemisphere is not negated",
+            "position": "linear",
+            "scale": "linear",
+            "outside_range": "clamp to nearest stored sample",
+            "glb_rotation_approximation": "LINEAR quaternion interpolation",
+        },
+        "runtime_application": {
+            "rotation": "applied to every matched rigid part",
+            "translation": "applied locally only to PELVIS/HIPS",
+            "root_motion": "root translation is also separated as object motion",
+            "scale": "preserved here but not applied by the known runtime path",
+        },
+        "root_motion": {
+            "part_index": root_part_index,
+            "part_id": (
+                model.limbs[root_part_index].limb_id
+                if root_part_index is not None
+                else None
+            ),
+            "rest_translation_xyz": (
+                list(model.limbs[root_part_index].position)
+                if root_part_index is not None
+                else None
+            ),
+            "frames": (
+                [
+                    {
+                        "time_ms": frame.time_ms,
+                        "raw_position_xyz": list(frame.position),
+                        "delta_from_rest_xyz": [
+                            frame.position[axis]
+                            - model.limbs[root_part_index].position[axis]
+                            for axis in range(3)
+                        ],
+                    }
+                    for frame in root_track.frames
+                ]
+                if root_track is not None and root_part_index is not None
+                else []
+            ),
+        },
+        "tracks": tracks,
+        "events": [
+            {
+                "time_ms": event.time_ms,
+                "type": event.event_type,
+                "name": event.event_name,
+                "parameter": event.parameter,
+            }
+            for event in animation.events
+        ],
+    }
+    if catalogue is not None:
+        record["catalogue"] = catalogue
+    return record
+
+
+def _sidecar_document(
+    model: U9Model,
+    clips: Sequence[tuple[U9Animation, str | None]],
     *,
     part_names: tuple[str, ...],
     parent_indices: tuple[int | None, ...],
     mesh_names: tuple[str | None, ...],
     lod_level: int,
     coordinate_scale: float,
-    motion_name: str | None,
     inputs: list[dict[str, object]],
+    library_metadata: dict[str, object] | None = None,
+    clip_metadata: dict[int, dict[str, object]] | None = None,
 ) -> dict[str, object]:
     indices_by_id: dict[int, list[int]] = {}
     for index, limb in enumerate(model.limbs):
@@ -288,20 +404,7 @@ def _sidecar_document(
                 for material_index, material in enumerate(lod.materials)
             )
 
-    tracks = [
-        _track_record(
-            part,
-            tuple(indices_by_id.get(part.part_id, ())),
-            root_part_index,
-        )
-        for part in animation.parts
-    ]
-    root_track = (
-        animation.part(model.limbs[root_part_index].limb_id)
-        if root_part_index is not None
-        else None
-    )
-    return {
+    document: dict[str, object] = {
         "schema": ANIMATED_MODEL_BUNDLE_SCHEMA,
         "schema_version": ANIMATED_MODEL_BUNDLE_SCHEMA_VERSION,
         "coordinate_system": {
@@ -342,77 +445,25 @@ def _sidecar_document(
         },
         "parts": parts,
         "clips": [
-            {
-                "animation_id": animation.animation_id,
-                "original_motion_name": motion_name,
-                "authoring_path": animation.source_name,
-                "frame_range": {
-                    "start": animation.start_frame,
-                    "end": animation.end_frame,
-                    "count": animation.frame_count,
-                },
-                "timing": {
-                    "fps": animation.source_fps,
-                    "nominal_frame_interval_ms": animation.frame_interval_ms,
-                    "duration_ms": animation.duration_ms,
-                },
-                "part_registry": list(animation.part_registry),
-                "interpolation": {
-                    "rotation": "spherical; destination hemisphere is not negated",
-                    "position": "linear",
-                    "scale": "linear",
-                    "outside_range": "clamp to nearest stored sample",
-                    "glb_rotation_approximation": "LINEAR quaternion interpolation",
-                },
-                "runtime_application": {
-                    "rotation": "applied to every matched rigid part",
-                    "translation": "applied locally only to PELVIS/HIPS",
-                    "root_motion": "root translation is also separated as object motion",
-                    "scale": "preserved here but not applied by the known runtime path",
-                },
-                "root_motion": {
-                    "part_index": root_part_index,
-                    "part_id": (
-                        model.limbs[root_part_index].limb_id
-                        if root_part_index is not None
-                        else None
-                    ),
-                    "rest_translation_xyz": (
-                        list(model.limbs[root_part_index].position)
-                        if root_part_index is not None
-                        else None
-                    ),
-                    "frames": (
-                        [
-                            {
-                                "time_ms": frame.time_ms,
-                                "raw_position_xyz": list(frame.position),
-                                "delta_from_rest_xyz": [
-                                    frame.position[axis]
-                                    - model.limbs[root_part_index].position[axis]
-                                    for axis in range(3)
-                                ],
-                            }
-                            for frame in root_track.frames
-                        ]
-                        if root_track is not None and root_part_index is not None
-                        else []
-                    ),
-                },
-                "tracks": tracks,
-                "events": [
-                    {
-                        "time_ms": event.time_ms,
-                        "type": event.event_type,
-                        "name": event.event_name,
-                        "parameter": event.parameter,
-                    }
-                    for event in animation.events
-                ],
-            }
+            _clip_record(
+                model,
+                animation,
+                motion_name,
+                indices_by_id=indices_by_id,
+                root_part_index=root_part_index,
+                catalogue=(
+                    clip_metadata.get(animation.animation_id)
+                    if clip_metadata is not None
+                    else None
+                ),
+            )
+            for animation, motion_name in clips
         ],
         "materials": materials,
     }
+    if library_metadata is not None:
+        document["library"] = library_metadata
+    return document
 
 
 class _GlbBuilder:
@@ -708,13 +759,12 @@ def _add_animation_channel(
 def _write_animated_glb(
     path: Path,
     model: U9Model,
-    animation: U9Animation,
+    clips: Sequence[tuple[U9Animation, str | None]],
     *,
     part_names: tuple[str, ...],
     parent_indices: tuple[int | None, ...],
     lod_level: int,
     coordinate_scale: float,
-    motion_name: str | None,
     texture_resolver: TextureResolver | None,
 ) -> None:
     builder = _GlbBuilder()
@@ -766,119 +816,136 @@ def _write_animated_glb(
     root_part_index = next(
         (index for index, parent in enumerate(parent_indices) if parent is None), None
     )
-    animation_payload: dict[str, Any] = {
-        "name": motion_name or f"animation_{animation.animation_id}",
-        "samplers": [],
-        "channels": [],
-        "extras": {
-            "u9_animation_id": animation.animation_id,
-            "u9_events": [
-                {
-                    "time_ms": event.time_ms,
-                    "type": event.event_type,
-                    "name": event.event_name,
-                    "parameter": event.parameter,
-                }
-                for event in animation.events
-            ],
-            "u9_sidecar_is_authoritative": True,
-        },
-    }
-    for track in animation.parts:
-        target_parts = indices_by_id.get(track.part_id, [])
-        if not target_parts or not track.frames:
-            continue
-        times = [frame.time_ms / 1000.0 for frame in track.frames]
-        input_accessor = builder.add_float_accessor(times, "SCALAR", bounds=True)
-        rotations = [_native_rotation_xyzw(frame.rotation) for frame in track.frames]
-        for part_index in target_parts:
-            _add_animation_channel(
-                builder,
-                animation_payload,
-                input_accessor=input_accessor,
-                values=rotations,
-                accessor_type="VEC4",
-                node_index=node_indices[part_index],
-                path="rotation",
-            )
-        if track.name.casefold() in {"pelvis", "hips"}:
-            positions = [
-                _native_position(frame.position, coordinate_scale)
-                for frame in track.frames
+    glb_animations = []
+    for animation, motion_name in clips:
+        animation_payload: dict[str, Any] = {
+            "name": motion_name or f"animation_{animation.animation_id}",
+            "samplers": [],
+            "channels": [],
+            "extras": {
+                "u9_animation_id": animation.animation_id,
+                "u9_events": [
+                    {
+                        "time_ms": event.time_ms,
+                        "type": event.event_type,
+                        "name": event.event_name,
+                        "parameter": event.parameter,
+                    }
+                    for event in animation.events
+                ],
+                "u9_sidecar_is_authoritative": True,
+            },
+        }
+        for track in animation.parts:
+            target_parts = indices_by_id.get(track.part_id, [])
+            if not target_parts or not track.frames:
+                continue
+            times = [frame.time_ms / 1000.0 for frame in track.frames]
+            input_accessor = builder.add_float_accessor(times, "SCALAR", bounds=True)
+            rotations = [
+                _native_rotation_xyzw(frame.rotation) for frame in track.frames
             ]
             for part_index in target_parts:
                 _add_animation_channel(
                     builder,
                     animation_payload,
                     input_accessor=input_accessor,
-                    values=positions,
-                    accessor_type="VEC3",
+                    values=rotations,
+                    accessor_type="VEC4",
                     node_index=node_indices[part_index],
+                    path="rotation",
+                )
+            if track.name.casefold() in {"pelvis", "hips"}:
+                positions = [
+                    _native_position(frame.position, coordinate_scale)
+                    for frame in track.frames
+                ]
+                for part_index in target_parts:
+                    _add_animation_channel(
+                        builder,
+                        animation_payload,
+                        input_accessor=input_accessor,
+                        values=positions,
+                        accessor_type="VEC3",
+                        node_index=node_indices[part_index],
+                        path="translation",
+                    )
+            if root_part_index is not None and root_part_index in target_parts:
+                root_rest = model.limbs[root_part_index].position
+                deltas = [
+                    _native_position(
+                        (
+                            frame.position[0] - root_rest[0],
+                            frame.position[1] - root_rest[1],
+                            frame.position[2] - root_rest[2],
+                        ),
+                        coordinate_scale,
+                    )
+                    for frame in track.frames
+                ]
+                _add_animation_channel(
+                    builder,
+                    animation_payload,
+                    input_accessor=input_accessor,
+                    values=deltas,
+                    accessor_type="VEC3",
+                    node_index=0,
                     path="translation",
                 )
-        if root_part_index is not None and root_part_index in target_parts:
-            root_rest = model.limbs[root_part_index].position
-            deltas = [
-                _native_position(
-                    (
-                        frame.position[0] - root_rest[0],
-                        frame.position[1] - root_rest[1],
-                        frame.position[2] - root_rest[2],
-                    ),
-                    coordinate_scale,
-                )
-                for frame in track.frames
-            ]
-            _add_animation_channel(
-                builder,
-                animation_payload,
-                input_accessor=input_accessor,
-                values=deltas,
-                accessor_type="VEC3",
-                node_index=0,
-                path="translation",
-            )
-    if animation_payload["channels"]:
-        builder.document["animations"] = [animation_payload]
+        if animation_payload["channels"]:
+            glb_animations.append(animation_payload)
+    if glb_animations:
+        builder.document["animations"] = glb_animations
     builder.write(path)
 
 
-def export_animated_model_bundle(
+def _validate_animated_model_export(
     model: U9Model,
-    animation: U9Animation,
-    output_directory: str | Path,
-    *,
-    model_archive_path: str | Path,
-    animation_archive_path: str | Path,
-    registry: U9NodeRegistry | None = None,
-    registry_path: str | Path | None = None,
-    motion_name: str | None = None,
-    motion_table_path: str | Path | None = None,
-    texture_resolver: TextureResolver | None = None,
-    texture_archive_path: str | Path | None = None,
-    palette_path: str | Path | None = None,
-    lod_level: int = 0,
-    coordinate_scale: float = DEFAULT_ANIMATED_MODEL_SCALE,
-    include_glb: bool = True,
-) -> U9AnimatedModelBundleResult:
-    """Write local limb OBJs, the versioned sidecar, and an animated GLB."""
+    clips: Sequence[tuple[U9Animation, str | None]],
+    lod_level: int,
+    coordinate_scale: float,
+) -> tuple[int, ...]:
     if model.record_format != "hierarchical":
         raise U9AnimatedModelBundleError(
             f"model {model.model_id} uses the indexed record family and has no "
             "animatable rigid hierarchy"
         )
+    if not clips:
+        raise U9AnimatedModelBundleError(
+            "animated model export requires at least one clip"
+        )
     if lod_level < 0:
         raise U9AnimatedModelBundleError("LOD level must be non-negative")
     if coordinate_scale <= 0:
         raise U9AnimatedModelBundleError("coordinate scale must be positive")
-    model_ids = {limb.limb_id for limb in model.limbs}
-    matched_track_count = sum(part.part_id in model_ids for part in animation.parts)
-    if not matched_track_count:
+    animation_ids = [animation.animation_id for animation, _motion_name in clips]
+    if len(set(animation_ids)) != len(animation_ids):
         raise U9AnimatedModelBundleError(
-            f"animation {animation.animation_id} and model {model.model_id} have "
-            "no shared limb/part IDs"
+            "animated model export contains duplicate animation IDs"
         )
+    model_ids = {limb.limb_id for limb in model.limbs}
+    matched_counts = tuple(
+        sum(part.part_id in model_ids for part in animation.parts)
+        for animation, _motion_name in clips
+    )
+    for (animation, _motion_name), matched_count in zip(clips, matched_counts):
+        if not matched_count:
+            raise U9AnimatedModelBundleError(
+                f"animation {animation.animation_id} and model {model.model_id} have "
+                "no shared limb/part IDs"
+            )
+    return matched_counts
 
+
+def _animated_model_inputs(
+    *,
+    model_archive_path: str | Path,
+    animation_archive_path: str | Path,
+    registry_path: str | Path | None,
+    motion_table_path: str | Path | None,
+    texture_archive_path: str | Path | None,
+    palette_path: str | Path | None,
+) -> list[dict[str, object]]:
     inputs = [
         _input_record("model_archive", model_archive_path),
         _input_record("animation_archive", animation_archive_path),
@@ -892,12 +959,20 @@ def export_animated_model_bundle(
     inputs.extend(
         _input_record(role, path) for role, path in optional_inputs if path is not None
     )
+    return inputs
 
-    output = Path(output_directory)
+
+def _export_animated_model_meshes(
+    model: U9Model,
+    output: Path,
+    *,
+    part_names: tuple[str, ...],
+    lod_level: int,
+    texture_resolver: TextureResolver | None,
+) -> tuple[tuple[str | None, ...], tuple[Path, ...]]:
+    """Write one shared set of local limb meshes for one or many clips."""
     mesh_directory = output / "meshes"
     mesh_directory.mkdir(parents=True, exist_ok=True)
-    part_names = _part_names(model, animation, registry)
-    parent_indices = _parent_indices(model)
     mesh_names: list[str | None] = []
     mesh_paths: list[Path] = []
     for part_index, limb in enumerate(model.limbs):
@@ -922,16 +997,61 @@ def export_animated_model_bundle(
             raise U9AnimatedModelBundleError(str(error)) from error
         mesh_names.append(f"meshes/{mesh_name}")
         mesh_paths.append(mesh_path)
+    return tuple(mesh_names), tuple(mesh_paths)
+
+
+def export_animated_model_bundle(
+    model: U9Model,
+    animation: U9Animation,
+    output_directory: str | Path,
+    *,
+    model_archive_path: str | Path,
+    animation_archive_path: str | Path,
+    registry: U9NodeRegistry | None = None,
+    registry_path: str | Path | None = None,
+    motion_name: str | None = None,
+    motion_table_path: str | Path | None = None,
+    texture_resolver: TextureResolver | None = None,
+    texture_archive_path: str | Path | None = None,
+    palette_path: str | Path | None = None,
+    lod_level: int = 0,
+    coordinate_scale: float = DEFAULT_ANIMATED_MODEL_SCALE,
+    include_glb: bool = True,
+) -> U9AnimatedModelBundleResult:
+    """Write local limb OBJs, the versioned sidecar, and one animated GLB."""
+    clips = ((animation, motion_name),)
+    matched_track_count = _validate_animated_model_export(
+        model, clips, lod_level, coordinate_scale
+    )[0]
+
+    inputs = _animated_model_inputs(
+        model_archive_path=model_archive_path,
+        animation_archive_path=animation_archive_path,
+        registry_path=registry_path,
+        motion_table_path=motion_table_path,
+        texture_archive_path=texture_archive_path,
+        palette_path=palette_path,
+    )
+
+    output = Path(output_directory)
+    part_names = _part_names(model, (animation,), registry)
+    parent_indices = _parent_indices(model)
+    mesh_names, mesh_paths = _export_animated_model_meshes(
+        model,
+        output,
+        part_names=part_names,
+        lod_level=lod_level,
+        texture_resolver=texture_resolver,
+    )
 
     sidecar = _sidecar_document(
         model,
-        animation,
+        clips,
         part_names=part_names,
         parent_indices=parent_indices,
-        mesh_names=tuple(mesh_names),
+        mesh_names=mesh_names,
         lod_level=lod_level,
         coordinate_scale=coordinate_scale,
-        motion_name=motion_name,
         inputs=inputs,
     )
     stem = f"model_{model.model_id:05d}_animation_{animation.animation_id:05d}"
@@ -944,21 +1064,109 @@ def export_animated_model_bundle(
         _write_animated_glb(
             glb_path,
             model,
-            animation,
+            clips,
             part_names=part_names,
             parent_indices=parent_indices,
             lod_level=lod_level,
             coordinate_scale=coordinate_scale,
-            motion_name=motion_name,
             texture_resolver=texture_resolver,
         )
     return U9AnimatedModelBundleResult(
         sidecar_path=sidecar_path,
         glb_path=glb_path,
-        limb_mesh_paths=tuple(mesh_paths),
+        limb_mesh_paths=mesh_paths,
         part_count=len(model.limbs),
         mesh_count=len(mesh_paths),
         track_count=len(animation.parts),
         matched_track_count=matched_track_count,
         authoring_only_track_count=len(animation.parts) - matched_track_count,
+    )
+
+
+def export_animated_model_library(
+    model: U9Model,
+    clips: Sequence[tuple[U9Animation, str | None]],
+    output_directory: str | Path,
+    *,
+    model_archive_path: str | Path,
+    animation_archive_path: str | Path,
+    registry: U9NodeRegistry | None = None,
+    registry_path: str | Path | None = None,
+    motion_table_path: str | Path | None = None,
+    texture_resolver: TextureResolver | None = None,
+    texture_archive_path: str | Path | None = None,
+    palette_path: str | Path | None = None,
+    lod_level: int = 0,
+    coordinate_scale: float = DEFAULT_ANIMATED_MODEL_SCALE,
+    include_glb: bool = True,
+    library_metadata: dict[str, object] | None = None,
+    clip_metadata: dict[int, dict[str, object]] | None = None,
+) -> U9AnimatedModelLibraryResult:
+    """Write shared model assets, complete clip data, and one multi-animation GLB."""
+    matched_counts = _validate_animated_model_export(
+        model, clips, lod_level, coordinate_scale
+    )
+    inputs = _animated_model_inputs(
+        model_archive_path=model_archive_path,
+        animation_archive_path=animation_archive_path,
+        registry_path=registry_path,
+        motion_table_path=motion_table_path,
+        texture_archive_path=texture_archive_path,
+        palette_path=palette_path,
+    )
+
+    output = Path(output_directory)
+    animations = tuple(animation for animation, _motion_name in clips)
+    part_names = _part_names(model, animations, registry)
+    parent_indices = _parent_indices(model)
+    mesh_names, mesh_paths = _export_animated_model_meshes(
+        model,
+        output,
+        part_names=part_names,
+        lod_level=lod_level,
+        texture_resolver=texture_resolver,
+    )
+    sidecar = _sidecar_document(
+        model,
+        clips,
+        part_names=part_names,
+        parent_indices=parent_indices,
+        mesh_names=mesh_names,
+        lod_level=lod_level,
+        coordinate_scale=coordinate_scale,
+        inputs=inputs,
+        library_metadata=library_metadata,
+        clip_metadata=clip_metadata,
+    )
+    stem = f"model_{model.model_id:05d}_animation_library"
+    sidecar_path = output / f"{stem}.u9anim.json"
+    sidecar_path.write_text(
+        json.dumps(sidecar, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+    glb_path = output / f"{stem}.glb" if include_glb else None
+    if glb_path is not None:
+        _write_animated_glb(
+            glb_path,
+            model,
+            clips,
+            part_names=part_names,
+            parent_indices=parent_indices,
+            lod_level=lod_level,
+            coordinate_scale=coordinate_scale,
+            texture_resolver=texture_resolver,
+        )
+    total_track_count = sum(len(animation.parts) for animation in animations)
+    total_matched_track_count = sum(matched_counts)
+    return U9AnimatedModelLibraryResult(
+        sidecar_path=sidecar_path,
+        glb_path=glb_path,
+        limb_mesh_paths=mesh_paths,
+        clip_count=len(clips),
+        part_count=len(model.limbs),
+        mesh_count=len(mesh_paths),
+        total_track_count=total_track_count,
+        total_matched_track_count=total_matched_track_count,
+        total_authoring_only_track_count=(
+            total_track_count - total_matched_track_count
+        ),
     )

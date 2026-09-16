@@ -7,6 +7,7 @@ import json
 import struct
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,7 @@ from titan.u9.animated_model_bundle import (
     ANIMATED_MODEL_BUNDLE_SCHEMA_VERSION,
     U9AnimatedModelBundleError,
     export_animated_model_bundle,
+    export_animated_model_library,
 )
 from titan.u9.animation import (
     U9Animation,
@@ -292,6 +294,43 @@ class AnimatedModelBundleTests(unittest.TestCase):
                 _read_glb_float_accessor(glb_path, document, accessor_index),
                 ((0.0, 0.0), (0.0, 1.0), (1.0, 0.0)),
             )
+
+    def test_library_shares_model_assets_and_names_multiple_glb_actions(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            model_archive = root / "model.bin"
+            animation_archive = root / "animation.bin"
+            model_archive.write_bytes(b"model")
+            animation_archive.write_bytes(b"animation")
+            breathe = _animation()
+            walk = replace(breathe, animation_id=174, source_name="avatar_walk")
+
+            result = export_animated_model_library(
+                _model(),
+                (
+                    (breathe, "HUMANOID_IDLE_BREATHE_AVATAR"),
+                    (walk, "HUMANOID_MOVEMENT_WALKFOWARD_AVATAR_NONE"),
+                ),
+                root / "library",
+                model_archive_path=model_archive,
+                animation_archive_path=animation_archive,
+            )
+            sidecar = json.loads(result.sidecar_path.read_text(encoding="utf-8"))
+            if result.glb_path is None:
+                self.fail("multi-animation GLB was not written")
+            glb = _read_glb_json(result.glb_path)
+
+            self.assertEqual(result.clip_count, 2)
+            self.assertEqual(result.mesh_count, 2)
+            self.assertEqual(len(sidecar["clips"]), 2)
+            self.assertEqual(
+                [animation["name"] for animation in glb["animations"]],
+                [
+                    "HUMANOID_IDLE_BREATHE_AVATAR",
+                    "HUMANOID_MOVEMENT_WALKFOWARD_AVATAR_NONE",
+                ],
+            )
+            self.assertEqual(len(glb["meshes"]), 2)
 
     def test_rejects_models_without_an_animatable_shared_hierarchy(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

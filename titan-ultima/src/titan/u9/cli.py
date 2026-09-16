@@ -39,10 +39,22 @@ from titan.u9.animation_model_report import (
     build_animation_model_report,
 )
 from titan.u9.animation_pose import U9AnimationPoseError, pose_model
+from titan.u9.animation_selection import (
+    U9AnimationSelectionError,
+    resolve_animation_selector,
+)
 from titan.u9.animated_model_bundle import (
     DEFAULT_ANIMATED_MODEL_SCALE,
     U9AnimatedModelBundleError,
     export_animated_model_bundle,
+)
+from titan.u9.animated_model_set import (
+    U9AnimatedModelSetError,
+    export_animated_model_set,
+)
+from titan.u9.avatar_animation_library import (
+    U9AvatarAnimationLibraryError,
+    export_avatar_animation_library,
 )
 from titan.u9.books import U9Books, U9BooksError
 from titan.u9.flx_archive import U9FlxArchive, U9FlxArchiveError
@@ -2076,6 +2088,185 @@ def cmd_animation_bundle_export(args: SimpleNamespace) -> int:
     print(f"  Authoring-only  : {result.authoring_only_track_count}")
     if result.glb_path is not None:
         print(f"  Animated GLB    : {result.glb_path}")
+    if args.textures is None:
+        print("  (no --textures given: exported materials have no images)")
+    return 0
+
+
+def cmd_animation_set_export(args: SimpleNamespace) -> int:
+    """Export independently playable clips for one explicit rigid actor model."""
+    if not args.clips:
+        print("ERROR: At least one --clip selector is required.", file=sys.stderr)
+        return 1
+    for label, path in (
+        ("Animation archive", args.animations),
+        ("Model archive", args.sappear),
+        ("Texture archive", args.textures),
+        ("Palette", args.palette),
+        ("Node registry", args.registry),
+        ("Ghidra motion-ID table", args.motion_ids),
+    ):
+        if path is not None and not Path(path).is_file():
+            print(f"ERROR: {label} not found: {path}", file=sys.stderr)
+            return 1
+
+    animations = _load_animations(args.animations)
+    if animations is None:
+        return 1
+    motion_ids = _load_motion_ids(args.motion_ids)
+    if args.motion_ids is not None and motion_ids is None:
+        return 1
+
+    registry_path = Path(args.registry) if args.registry else None
+    if registry_path is None:
+        registry_path = _find_case_insensitive_file(
+            Path(args.animations).resolve().parent, "registry.txt"
+        )
+    try:
+        registry = (
+            U9NodeRegistry.from_file(registry_path)
+            if registry_path is not None
+            else None
+        )
+        selected_clips = []
+        for selector in args.clips:
+            selection = resolve_animation_selector(selector, motion_ids)
+            animation = animations.animation(selection.animation_id)
+            if animation is None:
+                raise U9AnimatedModelSetError(
+                    f"animation selector {selector!r} resolved to unused archive slot "
+                    f"{selection.animation_id}"
+                )
+            selected_clips.append((selection, animation))
+
+        model = _load_model(args.sappear, args.model_id)
+        palette_path, _ = _find_palette(args.palette, args.textures)
+        texture_resolver = _make_texture_resolver(args.textures, palette_path)
+        output = args.output or f"model_{args.model_id:05d}_animation_set"
+        result = export_animated_model_set(
+            model,
+            selected_clips,
+            output,
+            model_archive_path=args.sappear,
+            animation_archive_path=args.animations,
+            registry=registry,
+            registry_path=registry_path,
+            motion_table_path=args.motion_ids,
+            texture_resolver=texture_resolver,
+            texture_archive_path=args.textures,
+            palette_path=palette_path,
+            lod_level=args.lod,
+            coordinate_scale=args.coordinate_scale,
+            include_glb=args.glb,
+        )
+    except (
+        OSError,
+        U9AnimationError,
+        U9AnimationSelectionError,
+        U9AnimatedModelSetError,
+        U9FlxArchiveError,
+        U9ModelError,
+        U9NodeRegistryError,
+    ) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+
+    print(
+        f"Exported {result.clip_count} animation clip(s) for model {args.model_id} "
+        f"(LOD {args.lod}) -> {output}/"
+    )
+    print(f"  Set manifest    : {result.manifest_path}")
+    for selection, animation in selected_clips:
+        label = selection.motion_name or f"animation_{animation.animation_id}"
+        print(f"  Clip {animation.animation_id:>5}: {label} ({selection.selector})")
+    print(f"  Clip sidecars   : {len(result.clip_sidecar_paths)}")
+    print(f"  Animated GLBs   : {len(result.clip_glb_paths)}")
+    print("  Timeline        : not authored (consumer chooses duration and order)")
+    if args.textures is None:
+        print("  (no --textures given: exported materials have no images)")
+    return 0
+
+
+def cmd_avatar_animation_library_export(args: SimpleNamespace) -> int:
+    """Export all compatible Avatar-labelled clips with shared actor assets."""
+    for label, path in (
+        ("Animation archive", args.animations),
+        ("Model archive", args.sappear),
+        ("Ghidra motion-ID table", args.motion_ids),
+        ("Texture archive", args.textures),
+        ("Palette", args.palette),
+        ("Node registry", args.registry),
+    ):
+        if path is not None and not Path(path).is_file():
+            print(f"ERROR: {label} not found: {path}", file=sys.stderr)
+            return 1
+
+    animations = _load_animations(args.animations)
+    if animations is None:
+        return 1
+    motion_ids = _load_motion_ids(args.motion_ids)
+    if motion_ids is None:
+        return 1
+
+    registry_path = Path(args.registry) if args.registry else None
+    if registry_path is None:
+        registry_path = _find_case_insensitive_file(
+            Path(args.animations).resolve().parent, "registry.txt"
+        )
+    try:
+        registry = (
+            U9NodeRegistry.from_file(registry_path)
+            if registry_path is not None
+            else None
+        )
+        model = _load_model(args.sappear, args.model_id)
+        palette_path, _ = _find_palette(args.palette, args.textures)
+        texture_resolver = _make_texture_resolver(args.textures, palette_path)
+        output = args.output or f"model_{args.model_id:05d}_avatar_animation_library"
+        result = export_avatar_animation_library(
+            model,
+            animations.animations(),
+            motion_ids,
+            output,
+            model_archive_path=args.sappear,
+            animation_archive_path=args.animations,
+            registry=registry,
+            registry_path=registry_path,
+            motion_table_path=args.motion_ids,
+            texture_resolver=texture_resolver,
+            texture_archive_path=args.textures,
+            palette_path=palette_path,
+            categories=args.categories or (),
+            lod_level=args.lod,
+            coordinate_scale=args.coordinate_scale,
+            include_glb=args.glb,
+        )
+    except (
+        OSError,
+        U9AnimationError,
+        U9AvatarAnimationLibraryError,
+        U9FlxArchiveError,
+        U9ModelError,
+        U9NodeRegistryError,
+    ) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+
+    exported = result.export
+    print(
+        f"Exported {result.exported_clip_count} Avatar animation clip(s) for "
+        f"model {args.model_id} (LOD {args.lod}) -> {output}/"
+    )
+    print(f"  Library sidecar : {exported.sidecar_path}")
+    print(f"  Multi-clip GLB  : {exported.glb_path or 'disabled'}")
+    print(f"  Shared meshes   : {exported.mesh_count}")
+    print(
+        "  Categories      : "
+        + ", ".join(f"{name}={count}" for name, count in result.category_counts)
+    )
+    print(f"  Unused mappings : {len(result.unused_motion_ids)}")
+    print(f"  Incompatible    : {len(result.incompatible_motion_ids)}")
+    print("  Timeline        : not authored (consumer selects and sequences actions)")
     if args.textures is None:
         print("  (no --textures given: exported materials have no images)")
     return 0
@@ -5390,6 +5581,150 @@ def animation_bundle_export_cmd(
                 model_id=model_id,
                 registry=registry,
                 motion_ids=motion_ids,
+                textures=textures,
+                palette=palette,
+                lod=lod,
+                coordinate_scale=coordinate_scale,
+                glb=glb,
+                output=output,
+            )
+        )
+    )
+
+
+@u9_app.command("animation-set-export")
+def animation_set_export_cmd(
+    animations: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
+    sappear: Annotated[str, typer.Argument(help="Path to static/sappear.flx")],
+    model_id: Annotated[int, typer.Argument(help="Explicit hierarchical model ID")],
+    clips: Annotated[
+        Optional[list[str]],
+        typer.Option(
+            "--clip",
+            help=(
+                "Clip selector; repeat for IDs, exact motion names, or confirmed "
+                "aliases such as avatar:breathe and avatar:walk"
+            ),
+        ),
+    ] = None,
+    registry: Annotated[
+        Optional[str],
+        typer.Option(
+            "--registry",
+            help="registry.txt path (default: beside the animation archive)",
+        ),
+    ] = None,
+    motion_ids: Annotated[
+        Optional[str],
+        typer.Option("--motion-ids", help="Ghidra motion-ID table for original names"),
+    ] = None,
+    textures: Annotated[
+        Optional[str],
+        typer.Option("-t", "--textures", help="Optional U9 bitmap texture FLX"),
+    ] = None,
+    palette: Annotated[
+        Optional[str],
+        typer.Option("-p", "--palette", help="Optional static/ankh.pal"),
+    ] = None,
+    lod: Annotated[int, typer.Option("--lod", help="LOD level to export")] = 0,
+    coordinate_scale: Annotated[
+        float,
+        typer.Option(
+            "--coordinate-scale",
+            help="GLB units per native U9 model unit",
+        ),
+    ] = DEFAULT_ANIMATED_MODEL_SCALE,
+    glb: Annotated[
+        bool,
+        typer.Option("--glb/--no-glb", help="Write one animated GLB per clip"),
+    ] = True,
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Output animation-set directory"),
+    ] = None,
+) -> None:
+    """Export named clips and a neutral actor animation-set manifest."""
+    raise SystemExit(
+        cmd_animation_set_export(
+            SimpleNamespace(
+                animations=animations,
+                sappear=sappear,
+                model_id=model_id,
+                clips=clips,
+                registry=registry,
+                motion_ids=motion_ids,
+                textures=textures,
+                palette=palette,
+                lod=lod,
+                coordinate_scale=coordinate_scale,
+                glb=glb,
+                output=output,
+            )
+        )
+    )
+
+
+@u9_app.command("avatar-animation-library-export")
+def avatar_animation_library_export_cmd(
+    animations: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
+    sappear: Annotated[str, typer.Argument(help="Path to static/sappear.flx")],
+    model_id: Annotated[int, typer.Argument(help="Explicit Avatar model ID")],
+    motion_ids: Annotated[
+        str,
+        typer.Option(
+            "--motion-ids",
+            help="Required Ghidra motion-ID table containing original names",
+        ),
+    ],
+    registry: Annotated[
+        Optional[str],
+        typer.Option(
+            "--registry",
+            help="registry.txt path (default: beside the animation archive)",
+        ),
+    ] = None,
+    categories: Annotated[
+        Optional[list[str]],
+        typer.Option(
+            "--category",
+            help="Optional category filter; repeat for movement, idle, combat, etc.",
+        ),
+    ] = None,
+    textures: Annotated[
+        Optional[str],
+        typer.Option("-t", "--textures", help="Optional U9 bitmap texture FLX"),
+    ] = None,
+    palette: Annotated[
+        Optional[str],
+        typer.Option("-p", "--palette", help="Optional static/ankh.pal"),
+    ] = None,
+    lod: Annotated[int, typer.Option("--lod", help="LOD level to export")] = 0,
+    coordinate_scale: Annotated[
+        float,
+        typer.Option(
+            "--coordinate-scale",
+            help="GLB units per native U9 model unit",
+        ),
+    ] = DEFAULT_ANIMATED_MODEL_SCALE,
+    glb: Annotated[
+        bool,
+        typer.Option("--glb/--no-glb", help="Write one GLB containing every clip"),
+    ] = True,
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Output Avatar library directory"),
+    ] = None,
+) -> None:
+    """Export shared Avatar assets and every compatible named animation clip."""
+    raise SystemExit(
+        cmd_avatar_animation_library_export(
+            SimpleNamespace(
+                animations=animations,
+                sappear=sappear,
+                model_id=model_id,
+                motion_ids=motion_ids,
+                registry=registry,
+                categories=categories,
                 textures=textures,
                 palette=palette,
                 lod=lod,

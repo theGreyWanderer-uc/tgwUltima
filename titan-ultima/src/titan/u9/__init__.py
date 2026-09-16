@@ -63,13 +63,36 @@ from titan.u9.animation_pose import (
     U9AnimationPoseResult,
     pose_model,
 )
+from titan.u9.animation_selection import (
+    DEFAULT_AVATAR_ANIMATION_SELECTIONS,
+    U9AnimationSelectionError,
+    U9AnimationSelectionRule,
+    U9ResolvedAnimationSelection,
+    resolve_animation_selector,
+)
 from titan.u9.animated_model_bundle import (
     ANIMATED_MODEL_BUNDLE_SCHEMA,
     ANIMATED_MODEL_BUNDLE_SCHEMA_VERSION,
     DEFAULT_ANIMATED_MODEL_SCALE,
     U9AnimatedModelBundleError,
     U9AnimatedModelBundleResult,
+    U9AnimatedModelLibraryResult,
     export_animated_model_bundle,
+    export_animated_model_library,
+)
+from titan.u9.animated_model_set import (
+    ANIMATED_MODEL_SET_SCHEMA,
+    ANIMATED_MODEL_SET_SCHEMA_VERSION,
+    U9AnimatedModelSetError,
+    U9AnimatedModelSetResult,
+    export_animated_model_set,
+)
+from titan.u9.avatar_animation_library import (
+    AVATAR_ANIMATION_LIBRARY_SCHEMA,
+    AVATAR_ANIMATION_LIBRARY_SCHEMA_VERSION,
+    U9AvatarAnimationLibraryError,
+    U9AvatarAnimationLibraryResult,
+    export_avatar_animation_library,
 )
 from titan.u9.books import U9Book, U9Books, U9BooksError
 from titan.u9.fixed import (
@@ -265,12 +288,29 @@ __all__ = [
     "U9AnimationPoseError",
     "U9AnimationPoseResult",
     "pose_model",
+    "DEFAULT_AVATAR_ANIMATION_SELECTIONS",
+    "U9AnimationSelectionError",
+    "U9AnimationSelectionRule",
+    "U9ResolvedAnimationSelection",
+    "resolve_animation_selector",
     "ANIMATED_MODEL_BUNDLE_SCHEMA",
     "ANIMATED_MODEL_BUNDLE_SCHEMA_VERSION",
     "DEFAULT_ANIMATED_MODEL_SCALE",
     "U9AnimatedModelBundleError",
     "U9AnimatedModelBundleResult",
+    "U9AnimatedModelLibraryResult",
     "export_animated_model_bundle",
+    "export_animated_model_library",
+    "ANIMATED_MODEL_SET_SCHEMA",
+    "ANIMATED_MODEL_SET_SCHEMA_VERSION",
+    "U9AnimatedModelSetError",
+    "U9AnimatedModelSetResult",
+    "export_animated_model_set",
+    "AVATAR_ANIMATION_LIBRARY_SCHEMA",
+    "AVATAR_ANIMATION_LIBRARY_SCHEMA_VERSION",
+    "U9AvatarAnimationLibraryError",
+    "U9AvatarAnimationLibraryResult",
+    "export_avatar_animation_library",
     "U9MotionId",
     "U9MotionIds",
     "U9MotionIdsError",
