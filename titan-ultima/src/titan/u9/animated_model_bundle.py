@@ -10,10 +10,14 @@ from __future__ import annotations
 __all__ = [
     "ANIMATED_MODEL_BUNDLE_SCHEMA",
     "ANIMATED_MODEL_BUNDLE_SCHEMA_VERSION",
+    "ANIMATED_MODEL_SHARED_LIBRARY_SCHEMA",
+    "ANIMATED_MODEL_SHARED_LIBRARY_SCHEMA_VERSION",
     "DEFAULT_ANIMATED_MODEL_SCALE",
     "U9AnimatedModelBundleError",
     "U9AnimatedModelBundleResult",
     "U9AnimatedModelLibraryResult",
+    "build_animation_catalogue_record",
+    "build_hashed_input_record",
     "export_animated_model_bundle",
     "export_animated_model_library",
 ]
@@ -44,6 +48,8 @@ from titan.u9.transform import mat4_trs
 
 ANIMATED_MODEL_BUNDLE_SCHEMA = "titan.u9.rigid-animated-model"
 ANIMATED_MODEL_BUNDLE_SCHEMA_VERSION = 1
+ANIMATED_MODEL_SHARED_LIBRARY_SCHEMA = "titan.u9.rigid-animation-skeleton-library"
+ANIMATED_MODEL_SHARED_LIBRARY_SCHEMA_VERSION = 1
 DEFAULT_ANIMATED_MODEL_SCALE = 1.0 / 40.0
 
 _ARRAY_BUFFER = 34962
@@ -94,7 +100,8 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _input_record(role: str, path: str | Path) -> dict[str, object]:
+def build_hashed_input_record(role: str, path: str | Path) -> dict[str, object]:
+    """Describe one animation export input with a stable content hash."""
     resolved = Path(path)
     if not resolved.is_file():
         raise U9AnimatedModelBundleError(f"{role} input not found: {resolved}")
@@ -227,6 +234,58 @@ def _frame_record(frame: Any) -> dict[str, object]:
     }
 
 
+def build_animation_catalogue_record(
+    animation: U9Animation,
+    motion_name: str | None,
+    *,
+    catalogue: dict[str, object] | None = None,
+) -> dict[str, object]:
+    """Serialize model-independent U9 animation keys for a shared catalogue."""
+    record: dict[str, object] = {
+        "animation_id": animation.animation_id,
+        "original_motion_name": motion_name,
+        "authoring_path": animation.source_name,
+        "frame_range": {
+            "start": animation.start_frame,
+            "end": animation.end_frame,
+            "count": animation.frame_count,
+        },
+        "timing": {
+            "fps": animation.source_fps,
+            "nominal_frame_interval_ms": animation.frame_interval_ms,
+            "duration_ms": animation.duration_ms,
+        },
+        "part_registry": list(animation.part_registry),
+        "interpolation": {
+            "rotation": "spherical; destination hemisphere is not negated",
+            "position": "linear",
+            "scale": "linear",
+            "outside_range": "clamp to nearest stored sample",
+            "glb_rotation_approximation": "LINEAR quaternion interpolation",
+        },
+        "tracks": [
+            {
+                "part_id": part.part_id,
+                "name": part.name,
+                "frames": [_frame_record(frame) for frame in part.frames],
+            }
+            for part in animation.parts
+        ],
+        "events": [
+            {
+                "time_ms": event.time_ms,
+                "type": event.event_type,
+                "name": event.event_name,
+                "parameter": event.parameter,
+            }
+            for event in animation.events
+        ],
+    }
+    if catalogue is not None:
+        record["catalogue"] = catalogue
+    return record
+
+
 def _track_record(
     part: U9AnimationPart,
     target_part_indices: tuple[int, ...],
@@ -268,77 +327,100 @@ def _clip_record(
         if root_part_index is not None
         else None
     )
-    record: dict[str, object] = {
-        "animation_id": animation.animation_id,
-        "original_motion_name": motion_name,
-        "authoring_path": animation.source_name,
-        "frame_range": {
-            "start": animation.start_frame,
-            "end": animation.end_frame,
-            "count": animation.frame_count,
-        },
-        "timing": {
-            "fps": animation.source_fps,
-            "nominal_frame_interval_ms": animation.frame_interval_ms,
-            "duration_ms": animation.duration_ms,
-        },
-        "part_registry": list(animation.part_registry),
-        "interpolation": {
-            "rotation": "spherical; destination hemisphere is not negated",
-            "position": "linear",
-            "scale": "linear",
-            "outside_range": "clamp to nearest stored sample",
-            "glb_rotation_approximation": "LINEAR quaternion interpolation",
-        },
-        "runtime_application": {
-            "rotation": "applied to every matched rigid part",
-            "translation": "applied locally only to PELVIS/HIPS",
-            "root_motion": "root translation is also separated as object motion",
-            "scale": "preserved here but not applied by the known runtime path",
-        },
-        "root_motion": {
-            "part_index": root_part_index,
-            "part_id": (
-                model.limbs[root_part_index].limb_id
-                if root_part_index is not None
-                else None
-            ),
-            "rest_translation_xyz": (
-                list(model.limbs[root_part_index].position)
-                if root_part_index is not None
-                else None
-            ),
-            "frames": (
-                [
-                    {
-                        "time_ms": frame.time_ms,
-                        "raw_position_xyz": list(frame.position),
-                        "delta_from_rest_xyz": [
-                            frame.position[axis]
-                            - model.limbs[root_part_index].position[axis]
-                            for axis in range(3)
-                        ],
-                    }
-                    for frame in root_track.frames
-                ]
-                if root_track is not None and root_part_index is not None
-                else []
-            ),
-        },
-        "tracks": tracks,
-        "events": [
-            {
-                "time_ms": event.time_ms,
-                "type": event.event_type,
-                "name": event.event_name,
-                "parameter": event.parameter,
-            }
-            for event in animation.events
-        ],
-    }
-    if catalogue is not None:
-        record["catalogue"] = catalogue
+    record = build_animation_catalogue_record(
+        animation,
+        motion_name,
+        catalogue=catalogue,
+    )
+    record.update(
+        {
+            "runtime_application": {
+                "rotation": "applied to every matched rigid part",
+                "translation": "applied locally only to PELVIS/HIPS",
+                "root_motion": "root translation is also separated as object motion",
+                "scale": "preserved here but not applied by the known runtime path",
+            },
+            "root_motion": {
+                "part_index": root_part_index,
+                "part_id": (
+                    model.limbs[root_part_index].limb_id
+                    if root_part_index is not None
+                    else None
+                ),
+                "rest_translation_xyz": (
+                    list(model.limbs[root_part_index].position)
+                    if root_part_index is not None
+                    else None
+                ),
+                "frames": (
+                    [
+                        {
+                            "time_ms": frame.time_ms,
+                            "raw_position_xyz": list(frame.position),
+                            "delta_from_rest_xyz": [
+                                frame.position[axis]
+                                - model.limbs[root_part_index].position[axis]
+                                for axis in range(3)
+                            ],
+                        }
+                        for frame in root_track.frames
+                    ]
+                    if root_track is not None and root_part_index is not None
+                    else []
+                ),
+            },
+            "tracks": tracks,
+        }
+    )
     return record
+
+
+def _shared_catalogue_sidecar(
+    document: dict[str, object],
+    shared_catalogue_reference: dict[str, object],
+) -> dict[str, object]:
+    """Replace repeated clip keys with compact model-to-track bindings."""
+    clips = document.pop("clips")
+    if not isinstance(clips, list):
+        raise U9AnimatedModelBundleError("animated model sidecar clips are not a list")
+    bindings: list[dict[str, object]] = []
+    for clip in clips:
+        if not isinstance(clip, dict):
+            raise U9AnimatedModelBundleError(
+                "animated model sidecar clip is not an object"
+            )
+        tracks = clip.get("tracks", [])
+        root_motion = clip.get("root_motion", {})
+        bindings.append(
+            {
+                "animation_id": clip.get("animation_id"),
+                "track_bindings": [
+                    {
+                        "part_id": track.get("part_id"),
+                        "name": track.get("name"),
+                        "target_part_indices": track.get("target_part_indices", []),
+                        "roles": track.get("roles", []),
+                    }
+                    for track in tracks
+                    if isinstance(track, dict)
+                ],
+                "root_motion_binding": (
+                    {
+                        "part_index": root_motion.get("part_index"),
+                        "part_id": root_motion.get("part_id"),
+                        "rest_translation_xyz": root_motion.get("rest_translation_xyz"),
+                    }
+                    if isinstance(root_motion, dict)
+                    else None
+                ),
+            }
+        )
+    document["schema"] = ANIMATED_MODEL_SHARED_LIBRARY_SCHEMA
+    document["schema_version"] = ANIMATED_MODEL_SHARED_LIBRARY_SCHEMA_VERSION
+    document["shared_catalogue"] = shared_catalogue_reference
+    document["clip_count"] = len(bindings)
+    document["clip_bindings"] = bindings
+    return document
 
 
 def _sidecar_document(
@@ -947,8 +1029,8 @@ def _animated_model_inputs(
     palette_path: str | Path | None,
 ) -> list[dict[str, object]]:
     inputs = [
-        _input_record("model_archive", model_archive_path),
-        _input_record("animation_archive", animation_archive_path),
+        build_hashed_input_record("model_archive", model_archive_path),
+        build_hashed_input_record("animation_archive", animation_archive_path),
     ]
     optional_inputs = (
         ("node_registry", registry_path),
@@ -957,7 +1039,9 @@ def _animated_model_inputs(
         ("palette", palette_path),
     )
     inputs.extend(
-        _input_record(role, path) for role, path in optional_inputs if path is not None
+        build_hashed_input_record(role, path)
+        for role, path in optional_inputs
+        if path is not None
     )
     return inputs
 
@@ -1101,18 +1185,28 @@ def export_animated_model_library(
     include_glb: bool = True,
     library_metadata: dict[str, object] | None = None,
     clip_metadata: dict[int, dict[str, object]] | None = None,
+    shared_catalogue_reference: dict[str, object] | None = None,
+    input_records: Sequence[dict[str, object]] | None = None,
 ) -> U9AnimatedModelLibraryResult:
-    """Write shared model assets, complete clip data, and one multi-animation GLB."""
+    """Write shared model assets and one multi-animation GLB.
+
+    When ``shared_catalogue_reference`` is supplied, the model sidecar contains
+    only compact track bindings; raw keys and events stay in that one catalogue.
+    """
     matched_counts = _validate_animated_model_export(
         model, clips, lod_level, coordinate_scale
     )
-    inputs = _animated_model_inputs(
-        model_archive_path=model_archive_path,
-        animation_archive_path=animation_archive_path,
-        registry_path=registry_path,
-        motion_table_path=motion_table_path,
-        texture_archive_path=texture_archive_path,
-        palette_path=palette_path,
+    inputs = (
+        list(input_records)
+        if input_records is not None
+        else _animated_model_inputs(
+            model_archive_path=model_archive_path,
+            animation_archive_path=animation_archive_path,
+            registry_path=registry_path,
+            motion_table_path=motion_table_path,
+            texture_archive_path=texture_archive_path,
+            palette_path=palette_path,
+        )
     )
 
     output = Path(output_directory)
@@ -1138,6 +1232,8 @@ def export_animated_model_library(
         library_metadata=library_metadata,
         clip_metadata=clip_metadata,
     )
+    if shared_catalogue_reference is not None:
+        sidecar = _shared_catalogue_sidecar(sidecar, shared_catalogue_reference)
     stem = f"model_{model.model_id:05d}_animation_library"
     sidecar_path = output / f"{stem}.u9anim.json"
     sidecar_path.write_text(

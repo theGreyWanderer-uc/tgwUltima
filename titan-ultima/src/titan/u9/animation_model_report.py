@@ -12,9 +12,12 @@ __all__ = [
     "ANIMATION_MODEL_REPORT_COLUMNS",
     "U9AnimationModelReportError",
     "build_animation_model_report",
+    "model_skeleton_fingerprint",
 ]
 
+import hashlib
 import re
+import struct
 from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
 from typing import Any
@@ -113,6 +116,7 @@ class _ModelMetadata:
     type_records: tuple[U9TypeRecord, ...]
     type_names: tuple[str | None, ...]
     clean_flags_06: tuple[int, ...]
+    skeleton_fingerprint: str
 
 
 _GENERIC_ACTOR_HINTS = {"", "humanoid", "npc", "magic", "ui"}
@@ -235,6 +239,25 @@ def _model_material_flags_06(model: U9Model) -> tuple[int, ...]:
     return tuple(sorted(values))
 
 
+def model_skeleton_fingerprint(model: U9Model) -> str:
+    """Hash ordered limb identity, parenting, and rest transforms."""
+    digest = hashlib.sha256()
+    digest.update(model.record_format.encode("ascii"))
+    digest.update(struct.pack("<I", len(model.limbs)))
+    for limb in model.limbs:
+        digest.update(
+            struct.pack(
+                "<II10f",
+                limb.limb_id,
+                limb.parent_id,
+                *limb.scale,
+                *limb.position,
+                *limb.rotation,
+            )
+        )
+    return digest.hexdigest()[:16]
+
+
 def _read_model_metadata(
     model_path: Path,
     types: U9TypesDat | None,
@@ -282,6 +305,7 @@ def _read_model_metadata(
                 type_records=type_records,
                 type_names=type_names,
                 clean_flags_06=_model_material_flags_06(model),
+                skeleton_fingerprint=model_skeleton_fingerprint(model),
             )
         )
     if parse_errors:
@@ -329,6 +353,7 @@ def _candidate_model_record(
         "model_id": model.model_id,
         "model_names": list(model.names),
         "record_format": model.record_format,
+        "skeleton_fingerprint": model.skeleton_fingerprint,
         "limb_count": len(model.limb_ids),
         "geometry_limb_count": model.geometry_limb_count,
         "matched_track_count": len(matched_ids),

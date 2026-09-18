@@ -61,12 +61,24 @@ class U9AvatarAnimationLibraryResult:
     category_counts: tuple[tuple[str, int], ...]
 
 
-def _motion_classification(motion: U9MotionId) -> dict[str, object]:
-    before_avatar, _, after_avatar = motion.name.partition("_AVATAR")
-    prefix_tokens = before_avatar.split("_")
+def _motion_classification(
+    motion: U9MotionId | None, animation: U9Animation
+) -> dict[str, object]:
+    motion_name = motion.name if motion is not None else ""
+    before_avatar, _, after_avatar = motion_name.partition("_AVATAR")
+    prefix_tokens = before_avatar.split("_") if before_avatar else []
     family = prefix_tokens[0].casefold() if prefix_tokens else ""
     category = prefix_tokens[1].casefold() if len(prefix_tokens) > 1 else "other"
     action = "_".join(prefix_tokens[2:]).casefold()
+    if not family or not action:
+        normalized_path = animation.source_name.replace("/", "\\").casefold()
+        path_parts = [part for part in normalized_path.split("\\") if part]
+        if "motions" in path_parts:
+            relative = path_parts[path_parts.index("motions") + 1 :]
+            family = family or (relative[0] if relative else "")
+            if category == "other" and len(relative) > 1:
+                category = relative[1]
+        action = action or Path(normalized_path).stem.casefold()
     variant = after_avatar.removeprefix("_")
     equipment = next(
         (label.casefold() for label in _EQUIPMENT_LABELS if label in variant),
@@ -106,51 +118,71 @@ def export_avatar_animation_library(
     if "" in wanted_categories:
         raise U9AvatarAnimationLibraryError("Avatar library category cannot be empty")
 
-    candidate_motions = tuple(
-        motion for motion in motion_ids.entries if _AVATAR_TOKEN.search(motion.name)
-    )
-    if wanted_categories:
-        candidate_motions = tuple(
-            motion
-            for motion in candidate_motions
-            if _motion_classification(motion)["category"] in wanted_categories
+    animations_by_id = {animation.animation_id: animation for animation in animations}
+    named_candidate_ids = {
+        motion.animation_id
+        for motion in motion_ids.entries
+        if _AVATAR_TOKEN.search(motion.name)
+    }
+    authoring_candidate_ids = {
+        animation.animation_id
+        for animation in animations
+        if _AVATAR_TOKEN.search(
+            Path(animation.source_name.replace("\\", "/")).stem.upper()
         )
-    if not candidate_motions:
+    }
+    candidate_ids = named_candidate_ids | authoring_candidate_ids
+    if wanted_categories:
+        candidate_ids = {
+            animation_id
+            for animation_id in candidate_ids
+            if animation_id in animations_by_id
+            and _motion_classification(
+                motion_ids.motion(animation_id), animations_by_id[animation_id]
+            )["category"]
+            in wanted_categories
+        }
+    if not candidate_ids:
         requested = ", ".join(sorted(wanted_categories)) or "Avatar"
         raise U9AvatarAnimationLibraryError(
-            f"no {requested} animation names were found in the Ghidra motion table"
+            f"no {requested} animation evidence was found for the Avatar library"
         )
 
-    animations_by_id = {animation.animation_id: animation for animation in animations}
     model_part_ids = {limb.limb_id for limb in model.limbs}
     default_rules = {
         rule.animation_id: rule for rule in DEFAULT_AVATAR_ANIMATION_SELECTIONS
     }
-    clips: list[tuple[U9Animation, str]] = []
+    clips: list[tuple[U9Animation, str | None]] = []
     clip_metadata: dict[int, dict[str, object]] = {}
     unused_motion_ids: list[int] = []
     incompatible_motion_ids: list[int] = []
     category_counts: Counter[str] = Counter()
 
-    for motion in candidate_motions:
-        animation = animations_by_id.get(motion.animation_id)
+    for animation_id in sorted(candidate_ids):
+        motion = motion_ids.motion(animation_id)
+        animation = animations_by_id.get(animation_id)
         if animation is None:
-            unused_motion_ids.append(motion.animation_id)
+            unused_motion_ids.append(animation_id)
             continue
         matched_track_ids = sorted(
             {part.part_id for part in animation.parts} & model_part_ids
         )
         if not matched_track_ids:
-            incompatible_motion_ids.append(motion.animation_id)
+            incompatible_motion_ids.append(animation_id)
             continue
 
-        classification = _motion_classification(motion)
+        classification = _motion_classification(motion, animation)
         category = str(classification["category"])
         category_counts[category] += 1
-        rule = default_rules.get(motion.animation_id)
-        clip_metadata[motion.animation_id] = {
+        rule = default_rules.get(animation_id)
+        selection_evidence = []
+        if animation_id in named_candidate_ids:
+            selection_evidence.append("complete Avatar token in original motion name")
+        if animation_id in authoring_candidate_ids:
+            selection_evidence.append("Avatar token in the authoring label")
+        clip_metadata[animation_id] = {
             **classification,
-            "selection_basis": "explicit Avatar token in the original motion name",
+            "selection_basis": selection_evidence,
             "compatibility_basis": "shared rigid limb IDs",
             "matched_track_count": len(matched_track_ids),
             "matched_track_ids": matched_track_ids,
@@ -165,7 +197,7 @@ def export_avatar_animation_library(
                 else "not yet decoded"
             ),
         }
-        clips.append((animation, motion.name))
+        clips.append((animation, motion.name if motion is not None else None))
 
     if not clips:
         raise U9AvatarAnimationLibraryError(
@@ -178,11 +210,14 @@ def export_avatar_animation_library(
         "schema_version": AVATAR_ANIMATION_LIBRARY_SCHEMA_VERSION,
         "actor": "avatar",
         "selection": {
-            "rule": "original motion name contains the complete AVATAR token",
+            "rules": [
+                "original motion name contains the complete AVATAR token",
+                "authoring label contains an Avatar token",
+            ],
             "category_filter": sorted(wanted_categories),
             "requires_shared_rigid_limb_id": True,
         },
-        "candidate_motion_count": len(candidate_motions),
+        "candidate_motion_count": len(candidate_ids),
         "exported_clip_count": len(clips),
         "unused_motion_ids": unused_motion_ids,
         "incompatible_motion_ids": incompatible_motion_ids,
@@ -221,7 +256,7 @@ def export_avatar_animation_library(
 
     return U9AvatarAnimationLibraryResult(
         export=exported,
-        candidate_motion_count=len(candidate_motions),
+        candidate_motion_count=len(candidate_ids),
         exported_clip_count=len(clips),
         unused_motion_ids=tuple(unused_motion_ids),
         incompatible_motion_ids=tuple(incompatible_motion_ids),

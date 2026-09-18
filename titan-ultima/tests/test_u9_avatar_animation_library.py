@@ -122,6 +122,41 @@ class AvatarAnimationLibraryTests(unittest.TestCase):
                     include_glb=False,
                 )
 
+    def test_includes_avatar_authoring_label_with_generic_motion_name(self) -> None:
+        animation = replace(
+            _animation(),
+            animation_id=936,
+            source_name=r"u:\art\motions\humanoid\combat\attack_avatar_handoneaa",
+        )
+        motions = U9MotionIds.parse("HUMANOID_GESTURE_GESTURE_ATTACK_LUNGE = 936,\n")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            model_archive = root / "model.bin"
+            animation_archive = root / "animation.bin"
+            model_archive.write_bytes(b"model")
+            animation_archive.write_bytes(b"animation")
+
+            result = export_avatar_animation_library(
+                _model(),
+                (animation,),
+                motions,
+                root / "library",
+                model_archive_path=model_archive,
+                animation_archive_path=animation_archive,
+                include_glb=False,
+            )
+            document = json.loads(
+                result.export.sidecar_path.read_text(encoding="utf-8")
+            )
+
+            self.assertEqual(result.exported_clip_count, 1)
+            catalogue = document["clips"][0]["catalogue"]
+            self.assertEqual(catalogue["category"], "gesture")
+            self.assertEqual(
+                catalogue["selection_basis"],
+                ["Avatar token in the authoring label"],
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

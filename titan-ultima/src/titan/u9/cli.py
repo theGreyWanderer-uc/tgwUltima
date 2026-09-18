@@ -38,6 +38,11 @@ from titan.u9.animation_model_report import (
     U9AnimationModelReportError,
     build_animation_model_report,
 )
+from titan.u9.animation_library_plan import (
+    U9AnimationLibraryPlanError,
+    build_animation_library_plan,
+    write_animation_library_plan,
+)
 from titan.u9.animation_pose import U9AnimationPoseError, pose_model
 from titan.u9.animation_selection import (
     U9AnimationSelectionError,
@@ -85,6 +90,10 @@ from titan.u9.map_render import (
 )
 from titan.u9.nonfixed import U9Nonfixed, U9NonfixedError
 from titan.u9.node_registry import U9NodeRegistry, U9NodeRegistryError
+from titan.u9.planned_animation_library_export import (
+    U9PlannedAnimationLibraryExportError,
+    export_planned_animation_libraries,
+)
 from titan.u9.object_placement import (
     U9ObjectFootprintFilter,
     U9ObjectPlacementError,
@@ -1895,7 +1904,12 @@ def cmd_animation_show(args: SimpleNamespace) -> int:
 
 
 def cmd_animation_model_report(args: SimpleNamespace) -> int:
-    """Export named clips and their registry-backed structural model candidates."""
+    """Export legacy detailed diagnostics for animation/model discovery."""
+    print(
+        "WARNING: animation-model-report is deprecated; use animation-library-plan "
+        "with --diagnostics for the same detailed evidence.",
+        file=sys.stderr,
+    )
     try:
         rows, warnings = build_animation_model_report(
             args.file,
@@ -1918,6 +1932,120 @@ def cmd_animation_model_report(args: SimpleNamespace) -> int:
     for warning in warnings:
         print(f"WARNING: {warning}", file=sys.stderr)
     print(f"Wrote {len(rows)} animation/model row(s) to {output}")
+    return 0
+
+
+def cmd_animation_library_plan(args: SimpleNamespace) -> int:
+    """Write the compact animation library plan and optional diagnostics."""
+    try:
+        plan = build_animation_library_plan(
+            args.file,
+            sappear_path=getattr(args, "sappear", None),
+            registry_path=getattr(args, "registry", None),
+            types_path=getattr(args, "types", None),
+            typenames_path=getattr(args, "typenames", None),
+            motion_ids_path=getattr(args, "motion_ids", None),
+        )
+        output = write_animation_library_plan(plan, args.output)
+        diagnostics_path = getattr(args, "diagnostics", None)
+        diagnostics_output = None
+        if diagnostics_path is not None:
+            diagnostics_output = write_dynamic_report(
+                list(plan.diagnostics),
+                diagnostics_path,
+                getattr(args, "diagnostics_format", "csv"),
+                preferred_columns=ANIMATION_MODEL_REPORT_COLUMNS,
+            )
+    except (
+        U9AnimationLibraryPlanError,
+        U9AssetReportError,
+        OSError,
+    ) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+    for warning in plan.warnings:
+        print(f"WARNING: {warning}", file=sys.stderr)
+    summary = plan.document["summary"]
+    print(
+        f"Wrote {summary['library_count']} animation libraries covering "
+        f"{summary['animation_count']} clips to {output}"
+    )
+    print(f"  Actor hints     : {summary['actor_hint_count']}")
+    print(f"  Track signatures: {summary['track_signature_count']}")
+    print(f"  Auto-exportable : {summary['auto_export_library_count']}")
+    print(f"  Needs review    : {summary['review_library_count']}")
+    if diagnostics_output is not None:
+        print(f"  Diagnostics     : {diagnostics_output}")
+    return 0
+
+
+def cmd_animation_library_export(args: SimpleNamespace) -> int:
+    """Export approved actor/skeleton libraries using one shared catalogue."""
+    for label, path in (
+        ("Animation library plan", args.plan),
+        ("Animation archive", args.animations),
+        ("Model archive", args.sappear),
+        ("Texture archive", args.textures),
+        ("Palette", args.palette),
+        ("Node registry", args.registry),
+    ):
+        if path is not None and not Path(path).is_file():
+            print(f"ERROR: {label} not found: {path}", file=sys.stderr)
+            return 1
+
+    animations = _load_animations(args.animations)
+    if animations is None:
+        return 1
+    registry_path = Path(args.registry) if args.registry else None
+    if registry_path is None:
+        registry_path = _find_case_insensitive_file(
+            Path(args.animations).resolve().parent, "registry.txt"
+        )
+    try:
+        registry = (
+            U9NodeRegistry.from_file(registry_path)
+            if registry_path is not None
+            else None
+        )
+        palette_path, _ = _find_palette(args.palette, args.textures)
+        texture_resolver = _make_texture_resolver(args.textures, palette_path)
+        output = args.output or "u9_animation_library_export"
+        result = export_planned_animation_libraries(
+            args.plan,
+            animations.animations(),
+            args.sappear,
+            args.animations,
+            output,
+            registry=registry,
+            registry_path=registry_path,
+            texture_resolver=texture_resolver,
+            texture_archive_path=args.textures,
+            palette_path=palette_path,
+            library_ids=tuple(args.library_ids or ()),
+            lod_level=args.lod,
+            coordinate_scale=args.coordinate_scale,
+            include_glb=args.glb,
+        )
+    except (
+        OSError,
+        U9AnimationError,
+        U9FlxArchiveError,
+        U9NodeRegistryError,
+        U9PlannedAnimationLibraryExportError,
+    ) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+
+    print(
+        f"Exported {len(result.libraries)} actor/skeleton libraries containing "
+        f"{result.exported_animation_count} unique clips -> {output}/"
+    )
+    print(f"  Shared catalogue: {result.catalogue_path}")
+    print(f"  Root manifest   : {result.manifest_path}")
+    print(f"  Review-only skip: {len(result.skipped_library_ids)}")
+    print(f"  GLB output      : {'enabled' if args.glb else 'disabled'}")
+    if args.textures is None:
+        print("  (no --textures given: exported materials have no images)")
     return 0
 
 
@@ -5409,7 +5537,140 @@ def animation_show_cmd(
     )
 
 
-@u9_app.command("animation-model-report")
+@u9_app.command("animation-library-plan")
+def animation_library_plan_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
+    output: Annotated[
+        str,
+        typer.Option("-o", "--output", help="Compact JSON library plan path"),
+    ],
+    sappear: Annotated[
+        Optional[str],
+        typer.Option(
+            "--sappear",
+            help="sappear.flx path (default: beside anim.flx)",
+        ),
+    ] = None,
+    registry: Annotated[
+        Optional[str],
+        typer.Option(
+            "--registry",
+            help="registry.txt path (default: beside anim.flx)",
+        ),
+    ] = None,
+    types: Annotated[
+        Optional[str],
+        typer.Option("--types", help="TYPES.DAT path (default: beside anim.flx)"),
+    ] = None,
+    typenames: Annotated[
+        Optional[str],
+        typer.Option(
+            "--typenames",
+            help="TYPENAME.FLX path (default: beside anim.flx)",
+        ),
+    ] = None,
+    motion_ids: Annotated[
+        Optional[str],
+        typer.Option("--motion-ids", help="Ghidra motion-ID table for original names"),
+    ] = None,
+    diagnostics: Annotated[
+        Optional[str],
+        typer.Option(
+            "--diagnostics",
+            help="Optional detailed animation/model diagnostics path",
+        ),
+    ] = None,
+    diagnostics_format: Annotated[
+        str,
+        typer.Option(
+            "--diagnostics-format",
+            help="Detailed diagnostics format: csv or json",
+        ),
+    ] = "csv",
+) -> None:
+    """Plan actor animation libraries; emit detailed diagnostics only on request."""
+    raise SystemExit(
+        cmd_animation_library_plan(
+            SimpleNamespace(
+                file=file,
+                output=output,
+                sappear=sappear,
+                registry=registry,
+                types=types,
+                typenames=typenames,
+                motion_ids=motion_ids,
+                diagnostics=diagnostics,
+                diagnostics_format=diagnostics_format,
+            )
+        )
+    )
+
+
+@u9_app.command("animation-library-export")
+def animation_library_export_cmd(
+    plan: Annotated[str, typer.Argument(help="Animation library plan JSON path")],
+    animations: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
+    sappear: Annotated[str, typer.Argument(help="Path to static/sappear.flx")],
+    registry: Annotated[
+        Optional[str],
+        typer.Option(
+            "--registry",
+            help="registry.txt path (default: beside the animation archive)",
+        ),
+    ] = None,
+    library_ids: Annotated[
+        Optional[list[str]],
+        typer.Option(
+            "--library",
+            help="Optional approved plan library ID; repeat to limit the export",
+        ),
+    ] = None,
+    textures: Annotated[
+        Optional[str],
+        typer.Option("-t", "--textures", help="Optional U9 bitmap texture FLX"),
+    ] = None,
+    palette: Annotated[
+        Optional[str],
+        typer.Option("-p", "--palette", help="Optional static/ankh.pal"),
+    ] = None,
+    lod: Annotated[int, typer.Option("--lod", help="LOD level to export")] = 0,
+    coordinate_scale: Annotated[
+        float,
+        typer.Option(
+            "--coordinate-scale",
+            help="GLB units per native U9 model unit",
+        ),
+    ] = DEFAULT_ANIMATED_MODEL_SCALE,
+    glb: Annotated[
+        bool,
+        typer.Option("--glb/--no-glb", help="Write one multi-action GLB per skeleton"),
+    ] = True,
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Output animation-library directory"),
+    ] = None,
+) -> None:
+    """Export every approved plan entry as deduplicated actor/skeleton libraries."""
+    raise SystemExit(
+        cmd_animation_library_export(
+            SimpleNamespace(
+                plan=plan,
+                animations=animations,
+                sappear=sappear,
+                registry=registry,
+                library_ids=library_ids,
+                textures=textures,
+                palette=palette,
+                lod=lod,
+                coordinate_scale=coordinate_scale,
+                glb=glb,
+                output=output,
+            )
+        )
+    )
+
+
+@u9_app.command("animation-model-report", deprecated=True)
 def animation_model_report_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
     output: Annotated[
@@ -5454,7 +5715,7 @@ def animation_model_report_cmd(
         typer.Option("-f", "--format", help="Report format: csv or json"),
     ] = "csv",
 ) -> None:
-    """Export named animation clips and compatible model/type candidates."""
+    """Deprecated: write detailed diagnostics; use animation-library-plan."""
     raise SystemExit(
         cmd_animation_model_report(
             SimpleNamespace(

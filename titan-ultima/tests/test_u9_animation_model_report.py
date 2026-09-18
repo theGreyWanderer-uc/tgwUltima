@@ -163,6 +163,7 @@ class AnimationModelReportTests(unittest.TestCase):
         self.assertEqual(row["candidate_model_ids"], [1])
         self.assertEqual(row["candidate_models"][0]["missing_track_ids"], [])
         self.assertEqual(row["candidate_models"][0]["matched_track_ids"], [1, 15])
+        self.assertEqual(len(row["candidate_models"][0]["skeleton_fingerprint"]), 16)
         self.assertEqual(row["source_name_candidate_count"], 1)
         source_candidate = row["source_name_candidate_models"][0]
         self.assertEqual(source_candidate["model_names"], ["Avatar"])
