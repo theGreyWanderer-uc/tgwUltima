@@ -72,6 +72,7 @@ from titan.u9.flx_writer import (
 from titan.u9.fixed import U9Fixed, U9FixedError
 from titan.u9.highway import U9Highway, U9HighwayError
 from titan.u9.icon import icon_entry_indices
+from titan.u9.integrity import check_save, render_integrity_report
 from titan.u9.mesh_export import MeshExportError, export_obj, export_stl
 from titan.u9.model import U9Model, U9ModelError
 from titan.u9.model_naming import label_for_model, names_for_model
@@ -3155,12 +3156,33 @@ def cmd_text_export(args: SimpleNamespace) -> int:
 
 
 # ============================================================================
+# CLI COMMANDS — SAVE INTEGRITY
+# ============================================================================
+
+
+def cmd_save_check(args: SimpleNamespace) -> int:
+    """Check custody, structure, and fixed-layout compatibility for one save."""
+    report = check_save(
+        args.target,
+        slot=args.slot,
+        static_directory=args.static,
+        fixed_reference_directory=args.fixed_reference,
+        allow_partial=args.partial,
+    )
+    print(render_integrity_report(report))
+    if args.json_output:
+        report.write_json(args.json_output)
+        print(f"\nJSON: {args.json_output}")
+    return {"PASS": 0, "WARN": 1, "ERROR": 2, "FATAL": 3}[report.overall]
+
+
+# ============================================================================
 # CLI COMMANDS — STATIC WORLD GEOMETRY (static/fixed.%d)
 # ============================================================================
 
 
 def _load_fixed(filepath: str) -> Optional[U9Fixed]:
-    """Open a static/fixed.<region> file, reporting the reason on failure."""
+    """Open a static/fixed.<map> file, reporting the reason on failure."""
     if not os.path.isfile(filepath):
         print(f"ERROR: File not found: {filepath}", file=sys.stderr)
         return None
@@ -3172,7 +3194,7 @@ def _load_fixed(filepath: str) -> Optional[U9Fixed]:
 
 
 def cmd_fixed_info(args: SimpleNamespace) -> int:
-    """Summarize one static region: chunk grid, pages and object totals."""
+    """Summarize one static map: region grid, pages and object totals."""
     region = _load_fixed(args.file)
     if region is None:
         return 1
@@ -3182,16 +3204,16 @@ def cmd_fixed_info(args: SimpleNamespace) -> int:
     objects = sum(len(c.objects) for c in chunks)
     chained = sum(1 for c in chunks if len(c.pages) > 1)
 
-    print(f"{args.file} -- {region.width}x{region.height} chunk region")
+    print(f"{args.file} -- {region.width}x{region.height} region map")
     print(f"  Header          : {region.header_size} bytes (0x20 + 4*w*h)")
     print(
-        f"  Payload         : {region.payload_size} bytes "
-        f"(watermark {region.declared_payload_size})"
+        f"  Heap            : {region.heap_size} bytes "
+        f"({region.trailing_size} trailing)"
     )
-    print(f"  Populated chunks: {len(chunks)} of {region.num_chunks}")
-    print(f"  Pages           : {pages} ({chained} chunk(s) span more than one)")
+    print(f"  Populated regions: {len(chunks)} of {region.num_chunks}")
+    print(f"  Pages           : {pages} ({chained} region(s) span more than one)")
     print(f"  Objects         : {objects}")
-    print("  Chunk positions come from each page's base, not the table order.")
+    print("  Region table    : row-major at +0x1C")
     return 0
 
 
@@ -6349,6 +6371,54 @@ def text_export_cmd(
 ) -> None:
     """Export a U9 text archive to CSV."""
     raise SystemExit(cmd_text_export(SimpleNamespace(file=file, output=output)))
+
+
+@u9_app.command("save-check")
+def save_check_cmd(
+    target: Annotated[
+        str,
+        typer.Argument(help="Ultima IX install root or savegame directory"),
+    ],
+    slot: Annotated[
+        Optional[int],
+        typer.Option("--slot", help="Check this slot instead of start.dat's selection"),
+    ] = None,
+    static: Annotated[
+        Optional[str],
+        typer.Option("--static", help="Directory containing installed fixed.<map> files"),
+    ] = None,
+    fixed_reference: Annotated[
+        Optional[str],
+        typer.Option(
+            "--fixed-reference",
+            help="Trusted creation-time fixed.<map> directory for identity comparison",
+        ),
+    ] = None,
+    json_output: Annotated[
+        Optional[str],
+        typer.Option("--json", help="Also write the complete report as JSON"),
+    ] = None,
+    partial: Annotated[
+        bool,
+        typer.Option(
+            "--partial",
+            help="Treat omitted archive/fixed files as an intentional forensic subset",
+        ),
+    ] = False,
+) -> None:
+    """Check a selected U9 save's custody, heap structure, and compatibility."""
+    raise SystemExit(
+        cmd_save_check(
+            SimpleNamespace(
+                target=target,
+                slot=slot,
+                static=static,
+                fixed_reference=fixed_reference,
+                json_output=json_output,
+                partial=partial,
+            )
+        )
+    )
 
 
 @u9_app.command("fixed-info")

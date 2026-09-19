@@ -5425,6 +5425,54 @@ titan u9 text-export <file> [-o OUT.csv]
 
 ---
 
+### Save integrity commands
+
+#### `u9 save-check`
+
+Verify the selected save archive, its extracted working files, nonfixed/fixed
+allocator structure, every serialized item handle's target arena/slot, and
+fixed-file compatibility. The terminal display keeps custody, structure, and
+compatibility as separate verdicts. It leads with a plain-language assessment,
+lists distinct actionable problems and next steps before supporting evidence,
+and separates informational confirmations from problems. Duplicate archive and
+loose-file findings are grouped in the terminal display; `--json` retains every
+finding in the complete machine-readable report.
+
+Failed or uncertain handle targets include decoded slot evidence: handle IDs,
+arena/map, heap offset, slot, page origin, local XYZ, type, quaternion words,
+status flags, and allocation state. The terminal displays at most eight target
+records per problem; JSON contains every record and also includes world XYZ and
+numeric status. Fields decoded from a non-live slot may be stale allocator bytes
+or zeros and describe physical contents, not a proven former object.
+
+```
+titan u9 save-check <install-or-savegame-dir> [--slot N] [--static DIR]
+                    [--fixed-reference DIR] [--partial] [--json REPORT.json]
+```
+
+| Option | Description |
+|--------|-------------|
+| `--slot N` | Check a slot explicitly instead of the slot selected by `start.dat` |
+| `--static DIR` | Directory containing the installed `fixed.<map>` files |
+| `--fixed-reference DIR` | Trusted creation-time fixed files for byte-identity comparison. This may be the same path as `--static` when the save is known to belong to that installation |
+| `--partial` | Treat omitted files as an intentional forensic subset, while checking every supplied artifact |
+| `--json FILE` | Also write hashes, artifact statistics, verdicts, and findings as JSON |
+
+Exit codes are `0` pass, `1` warnings, `2` errors, and `3` fatal findings.
+
+**Examples**
+```powershell
+titan u9 save-check C:\Ultima\Ultima9 `
+  --fixed-reference C:\Ultima\Ultima9\static `
+  --json C:\temp\u9-integrity.json
+
+titan u9 save-check D:\cases\broken-save --slot 631 --partial `
+  --static D:\cases\broken-save `
+  --fixed-reference C:\Ultima\Ultima9\static
+```
+
+---
+
 ### Static world commands
 
 `static/fixed.<region>` holds U9's immovable objects — trees, buildings,
@@ -5432,10 +5480,10 @@ terrain clutter — one file per region. It is the static counterpart to
 `runtime/nonfixed.<region>`; together they are the whole map.
 
 The two formats are close siblings with three differences that matter: the
-header is `0x20 + 4*w*h` rather than `36 + 4*w*h`, the chunk table is **not**
-row-major so a chunk's grid position comes from its page's base, and an
-object's rotation is four `int16` components rather than three plus a flags
-word. See `reference/u9/fixed/u9_fixed_reference.md`.
+header is `0x20 + 4*w*h` rather than `36 + 4*w*h`, the row-major table starts
+four bytes earlier, and an object's rotation is four `int16` components rather
+than three plus a flags word. See
+`reference/u9/fixed/u9_fixed_reference.md`.
 
 ---
 

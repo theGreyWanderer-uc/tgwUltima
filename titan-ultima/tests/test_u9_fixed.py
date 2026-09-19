@@ -1,13 +1,13 @@
 """Tests for titan.u9.fixed's static/fixed.%d decoder.
 
-Fixtures match the layout verified against 164 real region files (2,815
-chunks, 3,315 pages, 152,383 live objects). The properties pinned down here are
+Fixtures match the layout verified against 164 shipped map files (2,758
+regions, 3,175 pages, 156,074 live objects). The properties pinned down here are
 the ones that separate this format from its sibling ``nonfixed``, and the ones
 the published documentation gets wrong:
 
-* the header is ``0x20 + 4*w*h``, one field shorter at each end than nonfixed;
-* the chunk table is **not** row-major, so a chunk's grid position has to come
-  from its page's base, not from the table slot;
+* the region table starts at ``0x1c`` and is row-major;
+* the word after it is the free-page pool head, while the heap still starts at
+    ``0x20 + 4*w*h``;
 * an object's rotation is **four** ``int16`` components, not three plus a
   flags word;
 * page offset ``0x04`` heads a free-slot list and page offset ``0x14`` is the
@@ -27,7 +27,7 @@ from titan.u9.fixed import (
     U9FixedError,
 )
 
-TABLE_OFFSET = 0x20
+TABLE_OFFSET = 0x1C
 
 
 def _object(
@@ -40,7 +40,7 @@ def _object(
     rotation: tuple[int, int, int, int] = (0, 0, 0, -32768),
     flags: int = 0,
 ) -> bytes:
-    return struct.pack("<I4H4hI", reference, x, y, z, type_index, *rotation, flags)
+    return struct.pack("<I3hH4hI", reference, x, y, z, type_index, *rotation, flags)
 
 
 def _page(
@@ -103,23 +103,42 @@ def _sparse_page(
     return bytes(page)
 
 
-def _build(width: int, height: int, table: list[int], payload: bytes) -> bytes:
-    head = bytearray(TABLE_OFFSET + width * height * 4)
+def _build(
+    width: int,
+    height: int,
+    table: list[int],
+    payload: bytes,
+    *,
+    free_page_pool_head: int = 0,
+) -> bytes:
+    head = bytearray(TABLE_OFFSET + width * height * 4 + 4)
     struct.pack_into("<I", head, 0x08, len(payload))
     struct.pack_into("<I", head, 0x0C, 0x00C00000)
     struct.pack_into("<II", head, 0x10, width, height)
-    struct.pack_into("<I", head, 0x1C, 1)
     struct.pack_into(f"<{width * height}I", head, TABLE_OFFSET, *table)
+    struct.pack_into(
+        "<I", head, TABLE_OFFSET + width * height * 4, free_page_pool_head
+    )
     return bytes(head) + payload
 
 
 class FixedHeaderTests(unittest.TestCase):
     def test_header_size_formula(self) -> None:
-        # 0x20 + 4wh -- nonfixed is 36 + 4wh, a field longer at each end.
+        # The table starts at 0x1c, followed by one pool-head word.
         for w, h in ((2, 2), (4, 4), (32, 32)):
             region = U9Fixed(_build(w, h, [0] * (w * h), b""))
             self.assertEqual(region.header_size, 0x20 + 4 * w * h)
             self.assertEqual(region.num_chunks, w * h)
+            self.assertEqual(region.num_regions, w * h)
+            self.assertEqual(region.region_table, region.chunk_table)
+
+    def test_table_entry_zero_is_not_the_pool_head(self) -> None:
+        region = U9Fixed(
+            _build(1, 1, [0], b"\x00" * 0x1000, free_page_pool_head=1)
+        )
+        self.assertEqual(region.chunk_table, (0,))
+        self.assertEqual(region.free_page_pool_head, 1)
+        self.assertEqual(region.used_table_indices(), [])
 
     def test_zero_table_entry_means_no_pages(self) -> None:
         region = U9Fixed(_build(2, 2, [0, 0, 0, 0], b""))
@@ -171,10 +190,25 @@ class FixedObjectTests(unittest.TestCase):
         self.assertEqual(len(chunk.objects), 2)
         o = chunk.objects[0]
         self.assertEqual(o.reference, 0x20A8)
+        self.assertEqual(o.next_object, 0x20A8)
         self.assertEqual((o.x, o.y, o.z), (1852, 3964, 2469))
         self.assertEqual(o.type_index, 642)
         self.assertEqual(o.rotation, (0, 0, 12539, -32768))
         self.assertEqual(o.flags, 0x300033)
+
+    def test_coordinates_are_signed(self) -> None:
+        payload = _page(
+            base_x=0,
+            base_y=0,
+            objects=[_object(x=-1, y=-2, z=-3)],
+            page_offset=0,
+        )
+        chunk = U9Fixed(_build(1, 1, [1], payload)).chunk_at(0)
+        assert chunk is not None
+        self.assertEqual(
+            (chunk.objects[0].x, chunk.objects[0].y, chunk.objects[0].z),
+            (-1, -2, -3),
+        )
 
     def test_rotation_is_four_components_and_normalised(self) -> None:
         # The Codex documents three components plus a u16 flags field. Read
@@ -194,32 +228,32 @@ class FixedObjectTests(unittest.TestCase):
 
 
 class FixedChunkTests(unittest.TestCase):
-    """The table is not row-major; position comes from the page's base."""
+    """The table is row-major and page origins corroborate its slots."""
 
     def setUp(self) -> None:
-        a = _page(base_x=4096, base_y=0, objects=[_object(x=1)], page_offset=0)
+        a = _page(base_x=0, base_y=0, objects=[_object(x=1)], page_offset=0)
         b = _page(
-            base_x=0,
-            base_y=4096,
+            base_x=4096,
+            base_y=0,
             objects=[_object(x=2), _object(x=3)],
             page_offset=len(a),
         )
-        # slot 0 -> chunk (1,0), slot 1 -> chunk (0,1): deliberately not row-major
+        # slot 0 -> chunk (0,0), slot 1 -> chunk (1,0), in row-major order.
         self.region = U9Fixed(_build(2, 2, [1, len(a) + 1, 0, 0], a + b))
 
-    def test_grid_position_comes_from_the_base_not_the_slot(self) -> None:
+    def test_grid_position_matches_the_table_slot(self) -> None:
         chunks = self.region.chunks()
         self.assertEqual(
             [(c.table_index, c.chunk_x, c.chunk_y) for c in chunks],
-            [(0, 1, 0), (1, 0, 1)],
+            [(0, 0, 0), (1, 1, 0)],
         )
 
     def test_lookup_by_grid_finds_the_right_slot(self) -> None:
-        chunk = self.region.chunk(0, 1)
+        chunk = self.region.chunk(1, 0)
         assert chunk is not None
         self.assertEqual(chunk.table_index, 1)
         self.assertEqual(len(chunk.objects), 2)
-        self.assertIsNone(self.region.chunk(0, 0))
+        self.assertEqual(self.region.chunk(0, 0), self.region.chunk_at(0))
 
     def test_lookup_out_of_range_raises(self) -> None:
         with self.assertRaises(U9FixedError):
@@ -249,6 +283,17 @@ class FixedPageChainTests(unittest.TestCase):
         assert chunk is not None
         self.assertEqual([p.offset for p in chunk.pages], [0, 0x1000])
         self.assertEqual([o.x for o in chunk.objects], [7, 8, 9])
+
+    def test_page_exposes_spatial_chunk_list_heads(self) -> None:
+        data = bytearray(self.data)
+        region = U9Fixed(bytes(data))
+        heads = tuple(range(0x100, 0x140, 4))
+        struct.pack_into("<16I", data, region.header_size + 0x20, *heads)
+        page = U9Fixed(bytes(data)).pages(0)[0]
+        self.assertEqual(page.chunk_list_heads, heads)
+        self.assertEqual(page.first_free_property, 0)
+        self.assertEqual(page.properties_allocated, 0)
+        self.assertEqual(page.unused, 0)
 
     def test_all_pages_in_a_chain_share_the_base(self) -> None:
         chunk = U9Fixed(self.data).chunk_at(0)

@@ -11,70 +11,64 @@ are exactly where a reader written for one breaks on the other::
 
     File header
     0x00  unknown         u32 x 2
-    0x08  payload size    u32   -- a watermark, advisory
+    0x08  heap size       u32   -- bytes loaded into the fixed arena
     0x0C  0x00C00000      u32   -- the same constant nonfixed carries
-    0x10  width           u32   -- region width in chunks
-    0x14  height          u32   -- region height in chunks
-    0x18  unknown         u32
-    0x1C  1               u32
-    0x20  chunk_table     u32 x width*height
+    0x10  width           u32   -- map width in 4096-unit regions
+    0x14  height          u32   -- map height in regions
+    0x18  file kind       u32   -- 0 = fixed
+    0x1C  region_table    u32 x width*height
+    ...   free page head  u32   -- biased by one, 0 = none
 
 Header size is ``0x20 + 4*width*height``. Note that is **32 + 4WH**, where
-nonfixed is 36 + 4WH: this format has one fewer leading field and no trailing
-allocation cursor. Every offset after the header is relative to its end.
+nonfixed is 36 + 4WH: this format has one fewer leading field. Every offset
+after the header is relative to its end.
 
-Chunk table entries are **biased by one**, as in nonfixed: a stored ``v`` means
+Region table entries are **biased by one**, as in nonfixed: a stored ``v`` means
 offset ``v - 1`` and a stored ``0`` means "no pages". ``next_page`` carries the
 same bias::
 
     Page (0x1000 bytes)
     0x00  next_page          u32  -- biased by one, 0 = end of chain
     0x04  free_list_head     u32  -- region-relative, 0 = no free slots
-    0x08  zero               u32
-    0x0C  base_x             u32  -- chunk origin, always a multiple of 4096
+    0x08  first free property u32  -- unused and zero for fixed
+    0x0C  base_x              u32  -- region origin, multiple of 4096
     0x10  base_y             u32
     0x14  live_count         u32
-    0x18  unknown            u32 x 18
-    0x60  objects            24 bytes each
+    0x18  properties allocated u32 -- unused and zero for fixed
+    0x1C  unused              u32  -- zero
+    0x20  chunk list heads    u32 x 16
+    0x60  objects             24 bytes each
 
     Object (0x18 bytes)
-    0x00  reference   u32
-    0x04  x           u16  -- relative to the page's base_x
-    0x06  y           u16  -- relative to the page's base_y
-    0x08  z           u16  -- elevation
+    0x00  next object  u32  -- raw heap offset in the same 1024-unit chunk list
+    0x04  x            i16  -- relative to the page's base_x
+    0x06  y            i16  -- relative to the page's base_y
+    0x08  z            i16  -- elevation
     0x0A  type_index  u16  -- static/TYPES.DAT, static/TYPENAME.FLX
     0x0C  rotation    i16 x 4  -- quaternion, 0.16 fixed point
     0x14  flags       u32
 
 All integers are little-endian.
 
-Verified against 164 real region files -- 2,815 chunks, 3,315 pages, 152,383
+Verified against 164 shipped map files -- 2,758 regions, 3,175 pages, 156,074
 live objects:
 
-* every page's ``base_x``/``base_y`` is a multiple of 4096 (2,815/2,815 first
-  pages), and every page in a chunk's chain repeats that chunk's origin
-  (2,815/2,815);
-* every object's ``x`` and ``y`` is below 4096 (152,383/152,383), so they really
-  are chunk-relative;
+* every populated table entry's first-page origin matches its row-major slot
+    (2,758/2,758), and every page in a region chain repeats that origin
+    (3,175/3,175);
+* every object's ``x`` and ``y`` is below 4096 (156,074/156,074), so they are
+    region-relative;
 * reading four rotation components produces the expected near-unit quaternion
-  on 152,382/152,383 live objects at a 1% squared-norm tolerance; reading only
-  three reaches that tolerance on just 12,686/152,383.
+    on 156,073/156,074 live objects at a 1% squared-norm tolerance; reading only
+    three reaches that tolerance on just 12,842/156,074.
 
-Three corrections to the published community documentation came out of that:
+Two corrections to the published community documentation came out of that:
 
 * The Ultima Codex documents ``0x12`` as a ``uint16`` **flags** field and the
   rotation as three components. It is the quaternion's fourth component. Taken
   as three the vector is normalised on only 10.7% of objects; taken as four it
   is normalised on **100%**. The giveaway is objects reading
   ``(16383, 16383, 16383, 16383)`` -- a clean 0.5/0.5/0.5/0.5 rotation.
-* **The chunk table is not in ``[x + y*width]`` order.** Only 1 of 2,815
-  entries lands where row-major indexing predicts. The Codex hedges on this
-  ("may be in [x + y * width] order, but that doesn't seem to corroborate");
-  it is not. Take the chunk from the page's own ``base_x``/``base_y``, which
-  this reader does -- ``U9FixedChunk.chunk_x`` is derived, not assumed. This is
-  the sharpest difference from nonfixed, whose table *is* row-major on
-  3,198/3,198 pages.
-
 Objects are a **sparse** array over the page's 166 slots, not a run.
 
 ``0x04`` is the head of a free list, not the end of the objects. Each free
@@ -87,8 +81,8 @@ link, both region-relative. ``u9.exe`` builds the list in ``FUN_004D1C30``::
     page[0x14]    -= 1                   # live count
 
 So ``(head - page_offset - 0x60) / 24`` measures the distance to the *first free
-slot*. It divides cleanly on 2,814 of 2,815 pages because the head is always on
-a slot boundary, and on a page where nothing was ever freed it does equal the
+slot*. It divides cleanly for all 3,079 nonzero heads because each head is on a
+slot boundary, and on a page where nothing was ever freed it does equal the
 object count -- but on any page with a hole it truncates, silently dropping
 every object past it. Comparing actual slot identities on ``fixed.9``, that old
 interpretation omits 5,294 live objects across 168 pages and also misreads 1,880
@@ -132,17 +126,17 @@ import os
 import struct
 from dataclasses import dataclass
 
-TABLE_OFFSET = 0x20
+TABLE_OFFSET = 0x1C
 WIDTH_OFFSET = 0x10
 HEIGHT_OFFSET = 0x14
 PAYLOAD_SIZE_OFFSET = 0x08
 
 PAGE_SIZE = 0x1000
 PAGE_HEADER_SIZE = 0x60
-PAGE_HEADER_STRUCT = "<6I"
+PAGE_HEADER_STRUCT = "<8I16I"
 
 OBJECT_SIZE = 0x18
-OBJECT_STRUCT = "<I4H4hI"
+OBJECT_STRUCT = "<I3hH4hI"
 
 FREE_LIST_HEAD_OFFSET = 0x04
 
@@ -170,6 +164,11 @@ class U9FixedObject:
     flags: int
     base_x: int
     base_y: int
+
+    @property
+    def next_object(self) -> int:
+        """Raw heap offset of the next live object in this chunk list."""
+        return self.reference
 
     @property
     def world_x(self) -> int:
@@ -205,6 +204,14 @@ class U9FixedPage:
     object_count: int
     live_count: int = 0
     """Raw ``page+0x14``, the engine's own count of live objects."""
+    first_free_property: int = 0
+    """Raw ``page+0x08``; unused and zero in fixed files."""
+    properties_allocated: int = 0
+    """Raw ``page+0x18``; unused and zero in fixed files."""
+    unused: int = 0
+    """Raw ``page+0x1c``; zero in fixed files."""
+    chunk_list_heads: tuple[int, ...] = ()
+    """Sixteen raw object offsets for the page's 4x4 spatial chunk grid."""
     live_slots: tuple[int, ...] = ()
     """Occupied slot indices. Sparse: not necessarily ``range(object_count)``."""
     free_list_walked: bool = False
@@ -229,7 +236,7 @@ class U9FixedChunk:
 
     @property
     def chunk_x(self) -> int:
-        """Grid X, derived from ``base_x`` -- *not* from the table index."""
+        """Grid X corroborated by the page's stored ``base_x``."""
         return self.base_x // CHUNK_SPAN
 
     @property
@@ -238,7 +245,7 @@ class U9FixedChunk:
 
 
 class U9Fixed:
-    """Reader for one ``static/fixed.%d`` region file."""
+    """Reader for one ``static/fixed.%d`` map file."""
 
     def __init__(self, data: bytes) -> None:
         if len(data) < TABLE_OFFSET:
@@ -252,7 +259,7 @@ class U9Fixed:
                 f"implausible region grid {self.width}x{self.height} -- not a fixed file?"
             )
 
-        self.header_size = TABLE_OFFSET + self.width * self.height * 4
+        self.header_size = TABLE_OFFSET + self.width * self.height * 4 + 4
         if len(data) < self.header_size:
             raise U9FixedError(
                 f"truncated: a {self.width}x{self.height} grid needs a "
@@ -263,8 +270,12 @@ class U9Fixed:
         self.chunk_table = struct.unpack_from(
             f"<{self.width * self.height}I", data, TABLE_OFFSET
         )
-        # Advisory: it disagrees with the real payload on 10 of 164 shipped
-        # files, the same way nonfixed's watermark does.
+        self.region_table = self.chunk_table
+        (self.free_page_pool_head,) = struct.unpack_from(
+            "<I", data, TABLE_OFFSET + self.width * self.height * 4
+        )
+        # The heap can be shorter than the bytes physically following it;
+        # shipped files carry unreferenced trailing bytes in ten cases.
         self.declared_payload_size = struct.unpack_from(
             "<I", data, PAYLOAD_SIZE_OFFSET
         )[0]
@@ -279,15 +290,32 @@ class U9Fixed:
         return len(self._data) - self.header_size
 
     @property
+    def heap_size(self) -> int:
+        """Page bytes loaded into the fixed arena, from file offset ``0x08``."""
+        return self.declared_payload_size
+
+    @property
+    def trailing_size(self) -> int:
+        """Bytes after the declared heap, not addressable by heap offsets."""
+        return max(0, self.payload_size - self.declared_payload_size)
+
+    @property
     def num_chunks(self) -> int:
         return self.width * self.height
+
+    @property
+    def num_regions(self) -> int:
+        """Number of slots in the row-major region table."""
+        return self.num_chunks
 
     def used_table_indices(self) -> list[int]:
         """Chunk-table slots that point at a page chain."""
         return [i for i, v in enumerate(self.chunk_table) if v != 0]
 
     def _in_payload(self, rel: int, size: int) -> bool:
-        return 0 <= rel and rel + size <= self.payload_size
+        return 0 <= rel and rel + size <= min(
+            self.declared_payload_size, self.payload_size
+        )
 
     def _free_slots(self, rel: int) -> set[int] | None:
         """Slot indices on this page's free list, or ``None`` if unwalkable.
@@ -343,9 +371,18 @@ class U9Fixed:
                 break
             seen.add(rel)
             base = self.header_size + rel
-            next_page, free_head, _zero, base_x, base_y, live_count = (
-                struct.unpack_from(PAGE_HEADER_STRUCT, self._data, base)
-            )
+            fields = struct.unpack_from(PAGE_HEADER_STRUCT, self._data, base)
+            (
+                next_page,
+                free_head,
+                first_free_property,
+                base_x,
+                base_y,
+                live_count,
+                properties_allocated,
+                unused,
+                *chunk_list_heads,
+            ) = fields
             slots, walked = self._live_slots(rel, free_head, live_count)
             out.append(
                 U9FixedPage(
@@ -356,6 +393,10 @@ class U9Fixed:
                     base_y=base_y,
                     object_count=len(slots),
                     live_count=live_count,
+                    first_free_property=first_free_property,
+                    properties_allocated=properties_allocated,
+                    unused=unused,
+                    chunk_list_heads=tuple(chunk_list_heads),
                     live_slots=slots,
                     free_list_walked=walked,
                 )
@@ -411,23 +452,31 @@ class U9Fixed:
         return out
 
     def chunk(self, chunk_x: int, chunk_y: int) -> U9FixedChunk | None:
-        """One chunk by grid coordinate.
-
-        Resolved by scanning for a chunk whose ``base_x``/``base_y`` match,
-        because the table is not in row-major order -- see the module
-        docstring.
-        """
+        """One chunk by grid coordinate using the row-major region table."""
         if not (0 <= chunk_x < self.width and 0 <= chunk_y < self.height):
             raise U9FixedError(
                 f"chunk ({chunk_x}, {chunk_y}) out of range for a "
                 f"{self.width}x{self.height} region"
             )
-        want = (chunk_x * CHUNK_SPAN, chunk_y * CHUNK_SPAN)
-        for chunk in self.chunks():
-            if (chunk.base_x, chunk.base_y) == want:
-                return chunk
-        return None
+        return self.chunk_at(chunk_x + chunk_y * self.width)
 
     def objects(self) -> list[U9FixedObject]:
         """Every object in the region, chunk by chunk."""
         return [o for chunk in self.chunks() for o in chunk.objects]
+
+    def object_record_at(self, offset: int) -> U9FixedObject | None:
+        """Decode one aligned physical slot, including a free slot's stale bytes."""
+        page_offset = offset & ~(PAGE_SIZE - 1)
+        slot_delta = offset - page_offset - PAGE_HEADER_SIZE
+        if (
+            slot_delta < 0
+            or slot_delta % OBJECT_SIZE
+            or slot_delta // OBJECT_SIZE >= MAX_OBJECTS_PER_PAGE
+            or not self._in_payload(offset, OBJECT_SIZE)
+        ):
+            return None
+        for chunk in self.chunks():
+            for page in chunk.pages:
+                if page.offset == page_offset:
+                    return self._read_object(offset, page.base_x, page.base_y)
+        return None

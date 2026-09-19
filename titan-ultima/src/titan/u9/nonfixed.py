@@ -339,6 +339,23 @@ class U9Nonfixed:
             base_y=base_y,
         )
 
+    def entity_record_at(self, offset: int) -> U9Entity | None:
+        """Decode one aligned physical slot, including a free slot's stale bytes."""
+        page_offset = offset & ~(PAGE_SIZE - 1)
+        slot_delta = offset - page_offset - PAGE_HEADER_SIZE
+        if (
+            slot_delta < 0
+            or slot_delta % ENTITY_SIZE
+            or slot_delta // ENTITY_SIZE >= MAX_ENTITIES_PER_PAGE
+            or not self._in_payload(offset, ENTITY_SIZE)
+        ):
+            return None
+        for chunk in self.chunks():
+            for page in chunk.pages:
+                if page.offset == page_offset:
+                    return self._read_entity(offset, page.base_x, page.base_y)
+        return None
+
     def _read_extra_data(self, rel: int) -> U9ExtraData:
         fields = struct.unpack_from(EXTRA_STRUCT, self._data, self.header_size + rel)
         return U9ExtraData(
