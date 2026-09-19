@@ -128,7 +128,7 @@ class U9ItemHandleTable:
         seen: set[int] = set()
         current = self.free_head
         while current:
-            if current >= self.count:
+            if current < 0 or current >= self.count:
                 raise U9ProcessDataError(f"free chain leaves table at handle {current}")
             if current in seen:
                 raise U9ProcessDataError(f"free chain cycles at handle {current}")

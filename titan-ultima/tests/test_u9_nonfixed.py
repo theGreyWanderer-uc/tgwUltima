@@ -22,7 +22,7 @@ from __future__ import annotations
 import struct
 import unittest
 
-from titan.u9.nonfixed import U9Nonfixed, U9NonfixedError
+from titan.u9.nonfixed import MAX_ENTITIES_PER_PAGE, U9Nonfixed, U9NonfixedError
 
 PAGE_HEADER_SIZE = 0x60
 ENTITY_SIZE = 0x20
@@ -449,6 +449,18 @@ class NonfixedAllocatorTests(unittest.TestCase):
 
     def test_lossless_source_round_trip(self) -> None:
         self.assertEqual(U9Nonfixed(self.data).to_bytes(), self.data)
+
+    def test_entity_record_at_decodes_aligned_slots_only(self) -> None:
+        # This lookup raised NameError before MAX_ENTITIES_PER_PAGE was defined.
+        region = U9Nonfixed(self.data)
+        record = region.entity_record_at(0x80)
+        assert record is not None
+        self.assertEqual(record.type_index, 200)
+        self.assertIsNotNone(region.entity_record_at(0xC0))  # a free slot's stale bytes
+        self.assertIsNone(region.entity_record_at(0x70))  # not on a 32-byte slot
+        self.assertIsNone(region.entity_record_at(0x40))  # inside the page header
+        self.assertIsNone(region.entity_record_at(0x1060))  # no page there
+        self.assertEqual(MAX_ENTITIES_PER_PAGE, 125)
 
 
 class NonfixedRotationTests(unittest.TestCase):

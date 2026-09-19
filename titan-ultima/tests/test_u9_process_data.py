@@ -47,6 +47,13 @@ class ItemHandleTableTests(unittest.TestCase):
         with self.assertRaisesRegex(U9ProcessDataError, "cycles"):
             U9ItemHandleTable.from_bytes(bytes(data)).walk_free_chain()
 
+    def test_rejects_negative_free_link(self) -> None:
+        # A negative link must not index the tuple from its end.
+        data = bytearray(_process_data())
+        struct.pack_into("<i", data, HANDLE_DATA_OFFSET + 12 + 2 * 12, -1)
+        with self.assertRaisesRegex(U9ProcessDataError, "leaves table at handle -1"):
+            U9ItemHandleTable.from_bytes(bytes(data)).walk_free_chain()
+
 
 if __name__ == "__main__":
     unittest.main()
