@@ -17,7 +17,8 @@ from dataclasses import dataclass
 START_MAGIC = b"U9.008"
 SAVE_MAGIC = b"U9:008"
 METADATA_STRUCT = struct.Struct("<3f4f3f3i")
-MAX_MAP_NUMBER = 239
+MAX_MAP_NUMBER = 255  # the game archives, deletes and restores nonfixed.0-255
+MAX_SHIPPED_MAP_NUMBER = 239  # the highest region number with shipped files
 
 
 class U9SaveError(Exception):

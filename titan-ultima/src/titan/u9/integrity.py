@@ -18,7 +18,13 @@ from pathlib import Path
 from titan.u9.fixed import U9Fixed, U9FixedError
 from titan.u9.nonfixed import U9Nonfixed, U9NonfixedError
 from titan.u9.process_data import U9ItemHandleTable, U9ProcessDataError
-from titan.u9.savegame import U9SaveArchive, U9SaveError, U9StartDat
+from titan.u9.savegame import (
+    MAX_MAP_NUMBER,
+    MAX_SHIPPED_MAP_NUMBER,
+    U9SaveArchive,
+    U9SaveError,
+    U9StartDat,
+)
 
 AXES = ("custody", "structure", "compatibility")
 SEVERITY_RANK = {"PASS": 0, "INFO": 0, "WARN": 1, "ERROR": 2, "FATAL": 3}
@@ -467,6 +473,22 @@ def check_save(
         archive.processes.data,
         source=f"{archive_path}!processes.dat",
     )
+    stray_maps = [
+        member.map_number
+        for member in archive.nonfixed
+        if member.map_number is not None and member.map_number > MAX_SHIPPED_MAP_NUMBER
+    ]
+    if stray_maps:
+        report.add(
+            "ARC10",
+            "custody",
+            "WARN",
+            f"{len(stray_maps)} archived map members are numbered above "
+            f"{MAX_SHIPPED_MAP_NUMBER}: {stray_maps}. The game archives and restores "
+            f"nonfixed.0-{MAX_MAP_NUMBER}, so this is legal, but no shipped map has "
+            "these numbers; they come from stray loose files in the save directory",
+            path=archive_path,
+        )
     handles: U9ItemHandleTable | None = None
     try:
         handles = U9ItemHandleTable.from_bytes(archive.processes.data)
@@ -550,7 +572,10 @@ def check_save(
     for map_number, path in sorted(loose_nonfixed.items()):
         _check_nonfixed(report, f"working/nonfixed.{map_number}", path.read_bytes(), source=str(path))
 
-    relevant_maps = {archive.header.saved_map, *archived_maps}
+    # A member numbered above the shipped range is a stray file the save swept up
+    # (ARC10). It needs no fixed map unless a handle actually points at it.
+    relevant_maps = {archive.header.saved_map}
+    relevant_maps.update(m for m in archived_maps if m <= MAX_SHIPPED_MAP_NUMBER)
     if handles is not None:
         relevant_maps.update(entry.map_number for entry in handles.live_entries)
     fixed_files = _files_by_map(static_path, "fixed") if static_path else {}
@@ -649,7 +674,7 @@ def check_save(
         invalid_entries = [
             entry.index
             for entry in handles.live_entries
-            if entry.usage_count <= 0 or entry.map_number > 239
+            if entry.usage_count <= 0 or entry.map_number > MAX_MAP_NUMBER
         ]
         if invalid_entries:
             report.add(

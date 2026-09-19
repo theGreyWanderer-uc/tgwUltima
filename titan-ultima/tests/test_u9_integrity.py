@@ -121,6 +121,27 @@ class IntegrityTests(unittest.TestCase):
             2,
         )
 
+    def test_map_member_above_the_shipped_range_warns_instead_of_failing(self) -> None:
+        # The game archives and restores nonfixed.0-255, so a member numbered
+        # 240-255 is legal; no shipped map has that number, so it is worth a warning.
+        nonfixed = _nonfixed()
+        archive = bytearray(_archive(_processes(), nonfixed))
+        del archive[-4:]
+        archive += struct.pack("<ii", 240, len(nonfixed)) + nonfixed
+        archive += struct.pack("<i", -1)
+        (self.save / "u9game4.sav").write_bytes(bytes(archive))
+        (self.save / "nonfixed.240").write_bytes(nonfixed)
+
+        report = check_save(self.root, fixed_reference_directory=self.reference)
+        ids = {finding.check_id for finding in report.findings}
+        self.assertIn("ARC10", ids)
+        self.assertNotIn("ARC01", ids)
+        # No handle points at map 240, so it needs no fixed.240.
+        self.assertNotIn("REF01", ids)
+        self.assertEqual(report.verdict("custody"), "WARN")
+        self.assertEqual(report.verdict("structure"), "PASS")
+        self.assertEqual(report.verdict("compatibility"), "PASS")
+
     def test_missing_fixed_map_is_a_compatibility_failure(self) -> None:
         (self.static / "fixed.9").unlink()
         report = check_save(self.root, fixed_reference_directory=self.reference)
