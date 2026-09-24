@@ -188,6 +188,10 @@ class AnimatedModelBundleTests(unittest.TestCase):
             registry_path.write_text(
                 "1 BIP01\n2 PELVIS\n3 LEFT_HAND\n", encoding="ascii"
             )
+            animation_names_path = root / "animation_names.txt"
+            animation_names_path.write_text(
+                "HUMANOID_IDLE_BREATHE_AVATAR = 12\n", encoding="ascii"
+            )
 
             result = export_animated_model_bundle(
                 _model(),
@@ -198,6 +202,7 @@ class AnimatedModelBundleTests(unittest.TestCase):
                 registry=U9NodeRegistry.from_file(registry_path),
                 registry_path=registry_path,
                 motion_name="HUMANOID_IDLE_BREATHE_AVATAR",
+                motion_table_path=animation_names_path,
             )
             document = json.loads(result.sidecar_path.read_text(encoding="utf-8"))
 
@@ -228,6 +233,12 @@ class AnimatedModelBundleTests(unittest.TestCase):
                 document["inputs"][0]["sha256"],
                 hashlib.sha256(b"model archive").hexdigest(),
             )
+            animation_name_input = next(
+                item
+                for item in document["inputs"]
+                if item.get("input_kind") == "animation_name_table"
+            )
+            self.assertEqual(animation_name_input["role"], "ghidra_motion_table")
             self.assertEqual(result.part_count, 3)
             self.assertEqual(result.mesh_count, 2)
             self.assertEqual(result.track_count, 3)

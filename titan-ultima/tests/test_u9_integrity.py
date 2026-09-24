@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 from titan.u9.integrity import check_save, render_integrity_report
-from titan.u9.process_data import HANDLE_DATA_OFFSET
+from titan.u9.process_data import OBJECT_REFERENCE_DATA_OFFSET
 
 
 def _nonfixed() -> bytes:
@@ -27,7 +27,9 @@ def _fixed(*, live_slot: int | None = None) -> bytes:
         free_slots = [slot for slot in range(166) if slot != live_slot]
         struct.pack_into("<6I", data, 36, 0, 0x60 + free_slots[0] * 24, 0, 0, 0, 1)
         for index, slot in enumerate(free_slots):
-            next_offset = 0x60 + free_slots[index + 1] * 24 if index + 1 < len(free_slots) else 0
+            next_offset = (
+                0x60 + free_slots[index + 1] * 24 if index + 1 < len(free_slots) else 0
+            )
             struct.pack_into("<I", data, 36 + 0x60 + slot * 24, next_offset)
     return bytes(data)
 
@@ -46,15 +48,20 @@ def _archive(processes: bytes, nonfixed: bytes) -> bytes:
 
 def _processes(*, fixed_offset: int | None = None) -> bytes:
     count = 3 if fixed_offset is not None else 2
-    end = HANDLE_DATA_OFFSET + 12 + count * 12
+    end = OBJECT_REFERENCE_DATA_OFFSET + 12 + count * 12
     data = bytearray(end + 4)
     struct.pack_into("<II", data, 0, 8, 2)
-    struct.pack_into("<III", data, HANDLE_DATA_OFFSET, 1, count, 1)
-    struct.pack_into("<iii", data, HANDLE_DATA_OFFSET + 12, 0, -1, 0)
-    struct.pack_into("<iii", data, HANDLE_DATA_OFFSET + 24, 0, -1, 0)
+    struct.pack_into("<III", data, OBJECT_REFERENCE_DATA_OFFSET, 1, count, 1)
+    struct.pack_into("<iii", data, OBJECT_REFERENCE_DATA_OFFSET + 12, 0, -1, 0)
+    struct.pack_into("<iii", data, OBJECT_REFERENCE_DATA_OFFSET + 24, 0, -1, 0)
     if fixed_offset is not None:
         struct.pack_into(
-            "<iii", data, HANDLE_DATA_OFFSET + 36, 1, 9, -fixed_offset
+            "<iii",
+            data,
+            OBJECT_REFERENCE_DATA_OFFSET + 36,
+            1,
+            9,
+            -fixed_offset,
         )
     struct.pack_into("<I", data, end, 2)
     return bytes(data)
@@ -117,7 +124,13 @@ class IntegrityTests(unittest.TestCase):
         self.assertIn("Source: archive", rendered)
         self.assertIn("Source: working", rendered)
         self.assertEqual(
-            len([finding for finding in report.to_dict()["findings"] if finding["check_id"] == "NFS07"]),
+            len(
+                [
+                    finding
+                    for finding in report.to_dict()["findings"]
+                    if finding["check_id"] == "NFS07"
+                ]
+            ),
             2,
         )
 
@@ -161,33 +174,49 @@ class IntegrityTests(unittest.TestCase):
         self.assertIn("CUS07", {finding.check_id for finding in report.findings})
         self.assertIn("REF08", {finding.check_id for finding in report.findings})
 
-    def test_fixed_handle_resolves_live_slot_and_rejects_free_slot(self) -> None:
+    def test_fixed_reference_resolves_live_slot_and_rejects_free_slot(self) -> None:
         fixed = _fixed(live_slot=0)
         (self.static / "fixed.9").write_bytes(fixed)
         (self.reference / "fixed.9").write_bytes(fixed)
         for offset, expected in ((0x60, None), (0x78, "REF03")):
             processes = _processes(fixed_offset=offset)
             (self.save / "processes.dat").write_bytes(processes)
-            (self.save / "u9game4.sav").write_bytes(
-                _archive(processes, _nonfixed())
-            )
+            (self.save / "u9game4.sav").write_bytes(_archive(processes, _nonfixed()))
             report = check_save(self.root, fixed_reference_directory=self.reference)
+            process_evidence = report.artifacts["archive/processes.dat"]
+            self.assertEqual(process_evidence["reference_count"], 3)
+            self.assertEqual(
+                process_evidence["reference_count"],
+                process_evidence["handle_count"],
+            )
+            self.assertEqual(
+                process_evidence["live_references"],
+                process_evidence["live_handles"],
+            )
             ids = {finding.check_id for finding in report.findings}
             if expected is None:
                 self.assertNotIn("REF03", ids)
             else:
                 self.assertIn(expected, ids)
                 finding = next(
-                    finding for finding in report.findings if finding.check_id == "REF03"
+                    finding
+                    for finding in report.findings
+                    if finding.check_id == "REF03"
+                )
+                self.assertEqual(finding.details["reference_indices"], [2])
+                self.assertEqual(
+                    finding.details["reference_indices"],
+                    finding.details["handle_indices"],
                 )
                 records = finding.details["target_records"]
+                self.assertEqual(records[0]["reference_indices"], [2])
                 self.assertEqual(records[0]["handles"], [2])
                 self.assertEqual(records[0]["page"], [0, 0])
                 self.assertEqual(records[0]["xyz"], [0, 0, 0])
                 self.assertEqual(records[0]["status_hex"], "00000")
                 rendered = render_integrity_report(report)
                 self.assertIn(
-                    "Evidence: handle(2) fixed.9 offset 0x78 slot 1 "
+                    "Evidence: reference(2) fixed.9 offset 0x78 slot 1 "
                     "page(0,0) xyz(0,0,0) type 0",
                     rendered,
                 )

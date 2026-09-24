@@ -25,7 +25,9 @@ from titan.u9.model import U9Model
 from titan.u9.planned_animation_library_export import (
     ANIMATION_LIBRARY_CATALOGUE_SCHEMA,
     ANIMATION_LIBRARY_EXPORT_SCHEMA,
+    U9PlannedAnimationLibraryExportError,
     export_planned_animation_libraries,
+    parse_actor_model_library_spec,
 )
 
 
@@ -85,6 +87,18 @@ def _plan_library(
 
 
 class PlannedAnimationLibraryExportTests(unittest.TestCase):
+    def test_parses_explicit_actor_model_library(self) -> None:
+        spec = parse_actor_model_library_spec("bandit=3285:humanoid,npc")
+
+        self.assertEqual(spec.actor_hint, "bandit")
+        self.assertEqual(spec.model_id, 3285)
+        self.assertEqual(spec.plan_library_ids, ("humanoid", "npc"))
+
+        with self.assertRaisesRegex(
+            U9PlannedAnimationLibraryExportError, "ACTOR=MODEL_ID"
+        ):
+            parse_actor_model_library_spec("bandit=3285")
+
     def test_merges_actor_skeleton_and_keeps_raw_clips_in_one_catalogue(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -165,6 +179,53 @@ class PlannedAnimationLibraryExportTests(unittest.TestCase):
             self.assertEqual(manifest["summary"]["approved_plan_library_count"], 2)
             self.assertEqual(manifest["summary"]["exported_skeleton_library_count"], 1)
             self.assertTrue(manifest["interchange"]["raw_animation_data_is_shared"])
+
+    def test_explicit_actor_model_consumes_review_library(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            model_blob = _model_entry()
+            model_archive = root / "models.flx"
+            model_archive.write_bytes(_build_flx([None, model_blob]))
+            animation_archive = root / "animations.flx"
+            animation_archive.write_bytes(b"animation archive")
+            model = U9Model.parse(model_blob, model_id=1)
+            fingerprint = model_skeleton_fingerprint(model)
+            plan = {
+                "schema": ANIMATION_LIBRARY_PLAN_SCHEMA,
+                "schema_version": ANIMATION_LIBRARY_PLAN_SCHEMA_VERSION,
+                "selection_policy": {},
+                "summary": {},
+                "libraries": [
+                    _plan_library(
+                        "humanoid", 3, fingerprint, track_ids=[1], review=True
+                    )
+                ],
+            }
+            plan_path = root / "plan.json"
+            plan_path.write_text(json.dumps(plan), encoding="utf-8")
+
+            result = export_planned_animation_libraries(
+                plan_path,
+                (_animation(3),),
+                model_archive,
+                animation_archive,
+                root / "export",
+                actor_models=(parse_actor_model_library_spec("bandit=1:humanoid"),),
+                include_glb=False,
+            )
+
+            self.assertEqual(len(result.libraries), 1)
+            library = result.libraries[0]
+            self.assertEqual(library.actor_hint, "bandit")
+            self.assertEqual(library.representative_model_id, 1)
+            self.assertEqual(library.plan_library_ids, ("humanoid",))
+            self.assertEqual(result.skipped_library_ids, ())
+            manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                manifest["summary"]["explicit_actor_model_library_count"], 1
+            )
+            self.assertEqual(manifest["summary"]["skipped_review_library_count"], 0)
+            self.assertEqual(manifest["explicit_actor_models"][0]["model_id"], 1)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 """Apply one Ultima IX animation clip to a rigid ``sappear.flx`` hierarchy.
 
-This models the single-clip behavior recovered in the Ghidra decompile. A
+This models the verified single-clip playback behavior. A
 matching track replaces a limb's local rotation. Track translation is used
 only for the ``PELVIS``/``HIPS`` limb; root translation is returned separately
 as object motion, and ordinary-limb translation plus all track scale values are

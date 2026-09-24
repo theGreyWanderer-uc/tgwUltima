@@ -84,6 +84,9 @@ ANIMATION_MODEL_REPORT_COLUMNS = [
     "source_name_candidate_models",
     "runtime_binding_status",
     "runtime_binding_evidence",
+    "research_priority",
+    "research_question",
+    # Deprecated compatibility columns retained for existing report readers.
     "ghidra_priority",
     "ghidra_question",
 ]
@@ -402,7 +405,7 @@ def _registry_fields(
     }
 
 
-def _ghidra_fields(
+def _research_fields(
     candidate_status: str,
     candidate_count: int,
     has_motion_name: bool,
@@ -437,7 +440,7 @@ def _ghidra_fields(
             "Trace how this clip is consumed; no model candidate could be established "
             "from the available model-part namespace."
         )
-    return {
+    fields = {
         "runtime_binding_status": "unresolved",
         "runtime_binding_evidence": (
             "original motion ID/name, authoring-path naming, and registry-backed "
@@ -445,9 +448,14 @@ def _ghidra_fields(
             if has_motion_name
             else "authoring-path naming and registry-backed structural compatibility only"
         ),
-        "ghidra_priority": priority,
-        "ghidra_question": question,
+        "research_priority": priority,
+        "research_question": question,
     }
+    # Keep the original field names as aliases so existing CSV/JSON consumers
+    # continue to receive the same values during the terminology transition.
+    fields["ghidra_priority"] = priority
+    fields["ghidra_question"] = question
+    return fields
 
 
 def _animation_report_row(
@@ -581,7 +589,7 @@ def _animation_report_row(
         ],
     }
     row.update(_registry_fields(animation, registry))
-    row.update(_ghidra_fields(candidate_status, candidate_count, motion is not None))
+    row.update(_research_fields(candidate_status, candidate_count, motion is not None))
     return row
 
 
@@ -601,7 +609,7 @@ def build_animation_model_report(
     warnings: list[str] = []
     motion_ids: U9MotionIds | None = None
     if motion_ids_path is not None:
-        motion_file = _required_file(motion_ids_path, "Ghidra motion-ID table")
+        motion_file = _required_file(motion_ids_path, "animation-name table")
         try:
             motion_ids = U9MotionIds.from_file(motion_file)
         except U9MotionIdsError as error:
@@ -614,12 +622,12 @@ def build_animation_model_report(
             unused_motion_ids = motion_ids.unused_motion_ids(used_animation_ids)
             if missing_motion_ids:
                 warnings.append(
-                    f"Ghidra motion-ID table does not name {len(missing_motion_ids)} used "
+                    f"animation-name table does not name {len(missing_motion_ids)} used "
                     f"animation ID(s): {missing_motion_ids}"
                 )
             if unused_motion_ids:
                 warnings.append(
-                    f"Ghidra motion-ID table names {len(unused_motion_ids)} unused animation "
+                    f"animation-name table names {len(unused_motion_ids)} unused animation "
                     f"ID(s): {unused_motion_ids}"
                 )
         if animation_id is None:

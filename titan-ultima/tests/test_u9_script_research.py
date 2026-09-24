@@ -1,4 +1,4 @@
-"""Tests for the Ghidra-oriented U9 script evidence bundle."""
+"""Tests for the U9 script-research evidence bundle."""
 
 from __future__ import annotations
 

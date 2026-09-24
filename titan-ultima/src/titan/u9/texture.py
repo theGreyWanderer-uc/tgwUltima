@@ -29,7 +29,8 @@ Each frame directory entry points (relative to the entry start) at a
 per-frame header::
 
     +0x00  flags      u16  -- bit 8 (0x100) is "is_transparent"; bit 9
-                            (0x200) marks an 8-bit frame as a mask
+                            (0x200) marks an 8-bit frame as a mask;
+                            bit 10 (0x400) means two bytes per pixel
     +0x02  unknown2   u16  -- usually 0x6000
     +0x04  width      u32
     +0x08  height     u32
@@ -153,7 +154,8 @@ header's transparency flag on **17,718**. The two exceptions are frame 1 of
 ``bitmap16`` entries 1623 and 6146, whose header words read ``flags=0x6500,
 u2=0x2656`` where all fourteen sibling frames of the same entry read
 ``0x0400, 0x6000`` -- corrupt header words in an otherwise regular entry, not a
-format signal. Keying on the selector is preferred anyway because it is stored
+format signal. (That sibling value ``0x0400`` is frame-flags bit 10, the depth
+bit: an ordinary two-byte-per-pixel frame with nothing else set.) Keying on the selector is preferred anyway because it is stored
 per *entry* and so survives exactly that kind of damage, where the per-frame
 flag does not.
 """

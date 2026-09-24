@@ -3,7 +3,8 @@
 **TITAN** - Tool for Interpreting and Transforming Archival Nodes.
 
 TITAN is a Python CLI and library for working with proprietary data formats
-from *Ultima 8: Pagan*, *Ultima Underworld II: Labyrinth of Worlds*,
+from *Ultima 8: Pagan*, *Ultima Underworld: The Stygian Abyss*,
+*Ultima Underworld II: Labyrinth of Worlds*,
 *Ultima 7: The Black Gate / Serpent Isle*, *Ultima 6: The False Prophet*,
 and the *Ultima Online Classic Client*.
 It reads, extracts, converts, inspects, and
@@ -14,7 +15,7 @@ available under `titan u9`.
 Deterministic *Ultima III: Exodus* NES Sosaria-to-U7 map conversion is
 available under `titan u3`.
 
-Run `titan --help`, `titan uw2 --help`, `titan u8 --help`, `titan u7 --help`,
+Run `titan --help`, `titan uw1 --help`, `titan uw2 --help`, `titan u8 --help`, `titan u7 --help`,
 `titan u6 --help`, `titan u3 --help`, `titan u9 --help`, `titan uo --help`, or see the full
 [CLI reference](cli_reference.md).
 
@@ -143,6 +144,19 @@ place for command options, longer examples, and format notes.
 | Egg data | Not applicable | Query IREG egg trigger objects — type, usecode function, probability, location | `titan u7 egg-query --game bg --type usecode` | [U7 egg-query](cli_reference.md#u7-egg-query) |
 | Text and misc data | Gump layout, XOR credits, quotes, transform palettes | Global flags and selected runtime metadata | `titan u8 credits-decrypt ECREDITS.DAT` | [U8 data commands](cli_reference.md#u8-data-inspection-commands) |
 
+### Ultima Underworld
+
+Native UW1 support currently covers all floor/ceiling and wall texture
+archives. It preserves texture IDs, uses palette 0 from `PALS.DAT`, joins the
+descriptions in `STRINGS.PAK`, and writes both CSV and JSON manifests.
+
+```powershell
+titan uw1 texture-info -g "C:/UW1"
+titan uw1 texture-export -g "C:/UW1" -o uw1_textures/ --contact-sheets
+```
+
+See [UW1 commands](cli_reference.md#ultima-underworld-commands-titan-uw1).
+
 ### Ultima Underworld II
 
 Native UU2 support covers `LEV.ARK` map extraction, 2D cutaway maps, textured
@@ -208,7 +222,7 @@ questions concern field or gameplay semantics.
 | Texture archives | Parse headers/directories/row tables and export any frame or stored mip from `bitmap*.flx`; the same reader handles all 6,898 pre-baked terrain panels in `Texture8.*`/`texture16.*` | `titan u9 texture-export static/Texture8.9 1087 -p static/ankh.pal -o panels/` |
 | Terrain and region maps | Losslessly parse `terrain.*` grids/chunks and environment headers; render textured bird's-eye maps with water, depth-tested model meshes, filterable footprints, and exact cell/tile/chunk-ID grids; catalogue every region in a labelled numeric atlas; export bounded Y-up GLB scenes with shared repeated-model meshes; render those scenes through VTK/OpenGL with a south-high orthographic camera | `titan u9 map-render-3d britannia.glb --width 8192 --height 8192 -o britannia_south_high.png` |
 | 3D models and textures | Parse every `sappear.flx` model, including hierarchical and alternate indexed-polygon records, with lossless original-byte round-trip and separately exposed mount geometry; export render meshes to textured OBJ+MTL+PNG or geometry-only STL, with optional naming and previews | `titan u9 model-export static/sappear.flx 2 -t static/bitmap16.flx -o model_2/` |
-| Animation clips | Parse every `anim.flx` clip's authoring range/path, named transform tracks and typed events; optionally attach original names from Ghidra data; export registry-backed candidates, a selected static pose, or a versioned rigid-animation bundle containing local limb meshes, exact tracks and an animated GLB | `titan u9 animation-bundle-export static/anim.flx 172 static/sappear.flx 3223 -o avatar_bundle/` |
+| Animation clips | Parse every `anim.flx` clip's authoring range/path, named transform tracks and typed events; optionally attach original names from an animation-name table; export registry-backed candidates, a selected static pose, or a versioned rigid-animation bundle containing local limb meshes, exact tracks and an animated GLB | `titan u9 animation-bundle-export static/anim.flx 172 static/sappear.flx 3223 -o avatar_bundle/` |
 | 2D UI icons | List/export the standalone 2D icons (spell-rune sigils, item icons, ...) mixed into the same `bitmap16.flx`/`bitmapC.flx`/`bitmapsh.flx` archives as 3D model textures -- identified as the entries no `sappear.flx` model ever references, kept in a separate module/command group/output dir from the mesh commands above | `titan u9 icon-export-all static/sappear.flx static/bitmapsh.flx -p static/ankh.pal -o icon_export/` |
 
 U9 2D map commands default to the 28-pixel-per-cell `--resolution full` preset;

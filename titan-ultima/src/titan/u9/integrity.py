@@ -17,7 +17,7 @@ from pathlib import Path
 
 from titan.u9.fixed import U9Fixed, U9FixedError
 from titan.u9.nonfixed import U9Nonfixed, U9NonfixedError
-from titan.u9.process_data import U9ItemHandleTable, U9ProcessDataError
+from titan.u9.process_data import U9ObjectReferenceTable, U9ProcessDataError
 from titan.u9.savegame import (
     MAX_MAP_NUMBER,
     MAX_SHIPPED_MAP_NUMBER,
@@ -49,8 +49,8 @@ RECOMMENDATIONS = {
     "CUS": "Re-extract the selected archive; do not mix loose files from other slots.",
     "NFS": "Preserve the files and inspect the named nonfixed maps before loading.",
     "FXS": "Restore the affected fixed maps from a known-good installation.",
-    "HND": "Do not load until processes.dat and its ItemHandle table are repaired.",
-    "REF": "Do not load or overwrite the slot; inspect its handle targets and matching map data.",
+    "HND": "Do not load until processes.dat and its object-reference table are repaired.",
+    "REF": "Do not load or overwrite the slot; inspect its object-reference targets and matching map data.",
     "LAY": "Supply the creation-time fixed directory with --fixed-reference.",
 }
 
@@ -191,7 +191,9 @@ def _check_nonfixed(
     return nonfixed
 
 
-def _check_fixed(report: IntegrityReport, path: Path, map_number: int) -> U9Fixed | None:
+def _check_fixed(
+    report: IntegrityReport, path: Path, map_number: int
+) -> U9Fixed | None:
     data = path.read_bytes()
     name = f"fixed.{map_number}"
     _record_artifact(report, name, data, source=str(path))
@@ -235,22 +237,24 @@ def _check_fixed(report: IntegrityReport, path: Path, map_number: int) -> U9Fixe
 
 
 def _target_records(
-    table: U9ItemHandleTable,
+    table: U9ObjectReferenceTable,
     indices: list[int],
     nonfixed: dict[int, U9Nonfixed],
     fixed: dict[int, U9Fixed],
     allocation_state: str,
 ) -> list[dict[str, object]]:
-    handles_by_target: dict[tuple[str, int, int], list[int]] = {}
+    references_by_target: dict[tuple[str, int, int], list[int]] = {}
     for index in indices:
         entry = table.entries[index]
         arena = "fixed" if entry.is_fixed else "nonfixed"
-        handles_by_target.setdefault(
-            (arena, entry.map_number, entry.item_offset), []
+        references_by_target.setdefault(
+            (arena, entry.map_number, entry.object_offset), []
         ).append(index)
 
     records: list[dict[str, object]] = []
-    for (arena, map_number, offset), handle_indices in sorted(handles_by_target.items()):
+    for (arena, map_number, offset), reference_indices in sorted(
+        references_by_target.items()
+    ):
         page_offset = offset & ~0xFFF
         slot_size = 24 if arena == "fixed" else 32
         slot = (offset - page_offset - 0x60) // slot_size
@@ -265,7 +269,9 @@ def _target_records(
             local_x = record.offset_x if record is not None else None
             local_y = record.offset_y if record is not None else None
         detail: dict[str, object] = {
-            "handles": handle_indices,
+            "reference_indices": reference_indices,
+            # Compatibility alias for version-1 integrity-report readers.
+            "handles": reference_indices,
             "arena": arena,
             "map": map_number,
             "offset": offset,
@@ -287,9 +293,9 @@ def _target_records(
     return records
 
 
-def _resolve_handles(
+def _resolve_object_references(
     report: IntegrityReport,
-    table: U9ItemHandleTable,
+    table: U9ObjectReferenceTable,
     nonfixed: dict[int, U9Nonfixed],
     fixed: dict[int, U9Fixed],
 ) -> None:
@@ -302,7 +308,9 @@ def _resolve_handles(
     nonfixed_state: dict[int, tuple[set[int], set[int]]] = {}
     for map_number, heap in nonfixed.items():
         chunks = heap.chunks()
-        live = {entity.offset for chunk in chunks for entity in chunk.allocated_entities}
+        live = {
+            entity.offset for chunk in chunks for entity in chunk.allocated_entities
+        }
         uncertain_pages = {
             page.offset
             for chunk in chunks
@@ -323,7 +331,7 @@ def _resolve_handles(
         fixed_state[map_number] = live, pages, min(heap.heap_size, heap.payload_size)
 
     for entry in table.live_entries:
-        offset = entry.item_offset
+        offset = entry.object_offset
         page_offset = offset & ~0xFFF
         if entry.is_fixed:
             state = fixed_state.get(entry.map_number)
@@ -364,29 +372,40 @@ def _resolve_handles(
             "REF01",
             "compatibility",
             "FATAL",
-            f"{len(missing_maps)} handle target map arenas are unavailable",
-            arenas=[f"{kind}.{map_number}" for kind, map_number in sorted(missing_maps)],
+            f"{len(missing_maps)} object-reference target map arenas are unavailable",
+            arenas=[
+                f"{kind}.{map_number}" for kind, map_number in sorted(missing_maps)
+            ],
         )
     if invalid_slots:
         report.add(
             "REF02",
             "compatibility",
             "FATAL",
-            f"{len(invalid_slots)} handles have out-of-bounds or misaligned item offsets",
+            f"{len(invalid_slots)} object references have out-of-bounds or "
+            "misaligned object offsets",
+            reference_indices=invalid_slots,
+            # Compatibility alias retained for existing JSON consumers.
             handle_indices=invalid_slots,
         )
     if fixed_free:
         targets = {
-            (table.entries[index].map_number, table.entries[index].item_offset)
+            (table.entries[index].map_number, table.entries[index].object_offset)
             for index in fixed_free
         }
         report.add(
             "REF03",
             "compatibility",
             "FATAL",
-            f"{len(fixed_free)} fixed handles resolve to {len(targets)} non-live slots",
+            f"{len(fixed_free)} fixed object references resolve to "
+            f"{len(targets)} non-live slots",
+            reference_indices=fixed_free,
+            # Compatibility alias retained for existing JSON consumers.
             handle_indices=fixed_free,
-            targets=[{"map": map_number, "offset": offset} for map_number, offset in sorted(targets)],
+            targets=[
+                {"map": map_number, "offset": offset}
+                for map_number, offset in sorted(targets)
+            ],
             target_records=_target_records(
                 table, fixed_free, nonfixed, fixed, "non-live"
             ),
@@ -396,7 +415,9 @@ def _resolve_handles(
             "REF04",
             "compatibility",
             "ERROR",
-            f"{len(nonfixed_free)} nonfixed handles resolve to non-live slots",
+            f"{len(nonfixed_free)} nonfixed object references resolve to non-live slots",
+            reference_indices=nonfixed_free,
+            # Compatibility alias retained for existing JSON consumers.
             handle_indices=nonfixed_free,
             target_records=_target_records(
                 table, nonfixed_free, nonfixed, fixed, "non-live"
@@ -407,11 +428,12 @@ def _resolve_handles(
             "REF07",
             "compatibility",
             "WARN",
-            f"{len(unknown)} handle targets cannot be classified on invalid/incomplete pages",
+            f"{len(unknown)} object-reference targets cannot be classified on "
+            "invalid/incomplete pages",
+            reference_indices=unknown,
+            # Compatibility alias retained for existing JSON consumers.
             handle_indices=unknown,
-            target_records=_target_records(
-                table, unknown, nonfixed, fixed, "unknown"
-            ),
+            target_records=_target_records(table, unknown, nonfixed, fixed, "unknown"),
         )
 
 
@@ -437,7 +459,11 @@ def check_save(
 
     if not save_directory.is_dir():
         report.add(
-            "SEL02", "custody", "FATAL", "save directory does not exist", path=save_directory
+            "SEL02",
+            "custody",
+            "FATAL",
+            "save directory does not exist",
+            path=save_directory,
         )
         return report
 
@@ -489,9 +515,9 @@ def check_save(
             "these numbers; they come from stray loose files in the save directory",
             path=archive_path,
         )
-    handles: U9ItemHandleTable | None = None
+    object_references: U9ObjectReferenceTable | None = None
     try:
-        handles = U9ItemHandleTable.from_bytes(archive.processes.data)
+        object_references = U9ObjectReferenceTable.from_bytes(archive.processes.data)
     except U9ProcessDataError as error:
         report.add(
             "HND01",
@@ -502,9 +528,7 @@ def check_save(
         )
 
     pairs = [(archive.processes, save_directory / "processes.dat")]
-    pairs.extend(
-        (member, save_directory / member.name) for member in archive.nonfixed
-    )
+    pairs.extend((member, save_directory / member.name) for member in archive.nonfixed)
     missing_members: list[str] = []
     for member, loose_path in pairs:
         check_id = "CUS01" if member.name == "processes.dat" else "CUS03"
@@ -570,16 +594,25 @@ def check_save(
         if parsed is not None and member.map_number is not None:
             archive_nonfixed[member.map_number] = parsed
     for map_number, path in sorted(loose_nonfixed.items()):
-        _check_nonfixed(report, f"working/nonfixed.{map_number}", path.read_bytes(), source=str(path))
+        _check_nonfixed(
+            report,
+            f"working/nonfixed.{map_number}",
+            path.read_bytes(),
+            source=str(path),
+        )
 
     # A member numbered above the shipped range is a stray file the save swept up
-    # (ARC10). It needs no fixed map unless a handle actually points at it.
+    # (ARC10). It needs no fixed map unless an object reference points at it.
     relevant_maps = {archive.header.saved_map}
     relevant_maps.update(m for m in archived_maps if m <= MAX_SHIPPED_MAP_NUMBER)
-    if handles is not None:
-        relevant_maps.update(entry.map_number for entry in handles.live_entries)
+    if object_references is not None:
+        relevant_maps.update(
+            entry.map_number for entry in object_references.live_entries
+        )
     fixed_files = _files_by_map(static_path, "fixed") if static_path else {}
-    fixed_maps_to_check = relevant_maps & fixed_files.keys() if allow_partial else relevant_maps
+    fixed_maps_to_check = (
+        relevant_maps & fixed_files.keys() if allow_partial else relevant_maps
+    )
     parsed_fixed: dict[int, U9Fixed] = {}
     missing_fixed: list[int] = []
     for map_number in sorted(fixed_maps_to_check):
@@ -651,9 +684,9 @@ def check_save(
             "no creation-time fixed reference directory was supplied",
         )
 
-    if handles is not None:
+    if object_references is not None:
         try:
-            free_chain = handles.walk_free_chain()
+            free_chain = object_references.walk_free_chain()
         except U9ProcessDataError as error:
             free_chain = ()
             report.add(
@@ -664,28 +697,40 @@ def check_save(
                 path=f"{archive_path}!processes.dat",
             )
         report.artifacts["archive/processes.dat"].update(
-            handle_offset=handles.offset,
-            handle_count=handles.count,
+            reference_table_offset=object_references.offset,
+            reference_count=object_references.count,
+            free_references=len(free_chain),
+            live_references=len(object_references.live_entries),
+            fixed_references=len(object_references.fixed_entries),
+            nonfixed_references=len(object_references.nonfixed_entries),
+            # Compatibility aliases retained for existing JSON consumers.
+            handle_offset=object_references.offset,
+            handle_count=object_references.count,
             free_handles=len(free_chain),
-            live_handles=len(handles.live_entries),
-            fixed_handles=len(handles.fixed_entries),
-            nonfixed_handles=len(handles.nonfixed_entries),
+            live_handles=len(object_references.live_entries),
+            fixed_handles=len(object_references.fixed_entries),
+            nonfixed_handles=len(object_references.nonfixed_entries),
         )
         invalid_entries = [
             entry.index
-            for entry in handles.live_entries
-            if entry.usage_count <= 0 or entry.map_number > MAX_MAP_NUMBER
+            for entry in object_references.live_entries
+            if entry.reference_count <= 0 or entry.map_number > MAX_MAP_NUMBER
         ]
         if invalid_entries:
             report.add(
                 "HND04",
                 "structure",
                 "ERROR",
-                f"{len(invalid_entries)} live handles have invalid usage/map fields",
+                f"{len(invalid_entries)} live object references have invalid "
+                "count/map fields",
                 path=f"{archive_path}!processes.dat",
+                reference_indices=invalid_entries,
+                # Compatibility alias retained for existing JSON consumers.
                 handle_indices=invalid_entries,
             )
-        _resolve_handles(report, handles, archive_nonfixed, parsed_fixed)
+        _resolve_object_references(
+            report, object_references, archive_nonfixed, parsed_fixed
+        )
     return report
 
 
@@ -707,7 +752,9 @@ def render_integrity_report(report: IntegrityReport) -> str:
         )
 
     actionable = [finding for finding in report.findings if finding.severity != "INFO"]
-    confirmations = [finding for finding in report.findings if finding.severity == "INFO"]
+    confirmations = [
+        finding for finding in report.findings if finding.severity == "INFO"
+    ]
     problem_groups: dict[tuple[str, str, str, str], list[IntegrityFinding]] = {}
     for finding in actionable:
         key = (finding.severity, finding.check_id, finding.axis, finding.message)
@@ -724,9 +771,7 @@ def render_integrity_report(report: IntegrityReport) -> str:
         key=lambda item: (-SEVERITY_RANK[item[0][0]], item[0][2], item[0][1]),
     ):
         severity, check_id, axis, message = key
-        lines.append(
-            f"  {severity:5} {check_id} {axis}: {message}"
-        )
+        lines.append(f"  {severity:5} {check_id} {axis}: {message}")
         sources = sorted({finding.path for finding in findings if finding.path})
         for source in sources:
             lines.append(f"        Source: {source}")
@@ -734,14 +779,19 @@ def render_integrity_report(report: IntegrityReport) -> str:
         seen_targets: set[tuple[object, object, object]] = set()
         for finding in findings:
             for record in finding.details.get("target_records", []):
-                identity = (record.get("arena"), record.get("map"), record.get("offset"))
+                identity = (
+                    record.get("arena"),
+                    record.get("map"),
+                    record.get("offset"),
+                )
                 if identity not in seen_targets:
                     seen_targets.add(identity)
                     target_records.append(record)
         for record in target_records[:8]:
-            handles = ",".join(str(value) for value in record["handles"])
+            references = ",".join(str(value) for value in record["reference_indices"])
             prefix = (
-                f"        Evidence: handle({handles}) {record['arena']}.{record['map']} "
+                f"        Evidence: reference({references}) "
+                f"{record['arena']}.{record['map']} "
                 f"offset 0x{record['offset']:X} slot {record['slot']}"
             )
             if "page" not in record:
@@ -779,13 +829,16 @@ def render_integrity_report(report: IntegrityReport) -> str:
 
     lines.extend(("", "Evidence"))
     for name, artifact in report.artifacts.items():
-        summary = [f"{artifact.get('bytes', 0)} bytes", str(artifact.get("sha256", ""))[:12]]
+        summary = [
+            f"{artifact.get('bytes', 0)} bytes",
+            str(artifact.get("sha256", ""))[:12],
+        ]
         for key in (
             "maps",
-            "handle_count",
-            "live_handles",
-            "fixed_handles",
-            "nonfixed_handles",
+            "reference_count",
+            "live_references",
+            "fixed_references",
+            "nonfixed_references",
             "chunks",
             "pages",
             "objects",

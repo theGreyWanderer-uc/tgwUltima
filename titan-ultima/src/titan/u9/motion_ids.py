@@ -1,13 +1,13 @@
-"""Reader for a Ghidra-derived Ultima IX animation-name table.
+"""Reader for an optional Ultima IX animation-name table.
 
 The retail data stores animation IDs and authoring paths but no original engine
-symbol. Ghidra data provides an enum-style mapping from every used ``anim.flx``
-entry ID to the name used by gameplay and movement logic::
+symbol. An external analysis table can map each used ``anim.flx`` entry ID to
+the name used by gameplay and movement logic::
 
     HUMANOID_IDLE_BREATHE_AVATAR = 172,
 
-This helper deliberately reads a user-supplied Ghidra motion-ID table. Titan
-does not bundle that external reference data.
+Titan reads this optional table when the user supplies it and does not bundle
+the external names.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from pathlib import Path
 
 
 class U9MotionIdsError(Exception):
-    """Raised when a Ghidra motion-ID table cannot be parsed safely."""
+    """Raised when an animation-name table cannot be parsed safely."""
 
 
 _ENTRY_RE = re.compile(
@@ -57,7 +57,7 @@ class U9MotionIds:
             for match in _ENTRY_RE.finditer(text)
         )
         if not entries:
-            raise U9MotionIdsError("no Ghidra motion-ID entries found")
+            raise U9MotionIdsError("no animation-name entries found")
 
         ids: dict[int, str] = {}
         names: set[str] = set()
@@ -96,7 +96,7 @@ class U9MotionIds:
         return motion.name if motion is not None else None
 
     def missing_animation_ids(self, animation_ids: list[int]) -> list[int]:
-        """Return archive IDs that have no name in the Ghidra table."""
+        """Return archive IDs that have no external animation name."""
         return [
             animation_id
             for animation_id in animation_ids
@@ -104,7 +104,7 @@ class U9MotionIds:
         ]
 
     def unused_motion_ids(self, animation_ids: list[int]) -> list[int]:
-        """Return Ghidra table IDs whose archive slots are unused."""
+        """Return animation-name table IDs whose archive slots are unused."""
         used = set(animation_ids)
         return [
             entry.animation_id

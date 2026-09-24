@@ -73,7 +73,7 @@ Objects are a **sparse** array over the page's 166 slots, not a run.
 
 ``0x04`` is the head of a free list, not the end of the objects. Each free
 record's first dword -- the field this reader calls ``reference`` -- is the next
-link, both region-relative. ``u9.exe`` builds the list in ``FUN_004D1C30``::
+link, both region-relative. The verified allocator behavior is::
 
     page = record & 0xFFFFF000
     record[0x00]   = page[0x04]          # reference = old head

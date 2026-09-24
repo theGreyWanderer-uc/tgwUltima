@@ -7,16 +7,19 @@ __all__ = [
     "ANIMATION_LIBRARY_CATALOGUE_SCHEMA_VERSION",
     "ANIMATION_LIBRARY_EXPORT_SCHEMA",
     "ANIMATION_LIBRARY_EXPORT_SCHEMA_VERSION",
+    "U9ActorModelLibrarySpec",
     "U9ExportedAnimationSkeletonLibrary",
     "U9PlannedAnimationLibraryExportError",
     "U9PlannedAnimationLibraryExportResult",
     "export_planned_animation_libraries",
+    "parse_actor_model_library_spec",
     "read_animation_library_plan",
 ]
 
 import json
 import os
 import re
+from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -48,6 +51,46 @@ ANIMATION_LIBRARY_EXPORT_SCHEMA_VERSION = 1
 
 class U9PlannedAnimationLibraryExportError(Exception):
     """Raised when an approved animation plan cannot be exported safely."""
+
+
+@dataclass(frozen=True)
+class U9ActorModelLibrarySpec:
+    """Explicit actor model plus the plan libraries approved for that actor."""
+
+    actor_hint: str
+    model_id: int
+    plan_library_ids: tuple[str, ...]
+
+
+def parse_actor_model_library_spec(value: str) -> U9ActorModelLibrarySpec:
+    """Parse ``ACTOR=MODEL_ID:LIBRARY[,LIBRARY...]`` from the CLI."""
+    actor_hint, has_equals, model_and_libraries = value.partition("=")
+    model_text, has_colon, libraries_text = model_and_libraries.partition(":")
+    actor_hint = actor_hint.strip()
+    plan_library_ids = tuple(
+        dict.fromkeys(
+            library.strip() for library in libraries_text.split(",") if library.strip()
+        )
+    )
+    if not has_equals or not has_colon or not actor_hint or not plan_library_ids:
+        raise U9PlannedAnimationLibraryExportError(
+            "Actor model must use ACTOR=MODEL_ID:LIBRARY[,LIBRARY...] syntax"
+        )
+    try:
+        model_id = int(model_text, 0)
+    except ValueError as error:
+        raise U9PlannedAnimationLibraryExportError(
+            f"Actor model has an invalid model ID: {model_text!r}"
+        ) from error
+    if model_id < 0:
+        raise U9PlannedAnimationLibraryExportError(
+            f"Actor model ID must not be negative: {model_id}"
+        )
+    return U9ActorModelLibrarySpec(
+        actor_hint=actor_hint,
+        model_id=model_id,
+        plan_library_ids=plan_library_ids,
+    )
 
 
 @dataclass(frozen=True)
@@ -88,6 +131,7 @@ class _SkeletonTask:
     plan_library_ids: set[str] = field(default_factory=set)
     animation_ids: set[int] = field(default_factory=set)
     model_track_ids: set[int] = field(default_factory=set)
+    approval_modes: set[str] = field(default_factory=set)
 
     @property
     def library_id(self) -> str:
@@ -165,7 +209,9 @@ def read_animation_library_plan(path: str | Path) -> dict[str, Any]:
 
 
 def _selected_plan_libraries(
-    document: dict[str, Any], requested_library_ids: tuple[str, ...]
+    document: dict[str, Any],
+    requested_library_ids: tuple[str, ...],
+    explicit_source_library_ids: set[str],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     libraries = document["libraries"]
     by_id = {str(library["library_id"]): library for library in libraries}
@@ -186,11 +232,15 @@ def _selected_plan_libraries(
     skipped = [
         library for library in selected if bool(library["requires_model_review"])
     ]
-    if not approved:
+    if not approved and not explicit_source_library_ids:
         raise U9PlannedAnimationLibraryExportError(
             "Animation library selection contains no approved libraries"
         )
-    return approved, skipped
+    return approved, [
+        library
+        for library in skipped
+        if str(library["library_id"]) not in explicit_source_library_ids
+    ]
 
 
 def _build_skeleton_tasks(
@@ -246,6 +296,87 @@ def _build_skeleton_tasks(
             task.model_track_ids.update(
                 int(value) for value in library.get("model_track_ids", [])
             )
+            task.approval_modes.add("automatic-plan-approval")
+    return sorted(tasks.values(), key=lambda task: task.library_id), animation_metadata
+
+
+def _plan_libraries_by_id(document: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {str(library["library_id"]): library for library in document["libraries"]}
+
+
+def _explicit_actor_tasks(
+    specs: tuple[U9ActorModelLibrarySpec, ...],
+    document: dict[str, Any],
+    model_archive: U9FlxArchive,
+) -> tuple[list[_SkeletonTask], dict[int, dict[str, Any]]]:
+    """Build user-approved actor tasks while preserving structural validation."""
+    libraries_by_id = _plan_libraries_by_id(document)
+    tasks: dict[tuple[str, str], _SkeletonTask] = {}
+    animation_metadata: dict[int, dict[str, Any]] = {}
+    seen_specs: set[tuple[str, int]] = set()
+    for spec in specs:
+        actor_hint = spec.actor_hint.casefold()
+        spec_key = (actor_hint, spec.model_id)
+        if spec_key in seen_specs:
+            raise U9PlannedAnimationLibraryExportError(
+                f"Actor model was supplied more than once: {spec.actor_hint}={spec.model_id}"
+            )
+        seen_specs.add(spec_key)
+        unknown = sorted(set(spec.plan_library_ids) - libraries_by_id.keys())
+        if unknown:
+            raise U9PlannedAnimationLibraryExportError(
+                f"Actor model {spec.actor_hint} references unknown plan libraries: "
+                + ", ".join(unknown)
+            )
+        if spec.model_id >= model_archive.num_entries:
+            raise U9PlannedAnimationLibraryExportError(
+                f"Actor model {spec.actor_hint} model {spec.model_id} is out of range"
+            )
+        blob = model_archive.read_entry(spec.model_id)
+        if not blob:
+            raise U9PlannedAnimationLibraryExportError(
+                f"Actor model {spec.actor_hint} model {spec.model_id} is empty"
+            )
+        try:
+            model = U9Model.parse(blob, model_id=spec.model_id)
+        except U9ModelError as error:
+            raise U9PlannedAnimationLibraryExportError(
+                f"Actor model {spec.actor_hint} model {spec.model_id} failed to parse: "
+                f"{error}"
+            ) from error
+        fingerprint = model_skeleton_fingerprint(model)
+        limb_ids = {limb.limb_id for limb in model.limbs}
+        task = tasks.setdefault(
+            (actor_hint, fingerprint),
+            _SkeletonTask(
+                actor_hint=actor_hint,
+                skeleton_fingerprint=fingerprint,
+            ),
+        )
+        task.representative_model_ids.add(spec.model_id)
+        task.actor_anchor_model_ids.add(spec.model_id)
+        task.model_variant_ids.add(spec.model_id)
+        task.approval_modes.add("explicit-actor-model")
+        for library_id in spec.plan_library_ids:
+            library = libraries_by_id[library_id]
+            track_ids = {int(value) for value in library.get("model_track_ids", [])}
+            missing = sorted(track_ids - limb_ids)
+            if missing:
+                raise U9PlannedAnimationLibraryExportError(
+                    f"Actor model {spec.actor_hint} model {spec.model_id} cannot use "
+                    f"plan library {library_id}; missing track IDs: {missing}"
+                )
+            task.plan_library_ids.add(library_id)
+            task.model_track_ids.update(track_ids)
+            for animation in library["animations"]:
+                animation_id = int(animation["animation_id"])
+                task.animation_ids.add(animation_id)
+                animation_metadata[animation_id] = {
+                    **animation,
+                    "plan_library_id": library_id,
+                    "actor_hint": str(library["actor_hint"]),
+                    "runtime_binding_status": library["runtime_binding_status"],
+                }
     return sorted(tasks.values(), key=lambda task: task.library_id), animation_metadata
 
 
@@ -303,14 +434,41 @@ def export_planned_animation_libraries(
     texture_archive_path: str | Path | None = None,
     palette_path: str | Path | None = None,
     library_ids: tuple[str, ...] = (),
+    actor_models: tuple[U9ActorModelLibrarySpec, ...] = (),
     lod_level: int = 0,
     coordinate_scale: float = DEFAULT_ANIMATED_MODEL_SCALE,
     include_glb: bool = True,
 ) -> U9PlannedAnimationLibraryExportResult:
     """Export every approved actor/skeleton group using one shared clip catalogue."""
     document = read_animation_library_plan(plan_path)
-    approved, skipped = _selected_plan_libraries(document, library_ids)
+    try:
+        model_archive = U9FlxArchive.from_file(model_archive_path)
+    except (OSError, U9FlxArchiveError) as error:
+        raise U9PlannedAnimationLibraryExportError(
+            f"Model archive could not be read: {error}"
+        ) from error
+    explicit_source_ids = {
+        library_id for spec in actor_models for library_id in spec.plan_library_ids
+    }
+    approved, skipped = _selected_plan_libraries(
+        document, library_ids, explicit_source_ids
+    )
     tasks, animation_metadata = _build_skeleton_tasks(approved)
+    explicit_tasks, explicit_animation_metadata = _explicit_actor_tasks(
+        actor_models, document, model_archive
+    )
+    tasks = sorted((*tasks, *explicit_tasks), key=lambda task: task.library_id)
+    duplicate_task_ids = sorted(
+        library_id
+        for library_id, count in Counter(task.library_id for task in tasks).items()
+        if count > 1
+    )
+    if duplicate_task_ids:
+        raise U9PlannedAnimationLibraryExportError(
+            "Actor model libraries duplicate planned output IDs: "
+            + ", ".join(duplicate_task_ids)
+        )
+    animation_metadata.update(explicit_animation_metadata)
     animations_by_id = {animation.animation_id: animation for animation in animations}
     missing_animation_ids = sorted(set(animation_metadata) - animations_by_id.keys())
     if missing_animation_ids:
@@ -318,13 +476,6 @@ def export_planned_animation_libraries(
             "Animation archive is missing planned IDs: "
             + ", ".join(str(value) for value in missing_animation_ids)
         )
-
-    try:
-        model_archive = U9FlxArchive.from_file(model_archive_path)
-    except (OSError, U9FlxArchiveError) as error:
-        raise U9PlannedAnimationLibraryExportError(
-            f"Model archive could not be read: {error}"
-        ) from error
     models = {
         task.library_id: _load_planned_model(model_archive, task) for task in tasks
     }
@@ -412,6 +563,7 @@ def export_planned_animation_libraries(
             "plan_library_ids": sorted(task.plan_library_ids),
             "runtime_binding_status": "unresolved",
             "timeline_authored": False,
+            "approval_modes": sorted(task.approval_modes),
         }
         try:
             exported = export_animated_model_library(
@@ -464,6 +616,8 @@ def export_planned_animation_libraries(
         },
         "summary": {
             "approved_plan_library_count": len(approved),
+            "explicit_actor_model_library_count": len(explicit_tasks),
+            "explicit_actor_source_library_count": len(explicit_source_ids),
             "exported_skeleton_library_count": len(exported_libraries),
             "exported_animation_count": exported_animation_count,
             "skipped_review_library_count": len(skipped),
@@ -496,6 +650,14 @@ def export_planned_animation_libraries(
                 "model_selection_basis": library["model_selection_basis"],
             }
             for library in skipped
+        ],
+        "explicit_actor_models": [
+            {
+                "actor_hint": spec.actor_hint.casefold(),
+                "model_id": spec.model_id,
+                "plan_library_ids": list(spec.plan_library_ids),
+            }
+            for spec in actor_models
         ],
         "interchange": {
             "raw_animation_data_is_shared": True,

@@ -260,9 +260,9 @@ class U9ObjectFootprintFilter:
 def object_scale_from_extra_data(extra: U9ExtraData | None) -> Vec3:
     """Decode nonfixed scale properties as native U9 X/Y/Z multipliers.
 
-    The functioning Forgotten World editor treats values as percentages and
-    applies each scale property as a complete replacement. Repeating that
-    ordering matters if a hand-edited record contains more than one scale tag.
+    Values are percentages and each scale property replaces the complete scale
+    vector. Preserving that ordering matters if a hand-edited record contains
+    more than one scale tag.
     """
     scale: Vec3 = (1.0, 1.0, 1.0)
     if extra is None:

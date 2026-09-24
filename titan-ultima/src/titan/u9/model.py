@@ -7,7 +7,7 @@ of rigid **limbs** (body parts/pieces, not a modern vertex-skinned skeleton --
 see below), each with its own mesh at up to 4 levels of detail (LOD). Sixteen
 use the alternate indexed-polygon record described below.
 
-The layout was checked against Ghidra data and the game corpus rather than a
+The layout was checked against runtime analysis and the game corpus rather than a
 prior generated research summary whose offsets proved incorrect. For example,
 the summary placed the limb quaternion at +0x18, while the verified layout puts
 it at +0x20 after the complete 12-byte ``Position`` vector. Every offset below

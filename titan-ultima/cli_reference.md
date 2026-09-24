@@ -29,6 +29,7 @@ TITAN organises commands into **game-specific sub-apps** and **shared
 ```
 titan <shared-command>          # Flex archives, XMIDI music, config/setup
 titan dialogue <command>        # U8 dialogue web pipeline + local viewer
+titan uw1 <command>             # Ultima Underworld: The Stygian Abyss
 titan uw2 <command>             # Ultima Underworld II: Labyrinth of Worlds
 titan u8 <command>              # Ultima 8: Pagan
 titan u7 <command>              # Ultima 7: The Black Gate / Serpent Isle
@@ -65,12 +66,44 @@ detect U6 installs yet).
 UO commands accept an optional `client` argument. If omitted, they fall back
 to `[uo.game] base` in `titan.toml`.
 
-UU2 commands accept `-g`/`--gamedir`. If omitted, they use `[uw2.game] base`.
+UW1 and UW2 commands accept `-g`/`--gamedir`. If omitted, they use their
+respective `[uw1.game] base` or `[uw2.game] base` setting.
 Bare names such as `OBJECTS.GR` resolve below install's `DATA` directory.
 
 See [Configuration (titan.toml)](#configuration-titantoml) below.
 
 ---
+
+## Ultima Underworld commands (`titan uw1`)
+
+UW1 support currently reads every `.TR` archive in the installation's `DATA`
+directory. `F*.TR` archives contain floor/ceiling textures and `W*.TR`
+archives contain wall textures. Texture IDs remain unchanged across their
+low- and high-resolution variants.
+
+### `uw1 texture-info`
+
+```text
+titan uw1 texture-info [-g DIR] [--json]
+```
+
+Print the archive name, resolution, and number of texture records. `--json`
+includes each texture ID and byte offset.
+
+### `uw1 texture-export`
+
+```text
+titan uw1 texture-export -o DIR [-g DIR] [--scale N] [--contact-sheets]
+```
+
+Export all floor/ceiling and wall records as PNG. The command uses palette 0
+from `PALS.DAT`, adds descriptions from `STRINGS.PAK` when available, and
+writes `textures_manifest.csv` plus `textures_manifest.json`. `--scale` uses
+nearest-neighbour enlargement; `--contact-sheets` adds one sheet per archive.
+
+```powershell
+titan uw1 texture-export -g "C:/UW1" -o uw1_textures/ --contact-sheets
+```
 
 ## Ultima Underworld II commands (`titan uw2`)
 
@@ -592,6 +625,10 @@ titan flex-update <file> --index N --data FILE [-o FILE]
 | `--index N` | Record index to replace (0-based) |
 | `--data FILE` | Path to the replacement data file |
 | `-o FILE`, `--output FILE` | Output path (default: overwrites input) |
+
+The command detects the U7/Exult and U8/Pentagram Flex header dialects and
+rewrites with the matching implementation. U7 titles, magic/version fields,
+reserved header bytes, empty slots, and record indices are preserved.
 
 **Example**
 ```bash
@@ -4805,9 +4842,9 @@ entry. Each clip has its LightWave authoring path and inclusive authoring-frame
 range, a part-ID manifest, named part tracks, and timestamped quaternion,
 position, and scale transforms. All 857 used entries parse and consume exactly.
 
-The archive does not use `sappear.flx` model IDs as animation IDs. A
-Ghidra-derived motion-ID table can provide the original engine name for every
-retail clip.
+The archive does not use `sappear.flx` model IDs as animation IDs. An optional
+animation-name table can provide the original engine name for every retail
+clip.
 Titan can rank registry-backed structural model candidates and authoring-name
 evidence, but it does not claim those candidates are the engine's runtime binding. See
 `reference/u9/anim/u9_anim_flx_reference.md` for the verified layout and open
@@ -4821,13 +4858,13 @@ List animation IDs with frame, part and event counts, original motion names
 when supplied, and authoring paths.
 
 ```
-titan u9 animation-list <file> [--motion-ids <ghidra-motion-table>] [-n LIMIT]
+titan u9 animation-list <file> [--motion-ids <animation-name-table>] [-n LIMIT]
 ```
 
 | Argument | Description |
 |----------|-------------|
 | `file` | Path to `static/anim.flx` |
-| `--motion-ids PATH` | Ghidra motion-ID table providing original engine names |
+| `--motion-ids PATH` | Animation-name table providing original engine names |
 | `-n N`, `--limit N` | Maximum rows to print |
 
 **Example**
@@ -4843,14 +4880,14 @@ Show one clip's authoring timing and part list, or dump one part's transform
 frames with `--part`.
 
 ```
-titan u9 animation-show <file> <id> [--motion-ids <ghidra-motion-table>] [-p PART_ID] [-n LIMIT]
+titan u9 animation-show <file> <id> [--motion-ids <animation-name-table>] [-p PART_ID] [-n LIMIT]
 ```
 
 | Argument | Description |
 |----------|-------------|
 | `file` | Path to `static/anim.flx` |
 | `id` | Animation ID -- the FLX entry index |
-| `--motion-ids PATH` | Ghidra motion-ID table providing the original engine name |
+| `--motion-ids PATH` | Animation-name table providing the original engine name |
 | `-p ID`, `--part ID` | Print timestamped transforms for this part ID |
 | `-n N`, `--limit N` | Maximum parts or frames to print |
 
@@ -4863,7 +4900,7 @@ titan u9 animation-show static/anim.flx 172 --part 1 -n 10
 The second form identifies part 1 as `BIP01` and prints frames as
 `time_ms`, quaternion `(w,x,y,z)`, position `(x,y,z)`, and scale `(x,y,z)`.
 Animation events are displayed with time, numeric type, event name confirmed
-by the Ghidra decompile, and parameter.
+by runtime analysis, and parameter.
 
 ---
 
@@ -4873,7 +4910,7 @@ Export one row per used animation clip, joining `anim.flx`, `registry.txt`,
 `sappear.flx`, `TYPES.DAT`, and `TYPENAME.FLX`. The CSV/JSON includes authoring
 family/action hints, timing, tracks, authoring-only nodes, structural model
 candidates, model/type/usecode metadata, typed events, optional original
-motion symbols, candidate ambiguity, and a targeted Ghidra question. Companion
+motion symbols, candidate ambiguity, and a targeted research question. Companion
 game files are found beside `anim.flx` unless overridden.
 
 ```
@@ -4889,13 +4926,13 @@ titan u9 animation-model-report <anim.flx> -o <report.csv> [options]
 | `--registry PATH` | Override the companion `registry.txt` path |
 | `--types PATH` | Override the companion `TYPES.DAT` path |
 | `--typenames PATH` | Override the companion `TYPENAME.FLX` path |
-| `--motion-ids PATH` | Ghidra motion-ID table for original clip names |
+| `--motion-ids PATH` | Animation-name table for original clip names |
 | `-f FORMAT`, `--format FORMAT` | `csv` (default) or `json` |
 
 **Examples**
 ```bash
 titan u9 animation-model-report static/anim.flx -o animation_models.csv
-titan u9 animation-model-report static/anim.flx --animation 172 --motion-ids ghidra_motion_ids.txt -o avatar_idle.json -f json
+titan u9 animation-model-report static/anim.flx --animation 172 --motion-ids animation_names.txt -o avatar_idle.json -f json
 ```
 
 `full-structural` means that one model contains every clip track ID known to
@@ -4904,6 +4941,10 @@ the maximum overlap after no full candidate was found. Authoring-path/name match
 are a second evidence layer. Neither result proves runtime selection; the
 `runtime_binding_status` remains `unresolved` until engine tables or code are
 traced.
+
+New report consumers should use `research_priority` and `research_question`.
+The older `ghidra_priority` and `ghidra_question` columns remain equivalent
+compatibility aliases so existing reports and scripts continue to work.
 
 ---
 
@@ -4914,7 +4955,7 @@ then export the resulting static pose as OBJ, STL, or both. Matching tracks
 replace local rotations; only `PELVIS`/`HIPS` receives local translation. Root
 translation is reported separately as object motion. Unmatched model limbs
 retain their base transforms, authoring-only tracks are ignored, and stored
-track scale is not applied, matching the Ghidra decompile.
+track scale is not applied, matching verified runtime behavior.
 
 ```
 titan u9 animation-pose-export <anim.flx> <animation-id> <sappear.flx> <model-id> [options]
@@ -4923,7 +4964,7 @@ titan u9 animation-pose-export <anim.flx> <animation-id> <sappear.flx> <model-id
 | Option | Description |
 |---|---|
 | `--time-ms N` | Clip time to sample; clamps to the stored sample range |
-| `--motion-ids PATH` | Ghidra motion-ID table for output naming |
+| `--motion-ids PATH` | Animation-name table for output naming |
 | `-t PATH`, `--textures PATH` | Optional U9 bitmap texture archive |
 | `-p PATH`, `--palette PATH` | Optional `ankh.pal` |
 | `--lod N` | Model LOD, default 0 |
@@ -4933,7 +4974,7 @@ titan u9 animation-pose-export <anim.flx> <animation-id> <sappear.flx> <model-id
 
 ```bash
 titan u9 animation-pose-export static/anim.flx 172 static/sappear.flx 3223 \
-  --time-ms 500 --motion-ids ghidra_motion_ids.txt \
+  --time-ms 500 --motion-ids animation_names.txt \
   -t static/bitmap16.flx -p static/ankh.pal -o avatar_breathe/
 ```
 
@@ -4969,7 +5010,7 @@ titan u9 animation-bundle-export <anim.flx> <animation-id> <sappear.flx> <model-
 | Option | Description |
 |---|---|
 | `--registry PATH` | Node-name registry; discovered beside the animation archive by default |
-| `--motion-ids PATH` | Ghidra motion-ID table providing the original clip name |
+| `--motion-ids PATH` | Animation-name table providing the original clip name |
 | `-t PATH`, `--textures PATH` | Optional U9 bitmap texture archive |
 | `-p PATH`, `--palette PATH` | Optional `ankh.pal` for 8-bit textures |
 | `--lod N` | Model LOD, default 0 |
@@ -5085,7 +5126,7 @@ titan u9 activity-opcodes static/activity.flx
 
 #### `u9 script-research-export`
 
-Export lossless trigger/activity evidence tables for Ghidra analysis.
+Export lossless trigger/activity evidence tables for external analysis.
 
 ```
 titan u9 script-research-export <triggers> <activities> [-o DIRECTORY]
@@ -5328,7 +5369,7 @@ one NUL-terminated UTF-16LE string per FLX entry — no header, no length prefix
 
 `misctext.flx` is a flat list of 340 interface strings. `text.flx` holds 7,390
 lines of conversation grouped into 266 blocks by `BEGIN FILE` markers naming
-Ghidra data; 90% of those names are NPCs, the rest are places. See
+external analysis data; 90% of those names are NPCs, the rest are places. See
 `reference/u9/text/u9_text_reference.md`.
 
 ---
@@ -5344,7 +5385,7 @@ titan u9 text-list <file> [-b BLOCK] [-m] [-n LIMIT]
 | Argument | Description |
 |----------|-------------|
 | `file` | Path to `static/text.flx` or `static/misctext.flx` |
-| `-b NAME`, `--block NAME` | Only this Ghidra-derived block, e.g. `Raven` (case and extension ignored) |
+| `-b NAME`, `--block NAME` | Only this named block, e.g. `Raven` (case and extension ignored) |
 | `-m`, `--markers` | Include the `BEGIN FILE` markers |
 | `-n N`, `--limit N` | Maximum lines to print |
 
@@ -6003,7 +6044,7 @@ compositing.
 
 The renderer uses original raw U9 coordinates: 128 X/Y units per terrain
 cell and four Z units per terrain height unit. `--flip-y` is enabled by default
-to match the functioning Forgotten World editor's presentation transform; use
+to match the verified presentation transform; use
 `--no-flip-y` to retain increasing U9 Y in increasing image rows.
 
 Water is enabled by default. `--water-frame` selects one of water texture 49's
@@ -6496,7 +6537,7 @@ A value on the command line always wins.
 | `u9 texture-export` | Export one texture frame or stored mip to PNG |
 | `u9 animation-list` | List `anim.flx` clips with timing, part counts and authoring paths |
 | `u9 animation-show` | Show one animation clip or dump one part's transform frames |
-| `u9 animation-model-report` | Join clips, registry nodes, structural model candidates, types, usecode IDs, and Ghidra questions to CSV/JSON |
+| `u9 animation-model-report` | Join clips, registry nodes, structural model candidates, types, usecode IDs, and research questions to CSV/JSON |
 | `u9 animation-pose-export` | Sample a selected clip on a hierarchical model and export the static rigid-limb pose |
 | `u9 animation-bundle-export` | Export local limb meshes, a versioned exact-track JSON sidecar, and an animated rigid-node GLB |
 | `u9 icon-list` | List candidate 2D UI icon entries not referenced by any 3D model |

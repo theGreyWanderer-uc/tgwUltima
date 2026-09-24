@@ -9,7 +9,10 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from titan.u9.animation_model_report import build_animation_model_report
+from titan.u9.animation_model_report import (
+    ANIMATION_MODEL_REPORT_COLUMNS,
+    build_animation_model_report,
+)
 from titan.u9.cli import cmd_animation_model_report
 from titan.u9.types_dat import EXPECTED_SIZE, RECORD_SIZE, RECORD_STRUCT
 
@@ -130,7 +133,7 @@ class AnimationModelReportTests(unittest.TestCase):
         (self.static / "TYPES.DAT").write_bytes(_types_dat())
         typename = struct.pack("<IH", 0, 0x1B81) + b"Avatar\x00"
         (self.static / "TYPENAME.FLX").write_bytes(_build_flx([None, typename]))
-        (self.static / "ghidra_motion_ids.txt").write_text(
+        (self.static / "animation_names.txt").write_text(
             "enum {\nHUMANOID_IDLE_BREATHE_AVATAR = 3,\n};\n",
             encoding="ascii",
         )
@@ -141,7 +144,7 @@ class AnimationModelReportTests(unittest.TestCase):
     def test_report_joins_registry_model_type_and_source_name_evidence(self) -> None:
         rows, warnings = build_animation_model_report(
             self.static / "anim.flx",
-            motion_ids_path=self.static / "ghidra_motion_ids.txt",
+            motion_ids_path=self.static / "animation_names.txt",
         )
 
         self.assertEqual(warnings, [])
@@ -169,6 +172,14 @@ class AnimationModelReportTests(unittest.TestCase):
         self.assertEqual(source_candidate["model_names"], ["Avatar"])
         self.assertEqual(source_candidate["type_ids"], [1])
         self.assertEqual(source_candidate["usecode_ids"], [7])
+        self.assertEqual(row["research_priority"], "confirm-unique-candidate")
+        self.assertIn("runtime class/state binding", row["research_question"])
+        self.assertEqual(row["ghidra_priority"], row["research_priority"])
+        self.assertEqual(row["ghidra_question"], row["research_question"])
+        self.assertIn("research_priority", ANIMATION_MODEL_REPORT_COLUMNS)
+        self.assertIn("research_question", ANIMATION_MODEL_REPORT_COLUMNS)
+        self.assertIn("ghidra_priority", ANIMATION_MODEL_REPORT_COLUMNS)
+        self.assertIn("ghidra_question", ANIMATION_MODEL_REPORT_COLUMNS)
 
     def test_command_writes_csv(self) -> None:
         output = self.static / "animation-model.csv"
@@ -181,7 +192,7 @@ class AnimationModelReportTests(unittest.TestCase):
                 registry=None,
                 types=None,
                 typenames=None,
-                motion_ids=str(self.static / "ghidra_motion_ids.txt"),
+                motion_ids=str(self.static / "animation_names.txt"),
                 format="csv",
             )
         )

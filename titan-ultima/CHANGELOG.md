@@ -14,11 +14,21 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Added
 
+- **Ultima Underworld textures:** added native `titan uw1` inspection and
+  batch PNG export for all floor/ceiling and wall texture archives, with
+  original IDs, decoded descriptions, contact sheets, and CSV/JSON manifests.
+
 - **U9 animation semantics and posed export:** added optional original clip
   names from Ghidra data, typed animation events, interpolation matching the
   Ghidra decompile, explicit single-clip rigid-limb OBJ/STL pose export, and
   versioned animated-model bundles with local limb meshes, exact tracks,
   hierarchy/material metadata, archive hashes, and generated animated GLB.
+
+### Fixed
+
+- **Flex updates:** preserve generic archive comments and dispatch U7 archives
+  through the U7 writer, retaining their title, magic/version, reserved header
+  bytes, record indices, and compatibility with U7 palette inspection.
 
 ## [0.7.6]
 

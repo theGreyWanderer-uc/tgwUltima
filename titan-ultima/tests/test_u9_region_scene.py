@@ -1,4 +1,4 @@
-"""Tests for canonical U9 terrain/fixed region coordinates."""
+"""Tests for shared U9 terrain/fixed region coordinates."""
 
 from __future__ import annotations
 
@@ -113,7 +113,7 @@ def _nonfixed(
 
 
 class RegionSceneCoordinateTests(unittest.TestCase):
-    def test_coordinate_scales_match_the_legacy_editor(self) -> None:
+    def test_coordinate_scales_match_the_verified_format_relationship(self) -> None:
         self.assertEqual(TERRAIN_POINT_WORLD_XY, 128)
         self.assertEqual(TERRAIN_HEIGHT_WORLD_Z, 4)
         self.assertEqual(FIXED_CHUNK_TERRAIN_POINTS, 32)

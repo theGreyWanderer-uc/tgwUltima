@@ -1034,7 +1034,6 @@ def _animated_model_inputs(
     ]
     optional_inputs = (
         ("node_registry", registry_path),
-        ("ghidra_motion_table", motion_table_path),
         ("texture_archive", texture_archive_path),
         ("palette", palette_path),
     )
@@ -1043,6 +1042,14 @@ def _animated_model_inputs(
         for role, path in optional_inputs
         if path is not None
     )
+    if motion_table_path is not None:
+        animation_names = build_hashed_input_record(
+            "ghidra_motion_table", motion_table_path
+        )
+        # ``role`` is retained for version-1 sidecar readers. New consumers can
+        # use the format-oriented name without inheriting analysis terminology.
+        animation_names["input_kind"] = "animation_name_table"
+        inputs.append(animation_names)
     return inputs
 
 

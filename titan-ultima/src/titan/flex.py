@@ -458,19 +458,17 @@ class FlexArchive:
         # --- Build header ---
         header = bytearray(FLEX_HEADER_SIZE)
 
-        # Comment (ASCII, padded with 0x1A to fill 0x52 bytes)
+        # Comment (ASCII, padded with 0x1A to fill 0x52 bytes).
+        # Keep the text when rewriting an existing archive: the previous
+        # implementation populated it here and then immediately replaced the
+        # entire region with fill bytes below.
         comment_encoded = self.comment.encode("ascii", errors="replace")[:FLEX_COMMENT_LEN]
         header[:len(comment_encoded)] = comment_encoded
         # Fill remainder of comment region with 0x1A
         for i in range(len(comment_encoded), FLEX_COMMENT_LEN):
             header[i] = FLEX_FILL_BYTE
 
-        # Replicate Pentagram's FlexWriter::writeHead exactly:
-        #   for i in 0..19: write4(0x1A1A1A1A)  -> bytes 0x00..0x4F all 0x1A
-        #   write4(0x00001A1A)  -> bytes 0x50=0x1A, 0x51=0x1A, 0x52=0x00, 0x53=0x00
-        for i in range(FLEX_COMMENT_LEN):
-            header[i] = FLEX_FILL_BYTE
-        # 0x52 and 0x53 = 0x00 (from the 0x00001A1A dword at 0x50)
+        # 0x52 and 0x53 are the two zero bytes following the comment region.
         header[0x52] = 0x00
         header[0x53] = 0x00
 

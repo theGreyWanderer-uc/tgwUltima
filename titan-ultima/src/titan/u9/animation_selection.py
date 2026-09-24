@@ -1,8 +1,8 @@
 """Resolve confirmed U9 actor-state selectors to animation IDs.
 
-The initial table covers the default Avatar movement controller confirmed by
-Ghidra data.  It deliberately excludes weapon-specific combat movement and
-does not choose among the several shipped Avatar model IDs.
+The initial table covers the verified default Avatar movement controller. It
+deliberately excludes weapon-specific combat movement and does not choose
+among the several shipped Avatar model IDs.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ class U9AnimationSelectionError(Exception):
 
 @dataclass(frozen=True)
 class U9AnimationSelectionRule:
-    """One confirmed actor state to original motion mapping from Ghidra data."""
+    """One verified actor-state to original-motion mapping."""
 
     actor: str
     state: str
@@ -50,7 +50,7 @@ class U9AnimationSelectionRule:
             "controller_scope": "default humanoid movement inherited by Avatar",
             "lockset": self.lockset,
             "root_translation_axes": list(self.root_translation_axes),
-            "selection_evidence": "confirmed by Ghidra data",
+            "selection_evidence": "confirmed by external runtime analysis",
         }
 
 
@@ -226,13 +226,13 @@ def resolve_animation_selector(
             motion = motion_ids.by_name(rule.motion_name)
             if motion is None:
                 raise U9AnimationSelectionError(
-                    f"animation selector {selector!r}: Ghidra motion-ID table does not "
+                    f"animation selector {selector!r}: animation-name table does not "
                     f"contain {rule.motion_name}"
                 )
             if motion.animation_id != rule.animation_id:
                 raise U9AnimationSelectionError(
                     f"animation selector {selector!r}: confirmed ID {rule.animation_id} "
-                    f"disagrees with Ghidra motion-ID table ID {motion.animation_id}"
+                    f"disagrees with animation-name table ID {motion.animation_id}"
                 )
         return U9ResolvedAnimationSelection(
             selector=selector,

@@ -1,4 +1,4 @@
-"""Tests for the Ghidra-derived Ultima IX motion-ID reader."""
+"""Tests for the Ultima IX animation-name reader."""
 
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ class MotionIdsTests(unittest.TestCase):
 
     def test_reads_latin1_header_file(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "ghidra_motion_ids.txt"
+            path = Path(directory) / "animation_names.txt"
             path.write_text(SOURCE, encoding="latin-1")
             self.assertEqual(
                 U9MotionIds.from_file(path).name(840),
@@ -54,7 +54,7 @@ class MotionIdsTests(unittest.TestCase):
             U9MotionIds.parse("FIRST = 1,\nSECOND = 1,\n")
 
     def test_rejects_non_motion_header(self) -> None:
-        with self.assertRaisesRegex(U9MotionIdsError, "no Ghidra motion-ID entries"):
+        with self.assertRaisesRegex(U9MotionIdsError, "no animation-name entries"):
             U9MotionIds.parse("int unrelated = 1;\n")
 
 

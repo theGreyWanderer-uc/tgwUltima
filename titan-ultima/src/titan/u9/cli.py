@@ -94,6 +94,7 @@ from titan.u9.node_registry import U9NodeRegistry, U9NodeRegistryError
 from titan.u9.planned_animation_library_export import (
     U9PlannedAnimationLibraryExportError,
     export_planned_animation_libraries,
+    parse_actor_model_library_spec,
 )
 from titan.u9.object_placement import (
     U9ObjectFootprintFilter,
@@ -1758,7 +1759,7 @@ def _load_animations(filepath: str) -> Optional[U9Animations]:
 
 
 def _load_motion_ids(filepath: Optional[str]) -> Optional[U9MotionIds]:
-    """Read an optional Ghidra-derived motion-ID table."""
+    """Read an optional animation-name table."""
     if filepath is None:
         return None
     try:
@@ -2023,6 +2024,10 @@ def cmd_animation_library_export(args: SimpleNamespace) -> int:
             texture_archive_path=args.textures,
             palette_path=palette_path,
             library_ids=tuple(args.library_ids or ()),
+            actor_models=tuple(
+                parse_actor_model_library_spec(value)
+                for value in getattr(args, "actor_models", None) or ()
+            ),
             lod_level=args.lod,
             coordinate_scale=args.coordinate_scale,
             include_glb=args.glb,
@@ -2140,7 +2145,7 @@ def cmd_animation_bundle_export(args: SimpleNamespace) -> int:
         ("Texture archive", args.textures),
         ("Palette", args.palette),
         ("Node registry", args.registry),
-        ("Ghidra motion-ID table", args.motion_ids),
+        ("animation-name table", args.motion_ids),
     ):
         if path is not None and not Path(path).is_file():
             print(f"ERROR: {label} not found: {path}", file=sys.stderr)
@@ -2233,7 +2238,7 @@ def cmd_animation_set_export(args: SimpleNamespace) -> int:
         ("Texture archive", args.textures),
         ("Palette", args.palette),
         ("Node registry", args.registry),
-        ("Ghidra motion-ID table", args.motion_ids),
+        ("animation-name table", args.motion_ids),
     ):
         if path is not None and not Path(path).is_file():
             print(f"ERROR: {label} not found: {path}", file=sys.stderr)
@@ -2321,7 +2326,7 @@ def cmd_avatar_animation_library_export(args: SimpleNamespace) -> int:
     for label, path in (
         ("Animation archive", args.animations),
         ("Model archive", args.sappear),
-        ("Ghidra motion-ID table", args.motion_ids),
+        ("animation-name table", args.motion_ids),
         ("Texture archive", args.textures),
         ("Palette", args.palette),
         ("Node registry", args.registry),
@@ -2641,7 +2646,7 @@ def cmd_activity_opcodes(args: SimpleNamespace) -> int:
 
 
 def cmd_script_research_export(args: SimpleNamespace) -> int:
-    """Export trigger/activity evidence tables for Ghidra analysis."""
+    """Export trigger/activity evidence tables for external analysis."""
     triggers = _load_triggers(args.triggers)
     activities = _load_activities(args.activities)
     if triggers is None or activities is None:
@@ -2661,7 +2666,7 @@ def cmd_script_research_export(args: SimpleNamespace) -> int:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1
 
-    print(f"Wrote {len(paths)} Ghidra research file(s) to {args.output}")
+    print(f"Wrote {len(paths)} script research file(s) to {args.output}")
     for path in paths:
         print(f"  {path}")
     return 0
@@ -5513,7 +5518,7 @@ def animation_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
     motion_ids: Annotated[
         Optional[str],
-        typer.Option("--motion-ids", help="Ghidra motion-ID table for original names"),
+        typer.Option("--motion-ids", help="Animation-name table for original names"),
     ] = None,
     limit: Annotated[
         Optional[int],
@@ -5534,7 +5539,7 @@ def animation_show_cmd(
     id: Annotated[int, typer.Argument(help="Animation ID (the FLX entry index)")],
     motion_ids: Annotated[
         Optional[str],
-        typer.Option("--motion-ids", help="Ghidra motion-ID table for original name"),
+        typer.Option("--motion-ids", help="Animation-name table for original name"),
     ] = None,
     part: Annotated[
         Optional[int],
@@ -5593,7 +5598,7 @@ def animation_library_plan_cmd(
     ] = None,
     motion_ids: Annotated[
         Optional[str],
-        typer.Option("--motion-ids", help="Ghidra motion-ID table for original names"),
+        typer.Option("--motion-ids", help="Animation-name table for original names"),
     ] = None,
     diagnostics: Annotated[
         Optional[str],
@@ -5647,6 +5652,16 @@ def animation_library_export_cmd(
             help="Optional approved plan library ID; repeat to limit the export",
         ),
     ] = None,
+    actor_models: Annotated[
+        Optional[list[str]],
+        typer.Option(
+            "--actor-model",
+            help=(
+                "Explicit actor library as "
+                "ACTOR=MODEL_ID:PLAN_LIBRARY[,PLAN_LIBRARY...]; repeatable"
+            ),
+        ),
+    ] = None,
     textures: Annotated[
         Optional[str],
         typer.Option("-t", "--textures", help="Optional U9 bitmap texture FLX"),
@@ -5681,6 +5696,7 @@ def animation_library_export_cmd(
                 sappear=sappear,
                 registry=registry,
                 library_ids=library_ids,
+                actor_models=actor_models,
                 textures=textures,
                 palette=palette,
                 lod=lod,
@@ -5730,7 +5746,7 @@ def animation_model_report_cmd(
     ] = None,
     motion_ids: Annotated[
         Optional[str],
-        typer.Option("--motion-ids", help="Ghidra motion-ID table for original names"),
+        typer.Option("--motion-ids", help="Animation-name table for original names"),
     ] = None,
     fmt: Annotated[
         str,
@@ -5767,7 +5783,7 @@ def animation_pose_export_cmd(
     ] = 0,
     motion_ids: Annotated[
         Optional[str],
-        typer.Option("--motion-ids", help="Ghidra motion-ID table for output naming"),
+        typer.Option("--motion-ids", help="Animation-name table for output naming"),
     ] = None,
     textures: Annotated[
         Optional[str],
@@ -5827,7 +5843,7 @@ def animation_bundle_export_cmd(
     ] = None,
     motion_ids: Annotated[
         Optional[str],
-        typer.Option("--motion-ids", help="Ghidra motion-ID table for original name"),
+        typer.Option("--motion-ids", help="Animation-name table for original name"),
     ] = None,
     textures: Annotated[
         Optional[str],
@@ -5899,7 +5915,7 @@ def animation_set_export_cmd(
     ] = None,
     motion_ids: Annotated[
         Optional[str],
-        typer.Option("--motion-ids", help="Ghidra motion-ID table for original names"),
+        typer.Option("--motion-ids", help="Animation-name table for original names"),
     ] = None,
     textures: Annotated[
         Optional[str],
@@ -5956,7 +5972,7 @@ def avatar_animation_library_export_cmd(
         str,
         typer.Option(
             "--motion-ids",
-            help="Required Ghidra motion-ID table containing original names",
+            help="Required animation-name table containing original names",
         ),
     ],
     registry: Annotated[
@@ -6102,7 +6118,7 @@ def script_research_export_cmd(
         ),
     ] = "u9-script-research",
 ) -> None:
-    """Export lossless trigger/activity evidence tables for Ghidra research."""
+    """Export lossless trigger/activity evidence tables for external analysis."""
     raise SystemExit(
         cmd_script_research_export(
             SimpleNamespace(
