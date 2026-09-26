@@ -46,10 +46,94 @@ def _archive(processes: bytes, nonfixed: bytes) -> bytes:
     return bytes(data)
 
 
-def _processes(*, fixed_offset: int | None = None) -> bytes:
+def _hanging_object_process() -> bytes:
+    data = bytearray(
+        struct.pack("<i9i100s", 61, 7, 1, 0, 0, 10809, -1, -1, 0x3F, 0, b"Hanging")
+    )
+    data += struct.pack("<iii", 0, 0, 9)
+    data += struct.pack("<iiiii128si", 0, 0, 0, 1, 0, b"motion", 0)
+    values: list[int | float] = [
+        2,
+        1,
+        22,
+        45,
+        4.0,
+        3,
+        17,
+        45,
+        4.0,
+        0x02686032,
+        *([0.0] * 20),
+        0.25,
+        -0.5,
+        1,
+        0.75,
+        525,
+        19420,
+        1.5,
+        1,
+        -1,
+        1,
+        0.5,
+        759,
+        8337,
+        1.5,
+        1,
+        0,
+        0,
+        0.25,
+        0.5,
+        5,
+        38573,
+        308875,
+        0,
+        0.0,
+        -1.0,
+        0.0,
+        0,
+        0,
+        0,
+        0,
+    ]
+    data += struct.pack("<iiiifiiifI20f2fifiifiiifiifiiiffiIIi3f4I", *values)
+    return bytes(data)
+
+
+def _script_timer_process() -> bytes:
+    data = bytearray(
+        struct.pack("<i9i100s", 62, 14, 1, 0, 0, 10809, -1, -1, 0x3F, 0, b"Timer")
+    )
+    data += struct.pack("<iii", 0, 0, 9)
+    data += struct.pack("<iiiii128si", 0, 0, 0, 0x8000, 0, b"", 0)
+    timer_flags = (100 << 16) | (3 << 8) | (4 << 4) | 0x0F
+    data += struct.pack("<i12I", 1, timer_flags, 600, 4, 3, 400, 125, 1, 1, 0, 0, 0, 0)
+    return bytes(data)
+
+
+def _animation_controller_process() -> bytes:
+    data = bytearray(struct.pack("<if", 98, 1.2))
+    data += struct.pack(
+        "<9i100s", 30, 1, 0, 0, 125, -1, -1, 0x3F, 0, b"LayeredAnimation"
+    )
+    data += struct.pack("<iii", 0, 0, -1)
+    data += struct.pack(
+        "<i3f2Bi3f3fB", 0, 0.0, 0.0, 0.0, 0, 0, -1, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 0
+    )
+    data += struct.pack("<i32i", 0, *([0] * 32))
+    data += struct.pack("<i32i", 0, *([0] * 32))
+    data += struct.pack("<3f2BIii", 0.0, 0.0, 0.0, 1, 0, 0, -1, -1)
+    data += struct.pack("<ii", 0, 0)
+    data += struct.pack("<fi", 1.0, -1) * 5
+    data += struct.pack("<i", 0)
+    return bytes(data)
+
+
+def _processes(
+    *, fixed_offset: int | None = None, first_process: bool = False
+) -> bytes:
     count = 3 if fixed_offset is not None else 2
     end = OBJECT_REFERENCE_DATA_OFFSET + 12 + count * 12
-    data = bytearray(end + 4)
+    data = bytearray(end)
     struct.pack_into("<II", data, 0, 8, 2)
     struct.pack_into("<III", data, OBJECT_REFERENCE_DATA_OFFSET, 1, count, 1)
     struct.pack_into("<iii", data, OBJECT_REFERENCE_DATA_OFFSET + 12, 0, -1, 0)
@@ -63,7 +147,152 @@ def _processes(*, fixed_offset: int | None = None) -> bytes:
             9,
             -fixed_offset,
         )
-    struct.pack_into("<I", data, end, 2)
+    data += struct.pack(
+        "<I3f3fiiB4fi",
+        2,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        320,
+        2,
+        0,
+        60,
+        1,
+        8000,
+        4000,
+        0,
+    )
+    camera_control = bytearray(180)
+    struct.pack_into("<I", camera_control, 0, 2)
+    data += camera_control
+    data += struct.pack("<Iiii3f3fii", 0, 0, 0, 0, 250, 500, 1500, 0, 0, 0, 0, 0)
+    if first_process:
+        data += struct.pack(
+            "<i9i100siii",
+            104,
+            2,
+            1,
+            0,
+            0,
+            30103,
+            -1,
+            -1,
+            -1,
+            0,
+            b"Poof",
+            0,
+            0,
+            -1,
+        )
+        particle_counts = (2, 2, 3, 1, 1)
+        data += struct.pack("<iIBi5i", 5, 49, 0, 527, *particle_counts)
+        layouts = (
+            ("particle_presets", 2, 1490),
+            ("force_presets", 1, 97),
+            ("forces", 1, 24),
+            ("generations", 2, 124),
+            ("particles", 3, 196),
+        )
+        for name, count, record_size in layouts:
+            for record_id in range(1, count + 1):
+                record = bytearray(record_size)
+                struct.pack_into("<i", record, 0, record_id)
+                if name == "force_presets":
+                    struct.pack_into(
+                        "<Biii3ffii3fi3f3fiiii",
+                        record,
+                        4,
+                        43,
+                        100,
+                        5,
+                        9,
+                        1.0,
+                        2.0,
+                        3.0,
+                        0.75,
+                        50,
+                        -1,
+                        1.0,
+                        1.5,
+                        2.0,
+                        9999,
+                        0.1,
+                        0.2,
+                        0.3,
+                        4.0,
+                        5.0,
+                        6.0,
+                        24,
+                        -1,
+                        12,
+                        0,
+                    )
+                elif name == "forces":
+                    struct.pack_into("<i3fi", record, 4, 17, 1.0, 2.0, 3.0, 1)
+                elif name == "generations":
+                    struct.pack_into(
+                        "<30i", record, 4, 1, -1, -1, -1, *([1] * 16), *([-1] * 10)
+                    )
+                elif name == "particles":
+                    struct.pack_into(
+                        "<2i10i2i3f3f3f3f4f4f2iBHI4iIB5i",
+                        record,
+                        4,
+                        1,
+                        -1,
+                        *([-1] * 10),
+                        120,
+                        7,
+                        10.0,
+                        20.0,
+                        30.0,
+                        1.0,
+                        2.0,
+                        3.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        1.0,
+                        1.0,
+                        1.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        1.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        1.0,
+                        5,
+                        2,
+                        2,
+                        557,
+                        0x200,
+                        0,
+                        0,
+                        1,
+                        -1,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                    )
+                data += record
+        data += _hanging_object_process()
+        data += _script_timer_process()
+        data += _animation_controller_process()
+        data += struct.pack("<i9i100s", 70, 10, 1, 0, 0, 464, -1, -1, -1, 0, b"Torch")
+        data += struct.pack("<iii", 0, 0, 9)
+        data += struct.pack("<iiHfIIII", 0, 0, 65535, 65535.0, 24, 0, 0, 0x09)
+        data += struct.pack("<i", -1)
+    else:
+        data += struct.pack("<i", -1)
     return bytes(data)
 
 
@@ -95,11 +324,18 @@ class IntegrityTests(unittest.TestCase):
         self.assertEqual(report.verdict("structure"), "PASS")
         self.assertEqual(report.verdict("compatibility"), "PASS")
         self.assertIn("LAY01", {finding.check_id for finding in report.findings})
+        process_evidence = report.artifacts["archive/processes.dat"]
+        self.assertEqual(process_evidence["camera"]["version"], 2)
+        self.assertEqual(process_evidence["camera_control"]["version"], 2)
+        self.assertEqual(process_evidence["first_process_type"], -1)
         rendered = render_integrity_report(report)
         self.assertIn("Assessment: PASS - no integrity problems detected", rendered)
         self.assertIn("Custody       PASS", rendered)
         self.assertIn("Problems (0)\n  None", rendered)
         self.assertIn("Confirmations (1)", rendered)
+        self.assertIn("camera=v2/effects0", rendered)
+        self.assertIn("camera_control=v2", rendered)
+        self.assertIn("first_process_type=-1", rendered)
         self.assertLess(rendered.index("Problems"), rendered.index("Evidence"))
         json.dumps(report.to_dict())
 
@@ -112,6 +348,127 @@ class IntegrityTests(unittest.TestCase):
         self.assertIn("Assessment: UNSAFE TO LOAD", rendered)
         self.assertIn("CUS: Re-extract the selected archive", rendered)
         self.assertIn("Source:", rendered)
+
+    def test_reports_first_process_shared_prefix(self) -> None:
+        processes = _processes(first_process=True)
+        nonfixed = _nonfixed()
+        (self.save / "u9game4.sav").write_bytes(_archive(processes, nonfixed))
+        (self.save / "processes.dat").write_bytes(processes)
+
+        report = check_save(self.root, fixed_reference_directory=self.reference)
+        evidence = report.artifacts["archive/processes.dat"]
+        first_process = evidence["first_process"]
+        self.assertEqual(first_process["type"], 104)
+        self.assertEqual(first_process["name"], "Poof")
+        self.assertEqual(first_process["process_id"], 2)
+        self.assertEqual(first_process["payload_offset"], first_process["offset"] + 152)
+        self.assertEqual(
+            first_process["world_state"],
+            {"version": 0, "object_reference_indices": [], "map_number": -1},
+        )
+        self.assertEqual(
+            first_process["particle_state"]["record_counts"],
+            {
+                "particle_presets": 2,
+                "generations": 2,
+                "particles": 3,
+                "force_presets": 1,
+                "forces": 1,
+            },
+        )
+        self.assertEqual(
+            first_process["particle_state"]["end_offset"],
+            first_process["next_process_offset"],
+        )
+        self.assertEqual(first_process["next_process_type"], 61)
+        self.assertEqual(first_process["next_process_name"], "Hanging")
+        self.assertEqual(
+            first_process["particle_state"]["collections"]["particle_presets"][
+                "record_size"
+            ],
+            1490,
+        )
+        particle_presets = first_process["particle_state"]["particle_preset_records"]
+        self.assertEqual(len(particle_presets), 2)
+        self.assertEqual(particle_presets[0]["record_id"], 1)
+        self.assertEqual(particle_presets[0]["version_5_item_extension"], "0000")
+        self.assertEqual(particle_presets[0]["version_5_ramp_extension"], "00000000")
+        self.assertEqual(len(particle_presets[0]["item_variants"]), 10)
+        self.assertEqual(len(particle_presets[0]["ramp_slots"]), 10)
+        self.assertEqual(
+            first_process["particle_state"]["force_records"],
+            [
+                {
+                    "record_id": 1,
+                    "age": 17,
+                    "location": [1.0, 2.0, 3.0],
+                    "preset_id": 1,
+                    "offset": first_process["particle_state"]["collections"]["forces"][
+                        "offset"
+                    ],
+                    "end_offset": first_process["particle_state"]["collections"][
+                        "forces"
+                    ]["end_offset"],
+                }
+            ],
+        )
+        generation_records = first_process["particle_state"]["generation_records"]
+        self.assertEqual(len(generation_records), 2)
+        self.assertEqual(generation_records[0]["particle_preset_id"], 1)
+        self.assertEqual(generation_records[0]["birth_force_ids"], [1, 1, 1, 1])
+        self.assertEqual(generation_records[0]["slave_generation_ids"], [-1] * 10)
+        force_presets = first_process["particle_state"]["force_preset_records"]
+        self.assertEqual(len(force_presets), 1)
+        self.assertEqual(force_presets[0]["force_type"], 43)
+        self.assertEqual(force_presets[0]["location"], [1.0, 2.0, 3.0])
+        self.assertEqual(force_presets[0]["speed_limit"], 9999)
+        self.assertEqual(force_presets[0]["object_reference_index"], 0)
+        particle_records = first_process["particle_state"]["particle_records"]
+        self.assertEqual(len(particle_records), 3)
+        self.assertEqual(particle_records[0]["generation_id"], 1)
+        self.assertEqual(particle_records[0]["child_particle_ids"], [-1] * 10)
+        self.assertEqual(particle_records[0]["object_type_id"], 557)
+        self.assertTrue(particle_records[0]["pulse_count_byte_matches"])
+        self.assertEqual(particle_records[0]["object_reference_index"], 0)
+        self.assertEqual(evidence["decoded_following_process_count"], 4)
+        hanging, timer, controller, light = evidence["decoded_following_processes"]
+        self.assertEqual(hanging["type"], 61)
+        self.assertEqual(hanging["name"], "Hanging")
+        self.assertEqual(hanging["scripted_state"]["primary_object_reference_index"], 0)
+        self.assertEqual(hanging["hanging_object"]["version"], 2)
+        self.assertEqual(hanging["hanging_object"]["swing_period"], 22)
+        self.assertEqual(hanging["hanging_object"]["turn_period"], 17)
+        self.assertEqual(
+            hanging["hanging_object"]["configured_maximum_swing_angle"], 45
+        )
+        self.assertEqual(hanging["hanging_object"]["facing"], [0.0, -1.0, 0.0])
+        self.assertEqual(timer["type"], 62)
+        self.assertEqual(timer["name"], "Timer")
+        self.assertEqual(timer["script_timer"]["version"], 1)
+        self.assertEqual(timer["script_timer"]["phase_1_duration"], 600)
+        self.assertEqual(timer["script_timer"]["configured_dual_percentage"], 40)
+        self.assertTrue(timer["script_timer"]["runs_continuously"])
+        self.assertEqual(controller["type"], 98)
+        self.assertEqual(controller["name"], "LayeredAnimation")
+        animation = controller["animation_controller"]
+        self.assertAlmostEqual(animation["version"], 1.2)
+        self.assertEqual(animation["object_reference_index"], 0)
+        self.assertEqual(animation["upper_limb_ids"], [])
+        self.assertEqual(len(animation["animation_tracks"]), 5)
+        self.assertFalse(animation["animation_tracks"][0]["active"])
+        self.assertEqual(animation["kinematic_tracks"], [])
+        self.assertEqual(light["type"], 70)
+        self.assertEqual(light["name"], "Torch")
+        self.assertEqual(light["world_state"]["map_number"], 9)
+        self.assertEqual(light["portable_light"]["maximum_fuel"], 65535)
+        self.assertTrue(light["portable_light"]["is_on"])
+        self.assertTrue(light["portable_light"]["is_automatic"])
+        self.assertIsNone(evidence["blocked_process_type"])
+        self.assertEqual(evidence["process_terminator_offset"], light["end_offset"])
+        rendered = render_integrity_report(report)
+        self.assertIn("first_process=104/Poof", rendered)
+        self.assertIn("decoded_following_processes=4", rendered)
+        json.dumps(report.to_dict())
 
     def test_renderer_collapses_duplicate_problems_but_json_keeps_them(self) -> None:
         report = check_save(self.root, fixed_reference_directory=self.reference)

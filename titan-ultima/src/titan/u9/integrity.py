@@ -17,7 +17,18 @@ from pathlib import Path
 
 from titan.u9.fixed import U9Fixed, U9FixedError
 from titan.u9.nonfixed import U9Nonfixed, U9NonfixedError
-from titan.u9.process_data import U9ObjectReferenceTable, U9ProcessDataError
+from titan.u9.process_data import (
+    U9AnimationControllerProcessState,
+    U9HangingObjectProcessState,
+    U9ObjectReferenceTable,
+    U9ParticlePresetState,
+    U9PlayerProximityProcessState,
+    U9PortableLightProcessState,
+    U9ProcessDataError,
+    U9ProcessDataPrefix,
+    U9ScriptedProcessState,
+    U9ScriptTimerProcessState,
+)
 from titan.u9.savegame import (
     MAX_MAP_NUMBER,
     MAX_SHIPPED_MAP_NUMBER,
@@ -50,9 +61,204 @@ RECOMMENDATIONS = {
     "NFS": "Preserve the files and inspect the named nonfixed maps before loading.",
     "FXS": "Restore the affected fixed maps from a known-good installation.",
     "HND": "Do not load until processes.dat and its object-reference table are repaired.",
+    "PRC": "Do not load until the deterministic processes.dat prefix is repaired.",
     "REF": "Do not load or overwrite the slot; inspect its object-reference targets and matching map data.",
     "LAY": "Supply the creation-time fixed directory with --fixed-reference.",
 }
+
+
+def _particle_preset_record_json(
+    record: U9ParticlePresetState,
+) -> dict[str, object]:
+    """Return a JSON-safe complete particle-preset record."""
+    payload = asdict(record)
+    payload["version_5_item_extension"] = record.version_5_item_extension.hex()
+    payload["version_5_ramp_extension"] = record.version_5_ramp_extension.hex()
+    payload["end_offset"] = record.end_offset
+    return payload
+
+
+def _scripted_process_json(record: U9ScriptedProcessState) -> dict[str, object]:
+    """Return a JSON-safe scripted-object process prefix."""
+    return {
+        "version": record.version,
+        "primary_object_reference_index": record.primary_object_reference_index,
+        "user_object_reference_index": record.user_object_reference_index,
+        "argument_1": record.argument_1,
+        "argument_2": record.argument_2,
+        "temporary_buffer_hex": record.temporary_buffer.hex(),
+        "state": record.state,
+    }
+
+
+def _following_process_json(
+    record: U9AnimationControllerProcessState
+    | U9HangingObjectProcessState
+    | U9ScriptTimerProcessState
+    | U9PortableLightProcessState
+    | U9PlayerProximityProcessState,
+) -> dict[str, object]:
+    """Return the common and type-specific fields of one decoded process."""
+    header = record.header
+    world = record.world_state
+    payload: dict[str, object] = {
+        "offset": record.offset,
+        "end_offset": record.end_offset,
+        "type": header.process_type,
+        "process_id": header.process_id,
+        "category": header.category,
+        "paused_frames": header.paused_frames,
+        "timeout_frames": header.timeout_frames,
+        "run_count": header.run_count,
+        "next_process_id": header.next_process_id,
+        "previous_process_id": header.previous_process_id,
+        "execution_mask": header.execution_mask,
+        "state_flags": header.state_flags,
+        "name": header.name,
+        "world_state": {
+            "version": world.version,
+            "object_reference_indices": list(world.object_reference_indices),
+            "map_number": world.map_number,
+        },
+    }
+    if isinstance(record, U9AnimationControllerProcessState):
+        payload["animation_controller"] = {
+            "version": record.version,
+            "object_reference_index": record.object_reference_index,
+            "initial_position": list(record.initial_position),
+            "calculates_transforms": record.calculates_transforms,
+            "shutting_down": record.shutting_down,
+            "last_animation_id": record.last_animation_id,
+            "animation_root_position": list(record.animation_root_position),
+            "translation_scale": list(record.translation_scale),
+            "scales_translation": record.scales_translation,
+            "upper_lock_count": record.upper_lock_count,
+            "upper_lock_slots": list(record.upper_lock_slots),
+            "upper_limb_ids": list(record.upper_limb_ids),
+            "lower_lock_count": record.lower_lock_count,
+            "lower_lock_slots": list(record.lower_lock_slots),
+            "lower_limb_ids": list(record.lower_limb_ids),
+            "current_translation": list(record.current_translation),
+            "applies_events": record.applies_events,
+            "forces_animations_to_stop": record.forces_animations_to_stop,
+            "attached_element_id": record.attached_element_id,
+            "parent_process_id": record.parent_process_id,
+            "child_process_id": record.child_process_id,
+            "included_limb_ids": list(record.included_limb_ids),
+            "excluded_limb_ids": list(record.excluded_limb_ids),
+            "animation_tracks": [
+                {**asdict(track), "active": track.active}
+                for track in record.animation_tracks
+            ],
+            "kinematic_tracks": [asdict(track) for track in record.kinematic_tracks],
+        }
+    elif isinstance(record, U9HangingObjectProcessState):
+        payload["scripted_state"] = _scripted_process_json(record.scripted_state)
+        payload["hanging_object"] = {
+            "version": record.version,
+            "is_swingable": record.is_swingable,
+            "swing_period": record.swing_period,
+            "maximum_swing_angle": record.maximum_swing_angle,
+            "swing_envelope_period": record.swing_envelope_period,
+            "turning_type": record.turning_type,
+            "turn_period": record.turn_period,
+            "maximum_turn_angle": record.maximum_turn_angle,
+            "turn_envelope_period": record.turn_envelope_period,
+            "object_status_flags": record.object_status_flags,
+            "initial_orientation": list(record.initial_orientation),
+            "new_orientation": list(record.new_orientation),
+            "old_orientation": list(record.old_orientation),
+            "pitch_orientation": list(record.pitch_orientation),
+            "yaw_orientation": list(record.yaw_orientation),
+            "pitch": record.pitch,
+            "yaw": record.yaw,
+            "is_swinging": record.is_swinging,
+            "swing_envelope_value": record.swing_envelope_value,
+            "swing_time_ms": record.swing_time_ms,
+            "swing_envelope_time_ms": record.swing_envelope_time_ms,
+            "swing_time_constant": record.swing_time_constant,
+            "pitch_changed": record.pitch_changed,
+            "last_direction": record.last_direction,
+            "is_turning": record.is_turning,
+            "turn_envelope_value": record.turn_envelope_value,
+            "turn_time_ms": record.turn_time_ms,
+            "turn_envelope_time_ms": record.turn_envelope_time_ms,
+            "turn_time_constant": record.turn_time_constant,
+            "yaw_changed": record.yaw_changed,
+            "is_collided": record.is_collided,
+            "hit_magnitude": record.hit_magnitude,
+            "swing_magnitude_fraction": record.swing_magnitude_fraction,
+            "turn_magnitude_fraction": record.turn_magnitude_fraction,
+            "last_wind": record.last_wind,
+            "swing_configuration_bits": record.swing_configuration_bits,
+            "turn_configuration_bits": record.turn_configuration_bits,
+            "configured_swingable": record.configured_swingable,
+            "configured_swing_period": record.configured_swing_period,
+            "configured_maximum_swing_angle": (record.configured_maximum_swing_angle),
+            "configured_swing_half_life": record.configured_swing_half_life,
+            "configured_turning_type": record.configured_turning_type,
+            "configured_turn_period": record.configured_turn_period,
+            "configured_turn_limit_is_degrees": (
+                record.configured_turn_limit_is_degrees
+            ),
+            "configured_turn_limit": record.configured_turn_limit,
+            "configured_turn_half_life": record.configured_turn_half_life,
+            "reversed": record.reversed,
+            "facing": list(record.facing),
+            "reserved": list(record.reserved),
+        }
+    elif isinstance(record, U9ScriptTimerProcessState):
+        payload["scripted_state"] = _scripted_process_json(record.scripted_state)
+        payload["script_timer"] = {
+            "version": record.version,
+            "timer_flags": record.timer_flags,
+            "phase_1_duration": record.phase_1_duration,
+            "dual_mode": record.dual_mode,
+            "time_system": record.time_system,
+            "phase_2_duration": record.phase_2_duration,
+            "accumulated_time": record.accumulated_time,
+            "has_started": record.has_started,
+            "phase": record.phase,
+            "runs_continuously": record.runs_continuously,
+            "starts_in_fast_area": record.starts_in_fast_area,
+            "fast_area_stop_flag": record.fast_area_stop_flag,
+            "is_quiet_outside_fast_area": record.is_quiet_outside_fast_area,
+            "configured_dual_percentage": record.configured_dual_percentage,
+            "configured_time_system": record.configured_time_system,
+            "configured_duration": record.configured_duration,
+            "reserved": list(record.reserved),
+        }
+    elif isinstance(record, U9PortableLightProcessState):
+        payload["portable_light"] = {
+            "version": record.version,
+            "object_reference_index": record.light_object_reference_index,
+            "maximum_fuel": record.maximum_fuel,
+            "current_fuel": record.current_fuel,
+            "update_elapsed": record.update_elapsed,
+            "flare_elapsed": record.flare_elapsed,
+            "flare_duration": record.flare_duration,
+            "flags": record.flags,
+            "is_on": record.is_on,
+            "uses_skeletal_flame": record.uses_skeletal_flame,
+            "is_flaring": record.is_flaring,
+            "is_automatic": record.is_automatic,
+            "has_manual_override": record.has_manual_override,
+        }
+    else:
+        payload["scripted_state"] = _scripted_process_json(record.scripted_state)
+        payload["player_proximity"] = {
+            "version": record.version,
+            "enter_distance_squared": record.enter_distance_squared,
+            "exit_distance_squared": record.exit_distance_squared,
+            "uses_double_threshold": record.uses_double_threshold,
+            "location": list(record.location),
+            "x": record.x,
+            "y": record.y,
+            "idle_count": record.idle_count,
+            "enabled": record.enabled,
+            "reserved": list(record.reserved),
+        }
+    return payload
 
 
 @dataclass(frozen=True)
@@ -526,6 +732,18 @@ def check_save(
             str(error),
             path=f"{archive_path}!processes.dat",
         )
+    process_prefix: U9ProcessDataPrefix | None = None
+    if object_references is not None:
+        try:
+            process_prefix = U9ProcessDataPrefix.from_bytes(archive.processes.data)
+        except U9ProcessDataError as error:
+            report.add(
+                "PRC01",
+                "structure",
+                "FATAL",
+                str(error),
+                path=f"{archive_path}!processes.dat",
+            )
 
     pairs = [(archive.processes, save_directory / "processes.dat")]
     pairs.extend((member, save_directory / member.name) for member in archive.nonfixed)
@@ -711,6 +929,318 @@ def check_save(
             fixed_handles=len(object_references.fixed_entries),
             nonfixed_handles=len(object_references.nonfixed_entries),
         )
+        if process_prefix is not None:
+            camera = process_prefix.camera
+            control = process_prefix.camera_control
+            targeting = control.targeting
+            first_process = process_prefix.first_process
+            report.artifacts["archive/processes.dat"].update(
+                camera={
+                    "offset": camera.offset,
+                    "version": camera.version,
+                    "focus_position": list(camera.focus_position),
+                    "orientation": [camera.yaw, camera.pitch, camera.roll],
+                    "focus_distance": camera.focus_distance,
+                    "mode": camera.mode,
+                    "exclusive_interface": camera.exclusive_interface,
+                    "horizontal_fov": camera.horizontal_fov,
+                    "clip_distances": [
+                        camera.near_distance,
+                        camera.middle_distance,
+                        camera.far_distance,
+                    ],
+                    "effect_count": len(camera.effects),
+                    "effect_versions": [effect.version for effect in camera.effects],
+                    "effect_record_sizes": [effect.size for effect in camera.effects],
+                },
+                camera_control={
+                    "offset": control.offset,
+                    "version": control.version,
+                    "target_position": list(control.target_position),
+                    "target_orientation": [control.target_yaw, control.target_pitch],
+                    "current_distance": control.current_distance,
+                    "maximum_distance": control.maximum_distance,
+                    "underground": control.underground,
+                    "underwater": control.underwater,
+                    "on_moon": control.on_moon,
+                    "target_mode": control.target_mode,
+                    "temporary_camera_present": control.has_temporary_camera,
+                    "targeting": (
+                        {
+                            "version": targeting.version,
+                            "movement_mode": targeting.movement_mode,
+                            "visual_mode": targeting.visual_mode,
+                            "visibility": targeting.visibility,
+                            "ranges": list(targeting.ranges),
+                            "position": list(targeting.position),
+                            "screen_position": list(targeting.screen_position),
+                        }
+                        if targeting is not None
+                        else None
+                    ),
+                },
+                process_list_offset=process_prefix.process_list_offset,
+                first_process_type=process_prefix.first_process_type,
+                first_process=(
+                    {
+                        "offset": first_process.header.offset,
+                        "payload_offset": first_process.payload_offset,
+                        "type": first_process.header.process_type,
+                        "process_id": first_process.header.process_id,
+                        "category": first_process.header.category,
+                        "paused_frames": first_process.header.paused_frames,
+                        "timeout_frames": first_process.header.timeout_frames,
+                        "run_count": first_process.header.run_count,
+                        "next_process_id": first_process.header.next_process_id,
+                        "previous_process_id": first_process.header.previous_process_id,
+                        "execution_mask": first_process.header.execution_mask,
+                        "state_flags": first_process.header.state_flags,
+                        "name": first_process.header.name,
+                        "next_process_offset": process_prefix.next_process_offset,
+                        "next_process_type": process_prefix.next_process_type,
+                        "next_process_name": (
+                            process_prefix.next_process_header.name
+                            if process_prefix.next_process_header is not None
+                            else None
+                        ),
+                        "world_state": (
+                            {
+                                "version": first_process.world_state.version,
+                                "object_reference_indices": list(
+                                    first_process.world_state.object_reference_indices
+                                ),
+                                "map_number": first_process.world_state.map_number,
+                            }
+                            if first_process.world_state is not None
+                            else None
+                        ),
+                        "particle_state": (
+                            {
+                                "version": first_process.particle_state.version,
+                                "animation_time": (
+                                    first_process.particle_state.animation_time
+                                ),
+                                "translation_flag": (
+                                    first_process.particle_state.translation_flag
+                                ),
+                                "translation_pending": (
+                                    first_process.particle_state.translation_pending
+                                ),
+                                "next_particle_id": (
+                                    first_process.particle_state.next_particle_id
+                                ),
+                                "record_counts": {
+                                    "particle_presets": (
+                                        first_process.particle_state.particle_preset_count
+                                    ),
+                                    "generations": (
+                                        first_process.particle_state.generation_count
+                                    ),
+                                    "particles": (
+                                        first_process.particle_state.particle_count
+                                    ),
+                                    "force_presets": (
+                                        first_process.particle_state.force_preset_count
+                                    ),
+                                    "forces": first_process.particle_state.force_count,
+                                },
+                                "records_offset": (
+                                    first_process.particle_state.end_offset
+                                ),
+                                "end_offset": (
+                                    first_process.particle_state.records.end_offset
+                                ),
+                                "collections": {
+                                    collection_key: {
+                                        "offset": collection.offset,
+                                        "end_offset": collection.end_offset,
+                                        "count": collection.count,
+                                        "record_size": collection.record_size,
+                                    }
+                                    for collection_key, collection in (
+                                        (
+                                            "particle_presets",
+                                            first_process.particle_state.records.particle_presets,
+                                        ),
+                                        (
+                                            "force_presets",
+                                            first_process.particle_state.records.force_presets,
+                                        ),
+                                        (
+                                            "forces",
+                                            first_process.particle_state.records.forces,
+                                        ),
+                                        (
+                                            "generations",
+                                            first_process.particle_state.records.generations,
+                                        ),
+                                        (
+                                            "particles",
+                                            first_process.particle_state.records.particles,
+                                        ),
+                                    )
+                                },
+                                "particle_preset_records": [
+                                    _particle_preset_record_json(record)
+                                    for record in first_process.particle_state.records.particle_preset_records
+                                ],
+                                "force_preset_records": [
+                                    {
+                                        "record_id": record.record_id,
+                                        "force_type": record.force_type,
+                                        "lifetime": record.lifetime,
+                                        "initial_age": record.initial_age,
+                                        "trigger_age": record.trigger_age,
+                                        "location": list(record.location),
+                                        "strength": record.strength,
+                                        "influence_distance": (
+                                            record.influence_distance
+                                        ),
+                                        "inner_radius": record.inner_radius,
+                                        "scale": list(record.scale),
+                                        "speed_limit": record.speed_limit,
+                                        "twist_velocity": list(record.twist_velocity),
+                                        "offset_vector": list(record.offset_vector),
+                                        "element_id": record.element_id,
+                                        "hard_point_id": record.hard_point_id,
+                                        "numeric_type": record.numeric_type,
+                                        "object_reference_index": (
+                                            record.object_reference_index
+                                        ),
+                                        "offset": record.offset,
+                                        "end_offset": record.end_offset,
+                                    }
+                                    for record in first_process.particle_state.records.force_preset_records
+                                ],
+                                "force_records": [
+                                    {
+                                        "record_id": record.record_id,
+                                        "age": record.age,
+                                        "location": list(record.location),
+                                        "preset_id": record.preset_id,
+                                        "offset": record.offset,
+                                        "end_offset": record.end_offset,
+                                    }
+                                    for record in first_process.particle_state.records.force_records
+                                ],
+                                "generation_records": [
+                                    {
+                                        "record_id": record.record_id,
+                                        "particle_preset_id": (
+                                            record.particle_preset_id
+                                        ),
+                                        "birth_generation_id": (
+                                            record.birth_generation_id
+                                        ),
+                                        "lifetime_generation_id": (
+                                            record.lifetime_generation_id
+                                        ),
+                                        "death_generation_id": (
+                                            record.death_generation_id
+                                        ),
+                                        "birth_force_ids": list(record.birth_force_ids),
+                                        "lifetime_force_ids": list(
+                                            record.lifetime_force_ids
+                                        ),
+                                        "death_force_ids": list(record.death_force_ids),
+                                        "slave_force_ids": list(record.slave_force_ids),
+                                        "slave_generation_ids": list(
+                                            record.slave_generation_ids
+                                        ),
+                                        "offset": record.offset,
+                                        "end_offset": record.end_offset,
+                                    }
+                                    for record in first_process.particle_state.records.generation_records
+                                ],
+                                "particle_records": [
+                                    {
+                                        "record_id": record.record_id,
+                                        "generation_id": record.generation_id,
+                                        "parent_particle_id": (
+                                            record.parent_particle_id
+                                        ),
+                                        "child_particle_ids": list(
+                                            record.child_particle_ids
+                                        ),
+                                        "lifetime": record.lifetime,
+                                        "age": record.age,
+                                        "location": list(record.location),
+                                        "velocity": list(record.velocity),
+                                        "snap_velocity": list(record.snap_velocity),
+                                        "scale": list(record.scale),
+                                        "orientation_quaternion": list(
+                                            record.orientation_quaternion
+                                        ),
+                                        "rotation_quaternion": list(
+                                            record.rotation_quaternion
+                                        ),
+                                        "spawn_mean_lifetime": (
+                                            record.spawn_mean_lifetime
+                                        ),
+                                        "spawn_pulse_count": (record.spawn_pulse_count),
+                                        "spawn_pulse_count_byte": (
+                                            record.spawn_pulse_count_byte
+                                        ),
+                                        "pulse_count_byte_matches": (
+                                            record.pulse_count_byte_matches
+                                        ),
+                                        "object_type_id": record.object_type_id,
+                                        "object_status_flags": (
+                                            record.object_status_flags
+                                        ),
+                                        "swap_sequence": record.swap_sequence,
+                                        "sequence_index": record.sequence_index,
+                                        "swap_elapsed_frames": (
+                                            record.swap_elapsed_frames
+                                        ),
+                                        "attached_element_id": (
+                                            record.attached_element_id
+                                        ),
+                                        "sound_id": record.sound_id,
+                                        "light_source_flag": (record.light_source_flag),
+                                        "has_light_source": record.has_light_source,
+                                        "callback_id": record.callback_id,
+                                        "callback_effect_id": (
+                                            record.callback_effect_id
+                                        ),
+                                        "callback_magic_type": (
+                                            record.callback_magic_type
+                                        ),
+                                        "callback_caster_reference_index": (
+                                            record.callback_caster_reference_index
+                                        ),
+                                        "object_reference_index": (
+                                            record.object_reference_index
+                                        ),
+                                        "offset": record.offset,
+                                        "end_offset": record.end_offset,
+                                    }
+                                    for record in first_process.particle_state.records.particle_records
+                                ],
+                            }
+                            if first_process.particle_state is not None
+                            else None
+                        ),
+                    }
+                    if first_process is not None
+                    else None
+                ),
+                next_process_offset=process_prefix.next_process_offset,
+                next_process_type=process_prefix.next_process_type,
+                next_process_name=(
+                    process_prefix.next_process_header.name
+                    if process_prefix.next_process_header is not None
+                    else None
+                ),
+                decoded_following_process_count=len(process_prefix.following_processes),
+                decoded_following_processes=[
+                    _following_process_json(record)
+                    for record in process_prefix.following_processes
+                ],
+                blocked_process_offset=process_prefix.blocked_process_offset,
+                blocked_process_type=process_prefix.blocked_process_type,
+                process_terminator_offset=process_prefix.terminator_offset,
+            )
         invalid_entries = [
             entry.index
             for entry in object_references.live_entries
@@ -847,5 +1377,32 @@ def render_integrity_report(report: IntegrityReport) -> str:
         ):
             if key in artifact:
                 summary.append(f"{key}={artifact[key]}")
+        camera = artifact.get("camera")
+        if isinstance(camera, dict):
+            summary.append(
+                f"camera=v{camera['version']}/effects{camera['effect_count']}"
+            )
+        camera_control = artifact.get("camera_control")
+        if isinstance(camera_control, dict):
+            summary.append(f"camera_control=v{camera_control['version']}")
+        if "first_process_type" in artifact:
+            summary.append(f"first_process_type={artifact['first_process_type']}")
+        first_process = artifact.get("first_process")
+        if isinstance(first_process, dict):
+            summary.append(
+                f"first_process={first_process['type']}/{first_process['name']}"
+            )
+        if artifact.get("next_process_type") is not None:
+            summary.append(
+                f"next_process={artifact['next_process_type']}/"
+                f"{artifact.get('next_process_name') or '(unnamed)'}"
+            )
+        if "decoded_following_process_count" in artifact:
+            summary.append(
+                "decoded_following_processes="
+                f"{artifact['decoded_following_process_count']}"
+            )
+        if artifact.get("blocked_process_type") is not None:
+            summary.append(f"blocked_process_type={artifact['blocked_process_type']}")
         lines.append(f"  {name}: {', '.join(summary)}")
     return "\n".join(lines)
