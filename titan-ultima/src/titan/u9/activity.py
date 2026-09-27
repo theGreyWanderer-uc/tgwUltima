@@ -17,8 +17,11 @@ Each record is self-delimiting::
 
 and each step is::
 
-    0x00  opcode     u8
-    0x01  operands   8 bytes
+    0x00  opcode             u8
+    0x01  parameter_0        u16
+    0x03  parameter_1        u16
+    0x05  scheduled_minute   u16
+    0x07  duration_code      u16
 
 All integers are little-endian.
 
@@ -43,10 +46,11 @@ at by testing rather than assumption:
   Validating it as ``1..record_count`` rejects eight perfectly good
   entries, so this reader reads it and does not constrain it.
 
-Verified against the real ``static/activity.flx`` (29,522 bytes, 352 FLX
-slots, 214 used): **all 214 entries parse with their bodies consumed
-exactly**, yielding 617 records and 617 terminators -- one per record -- and
-zero trailing slack anywhere.
+Verified against v1.19H ``static/activity.flx`` (29,522 bytes, 352 FLX slots,
+214 used): **all 214 entries parse with their bodies consumed exactly**,
+yielding 617 records and 617 repeat/end markers -- one per record -- and zero
+trailing slack anywhere. The retail 1.19F archive has one additional malformed
+entry described below.
 
 The pre-patch original parses 214 of 215. Its single failure, entry 76, is
 the only record in either file with no ``0xFF`` terminator, and the v1.19H
@@ -61,18 +65,18 @@ named NPC at the same index, and the names match the characters -- NPC 1
 ``Raven`` has ``Goto Despise`` / ``Go To Wrong``, NPC 39 ``Irene`` has
 ``Shopkeep``.
 
-**Step opcode semantics are mostly undecoded.** 12 distinct opcodes appear
-across 1,049 non-terminator steps, dominated by ``0x04``, ``0x0A``, ``0x03``
-and ``0x01``. This module exposes the step stream, not its meaning.
+The 1.19F executable reads every step in this fixed layout and dispatches
+opcodes ``0x00`` through ``0x0C`` directly. The public catalogue below uses
+Titan terminology for the confirmed behavior. Opcode ``0x08`` is supported
+by the executable but absent from both shipped archives checked. ``0xFF`` is
+the repeat/end marker: it ends the stored record and tells the runtime to
+restart the activity cycle when repetition is enabled.
 
-The exceptions are ``0x01`` and ``0x02``, which move an NPC between two
-navigation points: the operand is a source ``u16`` and a destination ``u16``
-naming points in :mod:`titan.u9.highway`, followed by four bytes that are
-zero throughout. Both halves are declared points in all 156 such steps
-(100%), against 2 of 385 for ``0x04`` and none for the rest. NPC 166
-``Dermot`` is the clearest case: his ``Sequence 2`` (51823 -> 51554) and
-``Sequence 4`` (51554 -> 51823) are exact mirrors, the cemetery-to-pub round
-trip his patch notes describe.
+The final word is converted with ``duration_code >> 2`` only by the travel
+and begin-action handlers. Titan exposes both the stored word and that derived
+value without discarding its low two bits. Other handlers ignore some or all
+of the parameter and duration words; those bytes remain part of the lossless
+step record.
 
 For reverse engineering, every record and step carries its byte offset
 relative to the start of the FLX entry. Raw name padding, terminator
@@ -93,11 +97,14 @@ Example::
 from __future__ import annotations
 
 __all__ = [
+    "ACTIVITY_OPCODE_CATALOGUE",
     "U9Activities",
     "U9Activity",
     "U9ActivityError",
+    "U9ActivityOpcodeInfo",
     "U9ActivityRecord",
     "U9ActivityStep",
+    "activity_opcode_info",
 ]
 
 import os
@@ -114,17 +121,102 @@ RECORD_HEADER_SIZE = 1 + NAME_FIELD_SIZE
 TERMINATOR_OPCODE = 0xFF
 
 
+@dataclass(frozen=True)
+class U9ActivityOpcodeInfo:
+    """Titan's stable public description of one runtime activity command."""
+
+    opcode: int
+    meaning: str
+    parameter_roles: str
+    evidence: str = "retail_runtime_confirmed"
+
+
+ACTIVITY_OPCODE_CATALOGUE = (
+    U9ActivityOpcodeInfo(0x00, "no operation", "no parameters"),
+    U9ActivityOpcodeInfo(
+        0x01,
+        "travel between navigation points",
+        "parameter_0=start point; parameter_1=destination point; duration_code>>2",
+    ),
+    U9ActivityOpcodeInfo(
+        0x02,
+        "travel cautiously between navigation points",
+        "parameter_0=start point; parameter_1=destination point; duration_code>>2",
+    ),
+    U9ActivityOpcodeInfo(
+        0x03,
+        "relocate to a navigation point",
+        "parameter_0=destination point; parameter_1=destination map",
+    ),
+    U9ActivityOpcodeInfo(
+        0x04,
+        "begin NPC action",
+        "parameter_0=action kind; parameter_1=action argument; duration_code>>2",
+    ),
+    U9ActivityOpcodeInfo(
+        0x05,
+        "invoke conversation topic",
+        "parameter_0=topic; remaining stored words ignored by dispatcher",
+    ),
+    U9ActivityOpcodeInfo(
+        0x06,
+        "use selected object",
+        "parameter_0=object selector; parameter_1 not read directly by dispatcher",
+    ),
+    U9ActivityOpcodeInfo(
+        0x07,
+        "call activity sequence",
+        "parameter_0=record ordinal; remaining stored words ignored by dispatcher",
+    ),
+    U9ActivityOpcodeInfo(
+        0x08,
+        "return from activity sequence",
+        "no parameters read by dispatcher",
+    ),
+    U9ActivityOpcodeInfo(
+        0x09,
+        "run NPC triggers",
+        "parameter_0=trigger phase; remaining stored words ignored by dispatcher",
+    ),
+    U9ActivityOpcodeInfo(
+        0x0A,
+        "switch activity sequence",
+        "parameter_0=record ordinal; remaining stored words ignored by dispatcher",
+    ),
+    U9ActivityOpcodeInfo(
+        0x0B,
+        "branch label marker",
+        "parameter_0=label; remaining stored words ignored by dispatcher",
+    ),
+    U9ActivityOpcodeInfo(
+        0x0C,
+        "jump to branch label",
+        "parameter_0=label; remaining stored words ignored by dispatcher",
+    ),
+)
+
+_ACTIVITY_OPCODE_BY_VALUE = {info.opcode: info for info in ACTIVITY_OPCODE_CATALOGUE}
+_REPEAT_MARKER_INFO = U9ActivityOpcodeInfo(
+    TERMINATOR_OPCODE,
+    "repeat activity cycle",
+    "stored operand words ignored",
+)
+
+
+def activity_opcode_info(opcode: int) -> U9ActivityOpcodeInfo | None:
+    """Return the confirmed runtime description for ``opcode``, if known."""
+    if opcode == TERMINATOR_OPCODE:
+        return _REPEAT_MARKER_INFO
+    return _ACTIVITY_OPCODE_BY_VALUE.get(opcode)
+
+
 class U9ActivityError(Exception):
     """Raised on malformed ``static/activity.flx`` data."""
 
 
 @dataclass(frozen=True)
 class U9ActivityStep:
-    """One 9-byte step.
-
-    Only opcodes ``0xFF`` (terminator) and ``0x01``/``0x02`` (move between
-    highway points) have known meanings; see the module docstring.
-    """
+    """One lossless nine-byte command with typed views over its operands."""
 
     opcode: int
     operands: bytes
@@ -133,6 +225,20 @@ class U9ActivityStep:
     @property
     def is_terminator(self) -> bool:
         return self.opcode == TERMINATOR_OPCODE
+
+    @property
+    def is_repeat_marker(self) -> bool:
+        """Whether this is the stored end marker for a repeatable cycle."""
+        return self.opcode == TERMINATOR_OPCODE
+
+    @property
+    def opcode_info(self) -> U9ActivityOpcodeInfo | None:
+        return activity_opcode_info(self.opcode)
+
+    @property
+    def semantic_name(self) -> str:
+        info = self.opcode_info
+        return "unknown" if info is None else info.meaning
 
     @property
     def operands_u16(self) -> tuple[int, int, int, int]:
@@ -145,12 +251,81 @@ class U9ActivityStep:
         return struct.unpack("<2I", self.operands)
 
     @property
+    def parameter_0(self) -> int:
+        return self.operands_u16[0]
+
+    @property
+    def parameter_1(self) -> int:
+        return self.operands_u16[1]
+
+    @property
+    def scheduled_minute(self) -> int:
+        """World-clock minute used to schedule this step; zero means untimed."""
+        return self.operands_u16[2]
+
+    @property
+    def duration_code(self) -> int:
+        """Stored duration word, before command-specific conversion."""
+        return self.operands_u16[3]
+
+    @property
+    def duration_value(self) -> int | None:
+        """Duration consumed by travel and begin-action commands."""
+        if self.opcode not in (0x01, 0x02, 0x04):
+            return None
+        return self.duration_code >> 2
+
+    @property
+    def duration_remainder(self) -> int | None:
+        """Preserved low bits discarded by duration-using handlers."""
+        if self.opcode not in (0x01, 0x02, 0x04):
+            return None
+        return self.duration_code & 0x03
+
+    @property
     def movement_points(self) -> tuple[int, int] | None:
-        """Known source/destination highway points for opcodes 1 and 2."""
+        """Start/destination navigation points for travel commands."""
         if self.opcode not in (0x01, 0x02):
             return None
-        values = self.operands_u16
-        return values[0], values[1]
+        return self.parameter_0, self.parameter_1
+
+    @property
+    def relocation_target(self) -> tuple[int, int] | None:
+        """Destination navigation point and map for relocation commands."""
+        if self.opcode != 0x03:
+            return None
+        return self.parameter_0, self.parameter_1
+
+    @property
+    def npc_action(self) -> tuple[int, int] | None:
+        """NPC action kind and its command-specific argument."""
+        if self.opcode != 0x04:
+            return None
+        return self.parameter_0, self.parameter_1
+
+    @property
+    def conversation_topic(self) -> int | None:
+        return self.parameter_0 if self.opcode == 0x05 else None
+
+    @property
+    def object_selector(self) -> int | None:
+        return self.parameter_0 if self.opcode == 0x06 else None
+
+    @property
+    def sequence_ordinal(self) -> int | None:
+        if self.opcode not in (0x07, 0x0A):
+            return None
+        return self.parameter_0
+
+    @property
+    def trigger_phase(self) -> int | None:
+        return self.parameter_0 if self.opcode == 0x09 else None
+
+    @property
+    def branch_label(self) -> int | None:
+        if self.opcode not in (0x0B, 0x0C):
+            return None
+        return self.parameter_0
 
     def to_bytes(self) -> bytes:
         """Encode this step in its exact nine-byte disk layout."""

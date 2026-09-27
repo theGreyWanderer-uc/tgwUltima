@@ -17,24 +17,25 @@ pixel data is touched.
 
 In particular these are carried through verbatim rather than regenerated:
 
-* the frame's flags word, and the two undecoded ``u32`` fields at ``0x0C`` and
-  ``0x10`` of the frame header;
-* the undecoded ``u32`` at ``0x0C`` of the texture-set header;
+* the frame's full flags word and both anchor coordinates;
+* the reserved set-header byte, storage flags, and packed playback fields;
 * the row offset table;
 * every other frame in the entry.
 
-None of those four unknown fields has a known derivation, so authoring an entry
-from scratch would mean guessing them. Editing in place never has to.
+Editing in place therefore never normalizes forensic metadata or has to invent
+playback, anchor, or row-table values.
 
 Encodings, chosen from what the original frame used:
 
 ===============  =========================================================
-``compression``  Pixel format
+Stored fields     Pixel format
 ===============  =========================================================
-1                BC1 / DXT1 block compression
-0, 8-bit         palette indices into ``static/ankh.pal``; index 254 is transparent
-0, 8-bit         ALPHA_8 coverage or ALPHA_INTENSITY_44, selected by ``sdInfo``
-0, 16-bit        RGB565 (opaque) or RGBA5551 (transparency flag set)
+storage bit 0    BC1 / DXT1 block compression
+code 0, 1 byte  palette indices into ``static/ankh.pal``
+code 0, 2 bytes RGB565, with an optional stored transparency key
+code 1, 2 bytes ARGB1555
+code 2           ALPHA_INTENSITY_44 (1 byte) or ALPHA_INTENSITY_88 (2 bytes)
+code 3, 1 byte  ALPHA_8 coverage
 ===============  =========================================================
 
 Mip levels are **regenerated**, not preserved: a replaced base image makes the
@@ -45,8 +46,8 @@ the original chain, so the filter Origin used is unknown. This does not affect
 validity, only whether a rebuilt file is byte-identical to the shipped one.
 
 Pass the matching ``sdInfo`` format selector to :func:`replace_frame` when it
-is available. It distinguishes all three 8-bit encodings and overrides damaged
-frame flags when choosing RGB565 versus ARGB1555. The CLI discovers it beside
+is available. It repeats the two-bit frame format and overrides damaged frame
+flags. The CLI discovers it beside
 the texture archive automatically.
 
 Example::
@@ -64,6 +65,7 @@ __all__ = [
     "U9TextureWriteError",
     "encode_alpha8",
     "encode_alpha_intensity_44",
+    "encode_alpha_intensity_88",
     "encode_bc1",
     "encode_paletted",
     "encode_rgb565",
@@ -84,9 +86,9 @@ from titan.u9.texture import (
     COMPRESSION_NONE,
     FORMAT_ALPHA_8,
     FORMAT_ALPHA_INTENSITY_44,
+    FORMAT_P8,
     FRAME_DIR_ENTRY_SIZE,
     FRAME_HEADER_SIZE,
-    INTENSITY_FLAG,
     PALETTE_TRANSPARENCY_INDEX,
     TEXTURE_SET_HEADER_SIZE,
     U9TextureError,
@@ -99,6 +101,7 @@ from titan.u9.texture import (
 ENCODING_BC1 = "bc1"
 ENCODING_ALPHA8 = "alpha8"
 ENCODING_ALPHA_INTENSITY44 = "alpha_intensity44"
+ENCODING_ALPHA_INTENSITY88 = "alpha_intensity88"
 ENCODING_PALETTED = "paletted"
 ENCODING_RGB565 = "rgb565"
 ENCODING_RGBA5551 = "rgba5551"
@@ -114,13 +117,18 @@ class U9TextureWriteError(Exception):
 # ---------------------------------------------------------------- encoders
 
 
-def encode_rgb565(rgba: bytes) -> bytes:
+def encode_rgb565(
+    rgba: bytes,
+    *,
+    transparency_key: Optional[int] = None,
+) -> bytes:
     out = bytearray(len(rgba) // 2)
     for i in range(len(rgba) // 4):
         r, g, b = rgba[i * 4], rgba[i * 4 + 1], rgba[i * 4 + 2]
-        struct.pack_into(
-            "<H", out, i * 2, ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)
-        )
+        value = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)
+        if transparency_key is not None and rgba[i * 4 + 3] < ALPHA_CUTOFF:
+            value = transparency_key
+        struct.pack_into("<H", out, i * 2, value)
     return bytes(out)
 
 
@@ -135,12 +143,14 @@ def encode_rgba5551(rgba: bytes) -> bytes:
     return bytes(out)
 
 
-def encode_paletted(rgba: bytes, palette: U9Palette) -> bytes:
+def encode_paletted(
+    rgba: bytes, palette: U9Palette, *, transparency_key_enabled: bool = True
+) -> bytes:
     """Encode RGB by nearest colour and alpha with the exact index-254 key."""
     cache: dict[tuple[int, int, int], int] = {}
     out = bytearray(len(rgba) // 4)
     for i in range(len(out)):
-        if rgba[i * 4 + 3] < ALPHA_CUTOFF:
+        if transparency_key_enabled and rgba[i * 4 + 3] < ALPHA_CUTOFF:
             out[i] = PALETTE_TRANSPARENCY_INDEX
             continue
         key = (rgba[i * 4], rgba[i * 4 + 1], rgba[i * 4 + 2])
@@ -168,6 +178,16 @@ def encode_alpha_intensity_44(rgba: bytes) -> bytes:
         alpha_nibble = min(15, (alpha + 8) // 17)
         intensity_nibble = min(15, (intensity + 8) // 17)
         out[index] = (alpha_nibble << 4) | intensity_nibble
+    return bytes(out)
+
+
+def encode_alpha_intensity_88(rgba: bytes) -> bytes:
+    """Encode two-byte intensity/alpha with intensity first, alpha second."""
+    out = bytearray(len(rgba) // 2)
+    for index in range(len(rgba) // 4):
+        r, g, b, alpha = rgba[index * 4 : index * 4 + 4]
+        intensity = (r + g + b) // 3
+        struct.pack_into("<BB", out, index * 2, intensity, alpha)
     return bytes(out)
 
 
@@ -307,6 +327,10 @@ def frame_encoding(
         )
 
     compression = texture_set.compression
+    if texture_set.storage_flags & ~1:
+        raise U9TextureWriteError(
+            f"unsupported texture storage flags 0x{texture_set.storage_flags:04x}"
+        )
     if compression == COMPRESSION_BC1:
         return ENCODING_BC1
     if compression != COMPRESSION_NONE:
@@ -320,44 +344,65 @@ def frame_encoding(
         )
     )
     payload_length = frame.length - frame.header_size
-    if payload_length == total:
-        if selector == FORMAT_ALPHA_INTENSITY_44:
-            return ENCODING_ALPHA_INTENSITY44
-        if selector == FORMAT_ALPHA_8 or (
-            selector is None and frame.flags & INTENSITY_FLAG
-        ):
-            return ENCODING_ALPHA8
-        return ENCODING_PALETTED
-    if payload_length != total * 2:
+    bytes_per_pixel = 2 if frame.two_bytes_per_pixel else 1
+    expected_payload_length = total * bytes_per_pixel
+    if payload_length != expected_payload_length:
         raise U9TextureWriteError(
             f"raw payload size mismatch: frame has {payload_length} bytes, expected "
-            f"{total} for 8-bit or {total * 2} for 16-bit levels; refusing to guess"
+            f"{expected_payload_length} from the stored depth flag"
         )
-    is_1555 = (
-        frame.is_transparent if selector is None else selector == SELECTOR_ARGB_1555
+    pixel_format = frame.pixel_format_code if selector is None else selector
+    if bytes_per_pixel == 1:
+        if pixel_format == FORMAT_ALPHA_INTENSITY_44:
+            return ENCODING_ALPHA_INTENSITY44
+        if pixel_format == FORMAT_ALPHA_8:
+            return ENCODING_ALPHA8
+        if pixel_format == FORMAT_P8:
+            return ENCODING_PALETTED
+        raise U9TextureWriteError(
+            f"unsupported one-byte pixel format code {pixel_format}"
+        )
+    if pixel_format == SELECTOR_ARGB_1555:
+        return ENCODING_RGBA5551
+    if pixel_format == FORMAT_ALPHA_INTENSITY_44:
+        return ENCODING_ALPHA_INTENSITY88
+    if pixel_format == FORMAT_P8:
+        return ENCODING_RGB565
+    raise U9TextureWriteError(
+        f"unsupported two-byte pixel format code {pixel_format}"
     )
-    return ENCODING_RGBA5551 if is_1555 else ENCODING_RGB565
 
 
 def _encode_level(
-    rgba: bytes, width: int, height: int, encoding: str, palette: Optional[U9Palette]
+    rgba: bytes,
+    width: int,
+    height: int,
+    encoding: str,
+    palette: Optional[U9Palette],
+    *,
+    transparency_key: Optional[int] = None,
+    transparency_key_enabled: bool = True,
 ) -> bytes:
     if encoding == ENCODING_BC1:
         return encode_bc1(rgba, width, height)
     if encoding == ENCODING_RGB565:
-        return encode_rgb565(rgba)
+        return encode_rgb565(rgba, transparency_key=transparency_key)
     if encoding == ENCODING_RGBA5551:
         return encode_rgba5551(rgba)
     if encoding == ENCODING_ALPHA8:
         return encode_alpha8(rgba)
     if encoding == ENCODING_ALPHA_INTENSITY44:
         return encode_alpha_intensity_44(rgba)
+    if encoding == ENCODING_ALPHA_INTENSITY88:
+        return encode_alpha_intensity_88(rgba)
     if palette is None:
         raise U9TextureWriteError(
             "this frame is 8-bit paletted; a palette (static/ankh.pal) is required "
             "to encode into it"
         )
-    return encode_paletted(rgba, palette)
+    return encode_paletted(
+        rgba, palette, transparency_key_enabled=transparency_key_enabled
+    )
 
 
 def replace_frame(
@@ -380,7 +425,7 @@ def replace_frame(
         raise U9TextureWriteError(
             f"data too small for a texture-set header: {len(entry_data)} bytes"
         )
-    _, mip_count, _, _compression = struct.unpack_from("<4H", entry_data, 0x00)
+    mip_count = entry_data[0x02]
     frame_count = struct.unpack_from("<I", entry_data, 0x08)[0]
     if not (0 <= frame_index < frame_count):
         raise U9TextureWriteError(
@@ -402,16 +447,42 @@ def replace_frame(
         )
 
     encoding = frame_encoding(entry_data, frame_index, selector=selector)
+    texture_set = parse_texture_set(entry_data)
+    frame_info = texture_set.frames[frame_index]
+    transparency_key_enabled = frame_info.transparency_test_enabled
+    transparency_key = (
+        frame_info.transparency_key_16
+        if encoding == ENCODING_RGB565 and transparency_key_enabled
+        else None
+    )
     header_size = FRAME_HEADER_SIZE + 4 * height
     payload_size = frame_length - header_size
     if payload_size <= 0:
         raise U9TextureWriteError(f"frame {frame_index} declares no pixel data")
 
-    payload = bytearray(_encode_level(rgba, width, height, encoding, palette))
+    payload = bytearray(
+        _encode_level(
+            rgba,
+            width,
+            height,
+            encoding,
+            palette,
+            transparency_key=transparency_key,
+            transparency_key_enabled=transparency_key_enabled,
+        )
+    )
     level, level_width, level_height = rgba, width, height
     for _ in range(mip_count):
         level, level_width, level_height = _downsample(level, level_width, level_height)
-        payload += _encode_level(level, level_width, level_height, encoding, palette)
+        payload += _encode_level(
+            level,
+            level_width,
+            level_height,
+            encoding,
+            palette,
+            transparency_key=transparency_key,
+            transparency_key_enabled=transparency_key_enabled,
+        )
 
     if len(payload) != payload_size:
         raise U9TextureWriteError(

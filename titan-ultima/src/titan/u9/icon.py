@@ -23,12 +23,12 @@ or a 2D-only UI icon that no material ever references at all.
 :func:`used_texture_ids` computes the "claimed by a mesh" set by
 parsing every model in ``sappear.flx``; :func:`icon_entry_indices`
 returns a texture archive's used entries with that set subtracted --
-the "unclaimed" 2D icon candidates. Real data: 5,054 distinct
-texture_ids are claimed this way, leaving 1,549 of
-``bitmapsh.flx``'s 6,597 used entries as icon candidates -- including
-the full spell-rune cluster (568-641) confirmed by direct visual
-inspection.  The alternate indexed model records are included in the claimed
-set as well.
+the "unclaimed" 2D icon candidates. The sixteen orphaned indexed-geometry
+records are not accepted by the retail model loader and therefore do not claim
+textures in this runtime-compatible classification. Real data: 5,044 distinct
+texture IDs are claimed, leaving 1,553 of ``bitmapsh.flx``'s 6,597 used entries
+as icon candidates, including the full spell-rune cluster (568-641) confirmed
+by direct visual inspection.
 
 **Known limitation, confirmed not just theorized**: this is a "claimed
 vs. unclaimed" split, not a true icon/material classifier -- an entry

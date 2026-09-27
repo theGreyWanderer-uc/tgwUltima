@@ -62,7 +62,7 @@ whole rather than masked is a trap: ``sdInfoC.flx`` sets ``[11]``'s high bit on
 
 Bytes 0, 2 and 3 of ``[0]``, plus ``[3]``, ``[4]``, ``[7]`` and ``[8]``, are
 not decoded. They were tested against frame offsets, frame lengths, entry byte
-length, the compression field and the per-frame transparency flag; none
+length, the storage flags and the complete per-frame flag word; none
 correlates. ``[0]`` byte 1 is exposed as :attr:`U9SdInfoRecord.format_selector`.
 
 Example::
@@ -111,9 +111,9 @@ class U9SdInfoRecord:
     def format_selector(self) -> int:
         """The engine's pixel-format selector for this texture: ``fields[0]`` byte 1.
 
-        This is the descriptor byte the renderer switches on, and it is the only
-        thing that distinguishes the two one-byte-per-texel formats from each
-        other -- a payload-length test sees both as "8-bit":
+        This is the descriptor byte used to choose the pixel format. The same
+        two-bit value is stored in frame-flag bits 8-9; the companion copy is
+        useful because it survives two known damaged frame headers:
 
         =======  ==========================  ==============================
         Value    Format                      8-bit frames in shipped data
@@ -126,9 +126,8 @@ class U9SdInfoRecord:
         Value 1 also occurs, only on 16-bit and BC1 entries.
 
         Pass this to :func:`titan.u9.texture.decode_frame` as ``selector`` to
-        decode a texture the way the engine does. Without it that function falls
-        back to bit 9 of the frame flags, which agrees on 22,724 of 22,724 8-bit
-        frames but cannot separate ``ALPHA_INTENSITY_44`` from ``ALPHA_8``.
+        override the frame copy. Without it, Titan uses the complete stored
+        two-bit frame code rather than inferring a format from one bit.
         """
         return (self.fields[0] >> 8) & 0xFF
 

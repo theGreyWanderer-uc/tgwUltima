@@ -5,26 +5,26 @@ Each used FLX entry is one animation clip. The entry stores its original
 LightWave scene path, a fixed-capacity part registry, one transform track per
 animated part, and zero or more typed animation events::
 
-    0x00  animation_id       u32  -- same as the FLX entry index
-    0x04  start_frame        u32  -- inclusive LightWave source-frame number
-    0x08  end_frame          u32  -- inclusive
-    0x0C  frame_count        u32  -- end_frame - start_frame + 1
-    0x10  source_fps         u32  -- 30 in every shipped entry
-    0x14  frame_interval_ms  u32  -- 33 in every shipped entry
-    0x18  source_name_length u32
+    0x00  stored_animation_id  s32  -- matches the FLX entry index in retail data
+    0x04  start_frame          s32  -- inclusive LightWave source-frame number
+    0x08  end_frame            s32  -- inclusive
+    0x0C  frame_count          s32  -- end_frame - start_frame + 1 in retail data
+    0x10  source_fps           s32  -- 30 in every shipped entry
+    0x14  frame_interval_ms    s32  -- 33 in every shipped entry
+    0x18  source_name_length   s32
     0x1C  source_name        ASCII[source_name_length], not NUL-terminated
-          registry_size      u32
-          part_registry      u32[registry_size]
-          part_count         u32
+          registry_size      s32
+          part_registry      s32[registry_size]
+          part_count         s32
           parts              part[part_count]
-          event_count        u32
+          event_count        s32
           events             event[event_count]
 
-A part is ``u32 part_id``, a length-prefixed ASCII name, ``u32 frame_count``,
+A part is ``s32 part_id``, a length-prefixed ASCII name, ``s32 frame_count``,
 then that many 44-byte frames. There is no extra word between ``frame_count``
 and the first frame. A frame is::
 
-    0x00  time_ms   u32
+    0x00  time_ms   s32
     0x04  rotation  float32[4]  -- quaternion W, X, Y, Z
     0x14  position  float32[3]
     0x20  scale     float32[3]
@@ -33,7 +33,7 @@ This order matters. Reading the first word as a float and the last as time
 turns the real timestamps into denormals and reports the final ``1.0`` scale
 component as the constant integer 1065353216.
 
-An event is ``u32 time_ms, u32 type, u32 parameter``.  The type values are
+An event is ``s32 time_ms, u32 type, u32 parameter``.  The type values are
 ``1=loop``, ``2=contact``, ``3=sound_effect``, ``4=footstep`` and
 ``8=end_of_animation`` in the shipped archive.
 
@@ -41,9 +41,9 @@ Verified against all 857 used entries in the shipped 4,000-slot archive:
 every entry consumes exactly, all 1,310,139 frames are finite and carry a
 unit quaternion, every part in a clip has the declared frame count and the
 same timestamps, and every registry prefix exactly matches the stored part
-IDs. Registry slots after that prefix are retained because the original
-runtime loads the complete fixed-capacity array even though only the prefix is
-active.
+IDs. Registry words after that prefix are retained as inactive writer residue.
+The runtime loads the complete fixed-capacity array but only reads the active
+prefix.
 
 Example::
 
@@ -70,17 +70,17 @@ __all__ = [
 import math
 import os
 import struct
-from bisect import bisect_left
 from dataclasses import dataclass
 
 from titan.u9.flx_archive import U9FlxArchive, U9FlxArchiveError
 
-ENTRY_HEADER_STRUCT = "<7I"
+ENTRY_HEADER_STRUCT = "<7i"
 ENTRY_HEADER_SIZE = struct.calcsize(ENTRY_HEADER_STRUCT)
-FRAME_STRUCT = "<I10f"
+FRAME_STRUCT = "<i10f"
 FRAME_SIZE = struct.calcsize(FRAME_STRUCT)
-SUFFIX_STRUCT = "<III"
+SUFFIX_STRUCT = "<iII"
 SUFFIX_SIZE = struct.calcsize(SUFFIX_STRUCT)
+MAX_ANIMATION_RECORD_SIZE = 8 * 1024 * 1024
 
 EVENT_TYPE_NAMES = {
     0: "none",
@@ -116,6 +116,7 @@ class U9AnimationPart:
     part_id: int
     name: str
     frames: tuple[U9AnimationFrame, ...]
+    name_raw: bytes = b""
 
     @property
     def frame_count(self) -> int:
@@ -130,15 +131,19 @@ class U9AnimationPart:
         """
         if not self.frames:
             return None
-        times = tuple(frame.time_ms for frame in self.frames)
-        index = bisect_left(times, time_ms)
-        if index <= 0:
+        index = next(
+            (
+                frame_index
+                for frame_index, frame in enumerate(self.frames)
+                if frame.time_ms >= time_ms
+            ),
+            len(self.frames),
+        )
+        if index == 0:
             return self.frames[0]
         if index >= len(self.frames):
             return self.frames[-1]
         right = self.frames[index]
-        if right.time_ms == time_ms:
-            return right
         left = self.frames[index - 1]
         span = right.time_ms - left.time_ms
         if span <= 0:
@@ -149,6 +154,31 @@ class U9AnimationPart:
             rotation=_slerp(left.rotation, right.rotation, amount),
             position=_lerp3(left.position, right.position, amount),
             scale=_lerp3(left.scale, right.scale, amount),
+        )
+
+    @property
+    def timestamp_status(self) -> str:
+        """Whether stored sample times are monotonic, as runtime sampling expects."""
+        return (
+            "monotonic"
+            if all(
+                left.time_ms <= right.time_ms
+                for left, right in zip(self.frames, self.frames[1:])
+            )
+            else "out_of_order"
+        )
+
+    @property
+    def transform_status(self) -> str:
+        """Whether all stored transform components are finite."""
+        return (
+            "finite"
+            if all(
+                math.isfinite(value)
+                for frame in self.frames
+                for value in (*frame.rotation, *frame.position, *frame.scale)
+            )
+            else "nonfinite"
         )
 
 
@@ -196,6 +226,10 @@ class U9Animation:
     header_words: tuple[int, ...]
     parts: tuple[U9AnimationPart, ...]
     suffixes: tuple[U9AnimationSuffix, ...]
+    stored_animation_id: int | None = None
+    source_name_raw: bytes = b""
+    trailing_data: bytes = b""
+    _raw_data: bytes = b""
 
     @property
     def part_ids(self) -> tuple[int, ...]:
@@ -203,16 +237,125 @@ class U9Animation:
 
     @property
     def duration_ms(self) -> int:
-        """Latest timestamp carried by any part, or zero for an empty clip."""
+        """Compatibility view of :attr:`last_sample_time_ms`."""
+        return self.last_sample_time_ms
+
+    @property
+    def last_sample_time_ms(self) -> int:
+        """Latest stored transform timestamp, or zero for an empty clip."""
         return max(
             (frame.time_ms for part in self.parts for frame in part.frames),
             default=0,
         )
 
     @property
+    def runtime_length_ms(self) -> int | None:
+        """Controller playback length, using integer ``1000 * frames / fps``."""
+        if self.source_fps <= 0 or self.frame_count < 0:
+            return None
+        return 1000 * self.frame_count // self.source_fps
+
+    @property
     def part_registry(self) -> tuple[int, ...]:
-        """Runtime channel registry array, including unused capacity slots."""
+        """Compatibility view of the complete registry storage array."""
         return self.header_words
+
+    @property
+    def part_registry_storage(self) -> tuple[int, ...]:
+        """Complete stored registry array, including inactive residue."""
+        return self.header_words
+
+    @property
+    def active_part_registry(self) -> tuple[int, ...]:
+        """Registry prefix consulted for the stored number of part tracks."""
+        return self.header_words[: len(self.parts)]
+
+    @property
+    def part_registry_residue(self) -> tuple[int, ...]:
+        """Inactive capacity words retained but not consulted by the runtime."""
+        return self.header_words[len(self.parts) :]
+
+    @property
+    def stored_id_status(self) -> str:
+        """Compare the stored clip ID with the FLX directory slot used to load it."""
+        if self.stored_animation_id is None:
+            return "unavailable"
+        return (
+            "matches_entry"
+            if self.stored_animation_id == self.animation_id
+            else "mismatch"
+        )
+
+    @property
+    def frame_range_status(self) -> str:
+        """Compare the inclusive authoring range with the stored frame count."""
+        return (
+            "matches_count"
+            if self.end_frame >= self.start_frame
+            and self.end_frame - self.start_frame + 1 == self.frame_count
+            else "mismatch"
+        )
+
+    @property
+    def runtime_timing_status(self) -> str:
+        """Validate cells needed for controller playback-length calculation."""
+        if self.source_fps <= 0:
+            return "invalid_source_fps"
+        if self.frame_count < 0:
+            return "negative_frame_count"
+        if self.frame_interval_ms < 0:
+            return "negative_nominal_interval"
+        return "valid"
+
+    @property
+    def part_frame_count_status(self) -> str:
+        """Report whether every track carries the header-declared sample count."""
+        return (
+            "matches_clip"
+            if all(part.frame_count == self.frame_count for part in self.parts)
+            else "mismatch"
+        )
+
+    @property
+    def part_registry_status(self) -> str:
+        """Compare the active registry prefix with the following part IDs."""
+        if len(self.header_words) < len(self.parts):
+            return "shorter_than_parts"
+        return (
+            "matches_parts"
+            if self.active_part_registry == self.part_ids
+            else "mismatch"
+        )
+
+    @property
+    def timestamp_status(self) -> str:
+        """Summarize transform timestamp ordering across all part tracks."""
+        return (
+            "monotonic"
+            if all(part.timestamp_status == "monotonic" for part in self.parts)
+            else "out_of_order"
+        )
+
+    @property
+    def transform_status(self) -> str:
+        """Summarize finite transform storage across all part tracks."""
+        return (
+            "finite"
+            if all(part.transform_status == "finite" for part in self.parts)
+            else "nonfinite"
+        )
+
+    @property
+    def event_order_status(self) -> str:
+        """Report whether event timestamps are in runtime dispatch order."""
+        return (
+            "monotonic"
+            if all(
+                left.time_ms <= right.time_ms
+                for left, right in zip(self.events, self.events[1:])
+            )
+            else "out_of_order"
+        )
 
     @property
     def events(self) -> tuple[U9AnimationEvent, ...]:
@@ -222,6 +365,14 @@ class U9Animation:
     def part(self, part_id: int) -> U9AnimationPart | None:
         """Return the part with this ID, or ``None`` when it is absent."""
         return next((part for part in self.parts if part.part_id == part_id), None)
+
+    def to_bytes(self) -> bytes:
+        """Return the exact source record, including inactive and trailing bytes."""
+        if not self._raw_data:
+            raise U9AnimationError(
+                "animation was constructed in memory and has no source bytes"
+            )
+        return self._raw_data
 
     @classmethod
     def parse(cls, data: bytes, animation_id: int) -> U9Animation:
@@ -241,15 +392,10 @@ class U9Animation:
             frame_interval_ms,
             source_name_length,
         ) = struct.unpack_from(ENTRY_HEADER_STRUCT, data)
-        if record_index != animation_id:
+        if source_name_length < 0:
             raise U9AnimationError(
-                f"animation {animation_id}: record index is {record_index}, "
-                "expected the FLX entry index"
-            )
-        if end_frame < start_frame or end_frame - start_frame + 1 != frame_count:
-            raise U9AnimationError(
-                f"animation {animation_id}: frame range {start_frame}..{end_frame} "
-                f"does not match declared count {frame_count}"
+                f"animation {animation_id}: negative source-name length "
+                f"{source_name_length}"
             )
 
         pos = ENTRY_HEADER_SIZE
@@ -262,7 +408,7 @@ class U9Animation:
         )
         source_name = source_raw.decode("ascii", errors="replace")
 
-        registry_size, pos = _read_u32(data, pos, animation_id, "part-registry size")
+        registry_size, pos = _read_count(data, pos, animation_id, "part-registry size")
         registry_bytes = registry_size * 4
         registry_raw, pos = _read_bytes(
             data,
@@ -272,10 +418,10 @@ class U9Animation:
             "part-registry block",
         )
         header_words = (
-            struct.unpack(f"<{registry_size}I", registry_raw) if registry_size else ()
+            struct.unpack(f"<{registry_size}i", registry_raw) if registry_size else ()
         )
 
-        part_count, pos = _read_u32(data, pos, animation_id, "part count")
+        part_count, pos = _read_count(data, pos, animation_id, "part count")
         parts: list[U9AnimationPart] = []
         for part_index in range(part_count):
             part, pos = _read_part(
@@ -283,18 +429,10 @@ class U9Animation:
                 pos,
                 animation_id,
                 part_index,
-                frame_count,
             )
             parts.append(part)
 
-        part_ids = tuple(part.part_id for part in parts)
-        if len(header_words) < part_count or header_words[:part_count] != part_ids:
-            raise U9AnimationError(
-                f"animation {animation_id}: part ID manifest {header_words[:part_count]} "
-                f"does not match parsed parts {part_ids}"
-            )
-
-        event_count, pos = _read_u32(data, pos, animation_id, "event count")
+        event_count, pos = _read_count(data, pos, animation_id, "event count")
         event_bytes = event_count * SUFFIX_SIZE
         event_raw, pos = _read_bytes(
             data,
@@ -303,11 +441,6 @@ class U9Animation:
             animation_id,
             "animation events",
         )
-        if pos != len(data):
-            raise U9AnimationError(
-                f"animation {animation_id}: {len(data) - pos} trailing byte(s) "
-                "after the animation events"
-            )
         suffixes = tuple(
             U9AnimationSuffix(values=values)
             for values in struct.iter_unpack(SUFFIX_STRUCT, event_raw)
@@ -324,6 +457,10 @@ class U9Animation:
             header_words=header_words,
             parts=tuple(parts),
             suffixes=suffixes,
+            stored_animation_id=record_index,
+            source_name_raw=source_raw,
+            trailing_data=data[pos:],
+            _raw_data=data,
         )
 
 
@@ -357,6 +494,11 @@ class U9Animations:
         data = self._archive.read_entry(animation_id)
         if not data:
             return None
+        if len(data) > MAX_ANIMATION_RECORD_SIZE:
+            raise U9AnimationError(
+                f"animation {animation_id}: {len(data)}-byte record exceeds the "
+                f"retail {MAX_ANIMATION_RECORD_SIZE}-byte limit"
+            )
         return U9Animation.parse(data, animation_id)
 
     def animations(self) -> list[U9Animation]:
@@ -369,7 +511,7 @@ class U9Animations:
         return result
 
 
-def _read_u32(
+def _read_i32(
     data: bytes,
     pos: int,
     animation_id: int,
@@ -379,7 +521,21 @@ def _read_u32(
         raise U9AnimationError(
             f"animation {animation_id}: truncated before {description} at offset {pos:#x}"
         )
-    return struct.unpack_from("<I", data, pos)[0], pos + 4
+    return struct.unpack_from("<i", data, pos)[0], pos + 4
+
+
+def _read_count(
+    data: bytes,
+    pos: int,
+    animation_id: int,
+    description: str,
+) -> tuple[int, int]:
+    value, pos = _read_i32(data, pos, animation_id, description)
+    if value < 0:
+        raise U9AnimationError(
+            f"animation {animation_id}: negative {description} {value}"
+        )
+    return value, pos
 
 
 def _read_bytes(
@@ -403,10 +559,9 @@ def _read_part(
     pos: int,
     animation_id: int,
     part_index: int,
-    clip_frame_count: int,
 ) -> tuple[U9AnimationPart, int]:
-    part_id, pos = _read_u32(data, pos, animation_id, f"part {part_index} ID")
-    name_length, pos = _read_u32(
+    part_id, pos = _read_i32(data, pos, animation_id, f"part {part_index} ID")
+    name_length, pos = _read_count(
         data, pos, animation_id, f"part {part_index} name length"
     )
     name_raw, pos = _read_bytes(
@@ -417,14 +572,9 @@ def _read_part(
         f"part {part_index} name",
     )
     name = name_raw.decode("ascii", errors="replace")
-    frame_count, pos = _read_u32(
+    frame_count, pos = _read_count(
         data, pos, animation_id, f"part {part_index} frame count"
     )
-    if frame_count != clip_frame_count:
-        raise U9AnimationError(
-            f"animation {animation_id}: part {part_index} ({name!r}) has "
-            f"{frame_count} frame(s), clip declares {clip_frame_count}"
-        )
 
     frame_raw, pos = _read_bytes(
         data,
@@ -434,21 +584,9 @@ def _read_part(
         f"part {part_index} frame array",
     )
     frames: list[U9AnimationFrame] = []
-    previous_time = -1
-    for frame_index, values in enumerate(struct.iter_unpack(FRAME_STRUCT, frame_raw)):
+    for values in struct.iter_unpack(FRAME_STRUCT, frame_raw):
         time_ms = values[0]
         floats = values[1:]
-        if not all(math.isfinite(value) for value in floats):
-            raise U9AnimationError(
-                f"animation {animation_id}: part {part_index} frame {frame_index} "
-                "contains a non-finite transform value"
-            )
-        if time_ms < previous_time:
-            raise U9AnimationError(
-                f"animation {animation_id}: part {part_index} frame {frame_index} "
-                f"timestamp {time_ms} precedes {previous_time}"
-            )
-        previous_time = time_ms
         frames.append(
             U9AnimationFrame(
                 time_ms=time_ms,
@@ -458,7 +596,12 @@ def _read_part(
             )
         )
 
-    return U9AnimationPart(part_id=part_id, name=name, frames=tuple(frames)), pos
+    return U9AnimationPart(
+        part_id=part_id,
+        name=name,
+        frames=tuple(frames),
+        name_raw=name_raw,
+    ), pos
 
 
 def _lerp3(
@@ -478,39 +621,33 @@ def _slerp(
     right: tuple[float, float, float, float],
     amount: float,
 ) -> tuple[float, float, float, float]:
-    """Interpolate WXYZ quaternions without changing their stored hemisphere.
+    """Apply the retail WXYZ spherical interpolation branches exactly.
 
-    Ultima IX's ``slerp`` does not negate the destination when the dot product
-    is negative, so this intentionally does not apply the common shortest-path
-    rewrite. The near-opposite fallback is only defensive; it is not reached by
-    the shipped animation corpus at adjacent sample times.
+    The game does not negate a negative-dot destination or normalize the
+    result. Its near-opposite branch also retains the temporary quaternion's
+    scalar directly. No adjacent retail samples reach that fallback.
     """
-    dot = max(-1.0, min(1.0, sum(a * b for a, b in zip(left, right, strict=True))))
-    if 1.0 - dot <= 1e-6:
-        values = tuple(a + (b - a) * amount for a, b in zip(left, right, strict=True))
-    elif dot + 1.0 <= 1e-6:
-        orthogonal = (left[3], -left[2], left[1], -left[0])
-        source_weight = math.sin((1.0 - amount) * math.pi / 2.0)
-        target_weight = math.sin(amount * math.pi / 2.0)
-        values = tuple(
-            a * source_weight + b * target_weight
-            for a, b in zip(left, orthogonal, strict=True)
-        )
-    else:
-        angle = math.acos(dot)
-        sine = math.sin(angle)
-        source_weight = math.sin((1.0 - amount) * angle) / sine
-        target_weight = math.sin(amount * angle) / sine
-        values = tuple(
+    dot = sum(a * b for a, b in zip(left, right, strict=True))
+    if dot + 1.0 > 1e-5:
+        if 1.0 - dot > 1e-5:
+            angle = math.acos(dot)
+            sine = math.sin(angle)
+            source_weight = math.sin((1.0 - amount) * angle) / sine
+            target_weight = math.sin(amount * angle) / sine
+        else:
+            source_weight = 1.0 - amount
+            target_weight = amount
+        return tuple(
             a * source_weight + b * target_weight
             for a, b in zip(left, right, strict=True)
-        )
-    magnitude = math.sqrt(sum(value * value for value in values))
-    if magnitude == 0.0:
-        return left
+        )  # type: ignore[return-value]
+
+    temporary = (left[3], -left[2], left[1], -left[0])
+    source_weight = math.sin((1.0 - amount) * math.pi / 2.0)
+    target_weight = math.sin(amount * math.pi / 2.0)
     return (
-        values[0] / magnitude,
-        values[1] / magnitude,
-        values[2] / magnitude,
-        values[3] / magnitude,
+        temporary[0],
+        left[1] * source_weight + temporary[1] * target_weight,
+        left[2] * source_weight + temporary[2] * target_weight,
+        left[3] * source_weight + temporary[3] * target_weight,
     )

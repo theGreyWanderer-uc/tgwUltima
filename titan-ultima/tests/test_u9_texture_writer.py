@@ -18,6 +18,7 @@ import unittest
 from titan.u9.palette import U9Palette
 from titan.u9.texture import (
     COMPRESSION_BC1,
+    FRAME_TWO_BYTES_PER_PIXEL,
     FORMAT_ALPHA_8,
     FORMAT_ALPHA_INTENSITY_44,
     FORMAT_P8,
@@ -30,6 +31,7 @@ from titan.u9.texture_writer import (
     U9TextureWriteError,
     encode_alpha8,
     encode_alpha_intensity_44,
+    encode_alpha_intensity_88,
     encode_bc1,
     encode_paletted,
     encode_rgb565,
@@ -49,11 +51,22 @@ def _palette() -> U9Palette:
 
 
 def _entry(width: int, height: int, payload: bytes, *, compression: int = 0,
-           mip_count: int = 0, flags: int = 0) -> bytes:
+           mip_count: int = 0, flags: int = 0,
+           transparency_test_enabled: bool = False) -> bytes:
     """One-frame texture set wrapping ``payload``."""
-    header = struct.pack("<4HII", width, mip_count, height, compression, 1, 0)
+    header = struct.pack("<HBBHHII", width, mip_count, 0, height, compression, 1, 0)
     frame_offset = 0x18
-    frame_header = struct.pack("<2H4I", flags, 0x6000, width, height, 0, 0)
+    samples = sum(
+        mip_width * mip_height
+        for mip_width, mip_height in (
+            (max(1, width >> level), max(1, height >> level))
+            for level in range(mip_count + 1)
+        )
+    )
+    frame_flags = (0x20000000 if transparency_test_enabled else 0x60000000) | flags
+    if compression == 0 and len(payload) == samples * 2:
+        frame_flags |= FRAME_TWO_BYTES_PER_PIXEL
+    frame_header = struct.pack("<5I", frame_flags, width, height, 0, 0)
     row_table = b"".join(
         struct.pack("<I", 0x14 + 4 * height + r * width) for r in range(height)
     )
@@ -64,12 +77,14 @@ def _entry(width: int, height: int, payload: bytes, *, compression: int = 0,
 
 def _multi_frame_entry(width: int, height: int, payloads: list[bytes]) -> bytes:
     """Texture set whose same-format frames have independent payloads."""
-    header = struct.pack("<4HII", width, 0, height, 0, len(payloads), 0)
+    header = struct.pack("<HBBHHII", width, 0, 0, height, 0, len(payloads), 0)
     frame_offset = len(header) + len(payloads) * 8
     directory = bytearray()
     frames = bytearray()
     for payload in payloads:
-        frame_header = struct.pack("<2H4I", 0, 0x6000, width, height, 0, 0)
+        frame_header = struct.pack(
+            "<5I", 0x60000000 | FRAME_TWO_BYTES_PER_PIXEL, width, height, 0, 0
+        )
         row_table = b"".join(
             struct.pack("<I", 0x14 + 4 * height + row * width * 2)
             for row in range(height)
@@ -124,6 +139,10 @@ class EncoderTests(unittest.TestCase):
         rgba = bytes((0, 0, 0, 255, 255, 255, 255, 0))
         self.assertEqual(encode_alpha_intensity_44(rgba), bytes((0xF0, 0x0F)))
 
+    def test_alpha_intensity_88_packs_intensity_then_alpha(self) -> None:
+        rgba = bytes((30, 60, 90, 200))
+        self.assertEqual(encode_alpha_intensity_88(rgba), bytes((60, 200)))
+
     def test_bc1_block_size_is_eight_bytes_per_4x4(self) -> None:
         self.assertEqual(len(encode_bc1(_solid(4, 4, (10, 20, 30, 255)), 4, 4)), 8)
         self.assertEqual(len(encode_bc1(_solid(8, 8, (10, 20, 30, 255)), 8, 8)), 32)
@@ -151,29 +170,36 @@ class FrameEncodingTests(unittest.TestCase):
                        compression=COMPRESSION_BC1)
         self.assertEqual(frame_encoding(entry), "bc1")
 
-    def test_detects_paletted_by_payload_length(self) -> None:
+    def test_detects_paletted_from_stored_depth_and_format(self) -> None:
         entry = _entry(4, 4, bytes(16))
         self.assertEqual(frame_encoding(entry), "paletted")
 
     def test_selector_distinguishes_the_three_8_bit_formats(self) -> None:
         entry = _entry(4, 4, bytes(16), flags=INTENSITY_FLAG)
-        self.assertEqual(frame_encoding(entry), "alpha8")
+        self.assertEqual(frame_encoding(entry), "alpha_intensity44")
+        self.assertEqual(frame_encoding(entry, selector=FORMAT_ALPHA_8), "alpha8")
         self.assertEqual(
             frame_encoding(entry, selector=FORMAT_ALPHA_INTENSITY_44),
             "alpha_intensity44",
         )
         self.assertEqual(frame_encoding(entry, selector=FORMAT_P8), "paletted")
 
-    def test_selector_overrides_16_bit_transparency_flag(self) -> None:
+    def test_selector_overrides_16_bit_frame_format_code(self) -> None:
         entry = _entry(4, 4, bytes(32), flags=0x100)
         self.assertEqual(frame_encoding(entry, selector=FORMAT_P8), "rgb565")
         self.assertEqual(
             frame_encoding(entry, selector=SELECTOR_ARGB_1555), "rgba5551"
         )
 
-    def test_detects_rgb565_and_rgba5551_by_the_transparency_flag(self) -> None:
+    def test_detects_rgb565_and_rgba5551_by_the_format_code(self) -> None:
         self.assertEqual(frame_encoding(_entry(4, 4, bytes(32))), "rgb565")
         self.assertEqual(frame_encoding(_entry(4, 4, bytes(32), flags=0x100)), "rgba5551")
+
+    def test_detects_two_byte_alpha_intensity(self) -> None:
+        self.assertEqual(
+            frame_encoding(_entry(4, 4, bytes(32), flags=0x200)),
+            "alpha_intensity88",
+        )
 
     def test_unsupported_compression_raises(self) -> None:
         entry = _entry(4, 4, bytes(32), compression=9)
@@ -243,6 +269,26 @@ class ReplaceFrameTests(unittest.TestCase):
         )
         self.assertEqual(patched, entry)
 
+    def test_alpha_intensity_88_round_trip_is_lossless(self) -> None:
+        source = bytes((10, 20, 30, 40)) * 8
+        entry = _entry(4, 4, source, flags=0x200)
+        decoded = decode_frame(entry)
+        patched = replace_frame(entry, 0, decoded.pixels_rgba, 4, 4)
+        self.assertEqual(patched, entry)
+
+    def test_rgb565_writer_uses_the_stored_transparency_key(self) -> None:
+        key = 0x07E0
+        entry = _entry(
+            1,
+            1,
+            struct.pack("<H", 0),
+            flags=key << 12,
+            transparency_test_enabled=True,
+        )
+        patched = replace_frame(entry, 0, bytes((10, 20, 30, 0)), 1, 1)
+        self.assertEqual(decode_frame(patched).pixels_rgba[3], 0)
+        self.assertEqual(struct.unpack_from("<H", patched, -2)[0], key)
+
     def test_size_mismatch_is_refused(self) -> None:
         entry = _entry(8, 8, bytes(128))
         with self.assertRaises(U9TextureWriteError) as ctx:
@@ -311,7 +357,7 @@ class MipChainTests(unittest.TestCase):
         entry = _entry(8, 8, bytes(999))
         with self.assertRaises(U9TextureWriteError) as ctx:
             replace_frame(entry, 0, _solid(8, 8, (0, 0, 0, 255)), 8, 8)
-        self.assertIn("refusing", str(ctx.exception))
+        self.assertIn("stored depth flag", str(ctx.exception))
 
 
 if __name__ == "__main__":

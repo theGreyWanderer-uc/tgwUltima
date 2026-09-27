@@ -1,104 +1,29 @@
-"""
-Texture reader for Ultima 9: Ascension's model/UI texture archives
-(``static/bitmap16.flx``, ``static/bitmapC.flx``, ``static/bitmapsh.flx``) and
-pre-baked terrain panels (``Texture8.*`` and ``texture16.*``).
+"""Read Ultima IX texture-set entries from the three ``bitmap*.flx`` tiers.
 
-Ported from the real, open-source Blender importer
-``Chevluh/Ultima-9-Blender-Importer``'s ``ultimaModelImporter.py``
-(``makeTexture()``/``readTextureSetHeader()``/``readFrameRecord()``/
-``readFrameHeader()``), found locally at
-``D:\\_Repos\\_UltimaIX\\Ultima-9-Blender-Importer``. A :class:`U9Material`
-(see :mod:`titan.u9.model`) references one of these archives by
-``texture_id`` (the FLX entry index) and ``cur_frame`` (the animation
-frame within that entry, for animated textures -- most materials have
-only 1 frame).
+All offsets below are relative to one FLX entry.  The fixed 16-byte set header
+stores maximum dimensions, an additional-mip count, one reserved byte, storage
+flags, the frame count, and packed playback fields.  A directory of
+``(offset, length)`` pairs follows it.
 
-Container layout, all offsets relative to the start of one FLX entry's
-own bytes (i.e. ``U9FlxArchive.read_entry(texture_id)``)::
+Each frame begins with five little-endian ``u32`` values: full flags, width,
+height, horizontal anchor, and vertical anchor.  A ``height * u32`` row table
+then precedes the base pixels and mip chain.  Titan retains both headers and the
+row table verbatim; compressed entries and 30 shipped raw frames contain
+non-authoritative row values, so sequential decoding does not depend on them.
 
-    0x00  frame_width    u16  -- max width across all frames
-    0x02  format         u16  -- mip level count (not a format enum, despite the name)
-    0x04  frame_height   u16  -- max height across all frames
-    0x06  compression    u16  -- 0 = raw pixel data, 1 = BC1/DXT1 block
-                                compression; both are decoded here
-    0x08  frame_count    u32
-    0x0C  (unknown)      u32
-    0x10  frame directory: frame_count * (offset: u32, length: u32)
+Frame flags explicitly store a two-bit pixel-format code and a one/two-byte
+depth bit.  Payload length validates those fields; it does not choose them.
+The matching ``sdInfo*.flx`` record repeats the format code and may be supplied
+as ``selector`` to survive two known damaged frame headers.  Raw formats are
+P8/RGB565 (code 0), ARGB1555 (code 1 at two-byte depth), AI44/AI88 (code 2),
+and ALPHA8 (code 3 at one-byte depth).  Set storage bit 0 selects BC1.
 
-Each frame directory entry points (relative to the entry start) at a
-per-frame header::
+For keyed P8 and RGB565 data, frame bit 30 disables the stored transparency
+test; otherwise palette index 254 or the stored 16-bit key decodes with zero
+alpha.  Intrinsic alpha formats retain their alpha channel independently.
 
-    +0x00  flags      u16  -- bit 8 (0x100) is "is_transparent"; bit 9
-                            (0x200) marks an 8-bit frame as a mask;
-                            bit 10 (0x400) means two bytes per pixel
-    +0x02  unknown2   u16  -- usually 0x6000
-    +0x04  width      u32
-    +0x08  height     u32
-    +0x0C  (unknown)  u32
-    +0x10  (unknown)  u32
-    +0x14  row offset table: height * u32 (unused here -- pixels are
-           read sequentially instead, see below)
-
-Pixel data immediately follows the row-offset table (at
-``+0x14 + 4*height``). It contains the base-resolution image followed
-by a full mip chain. :func:`decode_frame` reads any requested stored level;
-zero is the base and positive values select progressively halved mips.
-
-Bits per pixel is not stored directly. It is inferred by comparing the frame's
-recorded byte length against the byte length a full 8-bit (1 byte/pixel) mip
-chain would occupy at this width/height/mip-count: one-byte and two-byte totals
-are accepted exactly, and any other length is rejected rather than guessed.
-
-**One byte per texel is three different formats**, and the length test cannot
-tell them apart:
-
-===========  ====================================  ====================
-``selector``  Format                                Shipped 8-bit frames
-===========  ====================================  ====================
-0            ``P_8`` -- indices into ankh.pal      12,254
-2            ``ALPHA_INTENSITY_44`` -- 4+4 nibbles  42
-3            ``ALPHA_8`` -- coverage mask           10,428
-===========  ====================================  ====================
-
-The engine chooses between them with a descriptor byte, and that byte is in the
-shipped data: ``sdInfo`` field 0 byte 1, exposed as
-:attr:`titan.u9.sdinfo.U9SdInfoRecord.format_selector`. Pass it to
-:func:`decode_frame` as ``selector`` and frames decode the way the engine
-decodes them. Without it, :data:`INTENSITY_FLAG` (frame-flags bit 9) stands in;
-that agrees about mask-versus-paletted on all 22,724 shipped 8-bit frames but
-cannot separate the two mask formats, so the 42 ``ALPHA_INTENSITY_44`` frames
-decode as flat masks.
-
-Applying a palette to a mask is not a subtle error -- sparkles, lightning and
-the pentagram glow come out as rainbow confetti, because consecutive intensity
-values land on unrelated hues.
-
-**Compression**: ``compression=1`` is **BC1/DXT1**, confirmed on real data --
-payload length matches a BC1 base surface plus its mip chain on 2,029 of 2,029
-sampled frames, and decoded frames render as clean ground textures. It is
-decoded here. Earlier revisions of this module rejected it as an unknown format
-because the Blender importer this reader was ported from has no path for it;
-that was a limitation of that tool, not of the format. ``u9ed`` decodes it with
-``BCnEncoder.Net`` as BC1. Anything other than 0 or 1 is still rejected with
-:class:`U9TextureError` rather than guessed at.
-
-Note that the length test must never be used as a stand-in for the
-``compression`` field: run against real ``compression=1`` data it produces a
-plausible-looking buffer-length match on 195 of 5,687 entries purely by chance,
-which would silently decode compressed bytes as raw pixels.
-
-The three archives are one texture set at three quality tiers, index-parallel to
-one another: ``bitmapsh.flx`` is 8-bit, ``bitmap16.flx`` 16-bit and
-``bitmapC.flx`` BC1. Masks are shared verbatim across all three rather than
-re-encoded, which is why ``bitmap16`` and ``bitmapC`` carry exactly the same
-3,476 8-bit frames -- every one of them a mask. ``ankh.pal`` is therefore needed
-by ``bitmapsh.flx`` alone. Paletted index 254 is an exact transparency key;
-its RGB-identical index 247 remains opaque.
-
-The terrain-panel entries are the same structure, not a separate raster
-format. All 6,898 shipped entries parse exactly: one 64x64 frame, no mips,
-8-bit palette indices or RGB565. What older notes called a 292-byte opaque
-prefix is the ordinary frame header and 64-entry row table.
+The three archives are index-parallel quality tiers.  The same structure is
+also used by the pre-baked terrain-panel archives.
 """
 
 from __future__ import annotations
@@ -110,6 +35,7 @@ __all__ = [
     "FORMAT_P8",
     "SELECTOR_ARGB_1555",
     "INTENSITY_FLAG",
+    "FRAME_TWO_BYTES_PER_PIXEL",
     "PALETTE_TRANSPARENCY_INDEX",
     "COMPRESSION_NONE",
     "U9TextureError",
@@ -134,6 +60,7 @@ FRAME_HEADER_SIZE = 0x14
 
 COMPRESSION_NONE = 0
 COMPRESSION_BC1 = 1
+TEXTURE_OPTION_COMPRESSED = 0x0001
 
 FORMAT_P8 = 0
 """``sdInfo`` selector: 8-bit palette indices."""
@@ -143,35 +70,23 @@ FORMAT_ALPHA_8 = 3
 """``sdInfo`` selector: 8-bit coverage mask, colour supplied by the vertex."""
 
 SELECTOR_ARGB_1555 = 1
-"""``sdInfo`` selector on a **16-bit** frame: ARGB_1555. Anything else is RGB_565.
+"""Pixel-format code 1 on a two-byte frame: ARGB1555.
 
 The selector's meaning depends on the depth branch: 0 is ``P_8`` on a
 one-byte-per-texel frame and ``RGB_565`` on a two-byte one. Only value 1 means
 1555, and it occurs on no 8-bit frame.
 
-Measured over all 17,720 shipped 16-bit frames, this agrees with the frame
-header's transparency flag on **17,718**. The two exceptions are frame 1 of
-``bitmap16`` entries 1623 and 6146, whose header words read ``flags=0x6500,
-u2=0x2656`` where all fourteen sibling frames of the same entry read
-``0x0400, 0x6000`` -- corrupt header words in an otherwise regular entry, not a
-format signal. (That sibling value ``0x0400`` is frame-flags bit 10, the depth
-bit: an ordinary two-byte-per-pixel frame with nothing else set.) Keying on the selector is preferred anyway because it is stored
-per *entry* and so survives exactly that kind of damage, where the per-frame
-flag does not.
+The matching ``sdInfo`` selector agrees with this stored code on all but frame
+1 of ``bitmap16`` entries 1623 and 6146.  Passing that per-entry selector lets
+Titan decode those two damaged frame headers consistently with their siblings.
 """
 
 INTENSITY_FLAG = 0x200
-"""Frame-flags bit 9: a fallback for when no ``sdInfo`` selector is available.
+"""Compatibility name for bit 1 of the stored two-bit pixel-format code.
 
-The engine's real discriminator is the descriptor byte exposed as
-:attr:`titan.u9.sdinfo.U9SdInfoRecord.format_selector`; pass it to
-:func:`decode_frame` as ``selector`` and this bit is not consulted.
-
-Without it, bit 9 stands in. It agrees with the real selector on **22,724 of
-22,724** shipped 8-bit frames as to whether a frame is a mask, but it cannot
-tell :data:`FORMAT_ALPHA_8` from :data:`FORMAT_ALPHA_INTENSITY_44` -- both set
-it. The 42 frames of the latter therefore decode as plain masks under the
-fallback, losing their alpha nibble.
+The complete code occupies frame-flag bits 8-9; ``0x200`` by itself is code 2,
+AI44 at one-byte depth or AI88 at two-byte depth.  New code should use
+:attr:`U9TextureFrameInfo.pixel_format_code` rather than testing this bit.
 
 **Not to be confused with the material's own ``0x200``**, which selects point
 over bilinear filtering. The engine's runtime material flag word collides with
@@ -182,6 +97,17 @@ the engine's structures say nothing about bit numbers in these files; see
 to the engine". This constant is bit 9 of the **frame header** at
 ``frame_offset + 0x00``.
 """
+
+FRAME_PIXEL_FORMAT_MASK = 0x00000300
+FRAME_PIXEL_FORMAT_SHIFT = 8
+FRAME_TWO_BYTES_PER_PIXEL = 0x00000400
+FRAME_EDITOR_ONLY = 0x00000800
+FRAME_TRANSPARENCY_KEY_MASK = 0x0FFFF000
+FRAME_TRANSPARENCY_KEY_SHIFT = 12
+FRAME_RUN_LENGTH_ENCODED = 0x10000000
+FRAME_CONTIGUOUS_ROWS = 0x20000000
+FRAME_TRANSPARENCY_TEST_DISABLED = 0x40000000
+FRAME_RESERVED_FLAG = 0x80000000
 
 BC1_BLOCK_BYTES = 8
 BC1_BLOCK_DIM = 4
@@ -206,12 +132,13 @@ class U9TextureFrameInfo:
     offset: int
     length: int
     flags: int
-    unknown_word: int
     width: int
     height: int
-    unknown3: int
-    unknown4: int
+    anchor_x: int
+    anchor_y: int
     row_offsets: tuple[int, ...]
+    header_raw: bytes
+    row_offsets_raw: bytes
 
     @property
     def header_size(self) -> int:
@@ -225,20 +152,154 @@ class U9TextureFrameInfo:
 
     @property
     def is_transparent(self) -> bool:
-        return bool(self.flags & 0x100)
+        """Compatibility view: whether per-pixel transparency testing is enabled."""
+        return self.transparency_test_enabled
+
+    @property
+    def pixel_format_code(self) -> int:
+        """Stored two-bit pixel-format code; its meaning depends on pixel depth."""
+        return (self.flags & FRAME_PIXEL_FORMAT_MASK) >> FRAME_PIXEL_FORMAT_SHIFT
+
+    @property
+    def two_bytes_per_pixel(self) -> bool:
+        return bool(self.flags & FRAME_TWO_BYTES_PER_PIXEL)
+
+    @property
+    def editor_only(self) -> bool:
+        return bool(self.flags & FRAME_EDITOR_ONLY)
+
+    @property
+    def transparency_key_16(self) -> int:
+        return (
+            self.flags & FRAME_TRANSPARENCY_KEY_MASK
+        ) >> FRAME_TRANSPARENCY_KEY_SHIFT
+
+    @property
+    def is_run_length_encoded(self) -> bool:
+        return bool(self.flags & FRAME_RUN_LENGTH_ENCODED)
+
+    @property
+    def has_contiguous_rows(self) -> bool:
+        return bool(self.flags & FRAME_CONTIGUOUS_ROWS)
+
+    @property
+    def transparency_test_enabled(self) -> bool:
+        return not bool(self.flags & FRAME_TRANSPARENCY_TEST_DISABLED)
+
+    @property
+    def reserved_flag_31(self) -> bool:
+        return bool(self.flags & FRAME_RESERVED_FLAG)
+
+    @property
+    def single_color_index(self) -> int:
+        return self.flags & 0xFF
+
+    @property
+    def unknown_word(self) -> int:
+        """Compatibility alias for the former, incorrect split-flags view."""
+        return (self.flags >> 16) & 0xFFFF
+
+    @property
+    def unknown3(self) -> int:
+        """Compatibility alias for :attr:`anchor_x`."""
+        return self.anchor_x
+
+    @property
+    def unknown4(self) -> int:
+        """Compatibility alias for :attr:`anchor_y`."""
+        return self.anchor_y
 
 
 @dataclass(frozen=True)
 class U9TextureSet:
     """Parsed texture-set and frame metadata from one FLX entry."""
 
-    frame_width: int
+    max_width: int
     mip_count: int
-    frame_height: int
-    compression: int
+    reserved_0x03: int
+    max_height: int
+    storage_flags: int
     frame_count: int
-    unknown: int
+    playback_flags: int
     frames: tuple[U9TextureFrameInfo, ...]
+    header_raw: bytes
+
+    @property
+    def is_compressed(self) -> bool:
+        return bool(self.storage_flags & TEXTURE_OPTION_COMPRESSED)
+
+    @property
+    def animation_mode_code(self) -> int:
+        return self.playback_flags & 0x7
+
+    @property
+    def playback_reverse(self) -> bool:
+        return bool(self.playback_flags & 0x8)
+
+    @property
+    def playback_rate(self) -> int:
+        return (self.playback_flags >> 4) & 0xFF
+
+    @property
+    def width_exponent(self) -> int:
+        return (self.playback_flags >> 12) & 0xF
+
+    @property
+    def height_exponent(self) -> int:
+        return (self.playback_flags >> 16) & 0xF
+
+    @property
+    def default_first_frame(self) -> int:
+        return (self.playback_flags >> 20) & 0xF
+
+    @property
+    def default_last_frame(self) -> int:
+        return (self.playback_flags >> 24) & 0xFF
+
+    @property
+    def playback_status(self) -> str:
+        if self.frame_count == 0:
+            return "not_applicable"
+        if (
+            self.default_first_frame >= self.frame_count
+            or self.default_last_frame >= self.frame_count
+            or self.default_first_frame > self.default_last_frame
+        ):
+            return "out_of_range"
+        return "ok"
+
+    @property
+    def dimension_exponent_status(self) -> str:
+        if self.max_width == 0 or self.max_height == 0:
+            return "not_applicable"
+        expected_width = self.max_width.bit_length() - 1
+        expected_height = self.max_height.bit_length() - 1
+        if (
+            self.width_exponent != expected_width
+            or self.height_exponent != expected_height
+        ):
+            return "mismatch"
+        return "ok"
+
+    @property
+    def frame_width(self) -> int:
+        """Compatibility alias for :attr:`max_width`."""
+        return self.max_width
+
+    @property
+    def frame_height(self) -> int:
+        """Compatibility alias for :attr:`max_height`."""
+        return self.max_height
+
+    @property
+    def compression(self) -> int:
+        """Compatibility view of storage bit 0 (0 raw, 1 BC1)."""
+        return int(self.is_compressed)
+
+    @property
+    def unknown(self) -> int:
+        """Compatibility alias for the now-decoded playback flags."""
+        return self.playback_flags
 
 
 @dataclass(frozen=True)
@@ -250,13 +311,9 @@ class U9TextureFrame:
     pixels_rgba: bytes
     """``width * height * 4`` bytes, one byte per channel, 0-255."""
     is_transparent: bool
-    """Frame-header bit 8, not a scan of decoded alpha values.
-
-    A paletted surface can contain transparent index 254 while this remains
-    false because the two mechanisms are independent.
-    """
+    """True when the decoded surface contains at least one alpha value below 255."""
     is_intensity: bool = False
-    """True when this was an 8-bit ALPHA_8 mask -- see :data:`INTENSITY_FLAG`.
+    """True when this was an alpha/intensity or alpha-only format.
 
     ``pixels_rgba`` then holds the mask in the alpha channel, mirrored into RGB
     so it is visible in a plain viewer, and any palette passed to
@@ -277,10 +334,15 @@ def parse_texture_set(entry_data: bytes) -> U9TextureSet:
             f"data too small for a texture-set header: {len(entry_data)} bytes"
         )
 
-    frame_width, mip_count, frame_height, compression = struct.unpack_from(
-        "<4H", entry_data, 0x00
-    )
-    frame_count, unknown = struct.unpack_from("<2I", entry_data, 0x08)
+    (
+        max_width,
+        mip_count,
+        reserved_0x03,
+        max_height,
+        storage_flags,
+        frame_count,
+        playback_flags,
+    ) = struct.unpack_from("<HBBHHII", entry_data, 0x00)
     directory_end = TEXTURE_SET_HEADER_SIZE + frame_count * FRAME_DIR_ENTRY_SIZE
     if directory_end > len(entry_data):
         raise U9TextureError(
@@ -305,9 +367,8 @@ def parse_texture_set(entry_data: bytes) -> U9TextureSet:
             )
 
         try:
-            flags, unknown_word = struct.unpack_from("<2H", entry_data, frame_offset)
-            width, height, unknown3, unknown4 = struct.unpack_from(
-                "<4I", entry_data, frame_offset + 4
+            flags, width, height, anchor_x, anchor_y = struct.unpack_from(
+                "<5I", entry_data, frame_offset
             )
         except struct.error as error:
             raise U9TextureError(f"malformed frame {index} header: {error}") from error
@@ -337,23 +398,28 @@ def parse_texture_set(entry_data: bytes) -> U9TextureSet:
                 offset=frame_offset,
                 length=frame_length,
                 flags=flags,
-                unknown_word=unknown_word,
                 width=width,
                 height=height,
-                unknown3=unknown3,
-                unknown4=unknown4,
+                anchor_x=anchor_x,
+                anchor_y=anchor_y,
                 row_offsets=row_offsets,
+                header_raw=entry_data[frame_offset : frame_offset + FRAME_HEADER_SIZE],
+                row_offsets_raw=entry_data[
+                    frame_offset + FRAME_HEADER_SIZE : frame_offset + header_size
+                ],
             )
         )
 
     return U9TextureSet(
-        frame_width=frame_width,
+        max_width=max_width,
         mip_count=mip_count,
-        frame_height=frame_height,
-        compression=compression,
+        reserved_0x03=reserved_0x03,
+        max_height=max_height,
+        storage_flags=storage_flags,
         frame_count=frame_count,
-        unknown=unknown,
+        playback_flags=playback_flags,
         frames=tuple(frames),
+        header_raw=entry_data[:TEXTURE_SET_HEADER_SIZE],
     )
 
 
@@ -388,23 +454,21 @@ def decode_frame(
     grayscale.
 
     ``mip_level`` selects the base image (zero) or one of the stored,
-    progressively halved surfaces. ``selector`` is the engine's pixel-format byte, from
+    progressively halved surfaces. ``selector`` is the companion pixel-format byte, from
     :attr:`titan.u9.sdinfo.U9SdInfoRecord.format_selector` on the ``sdInfo``
-    archive matching this one. Supply it and one-byte-per-texel frames are
-    decoded the way the engine decodes them; omit it and
-    :data:`INTENSITY_FLAG` stands in, which cannot separate ``ALPHA_8`` from
-    ``ALPHA_INTENSITY_44``.
+    archive matching this one. Supply it to override a damaged per-frame
+    format code; otherwise the identical two-bit code stored in the frame
+    flags is used.
     """
     texture_set = parse_texture_set(entry_data)
     mip_count = texture_set.mip_count
     compression = texture_set.compression
     frame_count = texture_set.frame_count
 
-    if compression not in (COMPRESSION_NONE, COMPRESSION_BC1):
+    if texture_set.storage_flags & ~TEXTURE_OPTION_COMPRESSED:
         raise U9TextureError(
-            f"unsupported compression scheme (compression={compression}); this decoder handles "
-            f"raw/uncompressed pixel data (compression=0) and BC1/DXT1 block compression "
-            f"(compression=1) -- see the module docstring"
+            f"unsupported texture storage flags 0x{texture_set.storage_flags:04x}; "
+            "only bit 0 (BC1 compression) is defined"
         )
 
     if not (0 <= frame_index < frame_count):
@@ -415,11 +479,9 @@ def decode_frame(
         raise U9TextureError(f"mip_level {mip_level} out of range (0..{mip_count})")
 
     frame_info = texture_set.frames[frame_index]
-    unknown1 = frame_info.flags
     width = frame_info.width
     height = frame_info.height
     frame_length = frame_info.length
-    is_transparent = frame_info.is_transparent
     pixel_data_start = frame_info.pixel_data_offset
     dimensions = mip_dimensions(width, height, mip_count)
 
@@ -437,11 +499,12 @@ def decode_frame(
             )
         pixel_data_start += sum(level_sizes[:mip_level])
         width, height = dimensions[mip_level]
+        pixels_rgba = _decode_bc1(entry_data, pixel_data_start, width, height)
         return U9TextureFrame(
             width=width,
             height=height,
-            pixels_rgba=_decode_bc1(entry_data, pixel_data_start, width, height),
-            is_transparent=is_transparent,
+            pixels_rgba=pixels_rgba,
+            is_transparent=_has_transparent_pixels(pixels_rgba),
             is_intensity=False,
             mip_level=mip_level,
         )
@@ -451,37 +514,17 @@ def decode_frame(
     )
     total_sample_count = sum(level_sample_counts)
     payload_length = frame_length - frame_info.header_size
-    if payload_length == total_sample_count:
-        is_8bit = True
-        bytes_per_pixel = 1
-    elif payload_length == total_sample_count * 2:
-        is_8bit = False
-        bytes_per_pixel = 2
-    else:
+    bytes_per_pixel = 2 if frame_info.two_bytes_per_pixel else 1
+    expected_payload_length = total_sample_count * bytes_per_pixel
+    if payload_length != expected_payload_length:
         raise U9TextureError(
             f"raw payload size mismatch: frame has {payload_length} bytes, expected "
-            f"{total_sample_count} for 8-bit or {total_sample_count * 2} for 16-bit levels"
+            f"{expected_payload_length} from the stored "
+            f"{'two-byte' if bytes_per_pixel == 2 else 'one-byte'} depth flag"
         )
-    # Only meaningful for 8-bit frames: the same bit on a 16-bit frame is not a
-    # format selector, and reporting it as one would mislabel 12,439 of them.
-    if not is_8bit:
-        eight_bit_format = None
-    elif selector is None:
-        eight_bit_format = FORMAT_ALPHA_8 if (unknown1 & INTENSITY_FLAG) else FORMAT_P8
-    elif selector in (FORMAT_ALPHA_8, FORMAT_ALPHA_INTENSITY_44):
-        eight_bit_format = selector
-    else:
-        eight_bit_format = FORMAT_P8
-    is_intensity = eight_bit_format in (FORMAT_ALPHA_8, FORMAT_ALPHA_INTENSITY_44)
-
-    # 16-bit frames pick between 565 and 1555 the same way: the selector is
-    # authoritative, the transparency flag is the fallback.
-    if is_8bit:
-        sixteen_bit_is_1555 = False
-    elif selector is None:
-        sixteen_bit_is_1555 = is_transparent
-    else:
-        sixteen_bit_is_1555 = selector == SELECTOR_ARGB_1555
+    is_8bit = bytes_per_pixel == 1
+    pixel_format = frame_info.pixel_format_code if selector is None else selector
+    is_intensity = pixel_format in (FORMAT_ALPHA_8, FORMAT_ALPHA_INTENSITY_44)
 
     pixel_data_start += sum(level_sample_counts[:mip_level]) * bytes_per_pixel
     width, height = dimensions[mip_level]
@@ -499,26 +542,51 @@ def decode_frame(
 
     try:
         if is_8bit:
-            if eight_bit_format == FORMAT_ALPHA_INTENSITY_44:
+            if pixel_format == FORMAT_ALPHA_INTENSITY_44:
                 pixels_rgba = _decode_alpha_intensity_44(
                     entry_data, pixel_data_start, pixel_count
                 )
-            elif eight_bit_format == FORMAT_ALPHA_8:
+            elif pixel_format == FORMAT_ALPHA_8:
                 pixels_rgba = _decode_intensity(
                     entry_data, pixel_data_start, pixel_count
                 )
+            elif pixel_format != FORMAT_P8:
+                raise U9TextureError(
+                    f"unsupported one-byte pixel format code {pixel_format}"
+                )
             elif palette is not None:
                 pixels_rgba = _decode_paletted(
-                    entry_data, pixel_data_start, pixel_count, palette
+                    entry_data,
+                    pixel_data_start,
+                    pixel_count,
+                    palette,
+                    frame_info.transparency_test_enabled,
                 )
             else:
                 pixels_rgba = _decode_monochrome(
-                    entry_data, pixel_data_start, pixel_count
+                    entry_data,
+                    pixel_data_start,
+                    pixel_count,
+                    frame_info.transparency_test_enabled,
                 )
-        elif sixteen_bit_is_1555:
+        elif pixel_format == SELECTOR_ARGB_1555:
             pixels_rgba = _decode_5551(entry_data, pixel_data_start, pixel_count)
+        elif pixel_format == FORMAT_ALPHA_INTENSITY_44:
+            pixels_rgba = _decode_alpha_intensity_88(
+                entry_data, pixel_data_start, pixel_count
+            )
+        elif pixel_format == FORMAT_P8:
+            pixels_rgba = _decode_565(
+                entry_data,
+                pixel_data_start,
+                pixel_count,
+                frame_info.transparency_key_16,
+                frame_info.transparency_test_enabled,
+            )
         else:
-            pixels_rgba = _decode_565(entry_data, pixel_data_start, pixel_count)
+            raise U9TextureError(
+                f"unsupported two-byte pixel format code {pixel_format}"
+            )
     except (struct.error, IndexError) as e:
         raise U9TextureError(f"pixel data truncated: {e}") from e
 
@@ -526,7 +594,7 @@ def decode_frame(
         width=width,
         height=height,
         pixels_rgba=pixels_rgba,
-        is_transparent=is_transparent,
+        is_transparent=_has_transparent_pixels(pixels_rgba),
         is_intensity=is_intensity,
         mip_level=mip_level,
     )
@@ -640,34 +708,57 @@ def _decode_intensity(data: bytes, start: int, count: int) -> bytes:
     return bytes(out)
 
 
-def _decode_monochrome(data: bytes, start: int, count: int) -> bytes:
+def _decode_monochrome(
+    data: bytes, start: int, count: int, transparency_test_enabled: bool
+) -> bytes:
     out = bytearray(count * 4)
     for i in range(count):
         v = data[start + i]
-        alpha = 0 if v == PALETTE_TRANSPARENCY_INDEX else 255
+        alpha = (
+            0
+            if transparency_test_enabled and v == PALETTE_TRANSPARENCY_INDEX
+            else 255
+        )
         out[i * 4 : i * 4 + 4] = (v, v, v, alpha)
     return bytes(out)
 
 
-def _decode_paletted(data: bytes, start: int, count: int, palette: U9Palette) -> bytes:
+def _decode_paletted(
+    data: bytes,
+    start: int,
+    count: int,
+    palette: U9Palette,
+    transparency_test_enabled: bool,
+) -> bytes:
     out = bytearray(count * 4)
     colors = palette.colors
     for i in range(count):
         index = data[start + i]
         r, g, b = colors[index]
-        alpha = 0 if index == PALETTE_TRANSPARENCY_INDEX else 255
+        alpha = (
+            0
+            if transparency_test_enabled and index == PALETTE_TRANSPARENCY_INDEX
+            else 255
+        )
         out[i * 4 : i * 4 + 4] = (r, g, b, alpha)
     return bytes(out)
 
 
-def _decode_565(data: bytes, start: int, count: int) -> bytes:
+def _decode_565(
+    data: bytes,
+    start: int,
+    count: int,
+    transparency_key: int,
+    transparency_test_enabled: bool,
+) -> bytes:
     out = bytearray(count * 4)
     for i in range(count):
         raw = struct.unpack_from("<H", data, start + i * 2)[0]
         b = (raw & 0x1F) * 255 // 31
         g = ((raw >> 5) & 0x3F) * 255 // 63
         r = ((raw >> 11) & 0x1F) * 255 // 31
-        out[i * 4 : i * 4 + 4] = (r, g, b, 255)
+        alpha = 0 if transparency_test_enabled and raw == transparency_key else 255
+        out[i * 4 : i * 4 + 4] = (r, g, b, alpha)
     return bytes(out)
 
 
@@ -681,3 +772,16 @@ def _decode_5551(data: bytes, start: int, count: int) -> bytes:
         a = 255 if (raw >> 15) & 1 else 0
         out[i * 4 : i * 4 + 4] = (r, g, b, a)
     return bytes(out)
+
+
+def _decode_alpha_intensity_88(data: bytes, start: int, count: int) -> bytes:
+    """Two-byte alpha/intensity: intensity byte first, alpha byte second."""
+    out = bytearray(count * 4)
+    for i in range(count):
+        intensity, alpha = struct.unpack_from("<BB", data, start + i * 2)
+        out[i * 4 : i * 4 + 4] = (intensity, intensity, intensity, alpha)
+    return bytes(out)
+
+
+def _has_transparent_pixels(pixels_rgba: bytes) -> bool:
+    return any(alpha != 255 for alpha in pixels_rgba[3::4])

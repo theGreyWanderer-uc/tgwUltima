@@ -203,6 +203,8 @@ def _planned_library(
             "category": _animation_category(row),
             "action": row.get("action_hint"),
             "duration_ms": int(row.get("duration_ms") or 0),
+            "last_sample_time_ms": int(row.get("last_sample_time_ms") or 0),
+            "runtime_length_ms": int(row.get("runtime_length_ms") or 0),
             "track_count": int(row.get("part_count") or 0),
             "model_track_count": int(row.get("model_track_count") or 0),
             "authoring_only_track_count": int(

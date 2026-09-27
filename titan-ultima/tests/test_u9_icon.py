@@ -39,42 +39,74 @@ from titan.u9.model import (
 
 def _material(texture_id: int) -> U9Material:
     return U9Material(
-        texture_id=texture_id, flags_02=0, render_flags=0, flags_06=0, first_face=0, face_count=1,
-        default_alpha=255, modified_alpha=255, anim_start=0, anim_end=0, cur_frame=0, anim_speed=0,
+        texture_id=texture_id,
+        flags_02=0,
+        render_flags=0,
+        flags_06=0,
+        first_face=0,
+        face_count=1,
+        default_alpha=255,
+        modified_alpha=255,
+        anim_start=0,
+        anim_end=0,
+        cur_frame=0,
+        anim_speed=0,
     )
 
 
 def _triangle(material_index: int = 0) -> U9Triangle:
     normal = (0.0, 0.0, 1.0)
     corners = tuple(
-        U9TriangleCorner(vertex_index=i, normal=normal, uv=(float(i), 0.0)) for i in range(3)
+        U9TriangleCorner(vertex_index=i, normal=normal, uv=(float(i), 0.0))
+        for i in range(3)
     )
-    return U9Triangle(corners=corners, material_index=material_index, face_normal=normal, color=(255, 255, 255, 255))
+    return U9Triangle(
+        corners=corners,
+        material_index=material_index,
+        face_normal=normal,
+        color=(255, 255, 255, 255),
+    )
 
 
 def _lod(texture_ids: tuple[int, ...]) -> U9SubmeshLod:
     materials = tuple(_material(t) for t in texture_ids)
     triangles = tuple(_triangle(material_index=i) for i in range(len(materials)))
     return U9SubmeshLod(
-        lod_index=0, vertices=((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)), triangles=triangles,
-        materials=materials, sphere_center=(0.0, 0.0, 0.0), sphere_radius=1.0,
-        min_bounds=(0.0, 0.0, 0.0), max_bounds=(1.0, 1.0, 0.0),
+        lod_index=0,
+        vertices=((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)),
+        triangles=triangles,
+        materials=materials,
+        sphere_center=(0.0, 0.0, 0.0),
+        sphere_radius=1.0,
+        min_bounds=(0.0, 0.0, 0.0),
+        max_bounds=(1.0, 1.0, 0.0),
     )
 
 
 def _limb(limb_id: int, lods: tuple) -> U9Limb:
     return U9Limb(
-        limb_id=limb_id, parent_id=limb_id, scale=(1.0, 1.0, 1.0), position=(0.0, 0.0, 0.0),
-        rotation=(1.0, 0.0, 0.0, 0.0), lods=lods,
+        limb_id=limb_id,
+        parent_id=limb_id,
+        scale=(1.0, 1.0, 1.0),
+        position=(0.0, 0.0, 0.0),
+        rotation=(1.0, 0.0, 0.0, 0.0),
+        lods=lods,
     )
 
 
 def _model(model_id: int, limbs: tuple) -> U9Model:
     return U9Model(
-        model_id=model_id, cylinder_base_center=(0.0, 0.0, 0.0), cylinder_base_height=0.0,
-        cylinder_base_radius=0.0, sphere_center=(0.0, 0.0, 0.0), sphere_radius=1.0,
-        min_bounds=(-1.0, -1.0, -1.0), max_bounds=(1.0, 1.0, 1.0), lod_thresholds=(0, 0, 0, 0),
-        center_of_mass=(0.0, 0.0, 0.0), limbs=limbs,
+        model_id=model_id,
+        cylinder_base_center=(0.0, 0.0, 0.0),
+        cylinder_base_height=0.0,
+        cylinder_base_radius=0.0,
+        sphere_center=(0.0, 0.0, 0.0),
+        sphere_radius=1.0,
+        min_bounds=(-1.0, -1.0, -1.0),
+        max_bounds=(1.0, 1.0, 1.0),
+        lod_thresholds=(0, 0, 0, 0),
+        center_of_mass=(0.0, 0.0, 0.0),
+        limbs=limbs,
     )
 
 
@@ -108,28 +140,41 @@ DIR_OFFSET = 0x80
 def _model_header() -> bytes:
     data = (
         struct.pack("<II", 1, 1)
-        + struct.pack("<3f", 0, 0, 0) + struct.pack("<2f", 0, 0)
-        + struct.pack("<3f", 0, 0, 0) + struct.pack("<f", 1.0) + struct.pack("<f", 0)
-        + struct.pack("<3f", -1, -1, -1) + struct.pack("<3f", 1, 1, 1)
-        + struct.pack("<4I", 100, 200, 300, 400) + struct.pack("<3f", 0, 0, 0)
+        + struct.pack("<3f", 0, 0, 0)
+        + struct.pack("<2f", 0, 0)
+        + struct.pack("<3f", 0, 0, 0)
+        + struct.pack("<f", 1.0)
+        + struct.pack("<f", 0)
+        + struct.pack("<3f", -1, -1, -1)
+        + struct.pack("<3f", 1, 1, 1)
+        + struct.pack("<4I", 100, 200, 300, 400)
+        + struct.pack("<3f", 0, 0, 0)
     )
     return data + b"\x00" * (MODEL_HEADER_SIZE - len(data))
 
 
 def _limb_header_bytes() -> bytes:
     return (
-        struct.pack("<II", 1, 1) + struct.pack("<3f", 1, 1, 1)
-        + struct.pack("<3f", 0, 0, 0) + struct.pack("<4f", 1, 0, 0, 0)
+        struct.pack("<II", 1, 1)
+        + struct.pack("<3f", 1, 1, 1)
+        + struct.pack("<3f", 0, 0, 0)
+        + struct.pack("<4f", 1, 0, 0, 0)
     )
 
 
 def _corner_bytes(vertex_index: int, uv: tuple[float, float]) -> bytes:
-    return struct.pack("<II", vertex_index, 0) + struct.pack("<3f", 0, 0, 1) + struct.pack("<2f", *uv)
+    return (
+        struct.pack("<II", vertex_index, 0)
+        + struct.pack("<3f", 0, 0, 1)
+        + struct.pack("<2f", *uv)
+    )
 
 
 def _face_bytes() -> bytes:
     data = b"".join(_corner_bytes(i, (float(i), 0.0)) for i in range(3))
-    data += struct.pack("<II", 0, 0) + struct.pack("<3f", 0, 0, 1) + struct.pack("<f", 0.0)
+    data += (
+        struct.pack("<II", 0, 0) + struct.pack("<3f", 0, 0, 1) + struct.pack("<f", 0.0)
+    )
     data += struct.pack("<I", 0) + bytes((255, 255, 255, 255)) + b"\x00" * 8
     assert len(data) == FACE_SIZE
     return data
@@ -145,24 +190,59 @@ def _material_bytes(texture_id: int) -> bytes:
 def _one_material_model_bytes(texture_id: int) -> bytes:
     """One limb, one LOD, one triangle, one material referencing *texture_id*."""
     face_bytes = _face_bytes()
-    vertex_bytes = b"".join(struct.pack("<3f", *v) for v in ((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)))
+    vertex_bytes = b"".join(
+        struct.pack("<3f", *v)
+        for v in ((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0))
+    )
     material_bytes = _material_bytes(texture_id)
     faces_off = LOD_HEADER_SIZE
     vertices_off = faces_off + len(face_bytes)
     materials_off = vertices_off + len(vertex_bytes)
+    sorted_list = struct.pack("<3h", -1, 0, -1)
+    sorted_offsets = tuple(
+        materials_off + len(material_bytes) + index * len(sorted_list)
+        for index in range(4)
+    )
+    mesh_size = (
+        LOD_HEADER_SIZE
+        + len(face_bytes)
+        + len(vertex_bytes)
+        + len(material_bytes)
+        + len(sorted_list) * 4
+    )
 
     lod_header = (
-        struct.pack("<I", 1) + struct.pack("<I", 0) + struct.pack("<I", 0)
-        + struct.pack("<3f", 0, 0, 0) + struct.pack("<f", 1.0)
-        + struct.pack("<3f", -1, -1, -1) + struct.pack("<3f", 1, 1, 1)
-        + struct.pack("<II", 0, 0) + struct.pack("<I", 1) + struct.pack("<I", 0)
-        + struct.pack("<I", 3) + struct.pack("<I", 0) + struct.pack("<I", 1) + struct.pack("<I", 1)
-        + struct.pack("<I", faces_off) + struct.pack("<I", 0) + struct.pack("<I", vertices_off)
-        + struct.pack("<I", 0) + struct.pack("<I", materials_off)
-        + struct.pack("<4I", 0, 0, 0, 0) + struct.pack("<I", 0)
+        struct.pack("<I", mesh_size)
+        + struct.pack("<I", 0)
+        + struct.pack("<I", 0)
+        + struct.pack("<3f", 0, 0, 0)
+        + struct.pack("<f", 1.0)
+        + struct.pack("<3f", -1, -1, -1)
+        + struct.pack("<3f", 1, 1, 1)
+        + struct.pack("<II", 0, 0)
+        + struct.pack("<I", 1)
+        + struct.pack("<I", 0)
+        + struct.pack("<I", 3)
+        + struct.pack("<I", 0)
+        + struct.pack("<I", 1)
+        + struct.pack("<I", 1)
+        + struct.pack("<I", faces_off)
+        + struct.pack("<I", 0)
+        + struct.pack("<I", vertices_off)
+        + struct.pack("<I", 0)
+        + struct.pack("<I", materials_off)
+        + struct.pack("<4I", *sorted_offsets)
+        + struct.pack("<I", 0)
     )
     assert len(lod_header) == LOD_HEADER_SIZE
-    lod_bytes = lod_header + b"\x00\x00\x00\x00" + face_bytes + vertex_bytes + material_bytes
+    lod_bytes = (
+        lod_header
+        + b"\x00\x00\x00\x00"
+        + face_bytes
+        + vertex_bytes
+        + material_bytes
+        + sorted_list * 4
+    )
 
     header = _model_header()
     limb_header_off = MODEL_HEADER_SIZE + 4 + 4
@@ -203,7 +283,9 @@ class UsedTextureIdsArchiveTests(unittest.TestCase):
         self.assertEqual(used_texture_ids(sappear), {42})
 
     def test_skips_unparseable_model_without_raising(self) -> None:
-        sappear = U9FlxArchive(_build_flx([_one_material_model_bytes(texture_id=42), b"\x00" * 4]))
+        sappear = U9FlxArchive(
+            _build_flx([_one_material_model_bytes(texture_id=42), b"\x00" * 4])
+        )
         self.assertEqual(used_texture_ids(sappear), {42})
 
 

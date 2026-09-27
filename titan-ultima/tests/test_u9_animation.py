@@ -30,15 +30,15 @@ def _frame(
     position: tuple[float, float, float] = (0.0, 0.0, 0.0),
     scale: tuple[float, float, float] = (1.0, 1.0, 1.0),
 ) -> bytes:
-    return struct.pack("<I10f", time_ms, *rotation, *position, *scale)
+    return struct.pack("<i10f", time_ms, *rotation, *position, *scale)
 
 
 def _part(part_id: int, name: str, frames: list[bytes]) -> bytes:
     raw_name = name.encode("ascii")
     return (
-        struct.pack("<II", part_id, len(raw_name))
+        struct.pack("<ii", part_id, len(raw_name))
         + raw_name
-        + struct.pack("<I", len(frames))
+        + struct.pack("<i", len(frames))
         + b"".join(frames)
     )
 
@@ -75,11 +75,11 @@ def _entry(
 
     source = b"u:\\art\\motions\\test"
     total_frames = end_frame - start_frame + 1
-    header_words = part_ids + [0xDEADBEEF, 0]
+    header_words = part_ids + [-559038737, 0]
     return b"".join(
         [
             struct.pack(
-                "<7I",
+                "<7i",
                 animation_id,
                 start_frame,
                 end_frame,
@@ -89,12 +89,12 @@ def _entry(
                 len(source),
             ),
             source,
-            struct.pack("<I", len(header_words)),
-            struct.pack(f"<{len(header_words)}I", *header_words),
-            struct.pack("<I", len(parts)),
+            struct.pack("<i", len(header_words)),
+            struct.pack(f"<{len(header_words)}i", *header_words),
+            struct.pack("<i", len(parts)),
             *parts,
-            struct.pack("<I", len(suffixes)),
-            *(struct.pack("<III", *suffix) for suffix in suffixes),
+            struct.pack("<i", len(suffixes)),
+            *(struct.pack("<iII", *suffix) for suffix in suffixes),
         ]
     )
 
@@ -140,10 +140,22 @@ class AnimationRecordTests(unittest.TestCase):
         self.assertEqual([part.name for part in animation.parts], ["ROOT", "HEAD"])
         self.assertEqual(animation.suffixes[0].values, (33, 4, 2))
         self.assertEqual(animation.part_registry, animation.header_words)
+        self.assertEqual(animation.active_part_registry, (1, 15))
+        self.assertEqual(animation.part_registry_residue, (-559038737, 0))
+        self.assertEqual(animation.part_registry_status, "matches_parts")
         self.assertEqual(animation.events, animation.suffixes)
         self.assertEqual(animation.events[0].time_ms, 33)
         self.assertEqual(animation.events[0].event_name, "footstep")
         self.assertEqual(animation.events[0].parameter, 2)
+        self.assertEqual(animation.stored_animation_id, 3)
+        self.assertEqual(animation.stored_id_status, "matches_entry")
+        self.assertEqual(animation.frame_range_status, "matches_count")
+        self.assertEqual(animation.runtime_timing_status, "valid")
+        self.assertEqual(animation.part_frame_count_status, "matches_clip")
+        self.assertEqual(animation.timestamp_status, "monotonic")
+        self.assertEqual(animation.transform_status, "finite")
+        self.assertEqual(animation.event_order_status, "monotonic")
+        self.assertEqual(animation.source_name_raw, b"u:\\art\\motions\\test")
 
     def test_frame_order_is_time_rotation_position_scale(self) -> None:
         animation = cast(U9Animation, self.animations.animation(3))
@@ -176,6 +188,8 @@ class AnimationRecordTests(unittest.TestCase):
     def test_part_lookup_and_duration(self) -> None:
         animation = cast(U9Animation, self.animations.animation(3))
         self.assertEqual(animation.duration_ms, 33)
+        self.assertEqual(animation.last_sample_time_ms, 33)
+        self.assertEqual(animation.runtime_length_ms, 66)
         head = animation.part(15)
         self.assertIsNotNone(head)
         self.assertEqual(head.name if head is not None else None, "HEAD")
@@ -193,6 +207,31 @@ class AnimationRecordTests(unittest.TestCase):
         self.assertAlmostEqual(sampled.position[0], 1.0 + 3.0 * 16.0 / 33.0)
         self.assertAlmostEqual(sum(value * value for value in sampled.rotation), 1.0)
 
+    def test_part_sample_preserves_the_runtime_opposite_quaternion_branch(self) -> None:
+        part = U9AnimationPart(
+            1,
+            "ROOT",
+            (
+                U9AnimationFrame(
+                    0,
+                    (0.5, 0.5, 0.5, 0.5),
+                    (0.0, 0.0, 0.0),
+                    (1.0, 1.0, 1.0),
+                ),
+                U9AnimationFrame(
+                    10,
+                    (-0.5, -0.5, -0.5, -0.5),
+                    (0.0, 0.0, 0.0),
+                    (1.0, 1.0, 1.0),
+                ),
+            ),
+        )
+        sampled = cast(U9AnimationFrame, part.sample(5))
+        self.assertEqual(sampled.rotation[0], 0.5)
+        self.assertAlmostEqual(sampled.rotation[1], 0.0)
+        self.assertAlmostEqual(sampled.rotation[2], 2**-0.5)
+        self.assertAlmostEqual(sampled.rotation[3], 0.0)
+
 
 class AnimationArchiveTests(unittest.TestCase):
     def test_unused_slots_and_used_ids(self) -> None:
@@ -208,15 +247,17 @@ class AnimationArchiveTests(unittest.TestCase):
 
 
 class AnimationValidationTests(unittest.TestCase):
-    def test_record_index_must_match_flx_index(self) -> None:
+    def test_record_index_mismatch_is_preserved_and_flagged(self) -> None:
         animations = U9Animations(_archive({3: _entry(animation_id=4)}))
-        with self.assertRaisesRegex(U9AnimationError, "record index"):
-            animations.animation(3)
+        animation = cast(U9Animation, animations.animation(3))
+        self.assertEqual(animation.animation_id, 3)
+        self.assertEqual(animation.stored_animation_id, 4)
+        self.assertEqual(animation.stored_id_status, "mismatch")
 
-    def test_part_ids_must_match_header_manifest(self) -> None:
+    def test_part_registry_mismatch_is_preserved_and_flagged(self) -> None:
         animations = U9Animations(_archive({3: _entry(part_ids=[1, 99])}))
-        with self.assertRaisesRegex(U9AnimationError, "part ID manifest"):
-            animations.animation(3)
+        animation = cast(U9Animation, animations.animation(3))
+        self.assertEqual(animation.part_registry_status, "mismatch")
 
     def test_truncated_frame_array_raises(self) -> None:
         part = _part(1, "ROOT", [_frame(0), _frame(33)])
@@ -225,12 +266,32 @@ class AnimationValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(U9AnimationError, "frame array"):
             animations.animation(3)
 
-    def test_frame_range_must_match_declared_count(self) -> None:
+    def test_frame_range_mismatch_is_preserved_and_flagged(self) -> None:
         malformed = bytearray(_entry())
-        struct.pack_into("<I", malformed, 0x0C, 999)
+        struct.pack_into("<i", malformed, 0x0C, 999)
         animations = U9Animations(_archive({3: bytes(malformed)}))
-        with self.assertRaisesRegex(U9AnimationError, "frame range"):
-            animations.animation(3)
+        animation = cast(U9Animation, animations.animation(3))
+        self.assertEqual(animation.frame_count, 999)
+        self.assertEqual(animation.frame_range_status, "mismatch")
+        self.assertEqual(animation.part_frame_count_status, "mismatch")
+
+    def test_trailing_bytes_are_preserved_losslessly(self) -> None:
+        entry = _entry() + b"TAIL"
+        animation = cast(U9Animation, U9Animations(_archive({3: entry})).animation(3))
+        self.assertEqual(animation.trailing_data, b"TAIL")
+        self.assertEqual(animation.to_bytes(), entry)
+
+    def test_negative_timestamp_and_nonfinite_transform_are_flagged(self) -> None:
+        part = _part(1, "ROOT", [_frame(-1, position=(float("nan"), 0.0, 0.0))])
+        entry = _entry(end_frame=0, parts=[part], part_ids=[1], suffixes=[])
+        animation = cast(U9Animation, U9Animations(_archive({3: entry})).animation(3))
+        self.assertEqual(animation.parts[0].frames[0].time_ms, -1)
+        self.assertEqual(animation.transform_status, "nonfinite")
+
+    def test_source_record_round_trips_exactly(self) -> None:
+        entry = _entry()
+        animation = cast(U9Animation, U9Animations(_archive({3: entry})).animation(3))
+        self.assertEqual(animation.to_bytes(), entry)
 
 
 class AnimationCliTests(unittest.TestCase):

@@ -15,7 +15,12 @@ import struct
 import unittest
 
 from titan.u9.flx_archive import U9FlxArchive
-from titan.u9.triggers import U9Triggers, U9TriggersError
+from titan.u9.triggers import (
+    TRIGGER_OPCODE_CATALOGUE,
+    U9Triggers,
+    U9TriggersError,
+    trigger_opcode_info,
+)
 
 FLX_DIR_OFFSET = 0x80
 FLX_COUNT_OFFSET = 0x50
@@ -54,6 +59,23 @@ def _archive(entries: dict[int, bytes], count: int = 8) -> U9FlxArchive:
 
 
 class TriggerRecordTests(unittest.TestCase):
+    def test_runtime_command_catalogue_is_complete_and_source_independent(self) -> None:
+        self.assertEqual(
+            [info.opcode for info in TRIGGER_OPCODE_CATALOGUE], list(range(101))
+        )
+        expected = {
+            0x1F: "transition between maps",
+            0x31: "choose NPC activity record",
+            0xFF: "end instruction stream",
+        }
+        for opcode, meaning in expected.items():
+            info = trigger_opcode_info(opcode)
+            self.assertIsNotNone(info)
+            if info is None:
+                self.fail(f"missing opcode information for 0x{opcode:02X}")
+            self.assertEqual(info.meaning, meaning)
+        self.assertIsNone(trigger_opcode_info(0x80))
+
     def test_record_fields(self) -> None:
         triggers = U9Triggers(_archive({1: _record(0x33, 16, 2220, 238) + TERMINATOR}))
         trigger = triggers.trigger(1)
@@ -114,6 +136,27 @@ class TriggerTerminationTests(unittest.TestCase):
         self.assertEqual(record.to_bytes(), blob[:RECORD_SIZE])
         assert trigger.terminator is not None
         self.assertEqual(trigger.terminator.entry_offset, RECORD_SIZE)
+
+    def test_map_transition_exposes_only_confirmed_packed_fields(self) -> None:
+        parameter = 42 | (2 << 8) | 0x4000 | 0x8000 | 0x0800
+        blob = _record(0x1F, 19, 0xBEEF, parameter) + TERMINATOR
+        trigger = U9Triggers(_archive({1: blob})).trigger(1)
+        self.assertIsNotNone(trigger)
+        if trigger is None:
+            self.fail("fixture trigger was not parsed")
+        record = trigger.records[0]
+        transition = record.map_transition
+        self.assertIsNotNone(transition)
+        if transition is None:
+            self.fail("map-transition view was not decoded")
+        self.assertEqual(record.semantic_name, "transition between maps")
+        self.assertEqual(transition.destination_link_delta, 3)
+        self.assertEqual(transition.map_number, 42)
+        self.assertEqual(transition.effect_variant, 2)
+        self.assertTrue(transition.retain_running_tasks)
+        self.assertTrue(transition.relative_position)
+        self.assertEqual(transition.unclassified_parameter_bits, 0x0800)
+        self.assertEqual(record.to_bytes(), blob[:RECORD_SIZE])
 
     def test_leading_terminator_is_an_empty_trigger(self) -> None:
         blob = TERMINATOR + _record(0x00) + _record(0x00)

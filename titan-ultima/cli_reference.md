@@ -3877,7 +3877,8 @@ archive reading, `TYPENAME.FLX`, `sound/*.flx` (Speech/sfx/music) decoding,
 sequences, `static/highway.dat` NPC navigation data, the `runtime/NPC.FLX` NPC table, and
 the `static/sdInfo*.flx` texture metadata tables, and the `static/text.flx` and
 `static/misctext.flx` text archives, and `static/fixed.<region>` static world
-geometry, and `static/anim.flx` skeletal transform clips are supported so far.
+geometry, `static/dimension.dat` model culling geometry, and `static/anim.flx`
+skeletal transform clips are supported so far.
 
 ### FLX archive commands
 
@@ -3949,7 +3950,8 @@ titan u9 flx-extract-all sound/sfx.flx -o sfx_entries/
 
 #### `u9 typename-dump`
 
-Dump type-ID -> display-name pairs from `static/TYPENAME.FLX`.
+List named object types from `static/TYPENAME.FLX`, including their linked
+readable-text and object-icon IDs.
 
 ```
 titan u9 typename-dump <file>
@@ -3966,7 +3968,204 @@ titan u9 typename-dump static/TYPENAME.FLX
 
 ---
 
+#### `u9 typename-csv`
+
+Export all 8,192 object-type metadata entries, including unnamed entries and
+lossless raw bytes.
+
+```
+titan u9 typename-csv <file> [-o OUTPUT]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/TYPENAME.FLX` |
+| `-o PATH`, `--output PATH` | CSV output path (default: `TYPENAME_metadata.csv`) |
+
+The CSV contains `type_id`, Titan's `record_representation` label, warnings,
+signed `readable_text_id`, `object_icon_id`, optional `display_name`, trailing
+bytes, and `raw_hex`. Hex storage fields use a `0x` prefix.
+
+---
+
+#### `u9 types-csv`
+
+Export the header-selected active records in `static/TYPES.DAT`, with corrected
+Titan field names and complete 16-byte forensic values.
+
+```
+titan u9 types-csv <file> [-o OUTPUT] [--typenames TYPENAME.FLX] [--all-slots]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/TYPES.DAT` |
+| `-o PATH`, `--output PATH` | CSV output path (default: `TYPES_records.csv`) |
+| `--typenames PATH` | Optional `static/TYPENAME.FLX` used to add display names |
+| `--all-slots` | Export all 8,192 physical slots, including inactive capacity |
+
+Without `--all-slots`, only the count declared in the file header is exported.
+The CSV distinguishes active records from inactive capacity, reports loader-
+rebuilt cells and unmapped object-flag bits, and retains each complete record
+in `raw_hex`.
+
+---
+
+#### `u9 dimension-info`, `u9 dimension-show`, `u9 dimension-csv`
+
+Inspect or export the fixed model-ID-indexed geometry cache in
+`static/dimension.dat`.
+
+```text
+titan u9 dimension-info <file> [--models SAPPEAR.FLX]
+titan u9 dimension-show <file> <id> [--models SAPPEAR.FLX]
+titan u9 dimension-csv <file> [-o DIR] [--models SAPPEAR.FLX]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/dimension.dat` |
+| `id` | Model ID from `0` through `7999` |
+| `--models PATH` | Optional `static/sappear.flx` same-ID comparison |
+| `-o DIR`, `--output DIR` | CSV output directory (default: `dimension_csv`) |
+
+The parser follows the retail four-block layout. The two final 32,000-byte
+blocks are prefixes of vector arrays: complete bound triplets exist through ID
+2665, ID 2666 stores only X/Y, and later IDs store no bound bytes. Missing
+components remain empty rather than being synthesized. `dimension-csv` writes
+`u9_dimensions.csv` with the four discontiguous raw fragments and optional
+model-comparison columns.
+
+---
+
 ### Sound commands
+
+---
+
+#### `u9 sound-category-list`
+
+List the used master sound categories from `sound/sfxcat.flx`.
+
+```
+titan u9 sound-category-list <file>
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `sound/sfxcat.flx` |
+
+---
+
+#### `u9 sound-category-csv`
+
+Export every used 40-byte master sound-category record and its raw bytes.
+
+```
+titan u9 sound-category-csv <file> [-o OUTPUT]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `sound/sfxcat.flx` |
+| `-o PATH`, `--output PATH` | CSV output path (default: `sfxcat_categories.csv`) |
+
+The CSV includes the archive slot, stored category ID, display name, Titan's
+`record_representation` label, warnings, name-termination state, fixed name
+cell and padding, alignment bytes, following-reference count, and `raw_hex`.
+Hex storage fields use a `0x` prefix.
+
+---
+
+#### `u9 sound-environment-list`
+
+List the used listener-reverb presets from `sound/sfxenv.flx`.
+
+```
+titan u9 sound-environment-list <file>
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `sound/sfxenv.flx` |
+
+The FLX slot is the environment ID referenced by `spaces.flx`. The stored
+profile code printed beside it is an acoustic property, not a second copy of
+that ID.
+
+---
+
+#### `u9 sound-environment-csv`
+
+Export every used fixed 80-byte `sfxenv.flx` record and its forensic storage.
+
+```
+titan u9 sound-environment-csv <file> [-o OUTPUT]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `sound/sfxenv.flx` |
+| `-o PATH`, `--output PATH` | CSV output path (default: `sfxenv_environments.csv`) |
+
+The CSV includes the slot and display name, four acoustic values, standard
+profile label, range and standard-preset statuses, warnings, the complete
+64-byte name cell, inactive bytes after its first terminator, archive-capacity
+diagnostics, and `raw_hex`. Titan flags the shipped slot-13 profile-code
+mismatch but does not alter it.
+
+---
+
+#### `u9 sound-template-csv`
+
+Export every used `SFXTMPL.FLX` template, embedded action, and weighted sound
+choice with complete forensic bytes.
+
+```
+titan u9 sound-template-csv <file> [-o OUTPUT]
+  [--categories sfxcat.flx] [--sounds sfx.flx]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `sound/SFXTMPL.FLX` |
+| `-o PATH`, `--output PATH` | CSV output path (default: `SFXTMPL_templates.csv`) |
+| `--categories PATH` | Optional `sound/sfxcat.flx` names and validation |
+| `--sounds PATH` | Optional `sound/sfx.flx` descriptions and validation |
+
+The flattened CSV emits one `sound_choice` row per weighted choice, an
+`action` row when an action has no choices, and a `template` row when a
+template has no actions. It includes cone angles, distance limits, time
+windows, volumes, pitch variation, selection weight, alignment cells, warning
+columns, and raw hex for the template, action, and choice levels. Joins are
+read-only and never alter stored values.
+
+---
+
+#### `u9 sound-association-csv`
+
+Export the direct object-type links stored in `sound/sfxassoc.flx`, or resolve
+the direct-then-base lookup used by the game.
+
+```
+titan u9 sound-association-csv <file> [-o OUTPUT]
+  [--templates SFXTMPL.FLX] [--types TYPES.DAT]
+  [--typenames TYPENAME.FLX] [--effective]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `sound/sfxassoc.flx` |
+| `-o PATH`, `--output PATH` | CSV output path (default: `sfxassoc_associations.csv`) |
+| `--templates PATH` | Optional `sound/SFXTMPL.FLX` used for template labels and validation |
+| `--types PATH` | Optional `static/TYPES.DAT` object/model join |
+| `--typenames PATH` | Optional `static/TYPENAME.FLX` display labels |
+| `--effective` | Export direct and inherited links; requires `--types` |
+
+Without `--effective`, the CSV contains the physically stored records only.
+The effective view checks each active type's direct slot first and then its
+one-step `base_type_id` fallback. It does not create or normalize records.
+Every row identifies the matched physical slot and retains its four bytes in
+`raw_hex`.
 
 ---
 
@@ -4050,8 +4249,10 @@ titan u9 sound-extract sound/sfx.flx --entry 1322 -f record -o records/
 Export record sizes, payload lengths, codecs, sample counts, durations, and
 dynamic companion metadata to CSV or JSON. A sound directory reports
 `Speech.flx`, `sfx.flx`, and `music.flx` together. When `SFXTMPL.FLX`,
-`sfxassoc.flx`, `sfxcat.flx`, and `TYPENAME.FLX` are discoverable, the report
-adds template/action/category and object-type links.
+`sfxassoc.flx`, `sfxcat.flx`, `TYPES.DAT`, and `TYPENAME.FLX` are discoverable,
+the report adds template/action/category links plus separate direct, inherited,
+and effective object-type sets. Effective links follow the game's direct-first,
+one-step base-type fallback.
 
 ```
 titan u9 sound-report <source> -o FILE [-f csv|json] [--entry ID]
@@ -4172,9 +4373,10 @@ quantization.
 
 Print a model's record type and limb/LOD/material/texture summary: header
 bounds, sphere, LOD thresholds, and a per-limb table (parent, root, position,
-plus each LOD's render and mount triangle/vertex counts, material count, and
-texture IDs). Both ordinary hierarchical records and the alternate `0xA9`
-indexed-polygon records are supported. With
+plus each LOD's render and connection triangle/vertex counts, material count,
+and texture IDs). The command follows the retail hierarchical loader. It
+rejects the sixteen orphaned indexed-geometry records rather than presenting
+them as game-recognized models. With
 `--types`/`--typenames` both given, also prints any possible name(s)
 for the model (see `titan.u9.model_naming`'s module docstring for why
 there can be zero, one, or several).
@@ -4204,7 +4406,9 @@ texture tier found beside `sappear.flx`. Pass either `sappear.flx` or its
 `static` directory. `--model` limits the scan to one model.
 
 The CSV schema is discovery-driven. Core model/material columns always lead;
-model bounds, limb transforms, LOD metadata, and raw material fields follow.
+model collision/physics fields, limb transforms, connection geometry, sorted-
+face metadata, reserved storage, and raw material fields follow. Alignment
+padding is labelled and retained as raw hex; it does not drive animation.
 Each material row also reports its `nonfinite_uv_corner_count`; `--only errors`
 includes rows with affected corners.
 For each texture archive actually found, a corresponding `texture_<tier>_*`
@@ -4216,7 +4420,8 @@ dictionaries with lists retained as arrays.
 Changing material ranges are reported as `confirmed` only when the range fits
 every readable texture tier. Missing textures and out-of-range declarations
 remain visible as `missing-texture` or `invalid-range` rather than being
-dropped.
+dropped. Each of the sixteen orphaned indexed records produces one
+`non-runtime-record` diagnostic row and is never expanded into material rows.
 
 ```
 titan u9 model-material-report <source> -o REPORT [-f csv|json]
@@ -4251,9 +4456,11 @@ rotated 180 degrees. There's no way to know a model's actual "front"
 direction from the exported data alone, but the default angle
 consistently turned out to be a rear-ish view on the humanoid models
 checked, so the rotated shot reliably ends up front-ish instead --
-hence the naming. All 3,764 used records are parseable; alternate quads are
-triangulated for export. The limb hierarchy is flattened to one shared world
-space (OBJ/STL have no node/parent concept); winding is reversed by
+hence the naming. The 3,748 retail hierarchical records are parseable and
+exportable. The sixteen orphaned indexed records are reported and skipped;
+their explicit forensic recovery is not silently exported as game geometry.
+The limb hierarchy is flattened to one shared world space (OBJ/STL have no
+node/parent concept); winding is reversed by
 default to match real stored face normals (see
 `titan.u9.mesh_export`'s module docstring). STL is geometry-only by
 format limitation -- pass `--textures` for a textured OBJ+MTL+PNG
@@ -4345,8 +4552,9 @@ titan u9 model-export-all static/sappear.flx -t static/bitmap16.flx -p static/an
 #### `u9 texture-info`
 
 Inspect one texture-set entry without decoding its pixels. This exposes the
-set header, frame directory, per-frame header flags, row-table-backed sizes,
-encoding, and every stored mip dimension. It accepts the three `bitmap*.flx`
+reserved set byte, storage and packed playback flags, frame directory, full
+32-bit per-frame flags, anchor coordinates, encoding, and every stored mip
+dimension. It accepts the three `bitmap*.flx`
 archives and the extensionless-FLX terrain panels `Texture8.<region>` and
 `texture16.<region>`.
 
@@ -4376,10 +4584,15 @@ and `bitmapC.flx` and reports all available tiers. `--entry` limits the report
 to one index while retaining one row for each tier and frame.
 
 The CSV columns are the deterministic union of data actually found. Core FLX,
-texture-set, and frame fields lead the file. Matching `sdInfo*.flx` fields,
+texture-set, and frame fields lead the file. These include forensic raw hex for
+both fixed headers and the complete row table, decoded playback/format/depth
+fields, anchors, reserved-bit status, row-table status, and non-destructive
+`out_of_range` playback diagnostics. Matching `sdInfo*.flx` fields,
 including all twelve raw descriptor words, appear only when that helper is
-available. If `sappear.flx` is available, model/material references, animation
+available; `sdinfo_matches_frame_format` exposes the two known damaged frame
+headers without changing them. If `sappear.flx` is available, model/material references, animation
 ranges, and optional indirect model names are added.
+Forensic byte columns use a `0x` prefix.
 
 `confirmed` means a model material declares a changing range that fits the
 stored frames. A multi-frame entry without such playback evidence is
@@ -4416,7 +4629,8 @@ titan u9 texture-frame-report static --entry 7344 -o television_frames.csv
 Export any texture frame or one of its stored mip levels to RGBA PNG. The
 8-bit archives need `ankh.pal` for their real colours; it is discovered
 automatically when beside the archive. Paletted index 254 exports with zero
-alpha while its RGB-identical index 247 remains opaque.
+alpha only when the frame enables keyed transparency; its RGB-identical index
+247 remains opaque.
 
 ```
 titan u9 texture-export <textures> <entry_id> [--frame N] [--mip N]
@@ -4840,7 +5054,10 @@ terminator.
 `static/anim.flx` stores one reusable skeletal transform clip per used FLX
 entry. Each clip has its LightWave authoring path and inclusive authoring-frame
 range, a part-ID manifest, named part tracks, and timestamped quaternion,
-position, and scale transforms. All 857 used entries parse and consume exactly.
+position, and scale transforms. All 857 used entries parse and round-trip
+exactly. Titan distinguishes the active registry prefix from serialized
+capacity residue and the last stored sample from the controller playback
+length.
 
 The archive does not use `sappear.flx` model IDs as animation IDs. An optional
 animation-name table can provide the original engine name for every retail
@@ -4854,8 +5071,9 @@ linkage questions.
 
 #### `u9 animation-list`
 
-List animation IDs with frame, part and event counts, original motion names
-when supplied, and authoring paths.
+List animation IDs with frame, part and event counts, last sample time,
+controller playback length, original motion names when supplied, and authoring
+paths.
 
 ```
 titan u9 animation-list <file> [--motion-ids <animation-name-table>] [-n LIMIT]
@@ -4876,8 +5094,8 @@ titan u9 animation-list static/anim.flx -n 20
 
 #### `u9 animation-show`
 
-Show one clip's authoring timing and part list, or dump one part's transform
-frames with `--part`.
+Show one clip's authoring timing, runtime playback length, structural status
+and part list, or dump one part's transform frames with `--part`.
 
 ```
 titan u9 animation-show <file> <id> [--motion-ids <animation-name-table>] [-p PART_ID] [-n LIMIT]
@@ -4908,10 +5126,16 @@ by runtime analysis, and parameter.
 
 Export one row per used animation clip, joining `anim.flx`, `registry.txt`,
 `sappear.flx`, `TYPES.DAT`, and `TYPENAME.FLX`. The CSV/JSON includes authoring
-family/action hints, timing, tracks, authoring-only nodes, structural model
-candidates, model/type/usecode metadata, typed events, optional original
-motion symbols, candidate ambiguity, and a targeted research question. Companion
-game files are found beside `anim.flx` unless overridden.
+family/action hints, stored-ID/range/registry/track/timestamp/transform/event
+statuses, both timing measures, complete registry storage and inactive residue,
+raw source/part name bytes, tracks, authoring-only nodes, structural model candidates, model/type/usecode
+metadata, typed events, optional original motion symbols, candidate ambiguity,
+and a targeted research question. Companion game files are found beside
+`anim.flx` unless overridden.
+
+Known non-runtime `sappear.flx` records are identified and skipped separately
+from malformed model records; neither category is used as an animation/model
+candidate.
 
 ```
 titan u9 animation-model-report <anim.flx> -o <report.csv> [options]
@@ -4990,7 +5214,8 @@ Export one selected hierarchical model and animation as a portable inspection
 bundle. Every visible limb at the selected LOD becomes a separate OBJ in native
 limb-local coordinates. The versioned JSON sidecar is authoritative and keeps
 all model parts, parent IDs, resolved parent indices, pivots, rest transforms,
-all clip keys, the full part registry, original timestamps, interpolation and
+all clip keys, complete registry storage plus its active count and retained
+residue, original timestamps, controller playback length, interpolation and
 runtime-application rules, root motion, events, material metadata, and SHA-256
 input hashes. Tracks without a matching model limb remain in the JSON as
 `authoring_only`.
@@ -5038,11 +5263,14 @@ scripts an NPC runs, with names like `Sequence 1`, `Stand`, `Loiter`,
 `After Yew` and `walking in hse`. One FLX entry is one activity set.
 
 Each record is `u8 ordinal`, a fixed 15-byte NUL-terminated name field, and a
-list of 9-byte steps ending at a `0xFF` step. All 214 used entries parse with
+list of 9-byte steps ending at a `0xFF` repeat/end marker. Each step is one
+opcode plus four little-endian words: two command parameters, a scheduled
+world-clock minute, and a duration code. All 214 v1.19H entries parse with
 their bodies consumed exactly.
 
-**Step opcode meanings are not decoded.** These commands expose the step
-stream and container structure; see
+Retail 1.19F confirms all commands `0x00..0x0C`; `0x08` is supported but absent
+from the shipped archives checked. Titan prints the command meaning and typed
+words while retaining the raw nine bytes. See
 `reference/u9/activity/u9_activity_reference.md`.
 
 ---
@@ -5092,10 +5320,10 @@ titan u9 activity-show static/activity.flx 1
 ```
   7 of 7 declared record(s), 328-byte payload
   [1] Sequence 1
-        0  opcode 0x04  1f 00 00 00 00 00 00 00
+        0  opcode 0x04 begin NPC action: parameter_0=31 parameter_1=0 minute=0 duration_code=0 effective_duration=0  raw=04 1f 00 00 00 00 00 00 00
   [2] After Yew
-        0  opcode 0x03  b4 cc 09 00 00 00 00 00
-        1  opcode 0x0a  01 00 00 00 00 00 00 00
+        0  opcode 0x03 relocate to a navigation point: parameter_0=52404 parameter_1=9 minute=0 duration_code=0  raw=03 b4 cc 09 00 00 00 00 00
+        1  opcode 0x0a switch activity sequence: parameter_0=1 parameter_1=0 minute=0 duration_code=0  raw=0a 01 00 00 00 00 00 00 00
 ```
 
 The bracketed number is the record's stored `ordinal`, which is a label rather
@@ -5105,8 +5333,8 @@ than a counter -- it does not always start at 1 and can contain gaps.
 
 #### `u9 activity-opcodes`
 
-Report step-opcode frequency and activity-name frequency across the archive --
-the starting point for decoding the step language.
+Report the complete runtime command catalogue, observed frequency, meaning,
+and activity-name frequency across the archive.
 
 ```
 titan u9 activity-opcodes <file> [-n LIMIT]
@@ -5138,12 +5366,13 @@ titan u9 script-research-export <triggers> <activities> [-o DIRECTORY]
 | `activities` | Path to `static/activity.flx` |
 | `-o DIR`, `--output DIR` | Output directory (default `u9-script-research`) |
 
-The command writes occurrence CSVs (including terminators, slack, raw operands,
+The command writes occurrence CSVs (including repeat/end markers, trigger slack, raw operands,
 and entry-relative byte offsets), opcode summaries, resolved opcode-`0x31`
 trigger/activity links, and a JSON manifest containing source hashes and corpus
-counts. Unknown activity operands are shown simultaneously as bytes, four
-little-endian `u16` values, and two little-endian `u32` values; these views are
-research aids, not claimed semantics.
+counts. Activity rows include semantic names, the fixed parameter/time/duration
+words, command-specific columns, the raw step, and parallel `u16`/`u32`
+forensic views. `activity_opcodes.csv` includes all thirteen runtime commands,
+including zero-count commands absent from the selected archive.
 
 **Example**
 ```bash
@@ -5167,17 +5396,16 @@ Codex's field offsets validate.
 
 A savegame carries a live copy of the same array in `savegame/processes.dat`
 and inside `savegame/u9game*.sav`. Pass `--save` to read that instead. The live
-array is longer than the shipped one — the engine appends runtime-spawned
-wildlife after the authored NPCs.
+array has 512 slots: 352 authored records followed by 160 runtime clone slots.
 
 ---
 
 #### `u9 npc-list`
 
-List NPC records with class, region, stats and position.
+List NPC records with combat behavior, region, stats and position.
 
 ```
-titan u9 npc-list <file> [-s] [-r REGION] [-c CLASS] [-a] [-n LIMIT]
+titan u9 npc-list <file> [-s] [-r REGION] [-b PROFILE] [-a] [-n LIMIT]
 ```
 
 | Argument | Description |
@@ -5185,7 +5413,7 @@ titan u9 npc-list <file> [-s] [-r REGION] [-c CLASS] [-a] [-n LIMIT]
 | `file` | Path to `runtime/NPC.FLX`, or a savegame file with `--save` |
 | `-s`, `--save` | Read the live array from a savegame `processes.dat` or `.sav` |
 | `-r N`, `--region N` | Only NPCs in this region |
-| `-c N`, `--class N` | Only NPCs with this `class_id` |
+| `-b N`, `--behavior-profile N` | Only NPCs with this combat behavior profile (`--class` remains an alias) |
 | `-a`, `--all` | Include unnamed/empty slots |
 | `-n N`, `--limit N` | Maximum rows to print |
 
@@ -5222,7 +5450,8 @@ To see what that NPC actually does, feed the same index to
 
 #### `u9 npc-classes`
 
-Group NPCs by `class_id` and preview each group's members.
+Group NPCs by combat behavior profile and preview each group's members. The
+command name is retained for compatibility with earlier Titan releases.
 
 ```
 titan u9 npc-classes <file> [-s] [-m MEMBERS]
@@ -5232,11 +5461,10 @@ titan u9 npc-classes <file> [-s] [-m MEMBERS]
 |----------|-------------|
 | `file` | Path to `runtime/NPC.FLX`, or a savegame file with `--save` |
 | `-s`, `--save` | Read the live array from a savegame file |
-| `-m N`, `--members N` | Member names to preview per class (default 8) |
+| `-m N`, `--members N` | Member names to preview per profile (default 8) |
 
-The grouping is behavioural, not visual — class 10 is every gargoyle in the
-game, 36 is pirates and bandits, 62 is guards — but members of one class span
-dozens of distinct models, so it is not an appearance field.
+The profile is a signed 32-bit value; `-1` means no combat behavior. It is not
+an appearance or faction field.
 
 ---
 
@@ -5261,8 +5489,8 @@ titan u9 npc-diff runtime/NPC.FLX savegame/processes.dat
 ```
 
 ```
-  352 authored record(s) vs 513 live record(s)
-  161 extra live slot(s), 29 named (runtime-spawned): Small Fish, Butterfly 3, ...
+  352 authored record(s) vs 512 live record(s)
+  160 extra live slot(s), 29 named (runtime-spawned): Small Fish, Butterfly 3, ...
   5 NPC(s) moved:
       Avatar    region 9 98332,20480,0    ->  region 14 6110,9472,1746
       Dermot    region 9 60544,58819,2631 ->  region 9 60273,58746,2631
@@ -5270,6 +5498,36 @@ titan u9 npc-diff runtime/NPC.FLX savegame/processes.dat
 
 In the save examined, every NPC that walked landed exactly on a `highway.dat`
 navigation point.
+
+---
+
+#### `u9 npc-csv`
+
+Export the complete decoded NPC record plus lossless raw bytes.
+
+```
+titan u9 npc-csv <file> [-o OUTPUT] [-s] [-a]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `runtime/NPC.FLX`, or a savegame file with `--save` |
+| `-o PATH`, `--output PATH` | CSV output path |
+| `-s`, `--save` | Read the live array from a savegame file |
+| `-a`, `--all` | Include unnamed/empty slots |
+
+The export includes stats, both flag sets, activity state, awareness settings,
+equipment and attachment arrays, movement behavior, breath, proximity radii,
+timers, activity-stack bytes, spell bytes, reserved and alignment cells, pool
+linkage, and `raw_hex`. Each of the eight level cells leads with its interpreted
+signed 32-bit code, followed by `status` (`out_of_range` or empty) and its
+`0x`-prefixed raw bytes. Health, mana, and breath are each exported as their
+three stored `u16` values plus raw bytes. `health_status` reports unreachable
+no-combat-AI anomalies or values clamped on their first game write; it never
+changes them. The command prints level and health warning counts after export.
+See
+`reference/u9/npc/u9_npc_reference.md` for the exact column semantics and
+offsets.
 
 ---
 
@@ -6515,10 +6773,24 @@ A value on the command line always wins.
 | `u9 flx-list` | List an Ultima 9 FLX archive's directory entries |
 | `u9 flx-extract` | Extract one entry from a U9 FLX archive |
 | `u9 flx-extract-all` | Extract every used entry from a U9 FLX archive |
+| `u9 dimension-info` | Summarize `dimension.dat` culling radii, centers, bound coverage, and optional model comparison |
+| `u9 dimension-show` | Inspect one model ID's cached geometry and discontiguous raw fragments |
+| `u9 dimension-csv` | Export all 8,000 model geometry slots with forensic bytes and optional `sappear.flx` joins |
+| `u9 spaces-info` | Summarize `spaces.flx` volumes, boundary planes, portals, and lifecycle anomalies |
+| `u9 spaces-show` | Inspect one `spaces.flx` entry with nested boundary and portal data |
+| `u9 spaces-csv` | Export relational space, boundary-plane, and portal CSV tables with raw bytes |
+| `u9 treedat-info` | Summarize the derived map-volume lookup cache, optionally joined to `spaces.flx` |
+| `u9 treedat-show` | Inspect one map's cached volume list and flattened partition tree |
+| `u9 treedat-csv` | Export map, partition-node, and leaf-membership CSV tables with raw bytes |
+| `u9 areas-info` | Summarize `areas.flx` gameplay zones, boxes, encounter tables, and structural warnings |
+| `u9 areas-show` | Inspect one gameplay-zone record with its stored boxes and encounter slots |
+| `u9 areas-csv` | Export relational gameplay-zone, box, and encounter-choice CSV tables with raw bytes |
 | `u9 typename-dump` | Dump type-ID → display-name pairs from `TYPENAME.FLX` |
 | `u9 palette-info` | Inspect `ankh.pal` layout, duplicates, reserved bytes, and transparency key |
 | `u9 palette-export` | Export `ankh.pal` as a PNG swatch and complete text table |
 | `u9 sound-list` | List sound record headers in a `sound/*.flx` archive |
+| `u9 sound-environment-list` | List fixed listener-reverb presets from `sfxenv.flx` |
+| `u9 sound-environment-csv` | Export lossless `sfxenv.flx` records, statuses, residue, and raw bytes |
 | `u9 sound-extract-pcm` | Extract PCM-encoded entries from a `sound/*.flx` archive as WAV |
 | `u9 sound-extract` | Extract decoded WAV, native payload, or complete record data |
 | `u9 sound-report` | Export dynamic audio record and SFX-link metadata to CSV/JSON |

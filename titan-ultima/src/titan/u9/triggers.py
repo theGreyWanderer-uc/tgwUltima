@@ -22,14 +22,14 @@ stream stops at the first ``0xFF``, but the terminator, slack records and
 entry-relative byte offsets are retained for binary research and exact
 round trips.
 
-**Opcode semantics are almost entirely undecoded.** 90 distinct opcodes
-appear across the 20,000-odd body records; this module exposes the record
-stream and the container structure, not their meaning. ``arg0`` is a genuine
-per-record parameter and not a category tag -- opcode ``0x01`` alone uses 32
-distinct ``arg0`` values, and only 13 of the 90 opcodes hold ``arg0``
-constant.
+The executable accepts a contiguous command catalogue from ``0x00`` through
+``0x64``. The shipped archive uses 90 of those 101 commands. Titan names the
+complete catalogue, but does not pretend that this also decodes every packed
+operand: ``arg0`` is a genuine per-record parameter and not a category tag --
+opcode ``0x01`` alone uses 32 distinct ``arg0`` values, and only 13 of the 90
+observed opcodes hold ``arg0`` constant.
 
-The one exception is opcode ``0x31``, which runs an NPC activity record:
+Opcode ``0x31`` runs an NPC activity record:
 ``arg1`` is an activity set index in :mod:`titan.u9.activity` (also the NPC's
 index in ``runtime/NPC.FLX``) and ``arg2``'s **low byte** is a record
 ``ordinal`` within that set. That pair names a record which actually exists
@@ -37,10 +37,10 @@ in 500 of the archive's 506 ``0x31`` steps (98.8%); reading ``arg2`` whole
 scores 96.0%, which is what exposed the high byte as a separate field. No
 other opcode with 20 or more steps passes the same test above 51.6%.
 
-Verified against the real ``static/triggers.flx`` (242,476 bytes, 10,000
-entries, 6,712 used, both the v1.19H copy and its pre-patch original):
-every used entry's length is a multiple of 6, and 6,710 of 6,712 (99.97%)
-carry a ``0xFF`` terminator.
+Verified against patched v1.19H (242,476 bytes, 10,000 entries, 6,712 used)
+and default GOG 1.19F (242,818 bytes, 6,708 used): every used entry's length
+is a multiple of 6. The versions have 6,710 and 6,706 terminated entries
+respectively (99.97% in each).
 
 The two that do not -- trigger IDs 58 and 631 -- appear to be **valid
 triggers that simply omit the redundant terminator**, not damage. Their
@@ -78,10 +78,14 @@ Example::
 from __future__ import annotations
 
 __all__ = [
+    "TRIGGER_OPCODE_CATALOGUE",
+    "U9MapTransition",
+    "U9TriggerOpcodeInfo",
     "U9Trigger",
     "U9TriggerRecord",
     "U9Triggers",
     "U9TriggersError",
+    "trigger_opcode_info",
 ]
 
 import os
@@ -96,6 +100,171 @@ RECORD_STRUCT = "<BBHH"
 TERMINATOR_OPCODE = 0xFF
 
 
+@dataclass(frozen=True)
+class U9TriggerOpcodeInfo:
+    """Titan's source-independent description of one trigger command."""
+
+    opcode: int
+    meaning: str
+    evidence: str
+    observed_in_retail_archive: bool
+
+
+_UNOBSERVED_RETAIL_OPCODES = frozenset(
+    {0x04, 0x12, 0x21, 0x23, 0x27, 0x47, 0x53, 0x5E, 0x5F, 0x61, 0x62}
+)
+
+_OPCODE_MEANINGS = (
+    "do nothing",
+    "invoke object behavior",
+    "assign object link",
+    "write object property",
+    "replace object kind",
+    "replace visual state",
+    "enable object status bits",
+    "disable object status bits",
+    "invert object status bits",
+    "hide object",
+    "show object",
+    "delete object",
+    "spawn object",
+    "write shared datum",
+    "branch on shared datum",
+    "create disappearance effect",
+    "remove disappearance effect",
+    "select targets by link",
+    "select targets by relative link",
+    "make trigger one-shot",
+    "include the triggering object",
+    "branch on target count",
+    "mark branch destination",
+    "branch unconditionally",
+    "assign local value",
+    "adjust local value",
+    "branch on local value",
+    "move objects over time",
+    "relocate objects instantly",
+    "face objects toward target",
+    "launch objects",
+    "transition between maps",
+    "play one-shot sound",
+    "choose a random target",
+    "rotate objects about the vertical axis",
+    "pan the camera",
+    "rotate objects about the lateral axis",
+    "rotate objects about the longitudinal axis",
+    "begin looping sound",
+    "assign a random local value",
+    "activate other triggers",
+    "test object status bits",
+    "launch a projectile",
+    "halt object movement",
+    "set target search radius",
+    "branch on use-state count",
+    "move objects to coordinates",
+    "branch on source link",
+    "play speech",
+    "choose NPC activity record",
+    "end looping sound",
+    "play an audio sample",
+    "alert nearby monsters",
+    "begin music",
+    "end music",
+    "play a movie",
+    "float an object",
+    "make an object follow another",
+    "branch on game time",
+    "test all object status bits",
+    "set storm state",
+    "run a special action",
+    "manage avatar equipment",
+    "set or advance the clock",
+    "assign NPC activity",
+    "set object opacity",
+    "set object scale",
+    "adjust object opacity",
+    "adjust object scale",
+    "branch on object opacity",
+    "branch on X scale",
+    "branch on Y scale",
+    "branch on Z scale",
+    "invoke a spell",
+    "register a chunk crossing",
+    "branch on avatar inventory",
+    "begin an audio sample",
+    "end an audio sample",
+    "tint an object",
+    "branch when an object lacks a tint",
+    "damage an object",
+    "choose combat behavior",
+    "modify avatar karma",
+    "branch on avatar karma",
+    "move objects quickly to coordinates",
+    "order an NPC attack",
+    "turn an NPC toward a target",
+    "adjust an object link",
+    "branch on interface state",
+    "invoke the alternate spell action",
+    "branch on hit points",
+    "branch on quest datum",
+    "configure the trigger camera",
+    "set combat mode and mortality",
+    "lock or unlock avatar controls",
+    "adjust avatar mana",
+    "begin or end breath tracking",
+    "branch on an avatar attribute",
+    "modify an avatar attribute",
+    "fade the display",
+    "branch on demo mode",
+)
+
+
+def _opcode_evidence(opcode: int) -> str:
+    if opcode == 0x1F:
+        return "retail_runtime_confirmed"
+    if opcode == 0x31:
+        return "retail_archive_confirmed"
+    return "implementation_correlated"
+
+
+TRIGGER_OPCODE_CATALOGUE = tuple(
+    U9TriggerOpcodeInfo(
+        opcode=opcode,
+        meaning=meaning,
+        evidence=_opcode_evidence(opcode),
+        observed_in_retail_archive=opcode not in _UNOBSERVED_RETAIL_OPCODES,
+    )
+    for opcode, meaning in enumerate(_OPCODE_MEANINGS)
+)
+_OPCODE_INFO_BY_VALUE = {info.opcode: info for info in TRIGGER_OPCODE_CATALOGUE}
+_TERMINATOR_INFO = U9TriggerOpcodeInfo(
+    opcode=TERMINATOR_OPCODE,
+    meaning="end instruction stream",
+    evidence="retail_runtime_confirmed",
+    observed_in_retail_archive=True,
+)
+
+
+def trigger_opcode_info(opcode: int) -> U9TriggerOpcodeInfo | None:
+    """Return Titan's meaning for ``opcode``, if the runtime defines it."""
+    if opcode == TERMINATOR_OPCODE:
+        return _TERMINATOR_INFO
+    return _OPCODE_INFO_BY_VALUE.get(opcode)
+
+
+@dataclass(frozen=True)
+class U9MapTransition:
+    """Decoded operands for command ``0x1F`` without altering stored words."""
+
+    destination_link_delta: int | None
+    unclassified_flag_bits: int
+    map_number: int
+    effect_variant: int
+    retain_running_tasks: bool
+    relative_position: bool
+    unclassified_parameter_bits: int
+
+
 class U9TriggersError(Exception):
     """Raised on malformed ``static/triggers.flx`` data."""
 
@@ -104,8 +273,9 @@ class U9TriggersError(Exception):
 class U9TriggerRecord:
     """One 6-byte trigger instruction.
 
-    Only opcode ``0xFF`` (terminator) and ``0x31`` (run an activity record)
-    have known meanings; see the module docstring.
+    Command names cover the executable's complete ``0x00`` through ``0x64``
+    catalogue. Only operands with corroborated layouts receive typed views;
+    all four stored fields remain available regardless.
     """
 
     opcode: int
@@ -117,6 +287,19 @@ class U9TriggerRecord:
     @property
     def is_terminator(self) -> bool:
         return self.opcode == TERMINATOR_OPCODE
+
+    @property
+    def opcode_info(self) -> U9TriggerOpcodeInfo | None:
+        """Known command meaning and its evidence level, if defined."""
+        return trigger_opcode_info(self.opcode)
+
+    @property
+    def semantic_name(self) -> str:
+        """Readable command name, retaining unknown values numerically."""
+        info = self.opcode_info
+        return (
+            info.meaning if info is not None else f"unknown opcode 0x{self.opcode:02X}"
+        )
 
     @property
     def arg2_low(self) -> int:
@@ -134,6 +317,29 @@ class U9TriggerRecord:
         if self.opcode != 0x31:
             return None
         return self.arg1, self.arg2_low
+
+    @property
+    def map_transition(self) -> U9MapTransition | None:
+        """Typed map-transition operands for command ``0x1F``.
+
+        A zero selector uses the firing object's link unchanged. Nonzero
+        selectors encode a signed delta around 16. Map zero means the current
+        map. Unknown parameter bits are retained explicitly.
+        """
+        if self.opcode != 0x1F:
+            return None
+        link_selector = self.arg0 & 0x1F
+        link_delta = None if link_selector == 0 else link_selector - 16
+        classified_mask = 0x00FF | 0x0300 | 0x4000 | 0x8000
+        return U9MapTransition(
+            destination_link_delta=link_delta,
+            unclassified_flag_bits=self.arg0 & ~0x1F,
+            map_number=self.arg2_low,
+            effect_variant=(self.arg2 >> 8) & 0x03,
+            retain_running_tasks=bool(self.arg2 & 0x4000),
+            relative_position=bool(self.arg2 & 0x8000),
+            unclassified_parameter_bits=self.arg2 & ~classified_mask,
+        )
 
     def to_bytes(self) -> bytes:
         """Encode this instruction in its exact six-byte disk layout."""

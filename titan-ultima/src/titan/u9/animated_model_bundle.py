@@ -170,13 +170,14 @@ def _material_record(
         "lod_index": lod_index,
         "material_index": material_index,
         "texture_id": material.texture_id,
-        "flags_02": material.flags_02,
+        "alignment_padding_02": material.alignment_padding_02,
         "render_flags": material.render_flags,
-        "flags_06": material.flags_06,
+        "render_flags_storage": material.render_flags_storage,
+        "alignment_padding_06": material.alignment_padding_06,
         "first_face": material.first_face,
         "face_count": material.face_count,
         "default_alpha": material.default_alpha,
-        "modified_alpha": material.modified_alpha,
+        "active_alpha": material.active_alpha,
         "animation": {
             "start_frame": material.anim_start,
             "end_frame": material.anim_end,
@@ -209,8 +210,8 @@ def _lod_records(limb: U9Limb) -> list[dict[str, object]]:
                 "present": True,
                 "vertex_count": len(lod.vertices),
                 "triangle_count": len(lod.triangles),
-                "mount_vertex_count": len(lod.mount_vertices),
-                "mount_triangle_count": len(lod.mount_triangles),
+                "connection_vertex_count": len(lod.connection_vertices),
+                "connection_triangle_count": len(lod.connection_triangles),
                 "material_count": len(lod.materials),
                 "sphere": {
                     "center": list(lod.sphere_center),
@@ -254,10 +255,18 @@ def build_animation_catalogue_record(
             "fps": animation.source_fps,
             "nominal_frame_interval_ms": animation.frame_interval_ms,
             "duration_ms": animation.duration_ms,
+            "last_sample_time_ms": animation.last_sample_time_ms,
+            "runtime_length_ms": animation.runtime_length_ms,
         },
         "part_registry": list(animation.part_registry),
+        "part_registry_active_count": len(animation.parts),
+        "part_registry_residue_raw_hex": struct.pack(
+            f"<{len(animation.part_registry_residue)}i",
+            *animation.part_registry_residue,
+        ).hex(),
         "interpolation": {
             "rotation": "spherical; destination hemisphere is not negated",
+            "rotation_result_normalized": False,
             "position": "linear",
             "scale": "linear",
             "outside_range": "clamp to nearest stored sample",
@@ -667,8 +676,8 @@ def _native_scale(value: Vec3) -> Vec3:
 
 def _material_alpha(material: U9Material) -> float:
     value = (
-        material.modified_alpha
-        if material.modified_alpha != MATERIAL_ALPHA_NONE
+        material.active_alpha
+        if material.active_alpha != MATERIAL_ALPHA_NONE
         else material.default_alpha
     )
     return value / 255.0

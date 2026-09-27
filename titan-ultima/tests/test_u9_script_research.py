@@ -43,7 +43,7 @@ def _trigger_record(opcode: int, arg0: int, arg1: int, arg2: int) -> bytes:
 
 def _activity_entry() -> bytes:
     name = b"Walk\x00".ljust(15, b"\xcd")
-    step = bytes((0x01,)) + struct.pack("<HHHH", 10, 20, 0, 0)
+    step = bytes((0x01,)) + struct.pack("<HHHH", 10, 20, 720, 43)
     terminator = bytes((0xFF,)) + b"\x00" * 8
     body = bytes((2,)) + name + step + terminator
     return struct.pack("<II", 1, len(body)) + body
@@ -80,6 +80,48 @@ class ScriptResearchExportTests(unittest.TestCase):
                 [row["stream_role"] for row in rows], ["body", "terminator", "slack"]
             )
             self.assertEqual([row["entry_offset"] for row in rows], ["0", "6", "12"])
+            self.assertEqual(rows[0]["semantic_name"], "choose NPC activity record")
+            self.assertEqual(rows[0]["semantic_evidence"], "retail_archive_confirmed")
+            self.assertEqual(rows[0]["raw_hex"], "3110010002ab")
+
+            with (Path(temporary) / "out/trigger_opcodes.csv").open(
+                encoding="utf-8", newline=""
+            ) as stream:
+                opcode_rows = list(csv.DictReader(stream))
+            self.assertEqual(len(opcode_rows), 101)
+            self.assertEqual(
+                opcode_rows[31]["semantic_name"], "transition between maps"
+            )
+            self.assertEqual(opcode_rows[31]["observed_in_archive"], "0")
+            self.assertEqual(opcode_rows[49]["observed_in_archive"], "1")
+
+            with (Path(temporary) / "out/activity_occurrences.csv").open(
+                encoding="utf-8", newline=""
+            ) as stream:
+                activity_rows = list(csv.DictReader(stream))
+            self.assertEqual(
+                activity_rows[0]["semantic_name"], "travel between navigation points"
+            )
+            self.assertEqual(activity_rows[0]["parameter_0"], "10")
+            self.assertEqual(activity_rows[0]["parameter_1"], "20")
+            self.assertEqual(activity_rows[0]["scheduled_minute"], "720")
+            self.assertEqual(activity_rows[0]["duration_code"], "43")
+            self.assertEqual(activity_rows[0]["duration_value"], "10")
+            self.assertEqual(activity_rows[0]["duration_remainder"], "3")
+            self.assertEqual(activity_rows[0]["movement_cautious"], "0")
+            self.assertEqual(activity_rows[1]["stream_role"], "repeat_marker")
+
+            with (Path(temporary) / "out/activity_opcodes.csv").open(
+                encoding="utf-8", newline=""
+            ) as stream:
+                activity_opcode_rows = list(csv.DictReader(stream))
+            self.assertEqual(len(activity_opcode_rows), 13)
+            self.assertEqual(activity_opcode_rows[1]["observed_in_archive"], "1")
+            self.assertEqual(activity_opcode_rows[8]["occurrences"], "0")
+            self.assertEqual(
+                activity_opcode_rows[8]["semantic_name"],
+                "return from activity sequence",
+            )
 
             with (Path(temporary) / "out/trigger_activity_links.csv").open(
                 encoding="utf-8", newline=""
@@ -96,6 +138,8 @@ class ScriptResearchExportTests(unittest.TestCase):
             )
             self.assertEqual(manifest["known_cross_links"]["resolved"], 1)
             self.assertEqual(manifest["triggers"]["body_records"], 1)
+            self.assertEqual(manifest["activities"]["runtime_catalogue_opcodes"], 13)
+            self.assertEqual(manifest["activities"]["catalogued_opcodes_observed"], 1)
             self.assertEqual(len(manifest["sources"]["fixture"]["sha256"]), 64)
 
 

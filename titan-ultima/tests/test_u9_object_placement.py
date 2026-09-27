@@ -64,6 +64,7 @@ def _fixed(type_index: int = 42) -> U9Fixed:
 
 def _types(type_index: int = 42, model_id: int = 7) -> U9TypesDat:
     data = bytearray(EXPECTED_SIZE)
+    struct.pack_into("<II", data, 0, type_index + 1, 0)
     offset = TYPES_HEADER_SIZE + type_index * 16
     struct.pack_into("<IHHHBBBBH", data, offset, 0, 0, model_id, 0, 0, 0, 0, 0, 0)
     return U9TypesDat(bytes(data))

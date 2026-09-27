@@ -85,10 +85,42 @@ TEXTURE_REPORT_COLUMNS = [
     "animation_evidence",
     "set_width",
     "set_height",
+    "set_header_raw_hex",
     "frame_width",
     "frame_height",
     "mip_count",
+    "reserved_0x03",
+    "reserved_0x03_status",
+    "storage_flags_raw_hex",
+    "storage_flags_status",
     "compression",
+    "is_compressed",
+    "playback_flags_raw_hex",
+    "animation_mode_code",
+    "playback_reverse",
+    "playback_rate",
+    "width_exponent",
+    "height_exponent",
+    "dimension_exponent_status",
+    "default_first_frame",
+    "default_last_frame",
+    "playback_status",
+    "frame_flags_raw_hex",
+    "single_color_index",
+    "pixel_format_code",
+    "two_bytes_per_pixel",
+    "editor_only",
+    "transparency_key_16_raw_hex",
+    "is_run_length_encoded",
+    "has_contiguous_rows",
+    "transparency_test_enabled",
+    "reserved_flag_31",
+    "anchor_x",
+    "anchor_y",
+    "frame_header_raw_hex",
+    "row_offsets_raw_hex",
+    "row_table_status",
+    "sdinfo_matches_frame_format",
     "encoding",
 ]
 
@@ -98,13 +130,31 @@ MODEL_REPORT_COLUMNS = [
     "model_status",
     "parse_error",
     "record_format",
+    "model_runtime_compatible",
+    "model_collision_shape_code",
+    "model_collision_shape",
+    "model_collision_shape_padding_raw_hex",
+    "model_volume",
+    "model_inertia_diagonal_only_code",
     "limb_index",
     "limb_id",
     "parent_limb_id",
     "lod_index",
+    "lod_connection_vertex_count",
+    "lod_connection_triangle_count",
+    "lod_secondary_flags",
+    "lod_build_higher_detail_pointer",
+    "lod_build_lower_detail_pointer",
+    "lod_reserved_words_raw_hex",
     "material_index",
     "nonfinite_uv_corner_count",
     "texture_id",
+    "alignment_padding_02_raw_hex",
+    "render_flags",
+    "render_flags_storage_raw_hex",
+    "alignment_padding_06_raw_hex",
+    "default_alpha",
+    "active_alpha",
     "material_animation_status",
     "anim_start",
     "anim_end",
@@ -269,12 +319,30 @@ def _read_material_references(
         try:
             model = U9Model.parse(data, model_id=current_id)
         except U9ModelError as error:
+            forensic_model: U9Model | None = None
+            try:
+                candidate = U9Model.parse_forensic(data, model_id=current_id)
+                if not candidate.runtime_compatible:
+                    forensic_model = candidate
+            except U9ModelError:
+                pass
             diagnostics.append(
                 {
                     "model_archive": str(model_path),
                     "model_id": current_id,
-                    "model_status": "parse-error",
+                    "model_status": (
+                        "non-runtime-record"
+                        if forensic_model is not None
+                        else "parse-error"
+                    ),
                     "parse_error": str(error),
+                    "record_format": (
+                        forensic_model.record_format if forensic_model else ""
+                    ),
+                    "model_runtime_compatible": False,
+                    "forensic_indexed_face_count": (
+                        len(forensic_model.indexed_faces) if forensic_model else 0
+                    ),
                     "entry_offset": entry.offset if entry else None,
                     "entry_length": entry.length if entry else len(data),
                 }
@@ -311,10 +379,20 @@ def _read_material_references(
                                 "model_max_bounds": model.max_bounds,
                                 "model_lod_thresholds": model.lod_thresholds,
                                 "model_center_of_mass": model.center_of_mass,
-                                "model_unknown_2c": model.unknown_2c,
-                                "model_mass_or_volume": model.mass_or_volume,
+                                "model_collision_shape_code": model.collision_shape_code,
+                                "model_collision_shape": model.collision_shape,
+                                "model_collision_shape_padding_raw_hex": (
+                                    model.collision_shape_padding.hex()
+                                ),
+                                "model_volume": model.volume,
                                 "model_inertia_matrix": model.inertia_matrix,
-                                "model_unknown_8c": model.unknown_8c,
+                                "model_inertia_diagonal_only_code": (
+                                    model.inertia_diagonal_only_code
+                                ),
+                                "model_inertia_diagonal_only": (
+                                    model.inertia_diagonal_only
+                                ),
+                                "model_runtime_compatible": model.runtime_compatible,
                                 "model_indexed_face_count": len(model.indexed_faces),
                                 "model_alternate_header_length": len(
                                     model.alternate_header
@@ -337,25 +415,39 @@ def _read_material_references(
                                 "lod_vertex_count": len(lod.vertices),
                                 "lod_triangle_count": len(lod.triangles),
                                 "lod_material_count": len(lod.materials),
-                                "lod_mount_vertex_count": len(lod.mount_vertices),
-                                "lod_mount_triangle_count": len(lod.mount_triangles),
+                                "lod_connection_vertex_count": len(
+                                    lod.connection_vertices
+                                ),
+                                "lod_connection_triangle_count": len(
+                                    lod.connection_triangles
+                                ),
                                 "lod_sphere_center": lod.sphere_center,
                                 "lod_sphere_radius": lod.sphere_radius,
                                 "lod_min_bounds": lod.min_bounds,
                                 "lod_max_bounds": lod.max_bounds,
                                 "lod_mesh_size": lod.mesh_size,
                                 "lod_flags": f"0x{lod.flags:08x}",
-                                "lod_unknown_08": f"0x{lod.unknown_08:08x}",
-                                "lod_unknown_34": f"0x{lod.unknown_34:08x}",
-                                "lod_unknown_38": f"0x{lod.unknown_38:08x}",
+                                "lod_secondary_flags": f"0x{lod.secondary_flags:08x}",
+                                "lod_build_higher_detail_pointer": (
+                                    f"0x{lod.build_higher_detail_pointer:08x}"
+                                ),
+                                "lod_build_lower_detail_pointer": (
+                                    f"0x{lod.build_lower_detail_pointer:08x}"
+                                ),
                                 "lod_max_face_count": lod.max_face_count,
                                 "lod_face_offset": lod.face_offset,
-                                "lod_mount_face_offset": lod.mount_face_offset,
+                                "lod_connection_face_offset": (
+                                    lod.connection_face_offset
+                                ),
                                 "lod_vertex_offset": lod.vertex_offset,
-                                "lod_mount_vertex_offset": lod.mount_vertex_offset,
+                                "lod_connection_vertex_offset": (
+                                    lod.connection_vertex_offset
+                                ),
                                 "lod_material_offset": lod.material_offset,
                                 "lod_sorted_face_offsets": lod.sorted_face_offsets,
-                                "lod_unknown_78": f"0x{lod.unknown_78:08x}",
+                                "lod_reserved_words_raw_hex": "".join(
+                                    f"{value:08x}" for value in lod.reserved_words
+                                ),
                             },
                             nonfinite_uv_corner_count=(
                                 material_nonfinite_uv_corners[material_index]
@@ -577,11 +669,30 @@ def build_texture_frame_report(
                 "parse_error": "",
                 "set_width": texture_set.frame_width,
                 "set_height": texture_set.frame_height,
+                "set_header_raw_hex": f"0x{texture_set.header_raw.hex()}",
                 "mip_count": texture_set.mip_count,
+                "reserved_0x03": texture_set.reserved_0x03,
+                "reserved_0x03_status": (
+                    "zero" if texture_set.reserved_0x03 == 0 else "nonzero"
+                ),
+                "storage_flags_raw_hex": f"0x{texture_set.storage_flags:04x}",
+                "storage_flags_status": (
+                    "known" if not texture_set.storage_flags & ~1 else "unknown_bits"
+                ),
                 "compression": texture_set.compression,
+                "is_compressed": texture_set.is_compressed,
                 "frame_count": texture_set.frame_count,
                 "is_multiframe": texture_set.frame_count > 1,
-                "set_header_0c": f"0x{texture_set.unknown:08x}",
+                "playback_flags_raw_hex": f"0x{texture_set.playback_flags:08x}",
+                "animation_mode_code": texture_set.animation_mode_code,
+                "playback_reverse": texture_set.playback_reverse,
+                "playback_rate": texture_set.playback_rate,
+                "width_exponent": texture_set.width_exponent,
+                "height_exponent": texture_set.height_exponent,
+                "dimension_exponent_status": (texture_set.dimension_exponent_status),
+                "default_first_frame": texture_set.default_first_frame,
+                "default_last_frame": texture_set.default_last_frame,
+                "playback_status": texture_set.playback_status,
                 **_texture_animation_fields(texture_set.frame_count, refs),
             }
             sd_record = None
@@ -617,6 +728,19 @@ def build_texture_frame_report(
                 except U9TextureWriteError as error:
                     encoding = "unknown"
                     encoding_error = str(error)
+                bytes_per_pixel = 2 if frame.two_bytes_per_pixel else 1
+                expected_rows = tuple(
+                    frame.header_size + row_index * frame.width * bytes_per_pixel
+                    for row_index in range(frame.height)
+                )
+                if texture_set.is_compressed:
+                    row_table_status = "retained_non_authoritative_compressed"
+                elif frame.is_run_length_encoded:
+                    row_table_status = "run_length_encoded"
+                elif frame.row_offsets == expected_rows:
+                    row_table_status = "sequential"
+                else:
+                    row_table_status = "retained_nonsequential"
                 row = {
                     **set_fields,
                     "frame_index": frame.index,
@@ -624,15 +748,31 @@ def build_texture_frame_report(
                     "frame_length": frame.length,
                     "frame_width": frame.width,
                     "frame_height": frame.height,
-                    "frame_flags": f"0x{frame.flags:04x}",
-                    "frame_unknown_word": f"0x{frame.unknown_word:04x}",
-                    "frame_unknown_3": f"0x{frame.unknown3:08x}",
-                    "frame_unknown_4": f"0x{frame.unknown4:08x}",
+                    "frame_flags_raw_hex": f"0x{frame.flags:08x}",
+                    "single_color_index": frame.single_color_index,
+                    "pixel_format_code": frame.pixel_format_code,
+                    "two_bytes_per_pixel": frame.two_bytes_per_pixel,
+                    "editor_only": frame.editor_only,
+                    "transparency_key_16_raw_hex": (
+                        f"0x{frame.transparency_key_16:04x}"
+                    ),
+                    "is_run_length_encoded": frame.is_run_length_encoded,
+                    "has_contiguous_rows": frame.has_contiguous_rows,
+                    "transparency_test_enabled": frame.transparency_test_enabled,
+                    "reserved_flag_31": frame.reserved_flag_31,
+                    "anchor_x": frame.anchor_x,
+                    "anchor_y": frame.anchor_y,
+                    "frame_header_raw_hex": f"0x{frame.header_raw.hex()}",
                     "row_offset_count": len(frame.row_offsets),
+                    "row_offsets_raw_hex": f"0x{frame.row_offsets_raw.hex()}",
+                    "row_table_status": row_table_status,
                     "pixel_data_offset": frame.pixel_data_offset,
-                    "is_transparent": frame.is_transparent,
                     "encoding": encoding,
                 }
+                if selector is not None:
+                    row["sdinfo_matches_frame_format"] = (
+                        selector == frame.pixel_format_code
+                    )
                 if encoding_error:
                     row["encoding_error"] = encoding_error
                 if refs and types is not None and typenames is not None:
@@ -681,16 +821,17 @@ def _base_model_row(
         "is_invisible": material.is_invisible,
         "first_face": material.first_face,
         "face_count": material.face_count,
-        "flags_02": f"0x{material.flags_02:04x}",
+        "alignment_padding_02_raw_hex": (f"{material.alignment_padding_02:04x}"),
         "render_flags": f"0x{material.render_flags:04x}",
-        "flags_06": f"0x{material.flags_06:04x}",
+        "render_flags_storage_raw_hex": f"{material.render_flags_storage:08x}",
+        "alignment_padding_06_raw_hex": (f"{material.alignment_padding_06:04x}"),
         "is_chromakey": material.is_chromakey,
         "is_sorted": material.is_sorted,
         "is_additive": material.is_additive,
         "clamps_s": material.clamps_s,
         "clamps_t": material.clamps_t,
         "default_alpha": material.default_alpha,
-        "modified_alpha": material.modified_alpha,
+        "active_alpha": material.active_alpha,
         "anim_start": material.anim_start,
         "anim_end": material.anim_end,
         "cur_frame": material.cur_frame,
@@ -754,12 +895,14 @@ def _texture_metadata_for_ids(
                 prefix + "compression": texture_set.compression,
                 prefix + "set_width": texture_set.frame_width,
                 prefix + "set_height": texture_set.frame_height,
-                prefix + "set_header_0c": f"0x{texture_set.unknown:08x}",
+                prefix + "playback_flags_raw_hex": (
+                    f"0x{texture_set.playback_flags:08x}"
+                ),
                 prefix + "frame_dimensions": [
                     f"{frame.width}x{frame.height}" for frame in texture_set.frames
                 ],
-                prefix + "transparent_frame_count": sum(
-                    frame.is_transparent for frame in texture_set.frames
+                prefix + "transparency_test_enabled_frame_count": sum(
+                    frame.transparency_test_enabled for frame in texture_set.frames
                 ),
             }
         )

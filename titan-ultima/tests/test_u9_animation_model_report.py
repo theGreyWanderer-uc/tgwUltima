@@ -101,6 +101,7 @@ def _model_entry() -> bytes:
 
 def _types_dat() -> bytes:
     data = bytearray(EXPECTED_SIZE)
+    struct.pack_into("<II", data, 0, 2, 0)
     type_id = 1
     struct.pack_into(
         RECORD_STRUCT,
@@ -151,6 +152,25 @@ class AnimationModelReportTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         row = rows[0]
         self.assertEqual(row["animation_id"], 3)
+        self.assertEqual(row["stored_animation_id"], 3)
+        self.assertEqual(row["stored_id_status"], "matches_entry")
+        self.assertEqual(row["frame_range_status"], "matches_count")
+        self.assertEqual(row["runtime_timing_status"], "valid")
+        self.assertEqual(row["last_sample_time_ms"], 0)
+        self.assertEqual(row["runtime_length_ms"], 33)
+        self.assertEqual(row["part_frame_count_status"], "matches_clip")
+        self.assertEqual(row["part_registry_capacity"], 4)
+        self.assertEqual(row["part_registry_status"], "matches_parts")
+        self.assertEqual(row["part_registry_residue_word_count"], 1)
+        self.assertEqual(row["part_registry_residue_nonzero_count"], 0)
+        self.assertEqual(row["timestamp_status"], "monotonic")
+        self.assertEqual(row["transform_status"], "finite")
+        self.assertEqual(row["event_order_status"], "monotonic")
+        self.assertEqual(row["trailing_data_raw_hex"], "")
+        self.assertEqual(
+            row["source_path_raw_hex"],
+            rb"u:\art\motions\humanoid\idle\lws\breathe_avatar".hex(),
+        )
         self.assertEqual(row["animation_label"], "humanoid/idle/breathe_avatar")
         self.assertEqual(row["action_hint"], "breathe")
         self.assertEqual(row["motion_name"], "HUMANOID_IDLE_BREATHE_AVATAR")
@@ -171,7 +191,7 @@ class AnimationModelReportTests(unittest.TestCase):
         source_candidate = row["source_name_candidate_models"][0]
         self.assertEqual(source_candidate["model_names"], ["Avatar"])
         self.assertEqual(source_candidate["type_ids"], [1])
-        self.assertEqual(source_candidate["usecode_ids"], [7])
+        self.assertEqual(source_candidate["base_type_ids"], [7])
         self.assertEqual(row["research_priority"], "confirm-unique-candidate")
         self.assertIn("runtime class/state binding", row["research_question"])
         self.assertEqual(row["ghidra_priority"], row["research_priority"])

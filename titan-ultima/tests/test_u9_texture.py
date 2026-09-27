@@ -16,6 +16,7 @@ import unittest
 
 from titan.u9.palette import U9Palette
 from titan.u9.texture import (
+    FRAME_TWO_BYTES_PER_PIXEL,
     FORMAT_ALPHA_8,
     FORMAT_ALPHA_INTENSITY_44,
     FORMAT_P8,
@@ -39,16 +40,36 @@ def _build_entry(
     pixel_bytes: bytes,
     *,
     set_unknown: int = 0,
+    reserved_0x03: int = 0,
+    storage_flags: int = 0,
+    anchor_x: int = 0,
+    anchor_y: int = 0,
 ) -> bytes:
-    frame_header = struct.pack("<HH", unknown1, 0x6000) + struct.pack("<IIII", width, height, 0, 0)
+    sample_count = sum(
+        mip_width * mip_height
+        for mip_width, mip_height in mip_dimensions(width, height, mip_count)
+    )
+    frame_flags = 0x20000000 | unknown1
+    if len(pixel_bytes) == sample_count * 2:
+        frame_flags |= FRAME_TWO_BYTES_PER_PIXEL
+    frame_header = struct.pack(
+        "<IIIII", frame_flags, width, height, anchor_x, anchor_y
+    )
     frame_header += b"\x00" * (4 * height)  # row-offset table, unused by the decoder
     frame_data = frame_header + pixel_bytes
 
     frame_count = 1
     frame_offset = TEXTURE_SET_HEADER_SIZE + frame_count * 8  # directly follows the frame directory
     frame_dir = struct.pack("<II", frame_offset, len(frame_data))
-    header = struct.pack("<HHHH", width, mip_count, height, 0) + struct.pack(
-        "<II", frame_count, set_unknown
+    header = struct.pack(
+        "<HBBHHII",
+        width,
+        mip_count,
+        reserved_0x03,
+        height,
+        storage_flags,
+        frame_count,
+        set_unknown,
     )
     return header + frame_dir + frame_data
 
@@ -75,7 +96,7 @@ class DecodeFrame565Tests(unittest.TestCase):
 class DecodeFrame5551Tests(unittest.TestCase):
     def test_alpha_bit_and_color_channels(self) -> None:
         # 5551: bit 15 = alpha, bits [14:10]=R(5), [9:5]=G(5), [4:0]=B(5).
-        # unknown1 bit 8 = 1 -> transparent -> 5551 path.
+        # pixel-format code 1 selects ARGB1555 on a two-byte frame.
         opaque_red = 0b1_11111_00000_00000  # a=1, R=31
         transparent_blue = 0b0_00000_00000_11111  # a=0, B=31
         pixels = struct.pack("<2H", opaque_red, transparent_blue)
@@ -130,6 +151,29 @@ class DecodeFramePalettedTests(unittest.TestCase):
         entry = _build_entry(1, 1, 0, 0, bytes((254,)))
         frame = decode_frame(entry)
         self.assertEqual(frame.pixels_rgba, bytes((254, 254, 254, 0)))
+
+    def test_disabled_transparency_test_keeps_index_254_opaque(self) -> None:
+        entry = _build_entry(1, 1, 0, 0x40000000, bytes((254,)))
+        frame = decode_frame(entry)
+        self.assertEqual(frame.pixels_rgba, bytes((254, 254, 254, 255)))
+
+
+class DecodeFrameRgb565KeyTests(unittest.TestCase):
+    def test_stored_rgb565_key_becomes_transparent_when_enabled(self) -> None:
+        key = 0x07E0
+        entry = _build_entry(
+            1, 1, 0, key << 12, struct.pack("<H", key)
+        )
+        frame = decode_frame(entry)
+        self.assertEqual(frame.pixels_rgba, bytes((0, 255, 0, 0)))
+
+    def test_disabled_rgb565_key_stays_opaque(self) -> None:
+        key = 0x07E0
+        entry = _build_entry(
+            1, 1, 0, 0x40000000 | (key << 12), struct.pack("<H", key)
+        )
+        frame = decode_frame(entry)
+        self.assertEqual(frame.pixels_rgba, bytes((0, 255, 0, 255)))
 
 
 class DecodeFrameEdgeCaseTests(unittest.TestCase):
@@ -188,9 +232,45 @@ class TextureStructureTests(unittest.TestCase):
         self.assertEqual((texture_set.frame_width, texture_set.frame_height), (2, 2))
         self.assertEqual(texture_set.frame_count, 1)
         self.assertEqual(texture_set.unknown, 0x00066000)
-        self.assertEqual(texture_set.frames[0].flags, 0x00D1)
-        self.assertEqual(texture_set.frames[0].unknown_word, 0x6000)
+        self.assertEqual(texture_set.frames[0].flags, 0x200000D1)
+        self.assertEqual(texture_set.frames[0].unknown_word, 0x2000)
         self.assertEqual(texture_set.frames[0].row_offsets, (0, 0))
+
+    def test_parses_reserved_playback_format_and_anchor_fields(self) -> None:
+        playback = 2 | (1 << 3) | (15 << 4) | (7 << 12) | (6 << 16)
+        playback |= (1 << 20) | (4 << 24)
+        entry = _build_entry(
+            2,
+            1,
+            0,
+            0x0100,
+            bytes(4),
+            set_unknown=playback,
+            reserved_0x03=0xA5,
+            anchor_x=12,
+            anchor_y=34,
+        )
+        texture_set = parse_texture_set(entry)
+        frame = texture_set.frames[0]
+        self.assertEqual(texture_set.reserved_0x03, 0xA5)
+        self.assertEqual(texture_set.animation_mode_code, 2)
+        self.assertTrue(texture_set.playback_reverse)
+        self.assertEqual(texture_set.playback_rate, 15)
+        self.assertEqual((texture_set.width_exponent, texture_set.height_exponent), (7, 6))
+        self.assertEqual((texture_set.default_first_frame, texture_set.default_last_frame), (1, 4))
+        self.assertEqual(texture_set.playback_status, "out_of_range")
+        self.assertEqual((frame.anchor_x, frame.anchor_y), (12, 34))
+        self.assertEqual(frame.pixel_format_code, 1)
+        self.assertTrue(frame.two_bytes_per_pixel)
+        self.assertEqual(frame.header_raw, entry[0x18:0x2C])
+
+    def test_stored_depth_flag_controls_raw_payload_validation(self) -> None:
+        entry = bytearray(_build_entry(1, 1, 0, 0, bytes((7,))))
+        struct.pack_into(
+            "<I", entry, 0x18, struct.unpack_from("<I", entry, 0x18)[0] | FRAME_TWO_BYTES_PER_PIXEL
+        )
+        with self.assertRaisesRegex(U9TextureError, "stored two-byte depth flag"):
+            decode_frame(bytes(entry))
 
     def test_mip_dimensions_halves_each_axis_and_floors_at_one(self) -> None:
         self.assertEqual(mip_dimensions(7, 5, 3), ((7, 5), (3, 2), (1, 1), (1, 1)))
@@ -262,12 +342,11 @@ class IntensityMaskTests(unittest.TestCase):
         )
         return decode_frame(entry, 0, self._palette())
 
-    def test_bit_9_selects_intensity_over_the_palette(self) -> None:
+    def test_format_code_2_selects_alpha_intensity_44(self) -> None:
         frame = self._frame(INTENSITY_FLAG, bytes((1, 200)))
         self.assertTrue(frame.is_intensity)
-        # index 1 is red in the palette; as a mask it must stay achromatic
-        self.assertEqual(frame.pixels_rgba[:4], bytes((1, 1, 1, 1)))
-        self.assertEqual(frame.pixels_rgba[4:8], bytes((200, 200, 200, 200)))
+        self.assertEqual(frame.pixels_rgba[:4], bytes((17, 17, 17, 0)))
+        self.assertEqual(frame.pixels_rgba[4:8], bytes((136, 136, 136, 204)))
 
     def test_without_bit_9_the_palette_is_applied(self) -> None:
         frame = self._frame(0, bytes((1, 0)))
@@ -288,13 +367,17 @@ class IntensityMaskTests(unittest.TestCase):
         self.assertEqual(frame.pixels_rgba[3], 0)
         self.assertEqual(frame.pixels_rgba[7], 255)
 
-    def test_bit_9_does_not_affect_16_bit_frames(self) -> None:
+    def test_format_code_2_selects_alpha_intensity_88_on_two_byte_frames(self) -> None:
         entry = _build_entry(
             width=2, height=1, mip_count=0, unknown1=INTENSITY_FLAG,
-            pixel_bytes=bytes(4),
+            pixel_bytes=bytes((10, 20, 30, 40)),
         )
         frame = decode_frame(entry)
-        self.assertFalse(frame.is_intensity)
+        self.assertTrue(frame.is_intensity)
+        self.assertEqual(
+            frame.pixels_rgba,
+            bytes((10, 10, 10, 20, 30, 30, 30, 40)),
+        )
 
 
 class FormatSelectorTests(unittest.TestCase):
@@ -348,21 +431,23 @@ class FormatSelectorTests(unittest.TestCase):
     def test_without_a_selector_bit_9_still_decides(self) -> None:
         frame = decode_frame(self._entry(INTENSITY_FLAG, bytes((5, 6))), 0, self._palette())
         self.assertTrue(frame.is_intensity)
-        self.assertEqual(frame.pixels_rgba[:4], bytes((5, 5, 5, 5)))
+        self.assertEqual(frame.pixels_rgba[:4], bytes((85, 85, 85, 0)))
 
-    def test_unknown_selector_falls_back_to_paletted(self) -> None:
-        # selector 1 occurs only on 16-bit and BC1 entries; it is not a mask
-        frame = decode_frame(
-            self._entry(INTENSITY_FLAG, bytes((1, 1))), 0, self._palette(), selector=1
-        )
-        self.assertFalse(frame.is_intensity)
+    def test_invalid_one_byte_selector_is_rejected(self) -> None:
+        with self.assertRaisesRegex(U9TextureError, "one-byte pixel format code 1"):
+            decode_frame(
+                self._entry(INTENSITY_FLAG, bytes((1, 1))),
+                0,
+                self._palette(),
+                selector=1,
+            )
 
-    def test_selector_is_ignored_on_16_bit_frames(self) -> None:
+    def test_invalid_two_byte_selector_is_rejected(self) -> None:
         entry = _build_entry(
             width=2, height=1, mip_count=0, unknown1=0, pixel_bytes=bytes(4)
         )
-        frame = decode_frame(entry, 0, selector=FORMAT_ALPHA_8)
-        self.assertFalse(frame.is_intensity)
+        with self.assertRaisesRegex(U9TextureError, "two-byte pixel format code 3"):
+            decode_frame(entry, 0, selector=FORMAT_ALPHA_8)
 
 
 class SixteenBitSelectorTests(unittest.TestCase):
@@ -422,15 +507,12 @@ class SixteenBitSelectorTests(unittest.TestCase):
         as565 = self._frame(0x0100, 0b0_00000_00000_11111, selector=FORMAT_P8)
         self.assertEqual(as565.pixels_rgba[3], 255)
 
-    def test_selector_1_never_applies_to_an_8_bit_frame(self) -> None:
-        # selector 1 occurs on no 8-bit frame; if one were seen, it must not be
-        # mistaken for a mask or for 1555
+    def test_selector_1_on_an_8_bit_frame_is_rejected(self) -> None:
         entry = _build_entry(
             width=1, height=1, mip_count=0, unknown1=0x0000, pixel_bytes=bytes((7,))
         )
-        frame = decode_frame(entry, 0, selector=SELECTOR_ARGB_1555)
-        self.assertFalse(frame.is_intensity)
-        self.assertEqual(frame.pixels_rgba, bytes((7, 7, 7, 255)))
+        with self.assertRaisesRegex(U9TextureError, "one-byte pixel format code 1"):
+            decode_frame(entry, 0, selector=SELECTOR_ARGB_1555)
 
 
 class TruncatedPixelDataRegressionTests(unittest.TestCase):

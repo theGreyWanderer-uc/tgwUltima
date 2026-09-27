@@ -14,6 +14,11 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Added
 
+- **U9 acoustic environments:** added lossless `sfxenv.flx` parsing, listing,
+  and forensic CSV export with standard-profile validation, inactive name-cell
+  residue, direct `spaces.flx` slot semantics, and preservation of the shipped
+  slot-13 profile-code mismatch.
+
 - **Ultima Underworld textures:** added native `titan uw1` inspection and
   batch PNG export for all floor/ceiling and wall texture archives, with
   original IDs, decoded descriptions, contact sheets, and CSV/JSON manifests.
@@ -25,6 +30,16 @@ This project uses [Semantic Versioning](https://semver.org/):
   hierarchy/material metadata, archive hashes, and generated animated GLB.
 
 ### Fixed
+
+- **U9 animation records:** aligned `anim.flx` with its signed runtime layout,
+  separated active part IDs from inactive registry residue, exposed controller
+  playback length alongside the final stored sample, preserved readable
+  anomalies/trailing bytes, and added exact record round trips.
+
+- **U9 model records:** aligned `sappear.flx` parsing with the retail loader,
+  including collision/physics fields, connection geometry, sorted-face lists,
+  material padding, and explicit forensic-only handling for the sixteen
+  orphaned indexed records.
 
 - **Flex updates:** preserve generic archive comments and dispatch U7 archives
   through the U7 writer, retaining their title, magic/version, reserved header

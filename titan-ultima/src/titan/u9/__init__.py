@@ -12,21 +12,17 @@ Common imports::
     from titan.u9.flx_archive import U9FlxArchive
     from titan.u9.flx_writer import build_flx
     from titan.u9.highway import U9Highway
+    from titan.u9.gameplay_zones import U9Areas
     from titan.u9.npc import U9Npcs
     from titan.u9.sdinfo import U9SdInfo
+    from titan.u9.space_tree import U9VolumeLookupCache
+    from titan.u9.spaces import U9Spaces
     from titan.u9.text import U9TextArchive
     from titan.u9.terrain import U9Terrain
     from titan.u9.triggers import U9Triggers
     from titan.u9.typename import U9TypeNames
     from titan.u9.sound import U9SoundRecord
-    from titan.u9.activity import (
-    U9Activities,
-    U9Activity,
-    U9ActivityError,
-    U9ActivityRecord,
-    U9ActivityStep,
-)
-from titan.u9.adpcm import decode_stereo, decode_mono as decode_adpcm_mono
+    from titan.u9.adpcm import decode_stereo, decode_mono as decode_adpcm_mono
     from titan.u9.microtalk import decode_mono as decode_microtalk_mono
     from titan.u9.model import U9Model
     from titan.u9.texture import decode_frame
@@ -44,6 +40,16 @@ from titan.u9.adpcm import decode_stereo, decode_mono as decode_adpcm_mono
 
 from __future__ import annotations
 
+from titan.u9.activity import (
+    ACTIVITY_OPCODE_CATALOGUE,
+    U9Activities,
+    U9Activity,
+    U9ActivityError,
+    U9ActivityOpcodeInfo,
+    U9ActivityRecord,
+    U9ActivityStep,
+    activity_opcode_info,
+)
 from titan.u9.adpcm import (
     AdpcmDecodeError,
     decode_mono as decode_adpcm_mono,
@@ -136,6 +142,18 @@ from titan.u9.flx_writer import (
     write_flx,
 )
 from titan.u9.highway import U9Highway, U9HighwayError, U9HighwayPoint, U9HighwayRoute
+from titan.u9.gameplay_zones import (
+    BOX_ZONE_KIND,
+    ENCOUNTER_SLOT_COUNT,
+    U9Areas,
+    U9AreasError,
+    U9EncounterChoice,
+    U9EncounterTable,
+    U9GameplayZone,
+    U9StoredPosition,
+    U9UnknownZone,
+    U9ZoneBox,
+)
 from titan.u9.icon import icon_entry_indices, used_texture_ids
 from titan.u9.mesh_export import (
     MeshExportError,
@@ -161,6 +179,16 @@ from titan.u9.model import (
     U9SubmeshLod,
     U9Triangle,
     U9TriangleCorner,
+)
+from titan.u9.model_geometry import (
+    BOUND_PREFIX_SIZE,
+    COMPLETE_STORED_BOUND_COUNT,
+    EXPECTED_SIZE as DIMENSION_DAT_EXPECTED_SIZE,
+    MODEL_SLOT_COUNT,
+    PARTIAL_STORED_BOUND_ID,
+    U9ModelGeometryRecord,
+    U9ModelGeometryTable,
+    U9ModelGeometryTableError,
 )
 from titan.u9.model_naming import label_for_model, names_for_model, slugify
 from titan.u9.motion_ids import U9MotionId, U9MotionIds, U9MotionIdsError
@@ -215,7 +243,16 @@ from titan.u9.object_raster import (
     U9ObjectRasterError,
     rasterize_object_meshes,
 )
-from titan.u9.npc import U9Npc, U9NpcError, U9Npcs
+from titan.u9.npc import (
+    AUTHORED_RECORD_COUNT,
+    LIVE_RECORD_COUNT,
+    NO_COMBAT_BEHAVIOR,
+    U9Npc,
+    U9NpcError,
+    U9NpcState,
+    U9NpcTrait,
+    U9Npcs,
+)
 from titan.u9.palette import PALETTE_TRANSPARENCY_INDEX, U9Palette, U9PaletteError
 from titan.u9.region_scene import (
     FIXED_CHUNK_TERRAIN_POINTS,
@@ -259,6 +296,46 @@ from titan.u9.preview import PreviewError, PreviewUnavailableError, render_previ
 from titan.u9.sdinfo import U9SdInfo, U9SdInfoError, U9SdInfoRecord
 from titan.u9.script_research import export_script_research_bundle
 from titan.u9.sound import U9SoundRecord, U9SoundRecordError
+from titan.u9.sound_category import (
+    CATEGORY_RECORD_SIZE,
+    U9SoundCategories,
+    U9SoundCategory,
+    U9SoundCategoryError,
+)
+from titan.u9.sound_environment import (
+    ENVIRONMENT_ARCHIVE_SLOT_COUNT,
+    ENVIRONMENT_RECORD_SIZE,
+    STANDARD_ACOUSTIC_PRESETS,
+    U9AcousticPreset,
+    U9AcousticPresetError,
+    U9AcousticPresets,
+)
+from titan.u9.sound_control import (
+    SFX_TEMPLATE_RECORD_REPRESENTATION,
+    SFX_TEMPLATE_SLOT_COUNT,
+    U9SfxAction,
+    U9SfxAssociation,
+    U9SfxAssociationResolution,
+    U9SfxAssociations,
+    U9SfxSoundReference,
+    U9SfxTemplate,
+    U9SfxTemplates,
+    U9SoundControlError,
+)
+from titan.u9.space_tree import (
+    TREE_CACHE_FORMAT_VERSION,
+    U9MapVolumeIndex,
+    U9VolumeLookupCache,
+    U9VolumeLookupError,
+    U9VolumePartition,
+)
+from titan.u9.spaces import (
+    U9VisibilityOpening,
+    U9VisibilityVolume,
+    U9VolumeBoundary,
+    U9Spaces,
+    U9SpacesError,
+)
 from titan.u9.terrain import (
     U9Terrain,
     U9TerrainChunk,
@@ -284,8 +361,18 @@ from titan.u9.texture_writer import (
     replace_frame,
 )
 from titan.u9.triggers import U9Trigger, U9TriggerRecord, U9Triggers, U9TriggersError
-from titan.u9.typename import U9TypeNameEntry, U9TypeNames
-from titan.u9.types_dat import U9TypeRecord, U9TypesDat, U9TypesDatError
+from titan.u9.typename import (
+    DEFAULT_OBJECT_ICON_ID,
+    U9TypeNameEntry,
+    U9TypeNameError,
+    U9TypeNames,
+)
+from titan.u9.types_dat import (
+    U9TypeRecord,
+    U9TypesDat,
+    U9TypesDatError,
+    U9TypesHeader,
+)
 
 __all__ = [
     "U9FlxArchive",
@@ -298,8 +385,50 @@ __all__ = [
     "U9FlxDirEntry",
     "U9TypeNames",
     "U9TypeNameEntry",
+    "U9TypeNameError",
+    "DEFAULT_OBJECT_ICON_ID",
     "U9SoundRecord",
     "U9SoundRecordError",
+    "U9SoundCategories",
+    "U9SoundCategory",
+    "U9SoundCategoryError",
+    "CATEGORY_RECORD_SIZE",
+    "U9AcousticPreset",
+    "U9AcousticPresets",
+    "U9AcousticPresetError",
+    "ENVIRONMENT_RECORD_SIZE",
+    "ENVIRONMENT_ARCHIVE_SLOT_COUNT",
+    "STANDARD_ACOUSTIC_PRESETS",
+    "U9SfxAssociation",
+    "U9SfxAssociationResolution",
+    "U9SfxAssociations",
+    "U9SfxSoundReference",
+    "U9SfxAction",
+    "U9SfxTemplate",
+    "U9SfxTemplates",
+    "SFX_TEMPLATE_SLOT_COUNT",
+    "SFX_TEMPLATE_RECORD_REPRESENTATION",
+    "U9SoundControlError",
+    "BOX_ZONE_KIND",
+    "ENCOUNTER_SLOT_COUNT",
+    "U9Areas",
+    "U9AreasError",
+    "U9EncounterChoice",
+    "U9EncounterTable",
+    "U9GameplayZone",
+    "U9StoredPosition",
+    "U9UnknownZone",
+    "U9ZoneBox",
+    "TREE_CACHE_FORMAT_VERSION",
+    "U9MapVolumeIndex",
+    "U9VolumeLookupCache",
+    "U9VolumeLookupError",
+    "U9VolumePartition",
+    "U9Spaces",
+    "U9SpacesError",
+    "U9VisibilityOpening",
+    "U9VisibilityVolume",
+    "U9VolumeBoundary",
     "decode_stereo",
     "decode_adpcm_mono",
     "AdpcmDecodeError",
@@ -364,6 +493,14 @@ __all__ = [
     "MicroTalkDecodeError",
     "U9Model",
     "U9ModelError",
+    "U9ModelGeometryRecord",
+    "U9ModelGeometryTable",
+    "U9ModelGeometryTableError",
+    "MODEL_SLOT_COUNT",
+    "BOUND_PREFIX_SIZE",
+    "COMPLETE_STORED_BOUND_COUNT",
+    "PARTIAL_STORED_BOUND_ID",
+    "DIMENSION_DAT_EXPECTED_SIZE",
     "U9Limb",
     "U9IndexedFace",
     "U9SubmeshLod",
@@ -395,6 +532,7 @@ __all__ = [
     "model_limb_world_matrices",
     "U9TypesDat",
     "U9TypesDatError",
+    "U9TypesHeader",
     "U9TypeRecord",
     "label_for_model",
     "names_for_model",
@@ -411,8 +549,11 @@ __all__ = [
     "U9Activities",
     "U9Activity",
     "U9ActivityError",
+    "U9ActivityOpcodeInfo",
     "U9ActivityRecord",
     "U9ActivityStep",
+    "ACTIVITY_OPCODE_CATALOGUE",
+    "activity_opcode_info",
     "export_script_research_bundle",
     "U9Triggers",
     "U9TriggersError",
@@ -435,6 +576,11 @@ __all__ = [
     "U9Npcs",
     "U9Npc",
     "U9NpcError",
+    "U9NpcState",
+    "U9NpcTrait",
+    "AUTHORED_RECORD_COUNT",
+    "LIVE_RECORD_COUNT",
+    "NO_COMBAT_BEHAVIOR",
     "U9Nonfixed",
     "U9NonfixedError",
     "U9Chunk",

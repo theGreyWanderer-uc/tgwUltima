@@ -120,6 +120,8 @@ def export_animated_model_set(
                         "source_fps": animation.source_fps,
                         "frame_interval_ms": animation.frame_interval_ms,
                         "duration_ms": animation.duration_ms,
+                        "last_sample_time_ms": animation.last_sample_time_ms,
+                        "runtime_length_ms": animation.runtime_length_ms,
                         "start_frame": animation.start_frame,
                         "end_frame": animation.end_frame,
                         "frame_count": animation.frame_count,

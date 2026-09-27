@@ -37,14 +37,14 @@ def _model_header(submesh_count: int, lod_count: int) -> bytes:
         + struct.pack("<2f", 0, 0)  # cylinder_base_height, radius
         + struct.pack("<3f", 0, 0, 0)  # sphere_center
         + struct.pack("<f", 1.0)  # sphere_radius
-        + struct.pack("<f", 2.5)  # unknown_2c
+        + struct.pack("<h2s", 2, b"\xcd\xcd")  # collision shape + padding
         + struct.pack("<3f", -1, -1, -1)  # min_bounds
         + struct.pack("<3f", 1, 1, 1)  # max_bounds
-        + struct.pack("<4I", 100, 200, 300, 400)  # lod_thresholds
+        + struct.pack("<4i", 100, 200, 300, -1)  # lod_thresholds
         + struct.pack("<3f", 0, 0, 0)  # center_of_mass
-        + struct.pack("<f", 12.5)  # mass_or_volume
+        + struct.pack("<f", 12.5)  # volume
         + struct.pack("<9f", *range(1, 10))  # inertia_matrix
-        + struct.pack("<f", 3.5)  # unknown_8c
+        + struct.pack("<i", 1)  # diagonal-only inertia hint
     )
     assert len(data) == MODEL_HEADER_SIZE
     return data
@@ -81,13 +81,13 @@ def _face(
     color=(255, 255, 255, 255),
     *,
     flags: int = 0,
-    flags2: int = 0,
+    secondary_flags: int = 0,
     plane_w: float = 0.0,
     raw_material: int = 0,
     collision: bytes = b"\x00" * 8,
 ) -> bytes:
     data = b"".join(corners)
-    data += struct.pack("<II", flags, flags2)
+    data += struct.pack("<II", flags, secondary_flags)
     data += struct.pack("<3f", *normal)
     data += struct.pack("<f", plane_w)
     data += struct.pack("<I", raw_material)
@@ -103,12 +103,23 @@ def _material(
     face_count: int,
     render_flags: int = 0,
     *,
+    alignment_padding_02: int = 0,
+    alignment_padding_06: int = 0,
+    active_alpha: int = 255,
     animation_type: int = 0,
     playback_direction: int = 0,
     animation_timer: int = 0,
 ) -> bytes:
-    data = struct.pack("<6H", texture_id, 0, render_flags, 0, first_face, face_count)
-    data += bytes([255, 255, 0, 0, 0, 0, animation_type, playback_direction])
+    data = struct.pack(
+        "<6H",
+        texture_id,
+        alignment_padding_02,
+        render_flags,
+        alignment_padding_06,
+        first_face,
+        face_count,
+    )
+    data += bytes([255, active_alpha, 0, 0, 0, 0, animation_type, playback_direction])
     data += struct.pack("<I", animation_timer)
     assert len(data) == MATERIAL_SIZE
     return data
@@ -140,6 +151,13 @@ def _lod(
     vertices_off = mount_faces_off + len(mount_face_bytes)
     mount_vertices_off = vertices_off + len(vertex_bytes)
     materials_off = mount_vertices_off + len(mount_vertex_bytes)
+    sorted_list = (
+        struct.pack(f"<{len(faces) + 2}h", -1, *range(len(faces)), -1) if faces else b""
+    )
+    sorted_offsets = tuple(
+        materials_off + len(material_bytes) + index * len(sorted_list) if faces else 0
+        for index in range(4)
+    )
     mesh_size = (
         LOD_HEADER_SIZE
         + len(face_bytes)
@@ -147,6 +165,7 @@ def _lod(
         + len(vertex_bytes)
         + len(mount_vertex_bytes)
         + len(material_bytes)
+        + len(sorted_list) * 4
     )
 
     header = (
@@ -169,7 +188,7 @@ def _lod(
         + struct.pack("<I", vertices_off)
         + struct.pack("<I", mount_vertices_off)
         + struct.pack("<I", materials_off)
-        + struct.pack("<4I", 0, 0, 0, 0)  # sorted_faces_offset
+        + struct.pack("<4I", *sorted_offsets)
         + struct.pack("<I", 0)  # unknown4
     )
     assert len(header) == LOD_HEADER_SIZE, len(header)
@@ -181,6 +200,7 @@ def _lod(
         + vertex_bytes
         + mount_vertex_bytes
         + material_bytes
+        + sorted_list * 4
     )
 
 
@@ -262,13 +282,16 @@ class ParseModelHeaderTests(unittest.TestCase):
         self.assertEqual(model.sphere_radius, 1.0)
         self.assertEqual(model.min_bounds, (-1.0, -1.0, -1.0))
         self.assertEqual(model.max_bounds, (1.0, 1.0, 1.0))
-        self.assertEqual(model.lod_thresholds, (100, 200, 300, 400))
-        self.assertEqual(model.unknown_2c, 2.5)
-        self.assertEqual(model.mass_or_volume, 12.5)
+        self.assertEqual(model.lod_thresholds, (100, 200, 300, -1))
+        self.assertEqual(model.collision_shape_code, 2)
+        self.assertEqual(model.collision_shape, "cylinder")
+        self.assertEqual(model.collision_shape_padding, b"\xcd\xcd")
+        self.assertEqual(model.volume, 12.5)
         self.assertEqual(
             model.inertia_matrix, tuple(float(value) for value in range(1, 10))
         )
-        self.assertEqual(model.unknown_8c, 3.5)
+        self.assertEqual(model.inertia_diagonal_only_code, 1)
+        self.assertIs(model.inertia_diagonal_only, True)
 
     def test_source_bytes_round_trip_exactly(self) -> None:
         data = _triangle_model()
@@ -310,13 +333,22 @@ class ParseLimbAndLodTests(unittest.TestCase):
         face = _face(
             (_corner(0, point_offset=10), _corner(1), _corner(2)),
             flags=11,
-            flags2=12,
+            secondary_flags=12,
             plane_w=2.25,
             raw_material=99,
             collision=b"abcdefgh",
         )
         material = _material(
-            7, 0, 1, animation_type=3, playback_direction=1, animation_timer=1234
+            7,
+            0,
+            1,
+            render_flags=0x1234,
+            alignment_padding_02=0xABCD,
+            alignment_padding_06=0x5678,
+            active_alpha=99,
+            animation_type=3,
+            playback_direction=1,
+            animation_timer=1234,
         )
         lod = (
             U9Model.parse(_single_limb_model([face], vertices, [material]))
@@ -325,15 +357,22 @@ class ParseLimbAndLodTests(unittest.TestCase):
         )
         self.assertEqual(lod.triangles[0].corners[0].point_offset, 10)
         self.assertEqual(lod.triangles[0].flags, 11)
-        self.assertEqual(lod.triangles[0].flags2, 12)
+        self.assertEqual(lod.triangles[0].secondary_flags, 12)
         self.assertEqual(lod.triangles[0].plane_w, 2.25)
         self.assertEqual(lod.triangles[0].raw_material, 99)
+        self.assertEqual(lod.triangles[0].boundary_vertex_indices, tuple(b"abcdef"))
+        self.assertEqual(lod.triangles[0].surface_size_code, 0x6867)
         self.assertEqual(lod.triangles[0].collision, b"abcdefgh")
+        self.assertEqual(lod.sorted_face_indices, ((0,), (0,), (0,), (0,)))
         self.assertEqual(lod.materials[0].animation_type, 3)
         self.assertEqual(lod.materials[0].playback_direction, 1)
         self.assertEqual(lod.materials[0].animation_timer, 1234)
+        self.assertEqual(lod.materials[0].alignment_padding_02, 0xABCD)
+        self.assertEqual(lod.materials[0].alignment_padding_06, 0x5678)
+        self.assertEqual(lod.materials[0].render_flags_storage, 0x56781234)
+        self.assertEqual(lod.materials[0].active_alpha, 99)
 
-    def test_mount_geometry_is_preserved_separately(self) -> None:
+    def test_connection_geometry_is_preserved_separately(self) -> None:
         main_vertices = [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)]
         mount_vertices = [(10.0, 0.0, 0.0), (10.0, 1.0, 0.0), (10.0, 0.0, 1.0)]
         main_face = _face((_corner(0), _corner(1), _corner(2)))
@@ -355,10 +394,10 @@ class ParseLimbAndLodTests(unittest.TestCase):
             + lod_bytes
         )
         lod = model.limbs[0].lods[0]
-        self.assertEqual(lod.mount_vertices, tuple(mount_vertices))
-        self.assertEqual(len(lod.mount_triangles), 1)
-        self.assertEqual(lod.mount_triangles[0].material_index, -1)
-        self.assertEqual(lod.mount_triangles[0].raw_material, 0xBEEF)
+        self.assertEqual(lod.connection_vertices, tuple(mount_vertices))
+        self.assertEqual(len(lod.connection_triangles), 1)
+        self.assertEqual(lod.connection_triangles[0].material_index, -1)
+        self.assertEqual(lod.connection_triangles[0].raw_material, 0xBEEF)
 
     def test_material_resolved_onto_triangle(self) -> None:
         model = U9Model.parse(_triangle_model())
@@ -396,10 +435,11 @@ class MalformedModelTests(unittest.TestCase):
 class ParseIndexedModelTests(unittest.TestCase):
     def test_triangle_and_quad_are_parsed_and_export_ready(self) -> None:
         data = _indexed_model()
-        model = U9Model.parse(data, model_id=536)
+        model = U9Model.parse_forensic(data, model_id=536)
         lod = model.limbs[0].lods[0]
 
-        self.assertEqual(model.record_format, "indexed")
+        self.assertEqual(model.record_format, "forensic_indexed")
+        self.assertFalse(model.runtime_compatible)
         self.assertEqual(len(model.indexed_faces), 2)
         self.assertFalse(model.indexed_faces[0].is_quad)
         self.assertTrue(model.indexed_faces[1].is_quad)
@@ -418,7 +458,11 @@ class ParseIndexedModelTests(unittest.TestCase):
         data = bytearray(_indexed_model())
         struct.pack_into("<I", data, 4, 0xAA)
         with self.assertRaisesRegex(U9ModelError, "indexed corner offset"):
-            U9Model.parse(bytes(data))
+            U9Model.parse_forensic(bytes(data))
+
+    def test_normal_parser_rejects_nonruntime_indexed_record(self) -> None:
+        with self.assertRaisesRegex(U9ModelError, "retail model loader"):
+            U9Model.parse(_indexed_model(), model_id=536)
 
 
 if __name__ == "__main__":

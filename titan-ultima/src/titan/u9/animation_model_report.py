@@ -38,11 +38,14 @@ class U9AnimationModelReportError(Exception):
 ANIMATION_MODEL_REPORT_COLUMNS = [
     "animation_archive",
     "animation_id",
+    "stored_animation_id",
+    "stored_id_status",
     "motion_name",
     "motion_family",
     "motion_id_status",
     "animation_label",
     "source_path",
+    "source_path_raw_hex",
     "source_asset_group",
     "source_family",
     "source_category",
@@ -53,14 +56,30 @@ ANIMATION_MODEL_REPORT_COLUMNS = [
     "start_frame",
     "end_frame",
     "frame_count",
+    "frame_range_status",
+    "runtime_timing_status",
     "source_fps",
     "frame_interval_ms",
     "duration_ms",
+    "last_sample_time_ms",
+    "runtime_length_ms",
     "part_count",
+    "part_frame_count_status",
     "part_ids",
     "part_names",
+    "part_name_raw_hex",
+    "part_registry_capacity",
+    "part_registry_status",
+    "part_registry_storage_raw_hex",
+    "part_registry_residue_word_count",
+    "part_registry_residue_nonzero_count",
+    "part_registry_residue_raw_hex",
+    "timestamp_status",
+    "transform_status",
     "event_count",
+    "event_order_status",
     "events",
+    "trailing_data_raw_hex",
     "registry_status",
     "registry_name_match_count",
     "registry_name_mismatches",
@@ -118,7 +137,6 @@ class _ModelMetadata:
     names: tuple[str, ...]
     type_records: tuple[U9TypeRecord, ...]
     type_names: tuple[str | None, ...]
-    clean_flags_06: tuple[int, ...]
     skeleton_fingerprint: str
 
 
@@ -230,18 +248,6 @@ def _load_type_helpers(
         return None, None, warnings
 
 
-def _model_material_flags_06(model: U9Model) -> tuple[int, ...]:
-    values = {
-        material.flags_06
-        for limb in model.limbs
-        for lod in limb.lods
-        if lod is not None
-        for material in lod.materials
-        if 0x80 <= material.flags_06 <= 0x9F
-    }
-    return tuple(sorted(values))
-
-
 def model_skeleton_fingerprint(model: U9Model) -> str:
     """Hash ordered limb identity, parenting, and rest transforms."""
     digest = hashlib.sha256()
@@ -276,11 +282,24 @@ def _read_model_metadata(
 
     models: list[_ModelMetadata] = []
     parse_errors = 0
+    non_runtime_records = 0
     for model_id in archive.used_entry_indices():
         try:
-            model = U9Model.parse(archive.read_entry(model_id), model_id)
-        except (U9ModelError, OSError):
+            data = archive.read_entry(model_id)
+            model = U9Model.parse(data, model_id)
+        except OSError:
             parse_errors += 1
+            continue
+        except U9ModelError:
+            try:
+                forensic_model = U9Model.parse_forensic(data, model_id)
+            except U9ModelError:
+                parse_errors += 1
+            else:
+                if forensic_model.runtime_compatible:
+                    parse_errors += 1
+                else:
+                    non_runtime_records += 1
             continue
         type_records = (
             tuple(
@@ -307,9 +326,13 @@ def _read_model_metadata(
                 names=names,
                 type_records=type_records,
                 type_names=type_names,
-                clean_flags_06=_model_material_flags_06(model),
                 skeleton_fingerprint=model_skeleton_fingerprint(model),
             )
+        )
+    if non_runtime_records:
+        warnings.append(
+            f"{non_runtime_records} sappear.flx entries are not retail-runtime "
+            "model records and were skipped"
         )
     if parse_errors:
         warnings.append(
@@ -364,12 +387,11 @@ def _candidate_model_record(
         "missing_track_count": len(missing_ids),
         "missing_track_ids": missing_ids,
         "missing_track_names": [part_names[node_id] for node_id in missing_ids],
-        "clean_material_flags_06": [f"0x{value:02x}" for value in model.clean_flags_06],
         "type_ids": [record.type_id for record in model.type_records],
         "type_names": list(model.type_names),
-        "usecode_ids": sorted({record.usecode_id for record in model.type_records}),
-        "type_flags": sorted(
-            {f"0x{record.type_flags:04x}" for record in model.type_records}
+        "base_type_ids": sorted({record.base_type_id for record in model.type_records}),
+        "object_flags": sorted(
+            {f"0x{record.object_flags:04x}" for record in model.type_records}
         ),
     }
 
@@ -523,6 +545,8 @@ def _animation_report_row(
     row: dict[str, Any] = {
         "animation_archive": str(animation_path),
         "animation_id": animation.animation_id,
+        "stored_animation_id": animation.stored_animation_id,
+        "stored_id_status": animation.stored_id_status,
         "motion_name": motion.name if motion is not None else None,
         "motion_family": motion.family if motion is not None else None,
         "motion_id_status": (
@@ -534,6 +558,7 @@ def _animation_report_row(
         ),
         "animation_label": hints.label,
         "source_path": animation.source_name,
+        "source_path_raw_hex": animation.source_name_raw.hex(),
         "source_asset_group": hints.asset_group,
         "source_family": hints.family,
         "source_category": hints.category,
@@ -544,13 +569,36 @@ def _animation_report_row(
         "start_frame": animation.start_frame,
         "end_frame": animation.end_frame,
         "frame_count": animation.frame_count,
+        "frame_range_status": animation.frame_range_status,
+        "runtime_timing_status": animation.runtime_timing_status,
         "source_fps": animation.source_fps,
         "frame_interval_ms": animation.frame_interval_ms,
         "duration_ms": animation.duration_ms,
+        "last_sample_time_ms": animation.last_sample_time_ms,
+        "runtime_length_ms": animation.runtime_length_ms,
         "part_count": len(animation.parts),
+        "part_frame_count_status": animation.part_frame_count_status,
         "part_ids": list(animation.part_ids),
         "part_names": [part.name for part in animation.parts],
+        "part_name_raw_hex": [part.name_raw.hex() for part in animation.parts],
+        "part_registry_capacity": len(animation.part_registry_storage),
+        "part_registry_status": animation.part_registry_status,
+        "part_registry_storage_raw_hex": struct.pack(
+            f"<{len(animation.part_registry_storage)}i",
+            *animation.part_registry_storage,
+        ).hex(),
+        "part_registry_residue_word_count": len(animation.part_registry_residue),
+        "part_registry_residue_nonzero_count": sum(
+            value != 0 for value in animation.part_registry_residue
+        ),
+        "part_registry_residue_raw_hex": struct.pack(
+            f"<{len(animation.part_registry_residue)}i",
+            *animation.part_registry_residue,
+        ).hex(),
+        "timestamp_status": animation.timestamp_status,
+        "transform_status": animation.transform_status,
         "event_count": len(animation.events),
+        "event_order_status": animation.event_order_status,
         "events": [
             {
                 "time_ms": event.time_ms,
@@ -560,6 +608,7 @@ def _animation_report_row(
             }
             for event in animation.events
         ],
+        "trailing_data_raw_hex": animation.trailing_data.hex(),
         "model_track_count": len(model_track_ids),
         "model_track_ids": sorted(model_track_ids),
         "authoring_only_track_count": len(authoring_only_ids),

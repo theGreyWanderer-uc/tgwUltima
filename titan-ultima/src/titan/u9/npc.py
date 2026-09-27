@@ -1,195 +1,144 @@
-"""
-``runtime/NPC.FLX`` reader for Ultima 9: Ascension.
+"""Parse U9's 316-byte NPC records from ``runtime/NPC.FLX`` and saves.
 
-The game's NPC table. Unlike every other FLX archive in U9, this one holds
-a *single* used entry whose payload is a flat array of fixed-size records --
-352 of them, one per NPC. **The record index is the NPC's identity**: it is
-also the activity set index in :mod:`titan.u9.activity`, which is what ties
-an NPC to the behaviour scripts it runs.
+The archive contains 352 authored records. A saved live table contains 512:
+the authored prefix followed by 160 clone slots. Record index is identity and
+also selects the corresponding activity set in :mod:`titan.u9.activity`.
 
-The same record array appears twice more in a savegame, byte-identically:
-in ``savegame/processes.dat`` and again inside ``savegame/u9game1.sav``.
-:meth:`U9Npcs.from_process_data` reads that live copy.
-
-``runtime/NPC.FLX`` is *mostly* static but the engine does write back to it.
-Two installs of the same build diverged by 29 bytes across 5 NPC records
-after play -- position on all five, and ``pool_handle`` on two of them.
-
-Each record is 316 bytes (``0x13C``)::
-
-    0x00  pool_handle     u32   -- byte offset into the region's object pool
-    0x04  name            char[32], NUL-terminated
-    0x24  gender          u8    -- 0 male, 1 female
-    0x34  health_current  u16
-    0x36  health_max      u16
-    0x38  health_max2     u16   -- always equal to health_max
-    0x3A  mana_current    u16
-    0x3C  mana_max        u16
-    0x3E  mana_max2       u16   -- always equal to mana_max
-    0x44  class_id        u16   -- 0..62, 0xFFFF = none; see below
-    0x48  flags           u32   -- bit meanings partly known; see below
-    0x54  combat_value    u16   -- 0 on non-combatants
-    0x58  region          u32   -- runtime/nonfixed.<region>
-    0x5C  x               u32   -- absolute world X
-    0x60  y               u32   -- absolute world Y
-    0x64  z               u16   -- elevation
-    0x6C  scale_x         u8    -- percent
-    0x6D  scale_y         u8
-    0x6E  scale_z         u8
-
-All integers are little-endian. The gaps are undecoded, and 200 of the 316
-bytes are identical across all 352 records in the shipped file.
-
-**The record is 316 bytes, not 323.** The Ultima Codex wiki documents
-``0x143``/323. That does not divide the 111,232-byte payload (344 records
-with 120 bytes left over) and lands every field on noise. 316 divides it
-exactly into 352, and the Codex's own field offsets then validate:
-
-===============================  ==========  ==========
-check                            316 stride  323 stride
-===============================  ==========  ==========
-records                          352         344
-remainder bytes                  0           120
-plausible ASCII name             351         17
-gender is 0 or 1                 352         273
-region <= 239                    352         237
-scale bytes in 1..200            350         14
-health_max == health_max2        341         34
-===============================  ==========  ==========
-
-The last byte that ever varies is ``0x13B``, which is the final byte of a
-316-byte record.
-
-``class_id`` is a grouping this module names but does not claim to fully
-understand. It is *not* appearance: members of one group span dozens of
-distinct ``TYPES.DAT`` models. It clusters semantically -- class 10 is every
-gargoyle in the game (``Valkadesh``, ``Winged Gargoyle``, ``Vassgralem``,
-...), 36 is pirates and bandits, 62 is guards, 39 mages, 34 townsfolk -- so
-faction or behaviour class is the natural reading.
-
-``flags`` at ``0x48`` is a bitfield the engine reads -- ``0x4c7296``,
-``0x4c77ac``, ``0x4cc08c`` and ``0x4cdbb7`` all test ``& 0x800``. Only 15
-distinct values occur, on 250 of 352 records, and three bits carry measurable
-signal:
-
-* **bit 11** (``0x800``), the one the engine tests, is set on 109 records and
-  collects hostile creatures -- Generic Pirate, Generic Bandit, Winged
-  Gargoyle, Goblin Commander, Small Rat, Bloated Demon. Friendly NPCs with a
-  ``combat_value`` (Avatar, LordBritish, Geoffrey, Valkadesh) do *not* have
-  it, so it is not "has combat stats".
-* **bit 27** (``0x08000000``) is set on 64 records, and every one of them has
-  ``combat_value > 0``. The implication runs one way: 69 records carry a
-  combat value without this bit.
-* **bit 0** (``0x1``) is set on 136 records and runs the other way -- 14% of
-  them have a combat value, against 53% of the rest.
-
-No bit is given a name here, because a correlation is not a meaning.
-
-Comparing the shipped table against a real savegame identifies which fields
-the engine writes back. Position, region and a handful of undecoded fields
-(``0x68``, ``0xEC``, ``0xF0``, ``0x110``) change; name, stats and
-``class_id`` do not. ``pool_handle`` changes rarely -- one NPC across twelve
-savegame files -- because it names the NPC's slot in the live object pool
-(see below), and that slot only moves when the NPC is re-instantiated.
-
-In one save three NPCs had moved, and all three were standing exactly on a
-:mod:`titan.u9.highway` navigation point -- direct confirmation that the
-highway graph drives NPC movement.
-
-In a live region, the entity that represents an NPC can be found by its
-``type_index`` (:mod:`titan.u9.nonfixed`, entity ``+0x0A``): matching that
-field against the NPC's record index finds 159 of 169 NPCs in a savegame's
-``nonfixed.9``, 157 at exactly the position the NPC record gives. That field
-is a **global object id** rather than an NPC index as such -- values below
-512 are the NPC-record range, which is why the match works.
-
-``pool_handle`` at ``0x00`` is **a byte offset into the region's object
-pool** -- the NPC's live world instance. Confirmed by disassembly of
-``u9.exe``: the first read is at ``0x004cd6e0``, which computes
-
-    object = *(void **)(pool + 0x34) + record->pool_handle
-
-with ``pool = *(void **)(*(void **)0x0091f0e0 + 0xd0)``. The pool's
-allocator at ``0x4c63e0`` fixes its element size at 32 bytes, which is why
-every handle is a multiple of 32; :attr:`U9Npc.pool_index` divides it out.
-Those 32 bytes are the world object body, not a descriptor -- every field is
-inside the record and ``+0x1c`` closes it exactly. The handle space is
-shared rather than NPC-specific: world objects decode the same way at
-``+0x0c`` and ``+0x1c``, and both readers are virtual methods on the pool's
-own vtable.
-
-The link is bidirectional: the record's handle gives the object, and the
-object's ``+0x0a`` -- a global object id whose sub-512 range is the NPC
-records -- gives the record back.
-
-The field is **tri-state**, which is what lets the allocator use zero as its
-free test:
-
-===========  ====================================================
-value        meaning
-===========  ====================================================
-0            slot free, or the NPC has no world placement
-1            slot allocated, no pool object yet
-other        a pool handle, always a multiple of 32
-===========  ====================================================
-
-The runtime array holds **512** records, not 352. The loader ``malloc``s
-``0x27800`` bytes (316 x 512 exactly), zeroes them, then reads ``npc.flx``
-over the top; a savegame moves ``0x1b280`` (316 x 352) as one block. So
-**slots 0-351 are the file's NPCs and slots 352-511 are a runtime spawn
-pool**, and the zeroing is why an unwritten slot reads 0.
-
-Spawning clones a record. The allocator at ``0x4f2a99`` gates on
-``cmp edi, 0x160`` -- only file-defined NPCs may be cloned -- scans slots 511
-down to 352 for a zero field 0, ``rep movsd`` 79 dwords (the whole 316-byte
-record), fixes up ``+0x5c`` and ``+0x58``, then stamps the new slot with 1.
-Many of the shipped table's zero-handle records are therefore **spawn
-templates** rather than absent NPCs: ``Small Fish`` (slot 37), ``Dragonfly``
-(297), ``Dog`` (304) and ``Yellowbird`` (328) all sit unplaced in region 0
-and appear cloned into high slots in a savegame.
-
-Example::
-
-    from titan.u9.npc import U9Npcs
-
-    npcs = U9Npcs.from_file("runtime/NPC.FLX")
-    print(len(npcs))                    # 352
-    print(npcs.npc(166).name)           # Dermot
-    print(npcs.by_name("Mariah").index) # 65
+The layout is known through the final byte. The eight level cells are signed
+32-bit integers, matching the reads performed by ``u9.exe`` 1.19F. Values
+outside the usual ``-1..3`` domain are retained and reported, never rewritten.
+Reserved bytes remain available through explicit offset-named fields as well
+as :attr:`U9Npc.raw`.
 """
 
 from __future__ import annotations
 
-__all__ = ["U9Npc", "U9NpcError", "U9Npcs"]
+__all__ = [
+    "AUTHORED_RECORD_COUNT",
+    "LIVE_RECORD_COUNT",
+    "NO_COMBAT_BEHAVIOR",
+    "U9Npc",
+    "U9NpcError",
+    "U9NpcState",
+    "U9NpcTrait",
+    "U9Npcs",
+]
 
 import os
 import struct
 from collections import Counter
 from dataclasses import dataclass
+from enum import IntFlag
 
 RECORD_SIZE = 0x13C  # 316
 NAME_OFFSET = 0x04
 NAME_FIELD_SIZE = 32
-NO_CLASS = 0xFFFF
+AUTHORED_RECORD_COUNT = 352
+LIVE_RECORD_COUNT = 512
+NO_COMBAT_BEHAVIOR = -1
+
+# Compatibility alias for callers of the earlier, incorrectly named field.
+NO_CLASS = NO_COMBAT_BEHAVIOR
 POOL_ELEMENT_SIZE = 32
 
 _POOL_HANDLE = 0x00
 _GENDER = 0x24
+_MAGIC_TIER = 0x25
+_ARMOR = 0x26
+_MIGHT_CODE = 0x28
+_AGILITY_CODE = 0x2C
+_INTELLECT_CODE = 0x30
 _HEALTH = 0x34
 _MANA = 0x3A
-_CLASS_ID = 0x44
-_FLAGS = 0x48
-_COMBAT_VALUE = 0x54
+_EARLY_RESERVED = 0x40
+_COMBAT_BEHAVIOR = 0x44
+_STATE_FLAGS = 0x48
+_ROUTINES = 0x4C
+_AWARENESS = 0x52
 _REGION = 0x58
 _POSITION = 0x5C
-_ELEVATION = 0x64
+_POSITION_TAIL = 0x66
+_ROUTINE_CURSOR = 0x68
 _SCALE = 0x6C
+_SCALE_RESERVED = 0x6F
+_EQUIPPED_OBJECTS = 0x70
+_MODEL_ATTACHMENTS = 0x8C
+_ACTIVE_WEAPON_CATEGORY = 0xA8
+_INVULNERABILITY_DURATION = 0xAC
+_MOVEMENT_BEHAVIOR = 0xB0
+_BREATH = 0xB4
+_BREATH_RESERVED = 0xBA
+_TRAIT_FLAGS = 0xC4
+_IMPACT_MATERIAL = 0xC8
+_IMPACT_RESERVED = 0xCC
+_PROXIMITY_RESERVED = 0xE0
+_PROXIMITY = 0xE2
+_ROUTINE_TIMING = 0xE6
+_TIMING_RESERVED = 0xFC
+_ROUTINE_STACK = 0x110
+_SPELLBOOK = 0x118
+_COMBAT_SKILLS = 0x124
+_TRAILING_RESERVED = 0x138
 
 # A savegame embeds the same array at an offset that is not fixed, so the
 # block is located by signature rather than hard-coded.
 _MIN_BLOCK_RECORDS = 16
-MAX_REGION = 239          # runtime/nonfixed.%d tops out here
-MAX_SCALE_PERCENT = 200   # largest scale seen in the shipped table
+MAX_REGION = 239  # runtime/nonfixed.%d tops out here
+MAX_SCALE_PERCENT = 200  # largest scale seen in the shipped table
+
+
+class U9NpcState(IntFlag):
+    """Primary NPC state bits stored at record offset ``0x48``."""
+
+    CANNOT_DIE = 0x00000001
+    VENOMED = 0x00000002
+    DISEASED = 0x00000004
+    HEXED = 0x00000008
+    WARD_ACTIVE = 0x00000010
+    LIFE_DEPLETED = 0x00000020
+    SLEEPING = 0x00000040
+    POWER_BOOSTED = 0x00000080
+    SPAWN_SEATED = 0x00000100
+    HIDDEN = 0x00000200
+    IMMOBILIZED = 0x00000400
+    CLONED_ARCHETYPE = 0x00000800
+    BEGUILED = 0x00001000
+    DAMAGE_REFLECTING = 0x00002000
+    FULL_DAMAGE_REFLECTION = 0x00004000
+    FLEEING = 0x00008000
+    SPELLCASTING_DISABLED = 0x00010000
+    MAGIC_RESISTANT = 0x00020000
+    NAME_REVEALED = 0x00040000
+    PLAYER_RECOGNIZED = 0x00080000
+    POSITION_LOCKED = 0x00100000
+    FEAR_IMMUNE = 0x00200000
+    ENGAGED_IN_COMBAT = 0x00400000
+    ARRIVAL_TRIGGER_ARMED = 0x00800000
+    TRAVELLING = 0x01000000
+    ROUTE_SEARCH_FAILED = 0x02000000
+    HOSTILE_MODE = 0x04000000
+    PRIMARY_HOSTILE_MODE = 0x08000000
+    DIALOGUE_ACTIVE = 0x10000000
+    DEPARTURE_TRIGGER_ARMED = 0x20000000
+    ROUTINE_ACTIVE = 0x40000000
+    ROUTE_SEARCH_BLOCKED = 0x80000000
+
+
+class U9NpcTrait(IntFlag):
+    """Secondary NPC trait bits stored at record offset ``0xC4``."""
+
+    STATIONARY = 0x0001
+    HIGHWAY_PAUSED = 0x0002
+    ATTACK_IMMUNE = 0x0004
+    REMOVE_WITH_COMBAT_AGENT = 0x0008
+    BOSS = 0x0010
+    ROUTINE_REFRESH_NEEDED = 0x0020
+    SPAWN_SLEEPING = 0x0040
+    COMBAT_IGNORED = 0x0080
+    HUMANOID_BODY = 0x0100
+    UNDEAD_BODY = 0x0200
+    SERPENT_VENOMED = 0x0400
+    KILL_PENALIZES_KARMA = 0x0800
 
 
 class U9NpcError(Exception):
@@ -198,27 +147,156 @@ class U9NpcError(Exception):
 
 @dataclass(frozen=True)
 class U9Npc:
-    """One 316-byte NPC record."""
+    """One fully framed 316-byte NPC record.
+
+    Fields named ``*_code`` are the signed 32-bit values read by the game.
+    Their raw bytes are retained with the rest of the record for exact
+    round trips.
+    """
 
     index: int
     pool_handle: int
     name: str
     gender: int
+    magic_tier: int
+    armor_rating: int
+    armor_modifier: int
+    might_code: int
+    agility_code: int
+    intellect_code: int
     health_current: int
-    health_max: int
-    health_max2: int
+    health_bonus_maximum: int
+    health_base_maximum: int
     mana_current: int
-    mana_max: int
-    mana_max2: int
-    class_id: int
-    flags: int
-    combat_value: int
+    mana_bonus_maximum: int
+    mana_base_maximum: int
+    reserved_0x40: int
+    residual_0x41_0x43: bytes
+    combat_behavior_id: int
+    state_flags: U9NpcState
+    active_routine_id: int
+    fallback_routine_id: int
+    fallback_routine_argument: int
+    magic_resistance_modifier: int
+    route_search_workers: int
+    awareness_radius: int
+    awareness_arc_degrees: int
+    guaranteed_awareness_percent: int
     region: int
     x: int
     y: int
     z: int
+    position_tail: bytes
+    routine_stack_depth: int
+    routine_step_index: int
+    active_routine_argument: int
     scale: tuple[int, int, int]
+    reserved_0x6f: int
+    equipped_object_offsets: tuple[int, ...]
+    model_attachment_ids: tuple[int, ...]
+    active_weapon_category_id: int
+    invulnerability_duration: int
+    movement_behavior_id: int
+    breath_current: int
+    breath_bonus_maximum: int
+    breath_base_maximum: int
+    reserved_0xba_0xc3: bytes
+    trait_flags: U9NpcTrait
+    impact_material_id: int
+    reserved_0xcc_0xdf: bytes
+    reserved_0xe0: int
+    proximity_enter_radius: int
+    proximity_exit_radius: int
+    queued_routine_argument: int
+    route_search_counter: int
+    routine_end_time: int
+    routine_start_time: int
+    primary_routine_duration: int
+    queued_routine_id: int
+    secondary_routine_duration: int
+    reserved_0xfc_0x10f: bytes
+    routine_stack: bytes
+    spellbook_flags: bytes
+    unarmed_skill_code: int
+    one_handed_skill_code: int
+    two_handed_skill_code: int
+    blunt_skill_code: int
+    ranged_skill_code: int
+    reserved_0x138_0x13b: bytes
     raw: bytes
+
+    @property
+    def level_code_items(self) -> tuple[tuple[str, int, bytes], ...]:
+        """All eight signed level codes and their exact stored bytes."""
+        return (
+            ("might", self.might_code, self.raw[_MIGHT_CODE : _MIGHT_CODE + 4]),
+            (
+                "agility",
+                self.agility_code,
+                self.raw[_AGILITY_CODE : _AGILITY_CODE + 4],
+            ),
+            (
+                "intellect",
+                self.intellect_code,
+                self.raw[_INTELLECT_CODE : _INTELLECT_CODE + 4],
+            ),
+            (
+                "unarmed_skill",
+                self.unarmed_skill_code,
+                self.raw[_COMBAT_SKILLS : _COMBAT_SKILLS + 4],
+            ),
+            (
+                "one_handed_skill",
+                self.one_handed_skill_code,
+                self.raw[_COMBAT_SKILLS + 4 : _COMBAT_SKILLS + 8],
+            ),
+            (
+                "two_handed_skill",
+                self.two_handed_skill_code,
+                self.raw[_COMBAT_SKILLS + 8 : _COMBAT_SKILLS + 12],
+            ),
+            (
+                "blunt_skill",
+                self.blunt_skill_code,
+                self.raw[_COMBAT_SKILLS + 12 : _COMBAT_SKILLS + 16],
+            ),
+            (
+                "ranged_skill",
+                self.ranged_skill_code,
+                self.raw[_COMBAT_SKILLS + 16 : _COMBAT_SKILLS + 20],
+            ),
+        )
+
+    @property
+    def health_status(self) -> str | None:
+        """Runtime consequence of a stored health invariant violation."""
+        if (
+            self.health_current <= self.health_bonus_maximum
+            and self.health_base_maximum <= self.health_bonus_maximum
+        ):
+            return None
+        if not self.has_combat_behavior:
+            return "unreachable: no combat AI"
+        return "clamped_on_first_write"
+
+    @property
+    def health_raw(self) -> bytes:
+        """Exact bytes of the three stored health values."""
+        return self.raw[_HEALTH:_MANA]
+
+    @property
+    def mana_raw(self) -> bytes:
+        """Exact bytes of the three stored mana values."""
+        return self.raw[_MANA:_EARLY_RESERVED]
+
+    @property
+    def breath_raw(self) -> bytes:
+        """Exact bytes of the three stored breath values."""
+        return self.raw[_BREATH:_BREATH_RESERVED]
+
+    def to_bytes(self) -> bytes:
+        """Return the original record unchanged."""
+        return self.raw
 
     @property
     def pool_index(self) -> int:
@@ -247,16 +325,61 @@ class U9Npc:
 
     @property
     def is_female(self) -> bool:
+        """Whether the record's binary gender marker is female."""
         return self.gender == 1
 
     @property
-    def has_class(self) -> bool:
-        """False when ``class_id`` is the 0xFFFF "none" sentinel."""
-        return self.class_id != NO_CLASS
+    def has_combat_behavior(self) -> bool:
+        """Whether a combat behavior profile is assigned (``-1`` means none)."""
+        return self.combat_behavior_id != NO_COMBAT_BEHAVIOR
 
     @property
     def position(self) -> tuple[int, int, int]:
+        """Signed world coordinates as ``(x, y, z)``."""
         return (self.x, self.y, self.z)
+
+    # Compatibility accessors for the earlier partial decoder. Their names
+    # are retained so downstream code keeps working, while the primary fields
+    # above carry the corrected semantics.
+    @property
+    def health_max(self) -> int:
+        """Compatibility alias for :attr:`health_bonus_maximum`."""
+        return self.health_bonus_maximum
+
+    @property
+    def health_max2(self) -> int:
+        """Compatibility alias for :attr:`health_base_maximum`."""
+        return self.health_base_maximum
+
+    @property
+    def mana_max(self) -> int:
+        """Compatibility alias for :attr:`mana_bonus_maximum`."""
+        return self.mana_bonus_maximum
+
+    @property
+    def mana_max2(self) -> int:
+        """Compatibility alias for :attr:`mana_base_maximum`."""
+        return self.mana_base_maximum
+
+    @property
+    def class_id(self) -> int:
+        """Compatibility alias for :attr:`combat_behavior_id`."""
+        return self.combat_behavior_id
+
+    @property
+    def has_class(self) -> bool:
+        """Compatibility alias for :attr:`has_combat_behavior`."""
+        return self.has_combat_behavior
+
+    @property
+    def flags(self) -> int:
+        """Compatibility integer view of :attr:`state_flags`."""
+        return int(self.state_flags)
+
+    @property
+    def combat_value(self) -> int:
+        """Compatibility alias for :attr:`awareness_radius`."""
+        return self.awareness_radius
 
 
 def _name_field_ok(field: bytes) -> bool:
@@ -283,7 +406,9 @@ def _record_ok(data: bytes, base: int) -> bool:
     """
     if base + RECORD_SIZE > len(data):
         return False
-    if not _name_field_ok(data[base + NAME_OFFSET : base + NAME_OFFSET + NAME_FIELD_SIZE]):
+    if not _name_field_ok(
+        data[base + NAME_OFFSET : base + NAME_OFFSET + NAME_FIELD_SIZE]
+    ):
         return False
     if data[base + _GENDER] > 1:
         return False
@@ -294,8 +419,30 @@ def _record_ok(data: bytes, base: int) -> bool:
 
 def _parse(data: bytes, base: int, index: int) -> U9Npc:
     r = data[base : base + RECORD_SIZE]
-    hc, hm, hm2 = struct.unpack_from("<3H", r, _HEALTH)
-    mc, mm, mm2 = struct.unpack_from("<3H", r, _MANA)
+    health = struct.unpack_from("<3H", r, _HEALTH)
+    mana = struct.unpack_from("<3H", r, _MANA)
+    active_routine, fallback_routine, fallback_argument = struct.unpack_from(
+        "<3H", r, _ROUTINES
+    )
+    magic_resistance, route_workers, awareness_radius = struct.unpack_from(
+        "<BBH", r, _AWARENESS
+    )
+    x, y, z = struct.unpack_from("<iih", r, _POSITION)
+    stack_depth, step_index, active_argument = struct.unpack_from(
+        "<BBH", r, _ROUTINE_CURSOR
+    )
+    breath = struct.unpack_from("<3H", r, _BREATH)
+    proximity_enter, proximity_exit = struct.unpack_from("<2H", r, _PROXIMITY)
+    (
+        queued_argument,
+        route_counter,
+        routine_end,
+        routine_start,
+        primary_duration,
+        queued_routine,
+        secondary_duration,
+    ) = struct.unpack_from("<HiHHiIi", r, _ROUTINE_TIMING)
+    combat_skills = struct.unpack_from("<5i", r, _COMBAT_SKILLS)
     return U9Npc(
         index=index,
         pool_handle=struct.unpack_from("<I", r, _POOL_HANDLE)[0],
@@ -303,20 +450,75 @@ def _parse(data: bytes, base: int, index: int) -> U9Npc:
         .split(b"\x00", 1)[0]
         .decode("ascii", errors="replace"),
         gender=r[_GENDER],
-        health_current=hc,
-        health_max=hm,
-        health_max2=hm2,
-        mana_current=mc,
-        mana_max=mm,
-        mana_max2=mm2,
-        class_id=struct.unpack_from("<H", r, _CLASS_ID)[0],
-        flags=struct.unpack_from("<I", r, _FLAGS)[0],
-        combat_value=struct.unpack_from("<H", r, _COMBAT_VALUE)[0],
-        region=struct.unpack_from("<I", r, _REGION)[0],
-        x=struct.unpack_from("<I", r, _POSITION)[0],
-        y=struct.unpack_from("<I", r, _POSITION + 4)[0],
-        z=struct.unpack_from("<H", r, _ELEVATION)[0],
+        magic_tier=r[_MAGIC_TIER],
+        armor_rating=r[_ARMOR],
+        armor_modifier=r[_ARMOR + 1],
+        might_code=struct.unpack_from("<i", r, _MIGHT_CODE)[0],
+        agility_code=struct.unpack_from("<i", r, _AGILITY_CODE)[0],
+        intellect_code=struct.unpack_from("<i", r, _INTELLECT_CODE)[0],
+        health_current=health[0],
+        health_bonus_maximum=health[1],
+        health_base_maximum=health[2],
+        mana_current=mana[0],
+        mana_bonus_maximum=mana[1],
+        mana_base_maximum=mana[2],
+        reserved_0x40=r[_EARLY_RESERVED],
+        residual_0x41_0x43=bytes(r[_EARLY_RESERVED + 1 : _COMBAT_BEHAVIOR]),
+        combat_behavior_id=struct.unpack_from("<i", r, _COMBAT_BEHAVIOR)[0],
+        state_flags=U9NpcState(struct.unpack_from("<I", r, _STATE_FLAGS)[0]),
+        active_routine_id=active_routine,
+        fallback_routine_id=fallback_routine,
+        fallback_routine_argument=fallback_argument,
+        magic_resistance_modifier=magic_resistance,
+        route_search_workers=route_workers,
+        awareness_radius=awareness_radius,
+        awareness_arc_degrees=r[_AWARENESS + 4],
+        guaranteed_awareness_percent=r[_AWARENESS + 5],
+        region=struct.unpack_from("<i", r, _REGION)[0],
+        x=x,
+        y=y,
+        z=z,
+        position_tail=bytes(r[_POSITION_TAIL : _POSITION_TAIL + 2]),
+        routine_stack_depth=stack_depth,
+        routine_step_index=step_index,
+        active_routine_argument=active_argument,
         scale=(r[_SCALE], r[_SCALE + 1], r[_SCALE + 2]),
+        reserved_0x6f=r[_SCALE_RESERVED],
+        equipped_object_offsets=struct.unpack_from("<7I", r, _EQUIPPED_OBJECTS),
+        model_attachment_ids=struct.unpack_from("<7i", r, _MODEL_ATTACHMENTS),
+        active_weapon_category_id=struct.unpack_from("<i", r, _ACTIVE_WEAPON_CATEGORY)[
+            0
+        ],
+        invulnerability_duration=struct.unpack_from("<I", r, _INVULNERABILITY_DURATION)[
+            0
+        ],
+        movement_behavior_id=struct.unpack_from("<i", r, _MOVEMENT_BEHAVIOR)[0],
+        breath_current=breath[0],
+        breath_bonus_maximum=breath[1],
+        breath_base_maximum=breath[2],
+        reserved_0xba_0xc3=bytes(r[_BREATH_RESERVED:_TRAIT_FLAGS]),
+        trait_flags=U9NpcTrait(struct.unpack_from("<I", r, _TRAIT_FLAGS)[0]),
+        impact_material_id=struct.unpack_from("<i", r, _IMPACT_MATERIAL)[0],
+        reserved_0xcc_0xdf=bytes(r[_IMPACT_RESERVED:_PROXIMITY_RESERVED]),
+        reserved_0xe0=struct.unpack_from("<H", r, _PROXIMITY_RESERVED)[0],
+        proximity_enter_radius=proximity_enter,
+        proximity_exit_radius=proximity_exit,
+        queued_routine_argument=queued_argument,
+        route_search_counter=route_counter,
+        routine_end_time=routine_end,
+        routine_start_time=routine_start,
+        primary_routine_duration=primary_duration,
+        queued_routine_id=queued_routine,
+        secondary_routine_duration=secondary_duration,
+        reserved_0xfc_0x10f=bytes(r[_TIMING_RESERVED:_ROUTINE_STACK]),
+        routine_stack=bytes(r[_ROUTINE_STACK : _ROUTINE_STACK + 8]),
+        spellbook_flags=bytes(r[_SPELLBOOK : _SPELLBOOK + 12]),
+        unarmed_skill_code=combat_skills[0],
+        one_handed_skill_code=combat_skills[1],
+        two_handed_skill_code=combat_skills[2],
+        blunt_skill_code=combat_skills[3],
+        ranged_skill_code=combat_skills[4],
+        reserved_0x138_0x13b=bytes(r[_TRAILING_RESERVED:RECORD_SIZE]),
         raw=bytes(r),
     )
 
@@ -334,9 +536,10 @@ class U9Npcs:
                 f"{len(block)} bytes is not a whole number of {RECORD_SIZE}-byte "
                 f"records ({len(block) % RECORD_SIZE} left over) -- not an NPC block?"
             )
-        self._block = block
+        self._block = bytes(block)
         self.npcs: tuple[U9Npc, ...] = tuple(
-            _parse(block, i * RECORD_SIZE, i) for i in range(len(block) // RECORD_SIZE)
+            _parse(self._block, i * RECORD_SIZE, i)
+            for i in range(len(self._block) // RECORD_SIZE)
         )
 
     @classmethod
@@ -402,6 +605,7 @@ class U9Npcs:
             start = pos if run else start + 1
         if best_len < _MIN_BLOCK_RECORDS:
             return None, 0
+        assert best_start is not None
 
         # A forward scan can latch onto the array one record late whenever the
         # true first record does not start a run on its own. Walk back along
@@ -415,16 +619,24 @@ class U9Npcs:
             prev = best_start - RECORD_SIZE
             if not _record_ok(data, prev):
                 break
-            if not _is_named(data[prev + NAME_OFFSET : prev + NAME_OFFSET + NAME_FIELD_SIZE]):
+            if not _is_named(
+                data[prev + NAME_OFFSET : prev + NAME_OFFSET + NAME_FIELD_SIZE]
+            ):
                 break
             best_start = prev
             best_len += 1
+        # A save serializes exactly 512 slots. Bytes following the table can
+        # coincidentally satisfy the structural probe and formerly produced a
+        # spurious 513th record in real saves.
+        best_len = min(best_len, LIVE_RECORD_COUNT)
         return best_start, best_len
 
     def npc(self, index: int) -> U9Npc:
         """One NPC by record index -- the same index as its activity set."""
         if index < 0 or index >= len(self.npcs):
-            raise U9NpcError(f"NPC index {index} out of range (0..{len(self.npcs) - 1})")
+            raise U9NpcError(
+                f"NPC index {index} out of range (0..{len(self.npcs) - 1})"
+            )
         return self.npcs[index]
 
     def by_name(self, name: str) -> U9Npc | None:
@@ -434,12 +646,21 @@ class U9Npcs:
     def in_region(self, region: int) -> list[U9Npc]:
         return [n for n in self.npcs if n.region == region]
 
+    def by_combat_behavior(self, behavior_id: int) -> list[U9Npc]:
+        """All NPCs assigned to one combat behavior profile."""
+        return [n for n in self.npcs if n.combat_behavior_id == behavior_id]
+
+    def combat_behavior_histogram(self) -> Counter[int]:
+        """Count combat behavior profiles, including the ``-1`` sentinel."""
+        return Counter(n.combat_behavior_id for n in self.npcs)
+
     def by_class(self, class_id: int) -> list[U9Npc]:
-        return [n for n in self.npcs if n.class_id == class_id]
+        """Compatibility alias for :meth:`by_combat_behavior`."""
+        return self.by_combat_behavior(class_id)
 
     def class_histogram(self) -> Counter[int]:
-        """How many NPCs carry each ``class_id``, the sentinel included."""
-        return Counter(n.class_id for n in self.npcs)
+        """Compatibility alias for :meth:`combat_behavior_histogram`."""
+        return self.combat_behavior_histogram()
 
     def changed_fields(self, other: U9Npcs) -> dict[int, int]:
         """Byte offsets that differ against another copy, and how many NPCs differ.
@@ -457,6 +678,10 @@ class U9Npcs:
                 if a.raw[offset] != b.raw[offset]:
                     counts[offset] += 1
         return dict(sorted(counts.items()))
+
+    def to_bytes(self) -> bytes:
+        """Return the complete record block unchanged."""
+        return self._block
 
     def __len__(self) -> int:
         return len(self.npcs)

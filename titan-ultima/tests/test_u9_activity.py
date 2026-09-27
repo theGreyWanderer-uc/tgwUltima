@@ -17,7 +17,12 @@ from __future__ import annotations
 import struct
 import unittest
 
-from titan.u9.activity import U9Activities, U9ActivityError
+from titan.u9.activity import (
+    ACTIVITY_OPCODE_CATALOGUE,
+    U9Activities,
+    U9ActivityError,
+    activity_opcode_info,
+)
 from titan.u9.flx_archive import U9FlxArchive
 
 FLX_DIR_OFFSET = 0x80
@@ -181,7 +186,7 @@ class ActivityOrdinalTests(unittest.TestCase):
 
 
 class ActivityOperandTests(unittest.TestCase):
-    def test_unknown_operands_have_parallel_integer_views(self) -> None:
+    def test_fixed_operand_words_and_parallel_forensic_views(self) -> None:
         operands = struct.pack("<HHHH", 0x1234, 0x5678, 0x9ABC, 0xDEF0)
         entry = _entry([_record(1, "Walk", [_step(0x01, operands)])])
         activity = U9Activities(_archive({1: entry})).activity(1)
@@ -189,11 +194,70 @@ class ActivityOperandTests(unittest.TestCase):
         step = activity.records[0].steps[0]
         self.assertEqual(step.operands_u16, (0x1234, 0x5678, 0x9ABC, 0xDEF0))
         self.assertEqual(step.operands_u32, (0x56781234, 0xDEF09ABC))
+        self.assertEqual(step.parameter_0, 0x1234)
+        self.assertEqual(step.parameter_1, 0x5678)
+        self.assertEqual(step.scheduled_minute, 0x9ABC)
+        self.assertEqual(step.duration_code, 0xDEF0)
+        self.assertEqual(step.duration_value, 0xDEF0 >> 2)
+        self.assertEqual(step.duration_remainder, 0)
         self.assertEqual(step.movement_points, (0x1234, 0x5678))
         self.assertEqual(step.to_bytes(), _step(0x01, operands))
         terminator = activity.records[0].terminator
         assert terminator is not None
         self.assertEqual(terminator.entry_offset, 33)
+        self.assertTrue(terminator.is_repeat_marker)
+        self.assertEqual(terminator.semantic_name, "repeat activity cycle")
+
+    def test_command_specific_views_do_not_reinterpret_other_commands(self) -> None:
+        relocation = struct.pack("<HHHH", 0xCCB4, 9, 720, 31)
+        action = struct.pack("<HHHH", 4, 12, 0, 43)
+        entry = _entry(
+            [_record(1, "Typed", [_step(0x03, relocation), _step(0x04, action)])]
+        )
+        activity = U9Activities(_archive({1: entry})).activity(1)
+        assert activity is not None
+        relocate_step, action_step = activity.records[0].steps
+        self.assertEqual(relocate_step.relocation_target, (0xCCB4, 9))
+        self.assertIsNone(relocate_step.movement_points)
+        self.assertIsNone(relocate_step.duration_value)
+        self.assertEqual(action_step.npc_action, (4, 12))
+        self.assertEqual(action_step.duration_value, 10)
+        self.assertEqual(action_step.duration_remainder, 3)
+
+    def test_control_flow_and_interaction_parameter_views(self) -> None:
+        cases = {
+            0x05: ("conversation_topic", 100),
+            0x06: ("object_selector", 3343),
+            0x07: ("sequence_ordinal", 2),
+            0x09: ("trigger_phase", 3),
+            0x0A: ("sequence_ordinal", 12),
+            0x0B: ("branch_label", 7),
+            0x0C: ("branch_label", 7),
+        }
+        records = [
+            _record(
+                index,
+                f"Case {opcode}",
+                [_step(opcode, struct.pack("<HHHH", value, 99, 12, 16))],
+            )
+            for index, (opcode, (_, value)) in enumerate(cases.items(), start=1)
+        ]
+        activity = U9Activities(_archive({1: _entry(records)})).activity(1)
+        assert activity is not None
+        for record, (_, (property_name, expected)) in zip(
+            activity.records, cases.items(), strict=True
+        ):
+            self.assertEqual(getattr(record.steps[0], property_name), expected)
+
+    def test_catalogue_covers_every_runtime_command(self) -> None:
+        self.assertEqual(
+            [info.opcode for info in ACTIVITY_OPCODE_CATALOGUE], list(range(13))
+        )
+        self.assertEqual(
+            activity_opcode_info(0x08).meaning,  # type: ignore[union-attr]
+            "return from activity sequence",
+        )
+        self.assertIsNone(activity_opcode_info(0x80))
 
 
 class ActivityArchiveTests(unittest.TestCase):
