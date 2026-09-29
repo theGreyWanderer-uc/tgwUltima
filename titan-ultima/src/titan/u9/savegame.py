@@ -52,14 +52,14 @@ class U9StartDat:
 class U9SaveHeader:
     label: str
     description: str
-    saved_position: tuple[float, float, float]
-    saved_orientation: tuple[float, float, float, float]
-    saved_yaw: float
-    saved_pitch: float
-    saved_roll: float
-    saved_map: int
-    saved_time: int
-    saved_day: int
+    position: tuple[float, float, float]
+    orientation: tuple[float, float, float, float]
+    yaw: float
+    pitch: float
+    roll: float
+    header_map: int
+    time: int
+    day: int
 
 
 @dataclass(frozen=True)
@@ -131,14 +131,14 @@ class U9SaveArchive:
         header = U9SaveHeader(
             label=label,
             description=description,
-            saved_position=(values[0], values[1], values[2]),
-            saved_orientation=(values[3], values[4], values[5], values[6]),
-            saved_yaw=values[7],
-            saved_pitch=values[8],
-            saved_roll=values[9],
-            saved_map=values[10],
-            saved_time=values[11],
-            saved_day=values[12],
+            position=(values[0], values[1], values[2]),
+            orientation=(values[3], values[4], values[5], values[6]),
+            yaw=values[7],
+            pitch=values[8],
+            roll=values[9],
+            header_map=values[10],
+            time=values[11],
+            day=values[12],
         )
 
         def read_member(name: str) -> U9SaveMember:

@@ -324,6 +324,8 @@ class IntegrityTests(unittest.TestCase):
         self.assertEqual(report.verdict("structure"), "PASS")
         self.assertEqual(report.verdict("compatibility"), "PASS")
         self.assertIn("LAY01", {finding.check_id for finding in report.findings})
+        archive_evidence = report.artifacts["archive"]
+        self.assertEqual(archive_evidence.get("header_map"), 9)
         process_evidence = report.artifacts["archive/processes.dat"]
         self.assertEqual(process_evidence["camera"]["version"], 2)
         self.assertEqual(process_evidence["camera_control"]["version"], 2)

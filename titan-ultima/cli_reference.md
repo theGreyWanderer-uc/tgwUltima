@@ -5724,6 +5724,207 @@ titan u9 text-export <file> [-o OUT.csv]
 
 ---
 
+#### `u9 text-keys-info`
+
+Summarize `static/text.dat`, the table the game uses to find a `text.flx` line
+from a `"<speaker> : <line>"` key. With `--text`, also check every target
+index and recover each item's key.
+
+```
+titan u9 text-keys-info <file> [-t TEXT.FLX] [--npcs NPC.FLX] [-s NAME ...]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/text.dat` |
+| `-t FILE`, `--text FILE` | Path to `static/text.flx`, to check targets and recover keys |
+| `--npcs FILE` | Path to `runtime/NPC.FLX`; its record names are the speakers the game uses |
+| `-s NAME`, `--speaker NAME` | Extra speaker name to try when recovering keys (repeatable) |
+
+**Example**
+```bash
+titan u9 text-keys-info static/text.dat -t static/text.flx --npcs runtime/NPC.FLX
+```
+
+```
+static/text.dat -- 7649 bucket(s), 7656 item(s)
+  empty buckets     : 2773
+  longest chain     : 6
+  trailing bytes    : 0
+  reachability      : reachable=7656
+  text references   : valid=7656
+  shared targets    : 0
+  lines without key : 0
+  reconstructed keys: file_marker=266, npc_name=7018, ui_prefix=311, unresolved=61
+```
+
+A key is counted as recovered only when it reproduces both the item's bucket
+and its stored CRC. The game builds keys as an NPC record's name or the
+constant `UI`, then `" : "` and the line. With `--npcs`, Titan tries `UI`, the
+record names, and any `--speaker` names. Without it, the line's own block
+name, `UI`, a few observed record names, `--speaker` names, and every other
+block name stand in, which leaves 142 unresolved instead of 61. File markers
+are keyed as `C:` plus the marker text.
+
+---
+
+#### `u9 text-key-lookup`
+
+Look up one key exactly as the game does, and show the selected item.
+
+```
+titan u9 text-key-lookup <file> <key> [-t TEXT.FLX]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/text.dat` |
+| `key` | Full key, e.g. `'Avatar : Farewell.'` |
+| `-t FILE`, `--text FILE` | Path to `static/text.flx`, to print the line |
+
+**Example**
+```bash
+titan u9 text-key-lookup static/text.dat "Avatar : Farewell." -t static/text.flx
+```
+
+```
+static/text.dat -- key 'Avatar : Farewell.'
+  bucket 5853  crc 0x57bdb75f
+  item 5853:1 at 0x16dd8 -> text index 873
+  text: Farewell.
+```
+
+Exits with status 1 when the key is not found.
+
+---
+
+#### `u9 text-keys-export`
+
+Export every stored item to CSV, one row per item in file order.
+
+```
+titan u9 text-keys-export <file> [-t TEXT.FLX] [--npcs NPC.FLX] [-s NAME ...] [-o OUT.csv]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/text.dat` |
+| `-t FILE`, `--text FILE` | Path to `static/text.flx`, to check targets and recover keys |
+| `--npcs FILE` | Path to `runtime/NPC.FLX`; its record names are the speakers the game uses |
+| `-s NAME`, `--speaker NAME` | Extra speaker name to try when recovering keys (repeatable) |
+| `-o FILE`, `--output FILE` | Output CSV path (default: `<file>_keys.csv`) |
+
+Columns: `bucket`, `position`, `offset`, `stored_hash`, `stored_crc_hex`,
+`text_index`, `reachability` (`reachable`, `unreachable_hash_mismatch`,
+`shadowed_by_earlier_item`), `text_reference_status` (`valid`, `empty_slot`,
+`out_of_range`, `not_checked`), `items_sharing_text_index`, `key_status`
+(`verified`, `unresolved`, `not_checked`), `key_method` (`npc_name`,
+`ui_prefix`, `file_marker`, `block_speaker`, `other_speaker`), `speaker`,
+`key`, `text`.
+
+---
+
+### Authoring-tool colour tables (optional; not loaded by the game)
+
+These four `static/` files were written by the authoring tool's palette tools.
+**The retail game never loads them**; Titan reads them as historical data only
+and does not use them for rendering. See the
+[format reference](reference/u9/palette/u9_color_tables_reference.md).
+
+#### `u9 shade-info`
+
+Summarize `shade.tbl` (32 light levels × 256 palette indices) or
+`shadegry.tbl` (four 16-step ramps and a 256-entry red tint). The two are told
+apart by their fixed sizes, 8,192 and 320 bytes.
+
+```
+titan u9 shade-info <file> [-p ANKH.PAL]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/shade.tbl` or `static/shadegry.tbl` |
+| `-p FILE`, `--palette FILE` | Path to `static/ankh.pal`, to show colours |
+
+```
+static/shade.tbl -- authoring-tool file; the retail game never loads it
+  layout            : 32 light levels x 256 palette indices
+  filler index      : 17 203,65,227
+  shaded levels     : 16..31
+  filler anomalies  : 0
+```
+
+---
+
+#### `u9 shade-csv`
+
+Export every cell to CSV: `section`, `position`, `source_index`,
+`output_index`, `cell_kind` (`filler`, `shaded`, `ramp_step`, `translation`),
+`source_rgb`, `output_rgb`.
+
+```
+titan u9 shade-csv <file> [-p ANKH.PAL] [-o OUT.csv]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/shade.tbl` or `static/shadegry.tbl` |
+| `-p FILE`, `--palette FILE` | Path to `static/ankh.pal`, to add RGB columns |
+| `-o FILE`, `--output FILE` | Output CSV path (default: `<file>_shade.csv`) |
+
+---
+
+#### `u9 color-cube-info`
+
+Summarize `rgbccube.dat` or `yiqccube.dat`: a 1,024-byte palette followed by
+an octree of candidate palette indices.
+
+```
+titan u9 color-cube-info <file> [-p ANKH.PAL]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/rgbccube.dat` or `static/yiqccube.dat` |
+| `-p FILE`, `--palette FILE` | Path to `static/ankh.pal`, to compare the stored palette |
+
+---
+
+#### `u9 color-cube-lookup`
+
+Show the palette index the tool's colour match picks for one colour.
+
+```
+titan u9 color-cube-lookup <file> <red> <green> <blue> [-m rgb|yiq]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/rgbccube.dat` or `static/yiqccube.dat` |
+| `red`, `green`, `blue` | Colour components, 0–255 |
+| `-m`, `--metric` | `rgb` or `yiq` (default: `yiq` when the file name contains `yiq`, else `rgb`) |
+
+```
+static/rgbccube.dat -- colour (200, 40, 40), metric rgb
+  leaf at 0x1920, depth 4, cube (192, 32, 32) size 16
+  candidates: 35
+  chosen index 35 = (203, 34, 23)
+```
+
+---
+
+#### `u9 color-cube-csv`
+
+Export every tree node in stored order: `order`, `offset`, `depth`, `path`,
+`kind`, `cube_red`, `cube_green`, `cube_blue`, `cube_size`, `count`,
+`candidates`.
+
+```
+titan u9 color-cube-csv <file> [-o OUT.csv]
+```
+
+---
+
 ### Save integrity commands
 
 #### `u9 save-check`

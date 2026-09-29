@@ -696,7 +696,7 @@ def check_save(
         archive_data,
         source=str(archive_path),
         description=archive.header.description,
-        saved_map=archive.header.saved_map,
+        header_map=archive.header.header_map,
         maps=[member.map_number for member in archive.nonfixed],
     )
     _record_artifact(
@@ -821,7 +821,7 @@ def check_save(
 
     # A member numbered above the shipped range is a stray file the save swept up
     # (ARC10). It needs no fixed map unless an object reference points at it.
-    relevant_maps = {archive.header.saved_map}
+    relevant_maps = {archive.header.header_map}
     relevant_maps.update(m for m in archived_maps if m <= MAX_SHIPPED_MAP_NUMBER)
     if object_references is not None:
         relevant_maps.update(

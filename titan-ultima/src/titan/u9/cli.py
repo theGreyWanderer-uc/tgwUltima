@@ -162,6 +162,32 @@ from titan.u9.sound_writer import (
     replace_sound_record_from_source,
 )
 from titan.u9.text import U9TextArchive, U9TextError
+from titan.u9.shade_tables import (
+    EDITOR_COLOR_TABLE_SIZE,
+    RAMP_LENGTH,
+    RAMP_NAMES,
+    SHADE_LEVEL_COUNT,
+    SHADE_LIT_LEVELS,
+    SHADE_TABLE_SIZE,
+    U9EditorColorTable,
+    U9ShadeTable,
+    U9ShadeTableError,
+)
+from titan.u9.color_cube import (
+    METRICS as COLOR_CUBE_METRICS,
+    U9ColorCube,
+    U9ColorCubeError,
+    metric_for_filename,
+)
+from titan.u9.text_keys import (
+    KEY_ENCODING,
+    U9TextKeyTable,
+    U9TextKeyTableError,
+    key_bucket,
+    key_crc,
+    reconstruct_keys,
+    text_reference_status,
+)
 from titan.u9.terrain import U9Terrain, U9TerrainError
 from titan.u9.texture import (
     U9TextureError,
@@ -5174,6 +5200,407 @@ def cmd_text_export(args: SimpleNamespace) -> int:
 
 
 # ============================================================================
+# CLI COMMANDS — TEXT KEY TABLE (static/text.dat)
+# ============================================================================
+
+
+def _load_text_key_table(filepath: str) -> Optional[U9TextKeyTable]:
+    """Open static/text.dat, reporting the reason on failure."""
+    if not os.path.isfile(filepath):
+        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
+        return None
+    try:
+        return U9TextKeyTable.from_file(filepath)
+    except U9TextKeyTableError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return None
+
+
+def _load_optional_text(filepath: Optional[str]) -> tuple[bool, Optional[U9TextArchive]]:
+    """Open an optional text.flx; the flag is False when one was given but failed."""
+    if filepath is None:
+        return True, None
+    text = _load_text(filepath)
+    return text is not None, text
+
+
+def _load_optional_npc_names(
+    filepath: Optional[str],
+) -> tuple[bool, Optional[list[str]]]:
+    """Read speaker names from an optional NPC.FLX; False when one failed."""
+    if filepath is None:
+        return True, None
+    if not os.path.isfile(filepath):
+        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
+        return False, None
+    try:
+        return True, [npc.name for npc in U9Npcs.from_file(filepath) if npc.name]
+    except U9NpcError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return False, None
+
+
+def _counts_line(counts: Counter) -> str:
+    return ", ".join(f"{name}={count}" for name, count in sorted(counts.items()))
+
+
+def cmd_text_keys_info(args: SimpleNamespace) -> int:
+    """Summarize the text key table and, optionally, its joins to text.flx."""
+    table = _load_text_key_table(args.file)
+    if table is None:
+        return 1
+    ok, text = _load_optional_text(args.text)
+    if not ok:
+        return 1
+    ok, npc_names = _load_optional_npc_names(args.npcs)
+    if not ok:
+        return 1
+
+    items = table.items
+    chains = Counter(len(bucket.items) for bucket in table.buckets)
+    print(f"{args.file} -- {table.bucket_count} bucket(s), {len(items)} item(s)")
+    print(f"  empty buckets     : {chains.get(0, 0)}")
+    print(f"  longest chain     : {max(chains, default=0)}")
+    print(f"  trailing bytes    : {len(table.trailing_data)}")
+    print(f"  reachability      : {_counts_line(Counter(map(table.reachability, items)))}")
+    if text is None:
+        return 0
+    try:
+        statuses = Counter(text_reference_status(item, text) for item in items)
+        targets = table.text_index_counts()
+        unkeyed = [index for index in text.used_indices() if index not in targets]
+        keys = reconstruct_keys(table, text, args.speakers or (), npc_names)
+    except U9TextError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+    print(f"  text references   : {_counts_line(statuses)}")
+    print(f"  shared targets    : {sum(1 for count in targets.values() if count > 1)}")
+    print(f"  lines without key : {len(unkeyed)}")
+    methods = Counter(key.method for key in keys.values())
+    methods["unresolved"] = len(items) - len(keys)
+    print(f"  reconstructed keys: {_counts_line(methods)}")
+    return 0
+
+
+def cmd_text_key_lookup(args: SimpleNamespace) -> int:
+    """Look up one key the way the game does and show the selected line."""
+    table = _load_text_key_table(args.file)
+    if table is None:
+        return 1
+    ok, text = _load_optional_text(args.text)
+    if not ok:
+        return 1
+    if table.bucket_count <= 0:
+        print(f"{args.file} -- the table has no buckets, so no key can be found")
+        return 1
+    try:
+        key = args.key.encode(KEY_ENCODING)
+        bucket = key_bucket(key, table.bucket_count)
+        crc = key_crc(key)
+    except (UnicodeEncodeError, ValueError) as error:
+        print(f"ERROR: cannot use this key: {error}", file=sys.stderr)
+        return 1
+
+    print(f"{args.file} -- key {args.key!r}")
+    print(f"  bucket {bucket}  crc 0x{crc:08x}")
+    item = table.lookup_bytes(key)
+    if item is None:
+        print("  not found")
+        return 1
+    print(
+        f"  item {item.bucket}:{item.position} at 0x{item.offset:x} "
+        f"-> text index {item.text_index}"
+    )
+    if text is not None:
+        status = text_reference_status(item, text)
+        entry = text.entry(item.text_index) if status == "valid" else None
+        print(f"  text: {entry.text if entry else f'({status})'}")
+    return 0
+
+
+TEXT_KEY_CSV_COLUMNS = (
+    "bucket",
+    "position",
+    "offset",
+    "stored_hash",
+    "stored_crc_hex",
+    "text_index",
+    "reachability",
+    "text_reference_status",
+    "items_sharing_text_index",
+    "key_status",
+    "key_method",
+    "speaker",
+    "key",
+    "text",
+)
+
+
+def cmd_text_keys_export(args: SimpleNamespace) -> int:
+    """Export every stored item, with its text join and verified key, to CSV."""
+    table = _load_text_key_table(args.file)
+    if table is None:
+        return 1
+    ok, text = _load_optional_text(args.text)
+    if not ok:
+        return 1
+    ok, npc_names = _load_optional_npc_names(args.npcs)
+    if not ok:
+        return 1
+    try:
+        keys = (
+            reconstruct_keys(table, text, args.speakers or (), npc_names)
+            if text
+            else {}
+        )
+    except U9TextError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+
+    targets = table.text_index_counts()
+    out_path = args.output or f"{Path(args.file).stem}_keys.csv"
+    os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+    with open(out_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(TEXT_KEY_CSV_COLUMNS)
+        for item in table.items:
+            status = text_reference_status(item, text) if text else "not_checked"
+            entry = text.entry(item.text_index) if status == "valid" else None
+            key = keys.get((item.bucket, item.position))
+            if text is None:
+                key_status = "not_checked"
+            else:
+                key_status = "verified" if key else "unresolved"
+            writer.writerow(
+                [
+                    item.bucket,
+                    item.position,
+                    item.offset,
+                    item.stored_hash,
+                    f"0x{item.stored_crc:08x}",
+                    item.text_index,
+                    table.reachability(item),
+                    status,
+                    targets[item.text_index],
+                    key_status,
+                    key.method if key else "",
+                    (key.speaker or "") if key else "",
+                    key.text if key else "",
+                    entry.text if entry else "",
+                ]
+            )
+    print(f"{args.file} -- wrote {len(table.items)} row(s) -> {out_path}")
+    if text is not None:
+        print(f"  verified keys: {len(keys)}, unresolved: {len(table.items) - len(keys)}")
+    return 0
+
+
+# ============================================================================
+# CLI COMMANDS — AUTHORING-TOOL COLOUR TABLES (not loaded by the game)
+# static/shade.tbl, static/shadegry.tbl, static/rgbccube.dat, static/yiqccube.dat
+# ============================================================================
+
+_NOT_LOADED_NOTE = "authoring-tool file; the retail game never loads it"
+
+
+def _load_optional_palette_colors(
+    filepath: Optional[str],
+) -> tuple[bool, Optional[tuple[tuple[int, int, int], ...]]]:
+    """Read colours from an optional ankh.pal; False when one was given but failed."""
+    if filepath is None:
+        return True, None
+    if not os.path.isfile(filepath):
+        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
+        return False, None
+    try:
+        return True, U9Palette.from_file(filepath).colors
+    except (OSError, U9PaletteError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return False, None
+
+
+def _load_shade_file(
+    filepath: str,
+) -> U9ShadeTable | U9EditorColorTable | None:
+    """Open shade.tbl or shadegry.tbl, told apart by their fixed sizes."""
+    if not os.path.isfile(filepath):
+        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
+        return None
+    size = os.path.getsize(filepath)
+    try:
+        if size == SHADE_TABLE_SIZE:
+            return U9ShadeTable.from_file(filepath)
+        if size == EDITOR_COLOR_TABLE_SIZE:
+            return U9EditorColorTable.from_file(filepath)
+    except U9ShadeTableError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return None
+    print(
+        f"ERROR: {filepath} is {size} bytes; expected {SHADE_TABLE_SIZE} (shade.tbl) "
+        f"or {EDITOR_COLOR_TABLE_SIZE} (shadegry.tbl)",
+        file=sys.stderr,
+    )
+    return None
+
+
+def _rgb_text(colors, index: int) -> str:
+    return "" if colors is None else "%d,%d,%d" % colors[index]
+
+
+def cmd_shade_info(args: SimpleNamespace) -> int:
+    """Summarize shade.tbl or shadegry.tbl."""
+    table = _load_shade_file(args.file)
+    if table is None:
+        return 1
+    ok, colors = _load_optional_palette_colors(args.palette)
+    if not ok:
+        return 1
+    print(f"{args.file} -- {_NOT_LOADED_NOTE}")
+    if isinstance(table, U9ShadeTable):
+        anomalies = table.filler_anomalies()
+        filler = table.filler_index
+        print(f"  layout            : {SHADE_LEVEL_COUNT} light levels x 256 palette indices")
+        print(f"  filler index      : {filler} {_rgb_text(colors, filler)}".rstrip())
+        print(f"  shaded levels     : {SHADE_LIT_LEVELS.start}..{SHADE_LIT_LEVELS.stop - 1}")
+        print(f"  filler anomalies  : {len(anomalies)}")
+        return 0
+    print(f"  layout            : {len(RAMP_NAMES)} ramps x {RAMP_LENGTH}, then a 256-entry red tint")
+    for name in RAMP_NAMES:
+        print(f"  ramp {name:<6}       : {' '.join(str(i) for i in table.ramp(name))}")
+    changed = sum(1 for index, value in enumerate(table.red_tint) if index != value)
+    print(f"  red tint changes  : {changed} of 256 indices")
+    return 0
+
+
+def cmd_shade_csv(args: SimpleNamespace) -> int:
+    """Export every cell of shade.tbl or shadegry.tbl to CSV."""
+    table = _load_shade_file(args.file)
+    if table is None:
+        return 1
+    ok, colors = _load_optional_palette_colors(args.palette)
+    if not ok:
+        return 1
+    out_path = args.output or f"{Path(args.file).stem}_shade.csv"
+    os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+    rows = 0
+    with open(out_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(
+            ["section", "position", "source_index", "output_index", "cell_kind",
+             "source_rgb", "output_rgb"]
+        )
+        if isinstance(table, U9ShadeTable):
+            for level in range(SHADE_LEVEL_COUNT):
+                for index, value in enumerate(table.level(level)):
+                    writer.writerow(
+                        [f"level_{level}", level, index, value,
+                         "filler" if table.is_filler_cell(level, index) else "shaded",
+                         _rgb_text(colors, index), _rgb_text(colors, value)]
+                    )
+                    rows += 1
+        else:
+            for name in RAMP_NAMES:
+                for position, value in enumerate(table.ramp(name)):
+                    writer.writerow(
+                        [f"ramp_{name}", position, "", value, "ramp_step", "",
+                         _rgb_text(colors, value)]
+                    )
+                    rows += 1
+            for index, value in enumerate(table.red_tint):
+                writer.writerow(
+                    ["red_tint", index, index, value, "translation",
+                     _rgb_text(colors, index), _rgb_text(colors, value)]
+                )
+                rows += 1
+    print(f"{args.file} -- wrote {rows} row(s) -> {out_path}")
+    return 0
+
+
+def _load_color_cube(filepath: str) -> Optional[U9ColorCube]:
+    if not os.path.isfile(filepath):
+        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
+        return None
+    try:
+        return U9ColorCube.from_file(filepath)
+    except U9ColorCubeError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return None
+
+
+def cmd_color_cube_info(args: SimpleNamespace) -> int:
+    """Summarize a colour-cube cache and compare its palette with ankh.pal."""
+    cube = _load_color_cube(args.file)
+    if cube is None:
+        return 1
+    ok, colors = _load_optional_palette_colors(args.palette)
+    if not ok:
+        return 1
+    leaves = cube.leaves
+    candidates = [index for leaf in leaves for index in leaf.candidates]
+    sizes = Counter(leaf.count for leaf in leaves)
+    print(f"{args.file} -- {_NOT_LOADED_NOTE}")
+    print(f"  nodes             : {len(cube.nodes)} ({len(leaves)} leaves)")
+    print(f"  deepest leaf      : {cube.max_depth}")
+    print(f"  candidates        : {len(candidates)}, indices {min(candidates)}..{max(candidates)}")
+    print(f"  largest leaf      : {max(sizes)}")
+    print(f"  metric (by name)  : {metric_for_filename(args.file)}")
+    if colors is not None:
+        differing = [i for i, color in enumerate(cube.palette_colors) if color != colors[i]]
+        print(
+            "  palette prefix    : "
+            + ("matches the palette" if not differing else f"{len(differing)} colour(s) differ")
+        )
+    return 0
+
+
+def cmd_color_cube_lookup(args: SimpleNamespace) -> int:
+    """Show which palette index the authoring tool's colour match picks."""
+    cube = _load_color_cube(args.file)
+    if cube is None:
+        return 1
+    metric = args.metric or metric_for_filename(args.file)
+    color = (args.red, args.green, args.blue)
+    try:
+        leaf = cube.leaf_for(color)
+        index = cube.closest_index(color, metric)
+    except ValueError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+    print(f"{args.file} -- colour {color}, metric {metric}")
+    print(
+        f"  leaf at 0x{leaf.offset:x}, depth {leaf.depth}, cube "
+        f"{leaf.cube_origin} size {leaf.cube_size}"
+    )
+    print(f"  candidates: {' '.join(str(i) for i in leaf.candidates)}")
+    print(f"  chosen index {index} = {cube.palette_colors[index]}")
+    return 0
+
+
+def cmd_color_cube_csv(args: SimpleNamespace) -> int:
+    """Export every colour-cube tree node, in stored order, to CSV."""
+    cube = _load_color_cube(args.file)
+    if cube is None:
+        return 1
+    out_path = args.output or f"{Path(args.file).stem}_nodes.csv"
+    os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+    with open(out_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(
+            ["order", "offset", "depth", "path", "kind", "cube_red", "cube_green",
+             "cube_blue", "cube_size", "count", "candidates"]
+        )
+        for order, node in enumerate(cube.nodes):
+            red, green, blue = node.cube_origin
+            writer.writerow(
+                [order, node.offset, node.depth, "/".join(map(str, node.path)),
+                 "leaf" if node.is_leaf else "internal", red, green, blue,
+                 node.cube_size, node.count, " ".join(map(str, node.candidates))]
+            )
+    print(f"{args.file} -- wrote {len(cube.nodes)} node row(s) -> {out_path}")
+    return 0
+
+
+# ============================================================================
 # CLI COMMANDS — SAVE INTEGRITY
 # ============================================================================
 
@@ -8709,6 +9136,183 @@ def text_export_cmd(
 ) -> None:
     """Export a U9 text archive to CSV."""
     raise SystemExit(cmd_text_export(SimpleNamespace(file=file, output=output)))
+
+
+@u9_app.command("text-keys-info")
+def text_keys_info_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/text.dat")],
+    text: Annotated[
+        Optional[str],
+        typer.Option(
+            "-t", "--text", help="Path to static/text.flx, to check targets and recover keys"
+        ),
+    ] = None,
+    speakers: Annotated[
+        Optional[list[str]],
+        typer.Option(
+            "-s", "--speaker", help="Extra speaker name to try when recovering keys (repeatable)"
+        ),
+    ] = None,
+    npcs: Annotated[
+        Optional[str],
+        typer.Option(
+            "--npcs", help="Path to runtime/NPC.FLX; its record names are the speakers the game uses"
+        ),
+    ] = None,
+) -> None:
+    """Summarize the U9 text key table and its links to text.flx."""
+    raise SystemExit(
+        cmd_text_keys_info(
+            SimpleNamespace(file=file, text=text, speakers=speakers, npcs=npcs)
+        )
+    )
+
+
+@u9_app.command("text-key-lookup")
+def text_key_lookup_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/text.dat")],
+    key: Annotated[
+        str, typer.Argument(help="Full key, e.g. 'Avatar : Farewell.'")
+    ],
+    text: Annotated[
+        Optional[str],
+        typer.Option(
+            "-t", "--text", help="Path to static/text.flx, to check targets and recover keys"
+        ),
+    ] = None,
+) -> None:
+    """Look up one text key the way the game does."""
+    raise SystemExit(
+        cmd_text_key_lookup(SimpleNamespace(file=file, key=key, text=text))
+    )
+
+
+@u9_app.command("text-keys-export")
+def text_keys_export_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/text.dat")],
+    text: Annotated[
+        Optional[str],
+        typer.Option(
+            "-t", "--text", help="Path to static/text.flx, to check targets and recover keys"
+        ),
+    ] = None,
+    speakers: Annotated[
+        Optional[list[str]],
+        typer.Option(
+            "-s", "--speaker", help="Extra speaker name to try when recovering keys (repeatable)"
+        ),
+    ] = None,
+    npcs: Annotated[
+        Optional[str],
+        typer.Option(
+            "--npcs", help="Path to runtime/NPC.FLX; its record names are the speakers the game uses"
+        ),
+    ] = None,
+    output: Annotated[
+        Optional[str],
+        typer.Option(
+            "-o", "--output", help="Output CSV path (default: <file>_keys.csv)"
+        ),
+    ] = None,
+) -> None:
+    """Export every U9 text key item, its target line and recovered key, to CSV."""
+    raise SystemExit(
+        cmd_text_keys_export(
+            SimpleNamespace(
+                file=file, text=text, speakers=speakers, npcs=npcs, output=output
+            )
+        )
+    )
+
+
+@u9_app.command("shade-info")
+def shade_info_cmd(
+    file: Annotated[
+        str, typer.Argument(help="Path to static/shade.tbl or static/shadegry.tbl")
+    ],
+    palette: Annotated[
+        Optional[str],
+        typer.Option("-p", "--palette", help="Path to static/ankh.pal, to show colours"),
+    ] = None,
+) -> None:
+    """Summarize a U9 shade table (authoring-tool file; the game never loads it)."""
+    raise SystemExit(cmd_shade_info(SimpleNamespace(file=file, palette=palette)))
+
+
+@u9_app.command("shade-csv")
+def shade_csv_cmd(
+    file: Annotated[
+        str, typer.Argument(help="Path to static/shade.tbl or static/shadegry.tbl")
+    ],
+    palette: Annotated[
+        Optional[str],
+        typer.Option("-p", "--palette", help="Path to static/ankh.pal, to add RGB columns"),
+    ] = None,
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Output CSV path (default: <file>_shade.csv)"),
+    ] = None,
+) -> None:
+    """Export every cell of a U9 shade table to CSV (authoring-tool file; the game never loads it)."""
+    raise SystemExit(
+        cmd_shade_csv(SimpleNamespace(file=file, palette=palette, output=output))
+    )
+
+
+@u9_app.command("color-cube-info")
+def color_cube_info_cmd(
+    file: Annotated[
+        str, typer.Argument(help="Path to static/rgbccube.dat or static/yiqccube.dat")
+    ],
+    palette: Annotated[
+        Optional[str],
+        typer.Option(
+            "-p", "--palette", help="Path to static/ankh.pal, to compare the stored palette"
+        ),
+    ] = None,
+) -> None:
+    """Summarize a U9 colour-cube cache (authoring-tool file; the game never loads it)."""
+    raise SystemExit(cmd_color_cube_info(SimpleNamespace(file=file, palette=palette)))
+
+
+@u9_app.command("color-cube-lookup")
+def color_cube_lookup_cmd(
+    file: Annotated[
+        str, typer.Argument(help="Path to static/rgbccube.dat or static/yiqccube.dat")
+    ],
+    red: Annotated[int, typer.Argument(help="Red, 0-255")],
+    green: Annotated[int, typer.Argument(help="Green, 0-255")],
+    blue: Annotated[int, typer.Argument(help="Blue, 0-255")],
+    metric: Annotated[
+        Optional[str],
+        typer.Option(
+            "-m",
+            "--metric",
+            help=f"Distance metric, one of {', '.join(COLOR_CUBE_METRICS)} "
+            "(default: yiq when the file name contains 'yiq', else rgb)",
+        ),
+    ] = None,
+) -> None:
+    """Show the palette index a U9 colour cube picks for a colour (authoring-tool file; the game never loads it)."""
+    raise SystemExit(
+        cmd_color_cube_lookup(
+            SimpleNamespace(file=file, red=red, green=green, blue=blue, metric=metric)
+        )
+    )
+
+
+@u9_app.command("color-cube-csv")
+def color_cube_csv_cmd(
+    file: Annotated[
+        str, typer.Argument(help="Path to static/rgbccube.dat or static/yiqccube.dat")
+    ],
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Output CSV path (default: <file>_nodes.csv)"),
+    ] = None,
+) -> None:
+    """Export every U9 colour-cube tree node to CSV (authoring-tool file; the game never loads it)."""
+    raise SystemExit(cmd_color_cube_csv(SimpleNamespace(file=file, output=output)))
 
 
 @u9_app.command("save-check")

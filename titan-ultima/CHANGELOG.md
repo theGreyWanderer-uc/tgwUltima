@@ -14,6 +14,19 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Added
 
+- **U9 dialogue key table:** added lossless `static/text.dat` parsing and
+  serialization, the game's exact key lookup, reachability and `text.flx`
+  target checks, and recovery of each item's `"<NPC name> : <line>"` or
+  `"UI : <line>"` key from `NPC.FLX` record names (verified for 7,595 of 7,656
+  retail items), through the new
+  `text-keys-info`, `text-key-lookup`, and `text-keys-export` commands.
+
+- **U9 authoring-tool colour tables (optional; not loaded by the game):**
+  added lossless readers for `shade.tbl`, `shadegry.tbl`, `rgbccube.dat` and
+  `yiqccube.dat` with the `shade-info`, `shade-csv`, `color-cube-info`,
+  `color-cube-lookup` and `color-cube-csv` commands. Retail 1.19F never loads
+  these files; Titan exposes them as historical data only.
+
 - **U9 acoustic environments:** added lossless `sfxenv.flx` parsing, listing,
   and forensic CSV export with standard-profile validation, inactive name-cell
   residue, direct `spaces.flx` slot semantics, and preservation of the shipped

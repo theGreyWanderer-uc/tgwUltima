@@ -18,6 +18,7 @@ Common imports::
     from titan.u9.space_tree import U9VolumeLookupCache
     from titan.u9.spaces import U9Spaces
     from titan.u9.text import U9TextArchive
+    from titan.u9.text_keys import U9TextKeyTable
     from titan.u9.terrain import U9Terrain
     from titan.u9.triggers import U9Triggers
     from titan.u9.typename import U9TypeNames
@@ -342,7 +343,21 @@ from titan.u9.terrain import (
     U9TerrainError,
     U9TerrainPoint,
 )
+from titan.u9.shade_tables import (
+    U9EditorColorTable,
+    U9ShadeTable,
+    U9ShadeTableError,
+)
+from titan.u9.color_cube import U9ColorCube, U9ColorCubeError, U9ColorCubeNode
 from titan.u9.text import U9TextArchive, U9TextBlock, U9TextEntry, U9TextError
+from titan.u9.text_keys import (
+    U9TextKey,
+    U9TextKeyBucket,
+    U9TextKeyItem,
+    U9TextKeyTable,
+    U9TextKeyTableError,
+    reconstruct_keys as reconstruct_text_keys,
+)
 from titan.u9.texture import (
     U9TextureError,
     U9TextureFrame,
@@ -570,6 +585,17 @@ __all__ = [
     "U9TextBlock",
     "U9TextEntry",
     "U9TextError",
+    "U9ColorCube",
+    "U9ColorCubeError",
+    "U9ColorCubeNode",
+    "U9EditorColorTable",
+    "U9ShadeTable",
+    "U9ShadeTableError",
+    "U9TextKey",
+    "U9TextKeyBucket",
+    "U9TextKeyItem",
+    "U9TextKeyTable",
+    "U9TextKeyTableError",
     "U9SdInfo",
     "U9SdInfoError",
     "U9SdInfoRecord",
@@ -601,6 +627,7 @@ __all__ = [
     "U9SappearModelSource",
     "object_scale_from_extra_data",
     "project_model_bounds_footprint",
+    "reconstruct_text_keys",
     "resolve_region_object_placements",
     "U9Palette",
     "U9PaletteError",

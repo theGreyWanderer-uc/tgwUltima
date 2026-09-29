@@ -34,7 +34,7 @@ class SaveArchiveTests(unittest.TestCase):
     def test_reads_header_and_exact_members(self) -> None:
         archive = U9SaveArchive.from_bytes(_archive())
         self.assertEqual(archive.header.description, "Test save")
-        self.assertEqual(archive.header.saved_map, 9)
+        self.assertEqual(archive.header.header_map, 9)
         self.assertEqual(archive.processes.data, b"process")
         self.assertEqual(archive.member("NONFIXED.9").data, b"map-nine")
 
