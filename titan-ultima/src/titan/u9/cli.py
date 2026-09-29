@@ -200,6 +200,7 @@ from titan.u9.texture_writer import (
     frame_encoding,
     replace_frames,
 )
+from titan.u9.trigger_operands import operand_summary
 from titan.u9.triggers import U9Triggers, U9TriggersError, trigger_opcode_info
 from titan.u9.typename import U9TypeNameError, U9TypeNames
 from titan.u9.types_dat import U9TypesDat, U9TypesDatError
@@ -4331,7 +4332,18 @@ def cmd_trigger_show(args: SimpleNamespace) -> int:
                 f"  {index:>3}  {r.opcode:>#6x}  {r.arg0:>5}  {r.arg1:>6}  "
                 f"{r.arg2:>6}  {r.semantic_name}"
             )
-    print("  Commands 0x00..0x64 are named; typed operand views remain selective.")
+            summary = operand_summary(r.opcode, r.arg0, r.arg1, r.arg2)
+            if summary:
+                print(f"  {'':>3}  {'':>6}  {'':>5}  {'':>6}  {'':>6}    {summary}")
+    for index, label in trigger.unresolved_branch_labels():
+        print(
+            f"  NOTE: record {index} branches to label {label}, which this trigger "
+            f"does not contain; the script ends there"
+        )
+    print(
+        "  Decoded operands are views over the stored words; 'unread' bits are "
+        "never read by the retail game, 'unclassified' bits are not yet traced."
+    )
     return 0
 
 

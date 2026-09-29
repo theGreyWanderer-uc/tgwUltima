@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Iterable, Mapping
 
 from titan.u9.activity import ACTIVITY_OPCODE_CATALOGUE, U9Activities
-from titan.u9.triggers import TRIGGER_OPCODE_CATALOGUE, U9Triggers
+from titan.u9.triggers import TRIGGER_OPCODE_CATALOGUE, U9TriggerRecord, U9Triggers
 
 
 def _hex8(value: int) -> str:
@@ -30,6 +30,45 @@ def _write_csv(path: Path, fieldnames: list[str], rows: Iterable[dict]) -> None:
         writer = csv.DictWriter(stream, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
+
+
+OPERAND_COLUMNS = [
+    "target_link_selector",
+    "target_link_delta",
+    "target_type",
+    "target_any_type",
+    "branch_form",
+    "branch_label",
+    "branch_compare",
+    "branch_compare_count",
+    "parameter_fields",
+    "parameter_unclassified_hex",
+    "parameter_evidence",
+]
+
+
+def _operand_columns(record: U9TriggerRecord) -> dict[str, object]:
+    """Typed operand views for one record; blank where a view does not apply."""
+    columns: dict[str, object] = dict.fromkeys(OPERAND_COLUMNS, "")
+    target = record.target_selection
+    if target is not None:
+        columns["target_link_selector"] = target.link_selector
+        columns["target_link_delta"] = "" if target.link_delta is None else target.link_delta
+        columns["target_type"] = target.target_type
+        columns["target_any_type"] = int(target.any_type)
+    branch = record.branch
+    if branch is not None:
+        columns["branch_form"] = branch.form
+        columns["branch_label"] = branch.label
+        if branch.compare_code is not None:
+            columns["branch_compare"] = branch.compare_operator or f"code_{branch.compare_code}"
+            columns["branch_compare_count"] = branch.compare_count
+    parameters = record.parameters
+    if parameters is not None:
+        columns["parameter_fields"] = ";".join(f"{name}={value}" for name, value in parameters.fields)
+        columns["parameter_unclassified_hex"] = f"0x{parameters.unclassified_bits:04X}"
+        columns["parameter_evidence"] = parameters.evidence
+    return columns
 
 
 def _sha256(path: str | os.PathLike[str]) -> str:
@@ -119,6 +158,7 @@ def export_script_research_bundle(
                     ),
                     "entry_terminated": int(trigger.terminated),
                     "slack_record_count": trigger.slack_records,
+                    **_operand_columns(trigger_record),
                 }
             )
             if role == "body":
@@ -323,6 +363,7 @@ def export_script_research_bundle(
             "map_unclassified_parameter_bits_hex",
             "entry_terminated",
             "slack_record_count",
+            *OPERAND_COLUMNS,
         ],
         trigger_rows,
     )

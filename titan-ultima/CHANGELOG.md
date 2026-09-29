@@ -14,6 +14,14 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Added
 
+- **U9 trigger operands:** every trigger command now has a typed operand
+  view -- target selection (link and object type) for the 63 commands that
+  act on each object a search finds, six branch encodings, and named `arg2`
+  fields graded `retail_confirmed` or `retail_corroborated`. The views never
+  alter stored words and report bits the game does not read. `trigger-show`
+  prints a decoded line under each record and notes branches to missing
+  labels; `script-research-export` adds the views as trailing columns.
+
 - **U9 dialogue key table:** added lossless `static/text.dat` parsing and
   serialization, the game's exact key lookup, reachability and `text.flx`
   target checks, and recovery of each item's `"<NPC name> : <line>"` or

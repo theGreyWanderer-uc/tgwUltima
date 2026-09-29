@@ -375,6 +375,7 @@ from titan.u9.texture_writer import (
     frame_encoding,
     replace_frame,
 )
+from titan.u9.trigger_operands import U9TriggerBranch, U9TriggerParameters, U9TriggerTarget
 from titan.u9.triggers import U9Trigger, U9TriggerRecord, U9Triggers, U9TriggersError
 from titan.u9.typename import (
     DEFAULT_OBJECT_ICON_ID,
@@ -574,6 +575,9 @@ __all__ = [
     "U9TriggersError",
     "U9Trigger",
     "U9TriggerRecord",
+    "U9TriggerBranch",
+    "U9TriggerParameters",
+    "U9TriggerTarget",
     "U9HighwayError",
     "U9HighwayPoint",
     "U9HighwayRoute",

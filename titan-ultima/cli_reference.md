@@ -5012,13 +5012,26 @@ titan u9 trigger-show static/triggers.flx 308
 ```
 
 ```
-    #  Opcode   Arg0    Arg1    Arg2
-  --------------------------------------
-    0    0x33     16    2220     238
-    1    0x1b     26     679    9413
-    2    0x1b     24     679    9925
-    3    0x1b     14    3660    8839
+    #  Opcode   Arg0    Arg1    Arg2  Meaning
+  ------------------------------------------------------------------------------
+    0    0x33     16    2220     238  play an audio sample
+                                        sample=238 sound=0
+    1    0x1b     26     679    9413  move objects over time
+                                        targets link +10, type 679; duration=5 no_vertical=1 destination_link=36; unread 0x0080
+    2    0x1b     24     679    9925  move objects over time
+                                        targets link +8, type 679; duration=5 no_vertical=1 destination_link=38; unread 0x0080
+    3    0x1b     14    3660    8839  move objects over time
+                                        targets link -2, type 3660; duration=7 no_vertical=0 destination_link=34; unread 0x0080
 ```
+
+Under each record, an indented line decodes its operands: the target search
+for commands that act on every object found (`link` relative to the firing
+object's, object `type` or `any type`), any branch (`go to label N`, with its
+condition), and the named `arg2` fields. `unread` bits are set in the data but
+never read by the retail game; `unclassified` bits belong to a layout not yet
+traced end to end. A closing note lists branches to labels the trigger does
+not contain, which end the script. See the
+[trigger reference](reference/u9/triggers/u9_triggers_reference.md#operands).
 
 To find which world objects fire a trigger, list a region's entities with
 `titan u9 nonfixed-entities` and match on the `Trig` column.
@@ -5373,6 +5386,14 @@ counts. Activity rows include semantic names, the fixed parameter/time/duration
 words, command-specific columns, the raw step, and parallel `u16`/`u32`
 forensic views. `activity_opcodes.csv` includes all thirteen runtime commands,
 including zero-count commands absent from the selected archive.
+
+`trigger_occurrences.csv` ends with the typed operand views, blank where a
+view does not apply: `target_link_selector`, `target_link_delta`,
+`target_type`, `target_any_type`, `branch_form`, `branch_label`,
+`branch_compare`, `branch_compare_count`, `parameter_fields`
+(`name=value;...`), `parameter_unclassified_hex` and `parameter_evidence`
+(`retail_confirmed` or `retail_corroborated`). The earlier columns and their
+order are unchanged.
 
 **Example**
 ```bash

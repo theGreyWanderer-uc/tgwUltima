@@ -23,11 +23,14 @@ entry-relative byte offsets are retained for binary research and exact
 round trips.
 
 The executable accepts a contiguous command catalogue from ``0x00`` through
-``0x64``. The shipped archive uses 90 of those 101 commands. Titan names the
-complete catalogue, but does not pretend that this also decodes every packed
-operand: ``arg0`` is a genuine per-record parameter and not a category tag --
-opcode ``0x01`` alone uses 32 distinct ``arg0`` values, and only 13 of the 90
-observed opcodes hold ``arg0`` constant.
+``0x64``. The shipped archive uses 90 of those 101 commands. Operands are
+decoded by :mod:`titan.u9.trigger_operands` and exposed on each record as
+read-only views over the stored words: :attr:`U9TriggerRecord.target_selection`
+(for the 63 commands that act on every object a search finds, ``arg0`` selects
+a link relative to the firing object's and ``arg1`` an object type),
+:attr:`U9TriggerRecord.branch` (branch labels and comparisons in ``arg2``) and
+:attr:`U9TriggerRecord.parameters` (the remaining ``arg2`` fields, each layout
+graded ``retail_confirmed`` or ``retail_corroborated``).
 
 Opcode ``0x31`` runs an NPC activity record:
 ``arg1`` is an activity set index in :mod:`titan.u9.activity` (also the NPC's
@@ -94,6 +97,14 @@ from collections import Counter
 from dataclasses import dataclass
 
 from titan.u9.flx_archive import U9FlxArchive, U9FlxArchiveError
+from titan.u9.trigger_operands import (
+    U9TriggerBranch,
+    U9TriggerParameters,
+    U9TriggerTarget,
+    branch,
+    parameters,
+    target_selection,
+)
 
 RECORD_SIZE = 6
 RECORD_STRUCT = "<BBHH"
@@ -341,6 +352,21 @@ class U9TriggerRecord:
             unclassified_parameter_bits=self.arg2 & ~classified_mask,
         )
 
+    @property
+    def target_selection(self) -> U9TriggerTarget | None:
+        """Link and object-type search for a targeted command, else ``None``."""
+        return target_selection(self.opcode, self.arg0, self.arg1)
+
+    @property
+    def branch(self) -> U9TriggerBranch | None:
+        """Branch label and comparison in ``arg2``, for branching commands."""
+        return branch(self.opcode, self.arg2)
+
+    @property
+    def parameters(self) -> U9TriggerParameters | None:
+        """Named ``arg2`` fields and leftover bits, for catalogued commands."""
+        return parameters(self.opcode, self.arg2)
+
     def to_bytes(self) -> bytes:
         """Encode this instruction in its exact six-byte disk layout."""
         return struct.pack(RECORD_STRUCT, self.opcode, self.arg0, self.arg1, self.arg2)
@@ -373,6 +399,21 @@ class U9Trigger:
         if self.terminator is None:
             return self.records
         return self.records + (self.terminator,) + self.slack
+
+    def unresolved_branch_labels(self) -> list[tuple[int, int]]:
+        """``(record index, label)`` for branches to a label this trigger lacks.
+
+        The executor looks for a ``0x16`` label instruction with that number;
+        finding none, it ends the script -- the same outcome as label 0.
+        """
+        labels = {record.arg2 for record in self.records if record.opcode == 0x16}
+        unresolved = []
+        for index, record in enumerate(self.records):
+            view = record.branch
+            if view is not None and view.form != "label" and view.label:
+                if view.label not in labels:
+                    unresolved.append((index, view.label))
+        return unresolved
 
     def to_bytes(self) -> bytes:
         """Return the complete original FLX-entry payload byte for byte."""
@@ -482,6 +523,15 @@ class U9Triggers:
         for trigger in self.triggers():
             histogram.update(trigger.opcodes)
         return histogram
+
+    def unresolved_branch_labels(self) -> dict[int, list[tuple[int, int]]]:
+        """Per trigger ID, branches whose label the trigger does not contain."""
+        found = {}
+        for trigger in self.triggers():
+            unresolved = trigger.unresolved_branch_labels()
+            if unresolved:
+                found[trigger.trigger_id] = unresolved
+        return found
 
     def unterminated_trigger_ids(self) -> list[int]:
         """Triggers whose record list runs off the end without a ``0xFF``.
