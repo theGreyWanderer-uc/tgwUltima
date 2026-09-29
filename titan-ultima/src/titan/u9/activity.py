@@ -78,6 +78,35 @@ value without discarding its low two bits. Other handlers ignore some or all
 of the parameter and duration words; those bytes remain part of the lossless
 step record.
 
+Command-specific values, confirmed in the retail 1.19F executable:
+
+* ``0x04`` begin NPC action: ``parameter_0`` is an action kind from
+  :data:`ACTION_KIND_CATALOGUE`, ``parameter_1`` its argument, and the action
+  lasts ``(duration_code >> 2)`` seconds (0 = until replaced). Kinds 1-38 are
+  dispatched by value; twelve of them, kind 0, every kind above 38 and every
+  value other than ``0xFFFE``/``0xFFFF`` start nothing. The same catalogue is
+  the activity field of trigger command ``0x40``.
+* ``0x06`` use selected object: ``parameter_0`` is an object *type*; the NPC
+  uses the nearest object of that type within 1,280 units. ``parameter_1`` is
+  never read.
+* ``0x09`` run NPC triggers: ``parameter_0`` is the trigger phase, passed whole
+  to the trigger executor (the value trigger command ``0x28`` passes as
+  ``arg2 & 3``); the NPC must be in the fast area. Phase 0 runs the trigger in
+  the low half of the NPC object's extra-data tag 62, phase 1 the high half,
+  phases 2 and 3 the halves of tag 59 (:meth:`titan.u9.nonfixed.U9Nonfixed.entity_triggers`).
+  Phases above 3 are not checked by the executor.
+
+Records are looked up by ``ordinal`` every tick; ordinal 0 means "no record".
+A call or switch to a missing ordinal is stored without a check, and on the
+next tick the set restarts at ordinal 1. If the set's first record (in file
+order) is not ordinal 1, the NPC runs its queued routine or else its default
+activity from ``runtime/NPC.FLX``
+(:attr:`U9Activity.starts_with_default_activity`). The call stack holds at
+most 7 ordinals; a deeper call is ignored, and a return at depth 0 does
+nothing.
+Names such as ``Sequence 3`` are the authoring tool's default for ordinal 3
+(all 311 in 1.19F match their record's ordinal); the runtime ignores names.
+
 For reverse engineering, every record and step carries its byte offset
 relative to the start of the FLX entry. Raw name padding, terminator
 operands, trailing payload bytes, and bytes beyond the declared payload are
@@ -97,13 +126,16 @@ Example::
 from __future__ import annotations
 
 __all__ = [
+    "ACTION_KIND_CATALOGUE",
     "ACTIVITY_OPCODE_CATALOGUE",
+    "U9ActivityActionKind",
     "U9Activities",
     "U9Activity",
     "U9ActivityError",
     "U9ActivityOpcodeInfo",
     "U9ActivityRecord",
     "U9ActivityStep",
+    "activity_action_kind",
     "activity_opcode_info",
 ]
 
@@ -151,7 +183,7 @@ ACTIVITY_OPCODE_CATALOGUE = (
     U9ActivityOpcodeInfo(
         0x04,
         "begin NPC action",
-        "parameter_0=action kind; parameter_1=action argument; duration_code>>2",
+        "parameter_0=action kind; parameter_1=action argument; duration_code>>2 seconds",
     ),
     U9ActivityOpcodeInfo(
         0x05,
@@ -161,7 +193,7 @@ ACTIVITY_OPCODE_CATALOGUE = (
     U9ActivityOpcodeInfo(
         0x06,
         "use selected object",
-        "parameter_0=object selector; parameter_1 not read directly by dispatcher",
+        "parameter_0=object type (nearest within 1,280 units); parameter_1 never read",
     ),
     U9ActivityOpcodeInfo(
         0x07,
@@ -176,7 +208,7 @@ ACTIVITY_OPCODE_CATALOGUE = (
     U9ActivityOpcodeInfo(
         0x09,
         "run NPC triggers",
-        "parameter_0=trigger phase; remaining stored words ignored by dispatcher",
+        "parameter_0=trigger phase (0-3); remaining stored words ignored by dispatcher",
     ),
     U9ActivityOpcodeInfo(
         0x0A,
@@ -201,6 +233,80 @@ _REPEAT_MARKER_INFO = U9ActivityOpcodeInfo(
     "repeat activity cycle",
     "stored operand words ignored",
 )
+
+
+@dataclass(frozen=True)
+class U9ActivityActionKind:
+    """One NPC action kind, as dispatched by the retail begin-action routine.
+
+    ``performed`` is False for kinds the 1.19F executable accepts but starts
+    nothing for; ``name`` is None for values outside the catalogue.
+    """
+
+    value: int
+    name: str | None
+    performed: bool
+    evidence: str = "retail_runtime_confirmed"
+
+
+_ACTION_KIND_NAMES = (
+    "none",
+    "stand",
+    "loiter",
+    "wander",
+    "patrol",
+    "pace",
+    "placeholder_1",
+    "placeholder_2",
+    "placeholder_3",
+    "placeholder_4",
+    "placeholder_5",
+    "placeholder_6",
+    "placeholder_7",
+    "humanoid_loiter",
+    "tend_bar",
+    "serve_drinks",
+    "work_forge",
+    "beg",
+    "keep_shop",
+    "drink_at_bar",
+    "pray",
+    "spar",
+    "cast_spells",
+    "listen",
+    "gesture",
+    "touch_object",
+    "pick_up_object",
+    "put_down_object",
+    "turn_to_face",
+    "creature_idle",
+    "patrol_by_ship",
+    "sit_in_chair",
+    "sleep_in_bed",
+    "random_gestures",
+    "drink",
+    "pausing_patrol",
+    "patrol_without_loiter",
+    "dying",
+    "loiter_until_avatar_leaves",
+)
+# Kinds the retail switch (u9.exe 0x00404DBA) sends to its do-nothing case.
+_UNPERFORMED_ACTION_KINDS = frozenset({0, 6, 7, 8, 9, 10, 11, 12, 14, 15, 19, 21, 22})
+
+ACTION_KIND_CATALOGUE = tuple(
+    U9ActivityActionKind(value, name, value not in _UNPERFORMED_ACTION_KINDS)
+    for value, name in enumerate(_ACTION_KIND_NAMES)
+) + (
+    U9ActivityActionKind(0xFFFE, "conversation", True),
+    U9ActivityActionKind(0xFFFF, "combat", True),
+)
+_ACTION_KIND_BY_VALUE = {kind.value: kind for kind in ACTION_KIND_CATALOGUE}
+
+
+def activity_action_kind(value: int) -> U9ActivityActionKind:
+    """The catalogued action kind for ``value``; unknown values start nothing."""
+    kind = _ACTION_KIND_BY_VALUE.get(value)
+    return kind if kind is not None else U9ActivityActionKind(value, None, False)
 
 
 def activity_opcode_info(opcode: int) -> U9ActivityOpcodeInfo | None:
@@ -304,6 +410,13 @@ class U9ActivityStep:
         return self.parameter_0, self.parameter_1
 
     @property
+    def npc_action_kind(self) -> U9ActivityActionKind | None:
+        """Catalogued action kind for a begin-action step (``0x04``)."""
+        if self.opcode != 0x04:
+            return None
+        return activity_action_kind(self.parameter_0)
+
+    @property
     def conversation_topic(self) -> int | None:
         return self.parameter_0 if self.opcode == 0x05 else None
 
@@ -393,6 +506,29 @@ class U9Activity:
     @property
     def names(self) -> list[str]:
         return [r.name for r in self.records]
+
+    @property
+    def starts_with_default_activity(self) -> bool:
+        """True when the first record is not ordinal 1.
+
+        The runtime starts a set at ordinal 1 and, when the first record is
+        some other ordinal, runs the NPC's queued or default activity
+        instead, so the set's records run only when something switches to
+        them.
+        """
+        return bool(self.records) and self.records[0].ordinal != 1
+
+    def unresolved_sequence_references(self) -> list[tuple[int, int, int]]:
+        """``(record ordinal, step index, target)`` for call/switch steps
+        (``0x07``/``0x0A``) naming an ordinal this set lacks; on the next tick
+        the runtime restarts the set at ordinal 1."""
+        ordinals = {record.ordinal for record in self.records}
+        return [
+            (record.ordinal, index, step.parameter_0)
+            for record in self.records
+            for index, step in enumerate(record.steps)
+            if step.opcode in (0x07, 0x0A) and step.parameter_0 not in ordinals
+        ]
 
     def to_bytes(self) -> bytes:
         """Return the complete original FLX-entry payload byte for byte."""

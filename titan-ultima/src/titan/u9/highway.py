@@ -8,10 +8,11 @@ can navigate between -- and the routes let the engine answer "how do I get
 from A to B" with a table lookup instead of solving the whole map path,
 falling back to local pathfinding between consecutive nodes.
 
-Points do not carry identifiers of their own. They are keyed by **trigger
-ID**, the same identifier space as :mod:`titan.u9.nonfixed`'s
-``U9Entity.trigger_id``, which is what ties the abstract graph to concrete
-world markers. Byte-for-byte::
+Points do not carry identifiers of their own. They are keyed by the value
+the marker object carries as its **link** (:attr:`titan.u9.nonfixed.U9Entity.link`,
+entity ``+0x1A``), which is what ties the abstract graph to concrete world
+markers. The fields below keep their historical ``trigger_id`` names, but the
+values are links, not ``static/triggers.flx`` IDs. Byte-for-byte::
 
     0x00  point_count       u32
     0x04  route_count       u32
@@ -42,9 +43,9 @@ Cross-checked against real world data with :mod:`titan.u9.nonfixed`: 815 of
 the 817 points (99.8%) have an entity of type 1134 -- unnamed in
 ``TYPENAME.FLX``, i.e. an invisible marker -- sitting at exactly the
 ``x``/``y`` this file declares. Entities of other types sharing a highway
-trigger ID never agree on position, so type 1134 is what physically
-constitutes a highway node. Trigger IDs are reused across regions, so
-roughly four other type-1134 markers share each ID; only the owning
+link value never agree on position, so type 1134 is what physically
+constitutes a highway node. Link values are reused across regions, so
+roughly four other type-1134 markers share each value; only the owning
 region's sits at the documented coordinates.
 
 Example::

@@ -4819,6 +4819,11 @@ Positions are world coordinates -- the chunk's base plus the entity's
 stored offset. The `State` column distinguishes `indexed` objects from the
 retained `unlinked` records shown by `--include-unlinked`.
 
+`Link` is the entity's link (the word at `+0x1A`, which earlier versions
+showed as `Trig`). `Triggers` lists the trigger IDs the object runs by phase,
+`phase0/phase1/phase2/phase3` with 0 for none, read from its extra-data tags
+62 and 59; `-` when it has none.
+
 ---
 
 #### `u9 nonfixed-diff`
@@ -4865,8 +4870,9 @@ same chunk grid.
 patheggs -- plus precomputed routes through that graph, so the engine can
 look up a long path instead of solving one.
 
-Points are keyed by **trigger ID**, the same identifier carried by
-`U9Entity.trigger_id` in the runtime regions. The physical markers are
+Points are keyed by the **link** value their marker object carries
+(`U9Entity.link`, the `Link` column of `nonfixed-entities`); commands and
+fields here keep the historical name "trigger ID" for it. The physical markers are
 entities of type 1134 (unnamed in `TYPENAME.FLX`): 815 of the 817 points sit
 at exactly the coordinates this file declares. See
 `reference/u9/highway/u9_highway_reference.md`.
@@ -4916,8 +4922,8 @@ titan u9 highway-points <file> [-i ID] [-n LIMIT]
 titan u9 highway-points static/highway.dat -i 53504
 ```
 
-To find the marker itself in the world, look for an entity carrying that
-trigger ID with `titan u9 nonfixed-entities`.
+To find the marker itself in the world, look for an entity whose `Link`
+column holds that ID with `titan u9 nonfixed-entities`.
 
 ---
 
@@ -4955,8 +4961,8 @@ own endpoints -- so `hops` is one fewer than the node count.
 ### Trigger script commands
 
 `static/triggers.flx` holds U9's trigger scripts, and **the FLX entry index is
-the trigger ID** -- the same value carried by runtime entities, which is what
-associates a world object with the script that fires for it.
+the trigger ID**. A world object names the triggers it runs in its extra-data
+tags 62 and 59 (the `Triggers` column of `nonfixed-entities`).
 
 A trigger body is a list of 6-byte `opcode / arg0 / arg1 / arg2` records ending
 at the first record whose opcode is `0xFF`. Records after that terminator are
@@ -5004,7 +5010,7 @@ titan u9 trigger-show <file> <id>
 | Argument | Description |
 |----------|-------------|
 | `file` | Path to `static/triggers.flx` |
-| `id` | Trigger ID -- the value a runtime entity carries in `trigger_id` |
+| `id` | Trigger ID -- a value in a runtime entity's `Triggers` column |
 
 **Example**
 ```bash
@@ -5034,7 +5040,7 @@ not contain, which end the script. See the
 [trigger reference](reference/u9/triggers/u9_triggers_reference.md#operands).
 
 To find which world objects fire a trigger, list a region's entities with
-`titan u9 nonfixed-entities` and match on the `Trig` column.
+`titan u9 nonfixed-entities` and match on the `Triggers` column.
 
 ---
 
@@ -5334,6 +5340,7 @@ titan u9 activity-show static/activity.flx 1
   7 of 7 declared record(s), 328-byte payload
   [1] Sequence 1
         0  opcode 0x04 begin NPC action: parameter_0=31 parameter_1=0 minute=0 duration_code=0 effective_duration=0  raw=04 1f 00 00 00 00 00 00 00
+           action kind 31: sit_in_chair
   [2] After Yew
         0  opcode 0x03 relocate to a navigation point: parameter_0=52404 parameter_1=9 minute=0 duration_code=0  raw=03 b4 cc 09 00 00 00 00 00
         1  opcode 0x0a switch activity sequence: parameter_0=1 parameter_1=0 minute=0 duration_code=0  raw=0a 01 00 00 00 00 00 00 00
@@ -5341,6 +5348,13 @@ titan u9 activity-show static/activity.flx 1
 
 The bracketed number is the record's stored `ordinal`, which is a label rather
 than a counter -- it does not always start at 1 and can contain gaps.
+
+Begin-action steps (`0x04`) get a line naming the action kind; kinds the
+retail game accepts but starts nothing for are marked. Notes at the end flag a
+set whose first record is not ordinal 1 (the NPC is expected to run its
+default activity instead) and call/switch steps naming an ordinal the set
+lacks. See the
+[activity reference](reference/u9/activity/u9_activity_reference.md#command-values).
 
 ---
 
@@ -5386,6 +5400,9 @@ counts. Activity rows include semantic names, the fixed parameter/time/duration
 words, command-specific columns, the raw step, and parallel `u16`/`u32`
 forensic views. `activity_opcodes.csv` includes all thirteen runtime commands,
 including zero-count commands absent from the selected archive.
+
+`activity_occurrences.csv` ends with `npc_action_name` and
+`npc_action_performed` for begin-action steps.
 
 `trigger_occurrences.csv` ends with the typed operand views, blank where a
 view does not apply: `target_link_selector`, `target_link_delta`,

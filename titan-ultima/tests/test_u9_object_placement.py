@@ -158,7 +158,7 @@ class ObjectPlacementTests(unittest.TestCase):
         self.assertEqual(placement.position, U9WorldPosition(128, 256, 300))
         self.assertEqual(placement.rotation_xyzw, (0, 0, 0, -32768))
         self.assertEqual(placement.flags, 0)
-        self.assertIsNone(placement.trigger_id)
+        self.assertIsNone(placement.link)
         self.assertEqual(result.diagnostics.fixed_resolved, 1)
         self.assertEqual(result.diagnostics.model_ids_resolved, (7,))
 
@@ -189,7 +189,7 @@ class ObjectPlacementTests(unittest.TestCase):
         placement = result.placements[0]
         self.assertEqual(placement.model_id, 9)
         self.assertEqual(placement.type_index, 600)
-        self.assertEqual(placement.trigger_id, 0)
+        self.assertEqual(placement.link, 0)
         self.assertEqual(result.diagnostics.nonfixed_resolved, 1)
 
     def test_missing_model_is_nonfatal_and_diagnosed(self) -> None:

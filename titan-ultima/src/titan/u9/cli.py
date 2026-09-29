@@ -2204,7 +2204,7 @@ def cmd_nonfixed_entities(args: SimpleNamespace) -> int:
     print(f"{args.file} -- {len(rows)} entit{'y' if len(rows) == 1 else 'ies'}")
     header = (
         f"{'Offset':>8}  {'Chunk':<7}  {'State':<8}  {'World (x,y,z)':<20}  "
-        f"{'Type':>5}  {'Mesh':>5}  {'Trig':>5}  {'Extra':>7}"
+        f"{'Type':>5}  {'Mesh':>5}  {'Link':>5}  {'Extra':>7}  {'Triggers':<23}"
     )
     if names:
         header += "  Name"
@@ -2214,9 +2214,11 @@ def cmd_nonfixed_entities(args: SimpleNamespace) -> int:
         grid = f"{c.chunk_x},{c.chunk_y}"
         pos = f"{e.world_x},{e.world_y},{e.z}"
         extra = f"{e.extra_data_offset:#07x}" if e.has_extra_data else "-"
+        phases = region.entity_triggers(e).by_phase
+        triggers = "/".join(str(tid) for tid in phases) if any(phases) else "-"
         line = (
             f"{e.offset:>#8x}  {grid:<7}  {state:<8}  {pos:<20}  {e.type_index:>5}  "
-            f"{e.mesh_index:>5}  {e.trigger_id:>5}  {extra:>7}"
+            f"{e.mesh_index:>5}  {e.link:>5}  {extra:>7}  {triggers:<23}"
         )
         if names:
             line += f"  {names.name_for(e.type_index) or ''}"
@@ -2235,7 +2237,7 @@ def _entity_fields(entity) -> dict:
         "rotation": entity.rotation,
         "flags": entity.flags,
         "mesh": entity.mesh_index,
-        "trigger": entity.trigger_id,
+        "link": entity.link,
         "extra": entity.extra_data_offset,
     }
 
@@ -4469,10 +4471,26 @@ def cmd_activity_show(args: SimpleNamespace) -> int:
                 f"duration_code={step.duration_code}{duration}  "
                 f"raw={step.to_bytes().hex(' ')}"
             )
+            kind = step.npc_action_kind
+            if kind is not None:
+                label = kind.name or "uncatalogued value"
+                effect = "" if kind.performed else " -- starts nothing in 1.19F"
+                print(f"           action kind {kind.value}: {label}{effect}")
         if not record.steps:
             print("       (no steps)")
+    if activity.starts_with_default_activity:
+        print(
+            "  NOTE: the first record is not ordinal 1, so the NPC runs its queued or "
+            "default activity until something switches to one of these records"
+        )
+    for ordinal, index, target in activity.unresolved_sequence_references():
+        print(
+            f"  NOTE: record [{ordinal}] step {index} targets ordinal {target}, which "
+            f"this set lacks; the runtime restarts the set at ordinal 1"
+        )
     print(
-        "  Opcode meanings and the fixed four-word operand layout are retail-confirmed."
+        "  Opcode meanings, the fixed four-word operand layout, the action-kind "
+        "catalogue and the ordinal fallbacks are retail-confirmed."
     )
     return 0
 

@@ -42,13 +42,16 @@ Common imports::
 from __future__ import annotations
 
 from titan.u9.activity import (
+    ACTION_KIND_CATALOGUE,
     ACTIVITY_OPCODE_CATALOGUE,
     U9Activities,
     U9Activity,
+    U9ActivityActionKind,
     U9ActivityError,
     U9ActivityOpcodeInfo,
     U9ActivityRecord,
     U9ActivityStep,
+    activity_action_kind,
     activity_opcode_info,
 )
 from titan.u9.adpcm import (
@@ -217,6 +220,7 @@ from titan.u9.map_render import (
 from titan.u9.nonfixed import (
     U9Chunk,
     U9Entity,
+    U9EntityTriggers,
     U9ExtraData,
     U9Nonfixed,
     U9NonfixedError,
@@ -568,6 +572,9 @@ __all__ = [
     "U9ActivityOpcodeInfo",
     "U9ActivityRecord",
     "U9ActivityStep",
+    "U9ActivityActionKind",
+    "ACTION_KIND_CATALOGUE",
+    "activity_action_kind",
     "ACTIVITY_OPCODE_CATALOGUE",
     "activity_opcode_info",
     "export_script_research_bundle",
@@ -616,6 +623,7 @@ __all__ = [
     "U9Chunk",
     "U9Page",
     "U9Entity",
+    "U9EntityTriggers",
     "U9ExtraData",
     "U9ModelBounds",
     "U9ModelBoundsLookup",

@@ -70,14 +70,14 @@ def _entity(
     rotation: tuple[int, int, int, int] = (0, 0, 0, -32768),
     flags: int = 0,
     mesh_index: int = 0,
-    trigger_id: int = 0,
+    link: int = 0,
     extra: int = 0,
 ) -> bytes:
     out = struct.pack(
         "<IHHHH4hIHHI",
         next_entity, x, y, z, type_index,
         rotation[0], rotation[1], rotation[2], rotation[3],
-        flags, mesh_index, trigger_id, extra,
+        flags, mesh_index, link, extra,
     )
     assert len(out) == ENTITY_SIZE
     return out
@@ -175,7 +175,7 @@ class NonfixedChunkTests(unittest.TestCase):
         # at region-relative offset 0, so its table entry is 1, not 0.
         entities = (
             _entity(next_entity=PAGE_HEADER_SIZE + ENTITY_SIZE, x=10, y=20, z=30, type_index=203, mesh_index=1210)
-            + _entity(next_entity=0, x=40, y=50, z=60, type_index=295, mesh_index=3009, trigger_id=7)
+            + _entity(next_entity=0, x=40, y=50, z=60, type_index=295, mesh_index=3009, link=7)
         )
         payload = _page(
             base_x=4096, base_y=0, entity_count=2, trigger_count=3,
@@ -205,7 +205,7 @@ class NonfixedChunkTests(unittest.TestCase):
         self.assertEqual((first.offset_x, first.offset_y, first.z), (10, 20, 30))
         self.assertEqual(first.type_index, 203)
         self.assertEqual(first.mesh_index, 1210)
-        self.assertEqual(second.trigger_id, 7)
+        self.assertEqual(second.link, 7)
 
     def test_world_coordinates_add_the_chunk_base(self) -> None:
         chunk = U9Nonfixed(self.data).chunk(1, 0)
@@ -368,6 +368,22 @@ class NonfixedExtraDataTests(unittest.TestCase):
         self.assertEqual(extra.arg_types, (66, 62, 0))
         self.assertEqual(extra.values, (1000, 2000, 0))
         self.assertEqual(extra.args, [(66, 1000), (62, 2000)])
+
+    def test_triggers_come_from_tags_62_and_59_by_phase(self) -> None:
+        region = U9Nonfixed(self.data)
+        entity = region.chunk(0, 0).entities[0]
+        self.assertEqual(region.entity_triggers(entity).by_phase, (2000, 0, 0, 0))
+
+        page = _page(base_x=0, base_y=0, entity_count=1, heads=[PAGE_HEADER_SIZE])
+        ent = _entity(next_entity=0, x=1, y=1, link=9, extra=self.extra_off)
+        tags = _extra(3, (59, 66, 62), (0x0007_0000, 1, 0x0005_0003), )
+        payload = page + ent + tags
+        region = U9Nonfixed(_header(2, 2, [1, 0, 0, 0], payload_size=len(payload)) + payload)
+        entity = region.chunk(0, 0).entities[0]
+        triggers = region.entity_triggers(entity)
+        self.assertEqual(triggers.by_phase, (3, 5, 0, 7))
+        self.assertEqual(triggers.ids, (3, 5, 7))
+        self.assertEqual(entity.link, 9)  # the +0x1A word is the link, not a trigger
 
     def test_entity_without_extra_data(self) -> None:
         page = _page(base_x=0, base_y=0, entity_count=1, heads=[PAGE_HEADER_SIZE])

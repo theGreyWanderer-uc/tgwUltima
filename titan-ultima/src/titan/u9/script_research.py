@@ -283,6 +283,16 @@ def export_script_research_bundle(
                         "branch_label": (
                             "" if step.branch_label is None else step.branch_label
                         ),
+                        "npc_action_name": (
+                            ""
+                            if step.npc_action_kind is None
+                            else step.npc_action_kind.name or ""
+                        ),
+                        "npc_action_performed": (
+                            ""
+                            if step.npc_action_kind is None
+                            else int(step.npc_action_kind.performed)
+                        ),
                     }
                 )
                 if role == "body":
@@ -425,6 +435,8 @@ def export_script_research_bundle(
             "sequence_ordinal",
             "trigger_phase",
             "branch_label",
+            "npc_action_name",
+            "npc_action_performed",
         ],
         activity_rows,
     )

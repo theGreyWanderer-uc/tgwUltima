@@ -2,9 +2,9 @@
 ``static/triggers.flx`` reader for Ultima 9: Ascension.
 
 U9's trigger scripts. Each FLX entry is one trigger, and **the entry index
-is the trigger ID** -- the same value carried by
-:attr:`titan.u9.nonfixed.U9Entity.trigger_id`, which is what associates a
-world object with the script that fires for it.
+is the trigger ID**. A world object names the triggers it runs in two
+extra-data values -- tag 62 for phases 0 and 1, tag 59 for phases 2 and 3, one
+16-bit ID per half (:meth:`titan.u9.nonfixed.U9Nonfixed.entity_triggers`).
 
 A trigger body is a flat list of 6-byte records, terminated by a record
 whose opcode is ``0xFF``::
@@ -63,10 +63,12 @@ so the whole word is ``0x10FF`` almost everywhere -- but the opcode byte is
 what actually ends the list, and matching on the byte rather than the word
 is what recovers trigger 7318.
 
-Cross-checked against world data: of the ``nonfixed`` entity trigger IDs
-that fall inside this archive's index range, 8,205 of 8,439 (97.2%) name a
-*used* entry here. Trigger IDs at or above 12,460 belong to
-:mod:`titan.u9.highway` instead -- the two files partition the ID space.
+Cross-checked against world data: across the 1.19F ``nonfixed`` regions,
+94-99% of the non-zero trigger IDs in entities' extra-data tags 62 and 59 name
+a *used* entry here, where a random value would match about 10%. (An earlier
+reading took the entity word at ``+0x1A`` for a trigger ID; it is the object's
+link, and the navigation-point IDs of :mod:`titan.u9.highway` are values of
+that link, not trigger IDs.)
 
 Example::
 

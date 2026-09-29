@@ -12,7 +12,27 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking -- U9 entity link:** `U9Entity.trigger_id` is renamed
+  `U9Entity.link`, and `U9ObjectPlacementResolution.trigger_id` is renamed
+  `link`. The word at entity `+0x1A` is not a trigger ID (an object's triggers
+  are in its extra-data tags 62 and 59); it is the object's link. The
+  `nonfixed-entities` column `Trig` is now `Link`, and `nonfixed-diff` reports
+  the field as `link`. No alias is kept.
+
 ### Added
+
+- **U9 world-object triggers:** `U9Nonfixed.entity_triggers()` returns the
+  four trigger IDs a world object runs, by phase, from its extra-data tags 62
+  and 59 (the values the retail trigger executor reads); `nonfixed-entities`
+  shows them in a new `Triggers` column.
+
+- **U9 activity values:** begin-action steps now name their NPC action kind
+  from a retail-confirmed catalogue, including which kinds the game starts
+  nothing for; `activity-show` prints the kind and flags sets that do not
+  start at ordinal 1 or call a missing ordinal; `script-research-export` adds
+  the kind columns.
 
 - **U9 trigger operands:** every trigger command now has a typed operand
   view -- target selection (link and object type) for the 63 commands that

@@ -178,7 +178,7 @@ class U9ObjectPlacementResolution:
     scale_xyz: Vec3
     footprint_xy: tuple[Vec2, ...]
     flags: int
-    trigger_id: int | None
+    link: int | None
     is_spatially_indexed: bool = True
 
     @property
@@ -345,7 +345,7 @@ def _resolved_placement(
     rotation_xyzw: tuple[int, int, int, int],
     scale_xyz: Vec3,
     flags: int,
-    trigger_id: int | None,
+    link: int | None,
     lookup: U9ModelBoundsLookup | None,
     is_spatially_indexed: bool = True,
 ) -> U9ObjectPlacementResolution:
@@ -367,7 +367,7 @@ def _resolved_placement(
         scale_xyz=scale_xyz,
         footprint_xy=footprint,
         flags=flags,
-        trigger_id=trigger_id,
+        link=link,
         is_spatially_indexed=is_spatially_indexed,
     )
 
@@ -402,7 +402,7 @@ def resolve_region_object_placements(
                     rotation_xyzw=fixed_placement.object.rotation,
                     scale_xyz=(1.0, 1.0, 1.0),
                     flags=fixed_placement.object.flags,
-                    trigger_id=None,
+                    link=None,
                     lookup=None,
                 )
             )
@@ -420,7 +420,7 @@ def resolve_region_object_placements(
                     rotation_xyzw=fixed_placement.object.rotation,
                     scale_xyz=(1.0, 1.0, 1.0),
                     flags=fixed_placement.object.flags,
-                    trigger_id=None,
+                    link=None,
                     lookup=None,
                 )
             )
@@ -437,7 +437,7 @@ def resolve_region_object_placements(
                 rotation_xyzw=fixed_placement.object.rotation,
                 scale_xyz=(1.0, 1.0, 1.0),
                 flags=fixed_placement.object.flags,
-                trigger_id=None,
+                link=None,
                 lookup=lookup,
             )
         )
@@ -464,7 +464,7 @@ def resolve_region_object_placements(
                 rotation_xyzw=rotation,
                 scale_xyz=object_scale_from_extra_data(extra),
                 flags=entity.flags,
-                trigger_id=entity.trigger_id,
+                link=entity.link,
                 lookup=lookup,
                 is_spatially_indexed=nonfixed_placement.is_spatially_indexed,
             )
