@@ -47,7 +47,7 @@ class HighwayHeaderTests(unittest.TestCase):
         highway = U9Highway(_build(POINTS, [_route(50000, 50003, 42, [50000, 50001, 50003])]))
         self.assertEqual(len(highway.points), 4)
         self.assertEqual(highway.declared_point_count, 4)
-        self.assertEqual(highway.points[0].trigger_id, 50000)
+        self.assertEqual(highway.points[0].link, 50000)
         self.assertEqual((highway.points[0].x, highway.points[0].y), (1254, 14640))
 
     def test_route_block_size_is_consumed_exactly(self) -> None:
@@ -96,8 +96,8 @@ class HighwayRouteTests(unittest.TestCase):
 
     def test_route_fields(self) -> None:
         route = U9Highway(self.data).routes[0]
-        self.assertEqual(route.start_trigger_id, 50000)
-        self.assertEqual(route.last_trigger_id, 50003)
+        self.assertEqual(route.start_link, 50000)
+        self.assertEqual(route.last_link, 50003)
         self.assertEqual(route.path_length, 4)
         self.assertEqual(route.route_distance, 82)
         self.assertEqual(route.unknown, 0)
@@ -106,8 +106,8 @@ class HighwayRouteTests(unittest.TestCase):
     def test_path_is_self_inclusive(self) -> None:
         # The real file stores the endpoints as the first and last path nodes.
         for route in U9Highway(self.data).routes:
-            self.assertEqual(route.path[0], route.start_trigger_id)
-            self.assertEqual(route.path[-1], route.last_trigger_id)
+            self.assertEqual(route.path[0], route.start_link)
+            self.assertEqual(route.path[-1], route.last_link)
 
     def test_hops_is_one_fewer_than_nodes(self) -> None:
         route = U9Highway(self.data).routes[0]
@@ -129,12 +129,12 @@ class HighwayLookupTests(unittest.TestCase):
     def setUp(self) -> None:
         self.highway = U9Highway(_build(POINTS, [_route(50000, 50001, 5, [50000, 50001])]))
 
-    def test_point_lookup_by_trigger_id(self) -> None:
+    def test_point_lookup_by_link(self) -> None:
         point = self.highway.point(50002)
         assert point is not None
         self.assertEqual((point.x, point.y), (1328, 13495))
 
-    def test_unknown_trigger_id_returns_none(self) -> None:
+    def test_unknown_link_returns_none(self) -> None:
         self.assertIsNone(self.highway.point(1))
 
     def test_unknown_path_nodes_is_empty_when_consistent(self) -> None:

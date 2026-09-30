@@ -2336,7 +2336,7 @@ def cmd_highway_info(args: SimpleNamespace) -> int:
     unknown = highway.unknown_path_nodes()
     xs = [p.x for p in highway.points]
     ys = [p.y for p in highway.points]
-    ids = [p.trigger_id for p in highway.points]
+    links = [p.link for p in highway.points]
 
     print(f"{args.file} -- U9 highway navigation graph")
     print(
@@ -2348,8 +2348,8 @@ def cmd_highway_info(args: SimpleNamespace) -> int:
     print(
         f"  Route block     : {highway.route_bytes} bytes, {highway.route_bytes_consumed} consumed"
     )
-    if ids:
-        print(f"  Trigger IDs     : {min(ids)}..{max(ids)}")
+    if links:
+        print(f"  Links           : {min(links)}..{max(links)}")
         print(f"  World extent    : x {min(xs)}..{max(xs)}, y {min(ys)}..{max(ys)}")
     print(
         f"  Connectivity    : {len(adjacency)} point(s) appear in a route, {edges} edge(s)"
@@ -2357,7 +2357,7 @@ def cmd_highway_info(args: SimpleNamespace) -> int:
     if highway.routes:
         longest = max(highway.routes, key=lambda r: r.path_length)
         print(
-            f"  Longest route   : {longest.start_trigger_id} -> {longest.last_trigger_id}, "
+            f"  Longest route   : {longest.start_link} -> {longest.last_link}, "
             f"{longest.path_length} nodes, distance {longest.route_distance}"
         )
     if unknown:
@@ -2368,7 +2368,7 @@ def cmd_highway_info(args: SimpleNamespace) -> int:
         print(
             "  WARNING: file did not parse completely -- truncated or not a highway.dat"
         )
-    print("  Points are keyed by trigger ID; the world markers are entities of")
+    print("  Points are keyed by their marker's link; the world markers are entities of")
     print("  type 1134 -- see 'titan u9 nonfixed-entities'.")
     return 0
 
@@ -2383,7 +2383,7 @@ def cmd_highway_points(args: SimpleNamespace) -> int:
     if args.id is not None:
         point = highway.point(args.id)
         if point is None:
-            print(f"No highway point with trigger ID {args.id}.")
+            print(f"No highway point with link {args.id}.")
             return 0
         points = [point]
     else:
@@ -2391,12 +2391,12 @@ def cmd_highway_points(args: SimpleNamespace) -> int:
 
     shown = points[: args.limit] if args.limit else points
     print(f"{args.file} -- {len(points)} point(s)")
-    print(f"{'TriggerID':>10}  {'X':>8}  {'Y':>8}  {'Links':>5}  Routes")
+    print(f"{'Link':>10}  {'X':>8}  {'Y':>8}  {'Edges':>5}  Routes")
     print("-" * 52)
     for p in shown:
-        links = len(adjacency.get(p.trigger_id, ()))
-        through = len(highway.routes_through(p.trigger_id))
-        print(f"{p.trigger_id:>10}  {p.x:>8}  {p.y:>8}  {links:>5}  {through}")
+        edges = len(adjacency.get(p.link, ()))
+        through = len(highway.routes_through(p.link))
+        print(f"{p.link:>10}  {p.x:>8}  {p.y:>8}  {edges:>5}  {through}")
     if args.limit and len(points) > args.limit:
         print(f"... ({len(points) - args.limit} more; raise --limit to see more)")
     return 0
@@ -2412,14 +2412,14 @@ def cmd_highway_routes(args: SimpleNamespace) -> int:
         highway.routes_through(args.id) if args.id is not None else list(highway.routes)
     )
     if args.id is not None and not routes:
-        print(f"No route visits trigger ID {args.id}.")
+        print(f"No route visits link {args.id}.")
         return 0
 
     shown = routes[: args.limit] if args.limit else routes
     print(f"{args.file} -- {len(routes)} route(s)")
     for r in shown:
         print(
-            f"  {r.start_trigger_id} -> {r.last_trigger_id}  "
+            f"  {r.start_link} -> {r.last_link}  "
             f"nodes {r.path_length}, hops {r.hops}, distance {r.route_distance}"
         )
         if args.paths:
@@ -8104,7 +8104,7 @@ def highway_points_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/highway.dat")],
     id: Annotated[
         Optional[int],
-        typer.Option("-i", "--id", help="Show only the point with this trigger ID"),
+        typer.Option("-i", "--id", help="Show only the point with this link"),
     ] = None,
     limit: Annotated[
         Optional[int],
@@ -8120,7 +8120,7 @@ def highway_routes_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/highway.dat")],
     id: Annotated[
         Optional[int],
-        typer.Option("-i", "--id", help="Only routes visiting this trigger ID"),
+        typer.Option("-i", "--id", help="Only routes visiting this link"),
     ] = None,
     paths: Annotated[
         bool,

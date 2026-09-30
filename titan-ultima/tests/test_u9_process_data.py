@@ -19,6 +19,7 @@ from titan.u9.process_data import (
     U9ClockAnimationProcessState,
     U9PathfinderProcessState,
     U9DoorTimerProcessState,
+    U9FloatingLanternProcessState,
     U9HangingObjectProcessState,
     U9HumanoidMovementFields,
     U9ItemHandleEntry,
@@ -45,6 +46,7 @@ from titan.u9.process_data import (
     U9ProcessWorldState,
     U9ScriptedObjectProcessState,
     U9SimpleProcessState,
+    U9SkeletonReformProcessState,
     U9ScriptedProcessState,
     U9ScriptTimerProcessState,
     U9SpiderMovementFields,
@@ -431,6 +433,7 @@ _SIMPLE_SAMPLE_VALUES: dict[str, object] = {
     "vector": (1.5, 1.5, 1.5),
     "quaternion": (1.0, 0.0, 0.0, 0.0),
     "location": (1, 2, 3),
+    "rgb": (255, 240, 90),
 }
 _SIMPLE_SAMPLE_PACKING: dict[str, tuple[str, tuple[object, ...]]] = {
     "int": ("i", (-7,)),
@@ -444,24 +447,70 @@ _SIMPLE_SAMPLE_PACKING: dict[str, tuple[str, tuple[object, ...]]] = {
     "vector": ("3f", (1.5, 1.5, 1.5)),
     "quaternion": ("4f", (1.0, 0.0, 0.0, 0.0)),
     "location": ("iih2x", (1, 2, 3)),
+    "rgb": ("3B", (255, 240, 90)),
     "reserved": ("I", (0,)),
 }
 
 
 def _simple_process(process_type: int) -> bytes:
     layout = SIMPLE_PROCESS_LAYOUTS[process_type]
-    data = bytearray(_world_process_header(process_type, layout.kind.encode()))
+    version_format = "<f" if isinstance(layout.version, float) else "<i"
+    data = bytearray(struct.pack("<i", process_type))
+    if layout.version_before_header:
+        data += struct.pack(version_format, layout.version)
+    data += struct.pack(
+        "<9i100s", 50, 1, 0, 0, 7, -1, -1, 0x3F, 0, layout.kind.encode()
+    )
+    if layout.parent != "header":
+        data += struct.pack("<iiii", 0, 1, 2, 9)
     if layout.parent == "scripted":
         data += struct.pack("<iiiii128si", 0, 1, 3, 5, 0, b"", 2)
     if layout.parent == "spell":
         data += struct.pack(
             "<iiIiiiiiIii4I", 4, 1, 24, 2, 422, 7, 30, 0, 0, 3, 16, 0, 0, 0, 0
         )
-    if layout.version is not None:
-        data += struct.pack("<i", layout.version)
+    if layout.version is not None and not layout.version_before_header:
+        data += struct.pack(version_format, layout.version)
     for _, kind in layout.fields:
         fmt, values = _SIMPLE_SAMPLE_PACKING[kind]
         data += struct.pack("<" + fmt, *values)
+    return bytes(data)
+
+
+def _skeleton_reform_process(*, moving: int = 1) -> bytes:
+    data = bytearray(_world_process_header(55, b"SkeletonReform"))
+    data += struct.pack("<i", 2)
+    for bone in range(11):
+        data += struct.pack(
+            "<i3f3f4f4f3ff3fB",
+            bone % 4,
+            *(float(bone), 1.0, 2.0),
+            *(0.0, 0.0, 0.0),
+            *(1.0, 0.0, 0.0, 0.0),
+            *(1.0, 0.0, 0.0, 0.0),
+            *(0.0, 0.0, 1.0),
+            0.5,
+            *(3.0, 4.0, 5.0),
+            moving if bone == 0 else 0,
+        )
+    data += struct.pack("<iBBii3ff", 3743, 0, 1, 2, 3, 10.0, 20.0, 30.0, 1.25)
+    return bytes(data)
+
+
+def _floating_lantern_process(*, spline_count: int = 2) -> bytes:
+    data = bytearray(_world_process_header(13, b"FloatingLantern"))
+    data += struct.pack("<ii", 1, 3)
+    data += struct.pack("<ii", 0, spline_count)
+    data += b"".join(
+        struct.pack("<3f", float(i), 0.0, 0.0) for i in range(spline_count)
+    )
+    data += struct.pack("<i2f", 2, 0.0, 10.0)
+    data += struct.pack("<i4f", 1, 1.0, 0.0, 0.0, 0.0)
+    data += struct.pack("<i", 0)
+    data += struct.pack("<iffffiiiiii", 5, 2.5, 2.0, 1.0, 70.0, 1, 2, 0, 0, 1, 2)
+    data += struct.pack(
+        "<fi3i3ii4I", 3.831, 0, 1, 43151, 44162, 82717, 83728, 0, 1, 0, 0, 0, 0
+    )
     return bytes(data)
 
 
@@ -724,6 +773,21 @@ class ProcessDataPrefixTests(unittest.TestCase):
         invalid_ramp[0x157] = 11
         with self.assertRaisesRegex(U9ProcessDataError, "ramp count above 10"):
             U9ParticlePresetState.from_bytes(bytes(invalid_ramp), 0, version=5)
+
+    def test_accepts_unset_camera_filter_ramp_counts(self) -> None:
+        # A retail save stores 255 in both camera-filter counts of an unused
+        # filter; the record size does not depend on them.
+        preset = bytearray(1490)
+        struct.pack_into("<ii", preset, 0, 1, 0)
+        preset[0x181] = preset[0x182] = 255
+        state = U9ParticlePresetState.from_bytes(bytes(preset), 0, version=5)
+        self.assertEqual(
+            (
+                state.camera_filter_color_ramp_count,
+                state.camera_filter_translucency_ramp_count,
+            ),
+            (255, 255),
+        )
 
     def test_decodes_particle_force_preset_fields(self) -> None:
         data = struct.pack(
@@ -1631,6 +1695,90 @@ class ProcessDataPrefixTests(unittest.TestCase):
         )
         self.assertEqual(grid.cell_spacing, 22.5)
 
+    def test_traverses_skeleton_reform_and_floating_lantern(self) -> None:
+        prefix, _ = self._insert_movement(
+            _skeleton_reform_process(), _floating_lantern_process()
+        )
+
+        skeleton, lantern, light = prefix.following_processes
+        assert isinstance(skeleton, U9SkeletonReformProcessState)
+        assert isinstance(lantern, U9FloatingLanternProcessState)
+        self.assertIsInstance(light, U9PortableLightProcessState)
+        self.assertEqual(skeleton.version, 2)
+        self.assertEqual(len(skeleton.bones), 11)
+        bone = skeleton.bones[1]
+        self.assertEqual(bone.bone_object_reference_index, 1)
+        self.assertEqual(bone.final_position, (1.0, 1.0, 2.0))
+        self.assertEqual(bone.final_orientation, (1.0, 0.0, 0.0, 0.0))
+        self.assertEqual(bone.move_orientation_rate, 0.5)
+        self.assertEqual(bone.current_destination, (3.0, 4.0, 5.0))
+        self.assertTrue(skeleton.bones[0].moving_to_final)
+        self.assertFalse(bone.moving_to_final)
+        self.assertEqual(
+            (skeleton.find_delay, skeleton.found_all_bones, skeleton.bones_ready),
+            (3743, False, True),
+        )
+        self.assertEqual(
+            (
+                skeleton.bone_key_object_reference_index,
+                skeleton.skeleton_object_reference_index,
+            ),
+            (2, 3),
+        )
+        self.assertEqual(skeleton.skeleton_position, (10.0, 20.0, 30.0))
+        self.assertEqual(skeleton.end_offset, lantern.offset)
+
+        self.assertEqual(
+            (lantern.version, lantern.lantern_object_reference_index), (1, 3)
+        )
+        path = lantern.path
+        self.assertEqual(path.spline_points, ((0.0, 0.0, 0.0), (1.0, 0.0, 0.0)))
+        self.assertEqual(path.spline_distances, (0.0, 10.0))
+        self.assertEqual(path.orientations, ((1.0, 0.0, 0.0, 0.0),))
+        self.assertEqual(path.orientation_distances, ())
+        self.assertEqual((path.link, path.speed, path.output_node_count), (5, 70.0, 2))
+        self.assertEqual(
+            (
+                path.last_path_marker_object_reference_index,
+                path.first_path_marker_object_reference_index,
+            ),
+            (1, 2),
+        )
+        self.assertAlmostEqual(lantern.accumulated_time, 3.831, places=5)
+        self.assertEqual(lantern.target_position_words, (1, 43151, 44162))
+        self.assertEqual(lantern.accumulated_offset_words, (82717, 83728, 0))
+        self.assertEqual(lantern.end_condition_flags, 1)
+        self.assertEqual(lantern.reserved, (0, 0, 0, 0))
+        self.assertEqual(lantern.end_offset, light.offset)
+
+    def test_rejects_bad_skeleton_reform_and_lantern_fields(self) -> None:
+        records = (
+            (_skeleton_reform_process(moving=2), "moving-to-final boolean byte 2"),
+            (_floating_lantern_process(spline_count=-1), "path-manager array count -1"),
+        )
+        for record, message in records:
+            with (
+                self.subTest(message=message),
+                self.assertRaisesRegex(U9ProcessDataError, message),
+            ):
+                self._insert_movement(record)
+
+    def test_accepts_unset_pathfinder_floats(self) -> None:
+        # Retail saves hold NaN in positions the walker never set.
+        prefix, data = self._insert_movement(_pathfinder_process(grid=True))
+        pathfinder = prefix.following_processes[0]
+        assert isinstance(pathfinder, U9PathfinderProcessState)
+        payload = pathfinder.world_state.end_offset
+        unset = bytearray(data)
+        struct.pack_into("<f3f", unset, payload + 168, *([math.nan] * 4))
+
+        reread = U9ProcessDataPrefix.from_bytes(bytes(unset)).following_processes[0]
+
+        assert isinstance(reread, U9PathfinderProcessState)
+        self.assertTrue(math.isnan(reread.obstacle_avoid_angle))
+        self.assertTrue(all(math.isnan(v) for v in reread.last_seen_position))
+        self.assertEqual(reread.end_offset, pathfinder.end_offset)
+
     def test_rejects_bad_pathfinder_fields(self) -> None:
         prefix, data = self._insert_movement(_pathfinder_process(grid=True))
         pathfinder = prefix.following_processes[0]
@@ -1641,7 +1789,6 @@ class ProcessDataPrefixTests(unittest.TestCase):
         for position, fmt, value, message in (
             (payload, "<i", 5, "pathfinder version 5"),
             (payload + 184, "<B", 2, "pathfinder grid flag 2"),
-            (payload + 20, "<f", math.inf, "pathfinder geometry"),
             (grid_offset + 100, "<i", 0, "path-grid size 0x2"),
             (grid_offset + 108, "<i", 3, "path-grid path-found flag 3"),
         ):
@@ -1672,6 +1819,7 @@ class ProcessDataPrefixTests(unittest.TestCase):
                 self.assertEqual(
                     record.spell_state is not None, layout.parent == "spell"
                 )
+                self.assertEqual(record.world_state is None, layout.parent == "header")
                 if record.spell_state is not None:
                     self.assertEqual(
                         (

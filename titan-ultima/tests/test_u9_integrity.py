@@ -187,6 +187,9 @@ def _later_process_records() -> bytes:
         0,
     )
     data += struct.pack("<7i", 2, 12, 1, 0, 3, 20, 0)
+    # A header-only process: no world state follows the common header.
+    data += struct.pack("<i9i100s", 18, 50, 1, 0, 0, 7, -1, -1, 0x3F, 0, b"Turn")
+    data += struct.pack("<iifiiiff4I", 2, 490, 1.39, -1, -1, 0, 0.016, 0.0, 0, 0, 0, 0)
     return bytes(data)
 
 
@@ -549,11 +552,26 @@ class IntegrityTests(unittest.TestCase):
         records = evidence["decoded_following_processes"]
         self.assertEqual(
             [record["type"] for record in records],
-            [61, 62, 98, 85, 30, 53, 57, 23, 197, 101, 1, 70],
+            [61, 62, 98, 85, 30, 53, 57, 23, 197, 101, 1, 18, 70],
         )
-        _, _, _, movement, activity, door, clock, action, timer, eye, walker, _ = (
-            records
-        )
+        (
+            _,
+            _,
+            _,
+            movement,
+            activity,
+            door,
+            clock,
+            action,
+            timer,
+            eye,
+            walker,
+            turn,
+            _,
+        ) = records
+        self.assertIsNone(turn["world_state"])
+        self.assertEqual(turn["table_process"]["kind"], "turn_to_angle")
+        self.assertEqual(turn["table_process"]["fields"]["npc_number"], 490)
         (humanoid,) = movement["movement_controller"]["leading"]
         self.assertEqual(humanoid["kind"], "humanoid")
         self.assertTrue(humanoid["fields"]["leaves_footprints"])

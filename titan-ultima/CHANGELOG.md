@@ -14,6 +14,15 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Changed
 
+- **Breaking -- U9 highway links:** the highway API now names its keys as
+  links, matching `U9Entity.link`: `U9HighwayPoint.trigger_id` is
+  `U9HighwayPoint.link`, and `U9HighwayRoute.start_trigger_id` /
+  `last_trigger_id` are `start_link` / `last_link`. The `point()`,
+  `routes_from()` and `routes_through()` parameters are named `link`.
+  `highway-info` reports a link range, and `highway-points` heads its columns
+  `Link` and `Edges` (the neighbour count, formerly `Links`). The values were
+  never `static/triggers.flx` trigger IDs. No alias is kept.
+
 - **Breaking -- U9 entity link:** `U9Entity.trigger_id` is renamed
   `U9Entity.link`, and `U9ObjectPlacementResolution.trigger_id` is renamed
   `link`. The word at entity `+0x1A` is not a trigger ID (an object's triggers
@@ -36,6 +45,17 @@ This project uses [Semantic Versioning](https://semver.org/):
   `U9SpiderMovementFields`, `U9SwimmingMovementFields`, ...): Avatar countdown timers and
   levitation flags, footprints and infernal armor, idle animations, spider
   speed, and swimming depths and animation lists.
+
+- **U9 save process stream -- skeletons, lanterns, torches, cameras:**
+  five more process types found blocking 15 older retail saves now decode:
+  the skeleton-reform process (`U9SkeletonReformProcessState`, eleven
+  `U9SkeletonBoneState` records), the floating lantern with its path
+  (`U9FloatingLanternProcessState`, `U9PathManagerState`), and the
+  turn-to-angle, poison-camera, underwater-camera, Avatar-torch and
+  arrow-projectile processes as table-driven layouts. Table-driven layouts can now be header-only (`world_state` is
+  `None`) or carry a version stored before the common header. Checked
+  against 244 retail saves (the 13 used so far plus 231 older ones): every
+  one now decodes through the process-list terminator.
 
 - **U9 save process stream -- pathfinder:** type 1 decodes as
   `U9PathfinderProcessState`: the walking NPC and its target, origin, goal,
@@ -130,6 +150,13 @@ This project uses [Semantic Versioning](https://semver.org/):
   hierarchy/material metadata, archive hashes, and generated animated GLB.
 
 ### Fixed
+
+- **U9 save process stream -- false rejections:** two checks rejected valid
+  retail saves. Pathfinder positions and angles the walker never set can
+  hold NaN, so the pathfinder's fixed fields are no longer range-checked
+  (4 saves); a particle preset that never uses a camera filter can store 255
+  in its two camera-filter ramp counts, which are no longer capped (1 save).
+  The other ten ramp counts are still checked.
 
 - **U9 save-check JSON:** `IntegrityReport.to_dict()` and `save-check --json`
   now write strict JSON. Saved records can hold NaN or infinite floats in

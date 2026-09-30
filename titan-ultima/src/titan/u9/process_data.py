@@ -14,7 +14,9 @@ __all__ = [
     "U9HangingObjectProcessState",
     "U9ObjectReferenceEntry",
     "U9ObjectReferenceTable",
+    "U9FloatingLanternProcessState",
     "U9ParticleCameraFilterTextureState",
+    "U9PathManagerState",
     "U9PathfinderProcessState",
     "U9PathGridCell",
     "U9PathGridState",
@@ -54,6 +56,8 @@ __all__ = [
     "U9NpcMovementFields",
     "U9ScriptedObjectProcessState",
     "U9SimpleProcessState",
+    "U9SkeletonBoneState",
+    "U9SkeletonReformProcessState",
     "U9SpellState",
     "U9SpiderMovementFields",
     "U9SwimmingMovementFields",
@@ -253,6 +257,23 @@ PATH_GRID_HEADER = struct.Struct("<15f4f4i2f2iiI")
 PATH_GRID_CELL = struct.Struct("<6i3fI")
 PATH_GRID_TAIL = struct.Struct("<IIfiI")
 MAX_PATH_GRID_SIDE = 1024
+SKELETON_REFORM_PROCESS_TYPE = 55
+SKELETON_REFORM_PROCESS_VERSION = 2
+SKELETON_BONE_COUNT = 11
+SKELETON_BONE = struct.Struct("<i3f3f4f4f3ff3fB")
+SKELETON_REFORM_TAIL = struct.Struct("<iBBii3ff")
+FLOATING_LANTERN_PROCESS_TYPE = 13
+FLOATING_LANTERN_PROCESS_VERSION = 1
+FLOATING_LANTERN_TAIL = struct.Struct("<fi3i3ii4I")
+PATH_MANAGER_VERSION = 0
+PATH_MANAGER_ARRAY_ELEMENTS = (
+    struct.Struct("<3f"),
+    struct.Struct("<f"),
+    struct.Struct("<4f"),
+    struct.Struct("<f"),
+)
+PATH_MANAGER_TAIL = struct.Struct("<iffffiiiiii")
+MAX_PATH_MANAGER_NODES = 0x10000
 HANGING_OBJECT_PROCESS_VERSION = 2
 # Packed layout: setup values, five scalar/X/Y/Z quaternions, live motion
 # state, two configuration words, facing vector, and four reserved words.
@@ -312,6 +333,11 @@ MAX_HANDLE_COUNT = MAX_OBJECT_REFERENCE_COUNT
 
 class U9ProcessDataError(Exception):
     """Raised when a deterministic process-data section is malformed."""
+
+
+def _float32(value: float) -> float:
+    """``value`` rounded to the nearest 32-bit float, as the game stores it."""
+    return float(struct.unpack("<f", struct.pack("<f", value))[0])
 
 
 def _require_bytes(data: bytes, offset: int, size: int, label: str) -> None:
@@ -1692,12 +1718,9 @@ class U9ParticlePresetState:
                 f"particle preset {record_id} has object-type count "
                 f"{object_type_count}; expected 0..{PARTICLE_ITEM_VARIANT_COUNT}"
             )
-        all_ramp_counts = (
-            *ramp_counts,
-            *light_ramp_counts,
-            camera_filter_color_ramp_count,
-            camera_filter_translucency_ramp_count,
-        )
+        # The two camera-filter counts are not checked: a preset that never
+        # uses a camera filter can store 255 there (seen in a retail save).
+        all_ramp_counts = (*ramp_counts, *light_ramp_counts)
         if any(count > PARTICLE_RAMP_SLOT_COUNT for count in all_ramp_counts):
             raise U9ProcessDataError(
                 f"particle preset {record_id} has a ramp count above "
@@ -3757,6 +3780,7 @@ _SIMPLE_FIELD_FORMATS = {
     "byte_flag": ("B", 1),
     "byte": ("B", 1),
     "ushort": ("H", 1),
+    "rgb": ("3B", 3),
     "reference": ("i", 1),  # object-reference index
     "vector": ("3f", 3),
     "quaternion": ("4f", 4),
@@ -3768,20 +3792,26 @@ _SIMPLE_FIELD_FORMATS = {
 @dataclass(frozen=True)
 class _SimpleProcessLayout:
     kind: str
-    parent: str  # "world", "scripted" or "spell"
-    version: int | None
+    parent: str  # "header", "world", "scripted" or "spell"
+    version: int | float | None  # a float version is stored as float32
     fields: tuple[tuple[str, str], ...]
+    version_before_header: bool = False
 
 
 def _simple(
     kind: str,
     parent: str,
-    version: int | None,
+    version: int | float | None,
     *fields: tuple[str, str],
     reserved: int = 4,
+    version_before_header: bool = False,
 ) -> _SimpleProcessLayout:
     return _SimpleProcessLayout(
-        kind, parent, version, fields + (("reserved", "reserved"),) * reserved
+        kind,
+        parent,
+        version,
+        fields + (("reserved", "reserved"),) * reserved,
+        version_before_header,
     )
 
 
@@ -4191,9 +4221,95 @@ SIMPLE_PROCESS_LAYOUTS.update(
     }
 )
 
+SIMPLE_PROCESS_LAYOUTS.update(
+    {
+        18: _simple(
+            "turn_to_angle",
+            "header",
+            2,
+            ("npc_number", "int"),
+            ("angle", "float"),
+            ("duration_npc_offset", "int"),
+            ("termination_npc_offset", "int"),
+            ("termination_value", "int"),
+            ("turning_speed", "float"),
+            ("old_turn_threshold", "float"),
+        ),
+        # Fields named only as far as retail establishes them.
+        163: _simple(
+            "poison_camera",
+            "world",
+            _float32(1.4),
+            ("current_object", "reference"),
+            ("flag_1", "byte"),
+            ("flag_2", "byte"),
+            ("pause_delta", "int"),
+            ("parameter_1", "float"),
+            ("parameter_2", "float"),
+            reserved=0,
+            version_before_header=True,
+        ),
+        # No source save; named from one retail record (the 16-bit value was
+        # 509, in the NPC-number range; the zero words are kept raw).
+        71: _simple(
+            "arrow_projectile",
+            "world",
+            1,
+            ("short_value", "ushort"),
+            ("arrow_object", "reference"),
+            ("position", "vector"),
+            ("word_1", "uint"),
+            ("parameter_1", "float"),
+            ("word_2", "uint"),
+            reserved=0,
+        ),
+        195: _simple(
+            "underwater_camera",
+            "world",
+            _float32(1.3),
+            ("current_object", "reference"),
+            ("original_horizontal_fov", "float"),
+            ("original_vertical_fov", "float"),
+            ("horizontal_angle", "float"),
+            ("vertical_angle", "float"),
+            ("horizontal_period", "float"),
+            ("vertical_period", "float"),
+            ("horizontal_variance", "float"),
+            ("vertical_variance", "float"),
+            ("stopping", "byte_flag"),
+            ("flag_2", "byte"),
+            reserved=0,
+            version_before_header=True,
+        ),
+        212: _simple(
+            "avatar_torch",
+            "world",
+            0,
+            ("object_1", "reference"),
+            ("object_2", "reference"),
+            ("parameter_1", "float"),
+            ("parameter_2", "float"),
+            ("elapsed_time", "uint"),
+            ("parameter_3", "float"),
+            ("color_1", "rgb"),
+            ("color_2", "rgb"),
+            ("counter", "int"),
+            reserved=0,
+        ),
+    }
+)
+
+
+def _version_format(layout: _SimpleProcessLayout) -> str:
+    return "f" if isinstance(layout.version, float) else "i"
+
 
 def _simple_layout_struct(layout: _SimpleProcessLayout) -> struct.Struct:
-    version = "i" if layout.version is not None else ""
+    version = (
+        _version_format(layout)
+        if layout.version is not None and not layout.version_before_header
+        else ""
+    )
     return struct.Struct(
         "<" + version + "".join(_SIMPLE_FIELD_FORMATS[k][0] for _, k in layout.fields)
     )
@@ -4214,13 +4330,15 @@ class U9SimpleProcessState:
     tuples, locations as integer ``(x, y, z)`` tuples, references as
     object-reference indices, flags as booleans. The trailing reserved words
     are in ``reserved``. Index a record by field name (``record["speed"]``).
+    ``world_state`` is ``None`` for layouts whose save writes only the common
+    process header.
     """
 
     header: U9ProcessHeaderState
-    world_state: U9ProcessWorldState
+    world_state: U9ProcessWorldState | None
     scripted_state: U9ScriptedProcessState | None
     kind: str
-    version: int | None
+    version: int | float | None
     values: tuple[tuple[str, object], ...]
     reserved: tuple[int, ...]
     offset: int
@@ -4241,17 +4359,32 @@ class U9SimpleProcessState:
     def from_bytes(
         cls, data: bytes, offset: int, *, object_reference_count: int
     ) -> U9SimpleProcessState:
-        header, world_state = _read_world_process_prefix(
-            data,
-            offset,
-            frozenset(SIMPLE_PROCESS_LAYOUTS),
-            "table-driven",
-            object_reference_count,
+        _require_bytes(data, offset, 4, "process type")
+        (process_type,) = struct.unpack_from("<i", data, offset)
+        layout = SIMPLE_PROCESS_LAYOUTS.get(process_type)
+        if layout is None:
+            raise U9ProcessDataError(
+                f"process type {process_type} is not a table-driven process"
+            )
+        layout_struct = _SIMPLE_LAYOUT_STRUCTS[process_type]
+        label = f"{layout.kind.replace('_', '-')} process"
+        version = None
+        if layout.version_before_header:
+            _require_bytes(data, offset + 4, 4, label)
+            (version,) = struct.unpack_from(
+                "<" + _version_format(layout), data, offset + 4
+            )
+        header = U9ProcessHeaderState.from_prefixed_bytes(
+            data, offset, prefix_size=8 if layout.version_before_header else 4
         )
-        layout = SIMPLE_PROCESS_LAYOUTS[header.process_type]
-        layout_struct = _SIMPLE_LAYOUT_STRUCTS[header.process_type]
+        world_state = None
+        payload_offset = header.end_offset
+        if layout.parent != "header":
+            world_state = U9ProcessWorldState.from_bytes(
+                data, payload_offset, object_reference_count=object_reference_count
+            )
+            payload_offset = world_state.end_offset
         scripted_state = None
-        payload_offset = world_state.end_offset
         if layout.parent == "scripted":
             scripted_state = U9ScriptedProcessState.from_bytes(
                 data, payload_offset, object_reference_count=object_reference_count
@@ -4263,14 +4396,13 @@ class U9SimpleProcessState:
                 data, payload_offset, object_reference_count=object_reference_count
             )
             payload_offset = spell_state.end_offset
-        label = f"{layout.kind.replace('_', '-')} process"
         _require_bytes(data, payload_offset, layout_struct.size, label)
         raw = layout_struct.unpack_from(data, payload_offset)
         cursor = 0
-        version = None
         if layout.version is not None:
-            version = raw[0]
-            cursor = 1
+            if not layout.version_before_header:
+                version = raw[0]
+                cursor = 1
             if version != layout.version:
                 raise U9ProcessDataError(
                     f"unsupported {label} version {version} at 0x{payload_offset:X}"
@@ -4462,9 +4594,10 @@ class U9PathfinderProcessState:
     walk states, and collision limits. ``grid`` is present when the walker
     had fallen back to a grid search. ``duration_npc_offset`` and
     ``termination_npc_offset`` are byte offsets into the NPC table (-1 for
-    none). ``previous_walk_state`` and ``blocked_position`` are not
-    initialized until the walker changes state or is blocked, so they can
-    hold any value (including NaN).
+    none). Several fields are only set in some walk states (the previous walk
+    state, blocked and last-seen positions, obstacle-avoid angle), so their
+    stored values can be anything, including NaN; the fixed part's numbers
+    are therefore not range-checked.
     """
 
     header: U9ProcessHeaderState
@@ -4529,11 +4662,6 @@ class U9PathfinderProcessState:
         has_grid = v[46]
         if has_grid not in (0, 1):
             raise U9ProcessDataError(f"invalid pathfinder grid flag {has_grid}")
-        # The blocked position is only set once the walker is blocked; retail
-        # saves can hold NaN there, so it is not checked.
-        _validate_finite(
-            v[3:20] + v[23:26] + v[31:36] + v[40:46], "pathfinder geometry"
-        )
         cursor += PATHFINDER_STATE.size
         grid = U9PathGridState.from_bytes(data, cursor) if has_grid else None
         if grid is not None:
@@ -4584,6 +4712,267 @@ class U9PathfinderProcessState:
         )
 
 
+@dataclass(frozen=True)
+class U9SkeletonBoneState:
+    """One of the 11 bones a skeleton-reform process gathers (89 bytes)."""
+
+    bone_object_reference_index: int
+    final_position: tuple[float, float, float]
+    ground_position: tuple[float, float, float]
+    final_orientation: tuple[float, float, float, float]
+    ground_orientation: tuple[float, float, float, float]
+    move_orientation_axis: tuple[float, float, float]
+    move_orientation_rate: float
+    current_destination: tuple[float, float, float]
+    moving_to_final: bool
+
+
+@dataclass(frozen=True)
+class U9SkeletonReformProcessState:
+    """A type-55 process that reassembles a skeleton from its bones.
+
+    World state, then version 2, eleven bone records, and the search and
+    skeleton state. Floats are not range-checked: bones not yet found keep
+    whatever their slots held.
+    """
+
+    header: U9ProcessHeaderState
+    world_state: U9ProcessWorldState
+    version: int
+    bones: tuple[U9SkeletonBoneState, ...]
+    find_delay: int
+    found_all_bones: bool
+    bones_ready: bool
+    bone_key_object_reference_index: int
+    skeleton_object_reference_index: int
+    skeleton_position: tuple[float, float, float]
+    move_rate: float
+    offset: int
+    end_offset: int
+
+    @classmethod
+    def from_bytes(
+        cls, data: bytes, offset: int, *, object_reference_count: int
+    ) -> U9SkeletonReformProcessState:
+        header, world_state = _read_world_process_prefix(
+            data,
+            offset,
+            frozenset({SKELETON_REFORM_PROCESS_TYPE}),
+            "skeleton-reform",
+            object_reference_count,
+        )
+        cursor = world_state.end_offset
+        size = 4 + SKELETON_BONE_COUNT * SKELETON_BONE.size + SKELETON_REFORM_TAIL.size
+        _require_bytes(data, cursor, size, "skeleton-reform process")
+        (version,) = struct.unpack_from("<i", data, cursor)
+        if version != SKELETON_REFORM_PROCESS_VERSION:
+            raise U9ProcessDataError(
+                f"unsupported skeleton-reform version {version} at 0x{cursor:X}"
+            )
+        cursor += 4
+        bones = []
+        for _ in range(SKELETON_BONE_COUNT):
+            b = SKELETON_BONE.unpack_from(data, cursor)
+            cursor += SKELETON_BONE.size
+            _validate_object_reference_index(
+                b[0], object_reference_count, "skeleton-reform bone"
+            )
+            _validate_byte_boolean(b[22], "skeleton-reform moving-to-final")
+            bones.append(
+                U9SkeletonBoneState(
+                    bone_object_reference_index=b[0],
+                    final_position=b[1:4],
+                    ground_position=b[4:7],
+                    final_orientation=b[7:11],
+                    ground_orientation=b[11:15],
+                    move_orientation_axis=b[15:18],
+                    move_orientation_rate=b[18],
+                    current_destination=b[19:22],
+                    moving_to_final=bool(b[22]),
+                )
+            )
+        t = SKELETON_REFORM_TAIL.unpack_from(data, cursor)
+        _validate_byte_boolean(t[1], "skeleton-reform found-all-bones")
+        _validate_byte_boolean(t[2], "skeleton-reform bones-ready")
+        for index, label in ((3, "bone key"), (4, "skeleton")):
+            _validate_object_reference_index(
+                t[index], object_reference_count, f"skeleton-reform {label}"
+            )
+        return cls(
+            header=header,
+            world_state=world_state,
+            version=version,
+            bones=tuple(bones),
+            find_delay=t[0],
+            found_all_bones=bool(t[1]),
+            bones_ready=bool(t[2]),
+            bone_key_object_reference_index=t[3],
+            skeleton_object_reference_index=t[4],
+            skeleton_position=t[5:8],
+            move_rate=t[8],
+            offset=offset,
+            end_offset=cursor + SKELETON_REFORM_TAIL.size,
+        )
+
+
+@dataclass(frozen=True)
+class U9PathManagerState:
+    """A path along path markers, saved inside a floating-lantern process.
+
+    Four count-prefixed arrays (spline points, their distances from the
+    start, orientations at the input nodes, and their distances), then the
+    path's link, distances, direction, speed, node counts, marked position
+    and orientation indices, and the last and first path markers. When no
+    path is built the arrays are empty and the later words can be stale.
+    """
+
+    version: int
+    spline_points: tuple[tuple[float, float, float], ...]
+    spline_distances: tuple[float, ...]
+    orientations: tuple[tuple[float, float, float, float], ...]
+    orientation_distances: tuple[float, ...]
+    link: int
+    current_distance: float
+    last_current_distance: float
+    direction: float
+    speed: float
+    input_node_count: int
+    output_node_count: int
+    marked_position: int
+    marked_orientation: int
+    last_path_marker_object_reference_index: int
+    first_path_marker_object_reference_index: int
+    offset: int
+    end_offset: int
+
+    @classmethod
+    def from_bytes(
+        cls, data: bytes, offset: int, *, object_reference_count: int
+    ) -> U9PathManagerState:
+        _require_bytes(data, offset, 4, "path-manager version")
+        (version,) = struct.unpack_from("<i", data, offset)
+        if version != PATH_MANAGER_VERSION:
+            raise U9ProcessDataError(
+                f"unsupported path-manager version {version} at 0x{offset:X}"
+            )
+        cursor = offset + 4
+        arrays: list[tuple[object, ...]] = []
+        for element in PATH_MANAGER_ARRAY_ELEMENTS:
+            _require_bytes(data, cursor, 4, "path-manager array count")
+            (count,) = struct.unpack_from("<i", data, cursor)
+            cursor += 4
+            if not 0 <= count <= MAX_PATH_MANAGER_NODES:
+                raise U9ProcessDataError(
+                    f"invalid path-manager array count {count} at 0x{cursor - 4:X}"
+                )
+            _require_bytes(data, cursor, count * element.size, "path-manager array")
+            values = tuple(
+                item if len(item) > 1 else item[0]
+                for item in element.iter_unpack(
+                    data[cursor : cursor + count * element.size]
+                )
+            )
+            cursor += count * element.size
+            arrays.append(values)
+        _require_bytes(data, cursor, PATH_MANAGER_TAIL.size, "path-manager tail")
+        t = PATH_MANAGER_TAIL.unpack_from(data, cursor)
+        for index, label in ((9, "last marker"), (10, "first marker")):
+            _validate_object_reference_index(
+                t[index], object_reference_count, f"path-manager {label}"
+            )
+        return cls(
+            version=version,
+            spline_points=arrays[0],  # type: ignore[arg-type]
+            spline_distances=arrays[1],  # type: ignore[arg-type]
+            orientations=arrays[2],  # type: ignore[arg-type]
+            orientation_distances=arrays[3],  # type: ignore[arg-type]
+            link=t[0],
+            current_distance=t[1],
+            last_current_distance=t[2],
+            direction=t[3],
+            speed=t[4],
+            input_node_count=t[5],
+            output_node_count=t[6],
+            marked_position=t[7],
+            marked_orientation=t[8],
+            last_path_marker_object_reference_index=t[9],
+            first_path_marker_object_reference_index=t[10],
+            offset=offset,
+            end_offset=cursor + PATH_MANAGER_TAIL.size,
+        )
+
+
+@dataclass(frozen=True)
+class U9FloatingLanternProcessState:
+    """A type-13 floating lantern following a path.
+
+    World state, version 1, the lantern object, its path manager, then
+    timing, the target and offset words, end-condition flags and four
+    reserved words. ``target_position_words`` and ``accumulated_offset_words``
+    are kept as the stored 32-bit words: the one retail record seen holds
+    integer-looking values there, so their element type is not settled.
+    """
+
+    header: U9ProcessHeaderState
+    world_state: U9ProcessWorldState
+    version: int
+    lantern_object_reference_index: int
+    path: U9PathManagerState
+    accumulated_time: float
+    trying_to_get_on_track: int
+    target_position_words: tuple[int, int, int]
+    accumulated_offset_words: tuple[int, int, int]
+    end_condition_flags: int
+    reserved: tuple[int, int, int, int]
+    offset: int
+    end_offset: int
+
+    @classmethod
+    def from_bytes(
+        cls, data: bytes, offset: int, *, object_reference_count: int
+    ) -> U9FloatingLanternProcessState:
+        header, world_state = _read_world_process_prefix(
+            data,
+            offset,
+            frozenset({FLOATING_LANTERN_PROCESS_TYPE}),
+            "floating-lantern",
+            object_reference_count,
+        )
+        cursor = world_state.end_offset
+        _require_bytes(data, cursor, 8, "floating-lantern process")
+        version, lantern = struct.unpack_from("<ii", data, cursor)
+        if version != FLOATING_LANTERN_PROCESS_VERSION:
+            raise U9ProcessDataError(
+                f"unsupported floating-lantern version {version} at 0x{cursor:X}"
+            )
+        _validate_object_reference_index(
+            lantern, object_reference_count, "floating-lantern"
+        )
+        path = U9PathManagerState.from_bytes(
+            data, cursor + 8, object_reference_count=object_reference_count
+        )
+        cursor = path.end_offset
+        _require_bytes(
+            data, cursor, FLOATING_LANTERN_TAIL.size, "floating-lantern tail"
+        )
+        t = FLOATING_LANTERN_TAIL.unpack_from(data, cursor)
+        return cls(
+            header=header,
+            world_state=world_state,
+            version=version,
+            lantern_object_reference_index=lantern,
+            path=path,
+            accumulated_time=t[0],
+            trying_to_get_on_track=t[1],
+            target_position_words=t[2:5],
+            accumulated_offset_words=t[5:8],
+            end_condition_flags=t[8],
+            reserved=t[9:13],
+            offset=offset,
+            end_offset=cursor + FLOATING_LANTERN_TAIL.size,
+        )
+
+
 U9FollowingProcessState = Union[
     U9AnimationControllerProcessState,
     U9HangingObjectProcessState,
@@ -4598,6 +4987,8 @@ U9FollowingProcessState = Union[
     U9DoorTimerProcessState,
     U9SimpleProcessState,
     U9PathfinderProcessState,
+    U9SkeletonReformProcessState,
+    U9FloatingLanternProcessState,
 ]
 # Decoder for each process type the traversal reads after the first process.
 _FOLLOWING_PROCESS_DECODERS: dict[int, type[U9FollowingProcessState]] = {
@@ -4608,6 +4999,8 @@ _FOLLOWING_PROCESS_DECODERS: dict[int, type[U9FollowingProcessState]] = {
     CLOCK_ANIMATION_PROCESS_TYPE: U9ClockAnimationProcessState,
     DOOR_TIMER_PROCESS_TYPE: U9DoorTimerProcessState,
     PATHFINDER_PROCESS_TYPE: U9PathfinderProcessState,
+    SKELETON_REFORM_PROCESS_TYPE: U9SkeletonReformProcessState,
+    FLOATING_LANTERN_PROCESS_TYPE: U9FloatingLanternProcessState,
     **dict.fromkeys(
         ANIMATION_CONTROLLER_PROCESS_TYPES, U9AnimationControllerProcessState
     ),

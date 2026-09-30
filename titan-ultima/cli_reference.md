@@ -4871,8 +4871,8 @@ patheggs -- plus precomputed routes through that graph, so the engine can
 look up a long path instead of solving one.
 
 Points are keyed by the **link** value their marker object carries
-(`U9Entity.link`, the `Link` column of `nonfixed-entities`); commands and
-fields here keep the historical name "trigger ID" for it. The physical markers are
+(`U9Entity.link`, the `Link` column of `nonfixed-entities`), not a trigger
+ID. The physical markers are
 entities of type 1134 (unnamed in `TYPENAME.FLX`): 815 of the 817 points sit
 at exactly the coordinates this file declares. See
 `reference/u9/highway/u9_highway_reference.md`.
@@ -4881,7 +4881,7 @@ at exactly the coordinates this file declares. See
 
 #### `u9 highway-info`
 
-Summarize the navigation graph: point and route counts, trigger ID range,
+Summarize the navigation graph: point and route counts, link range,
 world extent, connectivity, and the longest precomputed route.
 
 ```
@@ -4904,8 +4904,8 @@ references a point the file does not declare.
 
 #### `u9 highway-points`
 
-List navigation points with their absolute world positions, how many graph
-neighbours each has, and how many routes visit it.
+List navigation points by link with their absolute world positions, how many
+graph neighbours each has (`Edges`), and how many routes visit it.
 
 ```
 titan u9 highway-points <file> [-i ID] [-n LIMIT]
@@ -4914,7 +4914,7 @@ titan u9 highway-points <file> [-i ID] [-n LIMIT]
 | Argument | Description |
 |----------|-------------|
 | `file` | Path to `static/highway.dat` |
-| `-i ID`, `--id ID` | Show only the point with this trigger ID |
+| `-i ID`, `--id ID` | Show only the point with this link |
 | `-n N`, `--limit N` | Maximum rows to print |
 
 **Example**
@@ -4923,7 +4923,7 @@ titan u9 highway-points static/highway.dat -i 53504
 ```
 
 To find the marker itself in the world, look for an entity whose `Link`
-column holds that ID with `titan u9 nonfixed-entities`.
+column holds that link with `titan u9 nonfixed-entities`.
 
 ---
 
@@ -4939,7 +4939,7 @@ titan u9 highway-routes <file> [-i ID] [-p] [-n LIMIT]
 | Argument | Description |
 |----------|-------------|
 | `file` | Path to `static/highway.dat` |
-| `-i ID`, `--id ID` | Only routes whose path visits this trigger ID |
+| `-i ID`, `--id ID` | Only routes whose path visits this link |
 | `-p`, `--paths` | Print each route's full node path |
 | `-n N`, `--limit N` | Maximum routes to print |
 

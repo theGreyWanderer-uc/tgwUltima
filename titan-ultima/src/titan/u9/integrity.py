@@ -22,6 +22,7 @@ from titan.u9.process_data import (
     U9AnimationControllerProcessState,
     U9ClockAnimationProcessState,
     U9DoorTimerProcessState,
+    U9FloatingLanternProcessState,
     U9FollowingProcessState,
     U9HangingObjectProcessState,
     U9MovementControllerProcessState,
@@ -37,6 +38,7 @@ from titan.u9.process_data import (
     U9ProcessDataPrefix,
     U9ScriptedObjectProcessState,
     U9SimpleProcessState,
+    U9SkeletonReformProcessState,
     U9ScriptedProcessState,
     U9ScriptTimerProcessState,
 )
@@ -141,11 +143,15 @@ def _following_process_json(record: U9FollowingProcessState) -> dict[str, object
         "execution_mask": header.execution_mask,
         "state_flags": header.state_flags,
         "name": header.name,
-        "world_state": {
-            "version": world.version,
-            "object_reference_indices": list(world.object_reference_indices),
-            "map_number": world.map_number,
-        },
+        "world_state": (
+            None
+            if world is None
+            else {
+                "version": world.version,
+                "object_reference_indices": list(world.object_reference_indices),
+                "map_number": world.map_number,
+            }
+        ),
     }
     if isinstance(record, U9AnimationControllerProcessState):
         payload["animation_controller"] = {
@@ -334,6 +340,16 @@ def _following_process_json(record: U9FollowingProcessState) -> dict[str, object
             }
         )
         payload["pathfinder"] = pathfinder
+    elif isinstance(record, U9SkeletonReformProcessState):
+        skeleton = asdict(record)
+        for key in ("header", "world_state", "offset", "end_offset"):
+            skeleton.pop(key)
+        payload["skeleton_reform"] = skeleton
+    elif isinstance(record, U9FloatingLanternProcessState):
+        lantern = asdict(record)
+        for key in ("header", "world_state", "offset", "end_offset"):
+            lantern.pop(key)
+        payload["floating_lantern"] = lantern
     elif isinstance(record, U9SimpleProcessState):
         if record.scripted_state is not None:
             payload["scripted_state"] = _scripted_process_json(record.scripted_state)
