@@ -4,6 +4,7 @@ from __future__ import annotations
 
 __all__ = [
     "OBJECT_REFERENCE_DATA_OFFSET",
+    "SIMPLE_PROCESS_LAYOUTS",
     "U9CameraControlState",
     "U9CameraEffectState",
     "U9CameraState",
@@ -14,6 +15,9 @@ __all__ = [
     "U9ObjectReferenceEntry",
     "U9ObjectReferenceTable",
     "U9ParticleCameraFilterTextureState",
+    "U9PathfinderProcessState",
+    "U9PathGridCell",
+    "U9PathGridState",
     "U9ParticleForcePresetState",
     "U9ParticleForceState",
     "U9ParticleGenerationState",
@@ -49,6 +53,8 @@ __all__ = [
     "U9NpcActivityProcessState",
     "U9NpcMovementFields",
     "U9ScriptedObjectProcessState",
+    "U9SimpleProcessState",
+    "U9SpellState",
     "U9SpiderMovementFields",
     "U9SwimmingMovementFields",
     "U9TargetingState",
@@ -235,6 +241,18 @@ NPC_ACTION_PROCESS_STATE = struct.Struct(
 DOOR_TIMER_PROCESS_TYPE = 197
 DOOR_TIMER_PROCESS_VERSION = 0
 DOOR_TIMER_PROCESS_STATE = struct.Struct("<iif")
+SPELL_STATE_VERSION = 4
+SPELL_STATE = struct.Struct("<iiIiiiiiIii4I")
+PATHFINDER_PROCESS_TYPE = 1
+PATHFINDER_PROCESS_VERSION = 6
+# Fixed part up to and including the grid-present byte, then the tail after
+# the optional grid.
+PATHFINDER_STATE = struct.Struct("<iiiff" + "3f" * 7 + "iiiiif3ffiiiifff3fB")
+PATHFINDER_TAIL = struct.Struct("<7i")
+PATH_GRID_HEADER = struct.Struct("<15f4f4i2f2iiI")
+PATH_GRID_CELL = struct.Struct("<6i3fI")
+PATH_GRID_TAIL = struct.Struct("<IIfiI")
+MAX_PATH_GRID_SIDE = 1024
 HANGING_OBJECT_PROCESS_VERSION = 2
 # Packed layout: setup values, five scalar/X/Y/Z quaternions, live motion
 # state, two configuration words, facing vector, and four reserved words.
@@ -3672,6 +3690,900 @@ class U9DoorTimerProcessState:
         )
 
 
+@dataclass(frozen=True)
+class U9SpellState:
+    """The 60-byte block every spell process saves after its world state.
+
+    Written by the shared spell save (``0x005F23B0``): version 4, the caster,
+    flags, the spell's particle effect, animation ID, event, spell number,
+    stage, timer, the target, a callback number and four reserved words.
+    """
+
+    version: int
+    caster_object_reference_index: int
+    flags: int
+    effect_object_reference_index: int
+    animation_id: int
+    event: int
+    spell_number: int
+    stage: int
+    timer: int
+    target_object_reference_index: int
+    callback: int
+    reserved: tuple[int, int, int, int]
+    offset: int
+
+    @property
+    def end_offset(self) -> int:
+        return self.offset + SPELL_STATE.size
+
+    @classmethod
+    def from_bytes(
+        cls, data: bytes, offset: int, *, object_reference_count: int
+    ) -> U9SpellState:
+        _require_bytes(data, offset, SPELL_STATE.size, "spell state")
+        v = SPELL_STATE.unpack_from(data, offset)
+        if v[0] != SPELL_STATE_VERSION:
+            raise U9ProcessDataError(
+                f"unsupported spell-state version {v[0]} at 0x{offset:X}"
+            )
+        for index, label in ((1, "caster"), (3, "effect"), (9, "target")):
+            _validate_object_reference_index(
+                v[index], object_reference_count, f"spell {label}"
+            )
+        return cls(
+            version=v[0],
+            caster_object_reference_index=v[1],
+            flags=v[2],
+            effect_object_reference_index=v[3],
+            animation_id=v[4],
+            event=v[5],
+            spell_number=v[6],
+            stage=v[7],
+            timer=v[8],
+            target_object_reference_index=v[9],
+            callback=v[10],
+            reserved=v[11:15],
+            offset=offset,
+        )
+
+
+# Field kinds for table-driven process layouts: struct format and value count.
+_SIMPLE_FIELD_FORMATS = {
+    "int": ("i", 1),
+    "uint": ("I", 1),
+    "float": ("f", 1),
+    "flag": ("i", 1),  # 32-bit boolean
+    "byte_flag": ("B", 1),
+    "byte": ("B", 1),
+    "ushort": ("H", 1),
+    "reference": ("i", 1),  # object-reference index
+    "vector": ("3f", 3),
+    "quaternion": ("4f", 4),
+    "location": ("iih2x", 3),  # integer X/Y, 16-bit Z, two unused bytes
+    "reserved": ("I", 1),
+}
+
+
+@dataclass(frozen=True)
+class _SimpleProcessLayout:
+    kind: str
+    parent: str  # "world", "scripted" or "spell"
+    version: int | None
+    fields: tuple[tuple[str, str], ...]
+
+
+def _simple(
+    kind: str,
+    parent: str,
+    version: int | None,
+    *fields: tuple[str, str],
+    reserved: int = 4,
+) -> _SimpleProcessLayout:
+    return _SimpleProcessLayout(
+        kind, parent, version, fields + (("reserved", "reserved"),) * reserved
+    )
+
+
+_PATH_MOVER_FIELDS = (
+    ("distance_to_target", "float"),
+    ("distance_from_start", "float"),
+    ("target_location", "location"),
+    ("current_location", "vector"),
+    ("mover_speed", "float"),
+    ("move_delta", "vector"),
+)
+
+# Fixed-size process layouts, each read in retail stream order after the world
+# state (and, for "scripted", the scripted-object state). Every layout was
+# checked write by write against the retail save routine.
+SIMPLE_PROCESS_LAYOUTS: dict[int, _SimpleProcessLayout] = {
+    2: _simple(
+        "container_use",
+        "scripted",
+        0,
+        ("opening", "byte_flag"),
+        ("current_angle", "float"),
+        ("direction", "vector"),
+        ("has_window", "byte_flag"),
+        ("has_skeleton", "flag"),
+        reserved=0,
+    ),
+    3: _simple(
+        "object_mover",
+        "world",
+        1,
+        ("parameter", "uint"),
+        ("source_object", "reference"),
+        ("destination_object", "reference"),
+        ("delta_x", "float"),
+        ("delta_y", "float"),
+        ("delta_z", "float"),
+        ("speed", "uint"),
+        ("accumulated_time", "uint"),
+        ("source_location", "location"),
+        ("destination_location", "location"),
+        ("skips_first_frame", "flag"),
+    ),
+    4: _simple(
+        "absolute_object_mover",
+        "world",
+        1,
+        ("parameter", "uint"),
+        ("source_object", "reference"),
+        ("speed", "uint"),
+        ("accumulated_time", "uint"),
+        ("delta", "location"),
+        ("count", "int"),
+        ("blocked", "int"),
+        ("skips_first_frame", "flag"),
+    ),
+    5: _simple(
+        "object_turner",
+        "world",
+        1,
+        ("parameter", "uint"),
+        ("source_object", "reference"),
+        ("base_orientation", "quaternion"),
+        ("delta", "float"),
+        ("speed", "uint"),
+        ("accumulated_time", "uint"),
+        ("angle", "float"),
+        ("axis", "int"),
+        ("exit_state", "int"),
+        ("skips_first_frame", "flag"),
+    ),
+    7: _simple(
+        "object_fade",
+        "world",
+        3,
+        ("source_object", "reference"),
+        ("accumulated_time", "uint"),
+        ("command", "int"),
+        ("saved_parameter", "uint"),
+        ("maximum_time", "float"),
+        ("starting_translucency", "uint"),
+        ("ending_translucency", "uint"),
+        ("saved_translucency", "uint"),
+        ("was_translucent", "flag"),
+        ("was_fixed_in_place", "uint"),
+    ),
+    8: _simple(
+        "object_scale",
+        "world",
+        3,
+        ("source_object", "reference"),
+        ("accumulated_time", "uint"),
+        ("command", "int"),
+        ("saved_parameter", "uint"),
+        ("maximum_time", "float"),
+        ("starting_scale", "vector"),
+        ("ending_scale", "vector"),
+        ("was_fixed_in_place", "uint"),
+    ),
+    9: _simple(
+        "delayed_create",
+        "world",
+        1,
+        ("source_object", "reference"),
+        ("command", "int"),
+        ("location", "location"),
+        ("delay", "int"),
+        ("parameter", "uint"),
+    ),
+    10: _simple(
+        "object_fade_out",
+        "world",
+        2,
+        ("object", "reference"),
+        ("idle_time", "uint"),
+        ("translucency_rate", "uint"),
+        ("sink_rate", "uint"),
+        ("sink_delay", "uint"),
+        ("flags", "int"),
+        ("current_translucency_rate", "uint"),
+        ("current_sink_rate", "uint"),
+    ),
+    11: _simple(
+        "object_fade_in",
+        "world",
+        1,
+        ("object", "reference"),
+        ("idle_time", "uint"),
+        ("translucency_rate", "uint"),
+        ("current_translucency_rate", "uint"),
+        ("old_translucency", "uint"),
+        ("was_translucent", "flag"),
+    ),
+    12: _simple(
+        "object_path_mover",
+        "world",
+        1,
+        ("object", "reference"),
+        ("flags", "uint"),
+        *_PATH_MOVER_FIELDS,
+        ("rotation_axis", "vector"),
+        ("rotation_speed", "float"),
+        ("rotation_angle", "float"),
+        ("time_since_update", "uint"),
+        ("starting_location", "vector"),
+        ("last_location", "vector"),
+        ("orientation", "quaternion"),
+        ("exit_callback", "int"),
+        ("exit_callback_value_1", "uint"),
+        ("exit_callback_value_2", "uint"),
+        ("update_callback", "int"),
+        ("update_callback_value_1", "uint"),
+        ("update_callback_value_2", "uint"),
+    ),
+    14: _simple(
+        "lever_animation",
+        "scripted",
+        1,
+        ("current_angle", "int"),
+        ("target_angle", "int"),
+    ),
+    56: _simple("bellows_animation", "scripted", 0, ("down", "byte_flag"), reserved=0),
+    59: _simple(
+        "drawer_chest_animation",
+        "scripted",
+        1,
+        ("percentage_step", "float"),
+        ("section", "uint"),
+        ("auxiliary_value", "int"),
+        ("flag_value", "uint"),
+        ("current_percentage", "float"),
+        ("full_open_offset", "vector"),
+        ("drawer_step", "vector"),
+    ),
+    60: _simple(
+        "wardrobe_animation",
+        "scripted",
+        2,
+        ("open_angle_limit", "int"),
+        ("open_angle_step", "int"),
+        ("open", "byte_flag"),
+    ),
+    63: _simple(
+        "portcullis_animation",
+        "scripted",
+        2,
+        ("elapsed_time", "uint"),
+        ("loop_speed", "int"),
+        ("z_offset", "float"),
+        ("counter", "int"),
+        ("total_z_offset", "float"),
+        ("initial_z", "uint"),
+        ("loop_count", "int"),
+        ("state", "uint"),
+    ),
+    64: _simple(
+        "stone_block",
+        "scripted",
+        1,
+        ("elapsed_time", "uint"),
+        ("maximum_speed", "uint"),
+        ("target_z", "int"),
+        ("failed_z", "int"),
+        ("old_z", "uint"),
+    ),
+    65: _simple(
+        "attractor_repeller",
+        "scripted",
+        1,
+        ("distance", "int"),
+        ("elapsed_time", "uint"),
+        ("pull_amount", "int"),
+    ),
+    66: _simple(
+        "fireball",
+        "scripted",
+        1,
+        ("elapsed_time", "uint"),
+        ("orientation", "quaternion"),
+        ("target_location", "location"),
+    ),
+    67: _simple("button_use", "scripted", 1, ("time", "uint")),
+    72: _simple(
+        "scripted_floating_object",
+        "scripted",
+        1,
+        ("initial_location", "location"),
+        ("delta_time", "float"),
+        ("delta_time_2", "float"),
+    ),
+    73: _simple(
+        "path_follower",
+        "world",
+        1,
+        ("source_object", "reference"),
+        ("target_path_marker", "reference"),
+        ("starting_link", "int"),
+        ("target_link", "int"),
+        ("speed", "uint"),
+        ("accumulated_time", "uint"),
+        ("delta", "vector"),
+        ("starting_location", "location"),
+        ("total_time", "float"),
+        ("skips_first_frame", "flag"),
+    ),
+    74: _simple(
+        "floating_object",
+        "world",
+        1,
+        ("source_object", "reference"),
+        ("delta_time", "float"),
+        ("delta_time_2", "float"),
+        ("initial_location", "location"),
+        ("reversed", "flag"),
+        ("xy_variation", "float"),
+        ("z_variation", "float"),
+    ),
+    81: _simple(
+        "globe_pedestal",
+        "scripted",
+        1,
+        ("elapsed_time", "uint"),
+        ("globe", "reference"),
+        ("target_location", "location"),
+        ("original_location", "location"),
+        ("maximum_time", "float"),
+        ("image_sequence_number", "uint"),
+    ),
+    101: _simple(
+        "magic_eye",
+        "scripted",
+        1,
+        ("tracked_object", "reference"),
+        ("update_time", "uint"),
+        ("state", "int"),
+        ("eyelid_update_time", "uint"),
+        ("temporarily_active", "flag"),
+    ),
+    165: _simple("element_fade_out", "world", None, reserved=0),
+    203: _simple(
+        "delayed_conceal",
+        "world",
+        1,
+        ("source_object", "reference"),
+        ("command", "int"),
+        ("accumulated_time", "uint"),
+        ("maximum_time", "uint"),
+        ("was_translucent", "flag"),
+        ("saved_translucency", "uint"),
+    ),
+    204: _simple("world_only", "world", None, reserved=0),
+    205: _simple(
+        "head_turn",
+        "world",
+        1,
+        ("source_object", "reference"),
+        ("tracking_object", "reference"),
+        ("accumulated_time", "uint"),
+        ("maximum_time", "uint"),
+        ("has_head", "flag"),
+        reserved=3,
+    ),
+    207: _simple(
+        "fire_damage",
+        "world",
+        0,
+        ("source_object", "reference"),
+        ("fire_object", "reference"),
+        ("accumulated_time", "uint"),
+    ),
+    208: _simple("blood_spurt", "world", None, reserved=0),
+    209: _simple(
+        "windmill_animation",
+        "scripted",
+        None,
+        ("maximum_yaw_difference", "float"),
+        ("rpm", "float"),
+        reserved=0,
+    ),
+}
+
+_SPELL_CONSTANT_KINDS = {
+    108: "gust_spell",
+    109: "ignite_spell",
+    110: "douse_spell",
+    112: "telekinesis_spell",
+    113: "light_spell",
+    114: "light_heal_spell",
+    115: "crystal_barrier_spell",
+    116: "lightning_bolt_spell",
+    118: "cure_spell",
+    123: "charm_spell",
+    124: "ethereal_sight_spell",
+    125: "day_spell",
+    126: "freeze_spell",
+    130: "full_heal_spell",
+    132: "invisibility_spell",
+    133: "ring_of_fire_spell",
+    134: "mana_breath_spell",
+    136: "teleport_spell",
+    138: "frost_storm_spell",
+}
+SIMPLE_PROCESS_LAYOUTS.update(
+    {t: _simple(kind, "spell", 1) for t, kind in _SPELL_CONSTANT_KINDS.items()}
+)
+SIMPLE_PROCESS_LAYOUTS.update(
+    {
+        107: _simple(
+            "stone_spell",
+            "spell",
+            1,
+            ("placeholder_object", "reference"),
+            ("location", "vector"),
+            ("stone_location", "vector"),
+        ),
+        111: _simple(
+            "create_reagents_spell",
+            "spell",
+            1,
+            ("reagent_location", "vector"),
+            ("reagent_orientation", "quaternion"),
+            ("reagent_type", "ushort"),
+        ),
+        117: _simple(
+            "infernal_armor_spell",
+            "spell",
+            1,
+            ("proximity_damage_timer", "float"),
+            ("fade_armor_process_id", "int"),
+        ),
+        119: _simple(
+            "meteorite_spell", "spell", 1, ("last_meteorite_location", "vector")
+        ),
+        121: _simple("fireball_spell", "spell", 1, ("location", "vector")),
+        122: _simple("fog_spell", "spell", None, reserved=0),
+        127: _simple("summon_undead_spell", "spell", 1, ("undead", "reference")),
+        128: _simple("levitate_spell", "spell", 1, ("platform", "reference")),
+        152: _simple(
+            "blow_light_objects_away",
+            "world",
+            1,
+            ("direction", "vector"),
+            ("maximum_force", "float"),
+            ("maximum_weight", "byte"),
+            ("offset_distance", "float"),
+            ("orientation", "quaternion"),
+            ("effect_object", "reference"),
+            ("radius", "int"),
+        ),
+        153: _simple(
+            "fade_armor",
+            "world",
+            1,
+            ("burn_timer", "float"),
+            ("caster", "reference"),
+            ("direction", "int"),
+            ("calling_process_id", "int"),
+        ),
+        169: _simple(
+            "big_stone_spell",
+            "spell",
+            1,
+            ("placeholder_object", "reference"),
+            ("location", "vector"),
+            ("stone_location", "vector"),
+        ),
+    }
+)
+
+
+def _simple_layout_struct(layout: _SimpleProcessLayout) -> struct.Struct:
+    version = "i" if layout.version is not None else ""
+    return struct.Struct(
+        "<" + version + "".join(_SIMPLE_FIELD_FORMATS[k][0] for _, k in layout.fields)
+    )
+
+
+_SIMPLE_LAYOUT_STRUCTS = {
+    process_type: _simple_layout_struct(layout)
+    for process_type, layout in SIMPLE_PROCESS_LAYOUTS.items()
+}
+
+
+@dataclass(frozen=True)
+class U9SimpleProcessState:
+    """A fixed-size process read from :data:`SIMPLE_PROCESS_LAYOUTS`.
+
+    ``kind`` names the layout (for example ``path_follower``). ``values``
+    holds the named fields in stream order: vectors and quaternions as float
+    tuples, locations as integer ``(x, y, z)`` tuples, references as
+    object-reference indices, flags as booleans. The trailing reserved words
+    are in ``reserved``. Index a record by field name (``record["speed"]``).
+    """
+
+    header: U9ProcessHeaderState
+    world_state: U9ProcessWorldState
+    scripted_state: U9ScriptedProcessState | None
+    kind: str
+    version: int | None
+    values: tuple[tuple[str, object], ...]
+    reserved: tuple[int, ...]
+    offset: int
+    end_offset: int
+    spell_state: U9SpellState | None = None
+
+    def __getitem__(self, name: str) -> object:
+        for key, value in self.values:
+            if key == name:
+                return value
+        raise KeyError(name)
+
+    @property
+    def fields(self) -> dict[str, object]:
+        return dict(self.values)
+
+    @classmethod
+    def from_bytes(
+        cls, data: bytes, offset: int, *, object_reference_count: int
+    ) -> U9SimpleProcessState:
+        header, world_state = _read_world_process_prefix(
+            data,
+            offset,
+            frozenset(SIMPLE_PROCESS_LAYOUTS),
+            "table-driven",
+            object_reference_count,
+        )
+        layout = SIMPLE_PROCESS_LAYOUTS[header.process_type]
+        layout_struct = _SIMPLE_LAYOUT_STRUCTS[header.process_type]
+        scripted_state = None
+        payload_offset = world_state.end_offset
+        if layout.parent == "scripted":
+            scripted_state = U9ScriptedProcessState.from_bytes(
+                data, payload_offset, object_reference_count=object_reference_count
+            )
+            payload_offset = scripted_state.end_offset
+        spell_state = None
+        if layout.parent == "spell":
+            spell_state = U9SpellState.from_bytes(
+                data, payload_offset, object_reference_count=object_reference_count
+            )
+            payload_offset = spell_state.end_offset
+        label = f"{layout.kind.replace('_', '-')} process"
+        _require_bytes(data, payload_offset, layout_struct.size, label)
+        raw = layout_struct.unpack_from(data, payload_offset)
+        cursor = 0
+        version = None
+        if layout.version is not None:
+            version = raw[0]
+            cursor = 1
+            if version != layout.version:
+                raise U9ProcessDataError(
+                    f"unsupported {label} version {version} at 0x{payload_offset:X}"
+                )
+        values: list[tuple[str, object]] = []
+        reserved: list[int] = []
+        for name, field_kind in layout.fields:
+            count = _SIMPLE_FIELD_FORMATS[field_kind][1]
+            chunk = raw[cursor : cursor + count]
+            cursor += count
+            value: object = chunk[0] if count == 1 else tuple(chunk)
+            if field_kind in ("float", "vector", "quaternion"):
+                _validate_finite(tuple(chunk), f"{label} {name}")
+            elif field_kind in ("flag", "byte_flag"):
+                if chunk[0] not in (0, 1):
+                    raise U9ProcessDataError(f"invalid {label} {name} flag {chunk[0]}")
+                value = bool(chunk[0])
+            elif field_kind == "reference":
+                _validate_object_reference_index(
+                    chunk[0], object_reference_count, f"{label} {name}"
+                )
+            if field_kind == "reserved":
+                reserved.append(chunk[0])
+            else:
+                values.append((name, value))
+        return cls(
+            header=header,
+            world_state=world_state,
+            scripted_state=scripted_state,
+            kind=layout.kind,
+            version=version,
+            values=tuple(values),
+            reserved=tuple(reserved),
+            offset=offset,
+            end_offset=payload_offset + layout_struct.size,
+            spell_state=spell_state,
+        )
+
+
+@dataclass(frozen=True)
+class U9PathGridCell:
+    """One 40-byte cell of a saved path-search grid.
+
+    Only cells the search touched (``flags`` non-zero) hold meaningful
+    values; the game never clears the others, so their remaining fields are
+    arbitrary. ``next_address`` is a raw pointer to the next cell in the
+    search queue (not the next step of the path); use
+    :meth:`U9PathGridState.cell_index` to turn it into a cell index.
+    """
+
+    x: int
+    y: int
+    flags: int
+    distance: int
+    priority: int
+    estimate: int
+    location: tuple[float, float, float]
+    next_address: int
+
+
+@dataclass(frozen=True)
+class U9PathGridState:
+    """The optional grid search saved inside a pathfinder process.
+
+    The grid holds ``x_cells * y_cells`` cells in row-major order (cell
+    ``i`` is at ``x = i % x_cells``, ``y = i // x_cells``). The queue, path
+    and best-cell links are saved as raw pointers into the grid;
+    ``grid_address`` is the grid's own address at save time, so
+    :meth:`cell_index` converts any of them to a cell index.
+    """
+
+    from_position: tuple[float, float, float]
+    to_position: tuple[float, float, float]
+    horizontal: tuple[float, float, float]
+    vertical: tuple[float, float, float]
+    origin: tuple[float, float, float]
+    allowed_vertical_distance: float
+    allowed_slope: float
+    maximum_stair_height: float
+    maximum_stair_slope: float
+    from_cell: tuple[int, int]
+    to_cell: tuple[int, int]
+    cell_radius: float
+    cylinder_height: float
+    x_cells: int
+    y_cells: int
+    path_found: bool
+    grid_address: int
+    cells: tuple[U9PathGridCell, ...]
+    queue_address: int
+    path_address: int
+    cell_spacing: float
+    blocked: bool
+    best_cell_address: int
+    offset: int
+    end_offset: int
+
+    def cell_index(self, address: int) -> int | None:
+        """Index of the cell a saved pointer refers to, or ``None``."""
+        relative = address - self.grid_address
+        if address == 0 or relative % PATH_GRID_CELL.size:
+            return None
+        index = relative // PATH_GRID_CELL.size
+        return index if 0 <= index < len(self.cells) else None
+
+    @property
+    def queue_cell_index(self) -> int | None:
+        return self.cell_index(self.queue_address)
+
+    @property
+    def path_cell_index(self) -> int | None:
+        return self.cell_index(self.path_address)
+
+    @property
+    def best_cell_index(self) -> int | None:
+        return self.cell_index(self.best_cell_address)
+
+    @classmethod
+    def from_bytes(cls, data: bytes, offset: int) -> U9PathGridState:
+        _require_bytes(data, offset, PATH_GRID_HEADER.size, "path-grid header")
+        v = PATH_GRID_HEADER.unpack_from(data, offset)
+        x_cells, y_cells = v[25], v[26]
+        if not (
+            0 < x_cells <= MAX_PATH_GRID_SIDE and 0 < y_cells <= MAX_PATH_GRID_SIDE
+        ):
+            raise U9ProcessDataError(f"invalid path-grid size {x_cells}x{y_cells}")
+        if v[27] not in (0, 1):
+            raise U9ProcessDataError(f"invalid path-grid path-found flag {v[27]}")
+        _validate_finite(v[0:19] + v[23:25], "path-grid geometry")
+        cursor = offset + PATH_GRID_HEADER.size
+        count = x_cells * y_cells
+        _require_bytes(data, cursor, count * PATH_GRID_CELL.size, "path-grid cells")
+        cells = tuple(
+            U9PathGridCell(
+                x=c[0],
+                y=c[1],
+                flags=c[2],
+                distance=c[3],
+                priority=c[4],
+                estimate=c[5],
+                location=(c[6], c[7], c[8]),
+                next_address=c[9],
+            )
+            for c in PATH_GRID_CELL.iter_unpack(
+                data[cursor : cursor + count * PATH_GRID_CELL.size]
+            )
+        )
+        cursor += count * PATH_GRID_CELL.size
+        _require_bytes(data, cursor, PATH_GRID_TAIL.size, "path-grid tail")
+        queue, path, spacing, blocked, best = PATH_GRID_TAIL.unpack_from(data, cursor)
+        if blocked not in (0, 1):
+            raise U9ProcessDataError(f"invalid path-grid blocked flag {blocked}")
+        _validate_finite((spacing,), "path-grid cell spacing")
+        return cls(
+            from_position=v[0:3],
+            to_position=v[3:6],
+            horizontal=v[6:9],
+            vertical=v[9:12],
+            origin=v[12:15],
+            allowed_vertical_distance=v[15],
+            allowed_slope=v[16],
+            maximum_stair_height=v[17],
+            maximum_stair_slope=v[18],
+            from_cell=(v[19], v[20]),
+            to_cell=(v[21], v[22]),
+            cell_radius=v[23],
+            cylinder_height=v[24],
+            x_cells=x_cells,
+            y_cells=y_cells,
+            path_found=bool(v[27]),
+            grid_address=v[28],
+            cells=cells,
+            queue_address=queue,
+            path_address=path,
+            cell_spacing=spacing,
+            blocked=bool(blocked),
+            best_cell_address=best,
+            offset=offset,
+            end_offset=cursor + PATH_GRID_TAIL.size,
+        )
+
+
+@dataclass(frozen=True)
+class U9PathfinderProcessState:
+    """A type-1 pathfinder process: one NPC walking to a goal.
+
+    The fixed part covers the target (an NPC number, or -1 for a point), the
+    origin, goal, current leg and step goals, termination tests, search and
+    walk states, and collision limits. ``grid`` is present when the walker
+    had fallen back to a grid search. ``duration_npc_offset`` and
+    ``termination_npc_offset`` are byte offsets into the NPC table (-1 for
+    none). ``previous_walk_state`` and ``blocked_position`` are not
+    initialized until the walker changes state or is blocked, so they can
+    hold any value (including NaN).
+    """
+
+    header: U9ProcessHeaderState
+    world_state: U9ProcessWorldState
+    version: int
+    npc_number: int
+    target_npc_number: int
+    target_radius: float
+    approach_angle: float
+    origin: tuple[float, float, float]
+    step_start: tuple[float, float, float]
+    goal: tuple[float, float, float]
+    leg_goal: tuple[float, float, float]
+    step_goal: tuple[float, float, float]
+    blocked_position: tuple[float, float, float]
+    goal_offset: tuple[float, float, float]
+    speed: int
+    careful_walk: int
+    duration_npc_offset: int
+    termination_npc_offset: int
+    termination_value: int
+    last_angle: float
+    target_ray: tuple[float, float, float]
+    arrive_tolerance: float
+    flags: int
+    search_state: int
+    walk_state: int
+    previous_walk_state: int
+    radius: float
+    cylinder_radius: float
+    obstacle_avoid_angle: float
+    last_seen_position: tuple[float, float, float]
+    grid: U9PathGridState | None
+    continue_callback: int
+    ending_callback: int
+    status_code: int
+    grid_move_succeeded: int
+    collision_checks_per_frame: int
+    maximum_collision_checks: int
+    collision_checks_left: int
+    offset: int
+    end_offset: int
+
+    @classmethod
+    def from_bytes(
+        cls, data: bytes, offset: int, *, object_reference_count: int
+    ) -> U9PathfinderProcessState:
+        header, world_state = _read_world_process_prefix(
+            data,
+            offset,
+            frozenset({PATHFINDER_PROCESS_TYPE}),
+            "pathfinder",
+            object_reference_count,
+        )
+        cursor = world_state.end_offset
+        _require_bytes(data, cursor, PATHFINDER_STATE.size, "pathfinder process")
+        v = PATHFINDER_STATE.unpack_from(data, cursor)
+        if v[0] != PATHFINDER_PROCESS_VERSION:
+            raise U9ProcessDataError(
+                f"unsupported pathfinder version {v[0]} at 0x{cursor:X}"
+            )
+        has_grid = v[46]
+        if has_grid not in (0, 1):
+            raise U9ProcessDataError(f"invalid pathfinder grid flag {has_grid}")
+        # The blocked position is only set once the walker is blocked; retail
+        # saves can hold NaN there, so it is not checked.
+        _validate_finite(
+            v[3:20] + v[23:26] + v[31:36] + v[40:46], "pathfinder geometry"
+        )
+        cursor += PATHFINDER_STATE.size
+        grid = U9PathGridState.from_bytes(data, cursor) if has_grid else None
+        if grid is not None:
+            cursor = grid.end_offset
+        _require_bytes(data, cursor, PATHFINDER_TAIL.size, "pathfinder tail")
+        tail = PATHFINDER_TAIL.unpack_from(data, cursor)
+        return cls(
+            header=header,
+            world_state=world_state,
+            version=v[0],
+            npc_number=v[1],
+            target_npc_number=v[2],
+            target_radius=v[3],
+            approach_angle=v[4],
+            origin=v[5:8],
+            step_start=v[8:11],
+            goal=v[11:14],
+            leg_goal=v[14:17],
+            step_goal=v[17:20],
+            blocked_position=v[20:23],
+            goal_offset=v[23:26],
+            speed=v[26],
+            careful_walk=v[27],
+            duration_npc_offset=v[28],
+            termination_npc_offset=v[29],
+            termination_value=v[30],
+            last_angle=v[31],
+            target_ray=v[32:35],
+            arrive_tolerance=v[35],
+            flags=v[36],
+            search_state=v[37],
+            walk_state=v[38],
+            previous_walk_state=v[39],
+            radius=v[40],
+            cylinder_radius=v[41],
+            obstacle_avoid_angle=v[42],
+            last_seen_position=v[43:46],
+            grid=grid,
+            continue_callback=tail[0],
+            ending_callback=tail[1],
+            status_code=tail[2],
+            grid_move_succeeded=tail[3],
+            collision_checks_per_frame=tail[4],
+            maximum_collision_checks=tail[5],
+            collision_checks_left=tail[6],
+            offset=offset,
+            end_offset=cursor + PATHFINDER_TAIL.size,
+        )
+
+
 U9FollowingProcessState = Union[
     U9AnimationControllerProcessState,
     U9HangingObjectProcessState,
@@ -3684,6 +4596,8 @@ U9FollowingProcessState = Union[
     U9NpcActivityProcessState,
     U9NpcActionProcessState,
     U9DoorTimerProcessState,
+    U9SimpleProcessState,
+    U9PathfinderProcessState,
 ]
 # Decoder for each process type the traversal reads after the first process.
 _FOLLOWING_PROCESS_DECODERS: dict[int, type[U9FollowingProcessState]] = {
@@ -3693,6 +4607,7 @@ _FOLLOWING_PROCESS_DECODERS: dict[int, type[U9FollowingProcessState]] = {
     PLAYER_PROXIMITY_PROCESS_TYPE: U9PlayerProximityProcessState,
     CLOCK_ANIMATION_PROCESS_TYPE: U9ClockAnimationProcessState,
     DOOR_TIMER_PROCESS_TYPE: U9DoorTimerProcessState,
+    PATHFINDER_PROCESS_TYPE: U9PathfinderProcessState,
     **dict.fromkeys(
         ANIMATION_CONTROLLER_PROCESS_TYPES, U9AnimationControllerProcessState
     ),
@@ -3702,6 +4617,7 @@ _FOLLOWING_PROCESS_DECODERS: dict[int, type[U9FollowingProcessState]] = {
     **dict.fromkeys(SCRIPTED_OBJECT_PROCESS_TYPES, U9ScriptedObjectProcessState),
     **dict.fromkeys(NPC_ACTIVITY_PROCESS_TYPES, U9NpcActivityProcessState),
     **dict.fromkeys(NPC_ACTION_PROCESS_TYPES, U9NpcActionProcessState),
+    **dict.fromkeys(SIMPLE_PROCESS_LAYOUTS, U9SimpleProcessState),
 }
 
 

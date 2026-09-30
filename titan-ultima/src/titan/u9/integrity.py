@@ -11,6 +11,7 @@ __all__ = [
 
 import hashlib
 import json
+import math
 import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -29,11 +30,13 @@ from titan.u9.process_data import (
     U9NpcActivityProcessState,
     U9ObjectReferenceTable,
     U9ParticlePresetState,
+    U9PathfinderProcessState,
     U9PlayerProximityProcessState,
     U9PortableLightProcessState,
     U9ProcessDataError,
     U9ProcessDataPrefix,
     U9ScriptedObjectProcessState,
+    U9SimpleProcessState,
     U9ScriptedProcessState,
     U9ScriptTimerProcessState,
 )
@@ -97,6 +100,18 @@ def _scripted_process_json(record: U9ScriptedProcessState) -> dict[str, object]:
         "temporary_buffer_hex": record.temporary_buffer.hex(),
         "state": record.state,
     }
+
+
+def _json_safe(value: object) -> object:
+    """Copy ``value`` for strict JSON: non-finite floats (unset or garbage
+    values some saved records hold) become ``None``; tuples become lists."""
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, dict):
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    return value
 
 
 def _movement_extension_json(block: U9MovementExtensionState) -> dict[str, object]:
@@ -294,6 +309,43 @@ def _following_process_json(record: U9FollowingProcessState) -> dict[str, object
         }
         action["action_name"] = record.action.name
         payload["npc_action"] = action
+    elif isinstance(record, U9PathfinderProcessState):
+        pathfinder: dict[str, object] = {
+            key: list(value) if isinstance(value, tuple) else value
+            for key, value in vars(record).items()
+            if key not in ("header", "world_state", "offset", "end_offset", "grid")
+        }
+        grid = record.grid
+        pathfinder["grid"] = (
+            None
+            if grid is None
+            else {
+                "x_cells": grid.x_cells,
+                "y_cells": grid.y_cells,
+                "from_cell": list(grid.from_cell),
+                "to_cell": list(grid.to_cell),
+                "path_found": grid.path_found,
+                "blocked": grid.blocked,
+                "cell_spacing": grid.cell_spacing,
+                "touched_cell_count": sum(1 for cell in grid.cells if cell.flags),
+                "queue_cell_index": grid.queue_cell_index,
+                "path_cell_index": grid.path_cell_index,
+                "best_cell_index": grid.best_cell_index,
+            }
+        )
+        payload["pathfinder"] = pathfinder
+    elif isinstance(record, U9SimpleProcessState):
+        if record.scripted_state is not None:
+            payload["scripted_state"] = _scripted_process_json(record.scripted_state)
+        payload["table_process"] = {
+            "kind": record.kind,
+            "version": record.version,
+            "fields": {
+                key: list(value) if isinstance(value, tuple) else value
+                for key, value in record.values
+            },
+            "reserved": list(record.reserved),
+        }
     elif isinstance(record, U9DoorTimerProcessState):
         payload["door_timer"] = {
             "version": record.version,
@@ -369,7 +421,8 @@ class IntegrityReport:
         return self.verdict()
 
     def to_dict(self) -> dict[str, object]:
-        return {
+        """The report as JSON-ready data; non-finite floats become ``None``."""
+        report = {
             "target": self.target,
             "slot": self.slot,
             "archive": self.archive,
@@ -378,10 +431,11 @@ class IntegrityReport:
             "artifacts": self.artifacts,
             "findings": [asdict(finding) for finding in self.findings],
         }
+        return _json_safe(report)  # type: ignore[return-value]
 
     def write_json(self, filepath: str | Path) -> None:
         with open(filepath, "w", encoding="utf-8") as file:
-            json.dump(self.to_dict(), file, indent=2)
+            json.dump(self.to_dict(), file, indent=2, allow_nan=False)
             file.write("\n")
 
 

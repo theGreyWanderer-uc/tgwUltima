@@ -37,6 +37,35 @@ This project uses [Semantic Versioning](https://semver.org/):
   levitation flags, footprints and infernal armor, idle animations, spider
   speed, and swimming depths and animation lists.
 
+- **U9 save process stream -- pathfinder:** type 1 decodes as
+  `U9PathfinderProcessState`: the walking NPC and its target, origin, goal,
+  current leg and step goals, termination tests, search and walk states and
+  collision limits, plus the optional grid search (`U9PathGridState`: grid
+  geometry, from/to cells and every 40-byte `U9PathGridCell`). The grid's
+  saved queue, path and best-cell pointers convert to cell indices
+  (`cell_index`, `queue_cell_index`, `path_cell_index`, `best_cell_index`).
+  Unset positions may hold NaN; the integrity report writes those as `null`.
+  Together with the spell processes below, **all 13 retail saves checked now
+  decode through the process-list terminator.**
+
+- **U9 save process stream -- spells:** the 60-byte block every spell
+  process saves (`U9SpellState`: caster, target and effect object
+  references, spell number, stage, timer, animation, event, callback) is read
+  for table-driven spell types, exposed as `U9SimpleProcessState.spell_state`.
+  28 spell process types (teleport, fireball, meteorite, levitate, summon
+  undead, stone, create reagents and others) plus the blow-away and armor-fade
+  helpers join `SIMPLE_PROCESS_LAYOUTS`, which now covers 61 types.
+
+- **U9 save process stream -- table-driven process types:** 31 more
+  fixed-size process types are read from one declarative table
+  (`SIMPLE_PROCESS_LAYOUTS`) into `U9SimpleProcessState`: object movers,
+  turners, faders and scalers, path followers, floating objects, lever,
+  drawer, wardrobe, portcullis, bellows and windmill animations, stone
+  blocks, fireballs, magic eyes, head turns, fire damage and others. Each
+  record has a `kind`, its version, named fields (index by name, or
+  `.fields`) and its reserved words, with the same checks as the dedicated
+  readers (version, object references, flags, finite floats).
+
 - **U9 save process stream -- NPC activities and actions, scripted objects,
   clocks and door timers:** the traversal now reads the 24 NPC-activity
   process types (`U9NpcActivityProcessState`: NPC number, action kind, the
@@ -101,6 +130,12 @@ This project uses [Semantic Versioning](https://semver.org/):
   hierarchy/material metadata, archive hashes, and generated animated GLB.
 
 ### Fixed
+
+- **U9 save-check JSON:** `IntegrityReport.to_dict()` and `save-check --json`
+  now write strict JSON. Saved records can hold NaN or infinite floats in
+  unused slots (particle-preset ramp slots, an unset pathfinder position);
+  these were written as bare `NaN`, which strict JSON parsers reject. They are
+  now `null`, and the writer refuses any non-finite value that slips through.
 
 - **U9 animation records:** aligned `anim.flx` with its signed runtime layout,
   separated active part IDs from inactive registry residue, exposed controller

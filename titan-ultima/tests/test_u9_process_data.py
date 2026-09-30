@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import struct
 import unittest
 
@@ -7,6 +8,7 @@ from titan.u9.process_data import (
     HANDLE_DATA_OFFSET,
     MOVEMENT_CONTROLLER_STATE_SIZE,
     OBJECT_REFERENCE_DATA_OFFSET,
+    SIMPLE_PROCESS_LAYOUTS,
     U9CameraEffectState,
     U9CameraState,
     U9CameraControlState,
@@ -15,6 +17,7 @@ from titan.u9.process_data import (
     U9AvatarMovementTailFields,
     U9BruteMovementFields,
     U9ClockAnimationProcessState,
+    U9PathfinderProcessState,
     U9DoorTimerProcessState,
     U9HangingObjectProcessState,
     U9HumanoidMovementFields,
@@ -41,6 +44,7 @@ from titan.u9.process_data import (
     U9ProcessRecordPrefix,
     U9ProcessWorldState,
     U9ScriptedObjectProcessState,
+    U9SimpleProcessState,
     U9ScriptedProcessState,
     U9ScriptTimerProcessState,
     U9SpiderMovementFields,
@@ -412,6 +416,93 @@ def _npc_action_process(process_type: int = 23) -> bytes:
     data += struct.pack("<2ifi", 44, 43, 1.0, 0)
     data += struct.pack("<64i", *variables)
     data += struct.pack("<fi5i4I", 50.0, 1, 1, 30, 172, 1, 0, 0, 0, 0, 0)
+    return bytes(data)
+
+
+_SIMPLE_SAMPLE_VALUES: dict[str, object] = {
+    "int": -7,
+    "uint": 9,
+    "float": 1.5,
+    "flag": True,
+    "byte_flag": True,
+    "byte": 200,
+    "ushort": 40000,
+    "reference": 1,
+    "vector": (1.5, 1.5, 1.5),
+    "quaternion": (1.0, 0.0, 0.0, 0.0),
+    "location": (1, 2, 3),
+}
+_SIMPLE_SAMPLE_PACKING: dict[str, tuple[str, tuple[object, ...]]] = {
+    "int": ("i", (-7,)),
+    "uint": ("I", (9,)),
+    "float": ("f", (1.5,)),
+    "flag": ("i", (1,)),
+    "byte_flag": ("B", (1,)),
+    "byte": ("B", (200,)),
+    "ushort": ("H", (40000,)),
+    "reference": ("i", (1,)),
+    "vector": ("3f", (1.5, 1.5, 1.5)),
+    "quaternion": ("4f", (1.0, 0.0, 0.0, 0.0)),
+    "location": ("iih2x", (1, 2, 3)),
+    "reserved": ("I", (0,)),
+}
+
+
+def _simple_process(process_type: int) -> bytes:
+    layout = SIMPLE_PROCESS_LAYOUTS[process_type]
+    data = bytearray(_world_process_header(process_type, layout.kind.encode()))
+    if layout.parent == "scripted":
+        data += struct.pack("<iiiii128si", 0, 1, 3, 5, 0, b"", 2)
+    if layout.parent == "spell":
+        data += struct.pack(
+            "<iiIiiiiiIii4I", 4, 1, 24, 2, 422, 7, 30, 0, 0, 3, 16, 0, 0, 0, 0
+        )
+    if layout.version is not None:
+        data += struct.pack("<i", layout.version)
+    for _, kind in layout.fields:
+        fmt, values = _SIMPLE_SAMPLE_PACKING[kind]
+        data += struct.pack("<" + fmt, *values)
+    return bytes(data)
+
+
+_GRID_BASE = 0x0A000000
+
+
+def _pathfinder_process(*, grid: bool, blocked_x: float = 0.0) -> bytes:
+    data = bytearray(_world_process_header(1, b"Pathfinder"))
+    vectors = [(float(i), 2.0, 3.0) for i in range(7)]
+    vectors[5] = (blocked_x, 0.0, 0.0)
+    data += struct.pack("<iiiff", 6, 275, -1, 40.0, 0.5)
+    for vector in vectors:
+        data += struct.pack("<3f", *vector)
+    data += struct.pack("<iiiiif", 0, 1, 1264, -1, 0, 1.25)
+    data += struct.pack("<3f", 0.0, 1.0, 0.0)
+    data += struct.pack("<fiiiifff", 16.0, 33, 0, 10, 12345, 20.0, 18.0, 0.3)
+    data += struct.pack("<3fB", 7.0, 8.0, 9.0, 1 if grid else 0)
+    if grid:
+        data += struct.pack("<15f", *([1.0] * 15))
+        data += struct.pack(
+            "<4f4i2f2iiI", 30, 0.7, 20, 0.9, 0, 0, 1, 1, 9.0, 60, 2, 2, 1, _GRID_BASE
+        )
+        for index in range(4):
+            touched = index in (0, 1, 3)
+            data += struct.pack(
+                "<6i3fI",
+                index % 2 if touched else 0x1234,
+                index // 2 if touched else 0x5678,
+                194 if touched else 0,
+                index,
+                index + 1,
+                3 - index,
+                0.0,
+                0.0,
+                0.0,
+                _GRID_BASE + 40 * (index + 1) if index < 3 else 0,
+            )
+        data += struct.pack(
+            "<IIfiI", _GRID_BASE + 40, _GRID_BASE, 22.5, 0, _GRID_BASE + 120
+        )
+    data += struct.pack("<7i", 0, 0, 1, 11, 1, 30, 0)
     return bytes(data)
 
 
@@ -1485,6 +1576,166 @@ class ProcessDataPrefixTests(unittest.TestCase):
             ):
                 U9ProcessDataPrefix.from_bytes(bytes(bad))
 
+    def test_traverses_pathfinders_with_and_without_grid(self) -> None:
+        prefix, _ = self._insert_movement(
+            _pathfinder_process(grid=False, blocked_x=math.nan),
+            _pathfinder_process(grid=True),
+        )
+
+        plain, gridded, light = prefix.following_processes
+        assert isinstance(plain, U9PathfinderProcessState)
+        assert isinstance(gridded, U9PathfinderProcessState)
+        self.assertIsInstance(light, U9PortableLightProcessState)
+        self.assertIsNone(plain.grid)
+        self.assertTrue(math.isnan(plain.blocked_position[0]))
+        self.assertEqual(
+            (plain.version, plain.npc_number, plain.target_npc_number),
+            (6, 275, -1),
+        )
+        self.assertEqual(plain.goal, (2.0, 2.0, 3.0))
+        self.assertEqual(plain.leg_goal, (3.0, 2.0, 3.0))
+        self.assertEqual(
+            (plain.duration_npc_offset, plain.termination_npc_offset), (1264, -1)
+        )
+        self.assertEqual((plain.flags, plain.walk_state), (33, 10))
+        self.assertEqual(plain.previous_walk_state, 12345)
+        self.assertEqual(plain.last_seen_position, (7.0, 8.0, 9.0))
+        self.assertEqual(
+            (
+                plain.status_code,
+                plain.grid_move_succeeded,
+                plain.maximum_collision_checks,
+            ),
+            (1, 11, 30),
+        )
+        self.assertEqual(plain.end_offset, gridded.offset)
+        self.assertEqual(gridded.end_offset, light.offset)
+
+        grid = gridded.grid
+        assert grid is not None
+        self.assertEqual((grid.x_cells, grid.y_cells), (2, 2))
+        self.assertEqual((grid.from_cell, grid.to_cell), ((0, 0), (1, 1)))
+        self.assertTrue(grid.path_found)
+        self.assertEqual(len(grid.cells), 4)
+        self.assertEqual(
+            (grid.cells[3].x, grid.cells[3].y, grid.cells[3].flags), (1, 1, 194)
+        )
+        self.assertEqual(grid.cells[2].flags, 0)
+        self.assertEqual(grid.cell_index(grid.cells[0].next_address), 1)
+        self.assertIsNone(grid.cell_index(0))
+        self.assertIsNone(grid.cell_index(_GRID_BASE + 2))
+        self.assertIsNone(grid.cell_index(_GRID_BASE + 160))
+        self.assertEqual(
+            (grid.queue_cell_index, grid.path_cell_index, grid.best_cell_index),
+            (1, 0, 3),
+        )
+        self.assertEqual(grid.cell_spacing, 22.5)
+
+    def test_rejects_bad_pathfinder_fields(self) -> None:
+        prefix, data = self._insert_movement(_pathfinder_process(grid=True))
+        pathfinder = prefix.following_processes[0]
+        assert isinstance(pathfinder, U9PathfinderProcessState)
+        payload = pathfinder.world_state.end_offset
+        grid_offset = payload + 185
+
+        for position, fmt, value, message in (
+            (payload, "<i", 5, "pathfinder version 5"),
+            (payload + 184, "<B", 2, "pathfinder grid flag 2"),
+            (payload + 20, "<f", math.inf, "pathfinder geometry"),
+            (grid_offset + 100, "<i", 0, "path-grid size 0x2"),
+            (grid_offset + 108, "<i", 3, "path-grid path-found flag 3"),
+        ):
+            bad = bytearray(data)
+            struct.pack_into(fmt, bad, position, value)
+            with (
+                self.subTest(message=message),
+                self.assertRaisesRegex(U9ProcessDataError, message),
+            ):
+                U9ProcessDataPrefix.from_bytes(bytes(bad))
+
+    def test_traverses_every_table_driven_layout(self) -> None:
+        records = [_simple_process(t) for t in sorted(SIMPLE_PROCESS_LAYOUTS)]
+        prefix, _ = self._insert_movement(*records)
+
+        *simple, light = prefix.following_processes
+        self.assertIsInstance(light, U9PortableLightProcessState)
+        self.assertEqual(len(simple), len(SIMPLE_PROCESS_LAYOUTS))
+        for record, following in zip(simple, [*simple[1:], light]):
+            assert isinstance(record, U9SimpleProcessState)
+            layout = SIMPLE_PROCESS_LAYOUTS[record.header.process_type]
+            with self.subTest(kind=layout.kind):
+                self.assertEqual(record.kind, layout.kind)
+                self.assertEqual(record.version, layout.version)
+                self.assertEqual(
+                    record.scripted_state is not None, layout.parent == "scripted"
+                )
+                self.assertEqual(
+                    record.spell_state is not None, layout.parent == "spell"
+                )
+                if record.spell_state is not None:
+                    self.assertEqual(
+                        (
+                            record.spell_state.spell_number,
+                            record.spell_state.target_object_reference_index,
+                        ),
+                        (30, 3),
+                    )
+                self.assertEqual(record.end_offset, following.offset)
+                for name, kind in layout.fields:
+                    if kind != "reserved":
+                        self.assertEqual(record[name], _SIMPLE_SAMPLE_VALUES[kind])
+                self.assertEqual(
+                    record.reserved,
+                    (0,) * sum(k == "reserved" for _, k in layout.fields),
+                )
+
+    def test_rejects_bad_spell_state(self) -> None:
+        prefix, data = self._insert_movement(_simple_process(136))
+        spell = prefix.following_processes[0]
+        assert isinstance(spell, U9SimpleProcessState)
+        assert spell.spell_state is not None
+        self.assertEqual(spell.kind, "teleport_spell")
+        base = spell.spell_state.offset
+
+        for relative, value, message in (
+            (0, 3, "spell-state version 3"),
+            (36, 4, "spell target object-reference index 4"),
+            (60, 2, "teleport-spell process version 2"),
+        ):
+            bad = bytearray(data)
+            struct.pack_into("<i", bad, base + relative, value)
+            with (
+                self.subTest(message=message),
+                self.assertRaisesRegex(U9ProcessDataError, message),
+            ):
+                U9ProcessDataPrefix.from_bytes(bytes(bad))
+
+    def test_path_follower_fields_and_rejections(self) -> None:
+        prefix, data = self._insert_movement(_simple_process(73))
+        follower = prefix.following_processes[0]
+        assert isinstance(follower, U9SimpleProcessState)
+        self.assertEqual(follower.kind, "path_follower")
+        self.assertEqual(follower["starting_location"], (1, 2, 3))
+        self.assertEqual(follower["delta"], (1.5, 1.5, 1.5))
+        self.assertTrue(follower["skips_first_frame"])
+        self.assertEqual(follower.fields["source_object"], 1)
+        with self.assertRaises(KeyError):
+            follower["missing"]
+        payload = follower.world_state.end_offset
+
+        for relative, value, message in (
+            (0, 2, "path-follower process version 2"),
+            (4, 4, "path-follower process source_object object-reference index 4"),
+            (56, 2, "path-follower process skips_first_frame flag 2"),
+        ):
+            bad = bytearray(data)
+            struct.pack_into("<i", bad, payload + relative, value)
+            with (
+                self.subTest(message=message),
+                self.assertRaisesRegex(U9ProcessDataError, message),
+            ):
+                U9ProcessDataPrefix.from_bytes(bytes(bad))
+
     def test_rejects_bad_npc_activity_version_reference_and_flag(self) -> None:
         prefix, data = self._insert_movement(_npc_activity_process())
         activity = prefix.following_processes[0]
@@ -1567,13 +1818,13 @@ class ProcessDataPrefixTests(unittest.TestCase):
         original_prefix = U9ProcessDataPrefix.from_bytes(original)
         assert original_prefix.next_process_offset is not None
         data = original[: original_prefix.next_process_offset] + struct.pack(
-            "<if", 73, 1.2
+            "<if", 131, 1.2
         )
 
         prefix = U9ProcessDataPrefix.from_bytes(data)
 
-        self.assertEqual(prefix.next_process_type, 73)
-        self.assertEqual(prefix.blocked_process_type, 73)
+        self.assertEqual(prefix.next_process_type, 131)
+        self.assertEqual(prefix.blocked_process_type, 131)
         self.assertEqual(prefix.blocked_process_offset, prefix.next_process_offset)
         self.assertIsNone(prefix.next_process_header)
         self.assertEqual(prefix.following_processes, ())

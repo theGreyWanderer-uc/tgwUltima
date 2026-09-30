@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import struct
 import tempfile
 import unittest
@@ -155,6 +156,37 @@ def _later_process_records() -> bytes:
     data += struct.pack("<64ifi5i4I", *([0] * 64), 50.0, 0, 1, 30, -1, 0, 0, 0, 0, 0, 0)
     data += _world_header(197, b"DoorTimer")
     data += struct.pack("<iif", 0, 1, 28177.0)
+    data += _world_header(101, b"MagicEye")
+    data += struct.pack("<iiiii128si", 0, 1, 0, 0, 0, b"", 0)
+    data += struct.pack("<iiIiIi4I", 1, 1, 150, 0, 0, 0, 0, 0, 0, 0)
+    data += _world_header(1, b"Pathfinder")
+    data += struct.pack("<iiiff", 6, 275, -1, 40.0, 0.5)
+    data += struct.pack("<21f", *([1.0] * 15), float("nan"), 0.0, 0.0, 0.0, 0.0, 0.0)
+    data += struct.pack(
+        "<iiiiif3ffiiiifff3fB",
+        0,
+        1,
+        -1,
+        -1,
+        0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        16.0,
+        1,
+        0,
+        1,
+        0,
+        20.0,
+        18.0,
+        0.3,
+        0.0,
+        0.0,
+        0.0,
+        0,
+    )
+    data += struct.pack("<7i", 2, 12, 1, 0, 3, 20, 0)
     return bytes(data)
 
 
@@ -517,9 +549,11 @@ class IntegrityTests(unittest.TestCase):
         records = evidence["decoded_following_processes"]
         self.assertEqual(
             [record["type"] for record in records],
-            [61, 62, 98, 85, 30, 53, 57, 23, 197, 70],
+            [61, 62, 98, 85, 30, 53, 57, 23, 197, 101, 1, 70],
         )
-        _, _, _, movement, activity, door, clock, action, timer, _ = records
+        _, _, _, movement, activity, door, clock, action, timer, eye, walker, _ = (
+            records
+        )
         (humanoid,) = movement["movement_controller"]["leading"]
         self.assertEqual(humanoid["kind"], "humanoid")
         self.assertTrue(humanoid["fields"]["leaves_footprints"])
@@ -537,6 +571,23 @@ class IntegrityTests(unittest.TestCase):
         self.assertEqual(action["npc_action"]["maximum_collision_checks"], 30)
         self.assertEqual(len(action["npc_action"]["activity_variables"]), 64)
         self.assertEqual(timer["door_timer"]["door_object_reference_index"], 1)
+        self.assertEqual(eye["table_process"]["kind"], "magic_eye")
+        self.assertIsNone(walker["pathfinder"]["grid"])
+        self.assertTrue(math.isnan(walker["pathfinder"]["blocked_position"][0]))
+        self.assertEqual(walker["pathfinder"]["collision_checks_per_frame"], 3)
+        serialized = report.to_dict()["artifacts"]["archive/processes.dat"]
+        self.assertEqual(
+            serialized["decoded_following_processes"][10]["pathfinder"][
+                "blocked_position"
+            ],
+            [None, 0.0, 0.0],
+        )
+        output = self.root / "report.json"
+        report.write_json(output)
+        json.loads(output.read_text(encoding="utf-8"), parse_constant=self.fail)
+        self.assertEqual(eye["table_process"]["fields"]["update_time"], 150)
+        self.assertFalse(eye["table_process"]["fields"]["temporarily_active"])
+        self.assertEqual(eye["scripted_state"]["primary_object_reference_index"], 1)
         self.assertIsNone(evidence["blocked_process_type"])
         json.dumps(report.to_dict())
 
