@@ -5,14 +5,24 @@ import unittest
 
 from titan.u9.process_data import (
     HANDLE_DATA_OFFSET,
+    MOVEMENT_CONTROLLER_STATE_SIZE,
     OBJECT_REFERENCE_DATA_OFFSET,
     U9CameraEffectState,
     U9CameraState,
     U9CameraControlState,
     U9AnimationControllerProcessState,
+    U9AvatarMovementFields,
+    U9AvatarMovementTailFields,
+    U9BruteMovementFields,
+    U9ClockAnimationProcessState,
+    U9DoorTimerProcessState,
     U9HangingObjectProcessState,
+    U9HumanoidMovementFields,
     U9ItemHandleEntry,
     U9ItemHandleTable,
+    U9MovementControllerProcessState,
+    U9NpcActionProcessState,
+    U9NpcActivityProcessState,
     U9ObjectReferenceEntry,
     U9ObjectReferenceTable,
     U9ParticleForcePresetState,
@@ -30,8 +40,11 @@ from titan.u9.process_data import (
     U9ProcessHeaderState,
     U9ProcessRecordPrefix,
     U9ProcessWorldState,
+    U9ScriptedObjectProcessState,
     U9ScriptedProcessState,
     U9ScriptTimerProcessState,
+    U9SpiderMovementFields,
+    U9SwimmingMovementFields,
     U9TargetingState,
 )
 
@@ -351,6 +364,79 @@ def _script_timer_process() -> bytes:
     timer_flags = (100 << 16) | (3 << 8) | (4 << 4) | 0x0F
     data += struct.pack("<i12I", 1, timer_flags, 600, 4, 3, 400, 125, 1, 1, 0, 0, 0, 0)
     return bytes(data)
+
+
+def _movement_controller_process(
+    process_type: int,
+    *,
+    leading: bytes = b"",
+    trailing: bytes = b"",
+    name: bytes = b"MoveCon",
+) -> bytes:
+    data = bytearray(struct.pack("<i", process_type))
+    data += leading
+    data += struct.pack("<9i100s", 40, 1, 0, 0, 125, -1, -1, 0x3F, 0, name)
+    data += struct.pack("<iiii", 0, 1, 2, -1)
+    movement = bytearray(MOVEMENT_CONTROLLER_STATE_SIZE)
+    struct.pack_into("<i", movement, 0, 1)
+    struct.pack_into("<i", movement, 40, 1)
+    struct.pack_into("<i", movement, 48, 3)
+    data += movement
+    data += trailing
+    return bytes(data)
+
+
+def _world_process_header(process_type: int, name: bytes) -> bytes:
+    data = bytearray(
+        struct.pack("<i9i100s", process_type, 50, 1, 0, 0, 7, -1, -1, 0x3F, 0, name)
+    )
+    data += struct.pack("<iiii", 0, 1, 2, 9)
+    return bytes(data)
+
+
+def _npc_activity_process(process_type: int = 30) -> bytes:
+    variables = [0] * 64
+    variables[1] = 734
+    variables[5] = 735
+    data = bytearray(_world_process_header(process_type, b"NpcActivity"))
+    data += struct.pack("<7i64i4I", 2, 275, 2, 3, -1, 1, 0, *variables, 0, 0, 0, 0)
+    return bytes(data)
+
+
+def _npc_action_process(process_type: int = 23) -> bytes:
+    variables = [0] * 64
+    variables[0] = 734
+    data = bytearray(_world_process_header(process_type, b"NpcAction"))
+    data += struct.pack("<6ifi", 4, 275, 2, 1, 120, 340, 50.0, 3)
+    data += struct.pack("<8if3i", 0, 2, 0, 0, 125, 350, 0, -1, 1.5, 120, 340, 900)
+    data += struct.pack("<2ifi", 44, 43, 1.0, 0)
+    data += struct.pack("<64i", *variables)
+    data += struct.pack("<fi5i4I", 50.0, 1, 1, 30, 172, 1, 0, 0, 0, 0, 0)
+    return bytes(data)
+
+
+def _door_timer_process() -> bytes:
+    data = bytearray(_world_process_header(197, b"DoorTimer"))
+    data += struct.pack("<iif", 0, 3, 28177.0)
+    return bytes(data)
+
+
+def _scripted_object_process(process_type: int = 53) -> bytes:
+    data = bytearray(_world_process_header(process_type, b"Door"))
+    data += struct.pack("<iiiii128si", 0, 1, 3, 5, 0, b"", 2)
+    return bytes(data)
+
+
+def _clock_animation_process() -> bytes:
+    data = bytearray(_scripted_object_process(57))
+    data += struct.pack("<if", 0, 11685.0)
+    return bytes(data)
+
+
+def _flying_extension() -> bytes:
+    return struct.pack(
+        "<2f5ii5ii2I", 900.0, 10.0, 1, 2, 0, 0, 0, 2, 7, 0, 0, 0, 0, 1, 0, 0
+    )
 
 
 def _animation_controller_process() -> bytes:
@@ -1053,6 +1139,393 @@ class ProcessDataPrefixTests(unittest.TestCase):
         self.assertEqual(len(kinematic.reference_transform), 12)
         self.assertEqual(controller.end_offset, light.offset)
 
+    def test_routes_avatar_animation_controller_type(self) -> None:
+        original = _process_prefix()
+        original_prefix = U9ProcessDataPrefix.from_bytes(original)
+        assert original_prefix.next_process_offset is not None
+        record = bytearray(_animation_controller_process())
+        struct.pack_into("<i", record, 0, 213)
+        data = (
+            original[: original_prefix.next_process_offset]
+            + bytes(record)
+            + original[original_prefix.next_process_offset :]
+        )
+
+        controller, light = U9ProcessDataPrefix.from_bytes(data).following_processes
+
+        assert isinstance(controller, U9AnimationControllerProcessState)
+        self.assertEqual(controller.header.process_type, 213)
+        self.assertEqual(controller.end_offset, light.offset)
+
+    def _insert_movement(self, *records: bytes) -> tuple[U9ProcessDataPrefix, bytes]:
+        original = _process_prefix()
+        original_prefix = U9ProcessDataPrefix.from_bytes(original)
+        assert original_prefix.next_process_offset is not None
+        data = (
+            original[: original_prefix.next_process_offset]
+            + b"".join(records)
+            + original[original_prefix.next_process_offset :]
+        )
+        return U9ProcessDataPrefix.from_bytes(data), data
+
+    def test_traverses_base_and_flying_movement_controllers(self) -> None:
+        prefix, _ = self._insert_movement(
+            _movement_controller_process(88),
+            _movement_controller_process(93, trailing=_flying_extension()),
+        )
+
+        walker, flyer, light = prefix.following_processes
+        assert isinstance(walker, U9MovementControllerProcessState)
+        assert isinstance(flyer, U9MovementControllerProcessState)
+        self.assertIsInstance(light, U9PortableLightProcessState)
+        self.assertEqual(walker.header.name, "MoveCon")
+        self.assertEqual(walker.world_state.object_reference_indices, (2,))
+        self.assertEqual(walker.movement.version, 1)
+        self.assertEqual(walker.movement.object_reference_indices, (1, 3))
+        self.assertEqual(len(walker.movement.raw), MOVEMENT_CONTROLLER_STATE_SIZE)
+        self.assertIsNone(walker.flying)
+        self.assertEqual(walker.end_offset, flyer.offset)
+        assert flyer.flying is not None
+        self.assertEqual(flyer.flying.ceiling_altitude, 900.0)
+        self.assertEqual(flyer.flying.fall_animation_ids, (1, 2, 0, 0, 0))
+        self.assertEqual(flyer.flying.fall_animation_count, 2)
+        self.assertEqual(flyer.flying.death_animation_count, 1)
+        self.assertEqual(flyer.end_offset, light.offset)
+
+    def test_humanoid_blocks_precede_the_common_header(self) -> None:
+        avatar_fields = struct.pack("<iiiiBBBiiii", 3, 33, 7, 0, 0, 1, 0, 172, 0, -1, 1)
+        humanoid_fields = struct.pack("<iiBB", 2, 0, 0, 1)
+        prefix, _ = self._insert_movement(
+            _movement_controller_process(
+                166,
+                leading=avatar_fields + humanoid_fields,
+                trailing=b"\x01",
+                name=b"AvatarMoveCon",
+            ),
+            _movement_controller_process(
+                95, leading=struct.pack("<ii", 1, -1) + humanoid_fields
+            ),
+        )
+
+        avatar, brute, light = prefix.following_processes
+        assert isinstance(avatar, U9MovementControllerProcessState)
+        assert isinstance(brute, U9MovementControllerProcessState)
+        self.assertEqual(avatar.header.name, "AvatarMoveCon")
+        self.assertEqual(avatar.header.serialized_prefix_size, 4 + 35 + 10)
+        self.assertEqual(
+            [(block.kind, block.raw) for block in avatar.leading],
+            [("avatar", avatar_fields), ("humanoid", humanoid_fields)],
+        )
+        self.assertEqual(avatar.leading[0].offset, avatar.offset + 4)
+        self.assertEqual(
+            [(block.kind, block.raw) for block in avatar.extensions],
+            [("avatar_tail", b"\x01")],
+        )
+        self.assertEqual(avatar.end_offset, brute.offset)
+        self.assertEqual([block.kind for block in brute.leading], ["brute", "humanoid"])
+        self.assertEqual(brute.extensions, ())
+        self.assertEqual(brute.end_offset, light.offset)
+
+        self.assertEqual(
+            avatar.leading[0].fields,
+            U9AvatarMovementFields(
+                version=3,
+                breath_timer=33,
+                health_timer=7,
+                swamp_timer=0,
+                breath_override=False,
+                levitation_allowed=True,
+                levitating=False,
+                previous_idle_animation_id=172,
+                posing=0,
+                last_idle_animation_id=-1,
+                combat_mode=1,
+            ),
+        )
+        self.assertEqual(
+            avatar.leading[1].fields,
+            U9HumanoidMovementFields(
+                version=2,
+                lava_timer=0,
+                wearing_infernal_armor=False,
+                leaves_footprints=True,
+            ),
+        )
+        self.assertEqual(
+            avatar.extensions[0].fields, U9AvatarMovementTailFields(swamp_immunity=True)
+        )
+        self.assertEqual(
+            brute.leading[0].fields,
+            U9BruteMovementFields(version=1, idle_animation_id=-1),
+        )
+
+    def test_rejects_bad_movement_extension_versions_and_flags(self) -> None:
+        humanoid_fields = struct.pack("<iiBB", 2, 0, 0, 1)
+        prefix, data = self._insert_movement(
+            _movement_controller_process(85, leading=humanoid_fields)
+        )
+        walker = prefix.following_processes[0]
+        assert isinstance(walker, U9MovementControllerProcessState)
+        block = walker.leading[0]
+
+        bad_version = bytearray(data)
+        struct.pack_into("<i", bad_version, block.offset, 3)
+        with self.assertRaisesRegex(U9ProcessDataError, "humanoid movement version 3"):
+            U9ProcessDataPrefix.from_bytes(bytes(bad_version))
+
+        bad_flag = bytearray(data)
+        bad_flag[block.offset + 9] = 2
+        with self.assertRaisesRegex(U9ProcessDataError, "footprints boolean byte 2"):
+            U9ProcessDataPrefix.from_bytes(bytes(bad_flag))
+
+    def test_spider_swimming_and_zombie_blocks_follow_the_base_block(self) -> None:
+        spider_fields = struct.pack("<iII", -1, 5621, 0)
+        swimming_fields = struct.pack(
+            "<3f5ii5ii2I",
+            25.0,
+            300.0,
+            0.0,
+            *(0x3F7E6B52, 0x3F7E6B52, 78, -4909232, 0),
+            0,
+            *(939, 0, 0, 0, 0),
+            1,
+            0,
+            0x3F800000,
+        )
+        prefix, _ = self._insert_movement(
+            _movement_controller_process(155, trailing=spider_fields),
+            _movement_controller_process(168, trailing=swimming_fields),
+            _movement_controller_process(211),
+        )
+
+        spider, fish, zombie, light = prefix.following_processes
+        assert isinstance(spider, U9MovementControllerProcessState)
+        assert isinstance(fish, U9MovementControllerProcessState)
+        assert isinstance(zombie, U9MovementControllerProcessState)
+        self.assertEqual(
+            [(block.kind, block.raw) for block in spider.extensions],
+            [("spider", spider_fields)],
+        )
+        self.assertEqual(
+            [(block.kind, block.raw) for block in fish.extensions],
+            [("swimming", swimming_fields)],
+        )
+        self.assertIsNone(fish.flying)
+        self.assertEqual((zombie.leading, zombie.extensions), ((), ()))
+        self.assertEqual(spider.end_offset, fish.offset)
+        self.assertEqual(fish.end_offset, zombie.offset)
+        self.assertEqual(zombie.end_offset, light.offset)
+
+        self.assertEqual(
+            spider.extensions[0].fields,
+            U9SpiderMovementFields(speed=-1, reserved=(5621, 0)),
+        )
+        swimming = fish.extensions[0].fields
+        assert isinstance(swimming, U9SwimmingMovementFields)
+        self.assertEqual(
+            (swimming.floor_altitude, swimming.floor_depth, swimming.jump_depth),
+            (25.0, 300.0, 0.0),
+        )
+        self.assertEqual(swimming.fall_animation_count, 0)
+        self.assertEqual(swimming.fall_animation_ids[2], 78)
+        self.assertEqual(swimming.death_animation_ids[0], 939)
+        self.assertEqual(swimming.death_animation_count, 1)
+        self.assertEqual(swimming.reserved, (0, 0x3F800000))
+
+    def test_rejects_swimming_animation_count_above_capacity(self) -> None:
+        swimming_fields = struct.pack(
+            "<3f5ii5ii2I", 25.0, 300.0, 0.0, *([0] * 5), 6, *([0] * 5), 0, 0, 0
+        )
+        record = _movement_controller_process(87, trailing=swimming_fields)
+        with self.assertRaisesRegex(
+            U9ProcessDataError, "invalid swimming fall-animation count 6"
+        ):
+            self._insert_movement(record)
+
+    def test_npc_movement_extension_follows_the_base_block(self) -> None:
+        extension = struct.pack("<iii", 3, 3266, 2)
+        prefix, data = self._insert_movement(
+            _movement_controller_process(86, trailing=extension)
+        )
+
+        npc, light = prefix.following_processes
+        assert isinstance(npc, U9MovementControllerProcessState)
+        self.assertEqual(npc.leading, ())
+        (block,) = npc.extensions
+        self.assertEqual(block.kind, "npc")
+        self.assertEqual(block.object_reference_index, 3)
+        self.assertEqual(block.offset, npc.movement.end_offset)
+        self.assertEqual(npc.end_offset, light.offset)
+
+        bad_reference = bytearray(data)
+        struct.pack_into("<i", bad_reference, block.offset, 4)
+        with self.assertRaisesRegex(
+            U9ProcessDataError, "npc movement object-reference"
+        ):
+            U9ProcessDataPrefix.from_bytes(bytes(bad_reference))
+
+    def test_rejects_bad_movement_controller_version_and_reference(self) -> None:
+        prefix, data = self._insert_movement(_movement_controller_process(88))
+        walker = prefix.following_processes[0]
+        assert isinstance(walker, U9MovementControllerProcessState)
+
+        bad_version = bytearray(data)
+        struct.pack_into("<i", bad_version, walker.movement.offset, 2)
+        with self.assertRaisesRegex(
+            U9ProcessDataError, "movement-controller version 2"
+        ):
+            U9ProcessDataPrefix.from_bytes(bytes(bad_version))
+
+        bad_reference = bytearray(data)
+        struct.pack_into("<i", bad_reference, walker.movement.offset + 48, 4)
+        with self.assertRaisesRegex(
+            U9ProcessDataError, "movement-controller object-reference index 4"
+        ):
+            U9ProcessDataPrefix.from_bytes(bytes(bad_reference))
+
+    def test_traverses_npc_activity_process(self) -> None:
+        prefix, _ = self._insert_movement(
+            _npc_activity_process(30), _npc_activity_process(160)
+        )
+
+        loiter, idle, light = prefix.following_processes
+        assert isinstance(loiter, U9NpcActivityProcessState)
+        self.assertIsInstance(idle, U9NpcActivityProcessState)
+        self.assertIsInstance(light, U9PortableLightProcessState)
+        self.assertEqual(loiter.header.name, "NpcActivity")
+        self.assertEqual(loiter.world_state.map_number, 9)
+        self.assertEqual(
+            (
+                loiter.version,
+                loiter.npc_number,
+                loiter.action_kind,
+                loiter.npc_object_reference_index,
+                loiter.state,
+                loiter.activity_started,
+                loiter.clears_hands_on_exit,
+            ),
+            (2, 275, 2, 3, -1, True, False),
+        )
+        self.assertEqual(len(loiter.activity_variables), 64)
+        self.assertEqual(loiter.activity_variables[:6], (0, 734, 0, 0, 0, 735))
+        self.assertEqual(loiter.reserved, (0, 0, 0, 0))
+        self.assertEqual(loiter.end_offset, idle.offset)
+        self.assertEqual(idle.end_offset, light.offset)
+
+    def test_traverses_npc_action_and_door_timer_processes(self) -> None:
+        prefix, _ = self._insert_movement(
+            _npc_activity_process(30), _npc_action_process(23), _door_timer_process()
+        )
+
+        activity, action, door, light = prefix.following_processes
+        assert isinstance(activity, U9NpcActivityProcessState)
+        assert isinstance(action, U9NpcActionProcessState)
+        assert isinstance(door, U9DoorTimerProcessState)
+        self.assertIsInstance(light, U9PortableLightProcessState)
+        self.assertEqual(activity.action.name, "loiter")
+        self.assertEqual(action.action.name, "loiter")
+        self.assertEqual(
+            (action.version, action.npc_number, action.action_kind, action.pathfinding),
+            (4, 275, 2, True),
+        )
+        self.assertEqual((action.pathfind_x, action.pathfind_y), (120, 340))
+        self.assertEqual(action.error_tolerance, 50.0)
+        self.assertEqual(action.npc_object_reference_index, 3)
+        self.assertEqual(
+            (action.state, action.target_x, action.target_y), (2, 125, 350)
+        )
+        self.assertEqual((action.current_link, action.target_angle), (-1, 1.5))
+        self.assertEqual(
+            (action.origin_x, action.origin_y, action.stand_time), (120, 340, 900)
+        )
+        self.assertEqual(
+            (action.animation_to_play, action.last_animation_played), (44, 43)
+        )
+        self.assertEqual(action.activity_variables[0], 734)
+        self.assertEqual(action.maximum_step_height, 50.0)
+        self.assertEqual(action.extra_object_reference_index, 1)
+        self.assertEqual(
+            (action.collision_checks_per_frame, action.maximum_collision_checks),
+            (1, 30),
+        )
+        self.assertEqual(action.idle_animation_id, 172)
+        self.assertTrue(action.needs_idle_animation)
+        self.assertFalse(action.exits_next_frame)
+        self.assertEqual(action.reserved, (0, 0, 0, 0))
+        self.assertEqual(action.end_offset, door.offset)
+        self.assertEqual(
+            (door.version, door.door_object_reference_index, door.elapsed_time),
+            (0, 3, 28177.0),
+        )
+        self.assertEqual(door.end_offset, light.offset)
+
+    def test_rejects_bad_npc_action_and_door_timer_fields(self) -> None:
+        prefix, data = self._insert_movement(
+            _npc_action_process(), _door_timer_process()
+        )
+        action, door, _ = prefix.following_processes
+        assert isinstance(action, U9NpcActionProcessState)
+        assert isinstance(door, U9DoorTimerProcessState)
+        action_payload = action.world_state.end_offset
+        door_payload = door.world_state.end_offset
+
+        for position, value, message in (
+            (action_payload, 3, "NPC-action version 3"),
+            (action_payload + 12, 2, "pathfinding flag 2"),
+            (action_payload + 28, 4, "NPC-action object-reference index 4"),
+            (action_payload + 356, 4, "NPC-action extra object-reference index 4"),
+            (door_payload, 1, "door-timer version 1"),
+            (door_payload + 4, 4, "door-timer object-reference index 4"),
+        ):
+            bad = bytearray(data)
+            struct.pack_into("<i", bad, position, value)
+            with (
+                self.subTest(message=message),
+                self.assertRaisesRegex(U9ProcessDataError, message),
+            ):
+                U9ProcessDataPrefix.from_bytes(bytes(bad))
+
+    def test_rejects_bad_npc_activity_version_reference_and_flag(self) -> None:
+        prefix, data = self._insert_movement(_npc_activity_process())
+        activity = prefix.following_processes[0]
+        assert isinstance(activity, U9NpcActivityProcessState)
+        payload = activity.world_state.end_offset
+
+        for relative, value, message in (
+            (0, 1, "NPC-activity version 1"),
+            (12, 4, "NPC-activity object-reference index 4"),
+            (20, 2, "activity-started flag 2"),
+        ):
+            bad = bytearray(data)
+            struct.pack_into("<i", bad, payload + relative, value)
+            with (
+                self.subTest(message=message),
+                self.assertRaisesRegex(U9ProcessDataError, message),
+            ):
+                U9ProcessDataPrefix.from_bytes(bytes(bad))
+
+    def test_traverses_scripted_object_and_clock_animation_processes(self) -> None:
+        prefix, data = self._insert_movement(
+            _scripted_object_process(53), _clock_animation_process()
+        )
+
+        door, clock, light = prefix.following_processes
+        assert isinstance(door, U9ScriptedObjectProcessState)
+        assert isinstance(clock, U9ClockAnimationProcessState)
+        self.assertIsInstance(light, U9PortableLightProcessState)
+        self.assertEqual(door.header.process_type, 53)
+        self.assertEqual(door.scripted_state.user_object_reference_index, 3)
+        self.assertEqual(door.scripted_state.state, 2)
+        self.assertEqual(door.end_offset, clock.offset)
+        self.assertEqual(clock.header.process_type, 57)
+        self.assertEqual((clock.version, clock.loop_time_ms), (0, 11685.0))
+        self.assertEqual(clock.end_offset, light.offset)
+
+        bad_version = bytearray(data)
+        struct.pack_into("<i", bad_version, clock.scripted_state.end_offset, 1)
+        with self.assertRaisesRegex(U9ProcessDataError, "clock-animation version 1"):
+            U9ProcessDataPrefix.from_bytes(bytes(bad_version))
+
     def test_rejects_bad_animation_controller_versions_and_reference(self) -> None:
         original = _process_prefix()
         original_prefix = U9ProcessDataPrefix.from_bytes(original)
@@ -1094,13 +1567,13 @@ class ProcessDataPrefixTests(unittest.TestCase):
         original_prefix = U9ProcessDataPrefix.from_bytes(original)
         assert original_prefix.next_process_offset is not None
         data = original[: original_prefix.next_process_offset] + struct.pack(
-            "<if", 213, 1.2
+            "<if", 73, 1.2
         )
 
         prefix = U9ProcessDataPrefix.from_bytes(data)
 
-        self.assertEqual(prefix.next_process_type, 213)
-        self.assertEqual(prefix.blocked_process_type, 213)
+        self.assertEqual(prefix.next_process_type, 73)
+        self.assertEqual(prefix.blocked_process_type, 73)
         self.assertEqual(prefix.blocked_process_offset, prefix.next_process_offset)
         self.assertIsNone(prefix.next_process_header)
         self.assertEqual(prefix.following_processes, ())

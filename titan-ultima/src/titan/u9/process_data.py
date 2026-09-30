@@ -32,7 +32,25 @@ __all__ = [
     "U9ProcessWorldState",
     "U9ScriptedProcessState",
     "U9ScriptTimerProcessState",
+    "U9AvatarMovementFields",
+    "U9AvatarMovementTailFields",
+    "U9BruteMovementFields",
+    "U9ClockAnimationProcessState",
+    "U9DoorTimerProcessState",
+    "U9FlyingMovementState",
+    "U9FollowingProcessState",
+    "U9HumanoidMovementFields",
     "U9KinematicTrackState",
+    "U9MovementControllerProcessState",
+    "U9MovementControllerState",
+    "U9MovementExtensionFields",
+    "U9MovementExtensionState",
+    "U9NpcActionProcessState",
+    "U9NpcActivityProcessState",
+    "U9NpcMovementFields",
+    "U9ScriptedObjectProcessState",
+    "U9SpiderMovementFields",
+    "U9SwimmingMovementFields",
     "U9TargetingState",
     # Compatibility exports retained for callers using the earlier names.
     "HANDLE_DATA_OFFSET",
@@ -45,6 +63,9 @@ import math
 import os
 import struct
 from dataclasses import dataclass
+from typing import Union
+
+from titan.u9.activity import U9ActivityActionKind, activity_action_kind
 
 OBJECT_REFERENCE_DATA_OFFSET = 0x27F74
 OBJECT_REFERENCE_VERSION = 1
@@ -69,6 +90,88 @@ SCRIPT_TIMER_PROCESS_TYPE = 62
 PORTABLE_LIGHT_PROCESS_TYPE = 70
 PLAYER_PROXIMITY_PROCESS_TYPE = 80
 ANIMATION_CONTROLLER_PROCESS_TYPE = 98
+# The Avatar's animation controller shares type 98's save and load routines
+# (retail vtable slots 2/3: 0x0055C4F0 / 0x0055C7E0).
+AVATAR_ANIMATION_CONTROLLER_PROCESS_TYPE = 213
+ANIMATION_CONTROLLER_PROCESS_TYPES = frozenset(
+    {ANIMATION_CONTROLLER_PROCESS_TYPE, AVATAR_ANIMATION_CONTROLLER_PROCESS_TYPE}
+)
+# Movement controllers whose retail save routine is the base movement save
+# (0x00579B80) or the flying save (0x00494290), read from each type's vtable.
+BASE_MOVEMENT_CONTROLLER_PROCESS_TYPES = frozenset(
+    {
+        82,
+        84,
+        88,
+        89,
+        90,
+        156,
+        164,
+        167,
+        172,
+        175,
+        177,
+        183,
+        184,
+        185,
+        186,
+        199,
+        200,
+        201,
+    }
+)
+FLYING_MOVEMENT_CONTROLLER_PROCESS_TYPES = frozenset({83, 91, 92, 93, 94, 102, 178})
+EXTENDED_MOVEMENT_CONTROLLER_PROCESS_TYPES = frozenset(
+    {85, 86, 87, 95, 96, 97, 155, 166, 168, 170, 171, 173, 174, 176, 211}
+)
+MOVEMENT_CONTROLLER_PROCESS_TYPES = (
+    BASE_MOVEMENT_CONTROLLER_PROCESS_TYPES
+    | FLYING_MOVEMENT_CONTROLLER_PROCESS_TYPES
+    | EXTENDED_MOVEMENT_CONTROLLER_PROCESS_TYPES
+)
+# Controller-specific blocks around the base save, as (leading, trailing)
+# (kind, size) lists in stream order. Leading blocks are written before the
+# routine calls its parent, so they sit between the type word and the common
+# header; trailing blocks follow the base block. Retail routines: humanoid
+# 0x004BB900 (10 leading), NPC 0x004F53C0 (12 trailing), Avatar 0x004188E0
+# (35 leading, 1 trailing, around the humanoid save), brute 0x0042FF10
+# (8 leading before the humanoid save), spider 0x0053ECD0 (12 trailing),
+# swimming 0x005415D0 (68 trailing); skeleton 0x00527D00, ghost 0x004A7410,
+# lich 0x004D58A0 and zombie 0x005C26B0 only delegate.
+_HUMANOID = ("humanoid", 10)
+MOVEMENT_CONTROLLER_EXTENSIONS: dict[
+    int, tuple[tuple[tuple[str, int], ...], tuple[tuple[str, int], ...]]
+] = {
+    85: ((_HUMANOID,), ()),
+    96: ((_HUMANOID,), ()),
+    97: ((_HUMANOID,), ()),
+    95: ((("brute", 8), _HUMANOID), ()),
+    166: ((("avatar", 35), _HUMANOID), (("avatar_tail", 1),)),
+    86: ((), (("npc", 12),)),
+    176: ((), (("npc", 12),)),
+    155: ((), (("spider", 12),)),
+    87: ((), (("swimming", 68),)),
+    168: ((), (("swimming", 68),)),
+    170: ((), (("swimming", 68),)),
+    171: ((), (("swimming", 68),)),
+    173: ((), ()),
+    174: ((), ()),
+    211: ((), ()),
+}
+MOVEMENT_CONTROLLER_VERSION = 1
+MOVEMENT_CONTROLLER_STATE_SIZE = 1394
+MOVEMENT_CONTROLLER_REFERENCE_OFFSETS = (40, 48)
+FLYING_MOVEMENT_STATE = struct.Struct("<2f5ii5ii2I")
+HUMANOID_MOVEMENT_VERSION = 2
+HUMANOID_MOVEMENT_STATE = struct.Struct("<iiBB")
+AVATAR_MOVEMENT_VERSION = 3
+AVATAR_MOVEMENT_STATE = struct.Struct("<iiiiBBBiiii")
+AVATAR_MOVEMENT_TAIL_STATE = struct.Struct("<B")
+BRUTE_MOVEMENT_VERSION = 1
+BRUTE_MOVEMENT_STATE = struct.Struct("<ii")
+NPC_MOVEMENT_STATE = struct.Struct("<iII")
+SPIDER_MOVEMENT_STATE = struct.Struct("<iII")
+SWIMMING_MOVEMENT_STATE = struct.Struct("<3f5ii5ii2I")
 WORLD_PROCESS_TYPES = frozenset(
     {
         HANGING_OBJECT_PROCESS_TYPE,
@@ -80,6 +183,58 @@ WORLD_PROCESS_TYPES = frozenset(
 )
 SCRIPTED_PROCESS_VERSION = 0
 SCRIPTED_PROCESS_STATE = struct.Struct("<iiiii128si")
+# Processes whose retail save (0x0065D320) is the world state followed by the
+# scripted-object state and nothing else.
+SCRIPTED_OBJECT_PROCESS_TYPES = frozenset({50, 53, 54, 58, 202})
+CLOCK_ANIMATION_PROCESS_TYPE = 57
+CLOCK_ANIMATION_PROCESS_VERSION = 0
+CLOCK_ANIMATION_PROCESS_STATE = struct.Struct("<if")
+# Processes that run an NPC's scheduled activity. All share one retail save
+# routine (0x00402970): world state, then a fixed 300-byte block.
+NPC_ACTIVITY_PROCESS_TYPES = frozenset(
+    {
+        6,
+        24,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        34,
+        36,
+        75,
+        78,
+        99,
+        157,
+        159,
+        160,
+        179,
+        180,
+        187,
+        188,
+        189,
+        190,
+        196,
+        198,
+    }
+)
+NPC_ACTIVITY_PROCESS_VERSION = 2
+NPC_ACTIVITY_VARIABLE_COUNT = 64
+NPC_ACTIVITY_PROCESS_STATE = struct.Struct(f"<7i{NPC_ACTIVITY_VARIABLE_COUNT}i4I")
+# Processes that perform an NPC's current action (activity step). All share
+# one retail save routine (0x004016D0): world state, then 396 bytes.
+NPC_ACTION_PROCESS_TYPES = frozenset(
+    {15, 22, 23, 25, 26, 33, 37, 51, 52, 76, 77, 79, 100, 158, 161, 162, 181, 182}
+    | {191, 192, 193, 194}
+)
+NPC_ACTION_PROCESS_VERSION = 4
+NPC_ACTION_PROCESS_STATE = struct.Struct(
+    f"<6ifi8if3i2ifi{NPC_ACTIVITY_VARIABLE_COUNT}ifi5i4I"
+)
+DOOR_TIMER_PROCESS_TYPE = 197
+DOOR_TIMER_PROCESS_VERSION = 0
+DOOR_TIMER_PROCESS_STATE = struct.Struct("<iif")
 HANGING_OBJECT_PROCESS_VERSION = 2
 # Packed layout: setup values, five scalar/X/Y/Z quaternions, live motion
 # state, two configuration words, facing vector, and four reserved words.
@@ -975,7 +1130,11 @@ class U9KinematicTrackState:
 
 @dataclass(frozen=True)
 class U9AnimationControllerProcessState:
-    """A type-98 layered animation controller with five playback tracks."""
+    """A layered animation controller with five playback tracks.
+
+    Type 98 is the general controller; type 213 is the Avatar's, which the
+    retail executable saves and loads with the same routines.
+    """
 
     header: U9ProcessHeaderState
     version: float
@@ -1015,10 +1174,11 @@ class U9AnimationControllerProcessState:
     ) -> U9AnimationControllerProcessState:
         _require_bytes(data, offset, 8, "animation-controller type/version")
         process_type, version_bits = struct.unpack_from("<iI", data, offset)
-        if process_type != ANIMATION_CONTROLLER_PROCESS_TYPE:
+        if process_type not in ANIMATION_CONTROLLER_PROCESS_TYPES:
             raise U9ProcessDataError(
                 f"expected animation-controller process type "
-                f"{ANIMATION_CONTROLLER_PROCESS_TYPE}, found {process_type}"
+                f"{ANIMATION_CONTROLLER_PROCESS_TYPE} or "
+                f"{AVATAR_ANIMATION_CONTROLLER_PROCESS_TYPE}, found {process_type}"
             )
         version = struct.unpack_from("<f", data, offset + 4)[0]
         if version_bits != ANIMATION_CONTROLLER_VERSION_BITS:
@@ -2743,6 +2903,809 @@ class U9ObjectReferenceTable:
 
 
 @dataclass(frozen=True)
+class U9MovementControllerState:
+    """The fixed base block every movement controller saves after its world state.
+
+    The retail base save (``0x00579B80``) writes 1,394 bytes: a version word,
+    fields for movement capability, state, collision, shadow, travel, speed,
+    cylinder and animation tables, and two object references at ``+40`` and
+    ``+48``. Only the version and the two references are typed; ``raw``
+    keeps the complete block. The two references are written only while a
+    global save-mode flag is clear, which holds for every trusted save; a save
+    written with it set would store a block 8 bytes shorter.
+    """
+
+    version: int
+    object_reference_indices: tuple[int, int]
+    raw: bytes
+    offset: int
+
+    @property
+    def end_offset(self) -> int:
+        return self.offset + MOVEMENT_CONTROLLER_STATE_SIZE
+
+    @classmethod
+    def from_bytes(
+        cls, data: bytes, offset: int, *, object_reference_count: int
+    ) -> U9MovementControllerState:
+        _require_bytes(
+            data, offset, MOVEMENT_CONTROLLER_STATE_SIZE, "movement-controller state"
+        )
+        (version,) = struct.unpack_from("<i", data, offset)
+        if version != MOVEMENT_CONTROLLER_VERSION:
+            raise U9ProcessDataError(
+                f"unsupported movement-controller version {version} at 0x{offset:X}"
+            )
+        references = tuple(
+            struct.unpack_from("<i", data, offset + relative)[0]
+            for relative in MOVEMENT_CONTROLLER_REFERENCE_OFFSETS
+        )
+        for index in references:
+            _validate_object_reference_index(
+                index, object_reference_count, "movement-controller"
+            )
+        return cls(
+            version=version,
+            object_reference_indices=references,  # type: ignore[arg-type]
+            raw=bytes(data[offset : offset + MOVEMENT_CONTROLLER_STATE_SIZE]),
+            offset=offset,
+        )
+
+
+@dataclass(frozen=True)
+class U9FlyingMovementState:
+    """The 64-byte extension the flying movement save (``0x00494290``) adds."""
+
+    ceiling_altitude: float
+    floor_altitude: float
+    fall_animation_ids: tuple[int, int, int, int, int]
+    fall_animation_count: int
+    death_animation_ids: tuple[int, int, int, int, int]
+    death_animation_count: int
+    reserved: tuple[int, int]
+    offset: int
+
+    @property
+    def end_offset(self) -> int:
+        return self.offset + FLYING_MOVEMENT_STATE.size
+
+    @classmethod
+    def from_bytes(cls, data: bytes, offset: int) -> U9FlyingMovementState:
+        _require_bytes(
+            data, offset, FLYING_MOVEMENT_STATE.size, "flying movement state"
+        )
+        values = FLYING_MOVEMENT_STATE.unpack_from(data, offset)
+        _validate_finite(values[0:2], "flying movement altitude")
+        return cls(
+            ceiling_altitude=values[0],
+            floor_altitude=values[1],
+            fall_animation_ids=tuple(values[2:7]),  # type: ignore[arg-type]
+            fall_animation_count=values[7],
+            death_animation_ids=tuple(values[8:13]),  # type: ignore[arg-type]
+            death_animation_count=values[13],
+            reserved=tuple(values[14:16]),  # type: ignore[arg-type]
+            offset=offset,
+        )
+
+
+@dataclass(frozen=True)
+class U9HumanoidMovementFields:
+    """The 10-byte humanoid block (``0x004BB900``), written before the header."""
+
+    version: int
+    lava_timer: int
+    wearing_infernal_armor: bool
+    leaves_footprints: bool
+
+    @classmethod
+    def from_raw(cls, raw: bytes) -> U9HumanoidMovementFields:
+        values = HUMANOID_MOVEMENT_STATE.unpack(raw)
+        if values[0] != HUMANOID_MOVEMENT_VERSION:
+            raise U9ProcessDataError(
+                f"unsupported humanoid movement version {values[0]}"
+            )
+        _validate_byte_boolean(values[2], "infernal-armor")
+        _validate_byte_boolean(values[3], "footprints")
+        return cls(values[0], values[1], bool(values[2]), bool(values[3]))
+
+
+@dataclass(frozen=True)
+class U9AvatarMovementFields:
+    """The 35-byte Avatar block (``0x004188E0``), written before the header.
+
+    The three timers are integer countdowns: the game subtracts elapsed time
+    from them each update and re-arms them with whole values (100 for
+    ``health_timer``, 200 for ``swamp_timer``). Retail saves often hold very
+    large or negative values in them (``0x3EFFFFFF`` in ``health_timer``);
+    these are integers, not float bit patterns.
+    """
+
+    version: int
+    breath_timer: int
+    health_timer: int
+    swamp_timer: int
+    breath_override: bool
+    levitation_allowed: bool
+    levitating: bool
+    previous_idle_animation_id: int
+    posing: int
+    last_idle_animation_id: int
+    combat_mode: int
+
+    @classmethod
+    def from_raw(cls, raw: bytes) -> U9AvatarMovementFields:
+        values = AVATAR_MOVEMENT_STATE.unpack(raw)
+        if values[0] != AVATAR_MOVEMENT_VERSION:
+            raise U9ProcessDataError(f"unsupported Avatar movement version {values[0]}")
+        for value, label in zip(
+            values[4:7], ("breath-override", "levitation-allowed", "levitating")
+        ):
+            _validate_byte_boolean(value, label)
+        return cls(
+            version=values[0],
+            breath_timer=values[1],
+            health_timer=values[2],
+            swamp_timer=values[3],
+            breath_override=bool(values[4]),
+            levitation_allowed=bool(values[5]),
+            levitating=bool(values[6]),
+            previous_idle_animation_id=values[7],
+            posing=values[8],
+            last_idle_animation_id=values[9],
+            combat_mode=values[10],
+        )
+
+
+@dataclass(frozen=True)
+class U9AvatarMovementTailFields:
+    """The Avatar's one-byte trailing block: swamp immunity."""
+
+    swamp_immunity: bool
+
+    @classmethod
+    def from_raw(cls, raw: bytes) -> U9AvatarMovementTailFields:
+        (value,) = AVATAR_MOVEMENT_TAIL_STATE.unpack(raw)
+        _validate_byte_boolean(value, "swamp-immunity")
+        return cls(bool(value))
+
+
+@dataclass(frozen=True)
+class U9BruteMovementFields:
+    """The 8-byte brute block (``0x0042FF10``), written before the header."""
+
+    version: int
+    idle_animation_id: int
+
+    @classmethod
+    def from_raw(cls, raw: bytes) -> U9BruteMovementFields:
+        values = BRUTE_MOVEMENT_STATE.unpack(raw)
+        if values[0] != BRUTE_MOVEMENT_VERSION:
+            raise U9ProcessDataError(f"unsupported brute movement version {values[0]}")
+        return cls(*values)
+
+
+@dataclass(frozen=True)
+class U9NpcMovementFields:
+    """The 12-byte NPC block (``0x004F53C0``): the object the NPC sits or
+    sleeps on, then two pad words.
+
+    The pad words are not cleared before saving; retail saves hold arbitrary
+    values in them.
+    """
+
+    object_reference_index: int
+    reserved: tuple[int, int]
+
+    @classmethod
+    def from_raw(cls, raw: bytes) -> U9NpcMovementFields:
+        values = NPC_MOVEMENT_STATE.unpack(raw)
+        return cls(values[0], (values[1], values[2]))
+
+
+@dataclass(frozen=True)
+class U9SpiderMovementFields:
+    """The 12-byte spider block (``0x0053ECD0``): speed, then two pad words.
+
+    ``speed`` is -1 (slow), 0 (normal) or 1 (fast). The pad words are not
+    cleared before saving.
+    """
+
+    speed: int
+    reserved: tuple[int, int]
+
+    @classmethod
+    def from_raw(cls, raw: bytes) -> U9SpiderMovementFields:
+        values = SPIDER_MOVEMENT_STATE.unpack(raw)
+        return cls(values[0], (values[1], values[2]))
+
+
+@dataclass(frozen=True)
+class U9SwimmingMovementFields:
+    """The 68-byte swimming block (``0x005415D0``).
+
+    Only the first ``fall_animation_count`` / ``death_animation_count``
+    animation slots are meaningful; the rest and the two pad words are not
+    cleared before saving.
+    """
+
+    floor_altitude: float
+    floor_depth: float
+    jump_depth: float
+    fall_animation_ids: tuple[int, int, int, int, int]
+    fall_animation_count: int
+    death_animation_ids: tuple[int, int, int, int, int]
+    death_animation_count: int
+    reserved: tuple[int, int]
+
+    @classmethod
+    def from_raw(cls, raw: bytes) -> U9SwimmingMovementFields:
+        values = SWIMMING_MOVEMENT_STATE.unpack(raw)
+        _validate_finite(values[0:3], "swimming movement depth")
+        for count, label in ((values[8], "fall"), (values[14], "death")):
+            if not 0 <= count <= 5:
+                raise U9ProcessDataError(
+                    f"invalid swimming {label}-animation count {count}"
+                )
+        return cls(
+            floor_altitude=values[0],
+            floor_depth=values[1],
+            jump_depth=values[2],
+            fall_animation_ids=tuple(values[3:8]),  # type: ignore[arg-type]
+            fall_animation_count=values[8],
+            death_animation_ids=tuple(values[9:14]),  # type: ignore[arg-type]
+            death_animation_count=values[14],
+            reserved=(values[15], values[16]),
+        )
+
+
+U9MovementExtensionFields = Union[
+    U9HumanoidMovementFields,
+    U9AvatarMovementFields,
+    U9AvatarMovementTailFields,
+    U9BruteMovementFields,
+    U9NpcMovementFields,
+    U9SpiderMovementFields,
+    U9SwimmingMovementFields,
+]
+MOVEMENT_EXTENSION_FIELD_TYPES: dict[str, type[U9MovementExtensionFields]] = {
+    "humanoid": U9HumanoidMovementFields,
+    "avatar": U9AvatarMovementFields,
+    "avatar_tail": U9AvatarMovementTailFields,
+    "brute": U9BruteMovementFields,
+    "npc": U9NpcMovementFields,
+    "spider": U9SpiderMovementFields,
+    "swimming": U9SwimmingMovementFields,
+}
+
+
+@dataclass(frozen=True)
+class U9MovementExtensionState:
+    """A controller-specific block around the base block.
+
+    ``kind`` names the retail save routine that writes it (``humanoid``,
+    ``npc``, ``avatar``, ``avatar_tail``, ``brute``, ``spider`` or
+    ``swimming``). ``fields`` holds the typed view and ``raw`` the exact
+    bytes. The ``npc`` block begins with an object-reference index, also
+    exposed as ``object_reference_index``.
+    """
+
+    kind: str
+    raw: bytes
+    offset: int
+    object_reference_index: int | None = None
+    fields: U9MovementExtensionFields | None = None
+
+    @property
+    def end_offset(self) -> int:
+        return self.offset + len(self.raw)
+
+
+@dataclass(frozen=True)
+class U9MovementControllerProcessState:
+    """A movement controller: header, world state, base block, and extensions.
+
+    Humanoid-family controllers write their own fields before calling the
+    parent save, so ``leading`` blocks sit between the type word and the
+    common header body; ``extensions`` follow the base (or flying) block.
+    """
+
+    header: U9ProcessHeaderState
+    world_state: U9ProcessWorldState
+    movement: U9MovementControllerState
+    flying: U9FlyingMovementState | None
+    offset: int
+    end_offset: int
+    leading: tuple[U9MovementExtensionState, ...] = ()
+    extensions: tuple[U9MovementExtensionState, ...] = ()
+
+    @classmethod
+    def from_bytes(
+        cls,
+        data: bytes,
+        offset: int,
+        *,
+        object_reference_count: int,
+    ) -> U9MovementControllerProcessState:
+        _require_bytes(data, offset, 4, "process type")
+        (process_type,) = struct.unpack_from("<i", data, offset)
+        if process_type not in MOVEMENT_CONTROLLER_PROCESS_TYPES:
+            raise U9ProcessDataError(
+                f"process type {process_type} is not a supported movement controller"
+            )
+        flying_type = process_type in FLYING_MOVEMENT_CONTROLLER_PROCESS_TYPES
+        leading_layout, trailing_layout = MOVEMENT_CONTROLLER_EXTENSIONS.get(
+            process_type, ((), ())
+        )
+        leading = _read_movement_extensions(
+            data, offset + 4, leading_layout, object_reference_count
+        )
+        header = U9ProcessHeaderState.from_prefixed_bytes(
+            data,
+            offset,
+            prefix_size=4 + sum(size for _, size in leading_layout),
+        )
+        world_state = U9ProcessWorldState.from_bytes(
+            data, header.end_offset, object_reference_count=object_reference_count
+        )
+        movement = U9MovementControllerState.from_bytes(
+            data, world_state.end_offset, object_reference_count=object_reference_count
+        )
+        flying = (
+            U9FlyingMovementState.from_bytes(data, movement.end_offset)
+            if flying_type
+            else None
+        )
+        cursor = flying.end_offset if flying else movement.end_offset
+        extensions = _read_movement_extensions(
+            data, cursor, trailing_layout, object_reference_count
+        )
+        return cls(
+            header=header,
+            world_state=world_state,
+            movement=movement,
+            flying=flying,
+            offset=offset,
+            end_offset=extensions[-1].end_offset if extensions else cursor,
+            leading=leading,
+            extensions=extensions,
+        )
+
+
+def _read_movement_extensions(
+    data: bytes,
+    offset: int,
+    layout: tuple[tuple[str, int], ...],
+    object_reference_count: int,
+) -> tuple[U9MovementExtensionState, ...]:
+    blocks = []
+    cursor = offset
+    for kind, size in layout:
+        _require_bytes(data, cursor, size, f"{kind} movement extension")
+        raw = bytes(data[cursor : cursor + size])
+        fields = MOVEMENT_EXTENSION_FIELD_TYPES[kind].from_raw(raw)
+        reference = None
+        if isinstance(fields, U9NpcMovementFields):
+            reference = fields.object_reference_index
+            _validate_object_reference_index(
+                reference, object_reference_count, "npc movement"
+            )
+        blocks.append(
+            U9MovementExtensionState(
+                kind=kind,
+                raw=raw,
+                offset=cursor,
+                object_reference_index=reference,
+                fields=fields,
+            )
+        )
+        cursor += size
+    return tuple(blocks)
+
+
+def _read_world_process_prefix(
+    data: bytes,
+    offset: int,
+    process_types: frozenset[int],
+    label: str,
+    object_reference_count: int,
+) -> tuple[U9ProcessHeaderState, U9ProcessWorldState]:
+    header = U9ProcessHeaderState.from_bytes(data, offset)
+    if header.process_type not in process_types:
+        raise U9ProcessDataError(
+            f"process type {header.process_type} is not a {label} process"
+        )
+    world_state = U9ProcessWorldState.from_bytes(
+        data, header.end_offset, object_reference_count=object_reference_count
+    )
+    return header, world_state
+
+
+@dataclass(frozen=True)
+class U9ScriptedObjectProcessState:
+    """A process that saves only world state and scripted-object state.
+
+    Types 50, 53, 54, 58 and 202 share this retail save (``0x0065D320``).
+    """
+
+    header: U9ProcessHeaderState
+    world_state: U9ProcessWorldState
+    scripted_state: U9ScriptedProcessState
+    offset: int
+
+    @property
+    def end_offset(self) -> int:
+        return self.scripted_state.end_offset
+
+    @classmethod
+    def from_bytes(
+        cls, data: bytes, offset: int, *, object_reference_count: int
+    ) -> U9ScriptedObjectProcessState:
+        header, world_state = _read_world_process_prefix(
+            data,
+            offset,
+            SCRIPTED_OBJECT_PROCESS_TYPES,
+            "scripted-object",
+            object_reference_count,
+        )
+        scripted_state = U9ScriptedProcessState.from_bytes(
+            data, world_state.end_offset, object_reference_count=object_reference_count
+        )
+        return cls(header, world_state, scripted_state, offset)
+
+
+@dataclass(frozen=True)
+class U9ClockAnimationProcessState:
+    """A type-57 clock animation: scripted-object state, version, loop time.
+
+    ``loop_time_ms`` drives the pendulum swing (a sine over 1,000 ms
+    periods). The game seeds it with a random value below 1,000 and keeps
+    adding to it, so saved values grow with play time.
+    """
+
+    header: U9ProcessHeaderState
+    world_state: U9ProcessWorldState
+    scripted_state: U9ScriptedProcessState
+    version: int
+    loop_time_ms: float
+    offset: int
+    end_offset: int
+
+    @classmethod
+    def from_bytes(
+        cls, data: bytes, offset: int, *, object_reference_count: int
+    ) -> U9ClockAnimationProcessState:
+        header, world_state = _read_world_process_prefix(
+            data,
+            offset,
+            frozenset({CLOCK_ANIMATION_PROCESS_TYPE}),
+            "clock-animation",
+            object_reference_count,
+        )
+        scripted_state = U9ScriptedProcessState.from_bytes(
+            data, world_state.end_offset, object_reference_count=object_reference_count
+        )
+        payload_offset = scripted_state.end_offset
+        _require_bytes(
+            data,
+            payload_offset,
+            CLOCK_ANIMATION_PROCESS_STATE.size,
+            "clock-animation process",
+        )
+        version, loop_time_ms = CLOCK_ANIMATION_PROCESS_STATE.unpack_from(
+            data, payload_offset
+        )
+        if version != CLOCK_ANIMATION_PROCESS_VERSION:
+            raise U9ProcessDataError(
+                f"unsupported clock-animation version {version} at 0x{payload_offset:X}"
+            )
+        _validate_finite((loop_time_ms,), "clock-animation loop time")
+        return cls(
+            header=header,
+            world_state=world_state,
+            scripted_state=scripted_state,
+            version=version,
+            loop_time_ms=loop_time_ms,
+            offset=offset,
+            end_offset=payload_offset + CLOCK_ANIMATION_PROCESS_STATE.size,
+        )
+
+
+@dataclass(frozen=True)
+class U9NpcActivityProcessState:
+    """A process that runs one NPC's scheduled activity.
+
+    All 24 activity process types share one retail save (``0x00402970``):
+    world state, then 300 bytes -- version 2, the NPC number, the action kind
+    (a value of ``titan.u9.activity.ACTION_KIND_CATALOGUE``, e.g. 2 = loiter),
+    the NPC's object reference, the activity's state, two flags, 64 activity
+    variables and four reserved words. While it runs, the NPC's current step
+    is a separate :class:`U9NpcActionProcessState` record.
+    The activity variables are scratch words; some activities keep float
+    bit patterns (such as positions) in them, so they are left as integers.
+    """
+
+    header: U9ProcessHeaderState
+    world_state: U9ProcessWorldState
+    version: int
+    npc_number: int
+    action_kind: int
+    npc_object_reference_index: int
+    state: int
+    activity_started: bool
+    clears_hands_on_exit: bool
+    activity_variables: tuple[int, ...]
+    reserved: tuple[int, int, int, int]
+    offset: int
+    end_offset: int
+
+    @classmethod
+    def from_bytes(
+        cls, data: bytes, offset: int, *, object_reference_count: int
+    ) -> U9NpcActivityProcessState:
+        header, world_state = _read_world_process_prefix(
+            data,
+            offset,
+            NPC_ACTIVITY_PROCESS_TYPES,
+            "NPC-activity",
+            object_reference_count,
+        )
+        payload_offset = world_state.end_offset
+        _require_bytes(
+            data,
+            payload_offset,
+            NPC_ACTIVITY_PROCESS_STATE.size,
+            "NPC-activity process",
+        )
+        values = NPC_ACTIVITY_PROCESS_STATE.unpack_from(data, payload_offset)
+        if values[0] != NPC_ACTIVITY_PROCESS_VERSION:
+            raise U9ProcessDataError(
+                f"unsupported NPC-activity version {values[0]} at 0x{payload_offset:X}"
+            )
+        _validate_object_reference_index(
+            values[3], object_reference_count, "NPC-activity"
+        )
+        for value, label in (
+            (values[5], "activity-started"),
+            (values[6], "clear-hands"),
+        ):
+            if value not in (0, 1):
+                raise U9ProcessDataError(f"invalid {label} flag {value}")
+        variables_end = 7 + NPC_ACTIVITY_VARIABLE_COUNT
+        return cls(
+            header=header,
+            world_state=world_state,
+            version=values[0],
+            npc_number=values[1],
+            action_kind=values[2],
+            npc_object_reference_index=values[3],
+            state=values[4],
+            activity_started=bool(values[5]),
+            clears_hands_on_exit=bool(values[6]),
+            activity_variables=tuple(values[7:variables_end]),
+            reserved=tuple(values[variables_end:]),  # type: ignore[arg-type]
+            offset=offset,
+            end_offset=payload_offset + NPC_ACTIVITY_PROCESS_STATE.size,
+        )
+
+    @property
+    def action(self) -> U9ActivityActionKind:
+        """The catalogued action kind (name and whether it is performed)."""
+        return activity_action_kind(self.action_kind)
+
+
+@dataclass(frozen=True)
+class U9NpcActionProcessState:
+    """A process that performs one NPC's current action (activity step).
+
+    All 22 action process types share one retail save (``0x004016D0``):
+    world state, then 396 bytes of navigation, timing, animation and
+    collision state around the same 64 activity variables the activity
+    process keeps. ``exit_timer`` is a raw timer word, and ``careful_walk``
+    is kept as the stored word: retail saves often hold float bit patterns
+    there.
+    """
+
+    header: U9ProcessHeaderState
+    world_state: U9ProcessWorldState
+    version: int
+    npc_number: int
+    action_kind: int
+    pathfinding: bool
+    pathfind_x: int
+    pathfind_y: int
+    error_tolerance: float
+    npc_object_reference_index: int
+    point_count: int
+    state: int
+    wants_to_exit: bool
+    exit_timer: int
+    target_x: int
+    target_y: int
+    careful_walk: int
+    current_link: int
+    target_angle: float
+    origin_x: int
+    origin_y: int
+    stand_time: int
+    animation_to_play: int
+    last_animation_played: int
+    animation_speed: float
+    clears_hands_on_exit: bool
+    activity_variables: tuple[int, ...]
+    maximum_step_height: float
+    extra_object_reference_index: int
+    collision_checks_per_frame: int
+    maximum_collision_checks: int
+    idle_animation_id: int
+    needs_idle_animation: bool
+    exits_next_frame: bool
+    reserved: tuple[int, int, int, int]
+    offset: int
+    end_offset: int
+
+    @classmethod
+    def from_bytes(
+        cls, data: bytes, offset: int, *, object_reference_count: int
+    ) -> U9NpcActionProcessState:
+        header, world_state = _read_world_process_prefix(
+            data,
+            offset,
+            NPC_ACTION_PROCESS_TYPES,
+            "NPC-action",
+            object_reference_count,
+        )
+        payload_offset = world_state.end_offset
+        _require_bytes(
+            data, payload_offset, NPC_ACTION_PROCESS_STATE.size, "NPC-action process"
+        )
+        v = NPC_ACTION_PROCESS_STATE.unpack_from(data, payload_offset)
+        if v[0] != NPC_ACTION_PROCESS_VERSION:
+            raise U9ProcessDataError(
+                f"unsupported NPC-action version {v[0]} at 0x{payload_offset:X}"
+            )
+        variables_end = 24 + NPC_ACTIVITY_VARIABLE_COUNT
+        tail = v[variables_end:]
+        _validate_object_reference_index(v[7], object_reference_count, "NPC-action")
+        _validate_object_reference_index(
+            tail[1], object_reference_count, "NPC-action extra"
+        )
+        for value, label in (
+            (v[3], "pathfinding"),
+            (v[10], "wants-to-exit"),
+            (v[23], "clear-hands"),
+            (tail[5], "needs-idle-animation"),
+            (tail[6], "exit-next-frame"),
+        ):
+            if value not in (0, 1):
+                raise U9ProcessDataError(f"invalid {label} flag {value}")
+        _validate_finite((v[6], v[16], v[22], tail[0]), "NPC-action state")
+        return cls(
+            header=header,
+            world_state=world_state,
+            version=v[0],
+            npc_number=v[1],
+            action_kind=v[2],
+            pathfinding=bool(v[3]),
+            pathfind_x=v[4],
+            pathfind_y=v[5],
+            error_tolerance=v[6],
+            npc_object_reference_index=v[7],
+            point_count=v[8],
+            state=v[9],
+            wants_to_exit=bool(v[10]),
+            exit_timer=v[11],
+            target_x=v[12],
+            target_y=v[13],
+            careful_walk=v[14],
+            current_link=v[15],
+            target_angle=v[16],
+            origin_x=v[17],
+            origin_y=v[18],
+            stand_time=v[19],
+            animation_to_play=v[20],
+            last_animation_played=v[21],
+            animation_speed=v[22],
+            clears_hands_on_exit=bool(v[23]),
+            activity_variables=tuple(v[24:variables_end]),
+            maximum_step_height=tail[0],
+            extra_object_reference_index=tail[1],
+            collision_checks_per_frame=tail[2],
+            maximum_collision_checks=tail[3],
+            idle_animation_id=tail[4],
+            needs_idle_animation=bool(tail[5]),
+            exits_next_frame=bool(tail[6]),
+            reserved=tuple(tail[7:]),  # type: ignore[arg-type]
+            offset=offset,
+            end_offset=payload_offset + NPC_ACTION_PROCESS_STATE.size,
+        )
+
+    @property
+    def action(self) -> U9ActivityActionKind:
+        """The catalogued action kind (name and whether it is performed)."""
+        return activity_action_kind(self.action_kind)
+
+
+@dataclass(frozen=True)
+class U9DoorTimerProcessState:
+    """A type-197 automatic-door timer: version, the door, elapsed time."""
+
+    header: U9ProcessHeaderState
+    world_state: U9ProcessWorldState
+    version: int
+    door_object_reference_index: int
+    elapsed_time: float
+    offset: int
+    end_offset: int
+
+    @classmethod
+    def from_bytes(
+        cls, data: bytes, offset: int, *, object_reference_count: int
+    ) -> U9DoorTimerProcessState:
+        header, world_state = _read_world_process_prefix(
+            data,
+            offset,
+            frozenset({DOOR_TIMER_PROCESS_TYPE}),
+            "door-timer",
+            object_reference_count,
+        )
+        payload_offset = world_state.end_offset
+        _require_bytes(
+            data, payload_offset, DOOR_TIMER_PROCESS_STATE.size, "door-timer process"
+        )
+        version, door, elapsed = DOOR_TIMER_PROCESS_STATE.unpack_from(
+            data, payload_offset
+        )
+        if version != DOOR_TIMER_PROCESS_VERSION:
+            raise U9ProcessDataError(
+                f"unsupported door-timer version {version} at 0x{payload_offset:X}"
+            )
+        _validate_object_reference_index(door, object_reference_count, "door-timer")
+        _validate_finite((elapsed,), "door-timer elapsed time")
+        return cls(
+            header=header,
+            world_state=world_state,
+            version=version,
+            door_object_reference_index=door,
+            elapsed_time=elapsed,
+            offset=offset,
+            end_offset=payload_offset + DOOR_TIMER_PROCESS_STATE.size,
+        )
+
+
+U9FollowingProcessState = Union[
+    U9AnimationControllerProcessState,
+    U9HangingObjectProcessState,
+    U9ScriptTimerProcessState,
+    U9PortableLightProcessState,
+    U9PlayerProximityProcessState,
+    U9MovementControllerProcessState,
+    U9ScriptedObjectProcessState,
+    U9ClockAnimationProcessState,
+    U9NpcActivityProcessState,
+    U9NpcActionProcessState,
+    U9DoorTimerProcessState,
+]
+# Decoder for each process type the traversal reads after the first process.
+_FOLLOWING_PROCESS_DECODERS: dict[int, type[U9FollowingProcessState]] = {
+    HANGING_OBJECT_PROCESS_TYPE: U9HangingObjectProcessState,
+    SCRIPT_TIMER_PROCESS_TYPE: U9ScriptTimerProcessState,
+    PORTABLE_LIGHT_PROCESS_TYPE: U9PortableLightProcessState,
+    PLAYER_PROXIMITY_PROCESS_TYPE: U9PlayerProximityProcessState,
+    CLOCK_ANIMATION_PROCESS_TYPE: U9ClockAnimationProcessState,
+    DOOR_TIMER_PROCESS_TYPE: U9DoorTimerProcessState,
+    **dict.fromkeys(
+        ANIMATION_CONTROLLER_PROCESS_TYPES, U9AnimationControllerProcessState
+    ),
+    **dict.fromkeys(
+        MOVEMENT_CONTROLLER_PROCESS_TYPES, U9MovementControllerProcessState
+    ),
+    **dict.fromkeys(SCRIPTED_OBJECT_PROCESS_TYPES, U9ScriptedObjectProcessState),
+    **dict.fromkeys(NPC_ACTIVITY_PROCESS_TYPES, U9NpcActivityProcessState),
+    **dict.fromkeys(NPC_ACTION_PROCESS_TYPES, U9NpcActionProcessState),
+}
+
+
+@dataclass(frozen=True)
 class U9ProcessDataPrefix:
     """Deterministic stream through type 104 and supported later processes."""
 
@@ -2755,14 +3718,7 @@ class U9ProcessDataPrefix:
     next_process_offset: int | None
     next_process_type: int | None
     next_process_header: U9ProcessHeaderState | None
-    following_processes: tuple[
-        U9AnimationControllerProcessState
-        | U9HangingObjectProcessState
-        | U9ScriptTimerProcessState
-        | U9PortableLightProcessState
-        | U9PlayerProximityProcessState,
-        ...,
-    ]
+    following_processes: tuple[U9FollowingProcessState, ...]
     blocked_process_offset: int | None
     blocked_process_type: int | None
     terminator_offset: int | None
@@ -2783,13 +3739,7 @@ class U9ProcessDataPrefix:
         next_process_offset = None
         next_process_type = None
         next_process_header = None
-        following_processes: list[
-            U9AnimationControllerProcessState
-            | U9HangingObjectProcessState
-            | U9ScriptTimerProcessState
-            | U9PortableLightProcessState
-            | U9PlayerProximityProcessState
-        ] = []
+        following_processes: list[U9FollowingProcessState] = []
         blocked_process_offset = None
         blocked_process_type = None
         terminator_offset = None
@@ -2843,47 +3793,16 @@ class U9ProcessDataPrefix:
                                 f"invalid next process type {process_type} at "
                                 f"0x{cursor:X}"
                             )
-                        process: (
-                            U9AnimationControllerProcessState
-                            | U9HangingObjectProcessState
-                            | U9ScriptTimerProcessState
-                            | U9PortableLightProcessState
-                            | U9PlayerProximityProcessState
-                        )
-                        if process_type == HANGING_OBJECT_PROCESS_TYPE:
-                            process = U9HangingObjectProcessState.from_bytes(
-                                data,
-                                cursor,
-                                object_reference_count=object_references.count,
-                            )
-                        elif process_type == SCRIPT_TIMER_PROCESS_TYPE:
-                            process = U9ScriptTimerProcessState.from_bytes(
-                                data,
-                                cursor,
-                                object_reference_count=object_references.count,
-                            )
-                        elif process_type == PORTABLE_LIGHT_PROCESS_TYPE:
-                            process = U9PortableLightProcessState.from_bytes(
-                                data,
-                                cursor,
-                                object_reference_count=object_references.count,
-                            )
-                        elif process_type == PLAYER_PROXIMITY_PROCESS_TYPE:
-                            process = U9PlayerProximityProcessState.from_bytes(
-                                data,
-                                cursor,
-                                object_reference_count=object_references.count,
-                            )
-                        elif process_type == ANIMATION_CONTROLLER_PROCESS_TYPE:
-                            process = U9AnimationControllerProcessState.from_bytes(
-                                data,
-                                cursor,
-                                object_reference_count=object_references.count,
-                            )
-                        else:
+                        decoder = _FOLLOWING_PROCESS_DECODERS.get(process_type)
+                        if decoder is None:
                             blocked_process_offset = cursor
                             blocked_process_type = process_type
                             break
+                        process = decoder.from_bytes(
+                            data,
+                            cursor,
+                            object_reference_count=object_references.count,
+                        )
                         if next_process_header is None:
                             next_process_header = process.header
                         following_processes.append(process)

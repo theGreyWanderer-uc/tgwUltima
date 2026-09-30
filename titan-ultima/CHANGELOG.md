@@ -23,6 +23,36 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Added
 
+- **U9 save process stream -- movement controllers:** the process-data
+  traversal now reads 40 movement-controller process types (base, flying,
+  swimming, humanoid, Avatar, NPC, brute, skeleton, spider, ghost, lich and
+  zombie variants) and the
+  Avatar's animation controller (type 213). Each record keeps its version,
+  object references, flying altitudes and animation lists, and its
+  controller-specific blocks, including the humanoid-family fields the game
+  writes ahead of the common process header. Each block keeps its raw bytes
+  and a typed `fields` view (`U9HumanoidMovementFields`,
+  `U9AvatarMovementFields`, `U9BruteMovementFields`, `U9NpcMovementFields`,
+  `U9SpiderMovementFields`, `U9SwimmingMovementFields`, ...): Avatar countdown timers and
+  levitation flags, footprints and infernal armor, idle animations, spider
+  speed, and swimming depths and animation lists.
+
+- **U9 save process stream -- NPC activities and actions, scripted objects,
+  clocks and door timers:** the traversal now reads the 24 NPC-activity
+  process types (`U9NpcActivityProcessState`: NPC number, action kind, the
+  NPC's object reference, state, flags and the 64 activity variables), the 22
+  NPC-action process types that perform an NPC's current step
+  (`U9NpcActionProcessState`: pathfinding target, origin, stand time,
+  animations, collision limits and the same variables), the five process
+  types that save only scripted-object state (`U9ScriptedObjectProcessState`),
+  the type-57 clock animation (`U9ClockAnimationProcessState`) and the
+  type-197 automatic-door timer (`U9DoorTimerProcessState`). Both NPC records
+  expose `.action`, the matching `ACTION_KIND_CATALOGUE` entry. Across 13
+  retail saves, one save now decodes through the process-list terminator; the
+  others stop at pathfinder, path-follower, item-mover or magic-eye processes.
+  The integrity report's `decoded_following_processes` evidence includes all
+  of these records.
+
 - **U9 world-object triggers:** `U9Nonfixed.entity_triggers()` returns the
   four trigger IDs a world object runs, by phase, from its extra-data tags 62
   and 59 (the values the retail trigger executor reads); `nonfixed-entities`

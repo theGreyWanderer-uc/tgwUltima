@@ -19,13 +19,21 @@ from titan.u9.fixed import U9Fixed, U9FixedError
 from titan.u9.nonfixed import U9Nonfixed, U9NonfixedError
 from titan.u9.process_data import (
     U9AnimationControllerProcessState,
+    U9ClockAnimationProcessState,
+    U9DoorTimerProcessState,
+    U9FollowingProcessState,
     U9HangingObjectProcessState,
+    U9MovementControllerProcessState,
+    U9MovementExtensionState,
+    U9NpcActionProcessState,
+    U9NpcActivityProcessState,
     U9ObjectReferenceTable,
     U9ParticlePresetState,
     U9PlayerProximityProcessState,
     U9PortableLightProcessState,
     U9ProcessDataError,
     U9ProcessDataPrefix,
+    U9ScriptedObjectProcessState,
     U9ScriptedProcessState,
     U9ScriptTimerProcessState,
 )
@@ -91,13 +99,16 @@ def _scripted_process_json(record: U9ScriptedProcessState) -> dict[str, object]:
     }
 
 
-def _following_process_json(
-    record: U9AnimationControllerProcessState
-    | U9HangingObjectProcessState
-    | U9ScriptTimerProcessState
-    | U9PortableLightProcessState
-    | U9PlayerProximityProcessState,
-) -> dict[str, object]:
+def _movement_extension_json(block: U9MovementExtensionState) -> dict[str, object]:
+    return {
+        "kind": block.kind,
+        "offset": block.offset,
+        "fields": asdict(block.fields) if block.fields is not None else None,
+        "raw_hex": block.raw.hex(),
+    }
+
+
+def _following_process_json(record: U9FollowingProcessState) -> dict[str, object]:
     """Return the common and type-specific fields of one decoded process."""
     header = record.header
     world = record.world_state
@@ -244,7 +255,52 @@ def _following_process_json(
             "is_automatic": record.is_automatic,
             "has_manual_override": record.has_manual_override,
         }
-    else:
+    elif isinstance(record, U9MovementControllerProcessState):
+        payload["movement_controller"] = {
+            "version": record.movement.version,
+            "object_reference_indices": list(record.movement.object_reference_indices),
+            "flying": asdict(record.flying) if record.flying is not None else None,
+            "leading": [_movement_extension_json(block) for block in record.leading],
+            "extensions": [
+                _movement_extension_json(block) for block in record.extensions
+            ],
+        }
+    elif isinstance(record, U9ScriptedObjectProcessState):
+        payload["scripted_state"] = _scripted_process_json(record.scripted_state)
+    elif isinstance(record, U9ClockAnimationProcessState):
+        payload["scripted_state"] = _scripted_process_json(record.scripted_state)
+        payload["clock_animation"] = {
+            "version": record.version,
+            "loop_time_ms": record.loop_time_ms,
+        }
+    elif isinstance(record, U9NpcActivityProcessState):
+        payload["npc_activity"] = {
+            "version": record.version,
+            "npc_number": record.npc_number,
+            "action_kind": record.action_kind,
+            "action_name": record.action.name,
+            "npc_object_reference_index": record.npc_object_reference_index,
+            "state": record.state,
+            "activity_started": record.activity_started,
+            "clears_hands_on_exit": record.clears_hands_on_exit,
+            "activity_variables": list(record.activity_variables),
+            "reserved": list(record.reserved),
+        }
+    elif isinstance(record, U9NpcActionProcessState):
+        action: dict[str, object] = {
+            key: list(value) if isinstance(value, tuple) else value
+            for key, value in vars(record).items()
+            if key not in ("header", "world_state", "offset", "end_offset")
+        }
+        action["action_name"] = record.action.name
+        payload["npc_action"] = action
+    elif isinstance(record, U9DoorTimerProcessState):
+        payload["door_timer"] = {
+            "version": record.version,
+            "door_object_reference_index": record.door_object_reference_index,
+            "elapsed_time": record.elapsed_time,
+        }
+    elif isinstance(record, U9PlayerProximityProcessState):
         payload["scripted_state"] = _scripted_process_json(record.scripted_state)
         payload["player_proximity"] = {
             "version": record.version,

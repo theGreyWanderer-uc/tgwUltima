@@ -128,8 +128,41 @@ def _animation_controller_process() -> bytes:
     return bytes(data)
 
 
+def _world_header(process_type: int, name: bytes) -> bytes:
+    data = struct.pack("<i9i100s", process_type, 50, 1, 0, 0, 7, -1, -1, 0x3F, 0, name)
+    return data + struct.pack("<iiii", 0, 1, 1, 9)
+
+
+def _later_process_records() -> bytes:
+    """A humanoid movement controller, NPC activity, door and clock."""
+    data = bytearray(struct.pack("<i", 85))
+    data += struct.pack("<iiBB", 2, 0, 0, 1)
+    data += struct.pack("<9i100s", 40, 1, 0, 0, 125, -1, -1, 0x3F, 0, b"MoveCon")
+    data += struct.pack("<iiii", 0, 1, 1, 9)
+    movement = bytearray(1394)
+    struct.pack_into("<i", movement, 0, 1)
+    data += movement
+    data += _world_header(30, b"Loiter")
+    data += struct.pack("<7i64i4I", 2, 275, 2, 1, -1, 1, 0, *([0] * 64), 0, 0, 0, 0)
+    data += _world_header(53, b"Door")
+    data += struct.pack("<iiiii128si", 0, 1, 0, 0, 0, b"", 0)
+    data += _world_header(57, b"Clock")
+    data += struct.pack("<iiiii128si", 0, 1, 0, 0, 0, b"", 0)
+    data += struct.pack("<if", 0, 250.0)
+    data += _world_header(23, b"Loiter")
+    data += struct.pack("<6ifi8i", 4, 275, 2, 0, 0, 0, 0.0, 1, *([0] * 8))
+    data += struct.pack("<f3i2ifi", 0.0, 0, 0, 0, 0, 0, 1.0, 0)
+    data += struct.pack("<64ifi5i4I", *([0] * 64), 50.0, 0, 1, 30, -1, 0, 0, 0, 0, 0, 0)
+    data += _world_header(197, b"DoorTimer")
+    data += struct.pack("<iif", 0, 1, 28177.0)
+    return bytes(data)
+
+
 def _processes(
-    *, fixed_offset: int | None = None, first_process: bool = False
+    *,
+    fixed_offset: int | None = None,
+    first_process: bool = False,
+    extra: bytes = b"",
 ) -> bytes:
     count = 3 if fixed_offset is not None else 2
     end = OBJECT_REFERENCE_DATA_OFFSET + 12 + count * 12
@@ -287,6 +320,7 @@ def _processes(
         data += _hanging_object_process()
         data += _script_timer_process()
         data += _animation_controller_process()
+        data += extra
         data += struct.pack("<i9i100s", 70, 10, 1, 0, 0, 464, -1, -1, -1, 0, b"Torch")
         data += struct.pack("<iii", 0, 0, 9)
         data += struct.pack("<iiHfIIII", 0, 0, 65535, 65535.0, 24, 0, 0, 0x09)
@@ -470,6 +504,40 @@ class IntegrityTests(unittest.TestCase):
         rendered = render_integrity_report(report)
         self.assertIn("first_process=104/Poof", rendered)
         self.assertIn("decoded_following_processes=4", rendered)
+        json.dumps(report.to_dict())
+
+    def test_reports_movement_activity_and_scripted_object_processes(self) -> None:
+        processes = _processes(first_process=True, extra=_later_process_records())
+        nonfixed = _nonfixed()
+        (self.save / "u9game4.sav").write_bytes(_archive(processes, nonfixed))
+        (self.save / "processes.dat").write_bytes(processes)
+
+        report = check_save(self.root, fixed_reference_directory=self.reference)
+        evidence = report.artifacts["archive/processes.dat"]
+        records = evidence["decoded_following_processes"]
+        self.assertEqual(
+            [record["type"] for record in records],
+            [61, 62, 98, 85, 30, 53, 57, 23, 197, 70],
+        )
+        _, _, _, movement, activity, door, clock, action, timer, _ = records
+        (humanoid,) = movement["movement_controller"]["leading"]
+        self.assertEqual(humanoid["kind"], "humanoid")
+        self.assertTrue(humanoid["fields"]["leaves_footprints"])
+        self.assertEqual(humanoid["raw_hex"], "02000000000000000001")
+        self.assertIsNone(movement["movement_controller"]["flying"])
+        self.assertEqual(activity["npc_activity"]["npc_number"], 275)
+        self.assertEqual(activity["npc_activity"]["action_kind"], 2)
+        self.assertEqual(len(activity["npc_activity"]["activity_variables"]), 64)
+        self.assertEqual(door["scripted_state"]["primary_object_reference_index"], 1)
+        self.assertEqual(
+            clock["clock_animation"], {"version": 0, "loop_time_ms": 250.0}
+        )
+        self.assertEqual(activity["npc_activity"]["action_name"], "loiter")
+        self.assertEqual(action["npc_action"]["action_name"], "loiter")
+        self.assertEqual(action["npc_action"]["maximum_collision_checks"], 30)
+        self.assertEqual(len(action["npc_action"]["activity_variables"]), 64)
+        self.assertEqual(timer["door_timer"]["door_object_reference_index"], 1)
+        self.assertIsNone(evidence["blocked_process_type"])
         json.dumps(report.to_dict())
 
     def test_renderer_collapses_duplicate_problems_but_json_keeps_them(self) -> None:
