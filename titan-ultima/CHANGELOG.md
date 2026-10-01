@@ -32,6 +32,59 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Added
 
+- **U9 save process stream -- temporary camera and more process types:**
+  when the camera manager saved a temporary camera, its 173-byte record
+  (`U9TemporaryCameraState`) is now read between the camera control and the
+  targeting state, so the process list is reached in such saves too. The
+  layout comes from the game's code and no save containing one has been
+  checked yet, so the record carries `boundary_confirmed = False` and
+  `save-check` adds an informational finding `PRC03`. Seventeen more process
+  types are read: 17, 19, 20, 21 and 69 (straight-line path, safe item
+  rotation, explosion, missile launcher, delayed throw), the death, summon
+  daemon, earthquake, lightning storm and inferno spells (131, 137, 139, 140,
+  141), the acid-rain spell with its target list (142,
+  `U9AcidRainProcessState`), the fire-ring watcher (154), the venom effect
+  (210), the creeper plant growth (215: plant, scale, growth rate, start
+  time), and the header-less types 135, 151 (time stop and armageddon, which
+  save nothing) and 214 (delayed item teleport, `U9HeaderlessProcessState`).
+  Only type 206, which the game never saves, remains unread. A new
+  informational check `PRC04` notes a creeper plant-growth process: the retail
+  game does not restore its start time on load, so the plant stops growing
+  as soon as the save is loaded (the rest of the save loads normally, as a
+  test save confirmed).
+
+- **U9 save process stream -- sections after the process list:** new
+  `titan.u9.process_sections` reads the thirteen subsystem sections that
+  follow the process list (`U9ProcessSections.from_prefix`): fast area (the
+  loaded chunks, with display/active/collision state and water kind), NPC
+  data manager (a second NPC array, readable with `.npcs()`, and the cache
+  of each authored NPC's map record), main interface
+  (availability and visibility of each of the 11 on-screen elements, display
+  mode, and the 8,192 found-item-type flags), light system (saved lights with
+  colour, position, range and flicker), weather (clocks, current and target
+  weather, storm, wind and gusts, rain and lightning timers, sun, secondary
+  and lightning colours, Trammel and Felucca phases, sun-remover objects and
+  the screen fade), spell manager (active spell process IDs), physics (moving
+  objects and trigger overlaps), moving supports (lifts, steps, ships, with
+  riders and lift paths), highway manager (NPCs travelling a highway while
+  unloaded: NPC, highway, node, speed, step timer, frozen position), hints,
+  combat, book bookmarks and
+  the sound system's music list (`sounds.music_nodes`: track, priority,
+  piece, volumes and fade ticks; the list is counted and must end the file).
+  Combat is read combatant by combatant
+  (`U9CombatantRecord`): the record layout follows the NPC's combat
+  behaviour ID; each record's 268-byte common part is typed
+  (`U9CombatantCommonState`: radius, home location, pathfinding settings,
+  poison, friend links, last destination and more), and so are the
+  class-specific fields before and after it (`U9CombatantClassFields`, 25
+  classes: humanoid, Avatar, wolf, guard, gazer, creeper and others; the
+  creeper's second common part is `repeated_common`). Across 251 retail
+  saves (2,655 combatants) every byte of `processes.dat` is now accounted
+  for, with object references checked against the reference table.
+  `save-check --json` reports per-section offsets, sizes and counts under
+  `process_sections` (including each combatant's classes), and a new check
+  `PRC02` warns when those sections cannot be read.
+
 - **U9 save process stream -- movement controllers:** the process-data
   traversal now reads 40 movement-controller process types (base, flying,
   swimming, humanoid, Avatar, NPC, brute, skeleton, spider, ghost, lich and

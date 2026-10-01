@@ -62,6 +62,11 @@ __all__ = [
     "U9SpiderMovementFields",
     "U9SwimmingMovementFields",
     "U9TargetingState",
+    "U9TemporaryCameraState",
+    "U9AcidRainProcessState",
+    "U9HeaderlessProcessState",
+    "HEADERLESS_PROCESS_LAYOUTS",
+    "CREEPER_GROWTH_PROCESS_TYPE",
     # Compatibility exports retained for callers using the earlier names.
     "HANDLE_DATA_OFFSET",
     "U9ItemHandleEntry",
@@ -90,6 +95,10 @@ CAMERA_CONTROL_VERSIONS = {0, 1, 2}
 CAMERA_CONTROL_BASE_SIZE = 28
 CAMERA_CONTROL_EXTENDED_SIZE = 180
 TARGETING_STATE = struct.Struct("<Iiii3f3fii")
+# Temporary camera: version, word, object reference, word, then float
+# triples and words as the retail writer emits them, a byte, four zero words.
+TEMPORARY_CAMERA_STATE = struct.Struct("<iiii3f3i3f3i3f4i2i3f4i3i3fiB4I")
+TEMPORARY_CAMERA_VERSION = 5
 MIN_PROCESS_TYPE = 1
 MAX_PROCESS_TYPE = 0xE4
 PROCESS_HEADER = struct.Struct("<9i100s")
@@ -2569,6 +2578,56 @@ class U9TargetingState:
 
 
 @dataclass(frozen=True)
+class U9TemporaryCameraState:
+    """The optional 173-byte temporary-camera record (version 5).
+
+    Written after the camera control when its presence marker is non-zero,
+    and followed by the targeting state. The layout comes from the retail
+    save and load routines; no retail save containing one has been checked,
+    so ``boundary_confirmed`` is ``False``. Field meanings are not
+    established: ``vectors`` are the five float triples and ``words`` the
+    remaining 32-bit fields, each in stream order. Titan requires version 5
+    and the four trailing zero words before accepting the boundary.
+    """
+
+    version: int
+    object_reference_index: int
+    vectors: tuple[tuple[float, float, float], ...]
+    words: tuple[int, ...]
+    flag: int
+    reserved: tuple[int, int, int, int]
+    offset: int
+    boundary_confirmed: bool = False
+
+    @classmethod
+    def from_bytes(cls, data: bytes, offset: int) -> U9TemporaryCameraState:
+        _require_bytes(data, offset, TEMPORARY_CAMERA_STATE.size, "temporary camera")
+        v = TEMPORARY_CAMERA_STATE.unpack_from(data, offset)
+        if v[0] != TEMPORARY_CAMERA_VERSION:
+            raise U9ProcessDataError(
+                f"unsupported temporary-camera version {v[0]} at 0x{offset:X}"
+            )
+        reserved = v[40:44]
+        if any(reserved):
+            raise U9ProcessDataError(
+                f"temporary camera at 0x{offset:X} has non-zero closing words"
+            )
+        return cls(
+            version=v[0],
+            object_reference_index=v[2],
+            vectors=(v[4:7], v[10:13], v[16:19], v[25:28], v[35:38]),
+            words=(v[1], v[3], *v[7:10], *v[13:16], *v[19:25], *v[28:35], v[38]),
+            flag=v[39],
+            reserved=reserved,
+            offset=offset,
+        )
+
+    @property
+    def end_offset(self) -> int:
+        return self.offset + TEMPORARY_CAMERA_STATE.size
+
+
+@dataclass(frozen=True)
 class U9CameraControlState:
     """Saved camera targeting, distance, shake, and targeting-cursor state."""
 
@@ -2609,6 +2668,7 @@ class U9CameraControlState:
     targeting: U9TargetingState | None
     offset: int
     end_offset: int | None
+    temporary_camera: U9TemporaryCameraState | None = None
 
     @classmethod
     def from_bytes(cls, data: bytes, offset: int) -> U9CameraControlState:
@@ -2696,15 +2756,22 @@ class U9CameraControlState:
         (temporary_marker,) = struct.unpack_from("<I", data, marker_offset)
         has_temporary_camera = temporary_marker != 0
         targeting = None
+        temporary_camera = None
         end_offset: int | None = marker_offset + 4
-        if has_temporary_camera:
-            # This optional record has no length field and has not yet been
-            # verified against a saved retail example, so the next boundary
-            # intentionally remains unknown.
-            end_offset = None
-        elif version == 2:
-            targeting = U9TargetingState.from_bytes(data, marker_offset + 4)
+        if version == 2:
+            # The marker is the saved pointer to the temporary camera; its
+            # record (fixed 173 bytes) comes before the targeting state,
+            # which version 2 always writes.
+            cursor = marker_offset + 4
+            if has_temporary_camera:
+                temporary_camera = U9TemporaryCameraState.from_bytes(data, cursor)
+                cursor = temporary_camera.end_offset
+            targeting = U9TargetingState.from_bytes(data, cursor)
             end_offset = targeting.end_offset
+        elif has_temporary_camera:
+            # Only version 2 is written by retail; an older stream with a
+            # temporary camera has no known layout.
+            end_offset = None
 
         return cls(
             version=version,
@@ -2744,6 +2811,7 @@ class U9CameraControlState:
             targeting=targeting,
             offset=offset,
             end_offset=end_offset,
+            temporary_camera=temporary_camera,
         )
 
 
@@ -3166,7 +3234,9 @@ class U9SwimmingMovementFields:
 
     Only the first ``fall_animation_count`` / ``death_animation_count``
     animation slots are meaningful; the rest and the two pad words are not
-    cleared before saving.
+    cleared before saving. A creature that never uses one of the lists may
+    save its count uninitialized as well (a sea serpent was saved with a
+    fall-animation count of 585), so the counts are reported as stored.
     """
 
     floor_altitude: float
@@ -3182,11 +3252,6 @@ class U9SwimmingMovementFields:
     def from_raw(cls, raw: bytes) -> U9SwimmingMovementFields:
         values = SWIMMING_MOVEMENT_STATE.unpack(raw)
         _validate_finite(values[0:3], "swimming movement depth")
-        for count, label in ((values[8], "fall"), (values[14], "death")):
-            if not 0 <= count <= 5:
-                raise U9ProcessDataError(
-                    f"invalid swimming {label}-animation count {count}"
-                )
         return cls(
             floor_altitude=values[0],
             floor_depth=values[1],
@@ -3541,9 +3606,11 @@ class U9NpcActionProcessState:
     All 22 action process types share one retail save (``0x004016D0``):
     world state, then 396 bytes of navigation, timing, animation and
     collision state around the same 64 activity variables the activity
-    process keeps. ``exit_timer`` is a raw timer word, and ``careful_walk``
-    is kept as the stored word: retail saves often hold float bit patterns
-    there.
+    process keeps. ``exit_timer`` is a raw timer word. ``careful_walk`` is an
+    integer flag (the action code writes only 0 or 1 and never reads it as a
+    float); retail saves often hold float-like values there, most likely
+    leftover memory in action kinds that never set it, so the stored word is
+    kept as is.
     """
 
     header: U9ProcessHeaderState
@@ -3785,6 +3852,7 @@ _SIMPLE_FIELD_FORMATS = {
     "vector": ("3f", 3),
     "quaternion": ("4f", 4),
     "location": ("iih2x", 3),  # integer X/Y, 16-bit Z, two unused bytes
+    "text64": ("64s", 1),  # NUL-terminated text in a 64-byte buffer
     "reserved": ("I", 1),
 }
 
@@ -3814,6 +3882,12 @@ def _simple(
         version_before_header,
     )
 
+
+# Type 215's retail load calls the stream writer instead of the reader for
+# its last field (the start time). The stream stays in step, so the rest of
+# the save loads normally, but the start time is not restored: the growth
+# process ends on its first update after loading (tested on a retail save).
+CREEPER_GROWTH_PROCESS_TYPE = 215
 
 _PATH_MOVER_FIELDS = (
     ("distance_to_target", "float"),
@@ -4281,6 +4355,136 @@ SIMPLE_PROCESS_LAYOUTS.update(
             reserved=0,
             version_before_header=True,
         ),
+        # Layouts read from the retail save routines (2026-10-01); none of
+        # these types occurs in the checked saves.
+        17: _simple(
+            "straight_line_path",
+            "header",
+            2,
+            ("npc_number", "int"),
+            ("target_x", "int"),
+            ("target_y", "int"),
+            ("speed", "int"),
+            ("careful_walk", "flag"),
+            ("npc_record_offset", "int"),  # -1 when there is no NPC
+            ("termination_test", "int"),
+            ("last_angle", "float"),
+            ("target_ray", "vector"),
+            ("error_tolerance", "float"),
+            ("may_fail", "flag"),
+            ("wants_to_exit", "flag"),
+            ("success_state", "int"),
+        ),
+        19: _simple(
+            "safe_item_rotation",
+            "header",
+            0,
+            ("base_object", "reference"),
+            ("target_object", "reference"),
+            ("rotation_axis", "vector"),
+            ("description", "text64"),
+            reserved=0,
+        ),
+        20: _simple(
+            "explosion",
+            "header",
+            1,
+            ("explosion_object", "reference"),
+            ("time", "int"),
+            ("map_number", "int"),
+        ),
+        21: _simple(
+            "missile_launcher",
+            "header",
+            2,
+            ("launcher_object", "reference"),
+            ("parameter", "int"),
+            ("link", "int"),
+            ("missile_1", "reference"),
+            ("missile_2", "reference"),
+            ("explodes", "flag"),
+            ("map_number", "int"),
+            ("fired_missile", "int"),
+            ("missile_type", "int"),
+            ("own_link", "int"),
+        ),
+        69: _simple(
+            "delayed_throw",
+            "header",
+            1,
+            ("thrown_object", "reference"),
+            ("delay", "uint"),
+        ),
+        131: _simple(
+            "death_spell",
+            "spell",
+            1,
+            ("short_1", "ushort"),
+            ("byte_1", "byte"),
+            ("word_1", "uint"),
+            ("word_2", "uint"),
+            ("word_3", "uint"),
+            ("word_4", "uint"),
+            ("short_2", "ushort"),
+        ),
+        137: _simple(
+            "summon_daemon_spell",
+            "spell",
+            1,
+            ("object_1", "reference"),
+            ("word_1", "uint"),
+        ),
+        139: _simple(
+            "earthquake_spell", "spell", 1, ("word_1", "uint"), ("word_2", "uint")
+        ),
+        140: _simple(
+            "lightning_storm_spell",
+            "spell",
+            1,
+            ("object_1", "reference"),
+            ("object_2", "reference"),
+            ("word_1", "uint"),
+        ),
+        141: _simple(
+            "inferno_spell",
+            "spell",
+            1,
+            ("word_1", "uint"),
+            ("word_2", "uint"),
+            ("word_3", "uint"),
+        ),
+        154: _simple(
+            "fire_ring_watcher",
+            "world",
+            1,
+            ("object_1", "reference"),
+            ("object_2", "reference"),
+            ("word_1", "uint"),
+        ),
+        # Venom effect: a 30-second timer on a target.
+        210: _simple(
+            "venom_effect",
+            "world",
+            0,
+            ("object_1", "reference"),
+            ("word_1", "uint"),
+            ("word_2", "uint"),
+            ("word_3", "uint"),
+            ("word_4", "uint"),
+            reserved=0,
+        ),
+        # A creeper's plant growing from 0.25 to 0.75 scale. Retail does not
+        # restore its start time on load (see CREEPER_GROWTH_PROCESS_TYPE).
+        CREEPER_GROWTH_PROCESS_TYPE: _simple(
+            "creeper_plant_growth",
+            "world",
+            1,
+            ("plant", "reference"),
+            ("scale", "float"),
+            ("growth_per_millisecond", "float"),
+            ("start_time", "uint"),  # saved as elapsed system-tick milliseconds
+            reserved=0,
+        ),
         212: _simple(
             "avatar_torch",
             "world",
@@ -4298,6 +4502,41 @@ SIMPLE_PROCESS_LAYOUTS.update(
         ),
     }
 )
+
+
+def _decode_simple_fields(
+    fields: tuple[tuple[str, str], ...],
+    raw: tuple,
+    label: str,
+    object_reference_count: int,
+) -> tuple[tuple[tuple[str, object], ...], tuple[int, ...]]:
+    """Convert unpacked table-driven fields to ``(name, value)`` pairs and
+    the reserved words, validating floats, flags and object references."""
+    values: list[tuple[str, object]] = []
+    reserved: list[int] = []
+    cursor = 0
+    for name, field_kind in fields:
+        count = _SIMPLE_FIELD_FORMATS[field_kind][1]
+        chunk = raw[cursor : cursor + count]
+        cursor += count
+        value: object = chunk[0] if count == 1 else tuple(chunk)
+        if field_kind in ("float", "vector", "quaternion"):
+            _validate_finite(tuple(chunk), f"{label} {name}")
+        elif field_kind in ("flag", "byte_flag"):
+            if chunk[0] not in (0, 1):
+                raise U9ProcessDataError(f"invalid {label} {name} flag {chunk[0]}")
+            value = bool(chunk[0])
+        elif field_kind == "reference":
+            _validate_object_reference_index(
+                chunk[0], object_reference_count, f"{label} {name}"
+            )
+        elif field_kind == "text64":
+            value = chunk[0].split(b"\0", 1)[0].decode("cp1252", errors="replace")
+        if field_kind == "reserved":
+            reserved.append(chunk[0])
+        else:
+            values.append((name, value))
+    return tuple(values), tuple(reserved)
 
 
 def _version_format(layout: _SimpleProcessLayout) -> str:
@@ -4407,38 +4646,182 @@ class U9SimpleProcessState:
                 raise U9ProcessDataError(
                     f"unsupported {label} version {version} at 0x{payload_offset:X}"
                 )
-        values: list[tuple[str, object]] = []
-        reserved: list[int] = []
-        for name, field_kind in layout.fields:
-            count = _SIMPLE_FIELD_FORMATS[field_kind][1]
-            chunk = raw[cursor : cursor + count]
-            cursor += count
-            value: object = chunk[0] if count == 1 else tuple(chunk)
-            if field_kind in ("float", "vector", "quaternion"):
-                _validate_finite(tuple(chunk), f"{label} {name}")
-            elif field_kind in ("flag", "byte_flag"):
-                if chunk[0] not in (0, 1):
-                    raise U9ProcessDataError(f"invalid {label} {name} flag {chunk[0]}")
-                value = bool(chunk[0])
-            elif field_kind == "reference":
-                _validate_object_reference_index(
-                    chunk[0], object_reference_count, f"{label} {name}"
-                )
-            if field_kind == "reserved":
-                reserved.append(chunk[0])
-            else:
-                values.append((name, value))
+        values, reserved = _decode_simple_fields(
+            layout.fields, raw[cursor:], label, object_reference_count
+        )
         return cls(
             header=header,
             world_state=world_state,
             scripted_state=scripted_state,
             kind=layout.kind,
             version=version,
-            values=tuple(values),
-            reserved=tuple(reserved),
+            values=values,
+            reserved=reserved,
             offset=offset,
             end_offset=payload_offset + layout_struct.size,
             spell_state=spell_state,
+        )
+
+
+# Process types whose save routine writes no common process header: the
+# record is the type word followed only by these fields (none for the two
+# spells, whose save routines are empty).
+HEADERLESS_PROCESS_LAYOUTS: dict[int, _SimpleProcessLayout] = {
+    135: _simple("time_stop_spell", "none", None, reserved=0),
+    151: _simple("armageddon_spell", "none", None, reserved=0),
+    214: _simple(
+        "delayed_item_teleport",
+        "none",
+        0,
+        ("object_1", "reference"),
+        ("word_1", "uint"),
+        ("word_2", "uint"),
+        ("word_3", "uint"),
+        ("word_4", "uint"),
+    ),
+}
+
+
+@dataclass(frozen=True)
+class U9HeaderlessProcessState:
+    """A process whose save writes no common header (types 135, 151, 214).
+
+    ``header`` and ``world_state`` are always ``None``; fields follow the
+    type word directly, as in :class:`U9SimpleProcessState`.
+    """
+
+    process_type: int
+    kind: str
+    version: int | float | None
+    values: tuple[tuple[str, object], ...]
+    reserved: tuple[int, ...]
+    offset: int
+    end_offset: int
+    header: None = None
+    world_state: None = None
+
+    def __getitem__(self, name: str) -> object:
+        for key, value in self.values:
+            if key == name:
+                return value
+        raise KeyError(name)
+
+    @property
+    def fields(self) -> dict[str, object]:
+        return dict(self.values)
+
+    @classmethod
+    def from_bytes(
+        cls, data: bytes, offset: int, *, object_reference_count: int
+    ) -> U9HeaderlessProcessState:
+        _require_bytes(data, offset, 4, "process type")
+        (process_type,) = struct.unpack_from("<i", data, offset)
+        layout = HEADERLESS_PROCESS_LAYOUTS.get(process_type)
+        if layout is None:
+            raise U9ProcessDataError(
+                f"process type {process_type} is not a headerless process"
+            )
+        layout_struct = _simple_layout_struct(layout)
+        label = f"{layout.kind.replace('_', '-')} process"
+        payload_offset = offset + 4
+        _require_bytes(data, payload_offset, layout_struct.size, label)
+        raw = layout_struct.unpack_from(data, payload_offset)
+        version = None
+        cursor = 0
+        if layout.version is not None:
+            version = raw[0]
+            cursor = 1
+            if version != layout.version:
+                raise U9ProcessDataError(
+                    f"unsupported {label} version {version} at 0x{payload_offset:X}"
+                )
+        values, reserved = _decode_simple_fields(
+            layout.fields, raw[cursor:], label, object_reference_count
+        )
+        return cls(
+            process_type,
+            layout.kind,
+            version,
+            values,
+            reserved,
+            offset,
+            payload_offset + layout_struct.size,
+        )
+
+
+ACID_RAIN_PROCESS_TYPE = 142
+ACID_RAIN_MAXIMUM_TARGETS = 32  # the in-memory array holds 32 references
+ACID_RAIN_HEAD = struct.Struct("<iIIi")
+ACID_RAIN_TAIL = struct.Struct("<I3I4I")
+
+
+@dataclass(frozen=True)
+class U9AcidRainProcessState:
+    """The acid-rain spell (type 142): the shared spell block, then version
+    1, two words, a counted list of target object references, a word, three
+    words and four reserved words (48 bytes plus 4 per target).
+
+    Read from the retail save routine; no saved example has been checked.
+    """
+
+    header: U9ProcessHeaderState
+    world_state: U9ProcessWorldState
+    spell_state: U9SpellState
+    version: int
+    word_1: int
+    word_2: int
+    target_object_reference_indices: tuple[int, ...]
+    word_3: int
+    words: tuple[int, int, int]
+    reserved: tuple[int, int, int, int]
+    offset: int
+    end_offset: int
+
+    @classmethod
+    def from_bytes(
+        cls, data: bytes, offset: int, *, object_reference_count: int
+    ) -> U9AcidRainProcessState:
+        header = U9ProcessHeaderState.from_bytes(data, offset)
+        world_state = U9ProcessWorldState.from_bytes(
+            data, header.end_offset, object_reference_count=object_reference_count
+        )
+        spell_state = U9SpellState.from_bytes(
+            data, world_state.end_offset, object_reference_count=object_reference_count
+        )
+        cursor = spell_state.end_offset
+        _require_bytes(data, cursor, ACID_RAIN_HEAD.size, "acid-rain process")
+        version, word_1, word_2, count = ACID_RAIN_HEAD.unpack_from(data, cursor)
+        if version != 1:
+            raise U9ProcessDataError(
+                f"unsupported acid-rain process version {version} at 0x{cursor:X}"
+            )
+        if not 0 <= count <= ACID_RAIN_MAXIMUM_TARGETS:
+            raise U9ProcessDataError(
+                f"invalid acid-rain target count {count} at 0x{cursor + 12:X}"
+            )
+        cursor += ACID_RAIN_HEAD.size
+        _require_bytes(data, cursor, 4 * count, "acid-rain targets")
+        targets = struct.unpack_from(f"<{count}i", data, cursor)
+        for index in targets:
+            _validate_object_reference_index(
+                index, object_reference_count, "acid-rain target"
+            )
+        cursor += 4 * count
+        _require_bytes(data, cursor, ACID_RAIN_TAIL.size, "acid-rain process")
+        tail = ACID_RAIN_TAIL.unpack_from(data, cursor)
+        return cls(
+            header=header,
+            world_state=world_state,
+            spell_state=spell_state,
+            version=version,
+            word_1=word_1,
+            word_2=word_2,
+            target_object_reference_indices=targets,
+            word_3=tail[0],
+            words=tail[1:4],
+            reserved=tail[4:8],
+            offset=offset,
+            end_offset=cursor + ACID_RAIN_TAIL.size,
         )
 
 
@@ -4974,6 +5357,8 @@ class U9FloatingLanternProcessState:
 
 
 U9FollowingProcessState = Union[
+    U9AcidRainProcessState,
+    U9HeaderlessProcessState,
     U9AnimationControllerProcessState,
     U9HangingObjectProcessState,
     U9ScriptTimerProcessState,
@@ -5011,6 +5396,8 @@ _FOLLOWING_PROCESS_DECODERS: dict[int, type[U9FollowingProcessState]] = {
     **dict.fromkeys(NPC_ACTIVITY_PROCESS_TYPES, U9NpcActivityProcessState),
     **dict.fromkeys(NPC_ACTION_PROCESS_TYPES, U9NpcActionProcessState),
     **dict.fromkeys(SIMPLE_PROCESS_LAYOUTS, U9SimpleProcessState),
+    **dict.fromkeys(HEADERLESS_PROCESS_LAYOUTS, U9HeaderlessProcessState),
+    ACID_RAIN_PROCESS_TYPE: U9AcidRainProcessState,
 }
 
 
@@ -5042,6 +5429,15 @@ class U9ProcessDataPrefix:
         object_references = U9ObjectReferenceTable.from_bytes(data)
         camera = U9CameraState.from_bytes(data, object_references.end_offset)
         camera_control = U9CameraControlState.from_bytes(data, camera.end_offset)
+        temporary_camera = camera_control.temporary_camera
+        if temporary_camera is not None and not (
+            0 <= temporary_camera.object_reference_index < object_references.count
+        ):
+            raise U9ProcessDataError(
+                "temporary-camera object-reference index "
+                f"{temporary_camera.object_reference_index} is outside "
+                f"0..{object_references.count - 1}"
+            )
         process_list_offset = camera_control.end_offset
         first_process_type = None
         first_process = None

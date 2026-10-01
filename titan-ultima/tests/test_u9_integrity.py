@@ -10,6 +10,9 @@ from pathlib import Path
 from titan.u9.integrity import check_save, render_integrity_report
 from titan.u9.process_data import OBJECT_REFERENCE_DATA_OFFSET
 
+from tests.test_u9_process_data import _temporary_camera_record
+from tests.test_u9_process_sections import _sections
+
 
 def _nonfixed() -> bytes:
     data = bytearray(40)
@@ -198,6 +201,8 @@ def _processes(
     fixed_offset: int | None = None,
     first_process: bool = False,
     extra: bytes = b"",
+    sections: bytes = b"",
+    temporary_camera: bool = False,
 ) -> bytes:
     count = 3 if fixed_offset is not None else 2
     end = OBJECT_REFERENCE_DATA_OFFSET + 12 + count * 12
@@ -235,7 +240,11 @@ def _processes(
     )
     camera_control = bytearray(180)
     struct.pack_into("<I", camera_control, 0, 2)
+    if temporary_camera:
+        struct.pack_into("<I", camera_control, 176, 0x00A1B2C0)
     data += camera_control
+    if temporary_camera:
+        data += _temporary_camera_record(1)
     data += struct.pack("<Iiii3f3fii", 0, 0, 0, 0, 250, 500, 1500, 0, 0, 0, 0, 0)
     if first_process:
         data += struct.pack(
@@ -360,6 +369,7 @@ def _processes(
         data += struct.pack("<iii", 0, 0, 9)
         data += struct.pack("<iiHfIIII", 0, 0, 65535, 65535.0, 24, 0, 0, 0x09)
         data += struct.pack("<i", -1)
+        data += sections
     else:
         data += struct.pack("<i", -1)
     return bytes(data)
@@ -542,7 +552,11 @@ class IntegrityTests(unittest.TestCase):
         json.dumps(report.to_dict())
 
     def test_reports_movement_activity_and_scripted_object_processes(self) -> None:
-        processes = _processes(first_process=True, extra=_later_process_records())
+        processes = _processes(
+            first_process=True,
+            extra=_later_process_records(),
+            sections=_sections(refs=2),
+        )
         nonfixed = _nonfixed()
         (self.save / "u9game4.sav").write_bytes(_archive(processes, nonfixed))
         (self.save / "processes.dat").write_bytes(processes)
@@ -607,7 +621,86 @@ class IntegrityTests(unittest.TestCase):
         self.assertFalse(eye["table_process"]["fields"]["temporarily_active"])
         self.assertEqual(eye["scripted_state"]["primary_object_reference_index"], 1)
         self.assertIsNone(evidence["blocked_process_type"])
+        self.assertNotIn("PRC02", {finding.check_id for finding in report.findings})
+        sections = evidence["process_sections"]
+        self.assertEqual(sections["end_offset"], evidence["bytes"])
+        self.assertEqual(sections["lights"]["limited_range"], 1)
+        self.assertEqual(sections["moving_supports"]["kinds"], [1, 3])
+        self.assertEqual(sections["combat"]["npc_types"], [0, 494, 300])
+        self.assertEqual(
+            [
+                (
+                    c["combat_behavior"],
+                    c["leading_bytes"],
+                    c["trailing_bytes"],
+                    c["classes"],
+                    c["repeated_common"],
+                )
+                for c in sections["combat"]["combatants"]
+            ],
+            [
+                (0, 0, 157, ["humanoid", "avatar"], False),
+                (25, 39, 0, ["wolf"], False),
+                (19, 0, 306, ["creeper"], True),
+            ],
+        )
+        self.assertEqual(sections["sounds"]["music_nodes"], 2)
         json.dumps(report.to_dict())
+
+    def test_temporary_camera_is_read_and_reported_as_unconfirmed(self) -> None:
+        processes = _processes(
+            first_process=True, sections=_sections(refs=2), temporary_camera=True
+        )
+        nonfixed = _nonfixed()
+        (self.save / "u9game4.sav").write_bytes(_archive(processes, nonfixed))
+        (self.save / "processes.dat").write_bytes(processes)
+
+        report = check_save(self.root, fixed_reference_directory=self.reference)
+
+        (finding,) = [f for f in report.findings if f.check_id == "PRC03"]
+        self.assertEqual(finding.severity, "INFO")
+        evidence = report.artifacts["archive/processes.dat"]
+        temporary = evidence["camera_control"]["temporary_camera"]
+        self.assertEqual(temporary["version"], 5)
+        self.assertFalse(temporary["boundary_confirmed"])
+        self.assertEqual(evidence["first_process_type"], 104)
+        self.assertIsNotNone(evidence["process_sections"])
+
+    def test_creeper_growth_process_is_reported(self) -> None:
+        growth = _world_header(215, b"CreeperGrow") + struct.pack(
+            "<iiffI", 1, 1, 0.25, 0.00002, 5000
+        )
+        processes = _processes(
+            first_process=True, extra=growth, sections=_sections(refs=2)
+        )
+        nonfixed = _nonfixed()
+        (self.save / "u9game4.sav").write_bytes(_archive(processes, nonfixed))
+        (self.save / "processes.dat").write_bytes(processes)
+
+        report = check_save(self.root, fixed_reference_directory=self.reference)
+
+        (finding,) = [f for f in report.findings if f.check_id == "PRC04"]
+        self.assertEqual((finding.axis, finding.severity), ("compatibility", "INFO"))
+        self.assertIn("type 215", finding.message)
+        self.assertIn("rest of the save loads normally", finding.message)
+        rendered = render_integrity_report(report)
+        self.assertNotIn("PRC: Do not load until", rendered)
+        evidence = report.artifacts["archive/processes.dat"]
+        self.assertIsNotNone(evidence["process_sections"])
+
+    def test_unreadable_sections_after_the_process_list_warn(self) -> None:
+        processes = _processes(first_process=True, sections=b"\x00" * 16)
+        nonfixed = _nonfixed()
+        (self.save / "u9game4.sav").write_bytes(_archive(processes, nonfixed))
+        (self.save / "processes.dat").write_bytes(processes)
+
+        report = check_save(self.root, fixed_reference_directory=self.reference)
+
+        (finding,) = [f for f in report.findings if f.check_id == "PRC02"]
+        self.assertEqual(finding.severity, "WARN")
+        self.assertIn("fast-area version 0", finding.message)
+        evidence = report.artifacts["archive/processes.dat"]
+        self.assertIsNone(evidence["process_sections"])
 
     def test_renderer_collapses_duplicate_problems_but_json_keeps_them(self) -> None:
         report = check_save(self.root, fixed_reference_directory=self.reference)

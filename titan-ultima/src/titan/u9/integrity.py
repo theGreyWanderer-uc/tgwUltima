@@ -19,12 +19,15 @@ from pathlib import Path
 from titan.u9.fixed import U9Fixed, U9FixedError
 from titan.u9.nonfixed import U9Nonfixed, U9NonfixedError
 from titan.u9.process_data import (
+    CREEPER_GROWTH_PROCESS_TYPE,
+    U9AcidRainProcessState,
     U9AnimationControllerProcessState,
     U9ClockAnimationProcessState,
     U9DoorTimerProcessState,
     U9FloatingLanternProcessState,
     U9FollowingProcessState,
     U9HangingObjectProcessState,
+    U9HeaderlessProcessState,
     U9MovementControllerProcessState,
     U9MovementExtensionState,
     U9NpcActionProcessState,
@@ -42,6 +45,7 @@ from titan.u9.process_data import (
     U9ScriptedProcessState,
     U9ScriptTimerProcessState,
 )
+from titan.u9.process_sections import U9ProcessSections
 from titan.u9.savegame import (
     MAX_MAP_NUMBER,
     MAX_SHIPPED_MAP_NUMBER,
@@ -75,6 +79,7 @@ RECOMMENDATIONS = {
     "FXS": "Restore the affected fixed maps from a known-good installation.",
     "HND": "Do not load until processes.dat and its object-reference table are repaired.",
     "PRC": "Do not load until the deterministic processes.dat prefix is repaired.",
+    # A full check ID (for example "PRC04") may override its family's advice.
     "REF": "Do not load or overwrite the slot; inspect its object-reference targets and matching map data.",
     "LAY": "Supply the creation-time fixed directory with --fixed-reference.",
 }
@@ -116,6 +121,70 @@ def _json_safe(value: object) -> object:
     return value
 
 
+def _process_sections_json(sections: U9ProcessSections) -> dict[str, object]:
+    """Offsets, sizes and counts of the sections after the process list."""
+
+    def span(section: object) -> dict[str, object]:
+        offset = getattr(section, "offset")
+        end = getattr(section, "end_offset")
+        return {
+            "offset": offset,
+            "size": end - offset,
+            "version": getattr(section, "version"),
+        }
+
+    return {
+        "offset": sections.offset,
+        "end_offset": sections.end_offset,
+        "fast_area": span(sections.fast_area)
+        | {"entries": len(sections.fast_area.entries)},
+        "npc_manager": span(sections.npc_manager),
+        "main_interface": span(sections.main_interface),
+        "lights": span(sections.lights)
+        | {
+            "unlimited_range": len(sections.lights.infinite_lights),
+            "limited_range": len(sections.lights.ranged_lights),
+        },
+        "weather": span(sections.weather)
+        | {"sun_removers": len(sections.weather.sun_remover_reference_indices)},
+        "spell_manager": span(sections.spell_manager)
+        | {
+            "active_spell_process_ids": list(
+                sections.spell_manager.active_spell_process_ids
+            )
+        },
+        "physics": span(sections.physics)
+        | {
+            "map_number": sections.physics.map_number,
+            "objects": len(sections.physics.objects),
+            "overlaps": len(sections.physics.overlaps),
+        },
+        "moving_supports": span(sections.moving_supports)
+        | {"kinds": [support.kind for support in sections.moving_supports.supports]},
+        "highway_manager": span(sections.highway_manager)
+        | {"movers": len(sections.highway_manager.movers)},
+        "hints": span(sections.hints) | {"hints": len(sections.hints.hints)},
+        "combat": span(sections.combat)
+        | {
+            "npc_types": list(sections.combat.npc_types),
+            "combatants": [
+                {
+                    "npc_type": record.npc_type,
+                    "combat_behavior": record.combat_behavior,
+                    "leading_bytes": len(record.leading),
+                    "trailing_bytes": len(record.trailing),
+                    "classes": [block.kind for block in record.class_fields],
+                    "repeated_common": record.repeated_common is not None,
+                }
+                for record in sections.combat.combatants
+            ],
+        },
+        "books": span(sections.books),
+        "sounds": span(sections.sounds)
+        | {"music_nodes": len(sections.sounds.music_nodes)},
+    }
+
+
 def _movement_extension_json(block: U9MovementExtensionState) -> dict[str, object]:
     return {
         "kind": block.kind,
@@ -127,6 +196,22 @@ def _movement_extension_json(block: U9MovementExtensionState) -> dict[str, objec
 
 def _following_process_json(record: U9FollowingProcessState) -> dict[str, object]:
     """Return the common and type-specific fields of one decoded process."""
+    if isinstance(record, U9HeaderlessProcessState):
+        return {
+            "offset": record.offset,
+            "end_offset": record.end_offset,
+            "type": record.process_type,
+            "headerless": True,
+            "table_process": {
+                "kind": record.kind,
+                "version": record.version,
+                "fields": {
+                    key: list(value) if isinstance(value, tuple) else value
+                    for key, value in record.values
+                },
+                "reserved": list(record.reserved),
+            },
+        }
     header = record.header
     world = record.world_state
     payload: dict[str, object] = {
@@ -360,6 +445,15 @@ def _following_process_json(record: U9FollowingProcessState) -> dict[str, object
                 key: list(value) if isinstance(value, tuple) else value
                 for key, value in record.values
             },
+            "reserved": list(record.reserved),
+        }
+    elif isinstance(record, U9AcidRainProcessState):
+        payload["acid_rain"] = {
+            "version": record.version,
+            "words": [record.word_1, record.word_2, record.word_3, *record.words],
+            "target_object_reference_indices": list(
+                record.target_object_reference_indices
+            ),
             "reserved": list(record.reserved),
         }
     elif isinstance(record, U9DoorTimerProcessState):
@@ -870,6 +964,51 @@ def check_save(
                 str(error),
                 path=f"{archive_path}!processes.dat",
             )
+    if (
+        process_prefix is not None
+        and process_prefix.camera_control.temporary_camera is not None
+    ):
+        report.add(
+            "PRC03",
+            "structure",
+            "INFO",
+            "a temporary-camera record was read using the layout from the game "
+            "code; its boundary has not yet been confirmed on a retail save",
+            path=f"{archive_path}!processes.dat",
+        )
+    if process_prefix is not None:
+        growth = [
+            process.offset
+            for process in process_prefix.following_processes
+            if isinstance(process, U9SimpleProcessState)
+            and process.header.process_type == CREEPER_GROWTH_PROCESS_TYPE
+        ]
+        if growth:
+            report.add(
+                "PRC04",
+                "compatibility",
+                "INFO",
+                "the save contains a creeper plant-growth process (type 215) at "
+                + ", ".join(f"0x{offset:X}" for offset in growth)
+                + "; the retail game does not restore its start time on load, "
+                "so the plant stops growing as soon as the save is loaded "
+                "(the rest of the save loads normally)",
+                path=f"{archive_path}!processes.dat",
+            )
+    process_sections: U9ProcessSections | None = None
+    if process_prefix is not None and process_prefix.terminator_offset is not None:
+        try:
+            process_sections = U9ProcessSections.from_prefix(
+                archive.processes.data, process_prefix
+            )
+        except U9ProcessDataError as error:
+            report.add(
+                "PRC02",
+                "structure",
+                "WARN",
+                f"sections after the process list could not be read: {error}",
+                path=f"{archive_path}!processes.dat",
+            )
 
     pairs = [(archive.processes, save_directory / "processes.dat")]
     pairs.extend((member, save_directory / member.name) for member in archive.nonfixed)
@@ -1091,6 +1230,21 @@ def check_save(
                     "on_moon": control.on_moon,
                     "target_mode": control.target_mode,
                     "temporary_camera_present": control.has_temporary_camera,
+                    "temporary_camera": (
+                        {
+                            "offset": temporary.offset,
+                            "version": temporary.version,
+                            "object_reference_index": (
+                                temporary.object_reference_index
+                            ),
+                            "vectors": [list(v) for v in temporary.vectors],
+                            "words": list(temporary.words),
+                            "flag": temporary.flag,
+                            "boundary_confirmed": temporary.boundary_confirmed,
+                        }
+                        if (temporary := control.temporary_camera) is not None
+                        else None
+                    ),
                     "targeting": (
                         {
                             "version": targeting.version,
@@ -1366,6 +1520,11 @@ def check_save(
                 blocked_process_offset=process_prefix.blocked_process_offset,
                 blocked_process_type=process_prefix.blocked_process_type,
                 process_terminator_offset=process_prefix.terminator_offset,
+                process_sections=(
+                    _process_sections_json(process_sections)
+                    if process_sections is not None
+                    else None
+                ),
             )
         invalid_entries = [
             entry.index
@@ -1466,15 +1625,16 @@ def render_integrity_report(report: IntegrityReport) -> str:
                 f"        Evidence: {len(target_records) - 8} more target records in JSON"
             )
 
-    recommendation_families = {
-        finding.check_id[:3]
+    recommendation_keys = {
+        finding.check_id
+        if finding.check_id in RECOMMENDATIONS
+        else finding.check_id[:3]
         for finding in actionable
-        if finding.check_id[:3] in RECOMMENDATIONS
-    }
-    if recommendation_families:
+    } & RECOMMENDATIONS.keys()
+    if recommendation_keys:
         lines.extend(("", "Next steps"))
-        for family in sorted(recommendation_families):
-            lines.append(f"  {family}: {RECOMMENDATIONS[family]}")
+        for code in sorted(recommendation_keys):
+            lines.append(f"  {code}: {RECOMMENDATIONS[code]}")
 
     lines.extend(("", f"Confirmations ({len(confirmations)})"))
     if not confirmations:

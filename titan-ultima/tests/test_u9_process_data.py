@@ -8,6 +8,7 @@ from titan.u9.process_data import (
     HANDLE_DATA_OFFSET,
     MOVEMENT_CONTROLLER_STATE_SIZE,
     OBJECT_REFERENCE_DATA_OFFSET,
+    HEADERLESS_PROCESS_LAYOUTS,
     SIMPLE_PROCESS_LAYOUTS,
     U9CameraEffectState,
     U9CameraState,
@@ -39,6 +40,8 @@ from titan.u9.process_data import (
     U9ParticleProcessState,
     U9PlayerProximityProcessState,
     U9PortableLightProcessState,
+    U9AcidRainProcessState,
+    U9HeaderlessProcessState,
     U9ProcessDataPrefix,
     U9ProcessDataError,
     U9ProcessHeaderState,
@@ -77,11 +80,38 @@ def _process_data(count: int = 4) -> bytes:
     return bytes(data)
 
 
+def _temporary_camera_record(reference: int, *, version: int = 5) -> bytes:
+    """A 173-byte temporary-camera record with recognisable values."""
+    return struct.pack(
+        "<iiii3f3i3f3i3f4i2i3f4i3i3fiB4I",
+        version,
+        11,
+        reference,
+        12,
+        *(1.0, 2.0, 3.0),
+        *(13, 14, 15),
+        *(4.0, 5.0, 6.0),
+        *(16, 17, 18),
+        *(7.0, 8.0, 9.0),
+        *(19, 20, 21, 22),
+        *(23, 24),
+        *(10.0, 11.0, 12.0),
+        *(25, 26, 27, 28),
+        *(29, 30, 31),
+        *(13.0, 14.0, 15.0),
+        32,
+        1,
+        *(0, 0, 0, 0),
+    )
+
+
 def _process_prefix(
     *,
     effect_version: float = 1.1,
     effect_count: int = 8,
     has_temporary_camera: bool = False,
+    temporary_camera_version: int = 5,
+    temporary_camera_reference: int = 0,
     process_type: int = 104,
     process_name: bytes = b"Poof",
     object_reference_indices: tuple[int, ...] = (),
@@ -121,163 +151,168 @@ def _process_prefix(
     struct.pack_into("<I", control, 24, 1)
     struct.pack_into("<5f", control, 28, 70.0, 450.0, 500.0, 1000.0, 1.6)
     struct.pack_into("<4I", control, 48, 0, 1, 0, 1)
-    struct.pack_into("<I", control, 176, int(has_temporary_camera))
+    # The marker is the saved camera pointer: any non-zero value.
+    struct.pack_into("<I", control, 176, 0x00A1B2C0 if has_temporary_camera else 0)
     data += control
 
-    if not has_temporary_camera:
+    if has_temporary_camera:
+        data += _temporary_camera_record(
+            temporary_camera_reference, version=temporary_camera_version
+        )
+
+    data += struct.pack(
+        "<Iiii3f3fii",
+        0,
+        1,
+        2,
+        1,
+        250.0,
+        500.0,
+        1500.0,
+        110.0,
+        210.0,
+        310.0,
+        640,
+        480,
+    )
+    data += struct.pack("<i", process_type)
+    if process_type != -1:
         data += struct.pack(
-            "<Iiii3f3fii",
-            0,
-            1,
+            "<9i100s",
             2,
             1,
-            250.0,
-            500.0,
-            1500.0,
-            110.0,
-            210.0,
-            310.0,
-            640,
-            480,
+            0,
+            0,
+            30103,
+            -1,
+            -1,
+            -1,
+            0,
+            process_name,
         )
-        data += struct.pack("<i", process_type)
-        if process_type != -1:
+        if process_type == 104:
+            data += struct.pack("<ii", 0, len(object_reference_indices))
             data += struct.pack(
-                "<9i100s",
-                2,
-                1,
-                0,
-                0,
-                30103,
-                -1,
-                -1,
-                -1,
-                0,
-                process_name,
+                f"<{len(object_reference_indices)}i", *object_reference_indices
             )
-            if process_type == 104:
-                data += struct.pack("<ii", 0, len(object_reference_indices))
-                data += struct.pack(
-                    f"<{len(object_reference_indices)}i", *object_reference_indices
-                )
-                data += struct.pack("<i", -1)
-                data += struct.pack(
-                    "<iIBi5i", particle_version, 49, 0, 527, *particle_counts
-                )
-                collection_layouts = (
-                    (
-                        "particle_presets",
-                        particle_counts[0],
-                        1484 if particle_version == 3 else 1490,
-                    ),
-                    ("force_presets", particle_counts[3], 97),
-                    ("forces", particle_counts[4], 24),
-                    ("generations", particle_counts[1], 124),
-                    ("particles", particle_counts[2], 196),
-                )
-                for name, count, record_size in collection_layouts:
-                    for record_id in range(1, count + 1):
-                        record = bytearray(record_size)
-                        struct.pack_into("<i", record, 0, record_id)
-                        if name == "force_presets":
-                            record[:] = struct.pack(
-                                "<iBiii3ffii3fi3f3fiiii",
-                                record_id,
-                                43,
-                                100,
-                                5,
-                                9,
-                                1.0,
-                                2.0,
-                                3.0,
-                                0.75,
-                                50,
-                                -1,
-                                1.0,
-                                1.5,
-                                2.0,
-                                9999,
-                                0.1,
-                                0.2,
-                                0.3,
-                                4.0,
-                                5.0,
-                                6.0,
-                                24,
-                                -1,
-                                12,
-                                3,
-                            )
-                        elif name == "forces":
-                            struct.pack_into(
-                                "<i3fi",
-                                record,
-                                4,
-                                100 + record_id,
-                                float(record_id),
-                                float(record_id + 1),
-                                float(record_id + 2),
-                                1,
-                            )
-                        elif name == "generations":
-                            force_id = 1 if particle_counts[4] else -1
-                            values = [1, -1, -1, -1]
-                            values.extend([force_id] * 16)
-                            values.extend([-1] * 10)
-                            struct.pack_into("<30i", record, 4, *values)
-                        elif name == "particles":
-                            record[:] = struct.pack(
-                                "<3i10i2i3f3f3f3f4f4f2iBHI4iIB5i",
-                                record_id,
-                                1,
-                                -1,
-                                *([-1] * 10),
-                                120,
-                                7,
-                                10.0,
-                                20.0,
-                                30.0,
-                                1.0,
-                                2.0,
-                                3.0,
-                                0.0,
-                                0.0,
-                                0.0,
-                                1.0,
-                                1.0,
-                                1.0,
-                                0.0,
-                                0.0,
-                                0.0,
-                                1.0,
-                                0.0,
-                                0.0,
-                                0.0,
-                                1.0,
-                                5,
-                                2,
-                                2,
-                                557,
-                                0x200,
-                                0,
-                                0,
-                                1,
-                                -1,
-                                0,
-                                0,
-                                0,
-                                0,
-                                0,
-                                0,
-                                3,
-                            )
-                        data += record
-                data += struct.pack(
-                    "<i9i100s", 70, 10, 1, 0, 0, 464, -1, -1, -1, 0, b"Torch"
-                )
-                data += struct.pack("<iiii", 0, 1, 3, 9)
-                data += struct.pack("<iiHfIIII", 0, 3, 65535, 65535.0, 24, 0, 0, 0x09)
-                data += struct.pack("<i", -1)
+            data += struct.pack("<i", -1)
+            data += struct.pack(
+                "<iIBi5i", particle_version, 49, 0, 527, *particle_counts
+            )
+            collection_layouts = (
+                (
+                    "particle_presets",
+                    particle_counts[0],
+                    1484 if particle_version == 3 else 1490,
+                ),
+                ("force_presets", particle_counts[3], 97),
+                ("forces", particle_counts[4], 24),
+                ("generations", particle_counts[1], 124),
+                ("particles", particle_counts[2], 196),
+            )
+            for name, count, record_size in collection_layouts:
+                for record_id in range(1, count + 1):
+                    record = bytearray(record_size)
+                    struct.pack_into("<i", record, 0, record_id)
+                    if name == "force_presets":
+                        record[:] = struct.pack(
+                            "<iBiii3ffii3fi3f3fiiii",
+                            record_id,
+                            43,
+                            100,
+                            5,
+                            9,
+                            1.0,
+                            2.0,
+                            3.0,
+                            0.75,
+                            50,
+                            -1,
+                            1.0,
+                            1.5,
+                            2.0,
+                            9999,
+                            0.1,
+                            0.2,
+                            0.3,
+                            4.0,
+                            5.0,
+                            6.0,
+                            24,
+                            -1,
+                            12,
+                            3,
+                        )
+                    elif name == "forces":
+                        struct.pack_into(
+                            "<i3fi",
+                            record,
+                            4,
+                            100 + record_id,
+                            float(record_id),
+                            float(record_id + 1),
+                            float(record_id + 2),
+                            1,
+                        )
+                    elif name == "generations":
+                        force_id = 1 if particle_counts[4] else -1
+                        values = [1, -1, -1, -1]
+                        values.extend([force_id] * 16)
+                        values.extend([-1] * 10)
+                        struct.pack_into("<30i", record, 4, *values)
+                    elif name == "particles":
+                        record[:] = struct.pack(
+                            "<3i10i2i3f3f3f3f4f4f2iBHI4iIB5i",
+                            record_id,
+                            1,
+                            -1,
+                            *([-1] * 10),
+                            120,
+                            7,
+                            10.0,
+                            20.0,
+                            30.0,
+                            1.0,
+                            2.0,
+                            3.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            1.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            5,
+                            2,
+                            2,
+                            557,
+                            0x200,
+                            0,
+                            0,
+                            1,
+                            -1,
+                            0,
+                            0,
+                            0,
+                            0,
+                            0,
+                            0,
+                            3,
+                        )
+                    data += record
+            data += struct.pack(
+                "<i9i100s", 70, 10, 1, 0, 0, 464, -1, -1, -1, 0, b"Torch"
+            )
+            data += struct.pack("<iiii", 0, 1, 3, 9)
+            data += struct.pack("<iiHfIIII", 0, 3, 65535, 65535.0, 24, 0, 0, 0x09)
+            data += struct.pack("<i", -1)
     return bytes(data)
 
 
@@ -434,6 +469,7 @@ _SIMPLE_SAMPLE_VALUES: dict[str, object] = {
     "quaternion": (1.0, 0.0, 0.0, 0.0),
     "location": (1, 2, 3),
     "rgb": (255, 240, 90),
+    "text64": "Rotating gem",
 }
 _SIMPLE_SAMPLE_PACKING: dict[str, tuple[str, tuple[object, ...]]] = {
     "int": ("i", (-7,)),
@@ -448,6 +484,7 @@ _SIMPLE_SAMPLE_PACKING: dict[str, tuple[str, tuple[object, ...]]] = {
     "quaternion": ("4f", (1.0, 0.0, 0.0, 0.0)),
     "location": ("iih2x", (1, 2, 3)),
     "rgb": ("3B", (255, 240, 90)),
+    "text64": ("64s", (b"Rotating gem",)),
     "reserved": ("I", (0,)),
 }
 
@@ -474,6 +511,30 @@ def _simple_process(process_type: int) -> bytes:
     for _, kind in layout.fields:
         fmt, values = _SIMPLE_SAMPLE_PACKING[kind]
         data += struct.pack("<" + fmt, *values)
+    return bytes(data)
+
+
+def _headerless_process(process_type: int) -> bytes:
+    layout = HEADERLESS_PROCESS_LAYOUTS[process_type]
+    data = bytearray(struct.pack("<i", process_type))
+    if layout.version is not None:
+        data += struct.pack("<i", layout.version)
+    for _, kind in layout.fields:
+        fmt, values = _SIMPLE_SAMPLE_PACKING[kind]
+        data += struct.pack("<" + fmt, *values)
+    return bytes(data)
+
+
+def _acid_rain_process(targets: tuple[int, ...] = (1, 2)) -> bytes:
+    data = bytearray(struct.pack("<i", 142))
+    data += struct.pack("<9i100s", 50, 1, 0, 0, 7, -1, -1, 0x3F, 0, b"AcidRain")
+    data += struct.pack("<iiii", 0, 1, 2, 9)
+    data += struct.pack(
+        "<iiIiiiiiIii4I", 4, 1, 24, 2, 422, 7, 30, 0, 0, 3, 16, 0, 0, 0, 0
+    )
+    data += struct.pack("<iIIi", 1, 5, 6, len(targets))
+    data += struct.pack(f"<{len(targets)}i", *targets)
+    data += struct.pack("<I3I4I", 7, 8, 9, 10, 0, 0, 0, 0)
     return bytes(data)
 
 
@@ -1487,15 +1548,31 @@ class ProcessDataPrefixTests(unittest.TestCase):
         self.assertEqual(swimming.death_animation_count, 1)
         self.assertEqual(swimming.reserved, (0, 0x3F800000))
 
-    def test_rejects_swimming_animation_count_above_capacity(self) -> None:
+    def test_keeps_uninitialized_swimming_animation_count(self) -> None:
+        # A retail sea serpent: unused fall list and count left uninitialized.
         swimming_fields = struct.pack(
-            "<3f5ii5ii2I", 25.0, 300.0, 0.0, *([0] * 5), 6, *([0] * 5), 0, 0, 0
+            "<3f5ii5ii2I",
+            25.0,
+            500.0,
+            20.0,
+            *(588, 0, 1152074255, 167772170, 2),
+            585,
+            *(996, 1154590672, 1152064222, 1139321496, 2),
+            1,
+            1159938563,
+            1154583608,
         )
-        record = _movement_controller_process(87, trailing=swimming_fields)
-        with self.assertRaisesRegex(
-            U9ProcessDataError, "invalid swimming fall-animation count 6"
-        ):
-            self._insert_movement(record)
+        prefix, _ = self._insert_movement(
+            _movement_controller_process(171, trailing=swimming_fields)
+        )
+        serpent = prefix.following_processes[0]
+        assert isinstance(serpent, U9MovementControllerProcessState)
+        fields = serpent.extensions[0].fields
+        assert isinstance(fields, U9SwimmingMovementFields)
+        self.assertEqual(fields.fall_animation_count, 585)
+        self.assertEqual(
+            (fields.death_animation_ids[0], fields.death_animation_count), (996, 1)
+        )
 
     def test_npc_movement_extension_follows_the_base_block(self) -> None:
         extension = struct.pack("<iii", 3, 3266, 2)
@@ -1837,6 +1914,46 @@ class ProcessDataPrefixTests(unittest.TestCase):
                     (0,) * sum(k == "reserved" for _, k in layout.fields),
                 )
 
+    def test_traverses_headerless_processes(self) -> None:
+        prefix, _ = self._insert_movement(
+            *(_headerless_process(t) for t in (135, 151, 214))
+        )
+        time_stop, armageddon, other, light = prefix.following_processes
+        self.assertIsInstance(light, U9PortableLightProcessState)
+        for record in (time_stop, armageddon, other):
+            assert isinstance(record, U9HeaderlessProcessState)
+            self.assertIsNone(record.header)
+        assert isinstance(time_stop, U9HeaderlessProcessState)
+        assert isinstance(other, U9HeaderlessProcessState)
+        self.assertEqual(time_stop.kind, "time_stop_spell")
+        self.assertEqual(time_stop.end_offset, time_stop.offset + 4)
+        self.assertEqual(armageddon.offset, time_stop.end_offset)
+        self.assertEqual((other.version, other["object_1"]), (0, 1))
+        self.assertEqual(other.reserved, (0, 0, 0, 0))
+        self.assertEqual(other.end_offset - other.offset, 4 + 40)
+
+    def test_reads_acid_rain_target_list(self) -> None:
+        prefix, data = self._insert_movement(_acid_rain_process((1, 2)))
+        rain = prefix.following_processes[0]
+        assert isinstance(rain, U9AcidRainProcessState)
+        self.assertEqual(rain.target_object_reference_indices, (1, 2))
+        self.assertEqual((rain.word_1, rain.word_2, rain.word_3), (5, 6, 7))
+        self.assertEqual(rain.words, (8, 9, 10))
+        self.assertEqual(rain.end_offset - rain.spell_state.end_offset, 48 + 8)
+        self.assertEqual(rain.end_offset, prefix.following_processes[1].offset)
+        count_at = rain.spell_state.end_offset + 12
+        for relative, value, message in (
+            (0, 33, "acid-rain target count 33"),
+            (4, 4, "acid-rain target object-reference index 4"),
+        ):
+            bad = bytearray(data)
+            struct.pack_into("<i", bad, count_at + relative, value)
+            with (
+                self.subTest(message=message),
+                self.assertRaisesRegex(U9ProcessDataError, message),
+            ):
+                U9ProcessDataPrefix.from_bytes(bytes(bad))
+
     def test_rejects_bad_spell_state(self) -> None:
         prefix, data = self._insert_movement(_simple_process(136))
         spell = prefix.following_processes[0]
@@ -1966,13 +2083,13 @@ class ProcessDataPrefixTests(unittest.TestCase):
         original_prefix = U9ProcessDataPrefix.from_bytes(original)
         assert original_prefix.next_process_offset is not None
         data = original[: original_prefix.next_process_offset] + struct.pack(
-            "<if", 131, 1.2
+            "<if", 206, 1.2
         )
 
         prefix = U9ProcessDataPrefix.from_bytes(data)
 
-        self.assertEqual(prefix.next_process_type, 131)
-        self.assertEqual(prefix.blocked_process_type, 131)
+        self.assertEqual(prefix.next_process_type, 206)
+        self.assertEqual(prefix.blocked_process_type, 206)
         self.assertEqual(prefix.blocked_process_offset, prefix.next_process_offset)
         self.assertIsNone(prefix.next_process_header)
         self.assertEqual(prefix.following_processes, ())
@@ -2018,14 +2135,47 @@ class ProcessDataPrefixTests(unittest.TestCase):
         self.assertIsNone(version_one.targeting)
         self.assertEqual(version_one.end_offset, 180)
 
-    def test_stops_at_undecoded_temporary_camera_state(self) -> None:
+    def test_reads_temporary_camera_before_targeting_state(self) -> None:
+        plain = U9ProcessDataPrefix.from_bytes(_process_prefix())
         prefix = U9ProcessDataPrefix.from_bytes(
-            _process_prefix(has_temporary_camera=True)
+            _process_prefix(has_temporary_camera=True, temporary_camera_reference=1)
         )
-        self.assertTrue(prefix.camera_control.has_temporary_camera)
-        self.assertIsNone(prefix.camera_control.targeting)
-        self.assertIsNone(prefix.process_list_offset)
-        self.assertIsNone(prefix.first_process_type)
+        control = prefix.camera_control
+        temporary = control.temporary_camera
+        assert temporary is not None and control.targeting is not None
+        self.assertTrue(control.has_temporary_camera)
+        self.assertFalse(temporary.boundary_confirmed)
+        self.assertEqual((temporary.version, temporary.object_reference_index), (5, 1))
+        self.assertEqual(temporary.vectors[0], (1.0, 2.0, 3.0))
+        self.assertEqual(temporary.vectors[4], (13.0, 14.0, 15.0))
+        self.assertEqual(temporary.words, (11, 12, *range(13, 33)))
+        self.assertEqual(temporary.flag, 1)
+        self.assertEqual(control.targeting.offset, temporary.end_offset)
+        self.assertEqual(control.targeting.screen_position, (640, 480))
+        assert plain.process_list_offset is not None
+        self.assertEqual(prefix.process_list_offset, plain.process_list_offset + 173)
+        self.assertEqual(prefix.first_process_type, 104)
+        self.assertIsNone(plain.camera_control.temporary_camera)
+
+    def test_rejects_implausible_temporary_camera(self) -> None:
+        with self.assertRaisesRegex(U9ProcessDataError, "temporary-camera version 4"):
+            U9ProcessDataPrefix.from_bytes(
+                _process_prefix(has_temporary_camera=True, temporary_camera_version=4)
+            )
+        with self.assertRaisesRegex(U9ProcessDataError, "object-reference index 9999"):
+            U9ProcessDataPrefix.from_bytes(
+                _process_prefix(
+                    has_temporary_camera=True, temporary_camera_reference=9999
+                )
+            )
+        data = bytearray(
+            _process_prefix(has_temporary_camera=True, temporary_camera_reference=1)
+        )
+        temporary = U9ProcessDataPrefix.from_bytes(bytes(data)).camera_control
+        assert temporary.temporary_camera is not None
+        data[temporary.temporary_camera.offset + 0x9D + 5] = 1
+        with self.assertRaisesRegex(U9ProcessDataError, "non-zero closing words"):
+            U9ProcessDataPrefix.from_bytes(bytes(data))
 
     def test_rejects_unknown_camera_effect_version(self) -> None:
         with self.assertRaisesRegex(U9ProcessDataError, "camera-effect version"):
