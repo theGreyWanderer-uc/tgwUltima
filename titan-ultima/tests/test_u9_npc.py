@@ -16,9 +16,12 @@ import struct
 import unittest
 
 from titan.u9.npc import (
+    COMBAT_BEHAVIOR_NAMES,
     LIVE_RECORD_COUNT,
+    MOVEMENT_BEHAVIOR_NAMES,
     NO_COMBAT_BEHAVIOR,
     RECORD_SIZE,
+    SPELL_NAMES,
     U9NpcError,
     U9NpcState,
     U9NpcTrait,
@@ -246,6 +249,47 @@ class NpcRecordTests(unittest.TestCase):
             (0, 1, 2, 3, -1),
         )
         self.assertEqual(n.reserved_0x138_0x13b, b"TAIL")
+
+    def test_names_the_id_fields(self) -> None:
+        npc = U9Npcs(
+            _record(
+                "Giant Spider",
+                combat_behavior_id=23,
+                movement_behavior_id=17,
+                active_weapon_category_id=4,
+                impact_material_id=6,
+            )
+        ).npcs[0]
+        self.assertEqual(npc.combat_behavior_name, "giant_spider")
+        self.assertEqual(npc.movement_behavior_name, "spider")
+        self.assertEqual(npc.active_weapon_category_name, "projectile")
+        self.assertEqual(npc.impact_material_name, "rock")
+        none = U9Npcs(_record("Statue", active_weapon_category_id=-1)).npcs[0]
+        self.assertIsNone(none.combat_behavior_name)
+        self.assertIsNone(none.movement_behavior_name)
+        self.assertIsNone(none.active_weapon_category_name)
+        self.assertEqual(len(COMBAT_BEHAVIOR_NAMES), 64)
+        self.assertEqual(len(MOVEMENT_BEHAVIOR_NAMES), 38)
+
+    def test_spellbook_bits_are_spell_numbers(self) -> None:
+        # A retail Avatar: the four linear spells, light heal, lightning bolt,
+        # cure, sanctify and bind.
+        book = bytes.fromhex("1e1500006000000000000000")
+        npc = U9Npcs(_record("Avatar", spellbook_flags=book)).npcs[0]
+        self.assertEqual(npc.known_spells, (1, 2, 3, 4, 8, 10, 12, 37, 38))
+        self.assertEqual(
+            npc.known_spell_names[:4], ("stone", "gust", "ignite", "douse")
+        )
+        self.assertEqual(npc.known_spell_names[-2:], ("sanctify", "bind"))
+        self.assertEqual(SPELL_NAMES[36], "acid_rain")
+        unlisted = U9Npcs(_record("X", spellbook_flags=b"\x00" * 11 + b"\x80"))
+        self.assertEqual(unlisted.npcs[0].known_spell_names, ("spell_95",))
+
+    def test_routine_times_are_minutes_after_midnight(self) -> None:
+        timing = (0, 0, 1140, 406, 0, 0, 0)
+        npc = U9Npcs(_record("Baker", routine_timing=timing)).npcs[0]
+        self.assertEqual(npc.clock_time(npc.routine_start_time), "06:46")
+        self.assertEqual(npc.clock_time(npc.routine_end_time), "19:00")
 
     def test_gender_flag(self) -> None:
         self.assertTrue(U9Npcs(_record("Mariah", gender=1)).npc(0).is_female)

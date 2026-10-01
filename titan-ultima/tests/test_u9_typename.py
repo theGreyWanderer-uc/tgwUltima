@@ -142,5 +142,66 @@ class TypeNamesTests(unittest.TestCase):
             U9TypeNames(archive)
 
 
+class TypeNameRebuildTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.names = U9TypeNames(
+            U9FlxArchive(
+                _build_flx(
+                    [
+                        _entry(None),
+                        _entry("Lord British", readable_text_id=12),
+                        _entry(
+                            "Raven Key",
+                            object_icon_id=CUSTOM_ICON_ID,
+                            trailing_bytes=b"\xcd\xcd",
+                        ),
+                        _entry(None, readable_text_id=-1),
+                    ]
+                )
+            )
+        )
+
+    def test_unchanged_rebuild_keeps_every_entry(self) -> None:
+        rebuilt = U9TypeNames(U9FlxArchive(self.names.rebuilt({})))
+        self.assertEqual(
+            [entry.raw for entry in rebuilt], [entry.raw for entry in self.names]
+        )
+
+    def test_replaces_labels_and_keeps_references(self) -> None:
+        data = self.names.rebuilt(
+            {1: "Seigneur British", 2: "Clé du Corbeau", 3: "Épée", 0: None}
+        )
+        rebuilt = U9TypeNames(U9FlxArchive(data))
+        self.assertEqual(rebuilt.num_entries, 4)
+        self.assertEqual(rebuilt.name_for(1), "Seigneur British")
+        self.assertEqual(rebuilt.readable_text_id_for(1), 12)
+        key = rebuilt.entry_for(2)
+        assert key is not None
+        self.assertEqual(key.display_name, "Clé du Corbeau")
+        self.assertEqual(key.object_icon_id, CUSTOM_ICON_ID)
+        self.assertEqual(key.trailing_bytes, b"\xcd\xcd")
+        self.assertEqual(rebuilt.name_for(3), "Épée")
+        self.assertEqual(rebuilt.readable_text_id_for(3), -1)
+
+    def test_empty_label_removes_it(self) -> None:
+        rebuilt = U9TypeNames(U9FlxArchive(self.names.rebuilt({1: ""})))
+        entry = rebuilt.entry_for(1)
+        assert entry is not None
+        self.assertIsNone(entry.display_name)
+        self.assertEqual(len(entry.raw), 6)
+
+    def test_rejects_unstorable_labels(self) -> None:
+        for replacements, message in (
+            ({1: "Лорд"}, "single-byte"),
+            ({1: "a\x00b"}, "NUL"),
+            ({9: "Nowhere"}, "not a used entry"),
+        ):
+            with (
+                self.subTest(message=message),
+                self.assertRaisesRegex(U9TypeNameError, message),
+            ):
+                self.names.rebuilt(replacements)
+
+
 if __name__ == "__main__":
     unittest.main()

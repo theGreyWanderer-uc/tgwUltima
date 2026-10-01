@@ -15,8 +15,13 @@ from __future__ import annotations
 
 __all__ = [
     "AUTHORED_RECORD_COUNT",
+    "COMBAT_BEHAVIOR_NAMES",
+    "IMPACT_MATERIAL_NAMES",
     "LIVE_RECORD_COUNT",
+    "MOVEMENT_BEHAVIOR_NAMES",
     "NO_COMBAT_BEHAVIOR",
+    "SPELL_NAMES",
+    "WEAPON_CATEGORY_NAMES",
     "U9Npc",
     "U9NpcError",
     "U9NpcState",
@@ -87,6 +92,68 @@ MAX_REGION = 239  # runtime/nonfixed.%d tops out here
 MAX_SCALE_PERCENT = 200  # largest scale seen in the shipped table
 
 
+# Value names for the record's ID fields, in Titan's words. Index = stored
+# value. Combat behaviour selects the creature's combat AI (and with it the
+# combatant record layout in processes.dat); movement behaviour selects its
+# movement controller.
+COMBAT_BEHAVIOR_NAMES: tuple[str, ...] = (
+    "avatar", "giant_bat", "vampire_bat", "vulture", "crusty", "daemon",
+    "slasher_of_veils", "dragon", "zombie", "drone_gargoyle", "winged_gargoyle",
+    "queen_gargoyle", "gazer", "ghost", "goblin_grunt", "goblin_sergeant",
+    "gremlin", "chest_mimic", "door_mimic", "creeper_plant", "giant_rat",
+    "small_rat", "skeleton", "giant_spider", "phase_spider", "wolf",
+    "arctic_wolf", "hellhound", "songbird", "butterfly", "dog", "small_fish",
+    "predatory_fish", "woolly_goat", "human", "wyrmguard", "pirate", "bandit",
+    "archer", "mage", "ninja", "brute", "guard", "pig", "icehound",
+    "sea_serpent", "liche", "zombie_legs", "zombie_torso", "thug", "blorple",
+    "fish_school", "small_spider", "pirate_ship", "friendly_ship",
+    "magic_dart", "guardian", "trigger_guard", "dragonfly", "swan", "chicken",
+    "ghost_guard", "weak_guard", "weak_thug",
+)  # fmt: skip
+MOVEMENT_BEHAVIOR_NAMES: tuple[str, ...] = (
+    "humanoid", "brute", "goat", "goblin", "giant_rat", "small_rat", "bat",
+    "wolf", "npc", "butterfly", "dragon", "songbird", "skeleton", "vulture",
+    "liche", "zombie", "blorple", "spider", "small_fish", "ship", "avatar",
+    "predatory_fish", "queen_gargoyle", "fish_school", "sea_serpent", "crusty",
+    "ghost", "slasher_of_veils", "creeper", "winged_gargoyle", "gazer",
+    "daemon", "serpent", "chest_mimic", "dart", "dragonfly", "swan", "chicken",
+)  # fmt: skip
+IMPACT_MATERIAL_NAMES: tuple[str, ...] = (
+    "bone", "chain", "cloth", "flesh", "leather", "plate", "rock",
+)  # fmt: skip
+# -1 means none.
+WEAPON_CATEGORY_NAMES: tuple[str, ...] = (
+    "fists", "one_handed_edged", "two_handed_edged", "two_handed_blunt",
+    "projectile", "shield", "luggage",
+)  # fmt: skip
+# Spell numbers (the spellbook bit index; also used by trigger commands).
+# 1-4 linear, then four per circle 1-8, then the nine rituals (37-45);
+# 46 is a creature-only spell.
+SPELL_NAMES: dict[int, str] = dict(
+    enumerate(
+        (
+            "stone", "gust", "ignite", "douse",
+            "create_reagents", "telekinesis", "light", "light_heal",
+            "crystal_barrier", "lightning_bolt", "infernal_armor", "cure",
+            "meteorite", "wizard_eye", "fireball", "fog",
+            "charm", "ethereal_sight", "day", "freeze",
+            "summon_undead", "levitate", "flame_thrower", "full_heal",
+            "death", "invisibility", "ring_of_fire", "mana_breath",
+            "time_stop", "teleport", "summon_daemon", "frost_storm",
+            "earthquake", "lightning_storm", "inferno", "acid_rain",
+            "sanctify", "bind", "mana_recover", "moongate", "spirit_talk",
+            "reunite", "summon_pyros", "barrier_of_life", "armageddon",
+            "failure", "big_stone",
+        ),
+        start=1,
+    )
+)  # fmt: skip
+
+
+def _name(names: tuple[str, ...], value: int) -> str | None:
+    return names[value] if 0 <= value < len(names) else None
+
+
 class U9NpcState(IntFlag):
     """Primary NPC state bits stored at record offset ``0x48``."""
 
@@ -152,6 +219,13 @@ class U9Npc:
     Fields named ``*_code`` are the signed 32-bit values read by the game.
     Their raw bytes are retained with the rest of the record for exact
     round trips.
+
+    ``magic_tier`` is the NPC's spell level (a non-zero level lets a
+    non-player NPC cast; the Avatar's spellbook is used regardless);
+    ``spellbook_flags`` is a bitset of spell numbers
+    (see :attr:`known_spells`). ``routine_start_time`` and
+    ``routine_end_time`` are minutes after midnight (0..1439; see
+    :meth:`clock_time`). The ``*_name`` properties name the ID fields.
     """
 
     index: int
@@ -332,6 +406,46 @@ class U9Npc:
     def has_combat_behavior(self) -> bool:
         """Whether a combat behavior profile is assigned (``-1`` means none)."""
         return self.combat_behavior_id != NO_COMBAT_BEHAVIOR
+
+    @property
+    def combat_behavior_name(self) -> str | None:
+        """Titan name of :attr:`combat_behavior_id` (``None`` for none)."""
+        return _name(COMBAT_BEHAVIOR_NAMES, self.combat_behavior_id)
+
+    @property
+    def movement_behavior_name(self) -> str | None:
+        """Titan name of :attr:`movement_behavior_id` (``None`` for none)."""
+        return _name(MOVEMENT_BEHAVIOR_NAMES, self.movement_behavior_id)
+
+    @property
+    def impact_material_name(self) -> str | None:
+        """Hit-sound material of :attr:`impact_material_id`."""
+        return _name(IMPACT_MATERIAL_NAMES, self.impact_material_id)
+
+    @property
+    def active_weapon_category_name(self) -> str | None:
+        """Name of :attr:`active_weapon_category_id` (``None`` for none)."""
+        return _name(WEAPON_CATEGORY_NAMES, self.active_weapon_category_id)
+
+    @property
+    def known_spells(self) -> tuple[int, ...]:
+        """Spell numbers set in :attr:`spellbook_flags` (bit ``n`` of the
+        12-byte bitset, byte ``n // 8``, bit ``n % 8``, is spell ``n``)."""
+        return tuple(
+            index
+            for index in range(len(self.spellbook_flags) * 8)
+            if self.spellbook_flags[index // 8] & (1 << (index % 8))
+        )
+
+    @property
+    def known_spell_names(self) -> tuple[str, ...]:
+        """Names of :attr:`known_spells` (unlisted numbers as ``spell_<n>``)."""
+        return tuple(SPELL_NAMES.get(n, f"spell_{n}") for n in self.known_spells)
+
+    @staticmethod
+    def clock_time(minutes: int) -> str:
+        """Format a routine time (minutes after midnight) as ``HH:MM``."""
+        return f"{minutes // 60:02d}:{minutes % 60:02d}"
 
     @property
     def position(self) -> tuple[int, int, int]:

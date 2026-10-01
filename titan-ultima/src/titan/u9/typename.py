@@ -2,7 +2,8 @@
 
 The FLX slot index is the object type ID. Every used entry begins with a
 signed readable-text reference and an object-icon reference, followed by an
-optional NUL-terminated ASCII display label. The shipped archive has 8,192
+optional NUL-terminated single-byte display label (plain ASCII in the shipped
+archive; Titan reads and writes Windows-1252). The shipped archive has 8,192
 used entries; entries without a label contain only the six-byte header.
 """
 
@@ -18,12 +19,16 @@ __all__ = [
 
 import os
 import struct
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from titan.u9.flx_archive import U9FlxArchive
 
 RECORD_HEADER_SIZE = 6
 RECORD_HEADER_STRUCT = "<iH"
+# Labels are single-byte text. The shipped labels are plain ASCII; Titan reads
+# and writes them as Windows-1252 so Western European letters round-trip.
+NAME_ENCODING = "cp1252"
 DEFAULT_OBJECT_ICON_ID = 7041
 CURRENT_TYPE_NAME_REPRESENTATION = "six_byte_header"
 
@@ -111,7 +116,7 @@ def _parse_type_name_entry(type_id: int, data: bytes) -> U9TypeNameEntry:
         display_bytes = text_storage[:terminator]
         trailing_bytes = text_storage[terminator + 1 :]
         if display_bytes:
-            display_name = display_bytes.decode("ascii", errors="replace")
+            display_name = display_bytes.decode(NAME_ENCODING, errors="replace")
 
     return U9TypeNameEntry(
         type_id=type_id,
@@ -128,6 +133,7 @@ class U9TypeNames:
 
     def __init__(self, archive: U9FlxArchive) -> None:
         self.record_representation = CURRENT_TYPE_NAME_REPRESENTATION
+        self.num_entries = archive.num_entries
         self.entries = tuple(
             _parse_type_name_entry(entry.index, data)
             for entry in archive.entries
@@ -158,6 +164,40 @@ class U9TypeNames:
         """Return one object type's object-icon reference, or ``None``."""
         entry = self.entry_for(type_id)
         return entry.object_icon_id if entry else None
+
+    def rebuilt(self, replacements: Mapping[int, str | None]) -> bytes:
+        """Return a new archive with some display labels replaced.
+
+        Each entry keeps its readable-text and icon references and any
+        trailing bytes; only the label changes. ``None`` or ``""`` removes a
+        label (the entry becomes the bare six-byte header). Labels are
+        encoded as Windows-1252 and must not contain NUL. Entries not named
+        keep their exact bytes, and the slot count is preserved.
+        """
+        from titan.u9.flx_writer import build_flx
+
+        blobs = {entry.type_id: entry.raw for entry in self.entries}
+        for type_id, name in replacements.items():
+            entry = self._by_id.get(type_id)
+            if entry is None:
+                raise U9TypeNameError(f"type {type_id} is not a used entry")
+            if (name or None) == entry.display_name:
+                continue
+            header = entry.raw[:RECORD_HEADER_SIZE]
+            if not name:
+                blobs[type_id] = header
+                continue
+            if "\x00" in name:
+                raise U9TypeNameError(f"type {type_id}: label may not contain NUL")
+            try:
+                encoded = name.encode(NAME_ENCODING)
+            except UnicodeEncodeError as error:
+                raise U9TypeNameError(
+                    f"type {type_id}: {name!r} cannot be stored as single-byte "
+                    f"Windows-1252 text ({error.reason})"
+                ) from error
+            blobs[type_id] = header + encoded + b"\x00" + entry.trailing_bytes
+        return build_flx(blobs, count=self.num_entries)
 
     def __len__(self) -> int:
         return len(self.entries)

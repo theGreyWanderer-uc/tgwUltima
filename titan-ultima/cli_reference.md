@@ -3988,6 +3988,29 @@ bytes, and `raw_hex`. Hex storage fields use a `0x` prefix.
 
 ---
 
+#### `u9 typename-import`
+
+Rebuild a type-name archive with the display names from an edited
+`typename-csv` CSV.
+
+```
+titan u9 typename-import <file> <CSV> [-o OUTPUT]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | The original archive: `TYPENAME.FLX` or a `Tnbrk.*` dialect copy |
+| `CSV` | The edited CSV; only the `type_id` and `display_name` columns are read |
+| `-o PATH`, `--output PATH` | Output archive (default: `<stem>_imported<ext>` beside the original) |
+
+Only the names change: each entry keeps its readable-text and icon references,
+and entries without a row are untouched. An empty `display_name` removes a
+name. Names are single-byte text (Windows-1252), so Western European letters
+such as `é` or `ü` work, while letters outside that set (Cyrillic, Greek,
+Asian scripts) are rejected. Every changed name is read back before writing.
+
+---
+
 #### `u9 types-csv`
 
 Export the header-selected active records in `static/TYPES.DAT`, with corrected
@@ -5481,6 +5504,10 @@ titan u9 npc-show <file> <index> [-s]
 titan u9 npc-show runtime/NPC.FLX 166
 ```
 
+The output names the combat and movement behaviour, the active weapon
+category and hit-sound material, lists any known spells, and shows the
+routine's start and end times as clock times.
+
 To see what that NPC actually does, feed the same index to
 `titan u9 activity-show`.
 
@@ -5488,8 +5515,9 @@ To see what that NPC actually does, feed the same index to
 
 #### `u9 npc-classes`
 
-Group NPCs by combat behavior profile and preview each group's members. The
-command name is retained for compatibility with earlier Titan releases.
+Group NPCs by combat behavior profile (shown with its name, for example
+`49 thug`) and preview each group's members. The command name is retained for
+compatibility with earlier Titan releases.
 
 ```
 titan u9 npc-classes <file> [-s] [-m MEMBERS]
@@ -5562,7 +5590,12 @@ signed 32-bit code, followed by `status` (`out_of_range` or empty) and its
 `0x`-prefixed raw bytes. Health, mana, and breath are each exported as their
 three stored `u16` values plus raw bytes. `health_status` reports unreachable
 no-combat-AI anomalies or values clamped on their first game write; it never
-changes them. The command prints level and health warning counts after export.
+changes them. Each ID field is followed by a `*_name` column
+(`combat_behavior_name`, `movement_behavior_name`, `active_weapon_category_name`,
+`impact_material_name`), the routine times by `routine_start_clock` /
+`routine_end_clock` (`HH:MM`), and `spellbook_flags_hex` by `known_spells`
+(space-separated spell names). The command prints level and health warning
+counts after export.
 See
 `reference/u9/npc/u9_npc_reference.md` for the exact column semantics and
 offsets.
@@ -5759,6 +5792,43 @@ titan u9 text-export <file> [-o OUT.csv]
 |----------|-------------|
 | `file` | Path to `static/text.flx` or `static/misctext.flx` |
 | `-o FILE`, `--output FILE` | Output CSV path (default: `<file>_text.csv`) |
+
+Also works on the joke-dialect copies (`Tbrk.*`, `Mbrk.*`).
+
+---
+
+#### `u9 text-import`
+
+Rebuild a text archive with the texts from an edited `text-export` CSV, for
+example to translate the game.
+
+```
+titan u9 text-import <file> <CSV> [-o OUTPUT]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | The original archive: `text.flx`, `misctext.flx`, `Tbrk.*` or `Mbrk.*` |
+| `CSV` | The edited CSV; only the `index` and `text` columns are read |
+| `-o PATH`, `--output PATH` | Output archive (default: `<stem>_imported<ext>` beside the original) |
+
+Rows may cover every entry or only the ones you changed; entries without a row
+keep their text. The slot count, unused slots and entry numbering are kept, so
+conversation keys still find the right lines. The source-file marker lines
+(`... : BEGIN FILE`) must stay unchanged. Text is stored as UTF-16, so any
+character is accepted, but the command warns about characters beyond Latin-1
+because the game's fonts may not draw them. The CSV may be saved with or
+without a UTF-8 byte-order mark. Every changed entry is read back from the
+new archive before it is written.
+
+**Example: translating with a dialect slot**
+```powershell
+titan u9 text-export static\Mbrk.ns -o mbrk.csv
+# edit the text column, then:
+titan u9 text-import static\Mbrk.ns mbrk.csv -o static\Mbrk.ns.new
+```
+Replace `Mbrk.ns` (and likewise `Tbrk.ns`, `Tnbrk.ns`) with the new files and
+set `Language=Ns` in `Options.ini` to show them; English stays untouched.
 
 ---
 

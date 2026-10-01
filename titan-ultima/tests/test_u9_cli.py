@@ -30,11 +30,16 @@ from titan.u9.cli import (
     cmd_sound_template_csv,
     cmd_texture_export,
     cmd_texture_import,
+    cmd_text_export,
+    cmd_text_import,
     cmd_texture_info,
     cmd_types_csv,
     cmd_typename_csv,
     cmd_typename_dump,
+    cmd_typename_import,
 )
+from titan.u9.text import U9TextArchive
+from titan.u9.typename import U9TypeNames
 
 DIR_OFFSET = 0x80
 DEFAULT_ICON_ID = 7041
@@ -310,6 +315,137 @@ class TypesDatCsvCliTests(unittest.TestCase):
             self.assertEqual(rows[2]["slot_state"], "inactive_capacity")
 
 
+def _utf16(text: str) -> bytes:
+    return (text + "\x00").encode("utf-16-le")
+
+
+class TextImportCliTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.archive = os.path.join(self.tmp.name, "Mbrk.ns")
+        with open(self.archive, "wb") as file:
+            file.write(
+                _build_flx(
+                    b"", [_utf16("The gate is locked."), None, _utf16("Use key on?")]
+                )
+            )
+        self.csv = os.path.join(self.tmp.name, "mbrk.csv")
+        self.assertEqual(
+            cmd_text_export(SimpleNamespace(file=self.archive, output=self.csv)), 0
+        )
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def _edit(self, changes: dict[str, str], *, bom: bool = False) -> None:
+        with open(self.csv, newline="", encoding="utf-8") as file:
+            rows = list(csv.DictReader(file))
+        for row in rows:
+            row["text"] = changes.get(row["index"], row["text"])
+        with open(
+            self.csv, "w", newline="", encoding="utf-8-sig" if bom else "utf-8"
+        ) as file:
+            writer = csv.DictWriter(file, fieldnames=list(rows[0]))
+            writer.writeheader()
+            writer.writerows(rows)
+
+    def test_imports_edited_text_into_a_new_archive(self) -> None:
+        self._edit({"0": "La porte est verrouillée."}, bom=True)
+        output = os.path.join(self.tmp.name, "out", "Mbrk.ns")
+        result = cmd_text_import(
+            SimpleNamespace(file=self.archive, csv=self.csv, output=output)
+        )
+        self.assertEqual(result, 0)
+        text = U9TextArchive.from_file(output)
+        self.assertEqual(text.num_entries, 3)
+        self.assertEqual(
+            [entry.text for entry in text.entries()],
+            ["La porte est verrouillée.", "Use key on?"],
+        )
+
+    def test_default_output_keeps_the_extension(self) -> None:
+        self._edit({"2": "Utiliser la clé sur ?"})
+        self.assertEqual(
+            cmd_text_import(
+                SimpleNamespace(file=self.archive, csv=self.csv, output=None)
+            ),
+            0,
+        )
+        self.assertTrue(os.path.isfile(os.path.join(self.tmp.name, "Mbrk_imported.ns")))
+
+    def test_rejects_unknown_entry_and_missing_column(self) -> None:
+        self._edit({})
+        with open(self.csv, "a", newline="", encoding="utf-8") as file:
+            file.write("1,,0,new text\r\n")
+        output = os.path.join(self.tmp.name, "bad.ns")
+        self.assertEqual(
+            cmd_text_import(
+                SimpleNamespace(file=self.archive, csv=self.csv, output=output)
+            ),
+            1,
+        )
+        with open(self.csv, "w", encoding="utf-8") as file:
+            file.write("index,words\n0,x\n")
+        self.assertEqual(
+            cmd_text_import(
+                SimpleNamespace(file=self.archive, csv=self.csv, output=output)
+            ),
+            1,
+        )
+        self.assertFalse(os.path.exists(output))
+
+
+class TypeNameImportCliTests(unittest.TestCase):
+    def test_imports_edited_labels(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            archive = os.path.join(temp_dir, "Tnbrk.ns")
+            header = struct.pack("<iH", 0, DEFAULT_ICON_ID)
+            with open(archive, "wb") as file:
+                file.write(
+                    _build_flx(b"", [header, header + b"Lord British\x00", header])
+                )
+            exported = os.path.join(temp_dir, "names.csv")
+            self.assertEqual(
+                cmd_typename_csv(SimpleNamespace(file=archive, output=exported)), 0
+            )
+            with open(exported, newline="", encoding="utf-8") as file:
+                rows = list(csv.DictReader(file))
+            rows[1]["display_name"] = "Seigneur British"
+            rows[2]["display_name"] = "Clé du Corbeau"
+            with open(exported, "w", newline="", encoding="utf-8") as file:
+                writer = csv.DictWriter(file, fieldnames=list(rows[0]))
+                writer.writeheader()
+                writer.writerows(rows)
+
+            output = os.path.join(temp_dir, "out.ns")
+            result = cmd_typename_import(
+                SimpleNamespace(file=archive, csv=exported, output=output)
+            )
+
+            self.assertEqual(result, 0)
+            names = U9TypeNames.from_file(output)
+            self.assertEqual(names.name_for(1), "Seigneur British")
+            self.assertEqual(names.name_for(2), "Clé du Corbeau")
+            self.assertIsNone(names.name_for(0))
+
+    def test_rejects_labels_outside_the_single_byte_set(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            archive = os.path.join(temp_dir, "Tnbrk.ns")
+            with open(archive, "wb") as file:
+                file.write(_build_flx(b"", [struct.pack("<iH", 0, DEFAULT_ICON_ID)]))
+            edited = os.path.join(temp_dir, "names.csv")
+            with open(edited, "w", encoding="utf-8") as file:
+                file.write("type_id,display_name\n0,Лорд\n")
+            output = os.path.join(temp_dir, "out.ns")
+            self.assertEqual(
+                cmd_typename_import(
+                    SimpleNamespace(file=archive, csv=edited, output=output)
+                ),
+                1,
+            )
+            self.assertFalse(os.path.exists(output))
+
+
 class NpcCsvCliTests(unittest.TestCase):
     def test_exports_signed_level_codes_status_and_raw_bytes(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -333,6 +469,10 @@ class NpcCsvCliTests(unittest.TestCase):
             self.assertEqual(row["unarmed_skill_raw_hex"], "0xc8000000")
             self.assertEqual(row["health_status"], "")
             self.assertEqual(row["health_raw_hex"], "0x000000000000")
+            self.assertEqual(row["combat_behavior_name"], "avatar")
+            self.assertEqual(row["impact_material_name"], "bone")
+            self.assertEqual(row["routine_start_clock"], "00:00")
+            self.assertEqual(row["known_spells"], "")
 
 
 class SoundCategoryCliTests(unittest.TestCase):

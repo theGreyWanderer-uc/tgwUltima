@@ -387,6 +387,55 @@ def cmd_typename_csv(args: SimpleNamespace) -> int:
     return 0
 
 
+def cmd_typename_import(args: SimpleNamespace) -> int:
+    """Rebuild a type-name archive from an edited ``typename-csv`` CSV."""
+    filepath = args.file
+    if not os.path.isfile(filepath):
+        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
+        return 1
+    try:
+        names = U9TypeNames.from_file(filepath)
+    except (U9FlxArchiveError, U9TypeNameError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+    rows = _read_import_csv(args.csv, "type_id", "display_name")
+    if rows is None:
+        return 1
+    changes = {
+        type_id: value
+        for type_id, value in rows.items()
+        if (value or None) != names.name_for(type_id)
+        or names.entry_for(type_id) is None
+    }
+    try:
+        data = names.rebuilt(changes)
+    except U9TypeNameError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+
+    rebuilt = U9TypeNames(U9FlxArchive(data))
+    for type_id, value in changes.items():
+        if rebuilt.name_for(type_id) != (value or None):
+            print(
+                f"ERROR: type {type_id} did not read back as written", file=sys.stderr
+            )
+            return 1
+    removed = sum(1 for value in changes.values() if not value)
+
+    source = Path(filepath)
+    output = args.output or str(
+        source.with_name(f"{source.stem}_imported{source.suffix}")
+    )
+    os.makedirs(os.path.dirname(os.path.abspath(output)), exist_ok=True)
+    with open(output, "wb") as file:
+        file.write(data)
+    print(f"{filepath} — {len(rows)} row(s) read, {len(changes)} label(s) changed")
+    if removed:
+        print(f"  Removed : {removed} label(s) (empty display_name cells)")
+    print(f"  Written : {output} ({len(data)} bytes, slot count {rebuilt.num_entries})")
+    return 0
+
+
 def cmd_types_csv(args: SimpleNamespace) -> int:
     """Export active ``TYPES.DAT`` records, or every physical slot, to CSV."""
     filepath = args.file
@@ -4670,8 +4719,21 @@ def cmd_npc_show(args: SimpleNamespace) -> int:
         f"  Mana        : {n.mana_current} / {n.mana_bonus_maximum} "
         f"(base {n.mana_base_maximum})"
     )
-    behavior = str(n.combat_behavior_id) if n.has_combat_behavior else "none (-1)"
-    print(f"  Behavior    : combat {behavior}, movement {n.movement_behavior_id}")
+    behavior = (
+        f"{n.combat_behavior_id} ({n.combat_behavior_name})"
+        if n.has_combat_behavior
+        else "none (-1)"
+    )
+    movement = (
+        f"{n.movement_behavior_id} ({n.movement_behavior_name})"
+        if n.movement_behavior_name
+        else f"none ({n.movement_behavior_id})"
+    )
+    print(f"  Behavior    : combat {behavior}, movement {movement}")
+    weapon = n.active_weapon_category_name or "none"
+    print(f"  Combat      : weapon {weapon}, hit sound {n.impact_material_name}")
+    if n.known_spells:
+        print(f"  Spells      : {', '.join(n.known_spell_names)}")
     print(f"  State flags : {int(n.state_flags):#010x}")
     print(f"  Trait flags : {int(n.trait_flags):#010x}")
     print(
@@ -4688,6 +4750,11 @@ def cmd_npc_show(args: SimpleNamespace) -> int:
         f"{n.fallback_routine_argument}; queued {n.queued_routine_id} arg "
         f"{n.queued_routine_argument}"
     )
+    if n.routine_start_time or n.routine_end_time:
+        print(
+            f"  Routine time: {n.clock_time(n.routine_start_time)} to "
+            f"{n.clock_time(n.routine_end_time)}"
+        )
     print(f"  Equipment   : {n.equipped_object_offsets}")
     print(f"  Attachments : {n.model_attachment_ids}")
     print(
@@ -4720,12 +4787,16 @@ def cmd_npc_classes(args: SimpleNamespace) -> int:
     histogram = npcs.combat_behavior_histogram()
     print(f"{args.file} -- {len(histogram)} distinct combat behavior value(s)")
     for behavior_id, count in histogram.most_common():
-        label = "none (-1)" if behavior_id == NO_COMBAT_BEHAVIOR else str(behavior_id)
-        members = [n.name for n in npcs.by_combat_behavior(behavior_id) if n.name]
+        group = npcs.by_combat_behavior(behavior_id)
+        if behavior_id == NO_COMBAT_BEHAVIOR:
+            label = "none (-1)"
+        else:
+            label = f"{behavior_id} {group[0].combat_behavior_name or '?'}"
+        members = [n.name for n in group if n.name]
         preview = ", ".join(members[: args.members])
         if len(members) > args.members:
             preview += ", ..."
-        print(f"  {label:>13}  x{count:<4} {preview}")
+        print(f"  {label:>20}  x{count:<4} {preview}")
     return 0
 
 
@@ -4765,6 +4836,7 @@ def cmd_npc_csv(args: SimpleNamespace) -> int:
         "reserved_0x40",
         "residual_0x41_0x43_hex",
         "combat_behavior_id",
+        "combat_behavior_name",
         "state_flags",
         "active_routine_id",
         "fallback_routine_id",
@@ -4789,8 +4861,10 @@ def cmd_npc_csv(args: SimpleNamespace) -> int:
         *[f"equipped_object_offset_{index}" for index in range(7)],
         *[f"model_attachment_id_{index}" for index in range(7)],
         "active_weapon_category_id",
+        "active_weapon_category_name",
         "invulnerability_duration",
         "movement_behavior_id",
+        "movement_behavior_name",
         "breath_current",
         "breath_bonus_maximum",
         "breath_base_maximum",
@@ -4798,6 +4872,7 @@ def cmd_npc_csv(args: SimpleNamespace) -> int:
         "reserved_0xba_0xc3_hex",
         "trait_flags",
         "impact_material_id",
+        "impact_material_name",
         "reserved_0xcc_0xdf_hex",
         "reserved_0xe0",
         "proximity_enter_radius",
@@ -4805,13 +4880,16 @@ def cmd_npc_csv(args: SimpleNamespace) -> int:
         "queued_routine_argument",
         "route_search_counter",
         "routine_end_time",
+        "routine_end_clock",
         "routine_start_time",
+        "routine_start_clock",
         "primary_routine_duration",
         "queued_routine_id",
         "secondary_routine_duration",
         "reserved_0xfc_0x10f_hex",
         "routine_stack_hex",
         "spellbook_flags_hex",
+        "known_spells",
         *_npc_level_csv_columns("unarmed_skill"),
         *_npc_level_csv_columns("one_handed_skill"),
         *_npc_level_csv_columns("two_handed_skill"),
@@ -4851,6 +4929,7 @@ def cmd_npc_csv(args: SimpleNamespace) -> int:
                     n.reserved_0x40,
                     n.residual_0x41_0x43.hex(),
                     n.combat_behavior_id,
+                    n.combat_behavior_name or "",
                     f"{int(n.state_flags):#010x}",
                     n.active_routine_id,
                     n.fallback_routine_id,
@@ -4875,8 +4954,10 @@ def cmd_npc_csv(args: SimpleNamespace) -> int:
                     *n.equipped_object_offsets,
                     *n.model_attachment_ids,
                     n.active_weapon_category_id,
+                    n.active_weapon_category_name or "",
                     n.invulnerability_duration,
                     n.movement_behavior_id,
+                    n.movement_behavior_name or "",
                     n.breath_current,
                     n.breath_bonus_maximum,
                     n.breath_base_maximum,
@@ -4884,6 +4965,7 @@ def cmd_npc_csv(args: SimpleNamespace) -> int:
                     n.reserved_0xba_0xc3.hex(),
                     f"{int(n.trait_flags):#010x}",
                     n.impact_material_id,
+                    n.impact_material_name or "",
                     n.reserved_0xcc_0xdf.hex(),
                     n.reserved_0xe0,
                     n.proximity_enter_radius,
@@ -4891,13 +4973,16 @@ def cmd_npc_csv(args: SimpleNamespace) -> int:
                     n.queued_routine_argument,
                     n.route_search_counter,
                     n.routine_end_time,
+                    n.clock_time(n.routine_end_time),
                     n.routine_start_time,
+                    n.clock_time(n.routine_start_time),
                     n.primary_routine_duration,
                     n.queued_routine_id,
                     n.secondary_routine_duration,
                     n.reserved_0xfc_0x10f.hex(),
                     n.routine_stack.hex(),
                     n.spellbook_flags.hex(),
+                    " ".join(n.known_spell_names),
                     *_npc_level_csv_values(*levels["unarmed_skill"]),
                     *_npc_level_csv_values(*levels["one_handed_skill"]),
                     *_npc_level_csv_values(*levels["two_handed_skill"]),
@@ -5226,6 +5311,100 @@ def cmd_text_export(args: SimpleNamespace) -> int:
                 [e.index, owner.get(e.index, ""), int(e.is_file_marker), e.text]
             )
     print(f"{args.file} -- wrote {len(entries)} row(s) -> {out_path}")
+    return 0
+
+
+def _read_import_csv(
+    path: str, key_column: str, value_column: str
+) -> Optional[dict[int, str]]:
+    """Read ``{key: value}`` rows from an edited export CSV.
+
+    Accepts UTF-8 with or without a byte-order mark (as spreadsheet programs
+    often add). Other columns are ignored; a repeated key is an error.
+    """
+    if not os.path.isfile(path):
+        print(f"ERROR: File not found: {path}", file=sys.stderr)
+        return None
+    try:
+        with open(path, newline="", encoding="utf-8-sig") as f:
+            reader = csv.DictReader(f)
+            missing = {key_column, value_column} - set(reader.fieldnames or ())
+            if missing:
+                print(
+                    f"ERROR: {path} lacks column(s) {', '.join(sorted(missing))}",
+                    file=sys.stderr,
+                )
+                return None
+            rows: dict[int, str] = {}
+            for line, row in enumerate(reader, start=2):
+                try:
+                    key = int(row[key_column])
+                except (TypeError, ValueError):
+                    print(
+                        f"ERROR: {path} line {line}: {key_column} "
+                        f"{row[key_column]!r} is not a number",
+                        file=sys.stderr,
+                    )
+                    return None
+                if key in rows:
+                    print(
+                        f"ERROR: {path} line {line}: {key_column} {key} repeats",
+                        file=sys.stderr,
+                    )
+                    return None
+                rows[key] = row[value_column] or ""
+    except UnicodeDecodeError as e:
+        print(f"ERROR: {path} is not UTF-8 text ({e})", file=sys.stderr)
+        return None
+    return rows
+
+
+def cmd_text_import(args: SimpleNamespace) -> int:
+    """Rebuild a text archive from an edited ``text-export`` CSV."""
+    text = _load_text(args.file)
+    if text is None:
+        return 1
+    rows = _read_import_csv(args.csv, "index", "text")
+    if rows is None:
+        return 1
+    try:
+        changes = {
+            index: value
+            for index, value in rows.items()
+            if (entry := text.entry(index)) is None or entry.text != value
+        }
+        data = text.rebuilt(changes)
+    except U9TextError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
+    rebuilt = U9TextArchive(U9FlxArchive(data))
+    for index, value in changes.items():
+        entry = rebuilt.entry(index)
+        if entry is None or entry.text != value:
+            print(f"ERROR: entry {index} did not read back as written", file=sys.stderr)
+            return 1
+    wide = sorted({ch for value in changes.values() for ch in value if ord(ch) > 0xFF})
+
+    source = Path(args.file)
+    out_path = args.output or str(
+        source.with_name(f"{source.stem}_imported{source.suffix}")
+    )
+    os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+    with open(out_path, "wb") as f:
+        f.write(data)
+    print(
+        f"{args.file} -- {len(rows)} row(s) read, {len(changes)} entr"
+        f"{'y' if len(changes) == 1 else 'ies'} changed"
+    )
+    print(
+        f"  Written : {out_path} ({len(data)} bytes, slot count {rebuilt.num_entries})"
+    )
+    if wide:
+        print(
+            f"  Warning : {len(wide)} character(s) beyond Latin-1 "
+            f"({''.join(wide[:20])}); the game's fonts may not draw them"
+        )
     return 0
 
 
@@ -7264,6 +7443,30 @@ def typename_csv_cmd(
     raise SystemExit(cmd_typename_csv(SimpleNamespace(file=file, output=output)))
 
 
+@u9_app.command("typename-import")
+def typename_import_cmd(
+    file: Annotated[
+        str, typer.Argument(help="Original type-name archive (TYPENAME.FLX, Tnbrk.*)")
+    ],
+    csv_path: Annotated[
+        str,
+        typer.Argument(
+            metavar="CSV", help="Edited typename-csv CSV (type_id, display_name)"
+        ),
+    ],
+    output: Annotated[
+        Optional[str],
+        typer.Option(
+            "-o", "--output", help="Output archive (default: <stem>_imported<ext>)"
+        ),
+    ] = None,
+) -> None:
+    """Rebuild a U9 type-name archive with the labels from an edited CSV."""
+    raise SystemExit(
+        cmd_typename_import(SimpleNamespace(file=file, csv=csv_path, output=output))
+    )
+
+
 @u9_app.command("types-csv")
 def types_csv_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/TYPES.DAT")],
@@ -9166,6 +9369,30 @@ def text_export_cmd(
 ) -> None:
     """Export a U9 text archive to CSV."""
     raise SystemExit(cmd_text_export(SimpleNamespace(file=file, output=output)))
+
+
+@u9_app.command("text-import")
+def text_import_cmd(
+    file: Annotated[
+        str,
+        typer.Argument(
+            help="Original text archive (text.flx, misctext.flx, Tbrk.*, Mbrk.*)"
+        ),
+    ],
+    csv_path: Annotated[
+        str, typer.Argument(metavar="CSV", help="Edited text-export CSV (index, text)")
+    ],
+    output: Annotated[
+        Optional[str],
+        typer.Option(
+            "-o", "--output", help="Output archive (default: <stem>_imported<ext>)"
+        ),
+    ] = None,
+) -> None:
+    """Rebuild a U9 text archive with the texts from an edited CSV."""
+    raise SystemExit(
+        cmd_text_import(SimpleNamespace(file=file, csv=csv_path, output=output))
+    )
 
 
 @u9_app.command("text-keys-info")

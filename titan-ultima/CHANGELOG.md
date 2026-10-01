@@ -32,6 +32,28 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Added
 
+- **U9 text and type-name import (translation):** `text-import` rebuilds
+  `text.flx`, `misctext.flx` or a joke-dialect copy (`Tbrk.*`, `Mbrk.*`) from
+  an edited `text-export` CSV, and `typename-import` rebuilds `TYPENAME.FLX` or
+  `Tnbrk.*` from an edited `typename-csv` CSV. Entry numbering, slot counts,
+  unused slots, source-file markers and each type's text and icon references
+  are kept; every change is read back before writing. Library:
+  `U9TextArchive.rebuilt()`, `U9TypeNames.rebuilt()`. Type-name labels are now
+  decoded as Windows-1252 rather than ASCII, so accented names read back
+  correctly (the shipped labels are plain ASCII, so nothing they show changes).
+
+- **U9 NPC records -- value names:** `titan.u9.npc` now names the record's ID
+  fields: combat behaviour (64 creature kinds), movement behaviour (38
+  kinds), active weapon category and hit-sound material
+  (`combat_behavior_name`, `movement_behavior_name`,
+  `active_weapon_category_name`, `impact_material_name`). The 12-byte
+  spellbook is decoded as a bitset of spell numbers (`known_spells`,
+  `known_spell_names`, `SPELL_NAMES`), and the routine start and end times are
+  documented as minutes after midnight (`U9Npc.clock_time`). `npc-show`
+  prints the names, spells and routine hours; `npc-classes` labels each
+  group; `npc-csv` adds `*_name`, `routine_*_clock` and `known_spells`
+  columns.
+
 - **U9 save process stream -- temporary camera and more process types:**
   when the camera manager saved a temporary camera, its 173-byte record
   (`U9TemporaryCameraState`) is now read between the camera control and the
