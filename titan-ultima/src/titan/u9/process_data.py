@@ -558,7 +558,7 @@ class U9HangingObjectProcessState:
     swing_period: int
     maximum_swing_angle: int
     swing_envelope_period: float
-    turning_type: int
+    turn_mode: int
     turn_period: int
     maximum_turn_angle: int
     turn_envelope_period: float
@@ -583,7 +583,7 @@ class U9HangingObjectProcessState:
     turn_envelope_time_ms: int
     turn_time_constant: float
     yaw_changed: bool
-    is_collided: bool
+    in_collision: bool
     hit_magnitude: int
     swing_magnitude_fraction: float
     turn_magnitude_fraction: float
@@ -668,7 +668,7 @@ class U9HangingObjectProcessState:
             swing_period=values[2],
             maximum_swing_angle=values[3],
             swing_envelope_period=values[4],
-            turning_type=values[5],
+            turn_mode=values[5],
             turn_period=values[6],
             maximum_turn_angle=values[7],
             turn_envelope_period=values[8],
@@ -693,7 +693,7 @@ class U9HangingObjectProcessState:
             turn_envelope_time_ms=values[42],
             turn_time_constant=values[43],
             yaw_changed=bool(values[44]),
-            is_collided=bool(values[45]),
+            in_collision=bool(values[45]),
             hit_magnitude=values[46],
             swing_magnitude_fraction=values[47],
             turn_magnitude_fraction=values[48],
@@ -724,7 +724,7 @@ class U9HangingObjectProcessState:
         return (self.swing_configuration_bits >> 13) & 0x3F
 
     @property
-    def configured_turning_type(self) -> int:
+    def configured_turn_mode(self) -> int:
         return self.turn_configuration_bits & 0x07
 
     @property
@@ -754,8 +754,8 @@ class U9ScriptTimerProcessState:
     version: int
     timer_flags: int
     phase_1_duration: int
-    dual_mode: int
-    time_system: int
+    two_phase: int
+    clock_kind: int
     phase_2_duration: int
     accumulated_time: int
     has_started: bool
@@ -807,8 +807,8 @@ class U9ScriptTimerProcessState:
             version=values[0],
             timer_flags=values[1],
             phase_1_duration=values[2],
-            dual_mode=values[3],
-            time_system=values[4],
+            two_phase=values[3],
+            clock_kind=values[4],
             phase_2_duration=values[5],
             accumulated_time=values[6],
             has_started=bool(values[7]),
@@ -839,7 +839,7 @@ class U9ScriptTimerProcessState:
         return ((self.timer_flags >> 4) & 0x0F) * 10
 
     @property
-    def configured_time_system(self) -> int:
+    def configured_clock_kind(self) -> int:
         return (self.timer_flags >> 8) & 0x07
 
     @property
@@ -1580,16 +1580,16 @@ class U9ParticlePresetState:
     camera_shock_intensity: int
     calculate_ramps_by_lifespan_flag: int
     spawn_mean_ramp_count: int
-    lifespan_ramp_count: int
+    lifespan_keyframes: int
     object_scale_ramp_count: int
     object_color_ramp_count: int
     object_translucency_ramp_count: int
     object_luminance_ramp_count: int
     skeletal_animation_count: int
     random_skeletal_animation_flag: int
-    light_color_ramp_count: int
-    light_range_ramp_count: int
-    light_diffusion_ramp_count: int
+    light_color_keyframes: int
+    light_range_keyframes: int
+    light_diffusion_keyframes: int
     camera_filter_layer: int
     camera_filter_texture: U9ParticleCameraFilterTextureState
     camera_filter_edge_color: tuple[int, int, int]
@@ -1817,16 +1817,16 @@ class U9ParticlePresetState:
             camera_shock_intensity=int(camera_shock_intensity),
             calculate_ramps_by_lifespan_flag=int(calculate_ramps_by_lifespan_flag),
             spawn_mean_ramp_count=int(ramp_counts[0]),
-            lifespan_ramp_count=int(ramp_counts[1]),
+            lifespan_keyframes=int(ramp_counts[1]),
             object_scale_ramp_count=int(ramp_counts[2]),
             object_color_ramp_count=int(ramp_counts[3]),
             object_translucency_ramp_count=int(ramp_counts[4]),
             object_luminance_ramp_count=int(ramp_counts[5]),
             skeletal_animation_count=int(ramp_counts[6]),
             random_skeletal_animation_flag=int(random_skeletal_animation_flag),
-            light_color_ramp_count=int(light_ramp_counts[0]),
-            light_range_ramp_count=int(light_ramp_counts[1]),
-            light_diffusion_ramp_count=int(light_ramp_counts[2]),
+            light_color_keyframes=int(light_ramp_counts[0]),
+            light_range_keyframes=int(light_ramp_counts[1]),
+            light_diffusion_keyframes=int(light_ramp_counts[2]),
             camera_filter_layer=int(camera_filter_layer),
             camera_filter_texture=camera_filter_texture,
             camera_filter_edge_color=tuple(
@@ -2009,7 +2009,7 @@ class U9ParticleInstanceState:
     spawn_pulse_count_byte: int
     object_type_id: int
     object_status_flags: int
-    swap_sequence: int
+    alternate_sequence: int
     sequence_index: int
     swap_elapsed_frames: int
     attached_element_id: int
@@ -2017,7 +2017,7 @@ class U9ParticleInstanceState:
     light_source_flag: int
     callback_id: int
     callback_effect_id: int
-    callback_magic_type: int
+    callback_spell_kind: int
     callback_caster_reference_index: int
     object_reference_index: int
     offset: int
@@ -2049,7 +2049,7 @@ class U9ParticleInstanceState:
             spawn_pulse_count_byte=values[37],
             object_type_id=values[38],
             object_status_flags=values[39],
-            swap_sequence=values[40],
+            alternate_sequence=values[40],
             sequence_index=values[41],
             swap_elapsed_frames=values[42],
             attached_element_id=values[43],
@@ -2057,7 +2057,7 @@ class U9ParticleInstanceState:
             light_source_flag=values[45],
             callback_id=values[46],
             callback_effect_id=values[47],
-            callback_magic_type=values[48],
+            callback_spell_kind=values[48],
             callback_caster_reference_index=values[49],
             object_reference_index=values[50],
             offset=offset,
@@ -2635,12 +2635,12 @@ class U9CameraControlState:
     target_position: tuple[float, float, float]
     target_yaw: float
     target_pitch: float
-    unlimited_target_range: bool | None
+    no_target_range_limit: bool | None
     target_fov: float | None
     current_distance: float | None
     maximum_distance: float | None
     maximum_target_distance: float | None
-    target_line_radius: float | None
+    aim_line_radius: float | None
     underground: bool | None
     underwater: bool | None
     on_moon: bool | None
@@ -2656,14 +2656,14 @@ class U9CameraControlState:
     quake_initial_intensity: int | None
     quake_peak_intensity: int | None
     shock_offset: tuple[float, float, float] | None
-    shock_build_time: float | None
+    shock_rise_time: float | None
     shock_remaining_build_time: float | None
-    shock_decay_time: float | None
+    shock_fall_time: float | None
     shock_remaining_decay_time: float | None
-    shock_peak_intensity: int | None
+    shock_peak: int | None
     target_lock_rectangle: tuple[int, int, int, int] | None
-    distant_npcs_can_move: bool | None
-    distant_items_can_move: bool | None
+    far_npcs_active: bool | None
+    far_objects_active: bool | None
     has_temporary_camera: bool
     targeting: U9TargetingState | None
     offset: int
@@ -2683,12 +2683,12 @@ class U9CameraControlState:
             _require_bytes(data, offset, CAMERA_CONTROL_BASE_SIZE, "camera control")
             values = struct.unpack_from("<I3f2fI", data, offset)
             marker_offset = offset + 24
-            unlimited_target_range = None
+            no_target_range_limit = None
             target_fov = None
             current_distance = None
             maximum_distance = None
             maximum_target_distance = None
-            target_line_radius = None
+            aim_line_radius = None
             underground = None
             underwater = None
             on_moon = None
@@ -2704,25 +2704,25 @@ class U9CameraControlState:
             quake_initial_intensity = None
             quake_peak_intensity = None
             shock_offset = None
-            shock_build_time = None
+            shock_rise_time = None
             shock_remaining_build_time = None
-            shock_decay_time = None
+            shock_fall_time = None
             shock_remaining_decay_time = None
-            shock_peak_intensity = None
+            shock_peak = None
             target_lock_rectangle = None
-            distant_npcs_can_move = None
-            distant_items_can_move = None
+            far_npcs_active = None
+            far_objects_active = None
         else:
             _require_bytes(data, offset, CAMERA_CONTROL_EXTENDED_SIZE, "camera control")
             values = struct.unpack_from("<I3f2f", data, offset)
             marker_offset = offset + 176
-            unlimited_target_range = bool(
+            no_target_range_limit = bool(
                 struct.unpack_from("<I", data, offset + 24)[0]
             )
             target_fov, current_distance, maximum_distance = struct.unpack_from(
                 "<3f", data, offset + 28
             )
-            maximum_target_distance, target_line_radius = struct.unpack_from(
+            maximum_target_distance, aim_line_radius = struct.unpack_from(
                 "<2f", data, offset + 40
             )
             underground, underwater, on_moon, target_mode = (
@@ -2742,14 +2742,14 @@ class U9CameraControlState:
             )
             shock_offset = struct.unpack_from("<3f", data, offset + 120)
             (
-                shock_build_time,
+                shock_rise_time,
                 shock_remaining_build_time,
-                shock_decay_time,
+                shock_fall_time,
                 shock_remaining_decay_time,
             ) = struct.unpack_from("<4f", data, offset + 132)
-            (shock_peak_intensity,) = struct.unpack_from("<i", data, offset + 148)
+            (shock_peak,) = struct.unpack_from("<i", data, offset + 148)
             target_lock_rectangle = struct.unpack_from("<4i", data, offset + 152)
-            distant_npcs_can_move, distant_items_can_move = (
+            far_npcs_active, far_objects_active = (
                 bool(value) for value in struct.unpack_from("<2I", data, offset + 168)
             )
 
@@ -2778,12 +2778,12 @@ class U9CameraControlState:
             target_position=(values[1], values[2], values[3]),
             target_yaw=values[4],
             target_pitch=values[5],
-            unlimited_target_range=unlimited_target_range,
+            no_target_range_limit=no_target_range_limit,
             target_fov=target_fov,
             current_distance=current_distance,
             maximum_distance=maximum_distance,
             maximum_target_distance=maximum_target_distance,
-            target_line_radius=target_line_radius,
+            aim_line_radius=aim_line_radius,
             underground=underground,
             underwater=underwater,
             on_moon=on_moon,
@@ -2799,14 +2799,14 @@ class U9CameraControlState:
             quake_initial_intensity=quake_initial_intensity,
             quake_peak_intensity=quake_peak_intensity,
             shock_offset=shock_offset,
-            shock_build_time=shock_build_time,
+            shock_rise_time=shock_rise_time,
             shock_remaining_build_time=shock_remaining_build_time,
-            shock_decay_time=shock_decay_time,
+            shock_fall_time=shock_fall_time,
             shock_remaining_decay_time=shock_remaining_decay_time,
-            shock_peak_intensity=shock_peak_intensity,
+            shock_peak=shock_peak,
             target_lock_rectangle=target_lock_rectangle,
-            distant_npcs_can_move=distant_npcs_can_move,
-            distant_items_can_move=distant_items_can_move,
+            far_npcs_active=far_npcs_active,
+            far_objects_active=far_objects_active,
             has_temporary_camera=has_temporary_camera,
             targeting=targeting,
             offset=offset,
@@ -3635,15 +3635,15 @@ class U9NpcActionProcessState:
     origin_x: int
     origin_y: int
     stand_time: int
-    animation_to_play: int
-    last_animation_played: int
+    queued_animation_id: int
+    previous_animation_id: int
     animation_speed: float
     clears_hands_on_exit: bool
     activity_variables: tuple[int, ...]
     maximum_step_height: float
     extra_object_reference_index: int
-    collision_checks_per_frame: int
-    maximum_collision_checks: int
+    probes_per_frame: int
+    probe_limit: int
     idle_animation_id: int
     needs_idle_animation: bool
     exits_next_frame: bool
@@ -3710,15 +3710,15 @@ class U9NpcActionProcessState:
             origin_x=v[17],
             origin_y=v[18],
             stand_time=v[19],
-            animation_to_play=v[20],
-            last_animation_played=v[21],
+            queued_animation_id=v[20],
+            previous_animation_id=v[21],
             animation_speed=v[22],
             clears_hands_on_exit=bool(v[23]),
             activity_variables=tuple(v[24:variables_end]),
             maximum_step_height=tail[0],
             extra_object_reference_index=tail[1],
-            collision_checks_per_frame=tail[2],
-            maximum_collision_checks=tail[3],
+            probes_per_frame=tail[2],
+            probe_limit=tail[3],
             idle_animation_id=tail[4],
             needs_idle_animation=bool(tail[5]),
             exits_next_frame=bool(tail[6]),
@@ -4862,7 +4862,7 @@ class U9PathGridState:
     horizontal: tuple[float, float, float]
     vertical: tuple[float, float, float]
     origin: tuple[float, float, float]
-    allowed_vertical_distance: float
+    vertical_tolerance: float
     allowed_slope: float
     maximum_stair_height: float
     maximum_stair_slope: float
@@ -4945,7 +4945,7 @@ class U9PathGridState:
             horizontal=v[6:9],
             vertical=v[9:12],
             origin=v[12:15],
-            allowed_vertical_distance=v[15],
+            vertical_tolerance=v[15],
             allowed_slope=v[16],
             maximum_stair_height=v[17],
             maximum_stair_slope=v[18],
@@ -5011,16 +5011,16 @@ class U9PathfinderProcessState:
     previous_walk_state: int
     radius: float
     cylinder_radius: float
-    obstacle_avoid_angle: float
+    avoidance_angle: float
     last_seen_position: tuple[float, float, float]
     grid: U9PathGridState | None
     continue_callback: int
     ending_callback: int
     status_code: int
-    grid_move_succeeded: int
-    collision_checks_per_frame: int
-    maximum_collision_checks: int
-    collision_checks_left: int
+    last_grid_step_ok: int
+    probes_per_frame: int
+    probe_limit: int
+    probes_remaining: int
     offset: int
     end_offset: int
 
@@ -5080,16 +5080,16 @@ class U9PathfinderProcessState:
             previous_walk_state=v[39],
             radius=v[40],
             cylinder_radius=v[41],
-            obstacle_avoid_angle=v[42],
+            avoidance_angle=v[42],
             last_seen_position=v[43:46],
             grid=grid,
             continue_callback=tail[0],
             ending_callback=tail[1],
             status_code=tail[2],
-            grid_move_succeeded=tail[3],
-            collision_checks_per_frame=tail[4],
-            maximum_collision_checks=tail[5],
-            collision_checks_left=tail[6],
+            last_grid_step_ok=tail[3],
+            probes_per_frame=tail[4],
+            probe_limit=tail[5],
+            probes_remaining=tail[6],
             offset=offset,
             end_offset=cursor + PATHFINDER_TAIL.size,
         )
@@ -5216,7 +5216,7 @@ class U9PathManagerState:
     orientation_distances: tuple[float, ...]
     link: int
     current_distance: float
-    last_current_distance: float
+    previous_distance: float
     direction: float
     speed: float
     input_node_count: int
@@ -5271,7 +5271,7 @@ class U9PathManagerState:
             orientation_distances=arrays[3],  # type: ignore[arg-type]
             link=t[0],
             current_distance=t[1],
-            last_current_distance=t[2],
+            previous_distance=t[2],
             direction=t[3],
             speed=t[4],
             input_node_count=t[5],
@@ -5302,10 +5302,10 @@ class U9FloatingLanternProcessState:
     lantern_object_reference_index: int
     path: U9PathManagerState
     accumulated_time: float
-    trying_to_get_on_track: int
+    returning_to_path: int
     target_position_words: tuple[int, int, int]
     accumulated_offset_words: tuple[int, int, int]
-    end_condition_flags: int
+    stop_flags: int
     reserved: tuple[int, int, int, int]
     offset: int
     end_offset: int
@@ -5346,10 +5346,10 @@ class U9FloatingLanternProcessState:
             lantern_object_reference_index=lantern,
             path=path,
             accumulated_time=t[0],
-            trying_to_get_on_track=t[1],
+            returning_to_path=t[1],
             target_position_words=t[2:5],
             accumulated_offset_words=t[5:8],
-            end_condition_flags=t[8],
+            stop_flags=t[8],
             reserved=t[9:13],
             offset=offset,
             end_offset=cursor + FLOATING_LANTERN_TAIL.size,

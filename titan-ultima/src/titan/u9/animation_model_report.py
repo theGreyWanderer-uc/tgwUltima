@@ -19,13 +19,14 @@ import hashlib
 import re
 import struct
 from dataclasses import dataclass
-from pathlib import Path, PureWindowsPath
+from pathlib import Path
 from typing import Any
 
 from titan.u9.animation import U9Animation, U9AnimationError, U9Animations
+from titan.u9.animation_labels import parse_animation_source_hints
 from titan.u9.flx_archive import U9FlxArchive, U9FlxArchiveError
 from titan.u9.model import U9Model, U9ModelError
-from titan.u9.motion_ids import U9MotionIds, U9MotionIdsError
+
 from titan.u9.node_registry import U9NodeRegistry, U9NodeRegistryError
 from titan.u9.typename import U9TypeNames
 from titan.u9.types_dat import U9TypeRecord, U9TypesDat, U9TypesDatError
@@ -40,9 +41,6 @@ ANIMATION_MODEL_REPORT_COLUMNS = [
     "animation_id",
     "stored_animation_id",
     "stored_id_status",
-    "motion_name",
-    "motion_family",
-    "motion_id_status",
     "animation_label",
     "source_path",
     "source_path_raw_hex",
@@ -112,23 +110,6 @@ ANIMATION_MODEL_REPORT_COLUMNS = [
 
 
 @dataclass(frozen=True)
-class _SourceHints:
-    asset_group: str
-    family: str
-    category: str
-    stem: str
-    actor: str
-    actor_basis: str
-    action: str
-
-    @property
-    def label(self) -> str:
-        return "/".join(
-            value for value in (self.family, self.category, self.stem) if value
-        )
-
-
-@dataclass(frozen=True)
 class _ModelMetadata:
     model_id: int
     record_format: str
@@ -170,58 +151,6 @@ def _optional_companion(
     if explicit is not None:
         return _required_file(explicit, filename)
     return _case_insensitive_child(directory, filename)
-
-
-def _parse_source_hints(source_name: str) -> _SourceHints:
-    parts = list(PureWindowsPath(source_name).parts)
-    lowered = [part.casefold() for part in parts]
-    filename = parts[-1] if parts else source_name
-    stem = PureWindowsPath(filename).stem.casefold()
-
-    asset_group = "other"
-    relative: list[str] = []
-    for marker in ("motions", "objects"):
-        if marker in lowered:
-            marker_index = lowered.index(marker)
-            asset_group = marker
-            relative = [part.casefold() for part in parts[marker_index + 1 :]]
-            break
-
-    directories = relative[:-1]
-    family = directories[0] if directories else ""
-    category_parts = [part for part in directories[1:] if part != "lws"]
-    category = "/".join(category_parts)
-
-    actor = family
-    actor_basis = "family-directory" if family else "none"
-    if "avatar" in stem:
-        actor = "avatar"
-        actor_basis = "filename-token"
-    elif "npc" in stem:
-        actor = "npc"
-        actor_basis = "filename-token"
-    elif asset_group == "objects" and "_" in stem:
-        actor = stem.split("_", 1)[0]
-        actor_basis = "object-filename"
-
-    action = stem
-    family_prefix = f"{family}_"
-    if family and action.startswith(family_prefix):
-        action = action[len(family_prefix) :]
-    for marker in ("_avatar", "_npc"):
-        if marker in action:
-            action = action.split(marker, 1)[0]
-            break
-
-    return _SourceHints(
-        asset_group=asset_group,
-        family=family,
-        category=category,
-        stem=stem,
-        actor=actor,
-        actor_basis=actor_basis,
-        action=action,
-    )
 
 
 def _load_type_helpers(
@@ -430,7 +359,6 @@ def _registry_fields(
 def _research_fields(
     candidate_status: str,
     candidate_count: int,
-    has_motion_name: bool,
 ) -> dict[str, Any]:
     if candidate_status == "partial-best":
         priority = "high-part-mismatch"
@@ -465,10 +393,7 @@ def _research_fields(
     fields = {
         "runtime_binding_status": "unresolved",
         "runtime_binding_evidence": (
-            "original motion ID/name, authoring-path naming, and registry-backed "
-            "structural compatibility; actor/state selection unresolved"
-            if has_motion_name
-            else "authoring-path naming and registry-backed structural compatibility only"
+            "authoring-path naming and registry-backed structural compatibility only"
         ),
         "research_priority": priority,
         "research_question": question,
@@ -483,12 +408,11 @@ def _research_fields(
 def _animation_report_row(
     animation_path: Path,
     animation: U9Animation,
-    motion_ids: U9MotionIds | None,
     registry: U9NodeRegistry | None,
     models: list[_ModelMetadata],
     all_model_limb_ids: frozenset[int],
 ) -> dict[str, Any]:
-    hints = _parse_source_hints(animation.source_name)
+    hints = parse_animation_source_hints(animation.source_name)
     part_ids = frozenset(animation.part_ids)
     model_track_ids = part_ids & all_model_limb_ids
     authoring_only_ids = part_ids - all_model_limb_ids
@@ -539,23 +463,11 @@ def _animation_report_row(
         for model in candidates
     ]
     source_name_ids = {model.model_id for model in source_name_candidates}
-    motion = (
-        motion_ids.motion(animation.animation_id) if motion_ids is not None else None
-    )
     row: dict[str, Any] = {
         "animation_archive": str(animation_path),
         "animation_id": animation.animation_id,
         "stored_animation_id": animation.stored_animation_id,
         "stored_id_status": animation.stored_id_status,
-        "motion_name": motion.name if motion is not None else None,
-        "motion_family": motion.family if motion is not None else None,
-        "motion_id_status": (
-            "confirmed"
-            if motion is not None
-            else "unmapped"
-            if motion_ids
-            else "unavailable"
-        ),
         "animation_label": hints.label,
         "source_path": animation.source_name,
         "source_path_raw_hex": animation.source_name_raw.hex(),
@@ -638,7 +550,7 @@ def _animation_report_row(
         ],
     }
     row.update(_registry_fields(animation, registry))
-    row.update(_research_fields(candidate_status, candidate_count, motion is not None))
+    row.update(_research_fields(candidate_status, candidate_count))
     return row
 
 
@@ -650,35 +562,13 @@ def build_animation_model_report(
     registry_path: str | Path | None = None,
     types_path: str | Path | None = None,
     typenames_path: str | Path | None = None,
-    motion_ids_path: str | Path | None = None,
 ) -> tuple[list[dict[str, Any]], list[str]]:
     """Join animation names/tracks to registry-backed structural model candidates."""
     animation_path = _required_file(animation_file, "anim.flx")
     directory = animation_path.parent
     warnings: list[str] = []
-    motion_ids: U9MotionIds | None = None
-    if motion_ids_path is not None:
-        motion_file = _required_file(motion_ids_path, "animation-name table")
-        try:
-            motion_ids = U9MotionIds.from_file(motion_file)
-        except U9MotionIdsError as error:
-            raise U9AnimationModelReportError(str(error)) from error
     try:
         animations = U9Animations.from_file(animation_path)
-        used_animation_ids = animations.used_animation_ids()
-        if motion_ids is not None:
-            missing_motion_ids = motion_ids.missing_animation_ids(used_animation_ids)
-            unused_motion_ids = motion_ids.unused_motion_ids(used_animation_ids)
-            if missing_motion_ids:
-                warnings.append(
-                    f"animation-name table does not name {len(missing_motion_ids)} used "
-                    f"animation ID(s): {missing_motion_ids}"
-                )
-            if unused_motion_ids:
-                warnings.append(
-                    f"animation-name table names {len(unused_motion_ids)} unused animation "
-                    f"ID(s): {unused_motion_ids}"
-                )
         if animation_id is None:
             clips = animations.animations()
         else:
@@ -726,7 +616,6 @@ def build_animation_model_report(
         _animation_report_row(
             animation_path,
             animation,
-            motion_ids,
             registry,
             models,
             all_model_limb_ids,

@@ -57,7 +57,6 @@ def export_animated_model_set(
     animation_archive_path: str | Path,
     registry: U9NodeRegistry | None = None,
     registry_path: str | Path | None = None,
-    motion_table_path: str | Path | None = None,
     texture_resolver: TextureResolver | None = None,
     texture_archive_path: str | Path | None = None,
     palette_path: str | Path | None = None,
@@ -98,8 +97,7 @@ def export_animated_model_set(
                 animation_archive_path=animation_archive_path,
                 registry=registry,
                 registry_path=registry_path,
-                motion_name=selection.motion_name,
-                motion_table_path=motion_table_path,
+                animation_label=selection.animation_label,
                 texture_resolver=texture_resolver,
                 texture_archive_path=texture_archive_path,
                 palette_path=palette_path,
@@ -114,7 +112,7 @@ def export_animated_model_set(
                 {
                     "request_index": request_index,
                     "animation_id": animation.animation_id,
-                    "motion_name": selection.motion_name,
+                    "animation_label": selection.animation_label,
                     "selection": selection.to_metadata(),
                     "timing": {
                         "source_fps": animation.source_fps,

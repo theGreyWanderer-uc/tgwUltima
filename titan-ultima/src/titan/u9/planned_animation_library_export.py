@@ -508,7 +508,7 @@ def export_planned_animation_libraries(
         catalogue_clips.append(
             build_animation_catalogue_record(
                 animations_by_id[animation_id],
-                metadata.get("motion_name"),
+                metadata.get("animation_label"),
                 catalogue={
                     "plan_library_id": metadata["plan_library_id"],
                     "skeleton_library_ids": sorted(
@@ -542,7 +542,7 @@ def export_planned_animation_libraries(
         clips = tuple(
             (
                 animations_by_id[animation_id],
-                animation_metadata[animation_id].get("motion_name"),
+                animation_metadata[animation_id].get("animation_label"),
             )
             for animation_id in animation_ids
         )

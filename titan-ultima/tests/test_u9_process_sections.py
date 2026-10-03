@@ -5,8 +5,10 @@ import unittest
 
 from titan.u9.process_sections import (
     BOOK_PAGE_COUNT,
+    U9CombatState,
     U9ProcessSections,
     U9ProcessSectionsError,
+    _Reader,
 )
 
 REFS = 8
@@ -130,7 +132,7 @@ def _sections(
     d += struct.pack("<i3ii", 1, 10, 20, 30, 1) + struct.pack("<i", 0)
     d += struct.pack("<i", 1) + _light(ref(3))
     d += struct.pack("<23i", *range(23)) + struct.pack("<2I", 0, 0)
-    # 5 weather: state, two sun removers, screen fade.
+    # 5 weather: state, two sun masks, screen fade.
     d += struct.pack("<i", 2) + struct.pack(
         "<4if5i3f3f3fi3f4Ii3fi3Bi3Bi3B4hf",
         *(43200, 43190, 43500, 90000),
@@ -177,7 +179,7 @@ def _sections(
         + struct.pack("<i", 0)
     )
     d += struct.pack("<i", 0)
-    # 8 moving supports: a lift with one rider and an empty path, then a ship.
+    # 8 moving platforms: a lift with one rider and an empty path, then a ship.
     d += struct.pack("<ii", 1, 0)
     d += struct.pack("<iii4I", 1, 1, ref(2), 0, 0, 0, 0)
     d += struct.pack("<i", 1) + struct.pack(
@@ -260,7 +262,7 @@ class ProcessSectionsTests(unittest.TestCase):
         )
         self.assertEqual(w.transition_time, -5)
         self.assertEqual(w.storm_position, (100.0, 200.0, 0.0))
-        self.assertEqual((w.storm_radius, w.maximum_storm_intensity), (25000.0, 0.75))
+        self.assertEqual((w.storm_radius, w.storm_intensity_cap), (25000.0, 0.75))
         self.assertEqual((w.wind_strength, w.wind_vector), (120, (3.0, -4.0)))
         self.assertEqual(w.gust_sound_time, 500)
         self.assertEqual((w.rain_drop_count, w.lightning_time), (40, 5.0))
@@ -270,15 +272,15 @@ class ProcessSectionsTests(unittest.TestCase):
         self.assertEqual(
             (w.trammel_phase_name, w.felucca_phase_name), ("full", "first quarter")
         )
-        self.assertEqual(w.sun_remover_scale, 0.25)
-        self.assertEqual(w.sun_remover_reference_indices, (1, 2))
+        self.assertEqual(w.sun_mask_scale, 0.25)
+        self.assertEqual(w.sun_mask_reference_indices, (1, 2))
         self.assertEqual((w.screen_fade.edge_rate, w.screen_fade.direction), (15, -1))
         self.assertEqual(s.spell_manager.active_spell_process_ids, (4242,))
         self.assertEqual(s.physics.map_number, 9)
         self.assertEqual(s.physics.objects[0].mass, 10.0)
         (overlap,) = s.physics.overlaps
         self.assertEqual(overlap.triggers[0].trigger_object_reference_index, 6)
-        lift, ship = s.moving_supports.supports
+        lift, ship = s.moving_platforms.supports
         self.assertEqual((lift.kind, ship.kind), (1, 3))
         self.assertEqual(lift.supported_objects[0].object_reference_index, 3)
         assert lift.path is not None
@@ -301,14 +303,16 @@ class ProcessSectionsTests(unittest.TestCase):
         self.assertEqual(npc.common.npc_type, 494)
         self.assertEqual(avatar.common.combatant_radius, 30.0)
         self.assertEqual(avatar.common.home_location, (6155, 10125, 1942))
-        self.assertEqual(avatar.common.pathfind_error_tolerance, 16.0)
-        self.assertEqual(avatar.common.maximum_pathfind_failures, 4)
+        self.assertEqual(avatar.common.route_tolerance, 16.0)
+        self.assertEqual(avatar.common.route_failure_limit, 4)
         self.assertEqual(avatar.common.last_destination, (1.0, 2.0, 3.0))
-        self.assertEqual(avatar.common.charmer_npc_type, -1)
+        self.assertEqual(avatar.common.charm_source_npc_type, -1)
         self.assertEqual(npc.offset, avatar.end_offset)
         humanoid, avatar_fields = avatar.trailing_fields
         self.assertEqual((humanoid.kind, humanoid.version), ("humanoid", 3))
-        self.assertAlmostEqual(humanoid["pre_combat_turn_tolerance"], 0.7854, 5)
+        turn_tolerance = humanoid["pre_combat_turn_tolerance"]
+        assert isinstance(turn_tolerance, float)
+        self.assertAlmostEqual(turn_tolerance, 0.7854, 5)
         self.assertEqual(humanoid["stun_effect_id"], -1)
         self.assertEqual(avatar_fields["strike_zone_position"], (1.0, 2.0, 3.0))
         self.assertEqual(avatar_fields["self_damage_weapon"], 5)
@@ -370,7 +374,7 @@ class ProcessSectionsTests(unittest.TestCase):
             (good.lights.offset, "<i", 2, "light-system version 2"),
             (good.physics.offset, "<i", 0, "physics version 0"),
             (light_ref, "<i", REFS, f"saved light object-reference index {REFS}"),
-            (good.moving_supports.offset + 8, "<i", 5, "moving support marker 5"),
+            (good.moving_platforms.offset + 8, "<i", 5, "moving platform marker 5"),
             (good.fast_area.offset + 4, "<B", 3, "fast-area marker 3"),
         ):
             bad = bytearray(data)
@@ -416,6 +420,87 @@ class ProcessSectionsTests(unittest.TestCase):
             U9ProcessSectionsError, "NPC type 495, expected 494"
         ):
             U9ProcessSections.from_bytes(bytes(data), 0, object_reference_count=REFS)
+
+
+class CombatantReconFieldTests(unittest.TestCase):
+    def _parse(
+        self, behaviors: tuple[int, ...], records: tuple[bytes, ...]
+    ) -> U9CombatState:
+        npc_records = bytearray(512 * 316)
+        for npc_type, behavior in enumerate(behaviors):
+            struct.pack_into("<i", npc_records, npc_type * 316 + 0x44, behavior)
+        stream = (
+            struct.pack("<2i", 3, len(records))
+            + struct.pack(f"<{len(records)}i", *range(len(records)))
+            + b"".join(records)
+            + struct.pack("<3i", 0, -407, 17)
+        )
+        reader = _Reader(stream, 0)
+        combat = U9CombatState.read(reader, bytes(npc_records))
+        self.assertEqual(combat.end_offset, len(stream))
+        self.assertEqual(combat.tail, (0, -407, 17))
+        for previous, following in zip(combat.combatants, combat.combatants[1:]):
+            self.assertEqual(previous.end_offset, following.offset)
+        return combat
+
+    def test_slasher_float_health_and_zombie_split_flag_boundaries(self) -> None:
+        # Independent packed fixtures in retail stream order, including unaligned
+        # floats and nonzero following words; shield HP is separate from NPC HP.
+        slasher = struct.pack(
+            "<iiIiiBBIIIffBBiII",
+            3,
+            55,
+            1200,
+            2,
+            54,
+            1,
+            0,
+            300,
+            400,
+            500,
+            1200.0,
+            960.0,
+            1,
+            2,
+            -1,
+            65535,
+            64000,
+        )
+        zombie = struct.pack("<iiBii", 2, 500, 1, 3, 4)
+        combat = self._parse(
+            (6, 8), (_combatant_common(0) + slasher, _combatant_common(1) + zombie)
+        )
+        first, second = combat.combatants
+        fields = first.trailing_fields[0]
+        self.assertEqual(fields["avatar_tracking_distance"], 960.0)
+        self.assertIsInstance(fields["avatar_tracking_distance"], float)
+        self.assertEqual(fields["saved_health_maximum"], 65535)
+        self.assertEqual(fields["saved_health_current"], 64000)
+        self.assertEqual(fields["shield_hit_points"], 55)
+        self.assertEqual(first.trailing, slasher)
+        self.assertEqual(second.trailing_fields[0]["split_complete"], 1)
+        self.assertEqual(second.trailing_fields[0]["next_state"], 4)
+        self.assertEqual(second.trailing, zombie)
+
+    def test_all_shared_wolf_layouts_expose_nonzero_restore_state(self) -> None:
+        behaviors = (25, 26, 27, 30, 44)
+        wolf = struct.pack("<7i3B2i", 3, 0, 1, 2, 192, 1600, 3200, 1, 0, 1, 800, 20000)
+        records = []
+        for npc_type, behavior in enumerate(behaviors):
+            prefix = (
+                struct.pack("<2i", 1, 2)
+                if behavior == 30
+                else (struct.pack("<2i", 2, 700) if behavior == 44 else b"")
+            )
+            records.append(prefix + wolf + _combatant_common(npc_type))
+        combat = self._parse(behaviors, tuple(records))
+        for record in combat.combatants:
+            fields = record.leading_fields[-1]
+            self.assertEqual(fields.kind, "wolf")
+            self.assertEqual(fields["baseline_notice_distance"], 800)
+            self.assertEqual(fields["notice_distance_restore_ms"], 20000)
+            self.assertEqual(fields["notice_distance"], 3200)
+            self.assertTrue(record.leading.endswith(wolf))
 
 
 if __name__ == "__main__":

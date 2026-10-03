@@ -101,8 +101,8 @@ A call or switch to a missing ordinal is stored without a check, and on the
 next tick the set restarts at ordinal 1. If the set's first record (in file
 order) is not ordinal 1, the NPC runs its queued routine or else its default
 activity from ``runtime/NPC.FLX``
-(:attr:`U9Activity.starts_with_default_activity`). The call stack holds at
-most 7 ordinals; a deeper call is ignored, and a return at depth 0 does
+(:attr:`U9Activity.starts_with_default_activity`). The call stack has
+8 ordinal slots (cursor 0..7); a deeper call is ignored, and a return at depth 0 does
 nothing.
 Names such as ``Sequence 3`` are the authoring tool's default for ordinal 3
 (all 311 in 1.19F match their record's ordinal); the runtime ignores names.
@@ -128,6 +128,8 @@ from __future__ import annotations
 __all__ = [
     "ACTION_KIND_CATALOGUE",
     "ACTIVITY_OPCODE_CATALOGUE",
+    "GESTURE_ANIMATION_IDS",
+    "U9ActivityActionArgument",
     "U9ActivityActionKind",
     "U9Activities",
     "U9Activity",
@@ -136,6 +138,7 @@ __all__ = [
     "U9ActivityRecord",
     "U9ActivityStep",
     "activity_action_kind",
+    "activity_action_argument",
     "activity_opcode_info",
 ]
 
@@ -239,8 +242,9 @@ _REPEAT_MARKER_INFO = U9ActivityOpcodeInfo(
 class U9ActivityActionKind:
     """One NPC action kind, as dispatched by the retail begin-action routine.
 
-    ``performed`` is False for kinds the 1.19F executable accepts but starts
-    nothing for; ``name`` is None for values outside the catalogue.
+    ``performed`` is False for kinds rejected by the 1.19F dispatcher.
+    Accepted conversation state (0xFFFE) constructs no child action.
+    ``name`` is None for values outside the catalogue.
     """
 
     value: int
@@ -307,6 +311,237 @@ def activity_action_kind(value: int) -> U9ActivityActionKind:
     """The catalogued action kind for ``value``; unknown values start nothing."""
     kind = _ACTION_KIND_BY_VALUE.get(value)
     return kind if kind is not None else U9ActivityActionKind(value, None, False)
+
+
+# Retail 1.19F dwords at 0x0077F6E8, independently recovered from u9.exe.
+# Selector 121 is a zero word; later words are debug text, not animation IDs.
+GESTURE_ANIMATION_IDS: tuple[int, ...] = (
+    258,
+    259,
+    260,
+    261,
+    262,
+    263,
+    264,
+    265,
+    266,
+    267,
+    268,
+    270,
+    271,
+    272,
+    273,
+    274,
+    275,
+    276,
+    277,
+    278,
+    279,
+    280,
+    281,
+    282,
+    283,
+    284,
+    285,
+    286,
+    287,
+    288,
+    289,
+    290,
+    291,
+    292,
+    293,
+    294,
+    295,
+    296,
+    297,
+    298,
+    299,
+    301,
+    302,
+    303,
+    304,
+    305,
+    306,
+    307,
+    308,
+    309,
+    310,
+    311,
+    312,
+    313,
+    314,
+    315,
+    316,
+    317,
+    318,
+    319,
+    320,
+    321,
+    324,
+    325,
+    326,
+    340,
+    506,
+    581,
+    582,
+    583,
+    584,
+    703,
+    713,
+    805,
+    327,
+    328,
+    329,
+    330,
+    331,
+    332,
+    333,
+    334,
+    335,
+    336,
+    337,
+    338,
+    339,
+    449,
+    450,
+    451,
+    460,
+    461,
+    462,
+    463,
+    464,
+    465,
+    466,
+    467,
+    468,
+    469,
+    470,
+    471,
+    472,
+    473,
+    474,
+    475,
+    476,
+    477,
+    478,
+    605,
+    606,
+    607,
+    608,
+    936,
+    937,
+    1084,
+    1112,
+    1113,
+    1113,
+    1117,
+    426,
+)
+
+
+@dataclass(frozen=True)
+class U9ActivityActionArgument:
+    """Kind-specific views of an unchanged unsigned 16-bit action argument.
+
+    Inapplicable views return None. Zero links retain their action-specific
+    meaning (e.g. Avatar for facing, no initial facing for prayer). Furniture
+    selection in humanoid loiter applies only when its sleep branch is chosen.
+    These views describe inputs; they do not simulate action execution.
+    """
+
+    kind: U9ActivityActionKind
+    raw_word: int
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.raw_word <= 0xFFFF:
+            raise ValueError("action argument must be an unsigned 16-bit word")
+        if not 0 <= self.kind.value <= 0xFFFF:
+            raise ValueError("action kind must be an unsigned 16-bit word")
+
+    @property
+    def consumed_mask(self) -> int:
+        """Bits read for this kind; rejected/ignored arguments consume none."""
+        if self.kind.value in (13, 31, 32, 37, 38):
+            return 0x0001
+        if self.kind.value in (4, 5, 20, 23, 24, 25, 26, 27, 28, 30, 35, 36, 0xFFFF):
+            return 0xFFFF
+        return 0
+
+    @property
+    def unused_bits(self) -> int:
+        return self.raw_word & (0xFFFF ^ self.consumed_mask)
+
+    @property
+    def starting_marker_link(self) -> int | None:
+        return self.raw_word if self.kind.value in (4, 30, 35, 36) else None
+
+    @property
+    def heading_degrees(self) -> int | None:
+        return self.raw_word if self.kind.value == 5 else None
+
+    @property
+    def facing_link(self) -> int | None:
+        return self.raw_word if self.kind.value in (20, 28) else None
+
+    @property
+    def facing_base_type(self) -> int | None:
+        return self.raw_word if self.kind.value == 23 else None
+
+    @property
+    def gesture_selector(self) -> int | None:
+        return self.raw_word & 0x0FFF if self.kind.value == 24 else None
+
+    @property
+    def gesture_animation_id(self) -> int | None:
+        """Retail clip ID, or None for non-gestures/out-of-table selectors."""
+        selector = self.gesture_selector
+        if selector is None or selector >= len(GESTURE_ANIMATION_IDS):
+            return None
+        return GESTURE_ANIMATION_IDS[selector]
+
+    @property
+    def speed_step(self) -> int | None:
+        if self.kind.value == 24:
+            return (self.raw_word >> 12) & 7
+        if self.kind.value in (25, 26, 27):
+            return self.raw_word >> 13
+        return None
+
+    @property
+    def playback_scale(self) -> float | None:
+        step = self.speed_step
+        return None if step is None else 1.0 - 0.1 * step
+
+    @property
+    def repeat(self) -> bool | None:
+        return bool(self.raw_word & 0x8000) if self.kind.value == 24 else None
+
+    @property
+    def target_link(self) -> int | None:
+        return self.raw_word & 0x1FFF if self.kind.value in (25, 26) else None
+
+    @property
+    def placement_marker_link(self) -> int | None:
+        return self.raw_word & 0x1FFF if self.kind.value == 27 else None
+
+    @property
+    def nearest_chair(self) -> bool | None:
+        return bool(self.raw_word & 1) if self.kind.value == 31 else None
+
+    @property
+    def nearest_bed(self) -> bool | None:
+        return bool(self.raw_word & 1) if self.kind.value in (13, 32, 37, 38) else None
+
+    @property
+    def request_assistance(self) -> bool | None:
+        """Nonzero requests assistance on first combat entry against its target."""
+        return bool(self.raw_word) if self.kind.value == 0xFFFF else None
+
+
+def activity_action_argument(kind: int, argument: int) -> U9ActivityActionArgument:
+    """Decode the word retained for an activity or trigger begin-action command."""
+    return U9ActivityActionArgument(activity_action_kind(kind), argument)
 
 
 def activity_opcode_info(opcode: int) -> U9ActivityOpcodeInfo | None:
@@ -408,6 +643,13 @@ class U9ActivityStep:
         if self.opcode != 0x04:
             return None
         return self.parameter_0, self.parameter_1
+
+    @property
+    def npc_action_argument(self) -> U9ActivityActionArgument | None:
+        """Typed action argument for opcode 0x04, preserving the original word."""
+        if self.opcode != 0x04:
+            return None
+        return activity_action_argument(self.parameter_0, self.parameter_1)
 
     @property
     def npc_action_kind(self) -> U9ActivityActionKind | None:

@@ -146,7 +146,7 @@ def _process_sections_json(sections: U9ProcessSections) -> dict[str, object]:
             "limited_range": len(sections.lights.ranged_lights),
         },
         "weather": span(sections.weather)
-        | {"sun_removers": len(sections.weather.sun_remover_reference_indices)},
+        | {"sun_masks": len(sections.weather.sun_mask_reference_indices)},
         "spell_manager": span(sections.spell_manager)
         | {
             "active_spell_process_ids": list(
@@ -159,8 +159,8 @@ def _process_sections_json(sections: U9ProcessSections) -> dict[str, object]:
             "objects": len(sections.physics.objects),
             "overlaps": len(sections.physics.overlaps),
         },
-        "moving_supports": span(sections.moving_supports)
-        | {"kinds": [support.kind for support in sections.moving_supports.supports]},
+        "moving_platforms": span(sections.moving_platforms)
+        | {"kinds": [support.kind for support in sections.moving_platforms.supports]},
         "highway_manager": span(sections.highway_manager)
         | {"movers": len(sections.highway_manager.movers)},
         "hints": span(sections.hints) | {"hints": len(sections.hints.hints)},
@@ -277,7 +277,7 @@ def _following_process_json(record: U9FollowingProcessState) -> dict[str, object
             "swing_period": record.swing_period,
             "maximum_swing_angle": record.maximum_swing_angle,
             "swing_envelope_period": record.swing_envelope_period,
-            "turning_type": record.turning_type,
+            "turn_mode": record.turn_mode,
             "turn_period": record.turn_period,
             "maximum_turn_angle": record.maximum_turn_angle,
             "turn_envelope_period": record.turn_envelope_period,
@@ -302,7 +302,7 @@ def _following_process_json(record: U9FollowingProcessState) -> dict[str, object
             "turn_envelope_time_ms": record.turn_envelope_time_ms,
             "turn_time_constant": record.turn_time_constant,
             "yaw_changed": record.yaw_changed,
-            "is_collided": record.is_collided,
+            "in_collision": record.in_collision,
             "hit_magnitude": record.hit_magnitude,
             "swing_magnitude_fraction": record.swing_magnitude_fraction,
             "turn_magnitude_fraction": record.turn_magnitude_fraction,
@@ -313,7 +313,7 @@ def _following_process_json(record: U9FollowingProcessState) -> dict[str, object
             "configured_swing_period": record.configured_swing_period,
             "configured_maximum_swing_angle": (record.configured_maximum_swing_angle),
             "configured_swing_half_life": record.configured_swing_half_life,
-            "configured_turning_type": record.configured_turning_type,
+            "configured_turn_mode": record.configured_turn_mode,
             "configured_turn_period": record.configured_turn_period,
             "configured_turn_limit_is_degrees": (
                 record.configured_turn_limit_is_degrees
@@ -330,8 +330,8 @@ def _following_process_json(record: U9FollowingProcessState) -> dict[str, object
             "version": record.version,
             "timer_flags": record.timer_flags,
             "phase_1_duration": record.phase_1_duration,
-            "dual_mode": record.dual_mode,
-            "time_system": record.time_system,
+            "two_phase": record.two_phase,
+            "clock_kind": record.clock_kind,
             "phase_2_duration": record.phase_2_duration,
             "accumulated_time": record.accumulated_time,
             "has_started": record.has_started,
@@ -341,7 +341,7 @@ def _following_process_json(record: U9FollowingProcessState) -> dict[str, object
             "fast_area_stop_flag": record.fast_area_stop_flag,
             "is_quiet_outside_fast_area": record.is_quiet_outside_fast_area,
             "configured_dual_percentage": record.configured_dual_percentage,
-            "configured_time_system": record.configured_time_system,
+            "configured_clock_kind": record.configured_clock_kind,
             "configured_duration": record.configured_duration,
             "reserved": list(record.reserved),
         }
@@ -1468,7 +1468,7 @@ def check_save(
                                         "object_status_flags": (
                                             record.object_status_flags
                                         ),
-                                        "swap_sequence": record.swap_sequence,
+                                        "alternate_sequence": record.alternate_sequence,
                                         "sequence_index": record.sequence_index,
                                         "swap_elapsed_frames": (
                                             record.swap_elapsed_frames
@@ -1483,8 +1483,8 @@ def check_save(
                                         "callback_effect_id": (
                                             record.callback_effect_id
                                         ),
-                                        "callback_magic_type": (
-                                            record.callback_magic_type
+                                        "callback_spell_kind": (
+                                            record.callback_spell_kind
                                         ),
                                         "callback_caster_reference_index": (
                                             record.callback_caster_reference_index

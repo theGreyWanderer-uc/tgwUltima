@@ -56,7 +56,6 @@ def _plan_library(
         "animations": [
             {
                 "animation_id": animation_id,
-                "motion_name": f"CRITTER_ACTION_{animation_id}",
                 "animation_label": f"critter/action/{animation_id}",
                 "category": "action",
                 "action": str(animation_id),

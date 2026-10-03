@@ -44,6 +44,7 @@ OPERAND_COLUMNS = [
     "parameter_fields",
     "parameter_unclassified_hex",
     "parameter_evidence",
+    "special_action_meaning",
 ]
 
 
@@ -53,7 +54,9 @@ def _operand_columns(record: U9TriggerRecord) -> dict[str, object]:
     target = record.target_selection
     if target is not None:
         columns["target_link_selector"] = target.link_selector
-        columns["target_link_delta"] = "" if target.link_delta is None else target.link_delta
+        columns["target_link_delta"] = (
+            "" if target.link_delta is None else target.link_delta
+        )
         columns["target_type"] = target.target_type
         columns["target_any_type"] = int(target.any_type)
     branch = record.branch
@@ -61,13 +64,20 @@ def _operand_columns(record: U9TriggerRecord) -> dict[str, object]:
         columns["branch_form"] = branch.form
         columns["branch_label"] = branch.label
         if branch.compare_code is not None:
-            columns["branch_compare"] = branch.compare_operator or f"code_{branch.compare_code}"
+            columns["branch_compare"] = (
+                branch.compare_operator or f"code_{branch.compare_code}"
+            )
             columns["branch_compare_count"] = branch.compare_count
     parameters = record.parameters
     if parameters is not None:
-        columns["parameter_fields"] = ";".join(f"{name}={value}" for name, value in parameters.fields)
+        columns["parameter_fields"] = ";".join(
+            f"{name}={value}" for name, value in parameters.fields
+        )
         columns["parameter_unclassified_hex"] = f"0x{parameters.unclassified_bits:04X}"
         columns["parameter_evidence"] = parameters.evidence
+    special_action = record.special_action_info
+    if special_action is not None:
+        columns["special_action_meaning"] = special_action.meaning
     return columns
 
 
@@ -214,7 +224,7 @@ def export_script_research_bundle(
                 movement = step.movement_points
                 relocation = step.relocation_target
                 npc_action = step.npc_action
-                opcode_info = step.opcode_info
+                activity_opcode_info = step.opcode_info
                 activity_rows.append(
                     {
                         "activity_id": activity.activity_id,
@@ -229,7 +239,9 @@ def export_script_research_bundle(
                         "opcode_decimal": step.opcode,
                         "semantic_name": step.semantic_name,
                         "semantic_evidence": (
-                            "" if opcode_info is None else opcode_info.evidence
+                            ""
+                            if activity_opcode_info is None
+                            else activity_opcode_info.evidence
                         ),
                         "raw_hex": step.to_bytes().hex(),
                         "operands_hex": step.operands.hex(),

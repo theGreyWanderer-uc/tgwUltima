@@ -23,7 +23,8 @@ class U9CliHelpContractTests(unittest.TestCase):
                 result = self.runner.invoke(u9_app, arguments)
                 self.assertEqual(result.exit_code, 0, result.output)
 
-    def test_animation_name_input_option_remains_available(self) -> None:
+    def test_animation_commands_take_no_external_name_table(self) -> None:
+        # Clip labels come from the authoring path stored in anim.flx itself.
         for command in (
             "animation-list",
             "animation-show",
@@ -37,10 +38,7 @@ class U9CliHelpContractTests(unittest.TestCase):
             with self.subTest(command=command):
                 result = self.runner.invoke(u9_app, [command, "--help"])
                 self.assertEqual(result.exit_code, 0, result.output)
-                self.assertIn("--motion-ids", result.output)
-                normalized_help = " ".join(result.output.casefold().split())
-                self.assertIn("animation-name", normalized_help)
-                self.assertIn("table", normalized_help)
+                self.assertNotIn("--motion-ids", result.output)
 
     def test_script_research_command_remains_available(self) -> None:
         result = self.runner.invoke(u9_app, ["script-research-export", "--help"])

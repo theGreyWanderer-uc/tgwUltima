@@ -12,6 +12,38 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ## [Unreleased]
 
+- **Breaking -- U9 NPC state bit 22:** rename `ENGAGED_IN_COMBAT` to
+  `HAS_LIVE_ACTOR`. Retail actor creation/teardown establish actor presence,
+  rather than combat engagement. The mask `0x00400000` and saved bytes are
+  unchanged.
+
+- **U9 trigger behavior:** correct deferred movement retry/collision fields,
+  name follow timing `time_per_unit`, catalogue 24 special actions and four
+  phase roles, and expose action meanings in research exports. Add duration
+  and special-action record views; preserve every original byte. Binary
+  contracts and 19 isolated callback cases pass; controlled live outcomes
+  remain pending.
+
+- **U9 short-trigger loader documentation:** retail reads 510 bytes without
+  an entry-length clamp, so unterminated IDs 58/631 include commands from
+  59/632. Correct the prior standalone-valid classification; retain exact
+  entry parsing and on-disk diagnostics, with neighbor-separation coverage.
+
+- **U9 trigger retail contracts:** all 101 operand layouts now have confirmed
+  retail masks. Correct sound/status masks, link flags, radius encodings,
+  mana/no-op labels, audio-instance IDs, projectile fields and fade units.
+  Target views include random collection and conditional speech; `search_radius`
+  reports decoded world units. Several parameter keys now name confirmed roles
+  (`below`, `instance_id`, `subtract`, `source_only`, fade intervals); raw words
+  and six-byte records retain identical serialization.
+
+- **U9 activity and combatant decoder follow-ups:** begin-action steps expose
+  lossless, kind-specific argument views, including the 121 retail gesture
+  selectors, speed/repeat packing, links, furniture selection and combat
+  assistance. Six combatant fields now use confirmed names; the Slasher's
+  Avatar-tracking threshold decodes as a float and its saved NPC health words
+  as unsigned integers. Raw record bytes and stream widths are preserved.
+
 ### Changed
 
 - **Breaking -- U9 highway links:** the highway API now names its keys as
@@ -85,9 +117,9 @@ This project uses [Semantic Versioning](https://semver.org/):
   mode, and the 8,192 found-item-type flags), light system (saved lights with
   colour, position, range and flicker), weather (clocks, current and target
   weather, storm, wind and gusts, rain and lightning timers, sun, secondary
-  and lightning colours, Trammel and Felucca phases, sun-remover objects and
+  and lightning colours, Trammel and Felucca phases, sun-mask objects and
   the screen fade), spell manager (active spell process IDs), physics (moving
-  objects and trigger overlaps), moving supports (lifts, steps, ships, with
+  objects and trigger overlaps), moving platforms (lifts, steps, ships, with
   riders and lift paths), highway manager (NPCs travelling a highway while
   unloaded: NPC, highway, node, speed, step timer, frozen position), hints,
   combat, book bookmarks and
@@ -96,8 +128,8 @@ This project uses [Semantic Versioning](https://semver.org/):
   Combat is read combatant by combatant
   (`U9CombatantRecord`): the record layout follows the NPC's combat
   behaviour ID; each record's 268-byte common part is typed
-  (`U9CombatantCommonState`: radius, home location, pathfinding settings,
-  poison, friend links, last destination and more), and so are the
+  (`U9CombatantCommonState`: radius, home location, route settings,
+  poison, ally references, last destination and more), and so are the
   class-specific fields before and after it (`U9CombatantClassFields`, 25
   classes: humanoid, Avatar, wolf, guard, gazer, creeper and others; the
   creeper's second common part is `repeated_common`). Across 251 retail
@@ -218,8 +250,8 @@ This project uses [Semantic Versioning](https://semver.org/):
   batch PNG export for all floor/ceiling and wall texture archives, with
   original IDs, decoded descriptions, contact sheets, and CSV/JSON manifests.
 
-- **U9 animation semantics and posed export:** added optional original clip
-  names from Ghidra data, typed animation events, interpolation matching the
+- **U9 animation semantics and posed export:** added clip labels read from each
+  record's authoring path, typed animation events, interpolation matching the
   Ghidra decompile, explicit single-clip rigid-limb OBJ/STL pose export, and
   versioned animated-model bundles with local limb meshes, exact tracks,
   hierarchy/material metadata, archive hashes, and generated animated GLB.

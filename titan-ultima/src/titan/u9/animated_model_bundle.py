@@ -237,14 +237,14 @@ def _frame_record(frame: Any) -> dict[str, object]:
 
 def build_animation_catalogue_record(
     animation: U9Animation,
-    motion_name: str | None,
+    animation_label: str | None,
     *,
     catalogue: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Serialize model-independent U9 animation keys for a shared catalogue."""
     record: dict[str, object] = {
         "animation_id": animation.animation_id,
-        "original_motion_name": motion_name,
+        "animation_label": animation_label,
         "authoring_path": animation.source_name,
         "frame_range": {
             "start": animation.start_frame,
@@ -317,7 +317,7 @@ def _track_record(
 def _clip_record(
     model: U9Model,
     animation: U9Animation,
-    motion_name: str | None,
+    animation_label: str | None,
     *,
     indices_by_id: dict[int, list[int]],
     root_part_index: int | None,
@@ -338,7 +338,7 @@ def _clip_record(
     )
     record = build_animation_catalogue_record(
         animation,
-        motion_name,
+        animation_label,
         catalogue=catalogue,
     )
     record.update(
@@ -539,7 +539,7 @@ def _sidecar_document(
             _clip_record(
                 model,
                 animation,
-                motion_name,
+                animation_label,
                 indices_by_id=indices_by_id,
                 root_part_index=root_part_index,
                 catalogue=(
@@ -548,7 +548,7 @@ def _sidecar_document(
                     else None
                 ),
             )
-            for animation, motion_name in clips
+            for animation, animation_label in clips
         ],
         "materials": materials,
     }
@@ -908,9 +908,9 @@ def _write_animated_glb(
         (index for index, parent in enumerate(parent_indices) if parent is None), None
     )
     glb_animations = []
-    for animation, motion_name in clips:
+    for animation, animation_label in clips:
         animation_payload: dict[str, Any] = {
-            "name": motion_name or f"animation_{animation.animation_id}",
+            "name": animation_label or f"animation_{animation.animation_id}",
             "samplers": [],
             "channels": [],
             "extras": {
@@ -1009,7 +1009,7 @@ def _validate_animated_model_export(
         raise U9AnimatedModelBundleError("LOD level must be non-negative")
     if coordinate_scale <= 0:
         raise U9AnimatedModelBundleError("coordinate scale must be positive")
-    animation_ids = [animation.animation_id for animation, _motion_name in clips]
+    animation_ids = [animation.animation_id for animation, _animation_label in clips]
     if len(set(animation_ids)) != len(animation_ids):
         raise U9AnimatedModelBundleError(
             "animated model export contains duplicate animation IDs"
@@ -1017,9 +1017,9 @@ def _validate_animated_model_export(
     model_ids = {limb.limb_id for limb in model.limbs}
     matched_counts = tuple(
         sum(part.part_id in model_ids for part in animation.parts)
-        for animation, _motion_name in clips
+        for animation, _animation_label in clips
     )
-    for (animation, _motion_name), matched_count in zip(clips, matched_counts):
+    for (animation, _animation_label), matched_count in zip(clips, matched_counts):
         if not matched_count:
             raise U9AnimatedModelBundleError(
                 f"animation {animation.animation_id} and model {model.model_id} have "
@@ -1033,7 +1033,6 @@ def _animated_model_inputs(
     model_archive_path: str | Path,
     animation_archive_path: str | Path,
     registry_path: str | Path | None,
-    motion_table_path: str | Path | None,
     texture_archive_path: str | Path | None,
     palette_path: str | Path | None,
 ) -> list[dict[str, object]]:
@@ -1051,14 +1050,6 @@ def _animated_model_inputs(
         for role, path in optional_inputs
         if path is not None
     )
-    if motion_table_path is not None:
-        animation_names = build_hashed_input_record(
-            "ghidra_motion_table", motion_table_path
-        )
-        # ``role`` is retained for version-1 sidecar readers. New consumers can
-        # use the format-oriented name without inheriting analysis terminology.
-        animation_names["input_kind"] = "animation_name_table"
-        inputs.append(animation_names)
     return inputs
 
 
@@ -1109,8 +1100,7 @@ def export_animated_model_bundle(
     animation_archive_path: str | Path,
     registry: U9NodeRegistry | None = None,
     registry_path: str | Path | None = None,
-    motion_name: str | None = None,
-    motion_table_path: str | Path | None = None,
+    animation_label: str | None = None,
     texture_resolver: TextureResolver | None = None,
     texture_archive_path: str | Path | None = None,
     palette_path: str | Path | None = None,
@@ -1119,7 +1109,7 @@ def export_animated_model_bundle(
     include_glb: bool = True,
 ) -> U9AnimatedModelBundleResult:
     """Write local limb OBJs, the versioned sidecar, and one animated GLB."""
-    clips = ((animation, motion_name),)
+    clips = ((animation, animation_label),)
     matched_track_count = _validate_animated_model_export(
         model, clips, lod_level, coordinate_scale
     )[0]
@@ -1128,7 +1118,6 @@ def export_animated_model_bundle(
         model_archive_path=model_archive_path,
         animation_archive_path=animation_archive_path,
         registry_path=registry_path,
-        motion_table_path=motion_table_path,
         texture_archive_path=texture_archive_path,
         palette_path=palette_path,
     )
@@ -1192,7 +1181,6 @@ def export_animated_model_library(
     animation_archive_path: str | Path,
     registry: U9NodeRegistry | None = None,
     registry_path: str | Path | None = None,
-    motion_table_path: str | Path | None = None,
     texture_resolver: TextureResolver | None = None,
     texture_archive_path: str | Path | None = None,
     palette_path: str | Path | None = None,
@@ -1219,14 +1207,13 @@ def export_animated_model_library(
             model_archive_path=model_archive_path,
             animation_archive_path=animation_archive_path,
             registry_path=registry_path,
-            motion_table_path=motion_table_path,
             texture_archive_path=texture_archive_path,
             palette_path=palette_path,
         )
     )
 
     output = Path(output_directory)
-    animations = tuple(animation for animation, _motion_name in clips)
+    animations = tuple(animation for animation, _animation_label in clips)
     part_names = _part_names(model, animations, registry)
     parent_indices = _parent_indices(model)
     mesh_names, mesh_paths = _export_animated_model_meshes(

@@ -23,7 +23,11 @@ from titan.u9.trigger_operands import (
     parameters,
     target_selection,
 )
-from titan.u9.triggers import U9TriggerRecord, U9Triggers
+from titan.u9.triggers import (
+    U9TriggerRecord,
+    U9Triggers,
+    trigger_special_action_info,
+)
 
 ROOT = Path(__file__).resolve().parents[2] / "u9data"
 CORPUS = {
@@ -66,10 +70,17 @@ class TargetSelectionTests(unittest.TestCase):
         self.assertEqual(view.reserved_arg1_bits, 0xE000)
 
     def test_only_targeted_commands_have_a_target_view(self) -> None:
-        self.assertEqual(len(TARGETED_OPCODES), 63)
+        self.assertEqual(len(TARGETED_OPCODES), 64)
         self.assertIsNone(target_selection(0x1F, 16, 0))  # inline map transition
         self.assertIsNone(target_selection(0x31, 16, 9))  # inline NPC activity
         self.assertIsNotNone(target_selection(0x51, 16, 9))  # searched, no effect
+        self.assertIsNotNone(target_selection(0x21, 16, 9))  # random collection
+
+    def test_speech_uses_targets_except_for_its_type_215_path(self) -> None:
+        self.assertIsNone(target_selection(0x30, 16, 0xE000 | 215))
+        view = target_selection(0x30, 17, 239)
+        assert view is not None
+        self.assertEqual((view.link_delta, view.target_type), (1, 239))
 
 
 class BranchTests(unittest.TestCase):
@@ -103,7 +114,7 @@ class ParameterTests(unittest.TestCase):
                 layout = parameter_layout(opcode)
                 assert layout is not None
                 fields, evidence = layout
-                self.assertIn(evidence, (RETAIL_CONFIRMED, RETAIL_CORROBORATED))
+                self.assertEqual(evidence, RETAIL_CONFIRMED)
                 seen = 0
                 for field in fields:
                     self.assertFalse(seen & field.mask, field.name)
@@ -120,13 +131,49 @@ class ParameterTests(unittest.TestCase):
         self.assertEqual(view.unclassified_bits, 0xAB00)
         self.assertEqual(view.evidence, RETAIL_CONFIRMED)
 
-    def test_move_over_time_keeps_source_only_bits_unread(self) -> None:
+    def test_move_over_time_includes_deferred_callback_flags(self) -> None:
         view = parameters(0x1B, 0x05E5)
         assert view is not None
         self.assertEqual(view.get("destination_link"), 5)
         self.assertEqual(view.get("duration"), 5)
         self.assertEqual(view.get("no_vertical"), 1)
-        self.assertEqual(view.unclassified_bits, 0x00A0)
+        self.assertEqual(view.get("retry_when_blocked"), 1)
+        self.assertEqual(view.get("ignore_collision"), 1)
+        self.assertEqual(view.unclassified_bits, 0)
+
+    def test_step_collision_modes_are_retained_for_both_speeds(self) -> None:
+        for opcode in (0x2E, 0x54):
+            for mode in range(4):
+                record = U9TriggerRecord(opcode, 16, 0, 0xFF3F | mode << 6)
+                self.assertEqual(record.parameters.get("collision_mode"), mode)
+                self.assertEqual(record.parameters.unclassified_bits, 0)
+                self.assertEqual(_rebuild(record), record.arg2)
+
+    def test_follow_time_is_per_unit_and_marker_link_is_independent(self) -> None:
+        self.assertEqual(
+            parameters(0x39, (31 << 11) | 2047).as_dict(),
+            {"start_link": 2047, "time_per_unit": 31},
+        )
+
+    def test_movement_zero_duration_uses_minimum_without_changing_word(self) -> None:
+        for word, duration in ((0, 500), (0xFFE0, 500), (0x0505, 2500), (31, 15500)):
+            record = U9TriggerRecord(0x1B, 16, 0, word)
+            self.assertEqual(record.movement_duration_ms, duration)
+            self.assertEqual(_rebuild(record), word)
+        self.assertIsNone(U9TriggerRecord(0x39, 16, 0, 0).movement_duration_ms)
+
+    def test_special_action_uses_whole_word_and_preserves_ignored_values(self) -> None:
+        for action in (9, 10, 11):
+            self.assertEqual(
+                trigger_special_action_info(action).meaning, "reserved no-op"
+            )
+        for action in (24, 0x100, 0xFFFF):
+            record = U9TriggerRecord(0x3D, 16, 0, action)
+            self.assertIsNone(record.special_action_info)
+            self.assertEqual(record.to_bytes(), _record(0x3D, 16, 0, action))
+        self.assertIsNone(trigger_special_action_info(-1))
+        self.assertIsNotNone(U9TriggerRecord(0x3D, 16, 0, 0).special_action_info)
+        self.assertIsNone(U9TriggerRecord(0x1B, 16, 0, 0).special_action_info)
 
     def test_status_bits_map_to_object_flags(self) -> None:
         self.assertEqual(len(STATUS_BIT_OBJECT_FLAGS), 10)
@@ -135,6 +182,114 @@ class ParameterTests(unittest.TestCase):
             mapped |= bit
         self.assertEqual(mapped, 0x1F2F)
         self.assertEqual(parameters(0x06, 0xFFFF).unclassified_bits, 0xE0D0)
+        for opcode in (0x29, 0x3B):
+            view = parameters(opcode, 0xFFFF)
+            assert view is not None
+            self.assertEqual(view.get("status_bits"), 0x1F2F)
+            self.assertEqual(view.unclassified_bits, 0x00D0)
+
+    def test_sound_category_is_a_byte_and_sample_instance_is_separate(self) -> None:
+        for opcode in (0x20, 0x26):
+            view = parameters(opcode, 0xAB36)
+            assert view is not None
+            self.assertEqual(view.as_dict(), {"sound_category": 54})
+            self.assertEqual(view.unclassified_bits, 0xAB00)
+        for opcode in (0x33, 0x4C):
+            self.assertEqual(
+                parameters(opcode, 0xA123).as_dict(),
+                {"sample": 291, "instance_id": 5},
+            )
+        self.assertEqual(parameters(0x4D, 0xA123).get("instance_id"), 5)
+
+    def test_link_flags_have_distinct_direction_and_source_roles(self) -> None:
+        relative = parameters(0x12, 0x8001)
+        self.assertEqual(relative.as_dict(), {"amount": 1, "subtract": 1})
+        for word, subtract, source in ((0x4001, 1, 0), (0x8001, 0, 1)):
+            view = parameters(0x57, word | 0x2000)
+            assert view is not None
+            self.assertEqual(
+                view.as_dict(),
+                {"amount": 1, "subtract": subtract, "source_only": source},
+            )
+            self.assertEqual(view.unclassified_bits, 0x2000)
+
+    def test_search_radius_decodes_units_without_changing_the_word(self) -> None:
+        for word, units in (
+            (0, 1280),
+            (0x8000, 1280),
+            (10, 1280),
+            (20, 2560),
+            (0x800A, 10),
+            (0x7FFF, 4194176),
+            (0xFFFF, 32767),
+        ):
+            record = U9TriggerRecord(0x2C, 0, 0, word)
+            self.assertEqual(record.search_radius, units)
+            self.assertEqual(record.arg2, word)
+            self.assertEqual(_rebuild(record), word)
+        self.assertIsNone(U9TriggerRecord(0x20, 0, 0, 10).search_radius)
+
+    def test_relocation_fade_and_projectile_units_are_named(self) -> None:
+        self.assertEqual(
+            parameters(0x1C, 0x123C).as_dict(),
+            {
+                "placement_mode": 0,
+                "copy_marker_orientation": 1,
+                "retain_altitude": 1,
+                "destination_link": 0x123,
+            },
+        )
+        fade = parameters(0x63, 0x859E)
+        self.assertEqual(
+            fade.as_dict(),
+            {
+                "center_interval_ms": 30,
+                "fade_in": 1,
+                "edge_interval_ms": 5,
+            },
+        )
+        self.assertEqual(fade.unclassified_bits, 0x8000)
+        projectile = parameters(0x2A, 0x2EA9)
+        self.assertEqual(
+            projectile.as_dict(),
+            {
+                "x_direction": 1,
+                "y_direction": 5,
+                "z_direction": 2,
+                "targeted": 1,
+                "avatar_aim": 1,
+                "projectile_kind": 5,
+            },
+        )
+
+    def test_newly_confirmed_bits_remain_lossless_even_when_not_shipped(self) -> None:
+        for opcode in (
+            0x12,
+            0x1B,
+            0x20,
+            0x23,
+            0x26,
+            0x29,
+            0x2A,
+            0x2C,
+            0x2E,
+            0x39,
+            0x3B,
+            0x54,
+            0x57,
+            0x63,
+        ):
+            for word in (
+                0,
+                1,
+                0xFFFF,
+                0xAAAA,
+                0x5555,
+                *(1 << bit for bit in range(16)),
+            ):
+                with self.subTest(opcode=opcode, word=word):
+                    record = U9TriggerRecord(opcode, 0, 0, word)
+                    self.assertEqual(_rebuild(record), word)
 
     def test_summary_names_every_view(self) -> None:
         text = operand_summary(0x29, 17, ANY_TARGET_TYPE, 0x2003)
@@ -143,8 +298,7 @@ class ParameterTests(unittest.TestCase):
         self.assertIn("status_bits=3", text)
         hidden = operand_summary(0x09, 16, 1094, 0xAB36)
         self.assertIn("unread 0xAB00", hidden)
-        # A source-backed layout's leftover bits are unclassified, not "unread".
-        self.assertIn("unclassified 0x0001", operand_summary(0x2B, 16, 1, 0x0001))
+        self.assertIn("unread 0x0001", operand_summary(0x2B, 16, 1, 0x0001))
 
 
 class TriggerAuditTests(unittest.TestCase):

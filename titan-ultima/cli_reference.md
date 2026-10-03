@@ -3982,6 +3982,11 @@ titan u9 typename-csv <file> [-o OUTPUT]
 | `file` | Path to `static/TYPENAME.FLX` |
 | `-o PATH`, `--output PATH` | CSV output path (default: `TYPENAME_metadata.csv`) |
 
+**Example**
+```bash
+titan u9 typename-csv static/TYPENAME.FLX -o typenames.csv
+```
+
 The CSV contains `type_id`, Titan's `record_representation` label, warnings,
 signed `readable_text_id`, `object_icon_id`, optional `display_name`, trailing
 bytes, and `raw_hex`. Hex storage fields use a `0x` prefix.
@@ -4002,6 +4007,18 @@ titan u9 typename-import <file> <CSV> [-o OUTPUT]
 | `file` | The original archive: `TYPENAME.FLX` or a `Tnbrk.*` dialect copy |
 | `CSV` | The edited CSV; only the `type_id` and `display_name` columns are read |
 | `-o PATH`, `--output PATH` | Output archive (default: `<stem>_imported<ext>` beside the original) |
+
+**Examples**
+```bash
+titan u9 typename-csv static/TYPENAME.FLX -o typenames.csv
+# edit display_name in typenames.csv, then:
+titan u9 typename-import static/TYPENAME.FLX typenames.csv
+```
+
+```
+static/TYPENAME.FLX — 8192 row(s) read, 1 label(s) changed
+  Written : static/TYPENAME_imported.FLX (134210 bytes, slot count 8192)
+```
 
 Only the names change: each entry keeps its readable-text and icon references,
 and entries without a row are untouched. An empty `display_name` removes a
@@ -4026,6 +4043,12 @@ titan u9 types-csv <file> [-o OUTPUT] [--typenames TYPENAME.FLX] [--all-slots]
 | `-o PATH`, `--output PATH` | CSV output path (default: `TYPES_records.csv`) |
 | `--typenames PATH` | Optional `static/TYPENAME.FLX` used to add display names |
 | `--all-slots` | Export all 8,192 physical slots, including inactive capacity |
+
+**Examples**
+```bash
+titan u9 types-csv static/TYPES.DAT --typenames static/TYPENAME.FLX
+titan u9 types-csv static/TYPES.DAT --all-slots -o types_all_slots.csv
+```
 
 Without `--all-slots`, only the count declared in the file header is exported.
 The CSV distinguishes active records from inactive capacity, reports loader-
@@ -4061,6 +4084,104 @@ model-comparison columns.
 
 ---
 
+#### `u9 spaces-info`, `u9 spaces-show`, `u9 spaces-csv`
+
+Inspect or export the enclosed visibility/acoustics volumes in
+`static/spaces.flx`. Each used entry is one volume: a 56-byte header followed
+by a linked list of 40-byte boundary planes, each of which may own a list of
+68-byte visibility portals.
+
+```text
+titan u9 spaces-info <file>
+titan u9 spaces-show <file> <id>
+titan u9 spaces-csv <file> [-o DIR]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/spaces.flx` |
+| `id` | Space ID (the FLX entry index) |
+| `-o DIR`, `--output DIR` | CSV output directory (default: `spaces_csv`) |
+
+`spaces-info` totals the volumes, boundary planes and portals and reports
+lifecycle anomalies: entries the game rebuilds at runtime, nonzero flag cells
+that the loader resets, and links to volumes that do not exist. Retail 1.19F
+has 239 volumes, 1,592 planes and 489 portals. `spaces-show` prints one volume with its
+nested planes and portals. `spaces-csv` writes `u9_spaces.csv`,
+`u9_space_planes.csv` and `u9_space_portals.csv`, keyed by space, plane and
+portal index, with each record's raw bytes.
+
+The stored list pointers are only zero/nonzero markers on disk; Titan follows
+them but never treats their values as addresses. Every byte, including stale
+pointer values and reserved cells, is kept, so a parsed archive writes back
+unchanged.
+
+---
+
+#### `u9 treedat-info`, `u9 treedat-show`, `u9 treedat-csv`
+
+Inspect or export `static/treedat.flx`, the per-map lookup cache that the game
+derives from `spaces.flx`. Each used entry is one map: a versioned header
+listing the map's volume IDs, then a flat table of binary partition nodes
+whose leaves list the volumes to test.
+
+```text
+titan u9 treedat-info <file> [--spaces SPACES.FLX]
+titan u9 treedat-show <file> <id>
+titan u9 treedat-csv <file> [-o DIR] [--spaces SPACES.FLX]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/treedat.flx` |
+| `id` | Map ID (the FLX entry index) |
+| `--spaces PATH` | Optional `static/spaces.flx`, to check each map's volume list against the volumes that name that map |
+| `-o DIR`, `--output DIR` | CSV output directory (default: `treedat_csv`) |
+
+`treedat-csv` writes `u9_treedat_maps.csv`, `u9_treedat_nodes.csv` and
+`u9_treedat_node_volumes.csv` (leaf membership). With `--spaces`, maps whose
+cache no longer matches `spaces.flx`, and that the game would therefore
+rebuild, are flagged, and maps present only in `spaces.flx` are included.
+
+The cache is not authoritative geometry. Titan reports structural warnings and
+never repairs cached data. Retail 1.19F caches 65 maps (56 of them empty);
+checked against `spaces.flx`, maps 105, 122, 153, 201, 202 and 230 would be
+rebuilt.
+
+---
+
+#### `u9 areas-info`, `u9 areas-show`, `u9 areas-csv`
+
+Inspect or export the gameplay zones in `static/areas.flx`. Each used entry
+starts with a signed 32-bit kind. Kind 1, the only kind the retail archive
+uses, holds a zone header, an optional 12-slot encounter table, and up to eight
+axis-aligned world boxes. Entries of any other kind are kept as opaque records.
+
+```text
+titan u9 areas-info <file>
+titan u9 areas-show <file> <id>
+titan u9 areas-csv <file> [-o DIR]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `file` | Path to `static/areas.flx` |
+| `id` | Gameplay-zone ID (the FLX entry index) |
+| `-o DIR`, `--output DIR` | CSV output directory (default: `areas_csv`) |
+
+`areas-info` counts zones, world boxes, trigger-enabled zones, encounter
+tables and unsupported records, and lists structural warnings. Retail 1.19F
+has 74 zones with 85 boxes; 54 are trigger-enabled and 13 have an encounter
+table. `areas-show`
+prints one zone with its boxes and encounter slots. `areas-csv` writes
+`u9_areas.csv`, `u9_area_boxes.csv` and `u9_area_encounter_choices.csv`, with
+stored-ID and flag status columns and each record's raw bytes.
+
+Inactive encounter slots, structure padding, reserved cells and stale values
+are kept as stored, so the archive writes back byte for byte.
+
+---
+
 ### Sound commands
 
 ---
@@ -4077,6 +4198,11 @@ titan u9 sound-category-list <file>
 |----------|-------------|
 | `file` | Path to `sound/sfxcat.flx` |
 
+**Example**
+```bash
+titan u9 sound-category-list sound/sfxcat.flx
+```
+
 ---
 
 #### `u9 sound-category-csv`
@@ -4091,6 +4217,11 @@ titan u9 sound-category-csv <file> [-o OUTPUT]
 |----------|-------------|
 | `file` | Path to `sound/sfxcat.flx` |
 | `-o PATH`, `--output PATH` | CSV output path (default: `sfxcat_categories.csv`) |
+
+**Example**
+```bash
+titan u9 sound-category-csv sound/sfxcat.flx
+```
 
 The CSV includes the archive slot, stored category ID, display name, Titan's
 `record_representation` label, warnings, name-termination state, fixed name
@@ -4155,6 +4286,13 @@ titan u9 sound-template-csv <file> [-o OUTPUT]
 | `--categories PATH` | Optional `sound/sfxcat.flx` names and validation |
 | `--sounds PATH` | Optional `sound/sfx.flx` descriptions and validation |
 
+**Examples**
+```bash
+titan u9 sound-template-csv sound/SFXTMPL.FLX
+titan u9 sound-template-csv sound/SFXTMPL.FLX \
+  --categories sound/sfxcat.flx --sounds sound/sfx.flx -o templates.csv
+```
+
 The flattened CSV emits one `sound_choice` row per weighted choice, an
 `action` row when an action has no choices, and a `template` row when a
 template has no actions. It includes cone angles, distance limits, time
@@ -4183,6 +4321,18 @@ titan u9 sound-association-csv <file> [-o OUTPUT]
 | `--types PATH` | Optional `static/TYPES.DAT` object/model join |
 | `--typenames PATH` | Optional `static/TYPENAME.FLX` display labels |
 | `--effective` | Export direct and inherited links; requires `--types` |
+
+**Examples**
+```bash
+titan u9 sound-association-csv sound/sfxassoc.flx -o direct.csv
+titan u9 sound-association-csv sound/sfxassoc.flx --effective \
+  --types static/TYPES.DAT --typenames static/TYPENAME.FLX \
+  --templates sound/SFXTMPL.FLX -o effective.csv
+```
+
+In retail 1.19F the stored view has 281 rows. The effective view has 620:
+those 281 `direct` links plus 339 types that inherit a link from their base
+type (`link_source = base_type`).
 
 Without `--effective`, the CSV contains the physically stored records only.
 The effective view checks each active type's direct slot first and then its
@@ -5101,9 +5251,11 @@ exactly. Titan distinguishes the active registry prefix from serialized
 capacity residue and the last stored sample from the controller playback
 length.
 
-The archive does not use `sappear.flx` model IDs as animation IDs. An optional
-animation-name table can provide the original engine name for every retail
-clip.
+The archive does not use `sappear.flx` model IDs as animation IDs. Titan labels
+each clip from its stored authoring path: the folders below `motions` (or
+`objects`) and the file stem, without the `lws` folder, so entry 174 is
+`humanoid/movement/walkfoward_avatar_none`. The 857 retail clips have 853
+distinct labels; four labels belong to two IDs each.
 Titan can rank registry-backed structural model candidates and authoring-name
 evidence, but it does not claim those candidates are the engine's runtime binding. See
 `reference/u9/anim/u9_anim_flx_reference.md` for the verified layout and open
@@ -5114,17 +5266,15 @@ linkage questions.
 #### `u9 animation-list`
 
 List animation IDs with frame, part and event counts, last sample time,
-controller playback length, original motion names when supplied, and authoring
-paths.
+controller playback length, clip label, and authoring path.
 
 ```
-titan u9 animation-list <file> [--motion-ids <animation-name-table>] [-n LIMIT]
+titan u9 animation-list <file> [-n LIMIT]
 ```
 
 | Argument | Description |
 |----------|-------------|
 | `file` | Path to `static/anim.flx` |
-| `--motion-ids PATH` | Animation-name table providing original engine names |
 | `-n N`, `--limit N` | Maximum rows to print |
 
 **Example**
@@ -5136,18 +5286,17 @@ titan u9 animation-list static/anim.flx -n 20
 
 #### `u9 animation-show`
 
-Show one clip's authoring timing, runtime playback length, structural status
-and part list, or dump one part's transform frames with `--part`.
+Show one clip's label, authoring timing, runtime playback length, structural
+status and part list, or dump one part's transform frames with `--part`.
 
 ```
-titan u9 animation-show <file> <id> [--motion-ids <animation-name-table>] [-p PART_ID] [-n LIMIT]
+titan u9 animation-show <file> <id> [-p PART_ID] [-n LIMIT]
 ```
 
 | Argument | Description |
 |----------|-------------|
 | `file` | Path to `static/anim.flx` |
 | `id` | Animation ID -- the FLX entry index |
-| `--motion-ids PATH` | Animation-name table providing the original engine name |
 | `-p ID`, `--part ID` | Print timestamped transforms for this part ID |
 | `-n N`, `--limit N` | Maximum parts or frames to print |
 
@@ -5171,7 +5320,7 @@ Export one row per used animation clip, joining `anim.flx`, `registry.txt`,
 family/action hints, stored-ID/range/registry/track/timestamp/transform/event
 statuses, both timing measures, complete registry storage and inactive residue,
 raw source/part name bytes, tracks, authoring-only nodes, structural model candidates, model/type/usecode
-metadata, typed events, optional original motion symbols, candidate ambiguity,
+metadata, typed events, clip labels, candidate ambiguity,
 and a targeted research question. Companion game files are found beside
 `anim.flx` unless overridden.
 
@@ -5192,13 +5341,12 @@ titan u9 animation-model-report <anim.flx> -o <report.csv> [options]
 | `--registry PATH` | Override the companion `registry.txt` path |
 | `--types PATH` | Override the companion `TYPES.DAT` path |
 | `--typenames PATH` | Override the companion `TYPENAME.FLX` path |
-| `--motion-ids PATH` | Animation-name table for original clip names |
 | `-f FORMAT`, `--format FORMAT` | `csv` (default) or `json` |
 
 **Examples**
 ```bash
 titan u9 animation-model-report static/anim.flx -o animation_models.csv
-titan u9 animation-model-report static/anim.flx --animation 172 --motion-ids animation_names.txt -o avatar_idle.json -f json
+titan u9 animation-model-report static/anim.flx --animation 172 -o avatar_idle.json -f json
 ```
 
 `full-structural` means that one model contains every clip track ID known to
@@ -5230,7 +5378,6 @@ titan u9 animation-pose-export <anim.flx> <animation-id> <sappear.flx> <model-id
 | Option | Description |
 |---|---|
 | `--time-ms N` | Clip time to sample; clamps to the stored sample range |
-| `--motion-ids PATH` | Animation-name table for output naming |
 | `-t PATH`, `--textures PATH` | Optional U9 bitmap texture archive |
 | `-p PATH`, `--palette PATH` | Optional `ankh.pal` |
 | `--lod N` | Model LOD, default 0 |
@@ -5240,7 +5387,7 @@ titan u9 animation-pose-export <anim.flx> <animation-id> <sappear.flx> <model-id
 
 ```bash
 titan u9 animation-pose-export static/anim.flx 172 static/sappear.flx 3223 \
-  --time-ms 500 --motion-ids animation_names.txt \
+  --time-ms 500 \
   -t static/bitmap16.flx -p static/ankh.pal -o avatar_breathe/
 ```
 
@@ -5277,7 +5424,6 @@ titan u9 animation-bundle-export <anim.flx> <animation-id> <sappear.flx> <model-
 | Option | Description |
 |---|---|
 | `--registry PATH` | Node-name registry; discovered beside the animation archive by default |
-| `--motion-ids PATH` | Animation-name table providing the original clip name |
 | `-t PATH`, `--textures PATH` | Optional U9 bitmap texture archive |
 | `-p PATH`, `--palette PATH` | Optional `ankh.pal` for 8-bit textures |
 | `--lod N` | Model LOD, default 0 |
@@ -5295,6 +5441,184 @@ The GLB is a generated presentation of the known single-clip runtime path. The
 sidecar remains the loss-minimizing interchange record. Actor/state selection,
 layered controller composition, locksets, transition blending, root-axis masks,
 reverse playback and event dispatch are still unresolved.
+
+---
+
+#### `u9 animation-set-export`
+
+Export a chosen set of clips for one explicit hierarchical model. Each clip
+becomes an ordinary `animation-bundle-export` bundle under
+`clips/animation_NNNNN/`, and a versioned manifest
+(`model_NNNNN_animation_set.json`) lists them with their selection, timing and
+events.
+
+```
+titan u9 animation-set-export <anim.flx> <sappear.flx> <model-id> --clip SELECTOR [--clip SELECTOR ...] [options]
+```
+
+| Argument | Description |
+|---|---|
+| `animations` | Path to `static/anim.flx` |
+| `sappear` | Path to `static/sappear.flx` |
+| `model_id` | Explicit hierarchical model ID |
+| `--clip SELECTOR` | Clip to export; repeat for more. See below |
+| `--registry PATH` | Node-name registry; discovered beside the animation archive by default |
+| `-t PATH`, `--textures PATH` | Optional U9 bitmap texture archive |
+| `-p PATH`, `--palette PATH` | Optional `ankh.pal` for 8-bit textures |
+| `--lod N` | Model LOD, default 0 |
+| `--coordinate-scale N` | GLB units per native U9 model unit, default `0.025` |
+| `--glb` / `--no-glb` | Toggle one animated GLB per clip; default on |
+| `-o DIR`, `--output DIR` | Output directory (default: `model_NNNNN_animation_set`) |
+
+A selector is one of:
+
+- an animation ID, decimal or hex (`172`, `0x348`);
+- a clip label, as shown by `animation-list` (`humanoid/idle/breathe_avatar`).
+  Case does not matter and `\` may stand for `/`. Four labels belong to two IDs
+  each; selecting one of those is an error that lists both IDs;
+- an Avatar alias: `avatar:breathe` (or `avatar:idle`), `avatar:run`
+  (`avatar:run-forward`), `avatar:walk` (`avatar:walk-forward`),
+  `avatar:walk-back` (`avatar:walk-backward`), `avatar:run-left`,
+  `avatar:run-right`, `avatar:walk-left`, `avatar:walk-right`,
+  `avatar:turn-left` and `avatar:turn-right`. These name clips 172-181 and are
+  checked against the labels in the archive being read.
+
+```bash
+titan u9 animation-set-export static/anim.flx static/sappear.flx 3223 \
+  --clip avatar:breathe --clip avatar:walk --clip humanoid/movement/runleft_avatar_none \
+  -t static/bitmap16.flx -p static/ankh.pal -o avatar_clips/
+```
+
+The export does not loop, trim, order or blend clips: request order is not
+playback order, and every clip keeps its original duration. The aliases say
+which clip carries a motion, not how the game's controller chooses between
+clips.
+
+---
+
+#### `u9 avatar-animation-library-export`
+
+Export every clip whose label carries the `avatar` token and that shares rigid
+limb IDs with the given model. The model's meshes, materials and textures are
+written once, and all clips go into one multi-action GLB plus one versioned
+JSON sidecar.
+
+```
+titan u9 avatar-animation-library-export <anim.flx> <sappear.flx> <model-id> [options]
+```
+
+| Argument | Description |
+|---|---|
+| `animations` | Path to `static/anim.flx` |
+| `sappear` | Path to `static/sappear.flx` |
+| `model_id` | Explicit Avatar model ID |
+| `--category NAME` | Keep only this label category (`movement`, `idle`, `combat`, ...); repeatable, case-insensitive |
+| `--registry PATH` | Node-name registry; discovered beside the animation archive by default |
+| `-t PATH`, `--textures PATH` | Optional U9 bitmap texture archive |
+| `-p PATH`, `--palette PATH` | Optional `ankh.pal` for 8-bit textures |
+| `--lod N` | Model LOD, default 0 |
+| `--coordinate-scale N` | GLB units per native U9 model unit, default `0.025` |
+| `--glb` / `--no-glb` | Toggle the multi-clip GLB; default on |
+| `-o DIR`, `--output DIR` | Output directory (default: `model_NNNNN_avatar_animation_library`) |
+
+```bash
+titan u9 avatar-animation-library-export static/anim.flx static/sappear.flx 3223 \
+  --registry static/registry.txt -t static/bitmap16.flx -p static/ankh.pal -o avatar_library/
+titan u9 avatar-animation-library-export static/anim.flx static/sappear.flx 3223 \
+  --category movement --no-glb -o avatar_movement/
+```
+
+In retail 1.19F this exports 384 clips for model 3223, in 15 label categories.
+Each clip's catalogue entry gives its family, category, action, variant (the
+label text after `_avatar`), an equipment hint read from that variant (`none`,
+`bow`, `handone`, ...) and, for clips 172-181, the matching alias. Runtime
+selection is marked as not yet decoded for every clip. Clips with no shared
+limb are counted as incompatible and left out.
+
+---
+
+#### `u9 animation-library-plan`
+
+Group every clip into actor libraries in one discovery pass, and write the
+result as a compact, versioned JSON plan
+(`schema = "titan.u9.animation-library-plan"`). Companion files are found
+beside `anim.flx` unless overridden.
+
+```
+titan u9 animation-library-plan <anim.flx> -o <plan.json> [options]
+```
+
+| Argument | Description |
+|---|---|
+| `file` | Path to `static/anim.flx` |
+| `-o PATH`, `--output PATH` | Required JSON plan path |
+| `--sappear PATH` | Override the companion `sappear.flx` path |
+| `--registry PATH` | Override the companion `registry.txt` path |
+| `--types PATH` | Override the companion `TYPES.DAT` path |
+| `--typenames PATH` | Override the companion `TYPENAME.FLX` path |
+| `--diagnostics PATH` | Also write the detailed per-clip evidence table |
+| `--diagnostics-format FORMAT` | `csv` (default) or `json` |
+
+```bash
+titan u9 animation-library-plan static/anim.flx -o animation_libraries.json
+titan u9 animation-library-plan static/anim.flx -o animation_libraries.json --diagnostics animation_models.csv
+```
+
+A library is an actor hint plus an exact set of model-used track IDs. Within it,
+compatible models are grouped by an ordered hierarchy and rest-transform
+fingerprint. A library is approved automatically only when an actor-name model
+anchors it, or when exactly one model is a complete structural candidate.
+Partial matches and unanchored multi-model groups are marked for review. Each
+clip entry records its `animation_label`, category and action. The diagnostics
+table carries the same per-clip evidence as `animation-model-report`, which it
+replaces. No library claims a runtime binding.
+
+---
+
+#### `u9 animation-library-export`
+
+Export the approved libraries of an `animation-library-plan`. Libraries that
+share an actor and an exact skeleton are merged. Every clip's keys and events
+are written once to a shared catalogue, and each actor/skeleton library gets a
+compact binding sidecar and one multi-action GLB.
+
+```
+titan u9 animation-library-export <plan.json> <anim.flx> <sappear.flx> [options]
+```
+
+| Argument | Description |
+|---|---|
+| `plan` | Plan JSON written by `animation-library-plan` |
+| `animations` | Path to `static/anim.flx` |
+| `sappear` | Path to `static/sappear.flx` |
+| `--library ID` | Export only this approved plan library; repeatable |
+| `--actor-model SPEC` | Approve a model for chosen plan libraries, as `ACTOR=MODEL_ID:PLAN_LIBRARY[,PLAN_LIBRARY...]`; repeatable |
+| `--registry PATH` | Node-name registry; discovered beside the animation archive by default |
+| `-t PATH`, `--textures PATH` | Optional U9 bitmap texture archive |
+| `-p PATH`, `--palette PATH` | Optional `ankh.pal` for 8-bit textures |
+| `--lod N` | Model LOD, default 0 |
+| `--coordinate-scale N` | GLB units per native U9 model unit, default `0.025` |
+| `--glb` / `--no-glb` | Toggle one multi-action GLB per skeleton; default on |
+| `-o DIR`, `--output DIR` | Output directory (default: `u9_animation_library_export`) |
+
+```bash
+titan u9 animation-library-export animation_libraries.json static/anim.flx static/sappear.flx \
+  --registry static/registry.txt -t static/bitmap16.flx -p static/ankh.pal -o actor_libraries/
+titan u9 animation-library-export animation_libraries.json static/anim.flx static/sappear.flx \
+  --actor-model bandit=3285:humanoid,npc -o actor_libraries/
+```
+
+The output directory holds `animation_libraries.json` (the root manifest,
+`schema = "titan.u9.animation-library-export"`),
+`animation_catalogue.u9anim.json` (every raw key and event, once per clip), and
+one folder per actor/skeleton library under `libraries/`. Binding sidecars
+(`schema = "titan.u9.rigid-animation-skeleton-library"`) carry part targets
+and root bindings but no repeated keyframes. Review-only plan libraries are
+listed in the manifest and are not exported. `--actor-model` adds a specific
+model as an actor appearance over the named clip groups; track-ID and skeleton
+checks still apply. For example, `bandit=3285:humanoid,npc` approves the Bandit
+model for the generic humanoid and NPC groups without approving the other
+compatible human models.
 
 ---
 
@@ -5529,6 +5853,18 @@ titan u9 npc-classes <file> [-s] [-m MEMBERS]
 | `-s`, `--save` | Read the live array from a savegame file |
 | `-m N`, `--members N` | Member names to preview per profile (default 8) |
 
+**Example**
+```bash
+titan u9 npc-classes runtime/NPC.FLX -m 4
+```
+
+```
+runtime/NPC.FLX -- 58 distinct combat behavior value(s)
+               49 thug  x65   Shamino, Laszlo, Rand, Nameless, ...
+             none (-1)  x58   Geoffrey, Captain Wolford, Bronwyn, Alara, ...
+              34 human  x54   Amoranth, Aleena, Aidon, Emile, ...
+```
+
 The profile is a signed 32-bit value; `-1` means no combat behavior. It is not
 an appearance or faction field.
 
@@ -5581,6 +5917,24 @@ titan u9 npc-csv <file> [-o OUTPUT] [-s] [-a]
 | `-o PATH`, `--output PATH` | CSV output path |
 | `-s`, `--save` | Read the live array from a savegame file |
 | `-a`, `--all` | Include unnamed/empty slots |
+
+**Examples**
+```bash
+titan u9 npc-csv runtime/NPC.FLX -o npc.csv
+titan u9 npc-csv savegame/u9game1.sav --save -o npc_save1.csv
+```
+
+```
+runtime/NPC.FLX -- wrote 351 NPC row(s) -> npc.csv
+  113 columns; raw_hex carries the full 316-byte record
+  Level codes outside -1..3: 42
+  WARNING: 42 level code(s) marked out_of_range; see *_status columns
+  WARNING: 7 health record(s) flagged; see health_status
+  1 unnamed/blank slot(s) omitted; pass --all to include them
+```
+
+A save holds the live 512-slot array, so it yields more rows than the shipped
+table: 393 named slots in one save examined, against 351 shipped.
 
 The export includes stats, both flag sets, activity state, awareness settings,
 equipment and attachment arrays, movement behavior, breath, proximity radii,
@@ -5793,6 +6147,11 @@ titan u9 text-export <file> [-o OUT.csv]
 | `file` | Path to `static/text.flx` or `static/misctext.flx` |
 | `-o FILE`, `--output FILE` | Output CSV path (default: `<file>_text.csv`) |
 
+**Example**
+```bash
+titan u9 text-export static/text.flx -o text.csv
+```
+
 Also works on the joke-dialect copies (`Tbrk.*`, `Mbrk.*`).
 
 ---
@@ -5922,6 +6281,21 @@ titan u9 text-keys-export <file> [-t TEXT.FLX] [--npcs NPC.FLX] [-s NAME ...] [-
 | `-s NAME`, `--speaker NAME` | Extra speaker name to try when recovering keys (repeatable) |
 | `-o FILE`, `--output FILE` | Output CSV path (default: `<file>_keys.csv`) |
 
+**Examples**
+```bash
+titan u9 text-keys-export static/text.dat -o text_keys.csv
+titan u9 text-keys-export static/text.dat -t static/text.flx \
+  --npcs runtime/NPC.FLX -o text_keys.csv
+```
+
+```
+static/text.dat -- wrote 7656 row(s) -> text_keys.csv
+  verified keys: 7595, unresolved: 61
+```
+
+Without `--text` and `--npcs`, `key_status` is `not_checked`. With both, Titan
+recovers 7,595 of 7,656 retail keys.
+
 Columns: `bucket`, `position`, `offset`, `stored_hash`, `stored_crc_hex`,
 `text_index`, `reachability` (`reachable`, `unreachable_hash_mismatch`,
 `shadowed_by_earlier_item`), `text_reference_status` (`valid`, `empty_slot`,
@@ -5954,6 +6328,11 @@ titan u9 shade-info <file> [-p ANKH.PAL]
 | `file` | Path to `static/shade.tbl` or `static/shadegry.tbl` |
 | `-p FILE`, `--palette FILE` | Path to `static/ankh.pal`, to show colours |
 
+**Example**
+```bash
+titan u9 shade-info static/shade.tbl -p static/ankh.pal
+```
+
 ```
 static/shade.tbl -- authoring-tool file; the retail game never loads it
   layout            : 32 light levels x 256 palette indices
@@ -5980,6 +6359,11 @@ titan u9 shade-csv <file> [-p ANKH.PAL] [-o OUT.csv]
 | `-p FILE`, `--palette FILE` | Path to `static/ankh.pal`, to add RGB columns |
 | `-o FILE`, `--output FILE` | Output CSV path (default: `<file>_shade.csv`) |
 
+**Example**
+```bash
+titan u9 shade-csv static/shade.tbl -p static/ankh.pal
+```
+
 ---
 
 #### `u9 color-cube-info`
@@ -5996,6 +6380,11 @@ titan u9 color-cube-info <file> [-p ANKH.PAL]
 | `file` | Path to `static/rgbccube.dat` or `static/yiqccube.dat` |
 | `-p FILE`, `--palette FILE` | Path to `static/ankh.pal`, to compare the stored palette |
 
+**Example**
+```bash
+titan u9 color-cube-info static/rgbccube.dat -p static/ankh.pal
+```
+
 ---
 
 #### `u9 color-cube-lookup`
@@ -6011,6 +6400,11 @@ titan u9 color-cube-lookup <file> <red> <green> <blue> [-m rgb|yiq]
 | `file` | Path to `static/rgbccube.dat` or `static/yiqccube.dat` |
 | `red`, `green`, `blue` | Colour components, 0–255 |
 | `-m`, `--metric` | `rgb` or `yiq` (default: `yiq` when the file name contains `yiq`, else `rgb`) |
+
+**Example**
+```bash
+titan u9 color-cube-lookup static/rgbccube.dat 200 40 40
+```
 
 ```
 static/rgbccube.dat -- colour (200, 40, 40), metric rgb
@@ -6029,6 +6423,11 @@ Export every tree node in stored order: `order`, `offset`, `depth`, `path`,
 
 ```
 titan u9 color-cube-csv <file> [-o OUT.csv]
+```
+
+**Example**
+```bash
+titan u9 color-cube-csv static/yiqccube.dat
 ```
 
 ---
@@ -6124,6 +6523,11 @@ titan u9 fixed-chunks <file> [-g] [-n LIMIT]
 | `file` | Path to a `static/fixed.<region>` file |
 | `-g`, `--by-grid` | Order by grid position rather than table slot |
 | `-n N`, `--limit N` | Maximum rows to print |
+
+**Example**
+```bash
+titan u9 fixed-chunks static/fixed.9 --by-grid -n 20
+```
 
 The `Slot` and `Grid` columns differ, which is the point: the table is not in
 row-major order.
@@ -6336,6 +6740,11 @@ titan u9 books-list <file> [-s] [-n LIMIT]
 | `-s`, `--by-size` | Order by body size, largest first |
 | `-n N`, `--limit N` | Maximum rows to print |
 
+**Example**
+```bash
+titan u9 books-list static/BOOKS-EN.FLX --by-size -n 10
+```
+
 Entry 161 is marked `[embedded document]`: the shipped archive has a word
 processor file there in place of its text.
 
@@ -6395,6 +6804,11 @@ and the markup-stripped text.
 titan u9 books-export <file> [-o OUT.csv]
 ```
 
+**Example**
+```bash
+titan u9 books-export static/BOOKS-EN.FLX -o books.csv
+```
+
 ---
 
 ### Terrain commands
@@ -6443,6 +6857,11 @@ Print the tile grid as the chunk index each tile refers to.
 
 ```
 titan u9 terrain-tiles <file>
+```
+
+**Example**
+```bash
+titan u9 terrain-tiles static/terrain.9
 ```
 
 Repeated indices across the grid are chunk sharing, not an error.
@@ -6527,6 +6946,11 @@ texture and the raw word.
 
 ```
 titan u9 terrain-export <file> [-o OUT.csv]
+```
+
+**Example**
+```bash
+titan u9 terrain-export static/terrain.9 -o terrain_9.csv
 ```
 
 ---
@@ -7082,6 +7506,8 @@ A value on the command line always wins.
 | `u9 flx-list` | List an Ultima 9 FLX archive's directory entries |
 | `u9 flx-extract` | Extract one entry from a U9 FLX archive |
 | `u9 flx-extract-all` | Extract every used entry from a U9 FLX archive |
+| `u9 flx-pack` | Build a FLX archive from a directory of `NNNNN.bin` entries, as `flx-extract-all` writes them |
+| `u9 flx-repack` | Rebuild a FLX archive, optionally swapping in entries from a directory; with none, a byte-identity self-check |
 | `u9 dimension-info` | Summarize `dimension.dat` culling radii, centers, bound coverage, and optional model comparison |
 | `u9 dimension-show` | Inspect one model ID's cached geometry and discontiguous raw fragments |
 | `u9 dimension-csv` | Export all 8,000 model geometry slots with forensic bytes and optional `sappear.flx` joins |
@@ -7095,6 +7521,9 @@ A value on the command line always wins.
 | `u9 areas-show` | Inspect one gameplay-zone record with its stored boxes and encounter slots |
 | `u9 areas-csv` | Export relational gameplay-zone, box, and encounter-choice CSV tables with raw bytes |
 | `u9 typename-dump` | Dump type-ID → display-name pairs from `TYPENAME.FLX` |
+| `u9 typename-csv` | Export all 8,192 type-name slots to CSV with raw bytes |
+| `u9 typename-import` | Write a new `TYPENAME.FLX` with display names from an edited `typename-csv` CSV; text and icon references are kept and every changed name is read back |
+| `u9 types-csv` | Export `TYPES.DAT` records to CSV, optionally named and including inactive slots |
 | `u9 palette-info` | Inspect `ankh.pal` layout, duplicates, reserved bytes, and transparency key |
 | `u9 palette-export` | Export `ankh.pal` as a PNG swatch and complete text table |
 | `u9 sound-list` | List sound record headers in a `sound/*.flx` archive |
@@ -7105,6 +7534,10 @@ A value on the command line always wins.
 | `u9 sound-report` | Export dynamic audio record and SFX-link metadata to CSV/JSON |
 | `u9 sound-import` | Replace one sound entry from compatible WAV/native data |
 | `u9 sound-import-batch` | Replace many sound entries and repack once |
+| `u9 sound-category-list` | List the sound categories in `sfxcat.flx` |
+| `u9 sound-category-csv` | Export `sfxcat.flx` categories to CSV with raw bytes |
+| `u9 sound-template-csv` | Export `SFXTMPL.FLX` templates, actions and weighted sound choices to CSV, optionally named from `sfxcat.flx` and `sfx.flx` |
+| `u9 sound-association-csv` | Export object-type to sound-template links from `sfxassoc.flx`; with `--effective`, resolve each type's direct link or its base type's, as the game does |
 | `u9 model-info` | Print a model's limb/LOD/material/texture summary |
 | `u9 model-material-report` | Export dynamic model/material-to-texture metadata as CSV or JSON |
 | `u9 model-export` | Export one model to OBJ+MTL(+PNG textures) and/or STL |
@@ -7116,14 +7549,69 @@ A value on the command line always wins.
 | `u9 texture-info` | Inspect one bitmap or terrain-panel texture set |
 | `u9 texture-frame-report` | Export dynamic per-tier/per-frame metadata and animation evidence |
 | `u9 texture-export` | Export one texture frame or stored mip to PNG |
+| `u9 texture-import` | Replace one texture frame or a batch of frames from same-size PNGs, re-encoded in each frame's existing format so the entry keeps its length and header |
+| `u9 sdinfo-list` | List texture metadata records |
+| `u9 sdinfo-show` | Show one texture metadata record |
+| `u9 sdinfo-verify` | Cross-check a metadata table against its texture archive: entries, dimensions, frames and mips |
 | `u9 animation-list` | List `anim.flx` clips with timing, part counts and authoring paths |
 | `u9 animation-show` | Show one animation clip or dump one part's transform frames |
 | `u9 animation-model-report` | Join clips, registry nodes, structural model candidates, types, usecode IDs, and research questions to CSV/JSON |
 | `u9 animation-pose-export` | Sample a selected clip on a hierarchical model and export the static rigid-limb pose |
 | `u9 animation-bundle-export` | Export local limb meshes, a versioned exact-track JSON sidecar, and an animated rigid-node GLB |
+| `u9 animation-set-export` | Export chosen clips (by ID, label, or Avatar alias) for one model, with a neutral set manifest |
+| `u9 avatar-animation-library-export` | Export every compatible Avatar-labelled clip with shared meshes in one multi-action GLB |
+| `u9 animation-library-plan` | Group all clips into actor/skeleton libraries and write a compact JSON plan |
+| `u9 animation-library-export` | Export approved plan libraries with one shared clip catalogue and one GLB per skeleton |
 | `u9 icon-list` | List candidate 2D UI icon entries not referenced by any 3D model |
 | `u9 icon-export` | Export one texture archive entry to PNG, regardless of mesh usage |
 | `u9 icon-export-all` | Batch-export every candidate 2D UI icon to PNG |
+| `u9 fixed-info` | Summarize a `fixed.<region>` file |
+| `u9 fixed-chunks` | List a fixed region's populated chunks |
+| `u9 fixed-objects` | List a fixed region's objects, optionally by chunk or type |
+| `u9 fixed-types` | Count object types in a fixed region |
+| `u9 nonfixed-info` | Summarize a `nonfixed.<region>` file and check its allocator |
+| `u9 nonfixed-chunks` | List a nonfixed region's chunks with entity, extra-data and allocator counts |
+| `u9 nonfixed-entities` | List a nonfixed region's objects, optionally by chunk and named |
+| `u9 nonfixed-diff` | Compare two nonfixed region files: objects added, removed and changed, with the fields that differ |
+| `u9 terrain-info` | Summarize a `terrain.<region>` file |
+| `u9 terrain-tiles` | Print a region's tile-to-chunk grid |
+| `u9 terrain-chunk` | Dump one terrain chunk's 16×16 points |
+| `u9 terrain-textures` | Count ground textures used in a region |
+| `u9 terrain-heightmap` | Render a region's height map to a greyscale PNG |
+| `u9 terrain-export` | Export every terrain point of a region to CSV |
+| `u9 highway-info` | Summarize the `highway.dat` navigation graph |
+| `u9 highway-points` | List navigation points with world positions, edges and route visits |
+| `u9 highway-routes` | List precomputed routes, optionally through one point or with full paths |
+| `u9 npc-list` | List NPC records |
+| `u9 npc-show` | Show one NPC record |
+| `u9 npc-classes` | Group NPCs by combat behavior |
+| `u9 npc-diff` | Compare shipped NPC records with a save's live copy: changed byte offsets and moved NPCs |
+| `u9 npc-csv` | Export every decoded NPC field plus raw bytes to CSV, from `NPC.FLX` or a save, with level and health warnings |
+| `u9 trigger-list` | List trigger scripts |
+| `u9 trigger-show` | Dump one trigger's records |
+| `u9 trigger-opcodes` | Count trigger opcodes across the archive |
+| `u9 activity-list` | List activity sets |
+| `u9 activity-show` | Dump one activity set's records and steps |
+| `u9 activity-opcodes` | Report the activity command catalogue with frequencies and meanings |
+| `u9 script-research-export` | Export lossless trigger and activity tables for analysis |
+| `u9 text-list` | Print `text.flx` or `misctext.flx` strings |
+| `u9 text-blocks` | List `text.flx` source blocks |
+| `u9 text-search` | Find strings containing a substring |
+| `u9 text-export` | Export a text archive to CSV |
+| `u9 text-import` | Rebuild a text archive from an edited `text-export` CSV, e.g. for a translation |
+| `u9 text-keys-info` | Summarize the `text.dat` key table; with `--text`, check targets and recover keys |
+| `u9 text-key-lookup` | Look up one speaker/line key as the game does |
+| `u9 text-keys-export` | Export every `text.dat` item to CSV, with recovered keys when `--text` and `--npcs` are given |
+| `u9 books-list` | List books, scrolls and signs |
+| `u9 books-show` | Print one book by ID or name |
+| `u9 books-search` | Find books containing a substring |
+| `u9 books-export` | Export all books to CSV |
+| `u9 shade-info` | Summarize `shade.tbl` or `shadegry.tbl` (authoring-tool only) |
+| `u9 shade-csv` | Export shade-table cells to CSV |
+| `u9 color-cube-info` | Summarize `rgbccube.dat` or `yiqccube.dat` (authoring-tool only) |
+| `u9 color-cube-lookup` | Show the palette index chosen for one colour |
+| `u9 color-cube-csv` | Export colour-cube tree nodes to CSV |
+| `u9 save-check` | Verify a save archive and its working files: allocator structure, every stored item handle's target, and fixed-file compatibility, reported as separate custody, structure and compatibility verdicts |
 | `uo art-export` | Export UO land/static art to PNG |
 | `uo gump-export` | Export UO gumps to PNG |
 | `uo texture-export` | Export UO land textures to PNG |

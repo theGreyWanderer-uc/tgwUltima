@@ -37,14 +37,8 @@ class AnimationLibraryPlanTests(unittest.TestCase):
             (static / "TYPES.DAT").write_bytes(_types_dat())
             typename = b"\x00\x00\x00\x00\x81\x1bAvatar\x00"
             (static / "TYPENAME.FLX").write_bytes(_build_flx([None, typename]))
-            motion_table = static / "motions.txt"
-            motion_table.write_text(
-                "HUMANOID_IDLE_BREATHE_AVATAR = 3,\n", encoding="ascii"
-            )
 
-            plan = build_animation_library_plan(
-                static / "anim.flx", motion_ids_path=motion_table
-            )
+            plan = build_animation_library_plan(static / "anim.flx")
             output = write_animation_library_plan(plan, static / "plan.json")
             document = json.loads(output.read_text(encoding="utf-8"))
 
@@ -57,6 +51,11 @@ class AnimationLibraryPlanTests(unittest.TestCase):
             self.assertEqual(library["recommended_model_ids"], [1])
             self.assertEqual(library["representative_model_ids"], [1])
             self.assertEqual(library["animations"][0]["animation_id"], 3)
+            self.assertEqual(
+                library["animations"][0]["animation_label"],
+                "humanoid/idle/breathe_avatar",
+            )
+            self.assertEqual(library["animations"][0]["category"], "idle")
             self.assertEqual(
                 len(library["skeleton_groups"][0]["skeleton_fingerprint"]), 16
             )
@@ -72,10 +71,6 @@ class AnimationLibraryPlanTests(unittest.TestCase):
             (static / "registry.txt").write_text(
                 "1 BIP01\n15 HEAD\n99 CAMERA\n", encoding="ascii"
             )
-            motion_table = static / "motions.txt"
-            motion_table.write_text(
-                "HUMANOID_IDLE_BREATHE_AVATAR = 3,\n", encoding="ascii"
-            )
             output = static / "plan.json"
 
             result = cmd_animation_library_plan(
@@ -86,7 +81,6 @@ class AnimationLibraryPlanTests(unittest.TestCase):
                     registry=None,
                     types=None,
                     typenames=None,
-                    motion_ids=str(motion_table),
                     diagnostics=None,
                     diagnostics_format="csv",
                 )

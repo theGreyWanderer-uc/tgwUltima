@@ -60,17 +60,12 @@ def _track_signature(track_ids: tuple[int, ...]) -> str:
 
 def _animation_category(row: dict[str, Any]) -> str:
     category = str(row.get("source_category") or "").split("/", 1)[0]
-    if category:
-        return category.casefold()
-    motion_name = str(row.get("motion_name") or "")
-    tokens = motion_name.split("_")
-    return tokens[1].casefold() if len(tokens) > 1 else "other"
+    return category.casefold() if category else "other"
 
 
 def _actor_hint(row: dict[str, Any]) -> str:
     return str(
         row.get("source_actor_hint")
-        or row.get("motion_family")
         or row.get("source_family")
         or "unassigned"
     ).casefold()
@@ -198,7 +193,6 @@ def _planned_library(
     animations = [
         {
             "animation_id": int(row["animation_id"]),
-            "motion_name": row.get("motion_name"),
             "animation_label": row.get("animation_label"),
             "category": _animation_category(row),
             "action": row.get("action_hint"),
@@ -242,7 +236,6 @@ def build_animation_library_plan(
     registry_path: str | Path | None = None,
     types_path: str | Path | None = None,
     typenames_path: str | Path | None = None,
-    motion_ids_path: str | Path | None = None,
 ) -> U9AnimationLibraryPlan:
     """Discover animation families once and return compact and diagnostic views."""
     try:
@@ -252,7 +245,6 @@ def build_animation_library_plan(
             registry_path=registry_path,
             types_path=types_path,
             typenames_path=typenames_path,
-            motion_ids_path=motion_ids_path,
         )
     except U9AnimationModelReportError as error:
         raise U9AnimationLibraryPlanError(str(error)) from error

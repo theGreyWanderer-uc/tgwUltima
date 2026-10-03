@@ -121,10 +121,13 @@ MOVEMENT_BEHAVIOR_NAMES: tuple[str, ...] = (
 IMPACT_MATERIAL_NAMES: tuple[str, ...] = (
     "bone", "chain", "cloth", "flesh", "leather", "plate", "rock",
 )  # fmt: skip
-# -1 means none.
+# -1 means none. 0-4 follow the game's weapon-skill list (Fists, 1-handed,
+# 2-handed, Staffs, Range); the equip code treats 2-4 as two-handed and 4 as
+# the aimed weapon. 5 and 6 are held items kept in their own slots; the game
+# never makes them the active category, so they are named by value only.
 WEAPON_CATEGORY_NAMES: tuple[str, ...] = (
-    "fists", "one_handed_edged", "two_handed_edged", "two_handed_blunt",
-    "projectile", "shield", "luggage",
+    "fists", "one_handed", "two_handed", "staff", "ranged",
+    "held_item_5", "held_item_6",
 )  # fmt: skip
 # Spell numbers (the spellbook bit index; also used by trigger commands).
 # 1-4 linear, then four per circle 1-8, then the nine rituals (37-45);
@@ -179,7 +182,8 @@ class U9NpcState(IntFlag):
     PLAYER_RECOGNIZED = 0x00080000
     POSITION_LOCKED = 0x00100000
     FEAR_IMMUNE = 0x00200000
-    ENGAGED_IN_COMBAT = 0x00400000
+    # Retail actor creation sets this; actor teardown clears it.
+    HAS_LIVE_ACTOR = 0x00400000
     ARRIVAL_TRIGGER_ARMED = 0x00800000
     TRAVELLING = 0x01000000
     ROUTE_SEARCH_FAILED = 0x02000000

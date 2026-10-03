@@ -15,48 +15,44 @@ from titan.u9.avatar_animation_library import (
     U9AvatarAnimationLibraryError,
     export_avatar_animation_library,
 )
-from titan.u9.motion_ids import U9MotionIds
 
 
-MOTION_IDS = U9MotionIds.parse(
-    """
-    HUMANOID_IDLE_BREATHE_AVATAR = 172,
-    HUMANOID_MOVEMENT_WALKFOWARD_AVATAR_NONE = 174,
-    HUMANOID_COMBAT_ATTACK_AVATAR_BOWAA = 201,
-    HUMANOID_IDLE_IDLE_AVATAR_NONEA = 202,
-    DRAGON_DRAGON_FLY_FLAP = 840,
-    """
-)
+BREATHE_PATH = r"u:\art\motions\humanoid\idle\lws\breathe_avatar.lws"
+WALK_PATH = r"u:\art\motions\humanoid\movement\lws\walkfoward_avatar_none.lws"
+BOW_PATH = r"u:\art\motions\humanoid\combat\lws\attack_avatar_bowaa.lws"
+DRAGON_PATH = r"u:\art\motions\dragon\dragon_fly_begin.lws"
+
+
+def _clips():
+    breathe = replace(_animation(), source_name=BREATHE_PATH)
+    walk = replace(breathe, animation_id=174, source_name=WALK_PATH)
+    return breathe, walk
 
 
 class AvatarAnimationLibraryTests(unittest.TestCase):
-    def test_exports_named_compatible_clips_and_reports_exclusions(self) -> None:
-        breathe = _animation()
-        walk = replace(breathe, animation_id=174, source_name="avatar_walk")
+    def test_exports_labelled_compatible_clips_and_reports_exclusions(self) -> None:
+        breathe, walk = _clips()
         incompatible = replace(
             breathe,
             animation_id=201,
+            source_name=BOW_PATH,
             parts=(U9AnimationPart(900, "OTHER", breathe.parts[0].frames),),
         )
-        unrelated = replace(breathe, animation_id=840, source_name="dragon")
+        unrelated = replace(breathe, animation_id=840, source_name=DRAGON_PATH)
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             model_archive = root / "model.bin"
             animation_archive = root / "animation.bin"
-            motion_table = root / "motions.txt"
             model_archive.write_bytes(b"model")
             animation_archive.write_bytes(b"animation")
-            motion_table.write_text("motion table", encoding="ascii")
 
             result = export_avatar_animation_library(
                 _model(),
                 (breathe, walk, incompatible, unrelated),
-                MOTION_IDS,
                 root / "library",
                 model_archive_path=model_archive,
                 animation_archive_path=animation_archive,
-                motion_table_path=motion_table,
                 include_glb=False,
             )
             document = json.loads(
@@ -66,28 +62,37 @@ class AvatarAnimationLibraryTests(unittest.TestCase):
             self.assertEqual(
                 document["library"]["schema"], AVATAR_ANIMATION_LIBRARY_SCHEMA
             )
-            self.assertEqual(result.candidate_motion_count, 4)
+            self.assertEqual(result.candidate_clip_count, 3)
             self.assertEqual(result.exported_clip_count, 2)
-            self.assertEqual(result.unused_motion_ids, (202,))
-            self.assertEqual(result.incompatible_motion_ids, (201,))
+            self.assertEqual(result.incompatible_animation_ids, (201,))
             self.assertEqual(result.category_counts, (("idle", 1), ("movement", 1)))
             self.assertEqual(
                 [clip["animation_id"] for clip in document["clips"]], [172, 174]
             )
             self.assertEqual(
-                document["clips"][0]["catalogue"]["known_state"], "breathe"
+                [clip["animation_label"] for clip in document["clips"]],
+                [
+                    "humanoid/idle/breathe_avatar",
+                    "humanoid/movement/walkfoward_avatar_none",
+                ],
             )
+            breathe_catalogue = document["clips"][0]["catalogue"]
+            self.assertEqual(breathe_catalogue["known_state"], "breathe")
+            self.assertEqual(breathe_catalogue["action"], "breathe")
+            walk_catalogue = document["clips"][1]["catalogue"]
             self.assertEqual(
-                document["clips"][1]["catalogue"]["known_aliases"],
-                ["avatar:walk", "avatar:walk-forward"],
+                walk_catalogue["known_aliases"], ["avatar:walk", "avatar:walk-forward"]
+            )
+            self.assertEqual(walk_catalogue["equipment_hint"], "none")
+            self.assertEqual(
+                walk_catalogue["runtime_selection_semantics"], "not yet decoded"
             )
             self.assertFalse(document["library"]["timeline"]["authored"])
 
     def test_category_filter_is_case_insensitive_and_rejects_empty_results(
         self,
     ) -> None:
-        breathe = _animation()
-        walk = replace(breathe, animation_id=174, source_name="avatar_walk")
+        breathe, walk = _clips()
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             model_archive = root / "model.bin"
@@ -98,7 +103,6 @@ class AvatarAnimationLibraryTests(unittest.TestCase):
             result = export_avatar_animation_library(
                 _model(),
                 (breathe, walk),
-                MOTION_IDS,
                 root / "movement",
                 model_archive_path=model_archive,
                 animation_archive_path=animation_archive,
@@ -114,7 +118,6 @@ class AvatarAnimationLibraryTests(unittest.TestCase):
                 export_avatar_animation_library(
                     _model(),
                     (breathe, walk),
-                    MOTION_IDS,
                     root / "missing",
                     model_archive_path=model_archive,
                     animation_archive_path=animation_archive,
@@ -122,13 +125,12 @@ class AvatarAnimationLibraryTests(unittest.TestCase):
                     include_glb=False,
                 )
 
-    def test_includes_avatar_authoring_label_with_generic_motion_name(self) -> None:
+    def test_classifies_weapon_variant_from_the_authoring_label(self) -> None:
         animation = replace(
             _animation(),
             animation_id=936,
             source_name=r"u:\art\motions\humanoid\combat\attack_avatar_handoneaa",
         )
-        motions = U9MotionIds.parse("HUMANOID_GESTURE_GESTURE_ATTACK_LUNGE = 936,\n")
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             model_archive = root / "model.bin"
@@ -139,7 +141,6 @@ class AvatarAnimationLibraryTests(unittest.TestCase):
             result = export_avatar_animation_library(
                 _model(),
                 (animation,),
-                motions,
                 root / "library",
                 model_archive_path=model_archive,
                 animation_archive_path=animation_archive,
@@ -151,7 +152,9 @@ class AvatarAnimationLibraryTests(unittest.TestCase):
 
             self.assertEqual(result.exported_clip_count, 1)
             catalogue = document["clips"][0]["catalogue"]
-            self.assertEqual(catalogue["category"], "gesture")
+            self.assertEqual(catalogue["category"], "combat")
+            self.assertEqual(catalogue["variant_label"], "handoneaa")
+            self.assertEqual(catalogue["equipment_hint"], "handone")
             self.assertEqual(
                 catalogue["selection_basis"],
                 ["Avatar token in the authoring label"],

@@ -11,7 +11,7 @@ sections in a fixed order, each owned by one engine subsystem:
  5. weather system
  6. spell manager (active spell process IDs)
  7. physics system (moving objects, then collision/trigger overlaps)
- 8. moving supports (lifts, steps, ships and other moving platforms)
+ 8. moving platforms (lifts, steps, ships and other moving platforms)
  9. highway manager
 10. hint-object manager
 11. combat system (combatant NPC types and per-combatant records)
@@ -56,9 +56,9 @@ __all__ = [
     "U9HintManagerState",
     "U9LightSystemState",
     "U9MainInterfaceState",
-    "U9MovingSupport",
+    "U9MovingPlatform",
     "U9MusicNode",
-    "U9MovingSupportsState",
+    "U9MovingPlatformsState",
     "U9NpcManagerState",
     "U9PhysicsObject",
     "U9PhysicsState",
@@ -250,18 +250,18 @@ _SLASHER = _block(
     ("fly_time", "I"),
     ("hover_time", "I"),
     ("notice_distance", "f"),
-    ("unidentified_1", "i"),
+    ("avatar_tracking_distance", "f"),
     ("use_activities", "B"),
     ("drift_counter", "B"),
     ("shield", "r"),
-    ("unidentified_2", "i"),
-    ("unidentified_3", "i"),
+    ("saved_health_maximum", "I"),
+    ("saved_health_current", "I"),
 )
 _ZOMBIE = _block(
     "zombie",
     2,
     ("attack_delay", "i"),
-    ("unidentified_1", "B"),
+    ("split_complete", "B"),
     ("current_state", "i"),
     ("next_state", "i"),
 )
@@ -309,8 +309,8 @@ _WOLF = _block(
     ("action_complete", "B"),
     ("movement_complete", "B"),
     ("duration_complete", "B"),
-    ("unidentified_1", "i"),
-    ("unidentified_2", "i"),
+    ("baseline_notice_distance", "i"),
+    ("notice_distance_restore_ms", "i"),
 )
 _DOG = _block("dog", 1, ("attitude", "i"))
 _ICEHOUND = _block("icehound", 2, ("freeze_delay_remaining", "i"))
@@ -588,12 +588,12 @@ INTERFACE_ELEMENTS = (
     "mana_bar",
     "breath_bar",
     "armor_bar",
-    "weapon_bar",
+    "bar_4",
     "compass",
     "backpack",
     "spellbook",
     "journal",
-    "belt",
+    "toolbelt",
     "map",
 )
 INTERFACE_MODES = ("maximum", "minimum", "none")
@@ -665,7 +665,7 @@ class U9SavedLight:
     flicker_rate: float
     flicker_level: float
     flickers_randomly: int
-    flicker_color_randomness: float
+    flicker_hue_jitter: float
     reserved: tuple[int, int]
     object_reference_index: int
 
@@ -683,7 +683,7 @@ class U9SavedLight:
             flicker_rate=v[15],
             flicker_level=v[16],
             flickers_randomly=v[17],
-            flicker_color_randomness=v[18],
+            flicker_hue_jitter=v[18],
             reserved=v[19:21],
             object_reference_index=v[21],
         )
@@ -695,7 +695,7 @@ class U9LightSystemState:
 
     version: int
     ambient: tuple[int, int, int]
-    point_sources_enabled: int
+    point_lights_enabled: int
     infinite_lights: tuple[U9SavedLight, ...]
     ranged_lights: tuple[U9SavedLight, ...]
     settings: tuple[int, ...]
@@ -775,7 +775,7 @@ class U9ScreenFadeState:
 class U9WeatherState:
     """Version 2: clocks, sky state, storm, wind and gusts, rain and
     lightning timers, the sun/secondary/lightning lights, moon phases, the
-    sun-remover objects (counted object references) and the screen fade.
+    sun-mask objects (counted object references) and the screen fade.
 
     ``weather_time`` and ``sun_time`` are seconds of the day;
     ``current_state``/``desired_state`` index :data:`WEATHER_STATES`;
@@ -786,7 +786,7 @@ class U9WeatherState:
     version: int
     weather_time: int
     sun_time: int
-    storm_update_time: int
+    storm_timer: int
     total_seconds: int
     weather_time_ms: float
     underground: int
@@ -798,7 +798,7 @@ class U9WeatherState:
     storm_velocity: tuple[float, float, float]
     storm_intensity: float
     storm_radius: float
-    maximum_storm_intensity: float
+    storm_intensity_cap: float
     wind_strength: int
     wind_vector: tuple[float, float]
     wind_direction: float
@@ -813,12 +813,12 @@ class U9WeatherState:
     sun: U9WeatherLight
     secondary_light: U9WeatherLight
     lightning: U9WeatherLight
-    sun_flare_enabled: int
-    sun_flare_blocked: int
+    lens_flare_enabled: int
+    lens_flare_hidden: int
     trammel_phase: int
     felucca_phase: int
-    sun_remover_scale: float
-    sun_remover_reference_indices: tuple[int, ...]
+    sun_mask_scale: float
+    sun_mask_reference_indices: tuple[int, ...]
     screen_fade: U9ScreenFadeState
     reserved: tuple[int, int]
     offset: int
@@ -845,14 +845,14 @@ class U9WeatherState:
         start = r.offset
         version = r.version(2, "weather")
         v = r.take(WEATHER_STATE, "weather state")
-        n = r.count("sun remover")
-        refs = r.take(f"{n}i", "sun removers")
+        n = r.count("sun mask")
+        refs = r.take(f"{n}i", "sun masks")
         t = r.take(WEATHER_FADE, "weather screen fade")
         return cls(
             version=version,
             weather_time=v[0],
             sun_time=v[1],
-            storm_update_time=v[2],
+            storm_timer=v[2],
             total_seconds=v[3],
             weather_time_ms=v[4],
             underground=v[5],
@@ -864,7 +864,7 @@ class U9WeatherState:
             storm_velocity=v[13:16],
             storm_intensity=v[16],
             storm_radius=v[17],
-            maximum_storm_intensity=v[18],
+            storm_intensity_cap=v[18],
             wind_strength=v[19],
             wind_vector=v[20:22],
             wind_direction=v[22],
@@ -879,12 +879,12 @@ class U9WeatherState:
             sun=U9WeatherLight(bool(v[31]), v[32:35]),
             secondary_light=U9WeatherLight(bool(v[35]), v[36:39]),
             lightning=U9WeatherLight(bool(v[39]), v[40:43]),
-            sun_flare_enabled=v[43],
-            sun_flare_blocked=v[44],
+            lens_flare_enabled=v[43],
+            lens_flare_hidden=v[44],
             trammel_phase=v[45],
             felucca_phase=v[46],
-            sun_remover_scale=v[47],
-            sun_remover_reference_indices=refs,
+            sun_mask_scale=v[47],
+            sun_mask_reference_indices=refs,
             screen_fade=U9ScreenFadeState(*t[:8]),
             reserved=t[8:10],
             offset=start,
@@ -998,26 +998,26 @@ class U9PhysicsState:
         )
 
 
-# ------------------------------------------------------- 8: moving supports
+# ------------------------------------------------------- 8: moving platforms
 
 
 @dataclass(frozen=True)
 class U9SupportedObject:
-    """An object riding a moving support."""
+    """An object riding a moving platform."""
 
     object_reference_index: int
     old_location: tuple[float, float, float]
     old_orientation: tuple[float, float, float, float]
     old_yaw: float
-    support_counter: int
+    support_ticks: int
     delta_yaw: float
     original_location: tuple[float, float, float]
     original_orientation: tuple[float, float, float, float]
-    user_location: tuple[float, float, float]
+    rider_location: tuple[float, float, float]
 
 
 @dataclass(frozen=True)
-class U9MovingSupport:
+class U9MovingPlatform:
     """One moving platform. ``kind``: 0 plain, 1 floating lift (with a path),
     2 floating step, 3 ship, 4 a fifth kind; ``own`` holds the kind's fields."""
 
@@ -1030,27 +1030,27 @@ class U9MovingSupport:
 
 
 @dataclass(frozen=True)
-class U9MovingSupportsState:
+class U9MovingPlatformsState:
     version: int
     ignore_state_changes: int
-    supports: tuple[U9MovingSupport, ...]
+    supports: tuple[U9MovingPlatform, ...]
     offset: int
     end_offset: int
 
     @classmethod
-    def read(cls, r: _Reader, object_reference_count: int) -> U9MovingSupportsState:
+    def read(cls, r: _Reader, object_reference_count: int) -> U9MovingPlatformsState:
         start = r.offset
-        version = r.version(1, "moving-support")
-        ignore = int(r.one("i", "moving-support flag"))
+        version = r.version(1, "moving-platform")
+        ignore = int(r.one("i", "moving-platform flag"))
         supports = []
-        while r.continuation("moving support"):
+        while r.continuation("moving platform"):
             at = r.offset
-            kind, supporting = r.take("ii", "moving support")
+            kind, supporting = r.take("ii", "moving platform")
             if kind not in SUPPORT_OWN_SIZES:
                 raise U9ProcessSectionsError(
-                    f"unknown moving-support kind {kind} at 0x{at:X}"
+                    f"unknown moving-platform kind {kind} at 0x{at:X}"
                 )
-            reserved = r.take("4I", "moving-support reserved")
+            reserved = r.take("4I", "moving-platform reserved")
             riders = []
             while r.continuation("supported object"):
                 v = r.take(SUPPORTED_OBJECT, "supported object")
@@ -1060,11 +1060,11 @@ class U9MovingSupportsState:
                         old_location=v[1:4],
                         old_orientation=v[4:8],
                         old_yaw=v[8],
-                        support_counter=v[9],
+                        support_ticks=v[9],
                         delta_yaw=v[10],
                         original_location=v[11:14],
                         original_orientation=v[14:18],
-                        user_location=v[18:21],
+                        rider_location=v[18:21],
                     )
                 )
             path = None
@@ -1073,9 +1073,9 @@ class U9MovingSupportsState:
                     r.data, r.offset, object_reference_count=object_reference_count
                 )
                 r.offset = path.end_offset
-            own = r.raw(SUPPORT_OWN_SIZES[kind], "moving-support fields")
+            own = r.raw(SUPPORT_OWN_SIZES[kind], "moving-platform fields")
             supports.append(
-                U9MovingSupport(kind, supporting, reserved, tuple(riders), path, own)  # type: ignore[arg-type]
+                U9MovingPlatform(kind, supporting, reserved, tuple(riders), path, own)  # type: ignore[arg-type]
             )
         return cls(version, ignore, tuple(supports), start, r.offset)
 
@@ -1188,7 +1188,7 @@ class U9CombatantCommonState:
     npc_type: int
     stun_delay: int
     has_enemies: int
-    contact_animation_type: int
+    impact_animation_kind: int
     invulnerable_timer: int
     current_animation_id: int
     attack_level: int
@@ -1196,30 +1196,30 @@ class U9CombatantCommonState:
     noticed_enemies: int
     home_location: tuple[int, int, int]
     near_avatar: int
-    no_enemies_wait_delay: int
-    pathfind_speed: int
-    pathfind_error_tolerance: float
-    pathfind_failures: int
-    maximum_pathfind_failures: int
-    paused_for_pathfind: int
+    idle_without_enemies_delay: int
+    route_speed: int
+    route_tolerance: float
+    route_failures: int
+    route_failure_limit: int
+    waiting_for_route: int
     locked_in_place: int
     poisoned_hit_points: int
     poison_timer: int
-    attached_item_section: bytes
-    target_enemy_type: int
-    friend_type: int
-    friend_link: int
-    saved_friend_type: int
-    saved_friend_link: int
+    carried_object_bytes: bytes
+    preferred_target_kind: int
+    ally_kind: int
+    ally_reference: int
+    stored_ally_kind: int
+    stored_ally_reference: int
     homing_missile_enemy_type: int
     ghost_push_counter: int
     uses_straight_line_paths: int
-    protected_from_projectiles: int
-    in_combat_fog: int
+    projectile_immune: int
+    combat_fog_active: int
     last_destination: tuple[float, float, float]
     wander_failures: int
     reversing: int
-    charmer_npc_type: int
+    charm_source_npc_type: int
 
     @classmethod
     def read(cls, r: _Reader, expected_npc_type: int) -> U9CombatantCommonState:
@@ -1238,7 +1238,7 @@ class U9CombatantCommonState:
             npc_type=v[1],
             stun_delay=v[2],
             has_enemies=v[3],
-            contact_animation_type=v[4],
+            impact_animation_kind=v[4],
             invulnerable_timer=v[5],
             current_animation_id=v[6],
             attack_level=v[7],
@@ -1246,30 +1246,30 @@ class U9CombatantCommonState:
             noticed_enemies=v[9],
             home_location=v[10:13],
             near_avatar=v[13],
-            no_enemies_wait_delay=v[14],
-            pathfind_speed=v[15],
-            pathfind_error_tolerance=v[16],
-            pathfind_failures=v[17],
-            maximum_pathfind_failures=v[18],
-            paused_for_pathfind=v[19],
+            idle_without_enemies_delay=v[14],
+            route_speed=v[15],
+            route_tolerance=v[16],
+            route_failures=v[17],
+            route_failure_limit=v[18],
+            waiting_for_route=v[19],
             locked_in_place=v[20],
             poisoned_hit_points=v[21],
             poison_timer=v[22],
-            attached_item_section=v[23],
-            target_enemy_type=v[24],
-            friend_type=v[25],
-            friend_link=v[26],
-            saved_friend_type=v[27],
-            saved_friend_link=v[28],
+            carried_object_bytes=v[23],
+            preferred_target_kind=v[24],
+            ally_kind=v[25],
+            ally_reference=v[26],
+            stored_ally_kind=v[27],
+            stored_ally_reference=v[28],
             homing_missile_enemy_type=v[29],
             ghost_push_counter=v[30],
             uses_straight_line_paths=v[31],
-            protected_from_projectiles=v[32],
-            in_combat_fog=v[33],
+            projectile_immune=v[32],
+            combat_fog_active=v[33],
             last_destination=v[34:37],
             wander_failures=v[37],
             reversing=v[38],
-            charmer_npc_type=v[39],
+            charm_source_npc_type=v[39],
         )
 
 
@@ -1280,9 +1280,8 @@ class U9CombatantClassFields:
     ``kind`` names the class (``humanoid``, ``avatar``, ``wolf`` ...).
     ``values`` holds ``(name, value)`` pairs: vectors and arrays as tuples,
     object references as reference-table indices (names without a suffix,
-    such as ``shield``), byte flags as their stored byte. Fields the retail
-    save writes but whose meaning is not established are named
-    ``unidentified_N``. Index by name (``fields["current_state"]``).
+    such as ``shield``), byte flags as their stored byte. Index by name
+    (``fields["current_state"]``).
     """
 
     kind: str
@@ -1495,16 +1494,16 @@ def _validate_references(sections: U9ProcessSections, count: int) -> None:
 
     for light in sections.lights.infinite_lights + sections.lights.ranged_lights:
         check(light.object_reference_index, "saved light")
-    for ref in sections.weather.sun_remover_reference_indices:
-        check(ref, "sun remover")
+    for ref in sections.weather.sun_mask_reference_indices:
+        check(ref, "sun mask")
     for obj in sections.physics.objects:
         check(obj.object_reference_index, "physics")
     for overlap in sections.physics.overlaps:
         check(overlap.object_reference_index, "overlap")
         for trigger in overlap.triggers:
             check(trigger.trigger_object_reference_index, "overlap trigger")
-    for support in sections.moving_supports.supports:
-        check(support.supporting_object_reference_index, "moving support")
+    for support in sections.moving_platforms.supports:
+        check(support.supporting_object_reference_index, "moving platform")
         for rider in support.supported_objects:
             check(rider.object_reference_index, "supported object")
     for hint in sections.hints.hints:
@@ -1526,7 +1525,7 @@ class U9ProcessSections:
     weather: U9WeatherState
     spell_manager: U9SpellManagerState
     physics: U9PhysicsState
-    moving_supports: U9MovingSupportsState
+    moving_platforms: U9MovingPlatformsState
     highway_manager: U9HighwayManagerState
     hints: U9HintManagerState
     combat: U9CombatState
@@ -1559,7 +1558,7 @@ class U9ProcessSections:
         weather = U9WeatherState.read(r)
         spell_manager = U9SpellManagerState.read(r)
         physics = U9PhysicsState.read(r)
-        moving_supports = U9MovingSupportsState.read(r, object_reference_count)
+        moving_platforms = U9MovingPlatformsState.read(r, object_reference_count)
         highway_manager = U9HighwayManagerState.read(r)
         hints = U9HintManagerState.read(r)
 
@@ -1574,7 +1573,7 @@ class U9ProcessSections:
             weather,
             spell_manager,
             physics,
-            moving_supports,
+            moving_platforms,
             highway_manager,
             hints,
             combat,

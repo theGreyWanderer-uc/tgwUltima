@@ -799,7 +799,7 @@ class ProcessDataPrefixTests(unittest.TestCase):
         self.assertEqual(record.light_color, (10, 20, 30))
         self.assertEqual(record.sound_category_id, 47)
         self.assertEqual(record.spawn_mean_ramp_count, 1)
-        self.assertEqual(record.light_diffusion_ramp_count, 10)
+        self.assertEqual(record.light_diffusion_keyframes, 10)
         self.assertEqual(record.camera_filter_texture.texture_id, 42)
         self.assertEqual(record.camera_filter_texture.animation_time, 33)
         self.assertEqual(record.version_5_ramp_extension, b"\x11\x22\x33\x44")
@@ -1048,7 +1048,7 @@ class ProcessDataPrefixTests(unittest.TestCase):
         self.assertTrue(record.pulse_count_byte_matches)
         self.assertEqual(record.object_type_id, 557)
         self.assertEqual(record.object_status_flags, 0x80000200)
-        self.assertEqual(record.swap_sequence, 4)
+        self.assertEqual(record.alternate_sequence, 4)
         self.assertEqual(record.sequence_index, 8)
         self.assertEqual(record.swap_elapsed_frames, 13)
         self.assertEqual(record.attached_element_id, -1)
@@ -1057,7 +1057,7 @@ class ProcessDataPrefixTests(unittest.TestCase):
         self.assertTrue(record.has_light_source)
         self.assertEqual(record.callback_id, 30)
         self.assertEqual(record.callback_effect_id, 101)
-        self.assertEqual(record.callback_magic_type, 2)
+        self.assertEqual(record.callback_spell_kind, 2)
         self.assertEqual(record.callback_caster_reference_index, 31)
         self.assertEqual(record.object_reference_index, 32)
         self.assertEqual(record.end_offset, 196)
@@ -1224,7 +1224,7 @@ class ProcessDataPrefixTests(unittest.TestCase):
         self.assertEqual(hanging.configured_swing_period, 22)
         self.assertEqual(hanging.configured_maximum_swing_angle, 45)
         self.assertEqual(hanging.configured_swing_half_life, 4)
-        self.assertEqual(hanging.configured_turning_type, 3)
+        self.assertEqual(hanging.configured_turn_mode, 3)
         self.assertEqual(hanging.configured_turn_period, 17)
         self.assertTrue(hanging.configured_turn_limit_is_degrees)
         self.assertEqual(hanging.configured_turn_limit, 45)
@@ -1286,7 +1286,7 @@ class ProcessDataPrefixTests(unittest.TestCase):
         self.assertTrue(timer.fast_area_stop_flag)
         self.assertTrue(timer.is_quiet_outside_fast_area)
         self.assertEqual(timer.configured_dual_percentage, 40)
-        self.assertEqual(timer.configured_time_system, 3)
+        self.assertEqual(timer.configured_clock_kind, 3)
         self.assertEqual(timer.configured_duration, 100)
         self.assertEqual(timer.reserved, (0, 0, 0, 0))
         self.assertEqual(timer.end_offset, light.offset)
@@ -1671,13 +1671,13 @@ class ProcessDataPrefixTests(unittest.TestCase):
             (action.origin_x, action.origin_y, action.stand_time), (120, 340, 900)
         )
         self.assertEqual(
-            (action.animation_to_play, action.last_animation_played), (44, 43)
+            (action.queued_animation_id, action.previous_animation_id), (44, 43)
         )
         self.assertEqual(action.activity_variables[0], 734)
         self.assertEqual(action.maximum_step_height, 50.0)
         self.assertEqual(action.extra_object_reference_index, 1)
         self.assertEqual(
-            (action.collision_checks_per_frame, action.maximum_collision_checks),
+            (action.probes_per_frame, action.probe_limit),
             (1, 30),
         )
         self.assertEqual(action.idle_animation_id, 172)
@@ -1744,8 +1744,8 @@ class ProcessDataPrefixTests(unittest.TestCase):
         self.assertEqual(
             (
                 plain.status_code,
-                plain.grid_move_succeeded,
-                plain.maximum_collision_checks,
+                plain.last_grid_step_ok,
+                plain.probe_limit,
             ),
             (1, 11, 30),
         )
@@ -1824,7 +1824,7 @@ class ProcessDataPrefixTests(unittest.TestCase):
         self.assertAlmostEqual(lantern.accumulated_time, 3.831, places=5)
         self.assertEqual(lantern.target_position_words, (1, 43151, 44162))
         self.assertEqual(lantern.accumulated_offset_words, (82717, 83728, 0))
-        self.assertEqual(lantern.end_condition_flags, 1)
+        self.assertEqual(lantern.stop_flags, 1)
         self.assertEqual(lantern.reserved, (0, 0, 0, 0))
         self.assertEqual(lantern.end_offset, light.offset)
 
@@ -1852,7 +1852,7 @@ class ProcessDataPrefixTests(unittest.TestCase):
         reread = U9ProcessDataPrefix.from_bytes(bytes(unset)).following_processes[0]
 
         assert isinstance(reread, U9PathfinderProcessState)
-        self.assertTrue(math.isnan(reread.obstacle_avoid_angle))
+        self.assertTrue(math.isnan(reread.avoidance_angle))
         self.assertTrue(all(math.isnan(v) for v in reread.last_seen_position))
         self.assertEqual(reread.end_offset, pathfinder.end_offset)
 

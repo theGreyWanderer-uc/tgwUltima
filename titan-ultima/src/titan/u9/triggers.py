@@ -26,11 +26,11 @@ The executable accepts a contiguous command catalogue from ``0x00`` through
 ``0x64``. The shipped archive uses 90 of those 101 commands. Operands are
 decoded by :mod:`titan.u9.trigger_operands` and exposed on each record as
 read-only views over the stored words: :attr:`U9TriggerRecord.target_selection`
-(for the 63 commands that act on every object a search finds, ``arg0`` selects
-a link relative to the firing object's and ``arg1`` an object type),
+(for commands using the shared object search, ``arg0`` selects a link relative
+to the executor's current link context and ``arg1`` an object type),
 :attr:`U9TriggerRecord.branch` (branch labels and comparisons in ``arg2``) and
-:attr:`U9TriggerRecord.parameters` (the remaining ``arg2`` fields, each layout
-graded ``retail_confirmed`` or ``retail_corroborated``).
+:attr:`U9TriggerRecord.parameters` (the remaining ``arg2`` fields, all layouts
+graded ``retail_confirmed`` in 1.19F).
 
 Opcode ``0x31`` runs an NPC activity record:
 ``arg1`` is an activity set index in :mod:`titan.u9.activity` (also the NPC's
@@ -45,18 +45,19 @@ and default GOG 1.19F (242,818 bytes, 6,708 used): every used entry's length
 is a multiple of 6. The versions have 6,710 and 6,706 terminated entries
 respectively (99.97% in each).
 
-The two that do not -- trigger IDs 58 and 631 -- appear to be **valid
-triggers that simply omit the redundant terminator**, not damage. Their
-records use ordinary opcodes (``0x0C``, ``0x0A``, ``0x33``, each common
-elsewhere) with the usual ``arg0`` of 16; the FLX directory tiles the
-payload with zero gaps and zero overlaps, so nothing is truncated; and 54
-world entities across 20 regions reference trigger 58, which a broken
-trigger would make a conspicuous and widely reproducing bug. Since the
-terminator is the final record in 6,700 of 6,712 entries, it is redundant
-with the entry length almost everywhere. The engine most likely stops at
-the terminator *or* the end of the entry, whichever comes first -- which
-also explains the ten entries carrying slack behind their terminator.
-``U9Trigger.terminated`` reports the distinction without judging it.
+The two that do not -- trigger IDs 58 and 631 -- are shipped unterminated
+entries. Retail 1.19F requests 510 bytes from an entry's file offset without
+clamping to its directory length; the interpreter tests ``0xFF`` and does
+not test the entry boundary. In both archives, 58's read includes 59's
+projectile instruction and terminator; 631's includes 632's hide/show
+instructions and terminator. The earlier entry-end stopping hypothesis was
+disproved by the retail loader trace (G-TRG-2).
+
+Titan parses only the directory-owned bytes and preserves each entry exactly.
+It does not merge these neighboring programs or insert an end marker.
+``U9Trigger.terminated`` describes an on-disk terminator, not the end of the
+retail read window. Structural validity alone does not establish a trigger's
+runtime behavior; changing physical adjacency can change that behavior.
 
 The terminator's ``arg0`` is ``0x10`` in 6,711 cases and ``0x00`` in one,
 so the whole word is ``0x10FF`` almost everywhere -- but the opcode byte is
@@ -84,13 +85,17 @@ from __future__ import annotations
 
 __all__ = [
     "TRIGGER_OPCODE_CATALOGUE",
+    "TRIGGER_PHASE_MEANINGS",
+    "TRIGGER_SPECIAL_ACTION_CATALOGUE",
     "U9MapTransition",
     "U9TriggerOpcodeInfo",
+    "U9TriggerSpecialActionInfo",
     "U9Trigger",
     "U9TriggerRecord",
     "U9Triggers",
     "U9TriggersError",
     "trigger_opcode_info",
+    "trigger_special_action_info",
 ]
 
 import os
@@ -111,6 +116,63 @@ from titan.u9.trigger_operands import (
 RECORD_SIZE = 6
 RECORD_STRUCT = "<BBHH"
 TERMINATOR_OPCODE = 0xFF
+
+# Retail caller contexts establish these roles; phases 0/1 also cover volume
+# entry/exit and effect start/end, rather than one universal input event.
+TRIGGER_PHASE_MEANINGS = ("activation", "deactivation", "completion", "failure")
+
+
+@dataclass(frozen=True)
+class U9TriggerSpecialActionInfo:
+    """Independent wording for one retail 1.19F special-action slot.
+
+    This describes the code path, without promising a visible outcome when its
+    required NPC, temporary camera or other game state is missing.
+    """
+
+    action: int
+    meaning: str
+    evidence: str = "retail_confirmed"
+
+
+TRIGGER_SPECIAL_ACTION_CATALOGUE = tuple(
+    U9TriggerSpecialActionInfo(action, meaning)
+    for action, meaning in enumerate(
+        (
+            "begin shrine cleansing",
+            "refresh world lighting",
+            "set camera roll to 180 degrees",
+            "reset camera roll",
+            "attach red light to target",
+            "attach white light to target",
+            "attach blue light to target",
+            "remove target light",
+            "request Avatar combat mode",
+            "reserved no-op",
+            "reserved no-op",
+            "reserved no-op",
+            "move Avatar inventory to NPC 9 and disable selected UI elements",
+            "drop marked NPC 9 inventory near Avatar and restore UI",
+            "delete Avatar contents except types 4881 and 5737",
+            "position Avatar for sleeping",
+            "wake Avatar from sleeping or sitting",
+            "rebuild base UI and set Avatar health to zero",
+            "attach effect preset 1010 mode 5 to temporary camera",
+            "remove temporary camera and restore its saved control state",
+            "initialize Avatar attributes from datum 480",
+            "suppress weather collision checks and stop script during conversation",
+            "send NPC 185 support message 7 and reposition Avatar at hardpoint 133",
+            "enable NPC 9 and 185 map transfer",
+        )
+    )
+)
+
+
+def trigger_special_action_info(action: int) -> U9TriggerSpecialActionInfo | None:
+    """Special-action slot 0..23, else ``None`` (retail ignores other values)."""
+    if 0 <= action < len(TRIGGER_SPECIAL_ACTION_CATALOGUE):
+        return TRIGGER_SPECIAL_ACTION_CATALOGUE[action]
+    return None
 
 
 @dataclass(frozen=True)
@@ -163,7 +225,7 @@ _OPCODE_MEANINGS = (
     "play one-shot sound",
     "choose a random target",
     "rotate objects about the vertical axis",
-    "pan the camera",
+    "reserved target command",
     "rotate objects about the lateral axis",
     "rotate objects about the longitudinal axis",
     "begin looping sound",
@@ -174,7 +236,7 @@ _OPCODE_MEANINGS = (
     "halt object movement",
     "set target search radius",
     "branch on use-state count",
-    "move objects to coordinates",
+    "move objects by repeated coordinate steps",
     "branch on source link",
     "play speech",
     "choose NPC activity record",
@@ -185,7 +247,7 @@ _OPCODE_MEANINGS = (
     "end music",
     "play a movie",
     "float an object",
-    "make an object follow another",
+    "follow a sequence of linked markers",
     "branch on game time",
     "test all object status bits",
     "set storm state",
@@ -210,9 +272,9 @@ _OPCODE_MEANINGS = (
     "branch when an object lacks a tint",
     "damage an object",
     "choose combat behavior",
-    "modify avatar karma",
-    "branch on avatar karma",
-    "move objects quickly to coordinates",
+    "set or adjust avatar mana",
+    "branch on avatar mana",
+    "move objects quickly by repeated coordinate steps",
     "order an NPC attack",
     "turn an NPC toward a target",
     "adjust an object link",
@@ -233,7 +295,7 @@ _OPCODE_MEANINGS = (
 
 
 def _opcode_evidence(opcode: int) -> str:
-    if opcode == 0x1F:
+    if opcode in (0x1B, 0x1F, 0x23, 0x2E, 0x39, 0x3D, 0x52, 0x53, 0x54):
         return "retail_runtime_confirmed"
     if opcode == 0x31:
         return "retail_archive_confirmed"
@@ -287,7 +349,7 @@ class U9TriggerRecord:
     """One 6-byte trigger instruction.
 
     Command names cover the executable's complete ``0x00`` through ``0x64``
-    catalogue. Only operands with corroborated layouts receive typed views;
+    catalogue. All 101 retail operand layouts receive typed views;
     all four stored fields remain available regardless.
     """
 
@@ -368,6 +430,32 @@ class U9TriggerRecord:
     def parameters(self) -> U9TriggerParameters | None:
         """Named ``arg2`` fields and leftover bits, for catalogued commands."""
         return parameters(self.opcode, self.arg2)
+
+    @property
+    def search_radius(self) -> int | None:
+        """World-unit search half-extent set by 0x2C, else ``None``.
+
+        Bit 15 selects absolute units; otherwise the value is multiplied by
+        128. Either encoding of zero restores the default of 1,280 units.
+        """
+        if self.opcode != 0x2C:
+            return None
+        value = self.arg2 & 0x7FFF
+        return (value if self.arg2 & 0x8000 else value * 128) or 1280
+
+    @property
+    def special_action_info(self) -> U9TriggerSpecialActionInfo | None:
+        """Retail special-action meaning for 0x3D, else ``None``."""
+        if self.opcode != 0x3D:
+            return None
+        return trigger_special_action_info(self.arg2)
+
+    @property
+    def movement_duration_ms(self) -> int | None:
+        """0x1B duration in milliseconds; encoded zero selects 500 ms."""
+        if self.opcode != 0x1B:
+            return None
+        return 500 * max(self.arg2 & 0x1F, 1)
 
     def to_bytes(self) -> bytes:
         """Encode this instruction in its exact six-byte disk layout."""
@@ -536,9 +624,9 @@ class U9Triggers:
         return found
 
     def unterminated_trigger_ids(self) -> list[int]:
-        """Triggers whose record list runs off the end without a ``0xFF``.
+        """Entries without an on-disk ``0xFF`` record (shipped IDs 58 and 631).
 
-        Two in the shipped archive (IDs 58 and 631); a longer list means the
-        file is damaged or is not a triggers archive.
+        Retail 1.19F reads across entry boundaries; these IDs are a structural
+        diagnostic, not a claim that the game stops at the entry's end.
         """
         return [t.trigger_id for t in self.triggers() if not t.terminated]

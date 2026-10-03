@@ -600,13 +600,13 @@ class IntegrityTests(unittest.TestCase):
         )
         self.assertEqual(activity["npc_activity"]["action_name"], "loiter")
         self.assertEqual(action["npc_action"]["action_name"], "loiter")
-        self.assertEqual(action["npc_action"]["maximum_collision_checks"], 30)
+        self.assertEqual(action["npc_action"]["probe_limit"], 30)
         self.assertEqual(len(action["npc_action"]["activity_variables"]), 64)
         self.assertEqual(timer["door_timer"]["door_object_reference_index"], 1)
         self.assertEqual(eye["table_process"]["kind"], "magic_eye")
         self.assertIsNone(walker["pathfinder"]["grid"])
         self.assertTrue(math.isnan(walker["pathfinder"]["blocked_position"][0]))
-        self.assertEqual(walker["pathfinder"]["collision_checks_per_frame"], 3)
+        self.assertEqual(walker["pathfinder"]["probes_per_frame"], 3)
         serialized = report.to_dict()["artifacts"]["archive/processes.dat"]
         self.assertEqual(
             serialized["decoded_following_processes"][10]["pathfinder"][
@@ -625,7 +625,7 @@ class IntegrityTests(unittest.TestCase):
         sections = evidence["process_sections"]
         self.assertEqual(sections["end_offset"], evidence["bytes"])
         self.assertEqual(sections["lights"]["limited_range"], 1)
-        self.assertEqual(sections["moving_supports"]["kinds"], [1, 3])
+        self.assertEqual(sections["moving_platforms"]["kinds"], [1, 3])
         self.assertEqual(sections["combat"]["npc_types"], [0, 494, 300])
         self.assertEqual(
             [

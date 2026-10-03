@@ -64,6 +64,9 @@ class TriggerRecordTests(unittest.TestCase):
             [info.opcode for info in TRIGGER_OPCODE_CATALOGUE], list(range(101))
         )
         expected = {
+            0x23: "reserved target command",
+            0x52: "set or adjust avatar mana",
+            0x53: "branch on avatar mana",
             0x1F: "transition between maps",
             0x31: "choose NPC activity record",
             0xFF: "end instruction stream",
@@ -75,6 +78,10 @@ class TriggerRecordTests(unittest.TestCase):
                 self.fail(f"missing opcode information for 0x{opcode:02X}")
             self.assertEqual(info.meaning, meaning)
         self.assertIsNone(trigger_opcode_info(0x80))
+        for opcode in (0x23, 0x52, 0x53):
+            self.assertEqual(
+                trigger_opcode_info(opcode).evidence, "retail_runtime_confirmed"
+            )
 
     def test_record_fields(self) -> None:
         triggers = U9Triggers(_archive({1: _record(0x33, 16, 2220, 238) + TERMINATOR}))
@@ -184,6 +191,30 @@ class TriggerTerminationTests(unittest.TestCase):
         self.assertFalse(trigger.terminated)
         self.assertEqual(len(trigger.records), 1)
         self.assertEqual(triggers.unterminated_trigger_ids(), [1])
+
+    def test_neighboring_program_is_not_merged_into_an_unterminated_entry(self) -> None:
+        # Retail's fixed-size read crosses this boundary. The format reader
+        # must still retain the independently owned payloads and terminators.
+        for source, neighbor in (
+            (_record(0x0C, 16, 3375, 34210), _record(0x2A, 16, 2895, 2560)),
+            (
+                _record(0x0A, 16, 3239, 16386) + _record(0x33, 16, 3239, 8415),
+                _record(0x09, 16, 3239, 2) + _record(0x0A, 16, 4887, 16386),
+            ),
+        ):
+            with self.subTest(source_records=len(source) // RECORD_SIZE):
+                archive = _archive({1: source, 2: neighbor + TERMINATOR})
+                triggers = U9Triggers(archive)
+                first = triggers.trigger(1)
+                second = triggers.trigger(2)
+                assert first is not None and second is not None
+                self.assertFalse(first.terminated)
+                self.assertEqual(len(first.records), len(source) // RECORD_SIZE)
+                self.assertTrue(second.terminated)
+                self.assertEqual(first.to_bytes(), source)
+                self.assertEqual(second.to_bytes(), neighbor + TERMINATOR)
+                self.assertEqual(triggers.unterminated_trigger_ids(), [1])
+                self.assertEqual(archive.read_entry(1), source)
 
 
 class TriggerArchiveTests(unittest.TestCase):

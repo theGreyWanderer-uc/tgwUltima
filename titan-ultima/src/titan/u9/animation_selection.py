@@ -1,8 +1,11 @@
-"""Resolve confirmed U9 actor-state selectors to animation IDs.
+"""Resolve U9 actor-state selectors to animation IDs.
 
-The initial table covers the verified default Avatar movement controller. It
-deliberately excludes weapon-specific combat movement and does not choose
-among the several shipped Avatar model IDs.
+The table names the default Avatar movement clips. Each entry is identified by
+the authoring label stored in its ``anim.flx`` record
+(``humanoid/movement/walkfoward_avatar_none`` and so on); see
+:mod:`titan.u9.animation_labels`. It says which clip carries which motion, not
+how the runtime chooses among them: weapon-specific combat movement, layered
+controllers and the choice among the shipped Avatar model IDs are not covered.
 """
 
 from __future__ import annotations
@@ -18,7 +21,7 @@ __all__ = [
 import re
 from dataclasses import dataclass
 
-from titan.u9.motion_ids import U9MotionIds
+from titan.u9.animation_labels import U9AnimationLabels
 
 
 class U9AnimationSelectionError(Exception):
@@ -27,40 +30,31 @@ class U9AnimationSelectionError(Exception):
 
 @dataclass(frozen=True)
 class U9AnimationSelectionRule:
-    """One verified actor-state to original-motion mapping."""
+    """One actor-state name for a clip identified by its authoring label."""
 
     actor: str
     state: str
     animation_id: int
-    motion_name: str
+    animation_label: str
     aliases: tuple[str, ...]
-    travel_type: str
-    movement_slot: str
-    lockset: str | None
-    root_translation_axes: tuple[str, ...]
 
     def to_metadata(self) -> dict[str, object]:
         """Return stable JSON metadata without presentation-timeline policy."""
         return {
             "actor": self.actor,
             "state": self.state,
-            "travel_type": self.travel_type,
-            "movement_slot": self.movement_slot,
-            "equipment_context": "default/no weapon override",
-            "controller_scope": "default humanoid movement inherited by Avatar",
-            "lockset": self.lockset,
-            "root_translation_axes": list(self.root_translation_axes),
-            "selection_evidence": "confirmed by external runtime analysis",
+            "selection_evidence": "authoring label of the anim.flx record",
+            "runtime_selection": "not yet decoded",
         }
 
 
 @dataclass(frozen=True)
 class U9ResolvedAnimationSelection:
-    """A user selector resolved to one archive animation ID and motion name."""
+    """A user selector resolved to one archive animation ID and its label."""
 
     selector: str
     animation_id: int
-    motion_name: str | None
+    animation_label: str | None
     resolution: str
     rule: U9AnimationSelectionRule | None = None
 
@@ -75,117 +69,39 @@ class U9ResolvedAnimationSelection:
         return metadata
 
 
+def _avatar_movement(
+    state: str, animation_id: int, stem: str, *aliases: str
+) -> U9AnimationSelectionRule:
+    return U9AnimationSelectionRule(
+        actor="avatar",
+        state=state,
+        animation_id=animation_id,
+        animation_label=f"humanoid/movement/{stem}_avatar_none",
+        aliases=aliases or (f"avatar:{state}",),
+    )
+
+
 DEFAULT_AVATAR_ANIMATION_SELECTIONS = (
     U9AnimationSelectionRule(
         actor="avatar",
         state="breathe",
         animation_id=172,
-        motion_name="HUMANOID_IDLE_BREATHE_AVATAR",
+        animation_label="humanoid/idle/breathe_avatar",
         aliases=("avatar:breathe", "avatar:idle"),
-        travel_type="walk",
-        movement_slot="idle",
-        lockset=None,
-        root_translation_axes=("z",),
     ),
-    U9AnimationSelectionRule(
-        actor="avatar",
-        state="run-forward",
-        animation_id=173,
-        motion_name="HUMANOID_MOVEMENT_RUNFOWARD_AVATAR_NONE",
-        aliases=("avatar:run", "avatar:run-forward"),
-        travel_type="run",
-        movement_slot="forward",
-        lockset="lower",
-        root_translation_axes=("x", "z"),
+    _avatar_movement("run-forward", 173, "runfoward", "avatar:run", "avatar:run-forward"),
+    _avatar_movement(
+        "walk-forward", 174, "walkfoward", "avatar:walk", "avatar:walk-forward"
     ),
-    U9AnimationSelectionRule(
-        actor="avatar",
-        state="walk-forward",
-        animation_id=174,
-        motion_name="HUMANOID_MOVEMENT_WALKFOWARD_AVATAR_NONE",
-        aliases=("avatar:walk", "avatar:walk-forward"),
-        travel_type="walk",
-        movement_slot="forward",
-        lockset="lower",
-        root_translation_axes=("x", "z"),
+    _avatar_movement("run-left", 175, "runleft"),
+    _avatar_movement("run-right", 176, "runright"),
+    _avatar_movement("turn-left", 177, "turnleft"),
+    _avatar_movement("turn-right", 178, "turnright"),
+    _avatar_movement(
+        "walk-backward", 179, "walkback", "avatar:walk-back", "avatar:walk-backward"
     ),
-    U9AnimationSelectionRule(
-        actor="avatar",
-        state="run-left",
-        animation_id=175,
-        motion_name="HUMANOID_MOVEMENT_RUNLEFT_AVATAR_NONE",
-        aliases=("avatar:run-left",),
-        travel_type="run",
-        movement_slot="left",
-        lockset="lower",
-        root_translation_axes=("z",),
-    ),
-    U9AnimationSelectionRule(
-        actor="avatar",
-        state="run-right",
-        animation_id=176,
-        motion_name="HUMANOID_MOVEMENT_RUNRIGHT_AVATAR_NONE",
-        aliases=("avatar:run-right",),
-        travel_type="run",
-        movement_slot="right",
-        lockset="lower",
-        root_translation_axes=("z",),
-    ),
-    U9AnimationSelectionRule(
-        actor="avatar",
-        state="turn-left",
-        animation_id=177,
-        motion_name="HUMANOID_MOVEMENT_TURNLEFT_AVATAR_NONE",
-        aliases=("avatar:turn-left",),
-        travel_type="walk/run",
-        movement_slot="turn-left",
-        lockset="lower",
-        root_translation_axes=(),
-    ),
-    U9AnimationSelectionRule(
-        actor="avatar",
-        state="turn-right",
-        animation_id=178,
-        motion_name="HUMANOID_MOVEMENT_TURNRIGHT_AVATAR_NONE",
-        aliases=("avatar:turn-right",),
-        travel_type="walk/run",
-        movement_slot="turn-right",
-        lockset="lower",
-        root_translation_axes=(),
-    ),
-    U9AnimationSelectionRule(
-        actor="avatar",
-        state="walk-backward",
-        animation_id=179,
-        motion_name="HUMANOID_MOVEMENT_WALKBACK_AVATAR_NONE",
-        aliases=("avatar:walk-back", "avatar:walk-backward"),
-        travel_type="walk/run",
-        movement_slot="backward",
-        lockset="lower",
-        root_translation_axes=("x", "z"),
-    ),
-    U9AnimationSelectionRule(
-        actor="avatar",
-        state="walk-left",
-        animation_id=180,
-        motion_name="HUMANOID_MOVEMENT_WALKLEFT_AVATAR_NONE",
-        aliases=("avatar:walk-left",),
-        travel_type="walk",
-        movement_slot="left",
-        lockset="lower",
-        root_translation_axes=("z",),
-    ),
-    U9AnimationSelectionRule(
-        actor="avatar",
-        state="walk-right",
-        animation_id=181,
-        motion_name="HUMANOID_MOVEMENT_WALKRIGHT_AVATAR_NONE",
-        aliases=("avatar:walk-right",),
-        travel_type="walk",
-        movement_slot="right",
-        lockset="lower",
-        root_translation_axes=("z",),
-    ),
+    _avatar_movement("walk-left", 180, "walkleft"),
+    _avatar_movement("walk-right", 181, "walkright"),
 )
 
 
@@ -202,57 +118,71 @@ _RULES_BY_ALIAS = {
 _NUMERIC_SELECTOR = re.compile(r"^(?:0[xX][0-9A-Fa-f]+|[0-9]+)$")
 
 
+def _resolve_label(
+    selector: str, labels: U9AnimationLabels
+) -> U9ResolvedAnimationSelection | None:
+    animation_ids = labels.ids_for(selector)
+    if len(animation_ids) > 1:
+        raise U9AnimationSelectionError(
+            f"animation selector {selector!r} matches IDs "
+            f"{', '.join(str(value) for value in animation_ids)}; use an ID"
+        )
+    if not animation_ids:
+        return None
+    return U9ResolvedAnimationSelection(
+        selector=selector,
+        animation_id=animation_ids[0],
+        animation_label=labels.label(animation_ids[0]),
+        resolution="animation-label",
+    )
+
+
 def resolve_animation_selector(
     selector: str,
-    motion_ids: U9MotionIds | None = None,
+    labels: U9AnimationLabels | None = None,
 ) -> U9ResolvedAnimationSelection:
-    """Resolve a numeric ID, exact motion name, or confirmed ``actor:state`` alias."""
+    """Resolve a numeric ID, an authoring label, or an ``actor:state`` alias.
+
+    ``labels`` comes from the archive being exported. With it, labels resolve
+    and every alias is checked against the clip actually stored at its ID.
+    """
     stripped = selector.strip()
     if not stripped:
         raise U9AnimationSelectionError("animation selector is empty")
     if _NUMERIC_SELECTOR.fullmatch(stripped):
         animation_id = int(stripped, 0)
-        motion_name = motion_ids.name(animation_id) if motion_ids is not None else None
         return U9ResolvedAnimationSelection(
             selector=selector,
             animation_id=animation_id,
-            motion_name=motion_name,
+            animation_label=labels.label(animation_id) if labels is not None else None,
             resolution="animation-id",
         )
 
     rule = _RULES_BY_ALIAS.get(_normalize_semantic_selector(stripped))
     if rule is not None:
-        if motion_ids is not None:
-            motion = motion_ids.by_name(rule.motion_name)
-            if motion is None:
+        if labels is not None:
+            stored = labels.label(rule.animation_id)
+            if stored != rule.animation_label:
                 raise U9AnimationSelectionError(
-                    f"animation selector {selector!r}: animation-name table does not "
-                    f"contain {rule.motion_name}"
-                )
-            if motion.animation_id != rule.animation_id:
-                raise U9AnimationSelectionError(
-                    f"animation selector {selector!r}: confirmed ID {rule.animation_id} "
-                    f"disagrees with animation-name table ID {motion.animation_id}"
+                    f"animation selector {selector!r}: expected clip "
+                    f"{rule.animation_label} at ID {rule.animation_id}, but the "
+                    f"archive holds {stored or 'no clip'} there"
                 )
         return U9ResolvedAnimationSelection(
             selector=selector,
             animation_id=rule.animation_id,
-            motion_name=rule.motion_name,
+            animation_label=rule.animation_label,
             resolution="actor-state",
             rule=rule,
         )
 
-    if motion_ids is not None:
-        motion = motion_ids.by_name(stripped)
-        if motion is not None:
-            return U9ResolvedAnimationSelection(
-                selector=selector,
-                animation_id=motion.animation_id,
-                motion_name=motion.name,
-                resolution="motion-name",
-            )
+    if labels is not None:
+        labelled = _resolve_label(selector, labels)
+        if labelled is not None:
+            return labelled
 
     raise U9AnimationSelectionError(
-        f"unknown animation selector {selector!r}; use an animation ID, an exact "
-        "motion name with --motion-ids, or a confirmed actor:state alias"
+        f"unknown animation selector {selector!r}; use an animation ID, an "
+        "authoring label such as humanoid/idle/breathe_avatar, or a known "
+        "actor:state alias"
     )

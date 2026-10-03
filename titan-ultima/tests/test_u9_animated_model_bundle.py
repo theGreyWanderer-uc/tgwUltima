@@ -188,10 +188,6 @@ class AnimatedModelBundleTests(unittest.TestCase):
             registry_path.write_text(
                 "1 BIP01\n2 PELVIS\n3 LEFT_HAND\n", encoding="ascii"
             )
-            animation_names_path = root / "animation_names.txt"
-            animation_names_path.write_text(
-                "HUMANOID_IDLE_BREATHE_AVATAR = 12\n", encoding="ascii"
-            )
 
             result = export_animated_model_bundle(
                 _model(),
@@ -201,8 +197,7 @@ class AnimatedModelBundleTests(unittest.TestCase):
                 animation_archive_path=animation_archive,
                 registry=U9NodeRegistry.from_file(registry_path),
                 registry_path=registry_path,
-                motion_name="HUMANOID_IDLE_BREATHE_AVATAR",
-                motion_table_path=animation_names_path,
+                animation_label="humanoid/idle/breathe_avatar",
             )
             document = json.loads(result.sidecar_path.read_text(encoding="utf-8"))
 
@@ -233,12 +228,13 @@ class AnimatedModelBundleTests(unittest.TestCase):
                 document["inputs"][0]["sha256"],
                 hashlib.sha256(b"model archive").hexdigest(),
             )
-            animation_name_input = next(
-                item
-                for item in document["inputs"]
-                if item.get("input_kind") == "animation_name_table"
+            self.assertEqual(
+                [item["role"] for item in document["inputs"]],
+                ["model_archive", "animation_archive", "node_registry"],
             )
-            self.assertEqual(animation_name_input["role"], "ghidra_motion_table")
+            self.assertEqual(
+                document["clips"][0]["animation_label"], "humanoid/idle/breathe_avatar"
+            )
             self.assertEqual(result.part_count, 3)
             self.assertEqual(result.mesh_count, 2)
             self.assertEqual(result.track_count, 3)
@@ -319,8 +315,8 @@ class AnimatedModelBundleTests(unittest.TestCase):
             result = export_animated_model_library(
                 _model(),
                 (
-                    (breathe, "HUMANOID_IDLE_BREATHE_AVATAR"),
-                    (walk, "HUMANOID_MOVEMENT_WALKFOWARD_AVATAR_NONE"),
+                    (breathe, "humanoid/idle/breathe_avatar"),
+                    (walk, "humanoid/movement/walkfoward_avatar_none"),
                 ),
                 root / "library",
                 model_archive_path=model_archive,
@@ -337,8 +333,8 @@ class AnimatedModelBundleTests(unittest.TestCase):
             self.assertEqual(
                 [animation["name"] for animation in glb["animations"]],
                 [
-                    "HUMANOID_IDLE_BREATHE_AVATAR",
-                    "HUMANOID_MOVEMENT_WALKFOWARD_AVATAR_NONE",
+                    "humanoid/idle/breathe_avatar",
+                    "humanoid/movement/walkfoward_avatar_none",
                 ],
             )
             self.assertEqual(len(glb["meshes"]), 2)

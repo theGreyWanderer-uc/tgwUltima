@@ -44,14 +44,17 @@ from __future__ import annotations
 from titan.u9.activity import (
     ACTION_KIND_CATALOGUE,
     ACTIVITY_OPCODE_CATALOGUE,
+    GESTURE_ANIMATION_IDS,
     U9Activities,
     U9Activity,
     U9ActivityActionKind,
+    U9ActivityActionArgument,
     U9ActivityError,
     U9ActivityOpcodeInfo,
     U9ActivityRecord,
     U9ActivityStep,
     activity_action_kind,
+    activity_action_argument,
     activity_opcode_info,
 )
 from titan.u9.adpcm import (
@@ -80,6 +83,11 @@ from titan.u9.animation_pose import (
     U9AnimationPoseError,
     U9AnimationPoseResult,
     pose_model,
+)
+from titan.u9.animation_labels import (
+    U9AnimationLabels,
+    U9AnimationSourceHints,
+    parse_animation_source_hints,
 )
 from titan.u9.animation_selection import (
     DEFAULT_AVATAR_ANIMATION_SELECTIONS,
@@ -195,7 +203,6 @@ from titan.u9.model_geometry import (
     U9ModelGeometryTableError,
 )
 from titan.u9.model_naming import label_for_model, names_for_model, slugify
-from titan.u9.motion_ids import U9MotionId, U9MotionIds, U9MotionIdsError
 from titan.u9.map_atlas import (
     U9MapAtlasDiagnostics,
     U9MapAtlasError,
@@ -379,7 +386,11 @@ from titan.u9.texture_writer import (
     frame_encoding,
     replace_frame,
 )
-from titan.u9.trigger_operands import U9TriggerBranch, U9TriggerParameters, U9TriggerTarget
+from titan.u9.trigger_operands import (
+    U9TriggerBranch,
+    U9TriggerParameters,
+    U9TriggerTarget,
+)
 from titan.u9.triggers import U9Trigger, U9TriggerRecord, U9Triggers, U9TriggersError
 from titan.u9.typename import (
     DEFAULT_OBJECT_ICON_ID,
@@ -468,6 +479,9 @@ __all__ = [
     "U9AnimationPoseError",
     "U9AnimationPoseResult",
     "pose_model",
+    "U9AnimationLabels",
+    "U9AnimationSourceHints",
+    "parse_animation_source_hints",
     "DEFAULT_AVATAR_ANIMATION_SELECTIONS",
     "U9AnimationSelectionError",
     "U9AnimationSelectionRule",
@@ -506,9 +520,6 @@ __all__ = [
     "export_planned_animation_libraries",
     "parse_actor_model_library_spec",
     "read_animation_library_plan",
-    "U9MotionId",
-    "U9MotionIds",
-    "U9MotionIdsError",
     "decode_microtalk_mono",
     "MicroTalkDecodeError",
     "U9Model",
@@ -574,6 +585,9 @@ __all__ = [
     "U9ActivityStep",
     "U9ActivityActionKind",
     "ACTION_KIND_CATALOGUE",
+    "GESTURE_ANIMATION_IDS",
+    "U9ActivityActionArgument",
+    "activity_action_argument",
     "activity_action_kind",
     "ACTIVITY_OPCODE_CATALOGUE",
     "activity_opcode_info",

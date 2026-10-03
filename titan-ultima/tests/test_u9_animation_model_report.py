@@ -134,19 +134,12 @@ class AnimationModelReportTests(unittest.TestCase):
         (self.static / "TYPES.DAT").write_bytes(_types_dat())
         typename = struct.pack("<IH", 0, 0x1B81) + b"Avatar\x00"
         (self.static / "TYPENAME.FLX").write_bytes(_build_flx([None, typename]))
-        (self.static / "animation_names.txt").write_text(
-            "enum {\nHUMANOID_IDLE_BREATHE_AVATAR = 3,\n};\n",
-            encoding="ascii",
-        )
 
     def tearDown(self) -> None:
         self.temp.cleanup()
 
     def test_report_joins_registry_model_type_and_source_name_evidence(self) -> None:
-        rows, warnings = build_animation_model_report(
-            self.static / "anim.flx",
-            motion_ids_path=self.static / "animation_names.txt",
-        )
+        rows, warnings = build_animation_model_report(self.static / "anim.flx")
 
         self.assertEqual(warnings, [])
         self.assertEqual(len(rows), 1)
@@ -173,9 +166,7 @@ class AnimationModelReportTests(unittest.TestCase):
         )
         self.assertEqual(row["animation_label"], "humanoid/idle/breathe_avatar")
         self.assertEqual(row["action_hint"], "breathe")
-        self.assertEqual(row["motion_name"], "HUMANOID_IDLE_BREATHE_AVATAR")
-        self.assertEqual(row["motion_family"], "humanoid")
-        self.assertEqual(row["motion_id_status"], "confirmed")
+        self.assertNotIn("motion_name", row)
         self.assertEqual(row["event_count"], 1)
         self.assertEqual(row["events"][0]["name"], "footstep")
         self.assertEqual(row["registry_status"], "complete")
@@ -212,7 +203,6 @@ class AnimationModelReportTests(unittest.TestCase):
                 registry=None,
                 types=None,
                 typenames=None,
-                motion_ids=str(self.static / "animation_names.txt"),
                 format="csv",
             )
         )
@@ -222,7 +212,7 @@ class AnimationModelReportTests(unittest.TestCase):
             rows = list(csv.DictReader(stream))
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["animation_id"], "3")
-        self.assertEqual(rows[0]["motion_name"], "HUMANOID_IDLE_BREATHE_AVATAR")
+        self.assertEqual(rows[0]["animation_label"], "humanoid/idle/breathe_avatar")
         self.assertEqual(rows[0]["event_count"], "1")
         self.assertEqual(rows[0]["candidate_status"], "full-structural")
 

@@ -50,6 +50,29 @@ def _activity_entry() -> bytes:
 
 
 class ScriptResearchExportTests(unittest.TestCase):
+    def test_special_action_export_distinguishes_noop_from_unknown_whole_word(
+        self,
+    ) -> None:
+        blob = (
+            _trigger_record(0x3D, 16, 0, 9)
+            + _trigger_record(0x3D, 16, 0, 0x109)
+            + _trigger_record(0xFF, 16, 0, 0)
+        )
+        triggers = U9Triggers(_archive({1: blob}))
+        activities = U9Activities(_archive({}))
+        with tempfile.TemporaryDirectory() as temporary:
+            export_script_research_bundle(triggers, activities, temporary)
+            with (Path(temporary) / "trigger_occurrences.csv").open(
+                encoding="utf-8", newline=""
+            ) as stream:
+                rows = list(csv.DictReader(stream))
+        self.assertEqual(rows[0]["special_action_meaning"], "reserved no-op")
+        self.assertEqual(rows[1]["special_action_meaning"], "")
+        self.assertEqual(
+            bytes.fromhex(rows[1]["raw_hex"]), _trigger_record(0x3D, 16, 0, 0x109)
+        )
+        self.assertEqual(rows[2]["special_action_meaning"], "")
+
     def test_bundle_contains_occurrences_summaries_links_and_manifest(self) -> None:
         trigger_blob = (
             _trigger_record(0x31, 0x10, 1, 0xAB02)

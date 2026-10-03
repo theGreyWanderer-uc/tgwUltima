@@ -36,7 +36,7 @@ from titan.u9.asset_reports import (
     build_texture_frame_report,
     write_dynamic_report,
 )
-from titan.u9.animation import U9AnimationError, U9Animations
+from titan.u9.animation import U9Animation, U9AnimationError, U9Animations
 from titan.u9.animation_model_report import (
     ANIMATION_MODEL_REPORT_COLUMNS,
     U9AnimationModelReportError,
@@ -91,7 +91,7 @@ from titan.u9.model_geometry import (
     U9ModelGeometryTableError,
 )
 from titan.u9.model_naming import label_for_model, names_for_model
-from titan.u9.motion_ids import U9MotionIds, U9MotionIdsError
+from titan.u9.animation_labels import U9AnimationLabels, parse_animation_source_hints
 from titan.u9.map_atlas import (
     U9MapAtlasError,
     discover_region_files,
@@ -2495,25 +2495,15 @@ def _load_animations(filepath: str) -> Optional[U9Animations]:
         return None
 
 
-def _load_motion_ids(filepath: Optional[str]) -> Optional[U9MotionIds]:
-    """Read an optional animation-name table."""
-    if filepath is None:
-        return None
-    try:
-        return U9MotionIds.from_file(filepath)
-    except U9MotionIdsError as error:
-        print(f"ERROR: {error}", file=sys.stderr)
-        return None
+def _animation_label(animation: U9Animation) -> str:
+    """Titan's label for a clip, from its stored authoring path."""
+    return parse_animation_source_hints(animation.source_name).label
 
 
 def cmd_animation_list(args: SimpleNamespace) -> int:
     """List animation clips with their frame, part and event counts."""
     animations = _load_animations(args.file)
     if animations is None:
-        return 1
-    motion_path = getattr(args, "motion_ids", None)
-    motion_ids = _load_motion_ids(motion_path)
-    if motion_path is not None and motion_ids is None:
         return 1
 
     animation_ids = animations.used_animation_ids()
@@ -2524,7 +2514,7 @@ def cmd_animation_list(args: SimpleNamespace) -> int:
     )
     print(
         f"{'ID':>5}  {'Frames':>6}  {'Parts':>5}  {'Last ms':>8}  {'Game ms':>8}  "
-        f"{'Events':>6}  {'Motion':<42}  Authoring path"
+        f"{'Events':>6}  {'Label':<42}  Authoring path"
     )
     print("-" * 152)
     for animation_id in shown:
@@ -2535,12 +2525,11 @@ def cmd_animation_list(args: SimpleNamespace) -> int:
             return 1
         if animation is None:
             continue
-        motion_name = motion_ids.name(animation_id) if motion_ids is not None else ""
         print(
             f"{animation.animation_id:>5}  {animation.frame_count:>6}  "
             f"{len(animation.parts):>5}  {animation.duration_ms:>8}  "
             f"{animation.runtime_length_ms or 0:>8}  "
-            f"{len(animation.events):>6}  {motion_name or '-':<42}  "
+            f"{len(animation.events):>6}  {_animation_label(animation) or '-':<42}  "
             f"{animation.source_name}"
         )
     if args.limit and len(animation_ids) > args.limit:
@@ -2555,10 +2544,6 @@ def cmd_animation_show(args: SimpleNamespace) -> int:
     animations = _load_animations(args.file)
     if animations is None:
         return 1
-    motion_path = getattr(args, "motion_ids", None)
-    motion_ids = _load_motion_ids(motion_path)
-    if motion_path is not None and motion_ids is None:
-        return 1
 
     try:
         animation = animations.animation(args.id)
@@ -2570,10 +2555,7 @@ def cmd_animation_show(args: SimpleNamespace) -> int:
         return 0
 
     print(f"{args.file} -- animation {animation.animation_id}")
-    if motion_ids is not None:
-        print(
-            f"  Motion          : {motion_ids.name(animation.animation_id) or '(unmapped)'}"
-        )
+    print(f"  Label           : {_animation_label(animation) or '-'}")
     print(f"  Authoring path  : {animation.source_name}")
     print(
         f"  Authoring frames: {animation.start_frame}..{animation.end_frame} "
@@ -2668,7 +2650,6 @@ def cmd_animation_model_report(args: SimpleNamespace) -> int:
             registry_path=getattr(args, "registry", None),
             types_path=getattr(args, "types", None),
             typenames_path=getattr(args, "typenames", None),
-            motion_ids_path=getattr(args, "motion_ids", None),
         )
         output = write_dynamic_report(
             rows,
@@ -2694,7 +2675,6 @@ def cmd_animation_library_plan(args: SimpleNamespace) -> int:
             registry_path=getattr(args, "registry", None),
             types_path=getattr(args, "types", None),
             typenames_path=getattr(args, "typenames", None),
-            motion_ids_path=getattr(args, "motion_ids", None),
         )
         output = write_animation_library_plan(plan, args.output)
         diagnostics_path = getattr(args, "diagnostics", None)
@@ -2821,10 +2801,6 @@ def cmd_animation_pose_export(args: SimpleNamespace) -> int:
     animations = _load_animations(args.animations)
     if animations is None:
         return 1
-    motion_path = getattr(args, "motion_ids", None)
-    motion_ids = _load_motion_ids(motion_path)
-    if motion_path is not None and motion_ids is None:
-        return 1
 
     try:
         animation = animations.animation(args.animation_id)
@@ -2835,12 +2811,10 @@ def cmd_animation_pose_export(args: SimpleNamespace) -> int:
         model = _load_model(args.sappear, args.model_id)
         result = pose_model(model, animation, args.time_ms)
         resolver = _make_texture_resolver(args.textures, args.palette)
-        motion_name = (
-            motion_ids.name(args.animation_id) if motion_ids is not None else None
-        )
-        motion_label = f"_{motion_name.casefold()}" if motion_name else ""
+        clip_label = _animation_label(animation).replace("/", "_")
+        clip_suffix = f"_{clip_label}" if clip_label else ""
         stem = (
-            f"animation_{args.animation_id:05d}{motion_label}_"
+            f"animation_{args.animation_id:05d}{clip_suffix}_"
             f"model_{args.model_id:05d}_{args.time_ms:06d}ms"
         )
         outdir = args.output or stem
@@ -2893,7 +2867,6 @@ def cmd_animation_bundle_export(args: SimpleNamespace) -> int:
         ("Texture archive", args.textures),
         ("Palette", args.palette),
         ("Node registry", args.registry),
-        ("animation-name table", args.motion_ids),
     ):
         if path is not None and not Path(path).is_file():
             print(f"ERROR: {label} not found: {path}", file=sys.stderr)
@@ -2901,9 +2874,6 @@ def cmd_animation_bundle_export(args: SimpleNamespace) -> int:
 
     animations = _load_animations(args.animations)
     if animations is None:
-        return 1
-    motion_ids = _load_motion_ids(args.motion_ids)
-    if args.motion_ids is not None and motion_ids is None:
         return 1
 
     registry_path = Path(args.registry) if args.registry else None
@@ -2925,9 +2895,6 @@ def cmd_animation_bundle_export(args: SimpleNamespace) -> int:
         model = _load_model(args.sappear, args.model_id)
         palette_path, _ = _find_palette(args.palette, args.textures)
         texture_resolver = _make_texture_resolver(args.textures, palette_path)
-        motion_name = (
-            motion_ids.name(args.animation_id) if motion_ids is not None else None
-        )
         output = args.output or (
             f"model_{args.model_id:05d}_animation_{args.animation_id:05d}_bundle"
         )
@@ -2939,8 +2906,7 @@ def cmd_animation_bundle_export(args: SimpleNamespace) -> int:
             animation_archive_path=args.animations,
             registry=registry,
             registry_path=registry_path,
-            motion_name=motion_name,
-            motion_table_path=args.motion_ids,
+            animation_label=_animation_label(animation),
             texture_resolver=texture_resolver,
             texture_archive_path=args.textures,
             palette_path=palette_path,
@@ -2986,7 +2952,6 @@ def cmd_animation_set_export(args: SimpleNamespace) -> int:
         ("Texture archive", args.textures),
         ("Palette", args.palette),
         ("Node registry", args.registry),
-        ("animation-name table", args.motion_ids),
     ):
         if path is not None and not Path(path).is_file():
             print(f"ERROR: {label} not found: {path}", file=sys.stderr)
@@ -2994,9 +2959,6 @@ def cmd_animation_set_export(args: SimpleNamespace) -> int:
 
     animations = _load_animations(args.animations)
     if animations is None:
-        return 1
-    motion_ids = _load_motion_ids(args.motion_ids)
-    if args.motion_ids is not None and motion_ids is None:
         return 1
 
     registry_path = Path(args.registry) if args.registry else None
@@ -3010,9 +2972,10 @@ def cmd_animation_set_export(args: SimpleNamespace) -> int:
             if registry_path is not None
             else None
         )
+        labels = U9AnimationLabels.from_animations(animations.animations())
         selected_clips = []
         for selector in args.clips:
-            selection = resolve_animation_selector(selector, motion_ids)
+            selection = resolve_animation_selector(selector, labels)
             animation = animations.animation(selection.animation_id)
             if animation is None:
                 raise U9AnimatedModelSetError(
@@ -3033,7 +2996,6 @@ def cmd_animation_set_export(args: SimpleNamespace) -> int:
             animation_archive_path=args.animations,
             registry=registry,
             registry_path=registry_path,
-            motion_table_path=args.motion_ids,
             texture_resolver=texture_resolver,
             texture_archive_path=args.textures,
             palette_path=palette_path,
@@ -3059,7 +3021,7 @@ def cmd_animation_set_export(args: SimpleNamespace) -> int:
     )
     print(f"  Set manifest    : {result.manifest_path}")
     for selection, animation in selected_clips:
-        label = selection.motion_name or f"animation_{animation.animation_id}"
+        label = selection.animation_label or f"animation_{animation.animation_id}"
         print(f"  Clip {animation.animation_id:>5}: {label} ({selection.selector})")
     print(f"  Clip sidecars   : {len(result.clip_sidecar_paths)}")
     print(f"  Animated GLBs   : {len(result.clip_glb_paths)}")
@@ -3074,7 +3036,6 @@ def cmd_avatar_animation_library_export(args: SimpleNamespace) -> int:
     for label, path in (
         ("Animation archive", args.animations),
         ("Model archive", args.sappear),
-        ("animation-name table", args.motion_ids),
         ("Texture archive", args.textures),
         ("Palette", args.palette),
         ("Node registry", args.registry),
@@ -3085,9 +3046,6 @@ def cmd_avatar_animation_library_export(args: SimpleNamespace) -> int:
 
     animations = _load_animations(args.animations)
     if animations is None:
-        return 1
-    motion_ids = _load_motion_ids(args.motion_ids)
-    if motion_ids is None:
         return 1
 
     registry_path = Path(args.registry) if args.registry else None
@@ -3108,13 +3066,11 @@ def cmd_avatar_animation_library_export(args: SimpleNamespace) -> int:
         result = export_avatar_animation_library(
             model,
             animations.animations(),
-            motion_ids,
             output,
             model_archive_path=args.sappear,
             animation_archive_path=args.animations,
             registry=registry,
             registry_path=registry_path,
-            motion_table_path=args.motion_ids,
             texture_resolver=texture_resolver,
             texture_archive_path=args.textures,
             palette_path=palette_path,
@@ -3146,8 +3102,7 @@ def cmd_avatar_animation_library_export(args: SimpleNamespace) -> int:
         "  Categories      : "
         + ", ".join(f"{name}={count}" for name, count in result.category_counts)
     )
-    print(f"  Unused mappings : {len(result.unused_motion_ids)}")
-    print(f"  Incompatible    : {len(result.incompatible_motion_ids)}")
+    print(f"  Incompatible    : {len(result.incompatible_animation_ids)}")
     print("  Timeline        : not authored (consumer selects and sequences actions)")
     if args.textures is None:
         print("  (no --textures given: exported materials have no images)")
@@ -8343,10 +8298,6 @@ def highway_routes_cmd(
 @u9_app.command("animation-list")
 def animation_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
-    motion_ids: Annotated[
-        Optional[str],
-        typer.Option("--motion-ids", help="Animation-name table for original names"),
-    ] = None,
     limit: Annotated[
         Optional[int],
         typer.Option("-n", "--limit", help="Maximum rows to print"),
@@ -8355,7 +8306,7 @@ def animation_list_cmd(
     """List U9 animation clips, authoring paths, frame counts and animated parts."""
     raise SystemExit(
         cmd_animation_list(
-            SimpleNamespace(file=file, motion_ids=motion_ids, limit=limit)
+            SimpleNamespace(file=file, limit=limit)
         )
     )
 
@@ -8364,10 +8315,6 @@ def animation_list_cmd(
 def animation_show_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
     id: Annotated[int, typer.Argument(help="Animation ID (the FLX entry index)")],
-    motion_ids: Annotated[
-        Optional[str],
-        typer.Option("--motion-ids", help="Animation-name table for original name"),
-    ] = None,
     part: Annotated[
         Optional[int],
         typer.Option("-p", "--part", help="Dump transform frames for this part ID"),
@@ -8383,7 +8330,6 @@ def animation_show_cmd(
             SimpleNamespace(
                 file=file,
                 id=id,
-                motion_ids=motion_ids,
                 part=part,
                 limit=limit,
             )
@@ -8423,10 +8369,6 @@ def animation_library_plan_cmd(
             help="TYPENAME.FLX path (default: beside anim.flx)",
         ),
     ] = None,
-    motion_ids: Annotated[
-        Optional[str],
-        typer.Option("--motion-ids", help="Animation-name table for original names"),
-    ] = None,
     diagnostics: Annotated[
         Optional[str],
         typer.Option(
@@ -8452,7 +8394,6 @@ def animation_library_plan_cmd(
                 registry=registry,
                 types=types,
                 typenames=typenames,
-                motion_ids=motion_ids,
                 diagnostics=diagnostics,
                 diagnostics_format=diagnostics_format,
             )
@@ -8571,10 +8512,6 @@ def animation_model_report_cmd(
             help="TYPENAME.FLX path (default: beside anim.flx)",
         ),
     ] = None,
-    motion_ids: Annotated[
-        Optional[str],
-        typer.Option("--motion-ids", help="Animation-name table for original names"),
-    ] = None,
     fmt: Annotated[
         str,
         typer.Option("-f", "--format", help="Report format: csv or json"),
@@ -8591,7 +8528,6 @@ def animation_model_report_cmd(
                 registry=registry,
                 types=types,
                 typenames=typenames,
-                motion_ids=motion_ids,
                 format=fmt,
             )
         )
@@ -8608,10 +8544,6 @@ def animation_pose_export_cmd(
         int,
         typer.Option("--time-ms", help="Clip time to sample in milliseconds"),
     ] = 0,
-    motion_ids: Annotated[
-        Optional[str],
-        typer.Option("--motion-ids", help="Animation-name table for output naming"),
-    ] = None,
     textures: Annotated[
         Optional[str],
         typer.Option("-t", "--textures", help="Optional U9 bitmap texture FLX"),
@@ -8643,7 +8575,6 @@ def animation_pose_export_cmd(
                 sappear=sappear,
                 model_id=model_id,
                 time_ms=time_ms,
-                motion_ids=motion_ids,
                 textures=textures,
                 palette=palette,
                 lod=lod,
@@ -8667,10 +8598,6 @@ def animation_bundle_export_cmd(
             "--registry",
             help="registry.txt path (default: beside the animation archive)",
         ),
-    ] = None,
-    motion_ids: Annotated[
-        Optional[str],
-        typer.Option("--motion-ids", help="Animation-name table for original name"),
     ] = None,
     textures: Annotated[
         Optional[str],
@@ -8706,7 +8633,6 @@ def animation_bundle_export_cmd(
                 sappear=sappear,
                 model_id=model_id,
                 registry=registry,
-                motion_ids=motion_ids,
                 textures=textures,
                 palette=palette,
                 lod=lod,
@@ -8728,8 +8654,8 @@ def animation_set_export_cmd(
         typer.Option(
             "--clip",
             help=(
-                "Clip selector; repeat for IDs, exact motion names, or confirmed "
-                "aliases such as avatar:breathe and avatar:walk"
+                "Clip selector; repeat for IDs, clip labels such as "
+                "humanoid/idle/breathe_avatar, or aliases such as avatar:walk"
             ),
         ),
     ] = None,
@@ -8739,10 +8665,6 @@ def animation_set_export_cmd(
             "--registry",
             help="registry.txt path (default: beside the animation archive)",
         ),
-    ] = None,
-    motion_ids: Annotated[
-        Optional[str],
-        typer.Option("--motion-ids", help="Animation-name table for original names"),
     ] = None,
     textures: Annotated[
         Optional[str],
@@ -8778,7 +8700,6 @@ def animation_set_export_cmd(
                 model_id=model_id,
                 clips=clips,
                 registry=registry,
-                motion_ids=motion_ids,
                 textures=textures,
                 palette=palette,
                 lod=lod,
@@ -8795,13 +8716,6 @@ def avatar_animation_library_export_cmd(
     animations: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
     sappear: Annotated[str, typer.Argument(help="Path to static/sappear.flx")],
     model_id: Annotated[int, typer.Argument(help="Explicit Avatar model ID")],
-    motion_ids: Annotated[
-        str,
-        typer.Option(
-            "--motion-ids",
-            help="Required animation-name table containing original names",
-        ),
-    ],
     registry: Annotated[
         Optional[str],
         typer.Option(
@@ -8848,7 +8762,6 @@ def avatar_animation_library_export_cmd(
                 animations=animations,
                 sappear=sappear,
                 model_id=model_id,
-                motion_ids=motion_ids,
                 registry=registry,
                 categories=categories,
                 textures=textures,

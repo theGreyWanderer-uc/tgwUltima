@@ -262,7 +262,7 @@ class NpcRecordTests(unittest.TestCase):
         ).npcs[0]
         self.assertEqual(npc.combat_behavior_name, "giant_spider")
         self.assertEqual(npc.movement_behavior_name, "spider")
-        self.assertEqual(npc.active_weapon_category_name, "projectile")
+        self.assertEqual(npc.active_weapon_category_name, "ranged")
         self.assertEqual(npc.impact_material_name, "rock")
         none = U9Npcs(_record("Statue", active_weapon_category_id=-1)).npcs[0]
         self.assertIsNone(none.combat_behavior_name)
