@@ -17,7 +17,15 @@ from __future__ import annotations
 import struct
 import unittest
 
-from titan.u9.activity import U9Activities, U9ActivityError
+from titan.u9.activity import (
+    ACTIVITY_OPCODE_CATALOGUE,
+    GESTURE_ANIMATION_IDS,
+    U9Activities,
+    U9ActivityError,
+    U9ActivityStep,
+    activity_action_argument,
+    activity_opcode_info,
+)
 from titan.u9.flx_archive import U9FlxArchive
 
 FLX_DIR_OFFSET = 0x80
@@ -181,7 +189,7 @@ class ActivityOrdinalTests(unittest.TestCase):
 
 
 class ActivityOperandTests(unittest.TestCase):
-    def test_unknown_operands_have_parallel_integer_views(self) -> None:
+    def test_fixed_operand_words_and_parallel_forensic_views(self) -> None:
         operands = struct.pack("<HHHH", 0x1234, 0x5678, 0x9ABC, 0xDEF0)
         entry = _entry([_record(1, "Walk", [_step(0x01, operands)])])
         activity = U9Activities(_archive({1: entry})).activity(1)
@@ -189,11 +197,70 @@ class ActivityOperandTests(unittest.TestCase):
         step = activity.records[0].steps[0]
         self.assertEqual(step.operands_u16, (0x1234, 0x5678, 0x9ABC, 0xDEF0))
         self.assertEqual(step.operands_u32, (0x56781234, 0xDEF09ABC))
+        self.assertEqual(step.parameter_0, 0x1234)
+        self.assertEqual(step.parameter_1, 0x5678)
+        self.assertEqual(step.scheduled_minute, 0x9ABC)
+        self.assertEqual(step.duration_code, 0xDEF0)
+        self.assertEqual(step.duration_value, 0xDEF0 >> 2)
+        self.assertEqual(step.duration_remainder, 0)
         self.assertEqual(step.movement_points, (0x1234, 0x5678))
         self.assertEqual(step.to_bytes(), _step(0x01, operands))
         terminator = activity.records[0].terminator
         assert terminator is not None
         self.assertEqual(terminator.entry_offset, 33)
+        self.assertTrue(terminator.is_repeat_marker)
+        self.assertEqual(terminator.semantic_name, "repeat activity cycle")
+
+    def test_command_specific_views_do_not_reinterpret_other_commands(self) -> None:
+        relocation = struct.pack("<HHHH", 0xCCB4, 9, 720, 31)
+        action = struct.pack("<HHHH", 4, 12, 0, 43)
+        entry = _entry(
+            [_record(1, "Typed", [_step(0x03, relocation), _step(0x04, action)])]
+        )
+        activity = U9Activities(_archive({1: entry})).activity(1)
+        assert activity is not None
+        relocate_step, action_step = activity.records[0].steps
+        self.assertEqual(relocate_step.relocation_target, (0xCCB4, 9))
+        self.assertIsNone(relocate_step.movement_points)
+        self.assertIsNone(relocate_step.duration_value)
+        self.assertEqual(action_step.npc_action, (4, 12))
+        self.assertEqual(action_step.duration_value, 10)
+        self.assertEqual(action_step.duration_remainder, 3)
+
+    def test_control_flow_and_interaction_parameter_views(self) -> None:
+        cases = {
+            0x05: ("conversation_topic", 100),
+            0x06: ("object_selector", 3343),
+            0x07: ("sequence_ordinal", 2),
+            0x09: ("trigger_phase", 3),
+            0x0A: ("sequence_ordinal", 12),
+            0x0B: ("branch_label", 7),
+            0x0C: ("branch_label", 7),
+        }
+        records = [
+            _record(
+                index,
+                f"Case {opcode}",
+                [_step(opcode, struct.pack("<HHHH", value, 99, 12, 16))],
+            )
+            for index, (opcode, (_, value)) in enumerate(cases.items(), start=1)
+        ]
+        activity = U9Activities(_archive({1: _entry(records)})).activity(1)
+        assert activity is not None
+        for record, (_, (property_name, expected)) in zip(
+            activity.records, cases.items(), strict=True
+        ):
+            self.assertEqual(getattr(record.steps[0], property_name), expected)
+
+    def test_catalogue_covers_every_runtime_command(self) -> None:
+        self.assertEqual(
+            [info.opcode for info in ACTIVITY_OPCODE_CATALOGUE], list(range(13))
+        )
+        self.assertEqual(
+            activity_opcode_info(0x08).meaning,  # type: ignore[union-attr]
+            "return from activity sequence",
+        )
+        self.assertIsNone(activity_opcode_info(0x80))
 
 
 class ActivityArchiveTests(unittest.TestCase):
@@ -287,6 +354,147 @@ class ActivityValidationTests(unittest.TestCase):
                 U9Activities.from_file(path)
         finally:
             os.unlink(path)
+
+
+class ActivityActionArgumentTests(unittest.TestCase):
+    def test_gesture_examples_from_shipped_activity_archive(self) -> None:
+        for raw, selector, clip, scale, repeat in (
+            (0xA049, 73, 805, 0.8, True),
+            (0x8072, 114, 937, 1.0, True),
+            (0x3072, 114, 937, 0.7, False),
+        ):
+            with self.subTest(raw=raw):
+                word = activity_action_argument(24, raw)
+                self.assertEqual(word.gesture_selector, selector)
+                self.assertEqual(word.gesture_animation_id, clip)
+                self.assertAlmostEqual(word.playback_scale, scale)  # type: ignore[arg-type]
+                self.assertEqual(word.repeat, repeat)
+                self.assertEqual(word.unused_bits, 0)
+                self.assertIsNone(word.target_link)
+
+    def test_manipulation_high_bit_is_speed_not_repeat(self) -> None:
+        pickup = activity_action_argument(26, 0xC001)
+        drop = activity_action_argument(27, 0xC00B)
+        self.assertEqual(pickup.target_link, 1)
+        self.assertEqual(drop.placement_marker_link, 11)
+        for word in (pickup, drop):
+            self.assertEqual(word.speed_step, 6)
+            self.assertAlmostEqual(word.playback_scale, 0.4)  # type: ignore[arg-type]
+            self.assertIsNone(word.repeat)
+        self.assertIsNone(drop.target_link)
+        self.assertIsNone(pickup.placement_marker_link)
+
+    def test_full_word_selectors_keep_kind_and_zero_meanings(self) -> None:
+        cases = {
+            4: "starting_marker_link",
+            30: "starting_marker_link",
+            35: "starting_marker_link",
+            36: "starting_marker_link",
+            5: "heading_degrees",
+            20: "facing_link",
+            23: "facing_base_type",
+            28: "facing_link",
+        }
+        for kind, name in cases.items():
+            for raw in (0, 360, 0xFFFF):
+                with self.subTest(kind=kind, raw=raw):
+                    word = activity_action_argument(kind, raw)
+                    self.assertEqual(getattr(word, name), raw)
+                    self.assertEqual(word.consumed_mask, 0xFFFF)
+                    self.assertIsNone(word.speed_step)
+                    self.assertIsNone(word.request_assistance)
+        self.assertIsNone(activity_action_argument(20, 12).facing_base_type)
+        self.assertIsNone(activity_action_argument(23, 12).facing_link)
+
+    def test_furniture_bit_and_ignored_bits(self) -> None:
+        for kind in (13, 31, 32, 37, 38):
+            name = "nearest_chair" if kind == 31 else "nearest_bed"
+            for raw, nearest in ((0xFFFE, False), (0xFFFF, True)):
+                word = activity_action_argument(kind, raw)
+                self.assertEqual(getattr(word, name), nearest)
+                self.assertEqual(word.unused_bits, 0xFFFE)
+                self.assertEqual(word.consumed_mask, 1)
+                self.assertEqual(word.raw_word, raw)
+
+    def test_combat_uses_any_nonzero_word_without_a_target_selector(self) -> None:
+        for raw in (0, 1, 2, 0x8000, 0xFFFF):
+            word = activity_action_argument(0xFFFF, raw)
+            self.assertEqual(word.request_assistance, raw != 0)
+            self.assertIsNone(word.target_link)
+        self.assertIsNone(activity_action_argument(0xFFFE, 1).request_assistance)
+
+    def test_unperformed_unknown_and_ignored_arguments_are_preserved(self) -> None:
+        for kind in (
+            0,
+            1,
+            2,
+            3,
+            6,
+            12,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            21,
+            22,
+            29,
+            33,
+            34,
+            39,
+            0xFFFE,
+        ):
+            word = activity_action_argument(kind, 0xA5A5)
+            self.assertEqual(word.unused_bits, 0xA5A5)
+            self.assertEqual(word.consumed_mask, 0)
+            self.assertIsNone(word.gesture_selector)
+            self.assertIsNone(word.nearest_bed)
+
+    def test_gesture_table_aliases_and_bounds(self) -> None:
+        self.assertEqual(len(GESTURE_ANIMATION_IDS), 121)
+        self.assertEqual(GESTURE_ANIMATION_IDS[117:119], (1113, 1113))
+        self.assertEqual(activity_action_argument(24, 120).gesture_animation_id, 426)
+        for selector in (121, 122, 4095):
+            word = activity_action_argument(24, selector | 0xF000)
+            self.assertEqual(word.gesture_selector, selector)
+            self.assertIsNone(word.gesture_animation_id)
+            self.assertEqual(word.raw_word, selector | 0xF000)
+
+    def test_every_packed_gesture_and_manipulation_word_round_trips(self) -> None:
+        for raw in range(0x10000):
+            gesture = activity_action_argument(24, raw)
+            selector, speed, repeat = (
+                gesture.gesture_selector,
+                gesture.speed_step,
+                gesture.repeat,
+            )
+            assert selector is not None and speed is not None and repeat is not None
+            self.assertEqual(
+                selector | (speed << 12) | (int(repeat) << 15),
+                raw,
+            )
+            pickup = activity_action_argument(26, raw)
+            link, speed = pickup.target_link, pickup.speed_step
+            assert link is not None and speed is not None
+            self.assertEqual(
+                link | (speed << 13),
+                raw,
+            )
+
+    def test_typed_step_view_keeps_all_stored_words(self) -> None:
+        operands = struct.pack("<4H", 24, 0xA049, 719, 43)
+        step = U9ActivityStep(4, operands)
+        word = step.npc_action_argument
+        assert word is not None
+        self.assertEqual(word.kind.name, "gesture")
+        self.assertEqual(word.raw_word, 0xA049)
+        self.assertEqual(step.to_bytes(), bytes([4]) + operands)
+        self.assertEqual(step.npc_action, (24, 0xA049))
+        self.assertIsNone(U9ActivityStep(5, operands).npc_action_argument)
+        for kind, raw in ((24, -1), (24, 65536), (-1, 0), (65536, 0)):
+            with self.assertRaises(ValueError):
+                activity_action_argument(kind, raw)
 
 
 if __name__ == "__main__":

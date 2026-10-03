@@ -70,7 +70,8 @@ def _build_types(default_model_ids: list[int]) -> U9TypesDat:
     """
     records = [_types_record(m) for m in default_model_ids]
     records += [_types_record(0)] * (TYPES_DAT_MAX_RECORDS - len(records))
-    return U9TypesDat(b"\x00" * TYPES_DAT_HEADER_SIZE + b"".join(records))
+    header = struct.pack("<II", len(default_model_ids), 0)
+    return U9TypesDat(header + b"".join(records))
 
 
 class SlugifyTests(unittest.TestCase):

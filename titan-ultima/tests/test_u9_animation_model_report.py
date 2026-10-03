@@ -9,7 +9,10 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from titan.u9.animation_model_report import build_animation_model_report
+from titan.u9.animation_model_report import (
+    ANIMATION_MODEL_REPORT_COLUMNS,
+    build_animation_model_report,
+)
 from titan.u9.cli import cmd_animation_model_report
 from titan.u9.types_dat import EXPECTED_SIZE, RECORD_SIZE, RECORD_STRUCT
 
@@ -54,7 +57,7 @@ def _animation_entry() -> bytes:
         _animation_part(99, "CAMERA"),
     ]
     part_ids = (1, 15, 99)
-    source = rb"u:\art\motions\humanoid\idle\lws\breathe_avatar.lws"
+    source = rb"u:\art\motions\humanoid\idle\lws\breathe_avatar"
     header_words = part_ids + (0,)
     return b"".join(
         [
@@ -64,7 +67,8 @@ def _animation_entry() -> bytes:
             struct.pack(f"<{len(header_words)}I", *header_words),
             struct.pack("<I", len(part_data)),
             *part_data,
-            struct.pack("<I", 0),
+            struct.pack("<I", 1),
+            struct.pack("<III", 33, 4, 2),
         ]
     )
 
@@ -97,6 +101,7 @@ def _model_entry() -> bytes:
 
 def _types_dat() -> bytes:
     data = bytearray(EXPECTED_SIZE)
+    struct.pack_into("<II", data, 0, 2, 0)
     type_id = 1
     struct.pack_into(
         RECORD_STRUCT,
@@ -140,8 +145,30 @@ class AnimationModelReportTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         row = rows[0]
         self.assertEqual(row["animation_id"], 3)
+        self.assertEqual(row["stored_animation_id"], 3)
+        self.assertEqual(row["stored_id_status"], "matches_entry")
+        self.assertEqual(row["frame_range_status"], "matches_count")
+        self.assertEqual(row["runtime_timing_status"], "valid")
+        self.assertEqual(row["last_sample_time_ms"], 0)
+        self.assertEqual(row["runtime_length_ms"], 33)
+        self.assertEqual(row["part_frame_count_status"], "matches_clip")
+        self.assertEqual(row["part_registry_capacity"], 4)
+        self.assertEqual(row["part_registry_status"], "matches_parts")
+        self.assertEqual(row["part_registry_residue_word_count"], 1)
+        self.assertEqual(row["part_registry_residue_nonzero_count"], 0)
+        self.assertEqual(row["timestamp_status"], "monotonic")
+        self.assertEqual(row["transform_status"], "finite")
+        self.assertEqual(row["event_order_status"], "monotonic")
+        self.assertEqual(row["trailing_data_raw_hex"], "")
+        self.assertEqual(
+            row["source_path_raw_hex"],
+            rb"u:\art\motions\humanoid\idle\lws\breathe_avatar".hex(),
+        )
         self.assertEqual(row["animation_label"], "humanoid/idle/breathe_avatar")
         self.assertEqual(row["action_hint"], "breathe")
+        self.assertNotIn("motion_name", row)
+        self.assertEqual(row["event_count"], 1)
+        self.assertEqual(row["events"][0]["name"], "footstep")
         self.assertEqual(row["registry_status"], "complete")
         self.assertEqual(row["registry_name_match_count"], 3)
         self.assertEqual(row["model_track_ids"], [1, 15])
@@ -150,11 +177,20 @@ class AnimationModelReportTests(unittest.TestCase):
         self.assertEqual(row["candidate_model_ids"], [1])
         self.assertEqual(row["candidate_models"][0]["missing_track_ids"], [])
         self.assertEqual(row["candidate_models"][0]["matched_track_ids"], [1, 15])
+        self.assertEqual(len(row["candidate_models"][0]["skeleton_fingerprint"]), 16)
         self.assertEqual(row["source_name_candidate_count"], 1)
         source_candidate = row["source_name_candidate_models"][0]
         self.assertEqual(source_candidate["model_names"], ["Avatar"])
         self.assertEqual(source_candidate["type_ids"], [1])
-        self.assertEqual(source_candidate["usecode_ids"], [7])
+        self.assertEqual(source_candidate["base_type_ids"], [7])
+        self.assertEqual(row["research_priority"], "confirm-unique-candidate")
+        self.assertIn("runtime class/state binding", row["research_question"])
+        self.assertEqual(row["ghidra_priority"], row["research_priority"])
+        self.assertEqual(row["ghidra_question"], row["research_question"])
+        self.assertIn("research_priority", ANIMATION_MODEL_REPORT_COLUMNS)
+        self.assertIn("research_question", ANIMATION_MODEL_REPORT_COLUMNS)
+        self.assertIn("ghidra_priority", ANIMATION_MODEL_REPORT_COLUMNS)
+        self.assertIn("ghidra_question", ANIMATION_MODEL_REPORT_COLUMNS)
 
     def test_command_writes_csv(self) -> None:
         output = self.static / "animation-model.csv"
@@ -176,6 +212,8 @@ class AnimationModelReportTests(unittest.TestCase):
             rows = list(csv.DictReader(stream))
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["animation_id"], "3")
+        self.assertEqual(rows[0]["animation_label"], "humanoid/idle/breathe_avatar")
+        self.assertEqual(rows[0]["event_count"], "1")
         self.assertEqual(rows[0]["candidate_status"], "full-structural")
 
 

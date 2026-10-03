@@ -55,7 +55,7 @@ from titan._version import TITAN_VERSION
 #   0x54    4       uint32 count            — number of records
 #   0x58    4       uint32 magic2           — 0x000000CC (orig)
 #                                             or 0x0000CC00+ver (exult_v2)
-#   0x5C    36      uint32 padding[9]       — all zeros
+#   0x5C    36      reserved header bytes   — preserve when rewriting
 #   0x80    N*8     record table            — (offset:u32, size:u32) per record
 #   0x80+N*8 ...    record data
 #
@@ -65,7 +65,8 @@ U7_FLEX_TITLE_LEN: int = 80        # 0x50
 U7_FLEX_MAGIC1: int = 0xFFFF1A00   # Required at offset 0x50
 U7_FLEX_MAGIC2: int = 0x000000CC   # Original version marker at 0x58
 U7_FLEX_EXULT_MAGIC2: int = 0x0000CC00  # Exult v2 base (+ version byte)
-U7_FLEX_HEADER_PADDING: int = 9    # 9 × uint32 zeros (0x5C..0x7F)
+U7_FLEX_RESERVED_OFFSET: int = 0x5C
+U7_FLEX_RESERVED_SIZE: int = 0x24
 U7_FLEX_TABLE_OFFSET: int = 0x80
 U7_FLEX_RECORD_ENTRY_SIZE: int = 8
 
@@ -81,7 +82,7 @@ class U7FlexArchive:
         0x50    0x04    magic1 = 0xFFFF1A00
         0x54    0x04    Record count
         0x58    0x04    magic2 = 0x000000CC (original) or 0x0000CC00+ver
-        0x5C    0x24    Padding (9 × uint32 zeros)
+        0x5C    0x24    Reserved header bytes
         0x80    N*8     Record table (offset uint32, size uint32) per record
         0x80+N*8 ...    Record data
     """
@@ -90,6 +91,7 @@ class U7FlexArchive:
         self.title: str = ""
         self.records: list[bytes] = []
         self.magic2: int = U7_FLEX_MAGIC2
+        self.reserved_header: bytes = bytes(U7_FLEX_RESERVED_SIZE)
         self._source_path: Optional[str] = None
 
     # ------------------------------------------------------------------
@@ -155,6 +157,13 @@ class U7FlexArchive:
         # Magic2 / version at 0x58
         archive.magic2 = struct.unpack_from("<I", data, 0x58)[0]
 
+        # Original archives can carry nonzero values in the nominally
+        # reserved tail.  Their meaning is not needed to read records, but an
+        # update must not discard them.
+        archive.reserved_header = data[
+            U7_FLEX_RESERVED_OFFSET : U7_FLEX_RESERVED_OFFSET + U7_FLEX_RESERVED_SIZE
+        ]
+
         # Record table at 0x80
         archive.records = []
         for i in range(count):
@@ -196,6 +205,9 @@ class U7FlexArchive:
         )
         count = struct.unpack_from("<I", data, 0x54)[0]
         archive.magic2 = struct.unpack_from("<I", data, 0x58)[0]
+        archive.reserved_header = data[
+            U7_FLEX_RESERVED_OFFSET : U7_FLEX_RESERVED_OFFSET + U7_FLEX_RESERVED_SIZE
+        ]
 
         archive.records = []
         for i in range(count):
@@ -247,7 +259,14 @@ class U7FlexArchive:
         # magic2 at 0x58
         struct.pack_into("<I", header, 0x58, self.magic2)
 
-        # padding[9] at 0x5C..0x7F — already zeroed
+        if len(self.reserved_header) != U7_FLEX_RESERVED_SIZE:
+            raise ValueError(
+                "U7 Flex reserved header must be exactly "
+                f"{U7_FLEX_RESERVED_SIZE} bytes, got {len(self.reserved_header)}"
+            )
+        header[
+            U7_FLEX_RESERVED_OFFSET : U7_FLEX_RESERVED_OFFSET + U7_FLEX_RESERVED_SIZE
+        ] = self.reserved_header
 
         # --- Record table (8 * count bytes) ---
         table_size = count * U7_FLEX_RECORD_ENTRY_SIZE

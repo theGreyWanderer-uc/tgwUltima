@@ -1,6 +1,6 @@
 """Render an exported Ultima IX region GLB through VTK/OpenGL.
 
-The U9 GLB exporter is the canonical scene builder: it decodes terrain,
+The U9 GLB exporter is the primary scene builder: it decodes terrain,
 water, fixed objects, nonfixed objects, model transforms, materials, and
 textures.  This module deliberately starts at that boundary so a camera
 renderer cannot acquire a second, subtly different copy of those rules.

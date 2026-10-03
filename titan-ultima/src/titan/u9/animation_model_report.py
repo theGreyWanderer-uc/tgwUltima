@@ -12,16 +12,21 @@ __all__ = [
     "ANIMATION_MODEL_REPORT_COLUMNS",
     "U9AnimationModelReportError",
     "build_animation_model_report",
+    "model_skeleton_fingerprint",
 ]
 
+import hashlib
 import re
+import struct
 from dataclasses import dataclass
-from pathlib import Path, PureWindowsPath
+from pathlib import Path
 from typing import Any
 
 from titan.u9.animation import U9Animation, U9AnimationError, U9Animations
+from titan.u9.animation_labels import parse_animation_source_hints
 from titan.u9.flx_archive import U9FlxArchive, U9FlxArchiveError
 from titan.u9.model import U9Model, U9ModelError
+
 from titan.u9.node_registry import U9NodeRegistry, U9NodeRegistryError
 from titan.u9.typename import U9TypeNames
 from titan.u9.types_dat import U9TypeRecord, U9TypesDat, U9TypesDatError
@@ -34,8 +39,11 @@ class U9AnimationModelReportError(Exception):
 ANIMATION_MODEL_REPORT_COLUMNS = [
     "animation_archive",
     "animation_id",
+    "stored_animation_id",
+    "stored_id_status",
     "animation_label",
     "source_path",
+    "source_path_raw_hex",
     "source_asset_group",
     "source_family",
     "source_category",
@@ -46,14 +54,30 @@ ANIMATION_MODEL_REPORT_COLUMNS = [
     "start_frame",
     "end_frame",
     "frame_count",
+    "frame_range_status",
+    "runtime_timing_status",
     "source_fps",
     "frame_interval_ms",
     "duration_ms",
+    "last_sample_time_ms",
+    "runtime_length_ms",
     "part_count",
+    "part_frame_count_status",
     "part_ids",
     "part_names",
-    "suffix_count",
-    "suffix_values",
+    "part_name_raw_hex",
+    "part_registry_capacity",
+    "part_registry_status",
+    "part_registry_storage_raw_hex",
+    "part_registry_residue_word_count",
+    "part_registry_residue_nonzero_count",
+    "part_registry_residue_raw_hex",
+    "timestamp_status",
+    "transform_status",
+    "event_count",
+    "event_order_status",
+    "events",
+    "trailing_data_raw_hex",
     "registry_status",
     "registry_name_match_count",
     "registry_name_mismatches",
@@ -77,26 +101,12 @@ ANIMATION_MODEL_REPORT_COLUMNS = [
     "source_name_candidate_models",
     "runtime_binding_status",
     "runtime_binding_evidence",
+    "research_priority",
+    "research_question",
+    # Deprecated compatibility columns retained for existing report readers.
     "ghidra_priority",
     "ghidra_question",
 ]
-
-
-@dataclass(frozen=True)
-class _SourceHints:
-    asset_group: str
-    family: str
-    category: str
-    stem: str
-    actor: str
-    actor_basis: str
-    action: str
-
-    @property
-    def label(self) -> str:
-        return "/".join(
-            value for value in (self.family, self.category, self.stem) if value
-        )
 
 
 @dataclass(frozen=True)
@@ -108,7 +118,7 @@ class _ModelMetadata:
     names: tuple[str, ...]
     type_records: tuple[U9TypeRecord, ...]
     type_names: tuple[str | None, ...]
-    clean_flags_06: tuple[int, ...]
+    skeleton_fingerprint: str
 
 
 _GENERIC_ACTOR_HINTS = {"", "humanoid", "npc", "magic", "ui"}
@@ -143,58 +153,6 @@ def _optional_companion(
     return _case_insensitive_child(directory, filename)
 
 
-def _parse_source_hints(source_name: str) -> _SourceHints:
-    parts = list(PureWindowsPath(source_name).parts)
-    lowered = [part.casefold() for part in parts]
-    filename = parts[-1] if parts else source_name
-    stem = PureWindowsPath(filename).stem.casefold()
-
-    asset_group = "other"
-    relative: list[str] = []
-    for marker in ("motions", "objects"):
-        if marker in lowered:
-            marker_index = lowered.index(marker)
-            asset_group = marker
-            relative = [part.casefold() for part in parts[marker_index + 1 :]]
-            break
-
-    directories = relative[:-1]
-    family = directories[0] if directories else ""
-    category_parts = [part for part in directories[1:] if part != "lws"]
-    category = "/".join(category_parts)
-
-    actor = family
-    actor_basis = "family-directory" if family else "none"
-    if "avatar" in stem:
-        actor = "avatar"
-        actor_basis = "filename-token"
-    elif "npc" in stem:
-        actor = "npc"
-        actor_basis = "filename-token"
-    elif asset_group == "objects" and "_" in stem:
-        actor = stem.split("_", 1)[0]
-        actor_basis = "object-filename"
-
-    action = stem
-    family_prefix = f"{family}_"
-    if family and action.startswith(family_prefix):
-        action = action[len(family_prefix) :]
-    for marker in ("_avatar", "_npc"):
-        if marker in action:
-            action = action.split(marker, 1)[0]
-            break
-
-    return _SourceHints(
-        asset_group=asset_group,
-        family=family,
-        category=category,
-        stem=stem,
-        actor=actor,
-        actor_basis=actor_basis,
-        action=action,
-    )
-
-
 def _load_type_helpers(
     directory: Path,
     types_path: str | Path | None,
@@ -219,16 +177,23 @@ def _load_type_helpers(
         return None, None, warnings
 
 
-def _model_material_flags_06(model: U9Model) -> tuple[int, ...]:
-    values = {
-        material.flags_06
-        for limb in model.limbs
-        for lod in limb.lods
-        if lod is not None
-        for material in lod.materials
-        if 0x80 <= material.flags_06 <= 0x9F
-    }
-    return tuple(sorted(values))
+def model_skeleton_fingerprint(model: U9Model) -> str:
+    """Hash ordered limb identity, parenting, and rest transforms."""
+    digest = hashlib.sha256()
+    digest.update(model.record_format.encode("ascii"))
+    digest.update(struct.pack("<I", len(model.limbs)))
+    for limb in model.limbs:
+        digest.update(
+            struct.pack(
+                "<II10f",
+                limb.limb_id,
+                limb.parent_id,
+                *limb.scale,
+                *limb.position,
+                *limb.rotation,
+            )
+        )
+    return digest.hexdigest()[:16]
 
 
 def _read_model_metadata(
@@ -246,11 +211,24 @@ def _read_model_metadata(
 
     models: list[_ModelMetadata] = []
     parse_errors = 0
+    non_runtime_records = 0
     for model_id in archive.used_entry_indices():
         try:
-            model = U9Model.parse(archive.read_entry(model_id), model_id)
-        except (U9ModelError, OSError):
+            data = archive.read_entry(model_id)
+            model = U9Model.parse(data, model_id)
+        except OSError:
             parse_errors += 1
+            continue
+        except U9ModelError:
+            try:
+                forensic_model = U9Model.parse_forensic(data, model_id)
+            except U9ModelError:
+                parse_errors += 1
+            else:
+                if forensic_model.runtime_compatible:
+                    parse_errors += 1
+                else:
+                    non_runtime_records += 1
             continue
         type_records = (
             tuple(
@@ -277,8 +255,13 @@ def _read_model_metadata(
                 names=names,
                 type_records=type_records,
                 type_names=type_names,
-                clean_flags_06=_model_material_flags_06(model),
+                skeleton_fingerprint=model_skeleton_fingerprint(model),
             )
+        )
+    if non_runtime_records:
+        warnings.append(
+            f"{non_runtime_records} sappear.flx entries are not retail-runtime "
+            "model records and were skipped"
         )
     if parse_errors:
         warnings.append(
@@ -287,18 +270,18 @@ def _read_model_metadata(
     return models, warnings
 
 
-def _canonical_name(value: str) -> str:
+def _normalized_name(value: str) -> str:
     return "".join(re.findall(r"[a-z0-9]+", value.casefold()))
 
 
 def _name_matches_actor_hint(name: str, actor_hint: str) -> bool:
     if actor_hint in _GENERIC_ACTOR_HINTS:
         return False
-    hint = _canonical_name(actor_hint)
-    canonical = _canonical_name(name)
-    if not hint or not canonical:
+    hint = _normalized_name(actor_hint)
+    normalized = _normalized_name(name)
+    if not hint or not normalized:
         return False
-    if hint in canonical or canonical in hint:
+    if hint in normalized or normalized in hint:
         return True
     words = [
         word
@@ -325,6 +308,7 @@ def _candidate_model_record(
         "model_id": model.model_id,
         "model_names": list(model.names),
         "record_format": model.record_format,
+        "skeleton_fingerprint": model.skeleton_fingerprint,
         "limb_count": len(model.limb_ids),
         "geometry_limb_count": model.geometry_limb_count,
         "matched_track_count": len(matched_ids),
@@ -332,12 +316,11 @@ def _candidate_model_record(
         "missing_track_count": len(missing_ids),
         "missing_track_ids": missing_ids,
         "missing_track_names": [part_names[node_id] for node_id in missing_ids],
-        "clean_material_flags_06": [f"0x{value:02x}" for value in model.clean_flags_06],
         "type_ids": [record.type_id for record in model.type_records],
         "type_names": list(model.type_names),
-        "usecode_ids": sorted({record.usecode_id for record in model.type_records}),
-        "type_flags": sorted(
-            {f"0x{record.type_flags:04x}" for record in model.type_records}
+        "base_type_ids": sorted({record.base_type_id for record in model.type_records}),
+        "object_flags": sorted(
+            {f"0x{record.object_flags:04x}" for record in model.type_records}
         ),
     }
 
@@ -373,7 +356,10 @@ def _registry_fields(
     }
 
 
-def _ghidra_fields(candidate_status: str, candidate_count: int) -> dict[str, Any]:
+def _research_fields(
+    candidate_status: str,
+    candidate_count: int,
+) -> dict[str, Any]:
     if candidate_status == "partial-best":
         priority = "high-part-mismatch"
         question = (
@@ -404,14 +390,19 @@ def _ghidra_fields(candidate_status: str, candidate_count: int) -> dict[str, Any
             "Trace how this clip is consumed; no model candidate could be established "
             "from the available model-part namespace."
         )
-    return {
+    fields = {
         "runtime_binding_status": "unresolved",
         "runtime_binding_evidence": (
-            "source-path naming and registry-backed structural compatibility only"
+            "authoring-path naming and registry-backed structural compatibility only"
         ),
-        "ghidra_priority": priority,
-        "ghidra_question": question,
+        "research_priority": priority,
+        "research_question": question,
     }
+    # Keep the original field names as aliases so existing CSV/JSON consumers
+    # continue to receive the same values during the terminology transition.
+    fields["ghidra_priority"] = priority
+    fields["ghidra_question"] = question
+    return fields
 
 
 def _animation_report_row(
@@ -421,7 +412,7 @@ def _animation_report_row(
     models: list[_ModelMetadata],
     all_model_limb_ids: frozenset[int],
 ) -> dict[str, Any]:
-    hints = _parse_source_hints(animation.source_name)
+    hints = parse_animation_source_hints(animation.source_name)
     part_ids = frozenset(animation.part_ids)
     model_track_ids = part_ids & all_model_limb_ids
     authoring_only_ids = part_ids - all_model_limb_ids
@@ -475,8 +466,11 @@ def _animation_report_row(
     row: dict[str, Any] = {
         "animation_archive": str(animation_path),
         "animation_id": animation.animation_id,
+        "stored_animation_id": animation.stored_animation_id,
+        "stored_id_status": animation.stored_id_status,
         "animation_label": hints.label,
         "source_path": animation.source_name,
+        "source_path_raw_hex": animation.source_name_raw.hex(),
         "source_asset_group": hints.asset_group,
         "source_family": hints.family,
         "source_category": hints.category,
@@ -487,14 +481,46 @@ def _animation_report_row(
         "start_frame": animation.start_frame,
         "end_frame": animation.end_frame,
         "frame_count": animation.frame_count,
+        "frame_range_status": animation.frame_range_status,
+        "runtime_timing_status": animation.runtime_timing_status,
         "source_fps": animation.source_fps,
         "frame_interval_ms": animation.frame_interval_ms,
         "duration_ms": animation.duration_ms,
+        "last_sample_time_ms": animation.last_sample_time_ms,
+        "runtime_length_ms": animation.runtime_length_ms,
         "part_count": len(animation.parts),
+        "part_frame_count_status": animation.part_frame_count_status,
         "part_ids": list(animation.part_ids),
         "part_names": [part.name for part in animation.parts],
-        "suffix_count": len(animation.suffixes),
-        "suffix_values": [suffix.values for suffix in animation.suffixes],
+        "part_name_raw_hex": [part.name_raw.hex() for part in animation.parts],
+        "part_registry_capacity": len(animation.part_registry_storage),
+        "part_registry_status": animation.part_registry_status,
+        "part_registry_storage_raw_hex": struct.pack(
+            f"<{len(animation.part_registry_storage)}i",
+            *animation.part_registry_storage,
+        ).hex(),
+        "part_registry_residue_word_count": len(animation.part_registry_residue),
+        "part_registry_residue_nonzero_count": sum(
+            value != 0 for value in animation.part_registry_residue
+        ),
+        "part_registry_residue_raw_hex": struct.pack(
+            f"<{len(animation.part_registry_residue)}i",
+            *animation.part_registry_residue,
+        ).hex(),
+        "timestamp_status": animation.timestamp_status,
+        "transform_status": animation.transform_status,
+        "event_count": len(animation.events),
+        "event_order_status": animation.event_order_status,
+        "events": [
+            {
+                "time_ms": event.time_ms,
+                "type": event.event_type,
+                "name": event.event_name,
+                "parameter": event.parameter,
+            }
+            for event in animation.events
+        ],
+        "trailing_data_raw_hex": animation.trailing_data.hex(),
         "model_track_count": len(model_track_ids),
         "model_track_ids": sorted(model_track_ids),
         "authoring_only_track_count": len(authoring_only_ids),
@@ -524,7 +550,7 @@ def _animation_report_row(
         ],
     }
     row.update(_registry_fields(animation, registry))
-    row.update(_ghidra_fields(candidate_status, candidate_count))
+    row.update(_research_fields(candidate_status, candidate_count))
     return row
 
 

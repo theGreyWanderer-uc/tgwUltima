@@ -46,13 +46,13 @@ def _texture_entry(frame_count: int = 2) -> bytes:
     directory = bytearray()
     payload = bytearray()
     for index in range(frame_count):
-        frame = struct.pack("<2H4I", 0, 0x6000, 1, 1, 0, 0)
+        frame = struct.pack("<5I", 0x60000400, 1, 1, 0, 0)
         frame += struct.pack("<I", 24)
         frame += struct.pack("<H", index)
         directory += struct.pack("<II", cursor, len(frame))
         payload += frame
         cursor += len(frame)
-    header = struct.pack("<4H2I", 1, 0, 1, 0, frame_count, 0)
+    header = struct.pack("<HBBHHII", 1, 0, 0, 1, 0, frame_count, 0)
     return header + directory + payload
 
 
@@ -121,7 +121,17 @@ def _animated_model(texture_id: int, *, nonfinite_uv: bool = False) -> bytes:
     face_offset = LOD_HEADER_SIZE
     vertex_offset = face_offset + len(face)
     material_offset = vertex_offset + len(vertices)
-    mesh_size = LOD_HEADER_SIZE + len(face) + len(vertices) + len(material)
+    sorted_list = struct.pack("<3h", -1, 0, -1)
+    sorted_offsets = tuple(
+        material_offset + len(material) + index * len(sorted_list) for index in range(4)
+    )
+    mesh_size = (
+        LOD_HEADER_SIZE
+        + len(face)
+        + len(vertices)
+        + len(material)
+        + len(sorted_list) * 4
+    )
     lod = (
         struct.pack("<III", mesh_size, 0, 0)
         + struct.pack("<3ff", 0, 0, 0, 1)
@@ -130,12 +140,13 @@ def _animated_model(texture_id: int, *, nonfinite_uv: bool = False) -> bytes:
         + struct.pack("<II", 0, 0)
         + struct.pack("<6I", 1, 0, 3, 0, 1, 1)
         + struct.pack("<5I", face_offset, 0, vertex_offset, 0, material_offset)
-        + struct.pack("<4I", 0, 0, 0, 0)
+        + struct.pack("<4I", *sorted_offsets)
         + struct.pack("<I", 0)
         + b"\x00" * 4
         + face
         + vertices
         + material
+        + sorted_list * 4
     )
     limb_offset = MODEL_HEADER_SIZE + 8
     lod_offset = limb_offset + LIMB_HEADER_SIZE
@@ -187,6 +198,11 @@ class AssetReportIntegrationTests(unittest.TestCase):
         self.assertEqual(rows[0]["referencing_model_ids"], [0])
         self.assertEqual(rows[0]["sdinfo_frame_count"], 2)
         self.assertEqual(rows[0]["encoding"], "rgb565")
+        self.assertEqual(rows[0]["frame_flags_raw_hex"], "0x60000400")
+        self.assertTrue(rows[0]["two_bytes_per_pixel"])
+        self.assertEqual(rows[0]["row_table_status"], "sequential")
+        self.assertEqual(rows[0]["playback_status"], "ok")
+        self.assertTrue(rows[0]["sdinfo_matches_frame_format"])
 
     def test_invalid_filter_fails_even_if_it_would_select_no_rows(self) -> None:
         with self.assertRaises(U9AssetReportError):

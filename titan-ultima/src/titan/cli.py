@@ -6,6 +6,7 @@ Root commands (game-agnostic):
     music-export, music-batch, setup, config.
 
 Sub-apps:
+    uw1 — Ultima Underworld I commands (texture archives)
     uw2 — Ultima Underworld II commands (palette, GR shapes, object metadata)
     u8  — Ultima 8: Pagan commands (shape, map, sound, save, etc.)
     u7  — Ultima 7: The Black Gate / Serpent Isle commands
@@ -55,7 +56,7 @@ app = typer.Typer(
     name="titan",
     help=(
         "TITAN \u2013 Tool for Interpreting and Transforming Archival Nodes.\n"
-        "Work with Ultima file formats (UW2, U8, U7, U6, U3 NES, U9, UO)."
+        "Work with Ultima file formats (UW1, UW2, U8, U7, U6, U3 NES, U9, UO)."
     ),
     no_args_is_help=True,
     rich_markup_mode=None,
@@ -328,7 +329,18 @@ def cmd_flex_update(args: SimpleNamespace) -> int:
         print(f"ERROR: Invalid index: {index}", file=sys.stderr)
         return 1
 
-    archive = FlexArchive.from_file(flex_path)
+    # U7/Exult and U8/Pentagram Flex archives share table offsets but use
+    # different header dialects.  Parsing U7 through the generic U8 writer
+    # used to replace its required magic1 field at 0x50 with 0x00001A1A.
+    # Select the writer from the input header so updates preserve the archive
+    # dialect as well as its title/comment and version fields.
+    from titan.u7.flex import U7FlexArchive
+
+    archive: U7FlexArchive | FlexArchive
+    if U7FlexArchive.is_u7_flex(flex_path):
+        archive = U7FlexArchive.from_file(flex_path)
+    else:
+        archive = FlexArchive.from_file(flex_path)
 
     if index >= len(archive.records):
         print(
@@ -1364,6 +1376,7 @@ from titan.u3.cli import u3_app  # noqa: E402
 from titan.u6.cli import u6_app  # noqa: E402
 from titan.u9.cli import u9_app  # noqa: E402
 from titan.uo.cli import uo_app  # noqa: E402
+from titan.uw1.cli import uw1_app  # noqa: E402
 from titan.uw2.cli import uw2_app  # noqa: E402
 from titan.dialogue.cli import dialogue_app  # noqa: E402
 
@@ -1373,6 +1386,7 @@ app.add_typer(u3_app)
 app.add_typer(u6_app)
 app.add_typer(u9_app)
 app.add_typer(uo_app)
+app.add_typer(uw1_app)
 app.add_typer(uw2_app)
 app.add_typer(dialogue_app)
 

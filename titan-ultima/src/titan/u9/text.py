@@ -49,6 +49,7 @@ from __future__ import annotations
 __all__ = ["U9TextArchive", "U9TextBlock", "U9TextEntry", "U9TextError"]
 
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 ENCODING = "utf-16-le"
@@ -149,6 +150,37 @@ class U9TextArchive:
         except UnicodeDecodeError as e:
             raise U9TextError(f"entry {index}: not valid UTF-16LE ({e})") from e
         return U9TextEntry(index=index, text=text.rstrip("\x00"))
+
+    def rebuilt(self, replacements: Mapping[int, str]) -> bytes:
+        """Return a new archive with some entries' text replaced.
+
+        Every other entry, the slot count and unused slots are kept. Each
+        replacement must name a used entry. Source-file marker entries must
+        stay unchanged, and no other entry may become one, so the block
+        structure that conversations rely on survives. Text is stored as
+        UTF-16LE with one terminating NUL, as in the shipped archives.
+        """
+        from titan.u9.flx_writer import repack
+
+        blobs: dict[int, bytes] = {}
+        used = set(self.used_indices())
+        for index, text in replacements.items():
+            if index not in used:
+                raise U9TextError(f"entry {index} is not a used entry of this archive")
+            if "\x00" in text:
+                raise U9TextError(f"entry {index}: text may not contain NUL")
+            original = self.entry(index)
+            assert original is not None
+            if original.is_file_marker and text != original.text:
+                raise U9TextError(
+                    f"entry {index} is a source-file marker and must not change"
+                )
+            if not original.is_file_marker and text.endswith(MARKER_SUFFIX):
+                raise U9TextError(
+                    f"entry {index}: text may not end with {MARKER_SUFFIX!r}"
+                )
+            blobs[index] = (text + "\x00").encode(ENCODING)
+        return repack(self._archive, blobs)
 
     def entries(self) -> list[U9TextEntry]:
         """Every used entry, in index order."""

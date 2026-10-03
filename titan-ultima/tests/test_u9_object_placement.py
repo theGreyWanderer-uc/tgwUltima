@@ -64,6 +64,7 @@ def _fixed(type_index: int = 42) -> U9Fixed:
 
 def _types(type_index: int = 42, model_id: int = 7) -> U9TypesDat:
     data = bytearray(EXPECTED_SIZE)
+    struct.pack_into("<II", data, 0, type_index + 1, 0)
     offset = TYPES_HEADER_SIZE + type_index * 16
     struct.pack_into("<IHHHBBBBH", data, offset, 0, 0, model_id, 0, 0, 0, 0, 0, 0)
     return U9TypesDat(bytes(data))
@@ -157,7 +158,7 @@ class ObjectPlacementTests(unittest.TestCase):
         self.assertEqual(placement.position, U9WorldPosition(128, 256, 300))
         self.assertEqual(placement.rotation_xyzw, (0, 0, 0, -32768))
         self.assertEqual(placement.flags, 0)
-        self.assertIsNone(placement.trigger_id)
+        self.assertIsNone(placement.link)
         self.assertEqual(result.diagnostics.fixed_resolved, 1)
         self.assertEqual(result.diagnostics.model_ids_resolved, (7,))
 
@@ -188,7 +189,7 @@ class ObjectPlacementTests(unittest.TestCase):
         placement = result.placements[0]
         self.assertEqual(placement.model_id, 9)
         self.assertEqual(placement.type_index, 600)
-        self.assertEqual(placement.trigger_id, 0)
+        self.assertEqual(placement.link, 0)
         self.assertEqual(result.diagnostics.nonfixed_resolved, 1)
 
     def test_missing_model_is_nonfatal_and_diagnosed(self) -> None:

@@ -175,3 +175,7 @@ class U9FlxArchive:
 
     def used_entry_indices(self) -> list[int]:
         return [e.index for e in self.entries if e.is_used]
+
+    def to_bytes(self) -> bytes:
+        """Return the original FLX archive byte for byte."""
+        return bytes(self._data)

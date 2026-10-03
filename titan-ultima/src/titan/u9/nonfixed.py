@@ -32,13 +32,32 @@ allocator equation prove their allocation state. :attr:`U9Chunk.entities`
 contains spatially indexed entities for compatibility, while
 :attr:`U9Chunk.unlinked_entities` and :attr:`U9Chunk.allocated_entities`
 expose the rest.
+
+**Triggers and links.** An entity's triggers are not in the entity record.
+They are stored as extra-data values: tag 62 holds the triggers for phases 0
+(low 16 bits) and 1 (high 16 bits), tag 59 those for phases 2 and 3, and an
+ID of 0 means none. The retail trigger executor reads exactly those two
+properties (:meth:`U9Nonfixed.entity_triggers`). Across the 1.19F regions,
+94-99% of the non-zero halves are trigger IDs used in ``static/triggers.flx``.
+
+The entity word at ``+0x1A`` is not a trigger ID -- it equals one of the
+entity's trigger halves only once in the corpus. It is the object's **link**
+(:attr:`U9Entity.link`). The retail link routine returns this word unless bit
+0 of the entity's ``flags`` is set, in which case the link is 0; the game
+loads a region's entities into memory unchanged, so the routine reads the file
+bytes. Bit 0 is clear on every shipped entity. Trigger targets are matched
+against it: the relative target links of the triggers an entity runs (its link
+plus ``arg0 & 0x1F`` minus 16) name links present on the same map 97.0% of the
+time, against 66.1% for a random base link.
 """
 
 from __future__ import annotations
 
 __all__ = [
+    "ENTITY_TRIGGER_TAGS",
     "U9Chunk",
     "U9Entity",
+    "U9EntityTriggers",
     "U9ExtraData",
     "U9Nonfixed",
     "U9NonfixedError",
@@ -62,6 +81,10 @@ BUCKET_OFFSET = 0x1C
 
 ENTITY_SIZE = 0x20
 ENTITY_STRUCT = "<IHHHH4hIHHI"
+MAX_ENTITIES_PER_PAGE = (PAGE_SIZE - PAGE_HEADER_SIZE) // ENTITY_SIZE  # 125
+
+# Extra-data tags holding an entity's trigger IDs: phases 0/1, then 2/3.
+ENTITY_TRIGGER_TAGS = (62, 59)
 
 EXTRA_SIZE = 0x10
 EXTRA_STRUCT = "<B3B3I"
@@ -93,8 +116,28 @@ class U9ExtraData:
 
 
 @dataclass(frozen=True)
+class U9EntityTriggers:
+    """The four trigger IDs an entity runs, indexed by trigger phase.
+
+    ``by_phase[p]`` is the trigger for phase ``p`` (0 = none): phases 0 and 1
+    come from extra-data tag 62, phases 2 and 3 from tag 59.
+    """
+
+    by_phase: tuple[int, int, int, int]
+
+    @property
+    def ids(self) -> tuple[int, ...]:
+        """The distinct non-zero trigger IDs, in phase order."""
+        return tuple(dict.fromkeys(tid for tid in self.by_phase if tid))
+
+
+@dataclass(frozen=True)
 class U9Entity:
-    """One allocated 32-byte dynamic-object record."""
+    """One allocated 32-byte dynamic-object record.
+
+    ``link`` is the word at ``+0x1A`` (see the module notes); an entity's
+    triggers come from :meth:`U9Nonfixed.entity_triggers`.
+    """
 
     offset: int
     next_entity: int
@@ -105,7 +148,7 @@ class U9Entity:
     rotation: tuple[int, int, int, int]
     flags: int
     mesh_index: int
-    trigger_id: int
+    link: int
     extra_data_offset: int
     base_x: int
     base_y: int
@@ -333,11 +376,28 @@ class U9Nonfixed:
             rotation=(fields[5], fields[6], fields[7], fields[8]),
             flags=fields[9],
             mesh_index=fields[10],
-            trigger_id=fields[11],
+            link=fields[11],
             extra_data_offset=fields[12],
             base_x=base_x,
             base_y=base_y,
         )
+
+    def entity_record_at(self, offset: int) -> U9Entity | None:
+        """Decode one aligned physical slot, including a free slot's stale bytes."""
+        page_offset = offset & ~(PAGE_SIZE - 1)
+        slot_delta = offset - page_offset - PAGE_HEADER_SIZE
+        if (
+            slot_delta < 0
+            or slot_delta % ENTITY_SIZE
+            or slot_delta // ENTITY_SIZE >= MAX_ENTITIES_PER_PAGE
+            or not self._in_payload(offset, ENTITY_SIZE)
+        ):
+            return None
+        for chunk in self.chunks():
+            for page in chunk.pages:
+                if page.offset == page_offset:
+                    return self._read_entity(offset, page.base_x, page.base_y)
+        return None
 
     def _read_extra_data(self, rel: int) -> U9ExtraData:
         fields = struct.unpack_from(EXTRA_STRUCT, self._data, self.header_size + rel)
@@ -621,3 +681,16 @@ class U9Nonfixed:
         if not rel or not self._looks_like_extra_data(rel):
             return None
         return self._read_extra_data(rel)
+
+    def entity_triggers(self, entity: U9Entity) -> U9EntityTriggers:
+        """The entity's trigger IDs by phase, from extra-data tags 62 and 59."""
+        values = dict.fromkeys(ENTITY_TRIGGER_TAGS, 0)
+        extra = self.extra_data(entity)
+        if extra is not None:
+            for tag, value in extra.args:
+                if tag in values and not values[tag]:
+                    values[tag] = value
+        first, second = (values[tag] for tag in ENTITY_TRIGGER_TAGS)
+        return U9EntityTriggers(
+            (first & 0xFFFF, first >> 16, second & 0xFFFF, second >> 16)
+        )

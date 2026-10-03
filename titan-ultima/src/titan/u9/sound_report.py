@@ -18,12 +18,14 @@ from titan.u9.sound import (
     U9SoundRecord,
     U9SoundRecordError,
 )
+from titan.u9.sound_category import U9SoundCategories, U9SoundCategoryError
 from titan.u9.sound_control import (
+    U9SfxAssociations,
+    U9SfxTemplates,
     U9SoundControlError,
-    parse_sfx_associations,
-    parse_sfx_template,
 )
-from titan.u9.typename import U9TypeNames
+from titan.u9.typename import U9TypeNameError, U9TypeNames
+from titan.u9.types_dat import U9TypesDat, U9TypesDatError
 
 KNOWN_AUDIO_ARCHIVES = ("speech.flx", "sfx.flx", "music.flx")
 
@@ -64,6 +66,10 @@ SOUND_REPORT_COLUMNS = [
     "sfx_action_names",
     "sfx_reference_count",
     "sfx_reference_details",
+    "direct_associated_type_ids",
+    "direct_associated_type_names",
+    "inherited_associated_type_ids",
+    "inherited_associated_type_names",
     "associated_type_ids",
     "associated_type_names",
 ]
@@ -109,54 +115,68 @@ def _read_category_names(path: Path | None) -> dict[int, str]:
     if path is None:
         return {}
     try:
-        archive = U9FlxArchive.from_file(path)
-    except (OSError, U9FlxArchiveError):
+        categories = U9SoundCategories.from_file(path)
+    except (OSError, U9FlxArchiveError, U9SoundCategoryError):
         return {}
-    names: dict[int, str] = {}
-    for entry_id in archive.used_entry_indices():
-        data = archive.read_entry(entry_id)
-        if len(data) != 40:
-            continue
-        name = data[1:].split(b"\x00", 1)[0].decode("ascii", errors="replace")
-        if name:
-            names[data[0]] = name
-    return names
+    return {
+        category.category_id: category.display_name
+        for category in categories
+        if category.display_name
+    }
 
 
 def _load_sfx_links(
     helper_dir: Path,
 ) -> tuple[
-    dict[int, list[dict[str, Any]]], dict[int, list[int]], dict[int, str], list[str]
+    dict[int, list[dict[str, Any]]],
+    dict[int, list[int]],
+    dict[int, list[int]],
+    dict[int, str],
+    list[str],
 ]:
     warnings: list[str] = []
     references: dict[int, list[dict[str, Any]]] = defaultdict(list)
-    template_types: dict[int, list[int]] = defaultdict(list)
+    direct_template_types: dict[int, list[int]] = defaultdict(list)
+    effective_template_types: dict[int, list[int]] = defaultdict(list)
     categories = _read_category_names(_case_insensitive_child(helper_dir, "sfxcat.flx"))
 
     template_path = _case_insensitive_child(helper_dir, "SFXTMPL.FLX")
     if template_path is not None:
         try:
-            archive = U9FlxArchive.from_file(template_path)
-            for entry_id in archive.used_entry_indices():
-                template = parse_sfx_template(archive.read_entry(entry_id))
-                if template.template_id != entry_id:
+            templates = U9SfxTemplates.from_file(template_path)
+            for template in templates:
+                if not template.id_matches_index:
                     warnings.append(
-                        f"SFX template slot {entry_id} contains ID {template.template_id}"
+                        f"SFX template slot {template.archive_index} contains ID "
+                        f"{template.template_id}"
                     )
                 for action in template.actions:
                     for reference in action.sound_references:
                         references[reference.sound_id].append(
                             {
-                                "template_id": entry_id,
+                                "template_id": template.archive_index,
                                 "template_name": template.name,
-                                "template_unknown_2c": template.unknown_2c,
-                                "template_unknown_30": template.unknown_30,
-                                "template_unknown_34": template.unknown_34.hex(),
+                                "inner_cone_angle_degrees": (
+                                    template.inner_cone_angle_degrees
+                                ),
+                                "outer_cone_angle_degrees": (
+                                    template.outer_cone_angle_degrees
+                                ),
+                                "near_distance": template.near_distance,
+                                "far_distance": template.far_distance,
                                 "category_id": action.category_id,
                                 "action_name": action.name,
-                                "reference_unknown_00": reference.unknown_00,
-                                "reference_unknown_08": reference.unknown_08,
-                                "reference_unknown_0c": reference.unknown_0c,
+                                "choice_id": reference.choice_id,
+                                "full_volume_percent": (reference.full_volume_percent),
+                                "off_axis_volume_percent": (
+                                    reference.off_axis_volume_percent
+                                ),
+                                "active_hour_start": reference.active_hour_start,
+                                "active_hour_stop": reference.active_hour_stop,
+                                "pitch_variation_percent": (
+                                    reference.pitch_variation_percent
+                                ),
+                                "selection_weight": reference.selection_weight,
                             }
                         )
         except (OSError, U9FlxArchiveError, U9SoundControlError) as error:
@@ -165,12 +185,43 @@ def _load_sfx_links(
     association_path = _case_insensitive_child(helper_dir, "sfxassoc.flx")
     if association_path is not None:
         try:
-            association_archive = U9FlxArchive.from_file(association_path)
-            for association in parse_sfx_associations(association_archive):
-                template_types[association.template_id].append(association.type_id)
+            associations = U9SfxAssociations.from_file(association_path)
+            for association in associations:
+                direct_template_types[association.sound_template_id].append(
+                    association.object_type_id
+                )
+            types = _load_types(helper_dir)
+            if types is None:
+                effective_template_types.update(direct_template_types)
+            else:
+                for type_record in types:
+                    resolution = associations.resolve(type_record.type_id, types)
+                    if resolution.sound_template_id is not None:
+                        effective_template_types[resolution.sound_template_id].append(
+                            type_record.type_id
+                        )
         except (OSError, U9FlxArchiveError, U9SoundControlError) as error:
             warnings.append(f"could not load sfxassoc.flx links: {error}")
-    return references, template_types, categories, warnings
+    return (
+        references,
+        direct_template_types,
+        effective_template_types,
+        categories,
+        warnings,
+    )
+
+
+def _load_types(helper_dir: Path) -> U9TypesDat | None:
+    candidates = (helper_dir, helper_dir.parent / "static")
+    for directory in candidates:
+        types_path = _case_insensitive_child(directory, "TYPES.DAT")
+        if types_path is None:
+            continue
+        try:
+            return U9TypesDat.from_file(types_path)
+        except (OSError, U9TypesDatError):
+            pass
+    return None
 
 
 def _load_type_names(helper_dir: Path) -> U9TypeNames | None:
@@ -181,7 +232,7 @@ def _load_type_names(helper_dir: Path) -> U9TypeNames | None:
             continue
         try:
             return U9TypeNames.from_file(names_path)
-        except (OSError, U9FlxArchiveError):
+        except (OSError, U9FlxArchiveError, U9TypeNameError):
             pass
     return None
 
@@ -208,19 +259,28 @@ def _sample_metadata(record: U9SoundRecord) -> tuple[int | None, int | None]:
 def _link_fields(
     sound_id: int,
     references: dict[int, list[dict[str, Any]]],
-    template_types: dict[int, list[int]],
+    direct_template_types: dict[int, list[int]],
+    effective_template_types: dict[int, list[int]],
     categories: dict[int, str],
     type_names: U9TypeNames | None,
 ) -> dict[str, Any]:
     links = references.get(sound_id, [])
     template_ids = sorted({int(link["template_id"]) for link in links})
-    type_ids = sorted(
+    direct_type_ids = sorted(
         {
             type_id
             for template_id in template_ids
-            for type_id in template_types.get(template_id, [])
+            for type_id in direct_template_types.get(template_id, [])
         }
     )
+    effective_type_ids = sorted(
+        {
+            type_id
+            for template_id in template_ids
+            for type_id in effective_template_types.get(template_id, [])
+        }
+    )
+    inherited_type_ids = sorted(set(effective_type_ids) - set(direct_type_ids))
     fields: dict[str, Any] = {
         "sfx_template_ids": template_ids,
         "sfx_template_names": sorted({str(link["template_name"]) for link in links}),
@@ -228,7 +288,9 @@ def _link_fields(
         "sfx_action_names": sorted({str(link["action_name"]) for link in links}),
         "sfx_reference_count": len(links),
         "sfx_reference_details": links,
-        "associated_type_ids": type_ids,
+        "direct_associated_type_ids": direct_type_ids,
+        "inherited_associated_type_ids": inherited_type_ids,
+        "associated_type_ids": effective_type_ids,
     }
     category_names = sorted(
         {
@@ -240,8 +302,26 @@ def _link_fields(
     if category_names:
         fields["sfx_action_category_names"] = category_names
     if type_names is not None:
+        fields["direct_associated_type_names"] = sorted(
+            {
+                name
+                for type_id in direct_type_ids
+                if (name := type_names.name_for(type_id))
+            }
+        )
+        fields["inherited_associated_type_names"] = sorted(
+            {
+                name
+                for type_id in inherited_type_ids
+                if (name := type_names.name_for(type_id))
+            }
+        )
         fields["associated_type_names"] = sorted(
-            {name for type_id in type_ids if (name := type_names.name_for(type_id))}
+            {
+                name
+                for type_id in effective_type_ids
+                if (name := type_names.name_for(type_id))
+            }
         )
     return fields
 
@@ -251,7 +331,13 @@ def build_sound_metadata_report(
 ) -> tuple[list[dict[str, Any]], list[str]]:
     """Build one dynamic metadata row per used audio record in one or all archives."""
     archive_paths, helper_dir = _discover_audio_archives(source)
-    references, template_types, categories, warnings = _load_sfx_links(helper_dir)
+    (
+        references,
+        direct_template_types,
+        effective_template_types,
+        categories,
+        warnings,
+    ) = _load_sfx_links(helper_dir)
     type_names = _load_type_names(helper_dir)
     rows: list[dict[str, Any]] = []
 
@@ -341,7 +427,8 @@ def build_sound_metadata_report(
                     _link_fields(
                         record.sound_id,
                         references,
-                        template_types,
+                        direct_template_types,
+                        effective_template_types,
                         categories,
                         type_names,
                     )

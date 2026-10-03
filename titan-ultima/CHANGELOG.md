@@ -10,6 +10,281 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ---
 
+## [Unreleased]
+
+- **Breaking -- U9 NPC state bit 22:** rename `ENGAGED_IN_COMBAT` to
+  `HAS_LIVE_ACTOR`. Retail actor creation/teardown establish actor presence,
+  rather than combat engagement. The mask `0x00400000` and saved bytes are
+  unchanged.
+
+- **U9 trigger behavior:** correct deferred movement retry/collision fields,
+  name follow timing `time_per_unit`, catalogue 24 special actions and four
+  phase roles, and expose action meanings in research exports. Add duration
+  and special-action record views; preserve every original byte. Binary
+  contracts and 19 isolated callback cases pass; controlled live outcomes
+  remain pending.
+
+- **U9 short-trigger loader documentation:** retail reads 510 bytes without
+  an entry-length clamp, so unterminated IDs 58/631 include commands from
+  59/632. Correct the prior standalone-valid classification; retain exact
+  entry parsing and on-disk diagnostics, with neighbor-separation coverage.
+
+- **U9 trigger retail contracts:** all 101 operand layouts now have confirmed
+  retail masks. Correct sound/status masks, link flags, radius encodings,
+  mana/no-op labels, audio-instance IDs, projectile fields and fade units.
+  Target views include random collection and conditional speech; `search_radius`
+  reports decoded world units. Several parameter keys now name confirmed roles
+  (`below`, `instance_id`, `subtract`, `source_only`, fade intervals); raw words
+  and six-byte records retain identical serialization.
+
+- **U9 activity and combatant decoder follow-ups:** begin-action steps expose
+  lossless, kind-specific argument views, including the 121 retail gesture
+  selectors, speed/repeat packing, links, furniture selection and combat
+  assistance. Six combatant fields now use confirmed names; the Slasher's
+  Avatar-tracking threshold decodes as a float and its saved NPC health words
+  as unsigned integers. Raw record bytes and stream widths are preserved.
+
+### Changed
+
+- **Breaking -- U9 highway links:** the highway API now names its keys as
+  links, matching `U9Entity.link`: `U9HighwayPoint.trigger_id` is
+  `U9HighwayPoint.link`, and `U9HighwayRoute.start_trigger_id` /
+  `last_trigger_id` are `start_link` / `last_link`. The `point()`,
+  `routes_from()` and `routes_through()` parameters are named `link`.
+  `highway-info` reports a link range, and `highway-points` heads its columns
+  `Link` and `Edges` (the neighbour count, formerly `Links`). The values were
+  never `static/triggers.flx` trigger IDs. No alias is kept.
+
+- **Breaking -- U9 entity link:** `U9Entity.trigger_id` is renamed
+  `U9Entity.link`, and `U9ObjectPlacementResolution.trigger_id` is renamed
+  `link`. The word at entity `+0x1A` is not a trigger ID (an object's triggers
+  are in its extra-data tags 62 and 59); it is the object's link. The
+  `nonfixed-entities` column `Trig` is now `Link`, and `nonfixed-diff` reports
+  the field as `link`. No alias is kept.
+
+### Added
+
+- **U9 text and type-name import (translation):** `text-import` rebuilds
+  `text.flx`, `misctext.flx` or a joke-dialect copy (`Tbrk.*`, `Mbrk.*`) from
+  an edited `text-export` CSV, and `typename-import` rebuilds `TYPENAME.FLX` or
+  `Tnbrk.*` from an edited `typename-csv` CSV. Entry numbering, slot counts,
+  unused slots, source-file markers and each type's text and icon references
+  are kept; every change is read back before writing. Library:
+  `U9TextArchive.rebuilt()`, `U9TypeNames.rebuilt()`. Type-name labels are now
+  decoded as Windows-1252 rather than ASCII, so accented names read back
+  correctly (the shipped labels are plain ASCII, so nothing they show changes).
+
+- **U9 NPC records -- value names:** `titan.u9.npc` now names the record's ID
+  fields: combat behaviour (64 creature kinds), movement behaviour (38
+  kinds), active weapon category and hit-sound material
+  (`combat_behavior_name`, `movement_behavior_name`,
+  `active_weapon_category_name`, `impact_material_name`). The 12-byte
+  spellbook is decoded as a bitset of spell numbers (`known_spells`,
+  `known_spell_names`, `SPELL_NAMES`), and the routine start and end times are
+  documented as minutes after midnight (`U9Npc.clock_time`). `npc-show`
+  prints the names, spells and routine hours; `npc-classes` labels each
+  group; `npc-csv` adds `*_name`, `routine_*_clock` and `known_spells`
+  columns.
+
+- **U9 save process stream -- temporary camera and more process types:**
+  when the camera manager saved a temporary camera, its 173-byte record
+  (`U9TemporaryCameraState`) is now read between the camera control and the
+  targeting state, so the process list is reached in such saves too. The
+  layout comes from the game's code and no save containing one has been
+  checked yet, so the record carries `boundary_confirmed = False` and
+  `save-check` adds an informational finding `PRC03`. Seventeen more process
+  types are read: 17, 19, 20, 21 and 69 (straight-line path, safe item
+  rotation, explosion, missile launcher, delayed throw), the death, summon
+  daemon, earthquake, lightning storm and inferno spells (131, 137, 139, 140,
+  141), the acid-rain spell with its target list (142,
+  `U9AcidRainProcessState`), the fire-ring watcher (154), the venom effect
+  (210), the creeper plant growth (215: plant, scale, growth rate, start
+  time), and the header-less types 135, 151 (time stop and armageddon, which
+  save nothing) and 214 (delayed item teleport, `U9HeaderlessProcessState`).
+  Only type 206, which the game never saves, remains unread. A new
+  informational check `PRC04` notes a creeper plant-growth process: the retail
+  game does not restore its start time on load, so the plant stops growing
+  as soon as the save is loaded (the rest of the save loads normally, as a
+  test save confirmed).
+
+- **U9 save process stream -- sections after the process list:** new
+  `titan.u9.process_sections` reads the thirteen subsystem sections that
+  follow the process list (`U9ProcessSections.from_prefix`): fast area (the
+  loaded chunks, with display/active/collision state and water kind), NPC
+  data manager (a second NPC array, readable with `.npcs()`, and the cache
+  of each authored NPC's map record), main interface
+  (availability and visibility of each of the 11 on-screen elements, display
+  mode, and the 8,192 found-item-type flags), light system (saved lights with
+  colour, position, range and flicker), weather (clocks, current and target
+  weather, storm, wind and gusts, rain and lightning timers, sun, secondary
+  and lightning colours, Trammel and Felucca phases, sun-mask objects and
+  the screen fade), spell manager (active spell process IDs), physics (moving
+  objects and trigger overlaps), moving platforms (lifts, steps, ships, with
+  riders and lift paths), highway manager (NPCs travelling a highway while
+  unloaded: NPC, highway, node, speed, step timer, frozen position), hints,
+  combat, book bookmarks and
+  the sound system's music list (`sounds.music_nodes`: track, priority,
+  piece, volumes and fade ticks; the list is counted and must end the file).
+  Combat is read combatant by combatant
+  (`U9CombatantRecord`): the record layout follows the NPC's combat
+  behaviour ID; each record's 268-byte common part is typed
+  (`U9CombatantCommonState`: radius, home location, route settings,
+  poison, ally references, last destination and more), and so are the
+  class-specific fields before and after it (`U9CombatantClassFields`, 25
+  classes: humanoid, Avatar, wolf, guard, gazer, creeper and others; the
+  creeper's second common part is `repeated_common`). Across 251 retail
+  saves (2,655 combatants) every byte of `processes.dat` is now accounted
+  for, with object references checked against the reference table.
+  `save-check --json` reports per-section offsets, sizes and counts under
+  `process_sections` (including each combatant's classes), and a new check
+  `PRC02` warns when those sections cannot be read.
+
+- **U9 save process stream -- movement controllers:** the process-data
+  traversal now reads 40 movement-controller process types (base, flying,
+  swimming, humanoid, Avatar, NPC, brute, skeleton, spider, ghost, lich and
+  zombie variants) and the
+  Avatar's animation controller (type 213). Each record keeps its version,
+  object references, flying altitudes and animation lists, and its
+  controller-specific blocks, including the humanoid-family fields the game
+  writes ahead of the common process header. Each block keeps its raw bytes
+  and a typed `fields` view (`U9HumanoidMovementFields`,
+  `U9AvatarMovementFields`, `U9BruteMovementFields`, `U9NpcMovementFields`,
+  `U9SpiderMovementFields`, `U9SwimmingMovementFields`, ...): Avatar countdown timers and
+  levitation flags, footprints and infernal armor, idle animations, spider
+  speed, and swimming depths and animation lists.
+
+- **U9 save process stream -- skeletons, lanterns, torches, cameras:**
+  five more process types found blocking 15 older retail saves now decode:
+  the skeleton-reform process (`U9SkeletonReformProcessState`, eleven
+  `U9SkeletonBoneState` records), the floating lantern with its path
+  (`U9FloatingLanternProcessState`, `U9PathManagerState`), and the
+  turn-to-angle, poison-camera, underwater-camera, Avatar-torch and
+  arrow-projectile processes as table-driven layouts. Table-driven layouts can now be header-only (`world_state` is
+  `None`) or carry a version stored before the common header. Checked
+  against 244 retail saves (the 13 used so far plus 231 older ones): every
+  one now decodes through the process-list terminator.
+
+- **U9 save process stream -- pathfinder:** type 1 decodes as
+  `U9PathfinderProcessState`: the walking NPC and its target, origin, goal,
+  current leg and step goals, termination tests, search and walk states and
+  collision limits, plus the optional grid search (`U9PathGridState`: grid
+  geometry, from/to cells and every 40-byte `U9PathGridCell`). The grid's
+  saved queue, path and best-cell pointers convert to cell indices
+  (`cell_index`, `queue_cell_index`, `path_cell_index`, `best_cell_index`).
+  Unset positions may hold NaN; the integrity report writes those as `null`.
+  Together with the spell processes below, **all 13 retail saves checked now
+  decode through the process-list terminator.**
+
+- **U9 save process stream -- spells:** the 60-byte block every spell
+  process saves (`U9SpellState`: caster, target and effect object
+  references, spell number, stage, timer, animation, event, callback) is read
+  for table-driven spell types, exposed as `U9SimpleProcessState.spell_state`.
+  28 spell process types (teleport, fireball, meteorite, levitate, summon
+  undead, stone, create reagents and others) plus the blow-away and armor-fade
+  helpers join `SIMPLE_PROCESS_LAYOUTS`, which now covers 61 types.
+
+- **U9 save process stream -- table-driven process types:** 31 more
+  fixed-size process types are read from one declarative table
+  (`SIMPLE_PROCESS_LAYOUTS`) into `U9SimpleProcessState`: object movers,
+  turners, faders and scalers, path followers, floating objects, lever,
+  drawer, wardrobe, portcullis, bellows and windmill animations, stone
+  blocks, fireballs, magic eyes, head turns, fire damage and others. Each
+  record has a `kind`, its version, named fields (index by name, or
+  `.fields`) and its reserved words, with the same checks as the dedicated
+  readers (version, object references, flags, finite floats).
+
+- **U9 save process stream -- NPC activities and actions, scripted objects,
+  clocks and door timers:** the traversal now reads the 24 NPC-activity
+  process types (`U9NpcActivityProcessState`: NPC number, action kind, the
+  NPC's object reference, state, flags and the 64 activity variables), the 22
+  NPC-action process types that perform an NPC's current step
+  (`U9NpcActionProcessState`: pathfinding target, origin, stand time,
+  animations, collision limits and the same variables), the five process
+  types that save only scripted-object state (`U9ScriptedObjectProcessState`),
+  the type-57 clock animation (`U9ClockAnimationProcessState`) and the
+  type-197 automatic-door timer (`U9DoorTimerProcessState`). Both NPC records
+  expose `.action`, the matching `ACTION_KIND_CATALOGUE` entry. Across 13
+  retail saves, one save now decodes through the process-list terminator; the
+  others stop at pathfinder, path-follower, item-mover or magic-eye processes.
+  The integrity report's `decoded_following_processes` evidence includes all
+  of these records.
+
+- **U9 world-object triggers:** `U9Nonfixed.entity_triggers()` returns the
+  four trigger IDs a world object runs, by phase, from its extra-data tags 62
+  and 59 (the values the retail trigger executor reads); `nonfixed-entities`
+  shows them in a new `Triggers` column.
+
+- **U9 activity values:** begin-action steps now name their NPC action kind
+  from a retail-confirmed catalogue, including which kinds the game starts
+  nothing for; `activity-show` prints the kind and flags sets that do not
+  start at ordinal 1 or call a missing ordinal; `script-research-export` adds
+  the kind columns.
+
+- **U9 trigger operands:** every trigger command now has a typed operand
+  view -- target selection (link and object type) for the 63 commands that
+  act on each object a search finds, six branch encodings, and named `arg2`
+  fields graded `retail_confirmed` or `retail_corroborated`. The views never
+  alter stored words and report bits the game does not read. `trigger-show`
+  prints a decoded line under each record and notes branches to missing
+  labels; `script-research-export` adds the views as trailing columns.
+
+- **U9 dialogue key table:** added lossless `static/text.dat` parsing and
+  serialization, the game's exact key lookup, reachability and `text.flx`
+  target checks, and recovery of each item's `"<NPC name> : <line>"` or
+  `"UI : <line>"` key from `NPC.FLX` record names (verified for 7,595 of 7,656
+  retail items), through the new
+  `text-keys-info`, `text-key-lookup`, and `text-keys-export` commands.
+
+- **U9 authoring-tool colour tables (optional; not loaded by the game):**
+  added lossless readers for `shade.tbl`, `shadegry.tbl`, `rgbccube.dat` and
+  `yiqccube.dat` with the `shade-info`, `shade-csv`, `color-cube-info`,
+  `color-cube-lookup` and `color-cube-csv` commands. Retail 1.19F never loads
+  these files; Titan exposes them as historical data only.
+
+- **U9 acoustic environments:** added lossless `sfxenv.flx` parsing, listing,
+  and forensic CSV export with standard-profile validation, inactive name-cell
+  residue, direct `spaces.flx` slot semantics, and preservation of the shipped
+  slot-13 profile-code mismatch.
+
+- **Ultima Underworld textures:** added native `titan uw1` inspection and
+  batch PNG export for all floor/ceiling and wall texture archives, with
+  original IDs, decoded descriptions, contact sheets, and CSV/JSON manifests.
+
+- **U9 animation semantics and posed export:** added clip labels read from each
+  record's authoring path, typed animation events, interpolation matching the
+  Ghidra decompile, explicit single-clip rigid-limb OBJ/STL pose export, and
+  versioned animated-model bundles with local limb meshes, exact tracks,
+  hierarchy/material metadata, archive hashes, and generated animated GLB.
+
+### Fixed
+
+- **U9 save process stream -- false rejections:** two checks rejected valid
+  retail saves. Pathfinder positions and angles the walker never set can
+  hold NaN, so the pathfinder's fixed fields are no longer range-checked
+  (4 saves); a particle preset that never uses a camera filter can store 255
+  in its two camera-filter ramp counts, which are no longer capped (1 save).
+  The other ten ramp counts are still checked.
+
+- **U9 save-check JSON:** `IntegrityReport.to_dict()` and `save-check --json`
+  now write strict JSON. Saved records can hold NaN or infinite floats in
+  unused slots (particle-preset ramp slots, an unset pathfinder position);
+  these were written as bare `NaN`, which strict JSON parsers reject. They are
+  now `null`, and the writer refuses any non-finite value that slips through.
+
+- **U9 animation records:** aligned `anim.flx` with its signed runtime layout,
+  separated active part IDs from inactive registry residue, exposed controller
+  playback length alongside the final stored sample, preserved readable
+  anomalies/trailing bytes, and added exact record round trips.
+
+- **U9 model records:** aligned `sappear.flx` parsing with the retail loader,
+  including collision/physics fields, connection geometry, sorted-face lists,
+  material padding, and explicit forensic-only handling for the sixteen
+  orphaned indexed records.
+
+- **Flex updates:** preserve generic archive comments and dispatch U7 archives
+  through the U7 writer, retaining their title, magic/version, reserved header
+  bytes, record indices, and compatibility with U7 palette inspection.
+
 ## [0.7.6]
 
 ### Added
@@ -686,10 +961,10 @@ This project uses [Semantic Versioning](https://semver.org/):
   `npc.dat` / `GAMEDAT` data and `titan u7 schedule-dump` for loose
   `schedule.dat`, including automatic sibling `npc.dat` name resolution.
 - **U7 TFA reference output and notes:** added
-  `u7 typeflag-dump --format detail` output plus source-checked parser notes
+  `u7 typeflag-dump --format detail` output plus implementation-checked parser notes
   for `TFA.DAT`, `SHPDIMS.DAT`, `WGTVOL.DAT`, `OCCLUDE.DAT`, shape classes,
   and BG/SI animation nibbles.
-- **U7 Exult runtime source discovery:** `titan setup` now records live
+- **U7 Exult runtime path discovery:** `titan setup` now records live
   Exult profile `GAMEDAT` paths when initialized, detects mod
   `patch/initgame.dat` archives, and `u7 gamedat-info --mod NAME` can inspect
   configured/user-profile mod sources.
@@ -718,7 +993,7 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Correction
 
-- The U7 Exult runtime source discovery note above was incomplete: Exult
+- The U7 Exult runtime path discovery note above was incomplete: Exult
   stores initialized base-game and mod runtime files under its profile data
   folders, not only under the installed game or mod directories. The expanded
   setup/path handling is tracked in `0.6.5`.

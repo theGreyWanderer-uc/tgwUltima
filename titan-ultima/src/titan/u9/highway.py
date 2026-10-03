@@ -8,28 +8,29 @@ can navigate between -- and the routes let the engine answer "how do I get
 from A to B" with a table lookup instead of solving the whole map path,
 falling back to local pathfinding between consecutive nodes.
 
-Points do not carry identifiers of their own. They are keyed by **trigger
-ID**, the same identifier space as :mod:`titan.u9.nonfixed`'s
-``U9Entity.trigger_id``, which is what ties the abstract graph to concrete
-world markers. Byte-for-byte::
+Points do not carry identifiers of their own. They are keyed by the value
+the marker object carries as its **link** (:attr:`titan.u9.nonfixed.U9Entity.link`,
+entity ``+0x1A``), which is what ties the abstract graph to concrete world
+markers. The values are links, not ``static/triggers.flx`` trigger IDs.
+Byte-for-byte::
 
     0x00  point_count       u32
     0x04  route_count       u32
     0x08  points            point_count * 12 bytes:
-              0x00  trigger_id   u32
+              0x00  link         u32
               0x04  x            u32  -- absolute world X
               0x08  y            u32  -- absolute world Y
     ...   route_bytes       u32  -- total size of the route block below
     ...   routes            route_count * variable:
-              0x00  start_trigger_id  u16
-              0x02  last_trigger_id   u16
+              0x00  start_link        u16
+              0x02  last_link         u16
               0x04  path_length       u16  -- number of u16 node IDs following
               0x06  route_distance    u16  -- total distance to travel
               0x08  unknown           u16  -- zero in every route seen
               0x0A  path              u16 * path_length
 
 All integers are little-endian. A route's ``path`` is self-inclusive: its
-first element is ``start_trigger_id`` and its last is ``last_trigger_id``.
+first element is ``start_link`` and its last is ``last_link``.
 
 The layout is the one published on the Ultima Codex wiki (Ultima IX
 Internal Formats). Verified here against the real 12,428-byte
@@ -42,9 +43,9 @@ Cross-checked against real world data with :mod:`titan.u9.nonfixed`: 815 of
 the 817 points (99.8%) have an entity of type 1134 -- unnamed in
 ``TYPENAME.FLX``, i.e. an invisible marker -- sitting at exactly the
 ``x``/``y`` this file declares. Entities of other types sharing a highway
-trigger ID never agree on position, so type 1134 is what physically
-constitutes a highway node. Trigger IDs are reused across regions, so
-roughly four other type-1134 markers share each ID; only the owning
+link value never agree on position, so type 1134 is what physically
+constitutes a highway node. Link values are reused across regions, so
+roughly four other type-1134 markers share each value; only the owning
 region's sits at the documented coordinates.
 
 Example::
@@ -55,7 +56,7 @@ Example::
     print(len(highway.points), len(highway.routes))   # 817 149
     print(highway.point(50000))                       # U9HighwayPoint(...)
     for route in highway.routes_from(53508):
-        print(route.last_trigger_id, route.route_distance, route.path)
+        print(route.last_link, route.route_distance, route.path)
 """
 
 from __future__ import annotations
@@ -84,9 +85,9 @@ class U9HighwayError(Exception):
 
 @dataclass(frozen=True)
 class U9HighwayPoint:
-    """One navigation node, keyed by the trigger ID of its world marker."""
+    """One navigation node, keyed by the link of its world marker."""
 
-    trigger_id: int
+    link: int
     x: int
     y: int
 
@@ -95,8 +96,8 @@ class U9HighwayPoint:
 class U9HighwayRoute:
     """One precomputed route between two highway points."""
 
-    start_trigger_id: int
-    last_trigger_id: int
+    start_link: int
+    last_link: int
     path_length: int
     route_distance: int
     unknown: int
@@ -160,8 +161,8 @@ class U9Highway:
             path = struct.unpack_from(f"<{path_length}H", data, pos + ROUTE_HEADER_SIZE)
             routes.append(
                 U9HighwayRoute(
-                    start_trigger_id=start,
-                    last_trigger_id=last,
+                    start_link=start,
+                    last_link=last,
                     path_length=path_length,
                     route_distance=distance,
                     unknown=unknown,
@@ -177,7 +178,7 @@ class U9Highway:
         self.declared_route_count = route_count
         self.route_bytes_consumed = pos - self.routes_offset
 
-        self._by_id = {p.trigger_id: p for p in self.points}
+        self._by_link = {p.link: p for p in self.points}
 
     @classmethod
     def from_file(cls, filepath: str | os.PathLike[str]) -> U9Highway:
@@ -198,12 +199,12 @@ class U9Highway:
             and self.route_bytes_consumed == self.route_bytes
         )
 
-    def point(self, trigger_id: int) -> U9HighwayPoint | None:
-        """One point by trigger ID, or ``None`` if this file declares no such node."""
-        return self._by_id.get(trigger_id)
+    def point(self, link: int) -> U9HighwayPoint | None:
+        """One point by link, or ``None`` if this file declares no such node."""
+        return self._by_link.get(link)
 
     def unknown_path_nodes(self) -> list[int]:
-        """Trigger IDs referenced by routes that no declared point defines.
+        """Links referenced by routes that no declared point defines.
 
         Empty on the shipped file -- a non-empty result means the route
         block and the point table disagree.
@@ -211,17 +212,17 @@ class U9Highway:
         referenced: set[int] = set()
         for route in self.routes:
             referenced.update(route.path)
-            referenced.add(route.start_trigger_id)
-            referenced.add(route.last_trigger_id)
-        return sorted(referenced - set(self._by_id))
+            referenced.add(route.start_link)
+            referenced.add(route.last_link)
+        return sorted(referenced - set(self._by_link))
 
-    def routes_from(self, trigger_id: int) -> list[U9HighwayRoute]:
+    def routes_from(self, link: int) -> list[U9HighwayRoute]:
         """Routes starting at one point."""
-        return [r for r in self.routes if r.start_trigger_id == trigger_id]
+        return [r for r in self.routes if r.start_link == link]
 
-    def routes_through(self, trigger_id: int) -> list[U9HighwayRoute]:
+    def routes_through(self, link: int) -> list[U9HighwayRoute]:
         """Routes whose path visits one point, at any position."""
-        return [r for r in self.routes if trigger_id in r.path]
+        return [r for r in self.routes if link in r.path]
 
     def neighbors(self) -> dict[int, set[int]]:
         """Adjacency built from consecutive node pairs across every route.

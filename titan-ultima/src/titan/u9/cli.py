@@ -23,7 +23,11 @@ from typing import Annotated, Literal, Optional, cast
 import typer
 from PIL import Image
 
-from titan.u9.activity import U9Activities, U9ActivityError
+from titan.u9.activity import (
+    ACTIVITY_OPCODE_CATALOGUE,
+    U9Activities,
+    U9ActivityError,
+)
 from titan.u9.asset_reports import (
     MODEL_REPORT_COLUMNS,
     TEXTURE_REPORT_COLUMNS,
@@ -32,11 +36,34 @@ from titan.u9.asset_reports import (
     build_texture_frame_report,
     write_dynamic_report,
 )
-from titan.u9.animation import U9AnimationError, U9Animations
+from titan.u9.animation import U9Animation, U9AnimationError, U9Animations
 from titan.u9.animation_model_report import (
     ANIMATION_MODEL_REPORT_COLUMNS,
     U9AnimationModelReportError,
     build_animation_model_report,
+)
+from titan.u9.animation_library_plan import (
+    U9AnimationLibraryPlanError,
+    build_animation_library_plan,
+    write_animation_library_plan,
+)
+from titan.u9.animation_pose import U9AnimationPoseError, pose_model
+from titan.u9.animation_selection import (
+    U9AnimationSelectionError,
+    resolve_animation_selector,
+)
+from titan.u9.animated_model_bundle import (
+    DEFAULT_ANIMATED_MODEL_SCALE,
+    U9AnimatedModelBundleError,
+    export_animated_model_bundle,
+)
+from titan.u9.animated_model_set import (
+    U9AnimatedModelSetError,
+    export_animated_model_set,
+)
+from titan.u9.avatar_animation_library import (
+    U9AvatarAnimationLibraryError,
+    export_avatar_animation_library,
 )
 from titan.u9.books import U9Books, U9BooksError
 from titan.u9.flx_archive import U9FlxArchive, U9FlxArchiveError
@@ -47,11 +74,24 @@ from titan.u9.flx_writer import (
     write_flx,
 )
 from titan.u9.fixed import U9Fixed, U9FixedError
+from titan.u9.gameplay_zones import (
+    U9Areas,
+    U9AreasError,
+    U9GameplayZone,
+)
 from titan.u9.highway import U9Highway, U9HighwayError
 from titan.u9.icon import icon_entry_indices
+from titan.u9.integrity import check_save, render_integrity_report
 from titan.u9.mesh_export import MeshExportError, export_obj, export_stl
 from titan.u9.model import U9Model, U9ModelError
+from titan.u9.model_geometry import (
+    MODEL_SLOT_COUNT,
+    U9ModelGeometryRecord,
+    U9ModelGeometryTable,
+    U9ModelGeometryTableError,
+)
 from titan.u9.model_naming import label_for_model, names_for_model
+from titan.u9.animation_labels import U9AnimationLabels, parse_animation_source_hints
 from titan.u9.map_atlas import (
     U9MapAtlasError,
     discover_region_files,
@@ -65,12 +105,18 @@ from titan.u9.map_render import (
     resolve_topdown_pixels_per_cell,
 )
 from titan.u9.nonfixed import U9Nonfixed, U9NonfixedError
+from titan.u9.node_registry import U9NodeRegistry, U9NodeRegistryError
+from titan.u9.planned_animation_library_export import (
+    U9PlannedAnimationLibraryExportError,
+    export_planned_animation_libraries,
+    parse_actor_model_library_spec,
+)
 from titan.u9.object_placement import (
     U9ObjectFootprintFilter,
     U9ObjectPlacementError,
     U9SappearModelSource,
 )
-from titan.u9.npc import NO_CLASS, U9NpcError, U9Npcs
+from titan.u9.npc import NO_COMBAT_BEHAVIOR, U9NpcError, U9Npcs
 from titan.u9.palette import (
     EXPECTED_SIZE as U9_PALETTE_SIZE,
     PALETTE_TRANSPARENCY_INDEX,
@@ -93,6 +139,18 @@ from titan.u9.region_vtk import (
 from titan.u9.sdinfo import U9SdInfo, U9SdInfoError
 from titan.u9.script_research import export_script_research_bundle
 from titan.u9.sound import U9SoundRecord, U9SoundRecordError
+from titan.u9.sound_category import U9SoundCategories, U9SoundCategoryError
+from titan.u9.sound_environment import (
+    U9AcousticPresetError,
+    U9AcousticPresets,
+)
+from titan.u9.sound_control import (
+    U9SfxAssociations,
+    U9SfxTemplates,
+    U9SoundControlError,
+)
+from titan.u9.space_tree import U9VolumeLookupCache, U9VolumeLookupError
+from titan.u9.spaces import U9Spaces, U9SpacesError
 from titan.u9.sound_report import (
     SOUND_REPORT_COLUMNS,
     U9SoundReportError,
@@ -104,6 +162,32 @@ from titan.u9.sound_writer import (
     replace_sound_record_from_source,
 )
 from titan.u9.text import U9TextArchive, U9TextError
+from titan.u9.shade_tables import (
+    EDITOR_COLOR_TABLE_SIZE,
+    RAMP_LENGTH,
+    RAMP_NAMES,
+    SHADE_LEVEL_COUNT,
+    SHADE_LIT_LEVELS,
+    SHADE_TABLE_SIZE,
+    U9EditorColorTable,
+    U9ShadeTable,
+    U9ShadeTableError,
+)
+from titan.u9.color_cube import (
+    METRICS as COLOR_CUBE_METRICS,
+    U9ColorCube,
+    U9ColorCubeError,
+    metric_for_filename,
+)
+from titan.u9.text_keys import (
+    KEY_ENCODING,
+    U9TextKeyTable,
+    U9TextKeyTableError,
+    key_bucket,
+    key_crc,
+    reconstruct_keys,
+    text_reference_status,
+)
 from titan.u9.terrain import U9Terrain, U9TerrainError
 from titan.u9.texture import (
     U9TextureError,
@@ -116,8 +200,9 @@ from titan.u9.texture_writer import (
     frame_encoding,
     replace_frames,
 )
-from titan.u9.triggers import U9Triggers, U9TriggersError
-from titan.u9.typename import U9TypeNames
+from titan.u9.trigger_operands import operand_summary
+from titan.u9.triggers import U9Triggers, U9TriggersError, trigger_opcode_info
+from titan.u9.typename import U9TypeNameError, U9TypeNames
 from titan.u9.types_dat import U9TypesDat, U9TypesDatError
 
 # ============================================================================
@@ -228,7 +313,7 @@ def cmd_flx_extract_all(args: SimpleNamespace) -> int:
 
 
 def cmd_typename_dump(args: SimpleNamespace) -> int:
-    """Dump type-ID -> display-name pairs from static/TYPENAME.FLX."""
+    """List named object types and their readable-text and icon references."""
     filepath = args.file
     if not os.path.isfile(filepath):
         print(f"ERROR: File not found: {filepath}", file=sys.stderr)
@@ -236,16 +321,681 @@ def cmd_typename_dump(args: SimpleNamespace) -> int:
 
     try:
         names = U9TypeNames.from_file(filepath)
-    except U9FlxArchiveError as e:
+    except (U9FlxArchiveError, U9TypeNameError) as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
 
-    named = [e for e in names if e.name]
+    named = [entry for entry in names if entry.display_name]
     print(f"{filepath} — {len(names)} entries, {len(named)} named")
-    print(f"{'TypeID':>7}  Name")
-    print("-" * 32)
+    print(f"{'TypeID':>7}  {'Text':>6}  {'Icon':>6}  Name")
+    print("-" * 52)
     for entry in named:
-        print(f"{entry.type_id:>7}  {entry.name}")
+        print(
+            f"{entry.type_id:>7}  {entry.readable_text_id:>6}  "
+            f"{entry.object_icon_id:>6}  {entry.display_name}"
+        )
+    return 0
+
+
+def cmd_typename_csv(args: SimpleNamespace) -> int:
+    """Export every ``TYPENAME.FLX`` object-metadata entry to CSV."""
+    filepath = args.file
+    if not os.path.isfile(filepath):
+        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
+        return 1
+
+    try:
+        names = U9TypeNames.from_file(filepath)
+    except (U9FlxArchiveError, U9TypeNameError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+
+    output = args.output or f"{Path(filepath).stem}_metadata.csv"
+    os.makedirs(os.path.dirname(os.path.abspath(output)), exist_ok=True)
+    with open(output, "w", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+        writer.writerow(
+            [
+                "type_id",
+                "record_representation",
+                "warnings",
+                "readable_text_id",
+                "has_readable_text",
+                "object_icon_id",
+                "uses_default_icon",
+                "display_name",
+                "trailing_hex",
+                "raw_hex",
+            ]
+        )
+        for entry in names:
+            writer.writerow(
+                [
+                    entry.type_id,
+                    entry.record_representation,
+                    ";".join(entry.warnings),
+                    entry.readable_text_id,
+                    entry.has_readable_text,
+                    entry.object_icon_id,
+                    entry.uses_default_icon,
+                    entry.display_name or "",
+                    f"0x{entry.trailing_bytes.hex()}" if entry.trailing_bytes else "",
+                    f"0x{entry.raw.hex()}",
+                ]
+            )
+    print(f"{filepath} — wrote {len(names)} object metadata row(s) -> {output}")
+    return 0
+
+
+def cmd_typename_import(args: SimpleNamespace) -> int:
+    """Rebuild a type-name archive from an edited ``typename-csv`` CSV."""
+    filepath = args.file
+    if not os.path.isfile(filepath):
+        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
+        return 1
+    try:
+        names = U9TypeNames.from_file(filepath)
+    except (U9FlxArchiveError, U9TypeNameError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+    rows = _read_import_csv(args.csv, "type_id", "display_name")
+    if rows is None:
+        return 1
+    changes = {
+        type_id: value
+        for type_id, value in rows.items()
+        if (value or None) != names.name_for(type_id)
+        or names.entry_for(type_id) is None
+    }
+    try:
+        data = names.rebuilt(changes)
+    except U9TypeNameError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+
+    rebuilt = U9TypeNames(U9FlxArchive(data))
+    for type_id, value in changes.items():
+        if rebuilt.name_for(type_id) != (value or None):
+            print(
+                f"ERROR: type {type_id} did not read back as written", file=sys.stderr
+            )
+            return 1
+    removed = sum(1 for value in changes.values() if not value)
+
+    source = Path(filepath)
+    output = args.output or str(
+        source.with_name(f"{source.stem}_imported{source.suffix}")
+    )
+    os.makedirs(os.path.dirname(os.path.abspath(output)), exist_ok=True)
+    with open(output, "wb") as file:
+        file.write(data)
+    print(f"{filepath} — {len(rows)} row(s) read, {len(changes)} label(s) changed")
+    if removed:
+        print(f"  Removed : {removed} label(s) (empty display_name cells)")
+    print(f"  Written : {output} ({len(data)} bytes, slot count {rebuilt.num_entries})")
+    return 0
+
+
+def cmd_types_csv(args: SimpleNamespace) -> int:
+    """Export active ``TYPES.DAT`` records, or every physical slot, to CSV."""
+    filepath = args.file
+    if not os.path.isfile(filepath):
+        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
+        return 1
+
+    typenames_path = getattr(args, "typenames", None)
+    try:
+        types = U9TypesDat.from_file(filepath)
+        names = U9TypeNames.from_file(typenames_path) if typenames_path else None
+    except (OSError, U9TypesDatError, U9FlxArchiveError, U9TypeNameError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+
+    rows = types.slots if getattr(args, "all_slots", False) else types.records
+    output = args.output or f"{Path(filepath).stem}_records.csv"
+    os.makedirs(os.path.dirname(os.path.abspath(output)), exist_ok=True)
+    with open(output, "w", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+        writer.writerow(
+            [
+                "type_id",
+                "slot_state",
+                "display_name",
+                "record_representation",
+                "warnings",
+                "active_type_count",
+                "npc_type_count",
+                "runtime_handler_pointer_cell",
+                "runtime_handler_pointer_hex",
+                "runtime_pointer_state",
+                "base_type_id",
+                "default_model_id",
+                "object_flags",
+                "object_flags_hex",
+                "object_flag_names",
+                "unmapped_object_flag_bits_hex",
+                "mass_code",
+                "can_drag",
+                "can_inventory",
+                "volume_code",
+                "legacy_document_code",
+                "durability_points",
+                "runtime_handler_mask_cell",
+                "runtime_handler_mask_hex",
+                "raw_hex",
+            ]
+        )
+        for record in rows:
+            writer.writerow(
+                [
+                    record.type_id,
+                    "active" if record.is_active else "inactive_capacity",
+                    names.name_for(record.type_id) if names else "",
+                    record.record_representation,
+                    ";".join(record.warnings),
+                    types.header.active_type_count,
+                    types.header.npc_type_count,
+                    record.runtime_handler_pointer_cell,
+                    f"0x{record.runtime_handler_pointer_cell:08x}",
+                    record.runtime_pointer_state,
+                    record.base_type_id,
+                    record.default_model_id,
+                    record.object_flags,
+                    f"0x{record.object_flags:04x}",
+                    ";".join(record.object_flag_names),
+                    f"0x{record.unmapped_object_flag_bits:04x}",
+                    record.mass_code,
+                    record.can_drag,
+                    record.can_inventory,
+                    record.volume_code,
+                    record.legacy_document_code,
+                    record.durability_points,
+                    record.runtime_handler_mask_cell,
+                    f"0x{record.runtime_handler_mask_cell:04x}",
+                    f"0x{record.raw.hex()}",
+                ]
+            )
+    print(f"{filepath} — wrote {len(rows)} type record row(s) -> {output}")
+    return 0
+
+
+# ============================================================================
+# CLI COMMANDS — MASTER SOUND CATEGORIES (sound/sfxcat.flx)
+# ============================================================================
+
+
+def _load_sound_categories(filepath: str) -> Optional[U9SoundCategories]:
+    if not os.path.isfile(filepath):
+        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
+        return None
+    try:
+        return U9SoundCategories.from_file(filepath)
+    except (U9FlxArchiveError, U9SoundCategoryError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return None
+
+
+def cmd_sound_category_list(args: SimpleNamespace) -> int:
+    """List the master categories stored in ``sound/sfxcat.flx``."""
+    categories = _load_sound_categories(args.file)
+    if categories is None:
+        return 1
+
+    print(
+        f"{args.file} — {len(categories)} used categories in "
+        f"{categories.archive_slot_count} slots"
+    )
+    print(f"{'Slot':>4}  {'ID':>3}  {'Refs':>4}  Name")
+    print("-" * 52)
+    for category in categories:
+        print(
+            f"{category.archive_index:>4}  {category.category_id:>3}  "
+            f"{category.sound_reference_count:>4}  {category.display_name}"
+        )
+    return 0
+
+
+def cmd_sound_category_csv(args: SimpleNamespace) -> int:
+    """Export every used ``sfxcat.flx`` category record to CSV."""
+    categories = _load_sound_categories(args.file)
+    if categories is None:
+        return 1
+
+    output = args.output or f"{Path(args.file).stem}_categories.csv"
+    os.makedirs(os.path.dirname(os.path.abspath(output)), exist_ok=True)
+    with open(output, "w", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+        writer.writerow(
+            [
+                "archive_index",
+                "category_id",
+                "display_name",
+                "record_representation",
+                "warnings",
+                "id_matches_index",
+                "name_is_terminated",
+                "name_field_hex",
+                "name_padding_hex",
+                "alignment_hex",
+                "sound_reference_count",
+                "raw_hex",
+            ]
+        )
+        for category in categories:
+            writer.writerow(
+                [
+                    category.archive_index,
+                    category.category_id,
+                    category.display_name,
+                    category.record_representation,
+                    ";".join(category.warnings),
+                    category.id_matches_index,
+                    category.name_is_terminated,
+                    f"0x{category.name_field.hex()}",
+                    f"0x{category.name_padding_bytes.hex()}",
+                    f"0x{category.alignment_bytes.hex()}",
+                    category.sound_reference_count,
+                    f"0x{category.raw.hex()}",
+                ]
+            )
+    print(f"{args.file} — wrote {len(categories)} sound category row(s) -> {output}")
+    return 0
+
+
+# ============================================================================
+# CLI COMMANDS — ACOUSTIC ENVIRONMENTS (sound/sfxenv.flx)
+# ============================================================================
+
+
+def _load_sound_environments(filepath: str) -> Optional[U9AcousticPresets]:
+    if not os.path.isfile(filepath):
+        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
+        return None
+    try:
+        return U9AcousticPresets.from_file(filepath)
+    except (OSError, U9FlxArchiveError, U9AcousticPresetError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return None
+
+
+def cmd_sound_environment_list(args: SimpleNamespace) -> int:
+    """List the listener-reverb presets stored in ``sound/sfxenv.flx``."""
+    environments = _load_sound_environments(args.file)
+    if environments is None:
+        return 1
+
+    print(
+        f"{args.file} - {len(environments)} used environments in "
+        f"{environments.archive_slot_count} slots"
+    )
+    print(
+        f"{'Slot':>4}  {'Code':>4}  {'Volume':>7}  {'Decay':>7}  {'Damping':>7}  Name"
+    )
+    print("-" * 88)
+    for environment in environments:
+        print(
+            f"{environment.archive_index:>4}  "
+            f"{environment.acoustic_profile_code:>4}  "
+            f"{environment.reverb_volume:>7.3f}  "
+            f"{environment.decay_time_seconds:>7.3f}  "
+            f"{environment.high_frequency_damping:>7.3f}  "
+            f"{environment.display_name}"
+        )
+    return 0
+
+
+def cmd_sound_environment_csv(args: SimpleNamespace) -> int:
+    """Export every used ``sfxenv.flx`` environment record to CSV."""
+    environments = _load_sound_environments(args.file)
+    if environments is None:
+        return 1
+
+    output = args.output or f"{Path(args.file).stem}_environments.csv"
+    os.makedirs(os.path.dirname(os.path.abspath(output)), exist_ok=True)
+    columns = [
+        "archive_index",
+        "display_name",
+        "record_representation",
+        "acoustic_profile_code",
+        "acoustic_profile_name",
+        "reverb_volume",
+        "decay_time_seconds",
+        "high_frequency_damping",
+        "value_status",
+        "standard_preset_status",
+        "warnings",
+        "name_is_terminated",
+        "name_field_hex",
+        "name_residue_hex",
+        "archive_slot_count",
+        "archive_warnings",
+        "raw_hex",
+    ]
+    with open(output, "w", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=columns)
+        writer.writeheader()
+        for environment in environments:
+            writer.writerow(
+                {
+                    "archive_index": environment.archive_index,
+                    "display_name": environment.display_name,
+                    "record_representation": environment.record_representation,
+                    "acoustic_profile_code": environment.acoustic_profile_code,
+                    "acoustic_profile_name": environment.acoustic_profile_name,
+                    "reverb_volume": environment.reverb_volume,
+                    "decay_time_seconds": environment.decay_time_seconds,
+                    "high_frequency_damping": (environment.high_frequency_damping),
+                    "value_status": environment.value_status,
+                    "standard_preset_status": environment.standard_preset_status,
+                    "warnings": ";".join(environment.warnings),
+                    "name_is_terminated": environment.name_is_terminated,
+                    "name_field_hex": f"0x{environment.name_field.hex()}",
+                    "name_residue_hex": (f"0x{environment.name_residue_bytes.hex()}"),
+                    "archive_slot_count": environments.archive_slot_count,
+                    "archive_warnings": ";".join(environments.archive_warnings),
+                    "raw_hex": f"0x{environment.raw.hex()}",
+                }
+            )
+    print(
+        f"{args.file} - wrote {len(environments)} sound environment row(s) -> {output}"
+    )
+    return 0
+
+
+def cmd_sound_template_csv(args: SimpleNamespace) -> int:
+    """Export every template, action, and weighted sound choice to CSV."""
+    try:
+        templates = U9SfxTemplates.from_file(args.file)
+        categories = (
+            U9SoundCategories.from_file(args.categories) if args.categories else None
+        )
+        sound_names: dict[int, str] = {}
+        sound_identity_mismatches: set[int] = set()
+        if args.sounds:
+            sound_archive = U9FlxArchive.from_file(args.sounds)
+            for sound_index in sound_archive.used_entry_indices():
+                sound = U9SoundRecord.parse(sound_archive.read_entry(sound_index))
+                sound_names[sound_index] = sound.description
+                if sound.sound_id != sound_index:
+                    sound_identity_mismatches.add(sound_index)
+    except (
+        OSError,
+        U9FlxArchiveError,
+        U9SoundCategoryError,
+        U9SoundControlError,
+        U9SoundRecordError,
+    ) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+
+    output = args.output or f"{Path(args.file).stem}_templates.csv"
+    os.makedirs(os.path.dirname(os.path.abspath(output)), exist_ok=True)
+    columns = [
+        "row_kind",
+        "archive_index",
+        "template_id",
+        "template_name",
+        "record_representation",
+        "template_warnings",
+        "id_matches_index",
+        "action_count",
+        "inner_cone_angle_degrees",
+        "outer_cone_angle_degrees",
+        "near_distance",
+        "far_distance",
+        "template_name_field_hex",
+        "template_name_padding_hex",
+        "template_name_alignment_hex",
+        "template_trailing_alignment_hex",
+        "action_index",
+        "category_id",
+        "action_name",
+        "master_category_name",
+        "sound_reference_count",
+        "action_warnings",
+        "action_name_field_hex",
+        "action_name_padding_hex",
+        "action_alignment_hex",
+        "choice_index",
+        "choice_id",
+        "sound_id",
+        "sound_name",
+        "full_volume_percent",
+        "off_axis_volume_percent",
+        "active_hour_start",
+        "active_hour_stop",
+        "pitch_variation_percent",
+        "selection_weight",
+        "choice_warnings",
+        "choice_leading_alignment_hex",
+        "choice_trailing_alignment_hex",
+        "external_warnings",
+        "archive_slot_count",
+        "archive_warnings",
+        "template_raw_hex",
+        "action_raw_hex",
+        "choice_raw_hex",
+    ]
+    row_count = 0
+    action_count = 0
+    choice_count = 0
+    with open(output, "w", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=columns)
+        writer.writeheader()
+        for template in templates:
+            template_fields: dict[str, object] = {
+                "archive_index": template.archive_index,
+                "template_id": template.template_id,
+                "template_name": template.name,
+                "record_representation": template.record_representation,
+                "template_warnings": ";".join(template.warnings),
+                "id_matches_index": template.id_matches_index,
+                "action_count": template.action_count,
+                "inner_cone_angle_degrees": (template.inner_cone_angle_degrees),
+                "outer_cone_angle_degrees": template.outer_cone_angle_degrees,
+                "near_distance": template.near_distance,
+                "far_distance": template.far_distance,
+                "template_name_field_hex": f"0x{template.name_field.hex()}",
+                "template_name_padding_hex": (f"0x{template.name_padding_bytes.hex()}"),
+                "template_name_alignment_hex": (
+                    f"0x{template.name_alignment_bytes.hex()}"
+                ),
+                "template_trailing_alignment_hex": (
+                    f"0x{template.trailing_alignment_bytes.hex()}"
+                ),
+                "archive_slot_count": templates.archive_slot_count,
+                "archive_warnings": ";".join(templates.warnings),
+                "template_raw_hex": f"0x{template.raw.hex()}",
+            }
+            if not template.actions:
+                writer.writerow({**template_fields, "row_kind": "template"})
+                row_count += 1
+                continue
+
+            for action_index, action in enumerate(template.actions):
+                action_count += 1
+                master_category_name = (
+                    categories.name_for(action.category_id) if categories else None
+                )
+                external_warnings: list[str] = []
+                if categories is not None and master_category_name is None:
+                    external_warnings.append("category_missing")
+                elif (
+                    master_category_name is not None
+                    and master_category_name != action.name
+                ):
+                    external_warnings.append("action_name_differs_from_master")
+                action_fields: dict[str, object] = {
+                    **template_fields,
+                    "action_index": action_index,
+                    "category_id": action.category_id,
+                    "action_name": action.name,
+                    "master_category_name": master_category_name or "",
+                    "sound_reference_count": len(action.sound_references),
+                    "action_warnings": ";".join(action.warnings),
+                    "action_name_field_hex": f"0x{action.name_field.hex()}",
+                    "action_name_padding_hex": (f"0x{action.name_padding_bytes.hex()}"),
+                    "action_alignment_hex": f"0x{action.alignment_bytes.hex()}",
+                    "action_raw_hex": f"0x{action.raw.hex()}",
+                }
+                if not action.sound_references:
+                    writer.writerow(
+                        {
+                            **action_fields,
+                            "row_kind": "action",
+                            "external_warnings": ";".join(external_warnings),
+                        }
+                    )
+                    row_count += 1
+                    continue
+
+                for choice_index, choice in enumerate(action.sound_references):
+                    choice_count += 1
+                    choice_external_warnings = list(external_warnings)
+                    if args.sounds and choice.sound_id not in sound_names:
+                        choice_external_warnings.append("sound_missing")
+                    if choice.sound_id in sound_identity_mismatches:
+                        choice_external_warnings.append(
+                            "sound_identity_differs_from_slot"
+                        )
+                    writer.writerow(
+                        {
+                            **action_fields,
+                            "row_kind": "sound_choice",
+                            "choice_index": choice_index,
+                            "choice_id": choice.choice_id,
+                            "sound_id": choice.sound_id,
+                            "sound_name": sound_names.get(choice.sound_id, ""),
+                            "full_volume_percent": choice.full_volume_percent,
+                            "off_axis_volume_percent": (choice.off_axis_volume_percent),
+                            "active_hour_start": choice.active_hour_start,
+                            "active_hour_stop": choice.active_hour_stop,
+                            "pitch_variation_percent": (choice.pitch_variation_percent),
+                            "selection_weight": choice.selection_weight,
+                            "choice_warnings": ";".join(choice.warnings),
+                            "choice_leading_alignment_hex": (
+                                f"0x{choice.leading_alignment_bytes.hex()}"
+                            ),
+                            "choice_trailing_alignment_hex": (
+                                f"0x{choice.trailing_alignment_bytes.hex()}"
+                            ),
+                            "external_warnings": ";".join(choice_external_warnings),
+                            "choice_raw_hex": f"0x{choice.raw.hex()}",
+                        }
+                    )
+                    row_count += 1
+
+    print(
+        f"{args.file} — wrote {row_count} row(s) from {len(templates)} templates, "
+        f"{action_count} actions, and {choice_count} sound choices -> {output}"
+    )
+    return 0
+
+
+def cmd_sound_association_csv(args: SimpleNamespace) -> int:
+    """Export direct or runtime-effective ``sfxassoc.flx`` links to CSV."""
+    try:
+        associations = U9SfxAssociations.from_file(args.file)
+        types = U9TypesDat.from_file(args.types) if args.types else None
+        names = U9TypeNames.from_file(args.typenames) if args.typenames else None
+        template_names: dict[int, str] = {}
+        template_ids: set[int] | None = None
+        template_identity_mismatches: set[int] = set()
+        if args.templates:
+            templates = U9SfxTemplates.from_file(args.templates)
+            template_ids = {template.archive_index for template in templates}
+            for template in templates:
+                template_names[template.archive_index] = template.name
+                if not template.id_matches_index:
+                    template_identity_mismatches.add(template.archive_index)
+    except (
+        OSError,
+        U9FlxArchiveError,
+        U9SoundControlError,
+        U9TypesDatError,
+        U9TypeNameError,
+    ) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+
+    if args.effective and types is None:
+        print("ERROR: --effective requires --types", file=sys.stderr)
+        return 1
+
+    if args.effective and types is not None:
+        resolutions = [
+            resolution
+            for type_record in types
+            if (
+                resolution := associations.resolve(type_record.type_id, types)
+            ).sound_template_id
+            is not None
+        ]
+    else:
+        resolutions = [
+            associations.resolve(record.object_type_id) for record in associations
+        ]
+
+    output = args.output or f"{Path(args.file).stem}_associations.csv"
+    os.makedirs(os.path.dirname(os.path.abspath(output)), exist_ok=True)
+    with open(output, "w", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+        writer.writerow(
+            [
+                "object_type_id",
+                "display_name",
+                "link_source",
+                "matched_object_type_id",
+                "base_type_id",
+                "default_model_id",
+                "sound_template_id",
+                "sound_template_name",
+                "record_representation",
+                "warnings",
+                "archive_slot_count",
+                "archive_warnings",
+                "raw_hex",
+            ]
+        )
+        for resolution in resolutions:
+            type_record = (
+                types.record_for(resolution.requested_object_type_id)
+                if types is not None
+                else None
+            )
+            row_warnings: list[str] = []
+            if types is not None and type_record is None:
+                row_warnings.append("object_type_outside_active_types")
+            if (
+                template_ids is not None
+                and resolution.sound_template_id not in template_ids
+            ):
+                row_warnings.append("sound_template_missing")
+            if resolution.sound_template_id in template_identity_mismatches:
+                row_warnings.append("sound_template_identity_differs_from_slot")
+            association = resolution.association
+            writer.writerow(
+                [
+                    resolution.requested_object_type_id,
+                    names.name_for(resolution.requested_object_type_id)
+                    if names
+                    else "",
+                    resolution.link_source,
+                    resolution.matched_object_type_id,
+                    type_record.base_type_id if type_record else "",
+                    type_record.default_model_id if type_record else "",
+                    resolution.sound_template_id,
+                    template_names.get(resolution.sound_template_id, "")
+                    if resolution.sound_template_id is not None
+                    else "",
+                    association.record_representation if association else "",
+                    ";".join(row_warnings),
+                    associations.archive_slot_count,
+                    ";".join(associations.warnings),
+                    f"0x{association.raw.hex()}" if association else "",
+                ]
+            )
+    print(f"{args.file} — wrote {len(resolutions)} association row(s) -> {output}")
     return 0
 
 
@@ -694,8 +1444,8 @@ def cmd_model_info(args: SimpleNamespace) -> int:
                 {m.texture_id for m in lod.materials if not m.is_invisible}
             )
             mounts = (
-                f" + {len(lod.mount_triangles)}mt/{len(lod.mount_vertices)}mv"
-                if lod.mount_triangles or lod.mount_vertices
+                f" + {len(lod.connection_triangles)}ct/{len(lod.connection_vertices)}cv"
+                if lod.connection_triangles or lod.connection_vertices
                 else ""
             )
             lod_summaries.append(
@@ -1141,12 +1891,27 @@ def cmd_texture_info(args: SimpleNamespace) -> int:
     print(f"  Max dimensions : {texture_set.frame_width}x{texture_set.frame_height}")
     print(f"  Frames         : {texture_set.frame_count}")
     print(f"  Mip levels     : {texture_set.mip_count} additional")
+    print(f"  Reserved 0x03  : {texture_set.reserved_0x03:#04x}")
     print(f"  Compression    : {compression}")
-    print(f"  Header 0x0C    : {texture_set.unknown:#010x}")
+    print(f"  Storage flags  : {texture_set.storage_flags:#06x}")
+    print(f"  Playback flags : {texture_set.playback_flags:#010x}")
     print(
-        f"{'Frame':>5}  {'Size':<11}  {'Encoding':<10}  {'Offset':>8}  {'Length':>8}  Flags"
+        "  Playback       : "
+        f"mode={texture_set.animation_mode_code}, rate={texture_set.playback_rate}, "
+        f"reverse={texture_set.playback_reverse}, "
+        f"range={texture_set.default_first_frame}..{texture_set.default_last_frame} "
+        f"({texture_set.playback_status})"
     )
-    print("-" * 69)
+    print(
+        "  Size exponents : "
+        f"{texture_set.width_exponent}, {texture_set.height_exponent} "
+        f"({texture_set.dimension_exponent_status})"
+    )
+    print(
+        f"{'Frame':>5}  {'Size':<11}  {'Encoding':<18}  {'Offset':>8}  "
+        f"{'Length':>8}  {'Flags':>10}  Anchor"
+    )
+    print("-" * 92)
     selectors = _load_selectors(args.textures)
     for frame in texture_set.frames:
         try:
@@ -1158,8 +1923,9 @@ def cmd_texture_info(args: SimpleNamespace) -> int:
         dimensions = mip_dimensions(frame.width, frame.height, texture_set.mip_count)
         sizes = "/".join(f"{width}x{height}" for width, height in dimensions)
         print(
-            f"{frame.index:>5}  {sizes:<11}  {encoding:<10}  {frame.offset:>8}  "
-            f"{frame.length:>8}  {frame.flags:#06x}/{frame.unknown_word:#06x}"
+            f"{frame.index:>5}  {sizes:<11}  {encoding:<18}  {frame.offset:>8}  "
+            f"{frame.length:>8}  {frame.flags:#010x}  "
+            f"({frame.anchor_x}, {frame.anchor_y})"
         )
     return 0
 
@@ -1487,7 +2253,7 @@ def cmd_nonfixed_entities(args: SimpleNamespace) -> int:
     print(f"{args.file} -- {len(rows)} entit{'y' if len(rows) == 1 else 'ies'}")
     header = (
         f"{'Offset':>8}  {'Chunk':<7}  {'State':<8}  {'World (x,y,z)':<20}  "
-        f"{'Type':>5}  {'Mesh':>5}  {'Trig':>5}  {'Extra':>7}"
+        f"{'Type':>5}  {'Mesh':>5}  {'Link':>5}  {'Extra':>7}  {'Triggers':<23}"
     )
     if names:
         header += "  Name"
@@ -1497,9 +2263,11 @@ def cmd_nonfixed_entities(args: SimpleNamespace) -> int:
         grid = f"{c.chunk_x},{c.chunk_y}"
         pos = f"{e.world_x},{e.world_y},{e.z}"
         extra = f"{e.extra_data_offset:#07x}" if e.has_extra_data else "-"
+        phases = region.entity_triggers(e).by_phase
+        triggers = "/".join(str(tid) for tid in phases) if any(phases) else "-"
         line = (
             f"{e.offset:>#8x}  {grid:<7}  {state:<8}  {pos:<20}  {e.type_index:>5}  "
-            f"{e.mesh_index:>5}  {e.trigger_id:>5}  {extra:>7}"
+            f"{e.mesh_index:>5}  {e.link:>5}  {extra:>7}  {triggers:<23}"
         )
         if names:
             line += f"  {names.name_for(e.type_index) or ''}"
@@ -1518,7 +2286,7 @@ def _entity_fields(entity) -> dict:
         "rotation": entity.rotation,
         "flags": entity.flags,
         "mesh": entity.mesh_index,
-        "trigger": entity.trigger_id,
+        "link": entity.link,
         "extra": entity.extra_data_offset,
     }
 
@@ -1617,7 +2385,7 @@ def cmd_highway_info(args: SimpleNamespace) -> int:
     unknown = highway.unknown_path_nodes()
     xs = [p.x for p in highway.points]
     ys = [p.y for p in highway.points]
-    ids = [p.trigger_id for p in highway.points]
+    links = [p.link for p in highway.points]
 
     print(f"{args.file} -- U9 highway navigation graph")
     print(
@@ -1629,8 +2397,8 @@ def cmd_highway_info(args: SimpleNamespace) -> int:
     print(
         f"  Route block     : {highway.route_bytes} bytes, {highway.route_bytes_consumed} consumed"
     )
-    if ids:
-        print(f"  Trigger IDs     : {min(ids)}..{max(ids)}")
+    if links:
+        print(f"  Links           : {min(links)}..{max(links)}")
         print(f"  World extent    : x {min(xs)}..{max(xs)}, y {min(ys)}..{max(ys)}")
     print(
         f"  Connectivity    : {len(adjacency)} point(s) appear in a route, {edges} edge(s)"
@@ -1638,7 +2406,7 @@ def cmd_highway_info(args: SimpleNamespace) -> int:
     if highway.routes:
         longest = max(highway.routes, key=lambda r: r.path_length)
         print(
-            f"  Longest route   : {longest.start_trigger_id} -> {longest.last_trigger_id}, "
+            f"  Longest route   : {longest.start_link} -> {longest.last_link}, "
             f"{longest.path_length} nodes, distance {longest.route_distance}"
         )
     if unknown:
@@ -1649,7 +2417,7 @@ def cmd_highway_info(args: SimpleNamespace) -> int:
         print(
             "  WARNING: file did not parse completely -- truncated or not a highway.dat"
         )
-    print("  Points are keyed by trigger ID; the world markers are entities of")
+    print("  Points are keyed by their marker's link; the world markers are entities of")
     print("  type 1134 -- see 'titan u9 nonfixed-entities'.")
     return 0
 
@@ -1664,7 +2432,7 @@ def cmd_highway_points(args: SimpleNamespace) -> int:
     if args.id is not None:
         point = highway.point(args.id)
         if point is None:
-            print(f"No highway point with trigger ID {args.id}.")
+            print(f"No highway point with link {args.id}.")
             return 0
         points = [point]
     else:
@@ -1672,12 +2440,12 @@ def cmd_highway_points(args: SimpleNamespace) -> int:
 
     shown = points[: args.limit] if args.limit else points
     print(f"{args.file} -- {len(points)} point(s)")
-    print(f"{'TriggerID':>10}  {'X':>8}  {'Y':>8}  {'Links':>5}  Routes")
+    print(f"{'Link':>10}  {'X':>8}  {'Y':>8}  {'Edges':>5}  Routes")
     print("-" * 52)
     for p in shown:
-        links = len(adjacency.get(p.trigger_id, ()))
-        through = len(highway.routes_through(p.trigger_id))
-        print(f"{p.trigger_id:>10}  {p.x:>8}  {p.y:>8}  {links:>5}  {through}")
+        edges = len(adjacency.get(p.link, ()))
+        through = len(highway.routes_through(p.link))
+        print(f"{p.link:>10}  {p.x:>8}  {p.y:>8}  {edges:>5}  {through}")
     if args.limit and len(points) > args.limit:
         print(f"... ({len(points) - args.limit} more; raise --limit to see more)")
     return 0
@@ -1693,14 +2461,14 @@ def cmd_highway_routes(args: SimpleNamespace) -> int:
         highway.routes_through(args.id) if args.id is not None else list(highway.routes)
     )
     if args.id is not None and not routes:
-        print(f"No route visits trigger ID {args.id}.")
+        print(f"No route visits link {args.id}.")
         return 0
 
     shown = routes[: args.limit] if args.limit else routes
     print(f"{args.file} -- {len(routes)} route(s)")
     for r in shown:
         print(
-            f"  {r.start_trigger_id} -> {r.last_trigger_id}  "
+            f"  {r.start_link} -> {r.last_link}  "
             f"nodes {r.path_length}, hops {r.hops}, distance {r.route_distance}"
         )
         if args.paths:
@@ -1727,8 +2495,13 @@ def _load_animations(filepath: str) -> Optional[U9Animations]:
         return None
 
 
+def _animation_label(animation: U9Animation) -> str:
+    """Titan's label for a clip, from its stored authoring path."""
+    return parse_animation_source_hints(animation.source_name).label
+
+
 def cmd_animation_list(args: SimpleNamespace) -> int:
-    """List animation clips with their frame, part and suffix counts."""
+    """List animation clips with their frame, part and event counts."""
     animations = _load_animations(args.file)
     if animations is None:
         return 1
@@ -1740,9 +2513,10 @@ def cmd_animation_list(args: SimpleNamespace) -> int:
         f"of {animations.num_entries} slots"
     )
     print(
-        f"{'ID':>5}  {'Frames':>6}  {'Parts':>5}  {'Last ms':>8}  {'Suffix':>6}  Source"
+        f"{'ID':>5}  {'Frames':>6}  {'Parts':>5}  {'Last ms':>8}  {'Game ms':>8}  "
+        f"{'Events':>6}  {'Label':<42}  Authoring path"
     )
-    print("-" * 96)
+    print("-" * 152)
     for animation_id in shown:
         try:
             animation = animations.animation(animation_id)
@@ -1754,7 +2528,9 @@ def cmd_animation_list(args: SimpleNamespace) -> int:
         print(
             f"{animation.animation_id:>5}  {animation.frame_count:>6}  "
             f"{len(animation.parts):>5}  {animation.duration_ms:>8}  "
-            f"{len(animation.suffixes):>6}  {animation.source_name}"
+            f"{animation.runtime_length_ms or 0:>8}  "
+            f"{len(animation.events):>6}  {_animation_label(animation) or '-':<42}  "
+            f"{animation.source_name}"
         )
     if args.limit and len(animation_ids) > args.limit:
         print(
@@ -1779,18 +2555,30 @@ def cmd_animation_show(args: SimpleNamespace) -> int:
         return 0
 
     print(f"{args.file} -- animation {animation.animation_id}")
-    print(f"  Source          : {animation.source_name}")
+    print(f"  Label           : {_animation_label(animation) or '-'}")
+    print(f"  Authoring path  : {animation.source_name}")
     print(
-        f"  Source frames   : {animation.start_frame}..{animation.end_frame} "
+        f"  Authoring frames: {animation.start_frame}..{animation.end_frame} "
         f"({animation.frame_count} total)"
     )
     print(
         f"  Timing          : {animation.source_fps} fps, "
-        f"{animation.frame_interval_ms} nominal ms, last timestamp {animation.duration_ms} ms"
+        f"{animation.frame_interval_ms} nominal ms, "
+        f"last timestamp {animation.last_sample_time_ms} ms, "
+        f"runtime length {animation.runtime_length_ms} ms"
+    )
+    event_label = "event" if len(animation.events) == 1 else "events"
+    print(
+        f"  Structure       : {len(animation.part_registry)} registry words, "
+        f"{len(animation.parts)} parts, {len(animation.events)} {event_label}"
     )
     print(
-        f"  Structure       : {len(animation.header_words)} header words, "
-        f"{len(animation.parts)} parts, {len(animation.suffixes)} suffix records"
+        "  Stored status    : "
+        f"ID {animation.stored_id_status}, range {animation.frame_range_status}, "
+        f"timing {animation.runtime_timing_status}, "
+        f"registry {animation.part_registry_status}, "
+        f"tracks {animation.part_frame_count_status}, "
+        f"{len(animation.part_registry_residue)} inactive registry words"
     )
 
     if args.part is None:
@@ -1836,17 +2624,24 @@ def cmd_animation_show(args: SimpleNamespace) -> int:
                 "raise --limit to see more)"
             )
 
-    if animation.suffixes:
-        suffixes = " ".join(
-            f"({a}, {b}, {c})"
-            for a, b, c in (suffix.values for suffix in animation.suffixes)
-        )
-        print(f"  Raw suffixes    : {suffixes}")
+    if animation.events:
+        print(f"  {'Event ms':>8}  {'Type':>4}  {'Name':<18}  Parameter")
+        print("  " + "-" * 50)
+        for event in animation.events:
+            print(
+                f"  {event.time_ms:>8}  {event.event_type:>4}  "
+                f"{event.event_name:<18}  {event.parameter}"
+            )
     return 0
 
 
 def cmd_animation_model_report(args: SimpleNamespace) -> int:
-    """Export named clips and their registry-backed structural model candidates."""
+    """Export legacy detailed diagnostics for animation/model discovery."""
+    print(
+        "WARNING: animation-model-report is deprecated; use animation-library-plan "
+        "with --diagnostics for the same detailed evidence.",
+        file=sys.stderr,
+    )
     try:
         rows, warnings = build_animation_model_report(
             args.file,
@@ -1868,6 +2663,1589 @@ def cmd_animation_model_report(args: SimpleNamespace) -> int:
     for warning in warnings:
         print(f"WARNING: {warning}", file=sys.stderr)
     print(f"Wrote {len(rows)} animation/model row(s) to {output}")
+    return 0
+
+
+def cmd_animation_library_plan(args: SimpleNamespace) -> int:
+    """Write the compact animation library plan and optional diagnostics."""
+    try:
+        plan = build_animation_library_plan(
+            args.file,
+            sappear_path=getattr(args, "sappear", None),
+            registry_path=getattr(args, "registry", None),
+            types_path=getattr(args, "types", None),
+            typenames_path=getattr(args, "typenames", None),
+        )
+        output = write_animation_library_plan(plan, args.output)
+        diagnostics_path = getattr(args, "diagnostics", None)
+        diagnostics_output = None
+        if diagnostics_path is not None:
+            diagnostics_output = write_dynamic_report(
+                list(plan.diagnostics),
+                diagnostics_path,
+                getattr(args, "diagnostics_format", "csv"),
+                preferred_columns=ANIMATION_MODEL_REPORT_COLUMNS,
+            )
+    except (
+        U9AnimationLibraryPlanError,
+        U9AssetReportError,
+        OSError,
+    ) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+    for warning in plan.warnings:
+        print(f"WARNING: {warning}", file=sys.stderr)
+    summary = plan.document["summary"]
+    print(
+        f"Wrote {summary['library_count']} animation libraries covering "
+        f"{summary['animation_count']} clips to {output}"
+    )
+    print(f"  Actor hints     : {summary['actor_hint_count']}")
+    print(f"  Track signatures: {summary['track_signature_count']}")
+    print(f"  Auto-exportable : {summary['auto_export_library_count']}")
+    print(f"  Needs review    : {summary['review_library_count']}")
+    if diagnostics_output is not None:
+        print(f"  Diagnostics     : {diagnostics_output}")
+    return 0
+
+
+def cmd_animation_library_export(args: SimpleNamespace) -> int:
+    """Export approved actor/skeleton libraries using one shared catalogue."""
+    for label, path in (
+        ("Animation library plan", args.plan),
+        ("Animation archive", args.animations),
+        ("Model archive", args.sappear),
+        ("Texture archive", args.textures),
+        ("Palette", args.palette),
+        ("Node registry", args.registry),
+    ):
+        if path is not None and not Path(path).is_file():
+            print(f"ERROR: {label} not found: {path}", file=sys.stderr)
+            return 1
+
+    animations = _load_animations(args.animations)
+    if animations is None:
+        return 1
+    registry_path = Path(args.registry) if args.registry else None
+    if registry_path is None:
+        registry_path = _find_case_insensitive_file(
+            Path(args.animations).resolve().parent, "registry.txt"
+        )
+    try:
+        registry = (
+            U9NodeRegistry.from_file(registry_path)
+            if registry_path is not None
+            else None
+        )
+        palette_path, _ = _find_palette(args.palette, args.textures)
+        texture_resolver = _make_texture_resolver(args.textures, palette_path)
+        output = args.output or "u9_animation_library_export"
+        result = export_planned_animation_libraries(
+            args.plan,
+            animations.animations(),
+            args.sappear,
+            args.animations,
+            output,
+            registry=registry,
+            registry_path=registry_path,
+            texture_resolver=texture_resolver,
+            texture_archive_path=args.textures,
+            palette_path=palette_path,
+            library_ids=tuple(args.library_ids or ()),
+            actor_models=tuple(
+                parse_actor_model_library_spec(value)
+                for value in getattr(args, "actor_models", None) or ()
+            ),
+            lod_level=args.lod,
+            coordinate_scale=args.coordinate_scale,
+            include_glb=args.glb,
+        )
+    except (
+        OSError,
+        U9AnimationError,
+        U9FlxArchiveError,
+        U9NodeRegistryError,
+        U9PlannedAnimationLibraryExportError,
+    ) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+
+    print(
+        f"Exported {len(result.libraries)} actor/skeleton libraries containing "
+        f"{result.exported_animation_count} unique clips -> {output}/"
+    )
+    print(f"  Shared catalogue: {result.catalogue_path}")
+    print(f"  Root manifest   : {result.manifest_path}")
+    print(f"  Review-only skip: {len(result.skipped_library_ids)}")
+    print(f"  GLB output      : {'enabled' if args.glb else 'disabled'}")
+    if args.textures is None:
+        print("  (no --textures given: exported materials have no images)")
+    return 0
+
+
+def cmd_animation_pose_export(args: SimpleNamespace) -> int:
+    """Export one hierarchical model posed by one animation at a given time."""
+    error = _validate_model_export_args(
+        SimpleNamespace(
+            format=args.format,
+            file=args.sappear,
+            textures=args.textures,
+            palette=args.palette,
+            types=None,
+            typenames=None,
+        )
+    )
+    if error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+    animations = _load_animations(args.animations)
+    if animations is None:
+        return 1
+
+    try:
+        animation = animations.animation(args.animation_id)
+        if animation is None:
+            raise U9AnimationPoseError(
+                f"animation {args.animation_id} is an unused anim.flx slot"
+            )
+        model = _load_model(args.sappear, args.model_id)
+        result = pose_model(model, animation, args.time_ms)
+        resolver = _make_texture_resolver(args.textures, args.palette)
+        clip_label = _animation_label(animation).replace("/", "_")
+        clip_suffix = f"_{clip_label}" if clip_label else ""
+        stem = (
+            f"animation_{args.animation_id:05d}{clip_suffix}_"
+            f"model_{args.model_id:05d}_{args.time_ms:06d}ms"
+        )
+        outdir = args.output or stem
+        os.makedirs(outdir, exist_ok=True)
+        base = os.path.join(outdir, stem)
+        wrote = []
+        if args.format in ("obj", "both"):
+            export_obj(
+                result.model,
+                base + ".obj",
+                lod_level=args.lod,
+                texture_resolver=resolver,
+            )
+            wrote.append(base + ".obj")
+        if args.format in ("stl", "both"):
+            export_stl(result.model, base + ".stl", lod_level=args.lod)
+            wrote.append(base + ".stl")
+    except (
+        U9AnimationError,
+        U9AnimationPoseError,
+        U9FlxArchiveError,
+        U9ModelError,
+        MeshExportError,
+    ) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+
+    print(
+        f"Exported animation {args.animation_id} on model {args.model_id} "
+        f"at {args.time_ms} ms (LOD {args.lod}) -> {outdir}/"
+    )
+    for path in wrote:
+        print(f"  {path}")
+    print(f"  Matched parts   : {len(result.matched_part_ids)}")
+    print(f"  Authoring-only  : {list(result.authoring_only_part_ids)}")
+    print(f"  Model-only      : {list(result.model_only_limb_ids)}")
+    print(f"  Root motion     : {result.root_motion_delta}")
+    if args.format in ("obj", "both") and resolver is None:
+        print("  (no --textures given: OBJ materials have no images)")
+    if args.preview:
+        _generate_preview(outdir)
+    return 0
+
+
+def cmd_animation_bundle_export(args: SimpleNamespace) -> int:
+    """Export one complete rigid hierarchy, clip sidecar, and animated GLB."""
+    for label, path in (
+        ("Animation archive", args.animations),
+        ("Model archive", args.sappear),
+        ("Texture archive", args.textures),
+        ("Palette", args.palette),
+        ("Node registry", args.registry),
+    ):
+        if path is not None and not Path(path).is_file():
+            print(f"ERROR: {label} not found: {path}", file=sys.stderr)
+            return 1
+
+    animations = _load_animations(args.animations)
+    if animations is None:
+        return 1
+
+    registry_path = Path(args.registry) if args.registry else None
+    if registry_path is None:
+        registry_path = _find_case_insensitive_file(
+            Path(args.animations).resolve().parent, "registry.txt"
+        )
+    try:
+        registry = (
+            U9NodeRegistry.from_file(registry_path)
+            if registry_path is not None
+            else None
+        )
+        animation = animations.animation(args.animation_id)
+        if animation is None:
+            raise U9AnimatedModelBundleError(
+                f"animation {args.animation_id} is an unused archive slot"
+            )
+        model = _load_model(args.sappear, args.model_id)
+        palette_path, _ = _find_palette(args.palette, args.textures)
+        texture_resolver = _make_texture_resolver(args.textures, palette_path)
+        output = args.output or (
+            f"model_{args.model_id:05d}_animation_{args.animation_id:05d}_bundle"
+        )
+        result = export_animated_model_bundle(
+            model,
+            animation,
+            output,
+            model_archive_path=args.sappear,
+            animation_archive_path=args.animations,
+            registry=registry,
+            registry_path=registry_path,
+            animation_label=_animation_label(animation),
+            texture_resolver=texture_resolver,
+            texture_archive_path=args.textures,
+            palette_path=palette_path,
+            lod_level=args.lod,
+            coordinate_scale=args.coordinate_scale,
+            include_glb=args.glb,
+        )
+    except (
+        OSError,
+        U9AnimationError,
+        U9AnimatedModelBundleError,
+        U9FlxArchiveError,
+        U9ModelError,
+        U9NodeRegistryError,
+    ) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+
+    print(
+        f"Exported model {args.model_id} with animation {args.animation_id} "
+        f"(LOD {args.lod}) -> {output}/"
+    )
+    print(f"  Sidecar         : {result.sidecar_path}")
+    print(f"  Limb meshes     : {result.mesh_count}/{result.part_count}")
+    print(f"  Animation tracks: {result.track_count}")
+    print(f"  Matched tracks  : {result.matched_track_count}")
+    print(f"  Authoring-only  : {result.authoring_only_track_count}")
+    if result.glb_path is not None:
+        print(f"  Animated GLB    : {result.glb_path}")
+    if args.textures is None:
+        print("  (no --textures given: exported materials have no images)")
+    return 0
+
+
+def cmd_animation_set_export(args: SimpleNamespace) -> int:
+    """Export independently playable clips for one explicit rigid actor model."""
+    if not args.clips:
+        print("ERROR: At least one --clip selector is required.", file=sys.stderr)
+        return 1
+    for label, path in (
+        ("Animation archive", args.animations),
+        ("Model archive", args.sappear),
+        ("Texture archive", args.textures),
+        ("Palette", args.palette),
+        ("Node registry", args.registry),
+    ):
+        if path is not None and not Path(path).is_file():
+            print(f"ERROR: {label} not found: {path}", file=sys.stderr)
+            return 1
+
+    animations = _load_animations(args.animations)
+    if animations is None:
+        return 1
+
+    registry_path = Path(args.registry) if args.registry else None
+    if registry_path is None:
+        registry_path = _find_case_insensitive_file(
+            Path(args.animations).resolve().parent, "registry.txt"
+        )
+    try:
+        registry = (
+            U9NodeRegistry.from_file(registry_path)
+            if registry_path is not None
+            else None
+        )
+        labels = U9AnimationLabels.from_animations(animations.animations())
+        selected_clips = []
+        for selector in args.clips:
+            selection = resolve_animation_selector(selector, labels)
+            animation = animations.animation(selection.animation_id)
+            if animation is None:
+                raise U9AnimatedModelSetError(
+                    f"animation selector {selector!r} resolved to unused archive slot "
+                    f"{selection.animation_id}"
+                )
+            selected_clips.append((selection, animation))
+
+        model = _load_model(args.sappear, args.model_id)
+        palette_path, _ = _find_palette(args.palette, args.textures)
+        texture_resolver = _make_texture_resolver(args.textures, palette_path)
+        output = args.output or f"model_{args.model_id:05d}_animation_set"
+        result = export_animated_model_set(
+            model,
+            selected_clips,
+            output,
+            model_archive_path=args.sappear,
+            animation_archive_path=args.animations,
+            registry=registry,
+            registry_path=registry_path,
+            texture_resolver=texture_resolver,
+            texture_archive_path=args.textures,
+            palette_path=palette_path,
+            lod_level=args.lod,
+            coordinate_scale=args.coordinate_scale,
+            include_glb=args.glb,
+        )
+    except (
+        OSError,
+        U9AnimationError,
+        U9AnimationSelectionError,
+        U9AnimatedModelSetError,
+        U9FlxArchiveError,
+        U9ModelError,
+        U9NodeRegistryError,
+    ) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+
+    print(
+        f"Exported {result.clip_count} animation clip(s) for model {args.model_id} "
+        f"(LOD {args.lod}) -> {output}/"
+    )
+    print(f"  Set manifest    : {result.manifest_path}")
+    for selection, animation in selected_clips:
+        label = selection.animation_label or f"animation_{animation.animation_id}"
+        print(f"  Clip {animation.animation_id:>5}: {label} ({selection.selector})")
+    print(f"  Clip sidecars   : {len(result.clip_sidecar_paths)}")
+    print(f"  Animated GLBs   : {len(result.clip_glb_paths)}")
+    print("  Timeline        : not authored (consumer chooses duration and order)")
+    if args.textures is None:
+        print("  (no --textures given: exported materials have no images)")
+    return 0
+
+
+def cmd_avatar_animation_library_export(args: SimpleNamespace) -> int:
+    """Export all compatible Avatar-labelled clips with shared actor assets."""
+    for label, path in (
+        ("Animation archive", args.animations),
+        ("Model archive", args.sappear),
+        ("Texture archive", args.textures),
+        ("Palette", args.palette),
+        ("Node registry", args.registry),
+    ):
+        if path is not None and not Path(path).is_file():
+            print(f"ERROR: {label} not found: {path}", file=sys.stderr)
+            return 1
+
+    animations = _load_animations(args.animations)
+    if animations is None:
+        return 1
+
+    registry_path = Path(args.registry) if args.registry else None
+    if registry_path is None:
+        registry_path = _find_case_insensitive_file(
+            Path(args.animations).resolve().parent, "registry.txt"
+        )
+    try:
+        registry = (
+            U9NodeRegistry.from_file(registry_path)
+            if registry_path is not None
+            else None
+        )
+        model = _load_model(args.sappear, args.model_id)
+        palette_path, _ = _find_palette(args.palette, args.textures)
+        texture_resolver = _make_texture_resolver(args.textures, palette_path)
+        output = args.output or f"model_{args.model_id:05d}_avatar_animation_library"
+        result = export_avatar_animation_library(
+            model,
+            animations.animations(),
+            output,
+            model_archive_path=args.sappear,
+            animation_archive_path=args.animations,
+            registry=registry,
+            registry_path=registry_path,
+            texture_resolver=texture_resolver,
+            texture_archive_path=args.textures,
+            palette_path=palette_path,
+            categories=args.categories or (),
+            lod_level=args.lod,
+            coordinate_scale=args.coordinate_scale,
+            include_glb=args.glb,
+        )
+    except (
+        OSError,
+        U9AnimationError,
+        U9AvatarAnimationLibraryError,
+        U9FlxArchiveError,
+        U9ModelError,
+        U9NodeRegistryError,
+    ) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+
+    exported = result.export
+    print(
+        f"Exported {result.exported_clip_count} Avatar animation clip(s) for "
+        f"model {args.model_id} (LOD {args.lod}) -> {output}/"
+    )
+    print(f"  Library sidecar : {exported.sidecar_path}")
+    print(f"  Multi-clip GLB  : {exported.glb_path or 'disabled'}")
+    print(f"  Shared meshes   : {exported.mesh_count}")
+    print(
+        "  Categories      : "
+        + ", ".join(f"{name}={count}" for name, count in result.category_counts)
+    )
+    print(f"  Incompatible    : {len(result.incompatible_animation_ids)}")
+    print("  Timeline        : not authored (consumer selects and sequences actions)")
+    if args.textures is None:
+        print("  (no --textures given: exported materials have no images)")
+    return 0
+
+
+# ============================================================================
+# CLI COMMANDS — MODEL GEOMETRY TABLE (static/dimension.dat)
+# ============================================================================
+
+
+def _load_model_geometry_table(filepath: str) -> Optional[U9ModelGeometryTable]:
+    """Open static/dimension.dat, reporting the reason on failure."""
+    if not os.path.isfile(filepath):
+        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
+        return None
+    try:
+        return U9ModelGeometryTable.from_file(filepath)
+    except U9ModelGeometryTableError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return None
+
+
+def _load_optional_model_source(
+    filepath: str | None,
+) -> U9SappearModelSource | None:
+    if filepath is None:
+        return None
+    if not os.path.isfile(filepath):
+        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
+        return None
+    try:
+        return U9SappearModelSource.from_file(filepath)
+    except (OSError, U9FlxArchiveError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return None
+
+
+def _float_matches(left: float, right: float) -> bool:
+    return left == right or (math.isnan(left) and math.isnan(right))
+
+
+def _geometry_model_differences(
+    record: U9ModelGeometryRecord, model: U9Model
+) -> tuple[str, ...]:
+    differences: list[str] = []
+    if not _float_matches(record.culling_radius, model.sphere_radius):
+        differences.append("culling_radius")
+    if any(
+        not _float_matches(stored, current)
+        for stored, current in zip(record.culling_center, model.sphere_center)
+    ):
+        differences.append("culling_center")
+    for label, stored_values, current_values in (
+        ("bounds_minimum", record.bounds_minimum, model.min_bounds),
+        ("bounds_maximum", record.bounds_maximum, model.max_bounds),
+    ):
+        if any(
+            stored is not None and not _float_matches(stored, current)
+            for stored, current in zip(stored_values, current_values)
+        ):
+            differences.append(label)
+    return tuple(differences)
+
+
+def _geometry_model_join(
+    record: U9ModelGeometryRecord,
+    source: U9SappearModelSource | None,
+) -> tuple[str, tuple[str, ...], U9Model | None]:
+    if source is None:
+        return "not_checked", (), None
+    lookup = source.model(record.model_id)
+    if lookup.model is None:
+        return lookup.status, (), None
+    differences = _geometry_model_differences(record, lookup.model)
+    return (
+        "matches_model" if not differences else "differs_from_model",
+        differences,
+        lookup.model,
+    )
+
+
+def cmd_dimension_info(args: SimpleNamespace) -> int:
+    """Summarize the model-indexed geometry cache in dimension.dat."""
+    table = _load_model_geometry_table(args.file)
+    if table is None:
+        return 1
+    source = _load_optional_model_source(args.models)
+    if args.models and source is None:
+        return 1
+
+    radius_statuses = Counter(record.culling_radius_status for record in table.records)
+    storage_statuses = Counter(record.bounds_storage_status for record in table.records)
+    warning_ids = table.warning_model_ids()
+    print(f"{args.file} -- {MODEL_SLOT_COUNT} model geometry slots")
+    print(
+        "  radius states        : "
+        + ", ".join(
+            f"{status}={count}" for status, count in sorted(radius_statuses.items())
+        )
+    )
+    print(
+        "  bound storage        : "
+        + ", ".join(
+            f"{status}={count}" for status, count in sorted(storage_statuses.items())
+        )
+    )
+    print(f"  structural warnings : {len(warning_ids)}")
+    if source is not None:
+        joins = Counter(
+            _geometry_model_join(record, source)[0] for record in table.records
+        )
+        print(
+            "  model comparison     : "
+            + ", ".join(f"{status}={count}" for status, count in sorted(joins.items()))
+        )
+    return 0
+
+
+def cmd_dimension_show(args: SimpleNamespace) -> int:
+    """Show one model ID's gathered geometry values and stored fragments."""
+    table = _load_model_geometry_table(args.file)
+    if table is None:
+        return 1
+    source = _load_optional_model_source(args.models)
+    if args.models and source is None:
+        return 1
+    try:
+        record = table.record(args.id)
+    except IndexError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+
+    warnings = record.structural_warnings()
+    join_status, differences, model = _geometry_model_join(record, source)
+    print(f"{args.file} -- model geometry {record.model_id}")
+    print(
+        f"  culling radius={record.culling_radius!r} "
+        f"status={record.culling_radius_status}"
+    )
+    print(f"  culling center={record.culling_center}")
+    print(
+        f"  bounds minimum={record.bounds_minimum} "
+        f"maximum={record.bounds_maximum} storage={record.bounds_storage_status}"
+    )
+    print("  warnings: " + (", ".join(warnings) if warnings else "none"))
+    print(f"  model comparison: {join_status}")
+    if differences:
+        print(f"  differing fields: {', '.join(differences)}")
+    if model is not None:
+        print(
+            f"  model values: radius={model.sphere_radius!r} "
+            f"center={model.sphere_center} bounds={model.min_bounds}..{model.max_bounds}"
+        )
+    print(
+        "  raw fragments: "
+        f"radius=0x{record.radius_raw_data.hex()} "
+        f"center=0x{record.center_raw_data.hex()} "
+        f"minimum=0x{record.minimum_raw_data.hex()} "
+        f"maximum=0x{record.maximum_raw_data.hex()}"
+    )
+    return 0
+
+
+def cmd_dimension_csv(args: SimpleNamespace) -> int:
+    """Export every model geometry slot and its forensic fragments to CSV."""
+    table = _load_model_geometry_table(args.file)
+    if table is None:
+        return 1
+    source = _load_optional_model_source(args.models)
+    if args.models and source is None:
+        return 1
+
+    output = Path(args.output or "dimension_csv")
+    try:
+        output.mkdir(parents=True, exist_ok=True)
+        output_path = output / "u9_dimensions.csv"
+        with output_path.open("w", encoding="utf-8", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(
+                [
+                    "model_id",
+                    "culling_radius",
+                    "culling_radius_status",
+                    "culling_center_x",
+                    "culling_center_y",
+                    "culling_center_z",
+                    "bounds_storage_status",
+                    "bounds_minimum_x",
+                    "bounds_minimum_y",
+                    "bounds_minimum_z",
+                    "bounds_maximum_x",
+                    "bounds_maximum_y",
+                    "bounds_maximum_z",
+                    "structural_status",
+                    "warnings",
+                    "model_join_status",
+                    "model_differences",
+                    "model_culling_radius",
+                    "model_culling_center_x",
+                    "model_culling_center_y",
+                    "model_culling_center_z",
+                    "model_bounds_minimum_x",
+                    "model_bounds_minimum_y",
+                    "model_bounds_minimum_z",
+                    "model_bounds_maximum_x",
+                    "model_bounds_maximum_y",
+                    "model_bounds_maximum_z",
+                    "radius_raw_hex",
+                    "center_raw_hex",
+                    "minimum_raw_hex",
+                    "maximum_raw_hex",
+                    "stored_fragments_hex",
+                ]
+            )
+            for record in table.records:
+                warnings = record.structural_warnings()
+                join_status, differences, model = _geometry_model_join(record, source)
+                model_values: tuple[object, ...]
+                if model is None:
+                    model_values = ("",) * 10
+                else:
+                    model_values = (
+                        model.sphere_radius,
+                        *model.sphere_center,
+                        *model.min_bounds,
+                        *model.max_bounds,
+                    )
+                writer.writerow(
+                    [
+                        record.model_id,
+                        record.culling_radius,
+                        record.culling_radius_status,
+                        *record.culling_center,
+                        record.bounds_storage_status,
+                        *(
+                            "" if value is None else value
+                            for value in record.bounds_minimum
+                        ),
+                        *(
+                            "" if value is None else value
+                            for value in record.bounds_maximum
+                        ),
+                        "ok" if not warnings else "warning",
+                        ";".join(warnings),
+                        join_status,
+                        ";".join(differences),
+                        *model_values,
+                        f"0x{record.radius_raw_data.hex()}",
+                        f"0x{record.center_raw_data.hex()}",
+                        f"0x{record.minimum_raw_data.hex()}",
+                        f"0x{record.maximum_raw_data.hex()}",
+                        record.stored_fragments_hex,
+                    ]
+                )
+    except OSError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+
+    print(f"Wrote {MODEL_SLOT_COUNT} model geometry rows -> {output_path}")
+    return 0
+
+
+# ============================================================================
+# CLI COMMANDS — ENCLOSED SPACES (static/spaces.flx)
+# ============================================================================
+
+
+def _load_spaces(filepath: str) -> Optional[U9Spaces]:
+    """Open static/spaces.flx, reporting the reason on failure."""
+    if not os.path.isfile(filepath):
+        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
+        return None
+    try:
+        return U9Spaces.from_file(filepath)
+    except U9SpacesError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return None
+
+
+def cmd_spaces_info(args: SimpleNamespace) -> int:
+    """Summarize enclosed spaces, boundary planes, and visibility portals."""
+    spaces = _load_spaces(args.file)
+    if spaces is None:
+        return 1
+    records = spaces.spaces()
+    plane_count = sum(len(space.boundaries) for space in records)
+    portal_count = sum(space.portal_count for space in records)
+    rebuilt = sum(not space.stored_space_number_matches_runtime for space in records)
+    reset_flags = sum(
+        opening.stored_flags != 0
+        for space in records
+        for boundary in space.boundaries
+        for opening in boundary.openings
+    )
+    print(
+        f"{args.file} -- {len(records)} enclosed space(s) of {spaces.num_entries} slots"
+    )
+    print(f"  boundary planes        : {plane_count}")
+    print(f"  visibility portals     : {portal_count}")
+    print(f"  runtime-rebuilt IDs    : {rebuilt}")
+    print(f"  nonzero reset flag cells: {reset_flags}")
+    missing = spaces.missing_visibility_target_ids()
+    print(
+        "  unresolved space links: "
+        + (", ".join(str(value) for value in missing) if missing else "none")
+    )
+    return 0
+
+
+def cmd_spaces_show(args: SimpleNamespace) -> int:
+    """Show one enclosed space without interpreting forensic-only cells."""
+    spaces = _load_spaces(args.file)
+    if spaces is None:
+        return 1
+    space = spaces.space(args.id)
+    if space is None:
+        print(f"Space {args.id} is an unused slot.")
+        return 0
+
+    template = (
+        "none" if space.sound_template_id is None else str(space.sound_template_id)
+    )
+    environment = (
+        "none"
+        if space.acoustic_environment_id is None
+        else str(space.acoustic_environment_id)
+    )
+    print(f"{args.file} -- space {space.space_id}: {space.name!r}")
+    print(f"  map={space.world_map_id} sorting_priority={space.draw_order_priority}")
+    print(
+        f"  visible_space={space.visibility_target_id} "
+        f"hide_outside={space.hide_outside}"
+    )
+    print(
+        f"  sound_template={template} acoustic_environment={environment} "
+        f"audio_raw={space.audio_code:#010x}"
+    )
+    print(
+        f"  stored_space_number={space.stored_space_number} "
+        f"runtime_space_id={space.runtime_space_id} "
+        f"status={space.stored_space_number_status}"
+    )
+    print(
+        f"  planes={len(space.boundaries)} portals={space.portal_count} "
+        f"stored_flags={space.stored_flags:#06x}"
+    )
+    for plane_index, boundary in enumerate(space.boundaries):
+        print(
+            f"  plane {plane_index}: center={boundary.reference_point} "
+            f"normal={boundary.normal} w={boundary.plane_w} "
+            f"portals={len(boundary.openings)}"
+        )
+        for portal_index, opening in enumerate(boundary.openings):
+            range_text = (
+                "runtime maximum"
+                if opening.uses_runtime_maximum_range
+                else str(opening.range_limit)
+            )
+            print(
+                f"    portal {portal_index}: target={opening.visibility_target_id} "
+                f"range={range_text} stored_flags={opening.stored_flags:#010x} "
+                f"status={opening.stored_flags_status}"
+            )
+    return 0
+
+
+def cmd_spaces_csv(args: SimpleNamespace) -> int:
+    """Export normalized space, plane, and portal tables with raw records."""
+    spaces = _load_spaces(args.file)
+    if spaces is None:
+        return 1
+
+    output = Path(args.output or "spaces_csv")
+    try:
+        output.mkdir(parents=True, exist_ok=True)
+        space_path = output / "u9_spaces.csv"
+        plane_path = output / "u9_space_planes.csv"
+        portal_path = output / "u9_space_portals.csv"
+
+        with space_path.open("w", encoding="utf-8", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(
+                [
+                    "space_id",
+                    "name",
+                    "world_map_id",
+                    "draw_order_priority",
+                    "visibility_target_id",
+                    "boundary_plane_count",
+                    "portal_count",
+                    "hide_outside",
+                    "stored_flags",
+                    "unclassified_flag_bits",
+                    "audio_code",
+                    "has_sound_template",
+                    "sound_template_id",
+                    "has_acoustic_environment",
+                    "acoustic_environment_id",
+                    "unclassified_audio_bits",
+                    "stored_space_number",
+                    "runtime_space_id",
+                    "stored_space_number_status",
+                    "header_reserved",
+                    "boundary_head_sentinel",
+                    "name_field_hex",
+                    "raw_hex",
+                ]
+            )
+            for space in spaces.spaces():
+                writer.writerow(
+                    [
+                        space.space_id,
+                        space.name,
+                        space.world_map_id,
+                        space.draw_order_priority,
+                        space.visibility_target_id,
+                        len(space.boundaries),
+                        space.portal_count,
+                        space.hide_outside,
+                        f"0x{space.stored_flags:04x}",
+                        f"0x{space.unclassified_flag_bits:04x}",
+                        f"0x{space.audio_code:08x}",
+                        space.has_sound_template,
+                        ""
+                        if space.sound_template_id is None
+                        else space.sound_template_id,
+                        space.has_acoustic_environment,
+                        ""
+                        if space.acoustic_environment_id is None
+                        else space.acoustic_environment_id,
+                        f"0x{space.unclassified_audio_bits:08x}",
+                        space.stored_space_number,
+                        space.runtime_space_id,
+                        space.stored_space_number_status,
+                        space.header_reserved,
+                        f"0x{space.boundary_head_sentinel:08x}",
+                        f"0x{space.name_field.hex()}",
+                        f"0x{space.raw_data.hex()}",
+                    ]
+                )
+
+        with plane_path.open("w", encoding="utf-8", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(
+                [
+                    "space_id",
+                    "plane_index",
+                    "entry_offset",
+                    "reference_x",
+                    "reference_y",
+                    "reference_z",
+                    "normal_x",
+                    "normal_y",
+                    "normal_z",
+                    "plane_w",
+                    "portal_count",
+                    "next_plane_sentinel",
+                    "portal_head_sentinel",
+                    "plane_reserved",
+                    "raw_hex",
+                ]
+            )
+            for space in spaces.spaces():
+                for plane_index, boundary in enumerate(space.boundaries):
+                    writer.writerow(
+                        [
+                            space.space_id,
+                            plane_index,
+                            boundary.entry_offset,
+                            *boundary.reference_point,
+                            *boundary.normal,
+                            boundary.plane_w,
+                            len(boundary.openings),
+                            f"0x{boundary.next_plane_sentinel:08x}",
+                            f"0x{boundary.portal_head_sentinel:08x}",
+                            boundary.plane_reserved,
+                            f"0x{boundary.raw_data.hex()}",
+                        ]
+                    )
+
+        corner_columns = [
+            f"corner_{corner}_{axis}" for corner in range(4) for axis in ("x", "y", "z")
+        ]
+        with portal_path.open("w", encoding="utf-8", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(
+                [
+                    "space_id",
+                    "plane_index",
+                    "portal_index",
+                    "entry_offset",
+                    *corner_columns,
+                    "visibility_target_id",
+                    "range_limit",
+                    "uses_runtime_maximum_range",
+                    "reserved_link",
+                    "stored_flags",
+                    "stored_blocked",
+                    "stored_disabled",
+                    "unclassified_flag_bits",
+                    "runtime_initial_flags",
+                    "stored_flags_status",
+                    "next_portal_sentinel",
+                    "raw_hex",
+                ]
+            )
+            for space in spaces.spaces():
+                for plane_index, boundary in enumerate(space.boundaries):
+                    for portal_index, opening in enumerate(boundary.openings):
+                        writer.writerow(
+                            [
+                                space.space_id,
+                                plane_index,
+                                portal_index,
+                                opening.entry_offset,
+                                *(
+                                    value
+                                    for corner in opening.corners
+                                    for value in corner
+                                ),
+                                opening.visibility_target_id,
+                                opening.range_limit,
+                                opening.uses_runtime_maximum_range,
+                                opening.reserved_link,
+                                f"0x{opening.stored_flags:08x}",
+                                opening.stored_blocked,
+                                opening.stored_disabled,
+                                f"0x{opening.unclassified_flag_bits:08x}",
+                                f"0x{opening.runtime_initial_flags:08x}",
+                                opening.stored_flags_status,
+                                f"0x{opening.next_portal_sentinel:08x}",
+                                f"0x{opening.raw_data.hex()}",
+                            ]
+                        )
+    except OSError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+
+    print(f"Wrote {len(spaces.spaces())} enclosed spaces -> {space_path}")
+    print(
+        f"Wrote {sum(len(space.boundaries) for space in spaces.spaces())} "
+        f"boundary planes -> {plane_path}"
+    )
+    print(
+        f"Wrote {sum(space.portal_count for space in spaces.spaces())} "
+        f"visibility portals -> {portal_path}"
+    )
+    return 0
+
+
+# ============================================================================
+# CLI COMMANDS — DERIVED VOLUME LOOKUP CACHE (static/treedat.flx)
+# ============================================================================
+
+
+def _load_volume_lookup_cache(filepath: str) -> Optional[U9VolumeLookupCache]:
+    """Open static/treedat.flx, reporting the reason on failure."""
+    if not os.path.isfile(filepath):
+        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
+        return None
+    try:
+        return U9VolumeLookupCache.from_file(filepath)
+    except U9VolumeLookupError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return None
+
+
+def cmd_treedat_info(args: SimpleNamespace) -> int:
+    """Summarize map entries and partition nodes in treedat.flx."""
+    cache = _load_volume_lookup_cache(args.file)
+    if cache is None:
+        return 1
+    maps = cache.map_indices()
+    versions = Counter(map_index.format_version for map_index in maps)
+    partition_count = sum(len(map_index.partitions) for map_index in maps)
+    memberships = sum(map_index.leaf_membership_count for map_index in maps)
+    duplicates = sum(map_index.duplicated_leaf_memberships for map_index in maps)
+    invalid = cache.structurally_invalid_map_ids()
+    print(f"{args.file} -- {len(maps)} cached map(s) of {cache.num_entries} slots")
+    print(
+        "  format versions          : "
+        + ", ".join(f"{version}={count}" for version, count in sorted(versions.items()))
+    )
+    print(f"  empty map caches         : {sum(item.is_empty for item in maps)}")
+    print(f"  partition nodes          : {partition_count}")
+    print(f"  leaf memberships         : {memberships}")
+    print(f"  duplicated memberships  : {duplicates}")
+    print(
+        "  structurally invalid maps: "
+        + (", ".join(str(map_id) for map_id in invalid) if invalid else "none")
+    )
+    if args.spaces:
+        spaces = _load_spaces(args.spaces)
+        if spaces is None:
+            return 1
+        rebuild = cache.maps_requiring_rebuild(spaces)
+        print(
+            "  maps requiring rebuild   : "
+            + (", ".join(str(map_id) for map_id in rebuild) if rebuild else "none")
+        )
+    return 0
+
+
+def cmd_treedat_show(args: SimpleNamespace) -> int:
+    """Show one map's cached volume list and partition table."""
+    cache = _load_volume_lookup_cache(args.file)
+    if cache is None:
+        return 1
+    map_index = cache.map_index(args.id)
+    if map_index is None:
+        print(f"Map {args.id} has no stored cache entry.")
+        return 0
+
+    warnings = map_index.structural_warnings()
+    print(f"{args.file} -- cached map {map_index.map_id}")
+    print(
+        f"  version={map_index.format_version} volumes={len(map_index.volume_ids)} "
+        f"partitions={len(map_index.partitions)}"
+    )
+    print(
+        "  volume IDs: "
+        + (", ".join(str(value) for value in map_index.volume_ids) or "none")
+    )
+    print(
+        f"  leaf memberships={map_index.leaf_membership_count} "
+        f"duplicates={map_index.duplicated_leaf_memberships}"
+    )
+    print("  warnings: " + (", ".join(warnings) if warnings else "none"))
+    for node in map_index.partitions:
+        kind = "leaf" if node.is_leaf else "branch"
+        members = ",".join(str(value) for value in node.local_volume_ids) or "-"
+        print(
+            f"  node {node.node_index:>3} {kind:<6} "
+            f"front={node.front_child_index:>3} back={node.back_child_index:>3} "
+            f"subtree={node.subtree_volume_count:>3} local=[{members}] "
+            f"equation={(*node.partition_normal, node.partition_w)}"
+        )
+    return 0
+
+
+def cmd_treedat_csv(args: SimpleNamespace) -> int:
+    """Export map, partition, and leaf-membership cache tables to CSV."""
+    cache = _load_volume_lookup_cache(args.file)
+    if cache is None:
+        return 1
+    spaces = None
+    if args.spaces:
+        spaces = _load_spaces(args.spaces)
+        if spaces is None:
+            return 1
+
+    expected_by_map: dict[int, tuple[int, ...]] = {}
+    volume_world_map: dict[int, int] = {}
+    if spaces is not None:
+        pending: dict[int, list[int]] = {}
+        for volume in spaces.spaces():
+            pending.setdefault(volume.world_map_id, []).append(volume.space_id)
+            volume_world_map[volume.space_id] = volume.world_map_id
+        expected_by_map = {
+            map_id: tuple(volume_ids) for map_id, volume_ids in pending.items()
+        }
+    rebuild = set(cache.maps_requiring_rebuild(spaces)) if spaces is not None else set()
+    exported_map_ids = sorted(set(cache.used_map_ids) | set(expected_by_map))
+
+    output = Path(args.output or "treedat_csv")
+    try:
+        output.mkdir(parents=True, exist_ok=True)
+        map_path = output / "u9_treedat_maps.csv"
+        node_path = output / "u9_treedat_nodes.csv"
+        membership_path = output / "u9_treedat_node_volumes.csv"
+
+        with map_path.open("w", encoding="utf-8", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(
+                [
+                    "map_id",
+                    "format_version",
+                    "declared_volume_count",
+                    "volume_ids",
+                    "declared_partition_count",
+                    "partition_count",
+                    "leaf_membership_count",
+                    "duplicated_leaf_memberships",
+                    "root_subtree_volume_count",
+                    "structural_status",
+                    "warnings",
+                    "spaces_expected_volume_ids",
+                    "spaces_join_status",
+                    "runtime_rebuild_required",
+                    "raw_hex",
+                ]
+            )
+            for map_id in exported_map_ids:
+                map_index = cache.map_index(map_id)
+                expected = None if spaces is None else expected_by_map.get(map_id, ())
+                if map_index is None:
+                    writer.writerow(
+                        [
+                            map_id,
+                            "",
+                            "",
+                            "",
+                            "",
+                            "",
+                            "",
+                            "",
+                            "",
+                            "absent",
+                            "",
+                            ""
+                            if expected is None
+                            else ";".join(str(value) for value in expected),
+                            "missing_cache",
+                            map_id in rebuild,
+                            "",
+                        ]
+                    )
+                    continue
+                warnings = map_index.structural_warnings()
+                if spaces is None:
+                    join_status = "not_checked"
+                elif expected == map_index.volume_ids:
+                    join_status = "matches_spaces"
+                else:
+                    join_status = "differs_from_spaces"
+                writer.writerow(
+                    [
+                        map_index.map_id,
+                        map_index.format_version,
+                        map_index.declared_volume_count,
+                        ";".join(str(value) for value in map_index.volume_ids),
+                        map_index.declared_partition_count,
+                        len(map_index.partitions),
+                        map_index.leaf_membership_count,
+                        map_index.duplicated_leaf_memberships,
+                        ""
+                        if map_index.root_subtree_volume_count is None
+                        else map_index.root_subtree_volume_count,
+                        "ok" if not warnings else "warning",
+                        ";".join(warnings),
+                        ""
+                        if expected is None
+                        else ";".join(str(value) for value in expected),
+                        join_status,
+                        map_id in rebuild,
+                        f"0x{map_index.raw_data.hex()}",
+                    ]
+                )
+
+        with node_path.open("w", encoding="utf-8", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(
+                [
+                    "map_id",
+                    "node_index",
+                    "entry_offset",
+                    "node_kind",
+                    "front_child_index",
+                    "back_child_index",
+                    "has_complete_child_pair",
+                    "local_volume_count",
+                    "local_volume_ids",
+                    "partition_normal_x",
+                    "partition_normal_y",
+                    "partition_normal_z",
+                    "partition_w",
+                    "subtree_volume_count",
+                    "raw_hex",
+                ]
+            )
+            for map_index in cache.map_indices():
+                for node in map_index.partitions:
+                    writer.writerow(
+                        [
+                            map_index.map_id,
+                            node.node_index,
+                            node.entry_offset,
+                            "leaf" if node.is_leaf else "branch",
+                            node.front_child_index,
+                            node.back_child_index,
+                            node.has_complete_child_pair,
+                            len(node.local_volume_ids),
+                            ";".join(str(value) for value in node.local_volume_ids),
+                            *node.partition_normal,
+                            node.partition_w,
+                            node.subtree_volume_count,
+                            f"0x{node.raw_data.hex()}",
+                        ]
+                    )
+
+        with membership_path.open("w", encoding="utf-8", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(
+                [
+                    "map_id",
+                    "node_index",
+                    "membership_index",
+                    "volume_id",
+                    "in_map_volume_list",
+                    "spaces_world_map_id",
+                    "spaces_map_match",
+                ]
+            )
+            for map_index in cache.map_indices():
+                map_volume_ids = set(map_index.volume_ids)
+                for node in map_index.partitions:
+                    for membership_index, volume_id in enumerate(node.local_volume_ids):
+                        world_map_id = volume_world_map.get(volume_id)
+                        writer.writerow(
+                            [
+                                map_index.map_id,
+                                node.node_index,
+                                membership_index,
+                                volume_id,
+                                volume_id in map_volume_ids,
+                                "" if world_map_id is None else world_map_id,
+                                ""
+                                if spaces is None
+                                else world_map_id == map_index.map_id,
+                            ]
+                        )
+    except OSError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+
+    print(
+        f"Wrote {len(exported_map_ids)} map status row(s) "
+        f"({len(cache.map_indices())} cached) -> {map_path}"
+    )
+    print(
+        f"Wrote {sum(len(item.partitions) for item in cache.map_indices())} "
+        f"partition nodes -> {node_path}"
+    )
+    print(
+        f"Wrote {sum(item.leaf_membership_count for item in cache.map_indices())} "
+        f"node-volume memberships -> {membership_path}"
+    )
+    return 0
+
+
+# ============================================================================
+# CLI COMMANDS — GAMEPLAY ZONES (static/areas.flx)
+# ============================================================================
+
+
+def _load_areas(filepath: str) -> Optional[U9Areas]:
+    """Open static/areas.flx, reporting the reason on failure."""
+    if not os.path.isfile(filepath):
+        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
+        return None
+    try:
+        return U9Areas.from_file(filepath)
+    except U9AreasError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return None
+
+
+def cmd_areas_info(args: SimpleNamespace) -> int:
+    """Summarize gameplay zones, boxes, and encounter tables."""
+    areas = _load_areas(args.file)
+    if areas is None:
+        return 1
+    zones = areas.zones()
+    kinds = Counter(record.record_kind for record in areas.records())
+    warning_ids = [zone.zone_id for zone in zones if zone.structural_warnings()]
+    print(
+        f"{args.file} -- {len(areas.records())} used gameplay-zone record(s) "
+        f"of {areas.num_entries} slots"
+    )
+    print(
+        "  record kinds          : "
+        + ", ".join(f"{kind}={count}" for kind, count in sorted(kinds.items()))
+    )
+    print(f"  decoded box zones      : {len(zones)}")
+    print(f"  world boxes            : {sum(len(zone.boxes) for zone in zones)}")
+    print(f"  trigger-enabled zones  : {sum(zone.trigger_enabled for zone in zones)}")
+    print(
+        f"  encounter-table zones : {sum(zone.has_encounter_table for zone in zones)}"
+    )
+    print(f"  unsupported records    : {len(areas.unsupported_records())}")
+    print(
+        "  structural warnings   : "
+        + (
+            ", ".join(str(zone_id) for zone_id in warning_ids)
+            if warning_ids
+            else "none"
+        )
+    )
+    return 0
+
+
+def cmd_areas_show(args: SimpleNamespace) -> int:
+    """Show one gameplay-zone record and its nested data."""
+    areas = _load_areas(args.file)
+    if areas is None:
+        return 1
+    record = areas.record(args.id)
+    if record is None:
+        print(f"Gameplay-zone slot {args.id} is unused.")
+        return 0
+    if not isinstance(record, U9GameplayZone):
+        print(
+            f"{args.file} -- gameplay-zone record {record.zone_id}: "
+            f"unsupported kind {record.record_kind}, {len(record.raw_data)} raw byte(s)"
+        )
+        return 0
+
+    warnings = record.structural_warnings()
+    marker = record.path_marker_position
+    print(f"{args.file} -- gameplay zone {record.zone_id}, kind {record.record_kind}")
+    print(
+        f"  stored_zone_id={record.stored_zone_id} "
+        f"status={record.stored_zone_id_status} map={record.world_map_id}"
+    )
+    print(
+        f"  flags={record.stored_flags:#010x} trigger={record.trigger_enabled} "
+        f"encounters={record.has_encounter_table} "
+        f"unclassified={record.unclassified_flag_bits:#010x}"
+    )
+    print(
+        f"  path_marker=({marker.x}, {marker.y}, {marker.z}) "
+        f"status={record.path_marker_position_status} "
+        f"padding=0x{marker.padding.hex()}"
+    )
+    print(
+        f"  encounter_chance={record.encounter_chance_percent} "
+        f"status={record.encounter_chance_status} "
+        f"stored_total_weight={record.stored_total_weight}"
+    )
+    if record.encounter_table is not None:
+        table = record.encounter_table
+        print(
+            f"  encounter_choices={table.declared_choice_count} "
+            f"active_weight_total={table.active_weight_total} "
+            f"stored_flags={table.stored_flags:#06x}"
+        )
+        for choice in table.choice_slots:
+            active = choice.slot_index < table.declared_choice_count
+            print(
+                f"    slot {choice.slot_index:>2}: active={active} "
+                f"object_type={choice.object_type_id} weight={choice.selection_weight}"
+            )
+    print(f"  boxes={len(record.boxes)}")
+    for box in record.boxes:
+        first, second = box.corners
+        print(
+            f"    box {box.box_index}: ({first.x}, {first.y}, {first.z}) -> "
+            f"({second.x}, {second.y}, {second.z}) "
+            f"unbounded_height={box.uses_unbounded_height}"
+        )
+    print("  warnings: " + (", ".join(warnings) if warnings else "none"))
+    return 0
+
+
+def cmd_areas_csv(args: SimpleNamespace) -> int:
+    """Export gameplay-zone, box, and encounter-slot tables to CSV."""
+    areas = _load_areas(args.file)
+    if areas is None:
+        return 1
+
+    output = Path(args.output or "areas_csv")
+    try:
+        output.mkdir(parents=True, exist_ok=True)
+        area_path = output / "u9_areas.csv"
+        box_path = output / "u9_area_boxes.csv"
+        encounter_path = output / "u9_area_encounter_choices.csv"
+
+        with area_path.open("w", encoding="utf-8", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(
+                [
+                    "zone_id",
+                    "record_kind",
+                    "record_kind_name",
+                    "stored_zone_id",
+                    "stored_zone_id_status",
+                    "world_map_id",
+                    "stored_flags",
+                    "trigger_enabled",
+                    "has_encounter_table",
+                    "unclassified_flag_bits",
+                    "encounter_chance_percent",
+                    "encounter_chance_status",
+                    "stored_total_weight",
+                    "declared_encounter_choice_count",
+                    "active_encounter_weight_total",
+                    "encounter_reserved_prefix",
+                    "encounter_reserved_suffix",
+                    "encounter_stored_flags",
+                    "declared_box_count",
+                    "box_count",
+                    "path_marker_x",
+                    "path_marker_y",
+                    "path_marker_z",
+                    "path_marker_status",
+                    "path_marker_padding_hex",
+                    "structural_status",
+                    "warnings",
+                    "trailing_hex",
+                    "raw_hex",
+                ]
+            )
+            for record in areas.records():
+                if not isinstance(record, U9GameplayZone):
+                    writer.writerow(
+                        [
+                            record.zone_id,
+                            record.record_kind,
+                            "unsupported",
+                            *([""] * 22),
+                            "warning",
+                            "unsupported_record_kind",
+                            "",
+                            f"0x{record.raw_data.hex()}",
+                        ]
+                    )
+                    continue
+                table = record.encounter_table
+                warnings = record.structural_warnings()
+                marker = record.path_marker_position
+                writer.writerow(
+                    [
+                        record.zone_id,
+                        record.record_kind,
+                        "box_zone",
+                        record.stored_zone_id,
+                        record.stored_zone_id_status,
+                        record.world_map_id,
+                        f"0x{record.stored_flags:08x}",
+                        record.trigger_enabled,
+                        record.has_encounter_table,
+                        f"0x{record.unclassified_flag_bits:08x}",
+                        record.encounter_chance_percent,
+                        record.encounter_chance_status,
+                        record.stored_total_weight,
+                        "" if table is None else table.declared_choice_count,
+                        "" if table is None else table.active_weight_total,
+                        "" if table is None else table.reserved_prefix,
+                        "" if table is None else table.reserved_suffix,
+                        "" if table is None else f"0x{table.stored_flags:04x}",
+                        record.declared_box_count,
+                        len(record.boxes),
+                        marker.x,
+                        marker.y,
+                        marker.z,
+                        record.path_marker_position_status,
+                        f"0x{marker.padding.hex()}",
+                        "ok" if not warnings else "warning",
+                        ";".join(warnings),
+                        f"0x{record.trailing_data.hex()}",
+                        f"0x{record.raw_data.hex()}",
+                    ]
+                )
+
+        with box_path.open("w", encoding="utf-8", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(
+                [
+                    "zone_id",
+                    "box_index",
+                    "entry_offset",
+                    "corner_0_x",
+                    "corner_0_y",
+                    "corner_0_z",
+                    "corner_0_padding_hex",
+                    "corner_1_x",
+                    "corner_1_y",
+                    "corner_1_z",
+                    "corner_1_padding_hex",
+                    "minimum_x",
+                    "minimum_y",
+                    "minimum_z",
+                    "maximum_x",
+                    "maximum_y",
+                    "maximum_z",
+                    "uses_unbounded_height",
+                    "raw_hex",
+                ]
+            )
+            for zone in areas.zones():
+                for box in zone.boxes:
+                    first, second = box.corners
+                    writer.writerow(
+                        [
+                            zone.zone_id,
+                            box.box_index,
+                            box.entry_offset,
+                            first.x,
+                            first.y,
+                            first.z,
+                            f"0x{first.padding.hex()}",
+                            second.x,
+                            second.y,
+                            second.z,
+                            f"0x{second.padding.hex()}",
+                            *box.minimum,
+                            *box.maximum,
+                            box.uses_unbounded_height,
+                            f"0x{box.raw_data.hex()}",
+                        ]
+                    )
+
+        with encounter_path.open("w", encoding="utf-8", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(
+                [
+                    "zone_id",
+                    "slot_index",
+                    "is_active",
+                    "object_type_id",
+                    "selection_weight",
+                    "raw_hex",
+                ]
+            )
+            for zone in areas.zones():
+                table = zone.encounter_table
+                if table is None:
+                    continue
+                for choice in table.choice_slots:
+                    writer.writerow(
+                        [
+                            zone.zone_id,
+                            choice.slot_index,
+                            choice.slot_index < table.declared_choice_count,
+                            choice.object_type_id,
+                            choice.selection_weight,
+                            f"0x{choice.raw_data.hex()}",
+                        ]
+                    )
+    except OSError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+
+    print(f"Wrote {len(areas.records())} gameplay-zone rows -> {area_path}")
+    print(
+        f"Wrote {sum(len(zone.boxes) for zone in areas.zones())} "
+        f"zone boxes -> {box_path}"
+    )
+    print(
+        f"Wrote {sum(len(zone.encounter_table.choice_slots) for zone in areas.zones() if zone.encounter_table is not None)} "
+        f"encounter slots -> {encounter_path}"
+    )
     return 0
 
 
@@ -1951,13 +4329,27 @@ def cmd_trigger_show(args: SimpleNamespace) -> int:
             f"  {trigger.slack_records} stale record(s) after the terminator (preserved)"
         )
     if trigger.records:
-        print(f"  {'#':>3}  {'Opcode':>6}  {'Arg0':>5}  {'Arg1':>6}  {'Arg2':>6}")
-        print("  " + "-" * 38)
+        print(
+            f"  {'#':>3}  {'Opcode':>6}  {'Arg0':>5}  {'Arg1':>6}  {'Arg2':>6}  Meaning"
+        )
+        print("  " + "-" * 78)
         for index, r in enumerate(trigger.records):
             print(
-                f"  {index:>3}  {r.opcode:>#6x}  {r.arg0:>5}  {r.arg1:>6}  {r.arg2:>6}"
+                f"  {index:>3}  {r.opcode:>#6x}  {r.arg0:>5}  {r.arg1:>6}  "
+                f"{r.arg2:>6}  {r.semantic_name}"
             )
-    print("  Opcode 0x31 runs an activity record; the other 89 are not decoded.")
+            summary = operand_summary(r.opcode, r.arg0, r.arg1, r.arg2)
+            if summary:
+                print(f"  {'':>3}  {'':>6}  {'':>5}  {'':>6}  {'':>6}    {summary}")
+    for index, label in trigger.unresolved_branch_labels():
+        print(
+            f"  NOTE: record {index} branches to label {label}, which this trigger "
+            f"does not contain; the script ends there"
+        )
+    print(
+        "  Decoded operands are views over the stored words; 'unread' bits are "
+        "never read by the retail game, 'unclassified' bits are not yet traced."
+    )
     return 0
 
 
@@ -1978,11 +4370,13 @@ def cmd_trigger_opcodes(args: SimpleNamespace) -> int:
     print(f"{args.file} -- {total} body record(s), {len(histogram)} distinct opcode(s)")
     if unterminated:
         print(f"  unterminated trigger(s): {unterminated}")
-    print(f"{'Opcode':>7}  {'Count':>7}  {'Share':>7}")
-    print("-" * 26)
+    print(f"{'Opcode':>7}  {'Count':>7}  {'Share':>7}  Meaning")
+    print("-" * 72)
     rows = histogram.most_common(args.limit) if args.limit else histogram.most_common()
     for opcode, count in rows:
-        print(f"{opcode:>#7x}  {count:>7}  {100 * count / total:>6.2f}%")
+        info = trigger_opcode_info(opcode)
+        meaning = info.meaning if info is not None else "unknown"
+        print(f"{opcode:>#7x}  {count:>7}  {100 * count / total:>6.2f}%  {meaning}")
     if args.limit and len(histogram) > args.limit:
         print(f"... ({len(histogram) - args.limit} more; raise --limit to see more)")
     return 0
@@ -2069,13 +4463,38 @@ def cmd_activity_show(args: SimpleNamespace) -> int:
                 "       WARNING: no 0xFF step; the record runs to the end of the entry"
             )
         for index, step in enumerate(record.steps):
-            print(
-                f"       {index:>2}  opcode {step.opcode:#04x}  {step.operands.hex(' ')}"
+            duration = (
+                ""
+                if step.duration_value is None
+                else f" effective_duration={step.duration_value}"
             )
+            print(
+                f"       {index:>2}  opcode {step.opcode:#04x} "
+                f"{step.semantic_name}: parameter_0={step.parameter_0} "
+                f"parameter_1={step.parameter_1} minute={step.scheduled_minute} "
+                f"duration_code={step.duration_code}{duration}  "
+                f"raw={step.to_bytes().hex(' ')}"
+            )
+            kind = step.npc_action_kind
+            if kind is not None:
+                label = kind.name or "uncatalogued value"
+                effect = "" if kind.performed else " -- starts nothing in 1.19F"
+                print(f"           action kind {kind.value}: {label}{effect}")
         if not record.steps:
             print("       (no steps)")
+    if activity.starts_with_default_activity:
+        print(
+            "  NOTE: the first record is not ordinal 1, so the NPC runs its queued or "
+            "default activity until something switches to one of these records"
+        )
+    for ordinal, index, target in activity.unresolved_sequence_references():
+        print(
+            f"  NOTE: record [{ordinal}] step {index} targets ordinal {target}, which "
+            f"this set lacks; the runtime restarts the set at ordinal 1"
+        )
     print(
-        "  Opcodes 0x01/0x02 move between highway points; the other ten are not decoded."
+        "  Opcode meanings, the fixed four-word operand layout, the action-kind "
+        "catalogue and the ordinal fallbacks are retail-confirmed."
     )
     return 0
 
@@ -2098,10 +4517,17 @@ def cmd_activity_opcodes(args: SimpleNamespace) -> int:
         f"{args.file} -- {total} step(s), {len(opcodes)} distinct opcode(s), "
         f"{len(names)} distinct name(s)"
     )
-    print(f"{'Opcode':>7}  {'Count':>7}  {'Share':>7}")
-    print("-" * 26)
-    for opcode, count in opcodes.most_common():
-        print(f"{opcode:>#7x}  {count:>7}  {100 * count / total:>6.2f}%")
+    print(f"{'Opcode':>7}  {'Count':>7}  {'Share':>7}  Meaning")
+    print("-" * 72)
+    catalogued = {info.opcode for info in ACTIVITY_OPCODE_CATALOGUE}
+    for info in ACTIVITY_OPCODE_CATALOGUE:
+        count = opcodes[info.opcode]
+        share = 0.0 if total == 0 else 100 * count / total
+        print(f"{info.opcode:>#7x}  {count:>7}  {share:>6.2f}%  {info.meaning}")
+    for opcode in sorted(set(opcodes) - catalogued):
+        count = opcodes[opcode]
+        share = 0.0 if total == 0 else 100 * count / total
+        print(f"{opcode:>#7x}  {count:>7}  {share:>6.2f}%  unknown")
     print("")
     print(f"{'Count':>7}  Name")
     print("-" * 30)
@@ -2111,7 +4537,7 @@ def cmd_activity_opcodes(args: SimpleNamespace) -> int:
 
 
 def cmd_script_research_export(args: SimpleNamespace) -> int:
-    """Export trigger/activity evidence tables for Ghidra analysis."""
+    """Export trigger/activity evidence tables for external analysis."""
     triggers = _load_triggers(args.triggers)
     activities = _load_activities(args.activities)
     if triggers is None or activities is None:
@@ -2131,7 +4557,7 @@ def cmd_script_research_export(args: SimpleNamespace) -> int:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1
 
-    print(f"Wrote {len(paths)} Ghidra research file(s) to {args.output}")
+    print(f"Wrote {len(paths)} script research file(s) to {args.output}")
     for path in paths:
         print(f"  {path}")
     return 0
@@ -2140,6 +4566,32 @@ def cmd_script_research_export(args: SimpleNamespace) -> int:
 # ============================================================================
 # CLI COMMANDS — NPC TABLE (runtime/NPC.FLX, and a savegame's live copy)
 # ============================================================================
+
+
+def _npc_level_csv_columns(prefix: str) -> list[str]:
+    return [
+        f"{prefix}_code",
+        f"{prefix}_status",
+        f"{prefix}_raw_hex",
+    ]
+
+
+def _npc_level_status(value: int) -> str:
+    return "" if -1 <= value <= 3 else "out_of_range"
+
+
+def _npc_level_csv_values(value: int, raw: bytes) -> list[object]:
+    return [
+        value,
+        _npc_level_status(value),
+        f"0x{raw.hex()}",
+    ]
+
+
+def _format_npc_level(value: int, raw: bytes) -> str:
+    status = _npc_level_status(value)
+    suffix = f", {status}" if status else ""
+    return f"{value} [signed i32, raw {raw.hex(' ')}{suffix}]"
 
 
 def _load_npcs(filepath: str, from_save: bool) -> Optional[U9Npcs]:
@@ -2166,22 +4618,23 @@ def cmd_npc_list(args: SimpleNamespace) -> int:
     if args.region is not None:
         rows = [n for n in rows if n.region == args.region]
     if args.npc_class is not None:
-        rows = [n for n in rows if n.class_id == args.npc_class]
+        rows = [n for n in rows if n.combat_behavior_id == args.npc_class]
     if not args.all:
         rows = [n for n in rows if n.name]
     shown = rows[: args.limit] if args.limit else rows
 
     print(f"{args.file} -- {len(rows)} NPC(s) of {len(npcs)} record(s)")
     print(
-        f"{'Idx':>5}  {'Name':<24} {'G':>1}  {'Class':>5}  {'Region':>6}  "
+        f"{'Idx':>5}  {'Name':<24} {'G':>1}  {'Behavior':>8}  {'Region':>6}  "
         f"{'HP':>5}  {'Mana':>5}  Position"
     )
     print("-" * 90)
     for n in shown:
-        cls = "-" if not n.has_class else str(n.class_id)
+        behavior = "-" if not n.has_combat_behavior else str(n.combat_behavior_id)
         print(
-            f"{n.index:>5}  {n.name:<24} {'F' if n.is_female else 'M'}  {cls:>5}  "
-            f"{n.region:>6}  {n.health_max:>5}  {n.mana_max:>5}  "
+            f"{n.index:>5}  {n.name:<24} {'F' if n.is_female else 'M'}  "
+            f"{behavior:>8}  {n.region:>6}  {n.health_bonus_maximum:>5}  "
+            f"{n.mana_bonus_maximum:>5}  "
             f"{n.x},{n.y},{n.z}"
         )
     if args.limit and len(rows) > args.limit:
@@ -2203,14 +4656,70 @@ def cmd_npc_show(args: SimpleNamespace) -> int:
     print(f"{args.file} -- NPC {n.index}")
     print(f"  Name        : {n.name!r}")
     print(f"  Gender      : {'female' if n.is_female else 'male'}")
-    print(f"  Health      : {n.health_current} / {n.health_max}")
-    print(f"  Mana        : {n.mana_current} / {n.mana_max}")
-    print(f"  Class       : {n.class_id if n.has_class else 'none (0xFFFF)'}")
-    print(f"  Combat value: {n.combat_value}")
-    print(f"  Flags       : {n.flags:#010x}")
+    print(f"  Magic tier  : {n.magic_tier}")
+    print(f"  Armor       : {n.armor_rating} (+{n.armor_modifier})")
+    levels = {name: (value, raw) for name, value, raw in n.level_code_items}
+    print(
+        "  Core levels : "
+        f"might {_format_npc_level(*levels['might'])}; "
+        f"agility {_format_npc_level(*levels['agility'])}; "
+        f"intellect {_format_npc_level(*levels['intellect'])}"
+    )
+    health_status = f" [{n.health_status}]" if n.health_status else ""
+    print(
+        f"  Health      : {n.health_current} / {n.health_bonus_maximum} "
+        f"(base {n.health_base_maximum}){health_status}"
+    )
+    print(
+        f"  Mana        : {n.mana_current} / {n.mana_bonus_maximum} "
+        f"(base {n.mana_base_maximum})"
+    )
+    behavior = (
+        f"{n.combat_behavior_id} ({n.combat_behavior_name})"
+        if n.has_combat_behavior
+        else "none (-1)"
+    )
+    movement = (
+        f"{n.movement_behavior_id} ({n.movement_behavior_name})"
+        if n.movement_behavior_name
+        else f"none ({n.movement_behavior_id})"
+    )
+    print(f"  Behavior    : combat {behavior}, movement {movement}")
+    weapon = n.active_weapon_category_name or "none"
+    print(f"  Combat      : weapon {weapon}, hit sound {n.impact_material_name}")
+    if n.known_spells:
+        print(f"  Spells      : {', '.join(n.known_spell_names)}")
+    print(f"  State flags : {int(n.state_flags):#010x}")
+    print(f"  Trait flags : {int(n.trait_flags):#010x}")
+    print(
+        f"  Awareness   : radius {n.awareness_radius}, arc "
+        f"{n.awareness_arc_degrees} deg, guaranteed "
+        f"{n.guaranteed_awareness_percent}%"
+    )
     print(f"  Region      : {n.region}")
     print(f"  Position    : {n.x}, {n.y}, {n.z}")
     print(f"  Scale       : {n.scale[0]}%, {n.scale[1]}%, {n.scale[2]}%")
+    print(
+        f"  Activities  : active {n.active_routine_id} arg "
+        f"{n.active_routine_argument}; fallback {n.fallback_routine_id} arg "
+        f"{n.fallback_routine_argument}; queued {n.queued_routine_id} arg "
+        f"{n.queued_routine_argument}"
+    )
+    if n.routine_start_time or n.routine_end_time:
+        print(
+            f"  Routine time: {n.clock_time(n.routine_start_time)} to "
+            f"{n.clock_time(n.routine_end_time)}"
+        )
+    print(f"  Equipment   : {n.equipped_object_offsets}")
+    print(f"  Attachments : {n.model_attachment_ids}")
+    print(
+        "  Skill levels: "
+        f"unarmed {_format_npc_level(*levels['unarmed_skill'])}; "
+        f"one-handed {_format_npc_level(*levels['one_handed_skill'])}; "
+        f"two-handed {_format_npc_level(*levels['two_handed_skill'])}; "
+        f"blunt {_format_npc_level(*levels['blunt_skill'])}; "
+        f"ranged {_format_npc_level(*levels['ranged_skill'])}"
+    )
     if n.has_pool_object:
         print(
             f"  Pool handle : {n.pool_handle} (element {n.pool_index} of the region object pool)"
@@ -2220,25 +4729,29 @@ def cmd_npc_show(args: SimpleNamespace) -> int:
     else:
         print("  Pool handle : 0 -- slot free / no world placement")
     print(f"  Record index {n.index} is also this NPC's activity set index.")
-    print("  Undecoded bytes are available as U9Npc.raw.")
+    print("  Reserved cells: exposed by offset-named fields and preserved in raw.")
     return 0
 
 
 def cmd_npc_classes(args: SimpleNamespace) -> int:
-    """Group NPCs by class_id -- the grouping clusters by faction, not appearance."""
+    """Group NPCs by combat behavior profile (legacy command name)."""
     npcs = _load_npcs(args.file, args.save)
     if npcs is None:
         return 1
 
-    histogram = npcs.class_histogram()
-    print(f"{args.file} -- {len(histogram)} distinct class_id value(s)")
-    for class_id, count in histogram.most_common():
-        label = "none (0xFFFF)" if class_id == NO_CLASS else str(class_id)
-        members = [n.name for n in npcs.by_class(class_id) if n.name]
+    histogram = npcs.combat_behavior_histogram()
+    print(f"{args.file} -- {len(histogram)} distinct combat behavior value(s)")
+    for behavior_id, count in histogram.most_common():
+        group = npcs.by_combat_behavior(behavior_id)
+        if behavior_id == NO_COMBAT_BEHAVIOR:
+            label = "none (-1)"
+        else:
+            label = f"{behavior_id} {group[0].combat_behavior_name or '?'}"
+        members = [n.name for n in group if n.name]
         preview = ", ".join(members[: args.members])
         if len(members) > args.members:
             preview += ", ..."
-        print(f"  {label:>13}  x{count:<4} {preview}")
+        print(f"  {label:>20}  x{count:<4} {preview}")
     return 0
 
 
@@ -2260,66 +4773,179 @@ def cmd_npc_csv(args: SimpleNamespace) -> int:
         "name",
         "gender",
         "sex",
+        "magic_tier",
+        "armor_rating",
+        "armor_modifier",
+        *_npc_level_csv_columns("might"),
+        *_npc_level_csv_columns("agility"),
+        *_npc_level_csv_columns("intellect"),
         "health_current",
-        "health_max",
-        "health_max2",
+        "health_bonus_maximum",
+        "health_base_maximum",
+        "health_status",
+        "health_raw_hex",
         "mana_current",
-        "mana_max",
-        "mana_max2",
-        "class_id",
-        "flags",
-        "combat_value",
+        "mana_bonus_maximum",
+        "mana_base_maximum",
+        "mana_raw_hex",
+        "reserved_0x40",
+        "residual_0x41_0x43_hex",
+        "combat_behavior_id",
+        "combat_behavior_name",
+        "state_flags",
+        "active_routine_id",
+        "fallback_routine_id",
+        "fallback_routine_argument",
+        "magic_resistance_modifier",
+        "route_search_workers",
+        "awareness_radius",
+        "awareness_arc_degrees",
+        "guaranteed_awareness_percent",
         "region",
         "x",
         "y",
         "z",
+        "position_tail_hex",
+        "routine_stack_depth",
+        "routine_step_index",
+        "active_routine_argument",
         "scale_x",
         "scale_y",
         "scale_z",
+        "reserved_0x6f",
+        *[f"equipped_object_offset_{index}" for index in range(7)],
+        *[f"model_attachment_id_{index}" for index in range(7)],
+        "active_weapon_category_id",
+        "active_weapon_category_name",
+        "invulnerability_duration",
+        "movement_behavior_id",
+        "movement_behavior_name",
+        "breath_current",
+        "breath_bonus_maximum",
+        "breath_base_maximum",
+        "breath_raw_hex",
+        "reserved_0xba_0xc3_hex",
+        "trait_flags",
+        "impact_material_id",
+        "impact_material_name",
+        "reserved_0xcc_0xdf_hex",
+        "reserved_0xe0",
+        "proximity_enter_radius",
+        "proximity_exit_radius",
+        "queued_routine_argument",
+        "route_search_counter",
+        "routine_end_time",
+        "routine_end_clock",
+        "routine_start_time",
+        "routine_start_clock",
+        "primary_routine_duration",
+        "queued_routine_id",
+        "secondary_routine_duration",
+        "reserved_0xfc_0x10f_hex",
+        "routine_stack_hex",
+        "spellbook_flags_hex",
+        "known_spells",
+        *_npc_level_csv_columns("unarmed_skill"),
+        *_npc_level_csv_columns("one_handed_skill"),
+        *_npc_level_csv_columns("two_handed_skill"),
+        *_npc_level_csv_columns("blunt_skill"),
+        *_npc_level_csv_columns("ranged_skill"),
+        "reserved_0x138_0x13b_hex",
         "pool_handle",
         "pool_index",
-        # Undecoded but genuinely varying; kept as named columns so they can be
-        # correlated without re-slicing the raw bytes.
-        "unk_0x4e",
-        "unk_0x56",
-        "unk_0xb0",
-        "unk_0xc4",
-        "unk_0xc8",
         "raw_hex",
     ]
     with open(out_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(header)
         for n in rows:
+            levels = {name: (value, raw) for name, value, raw in n.level_code_items}
             writer.writerow(
                 [
                     n.index,
                     n.name,
                     n.gender,
                     "female" if n.is_female else "male",
+                    n.magic_tier,
+                    n.armor_rating,
+                    n.armor_modifier,
+                    *_npc_level_csv_values(*levels["might"]),
+                    *_npc_level_csv_values(*levels["agility"]),
+                    *_npc_level_csv_values(*levels["intellect"]),
                     n.health_current,
-                    n.health_max,
-                    n.health_max2,
+                    n.health_bonus_maximum,
+                    n.health_base_maximum,
+                    n.health_status or "",
+                    f"0x{n.health_raw.hex()}",
                     n.mana_current,
-                    n.mana_max,
-                    n.mana_max2,
-                    n.class_id if n.has_class else "",
-                    f"{n.flags:#010x}",
-                    n.combat_value,
+                    n.mana_bonus_maximum,
+                    n.mana_base_maximum,
+                    f"0x{n.mana_raw.hex()}",
+                    n.reserved_0x40,
+                    n.residual_0x41_0x43.hex(),
+                    n.combat_behavior_id,
+                    n.combat_behavior_name or "",
+                    f"{int(n.state_flags):#010x}",
+                    n.active_routine_id,
+                    n.fallback_routine_id,
+                    n.fallback_routine_argument,
+                    n.magic_resistance_modifier,
+                    n.route_search_workers,
+                    n.awareness_radius,
+                    n.awareness_arc_degrees,
+                    n.guaranteed_awareness_percent,
                     n.region,
                     n.x,
                     n.y,
                     n.z,
+                    n.position_tail.hex(),
+                    n.routine_stack_depth,
+                    n.routine_step_index,
+                    n.active_routine_argument,
                     n.scale[0],
                     n.scale[1],
                     n.scale[2],
+                    n.reserved_0x6f,
+                    *n.equipped_object_offsets,
+                    *n.model_attachment_ids,
+                    n.active_weapon_category_id,
+                    n.active_weapon_category_name or "",
+                    n.invulnerability_duration,
+                    n.movement_behavior_id,
+                    n.movement_behavior_name or "",
+                    n.breath_current,
+                    n.breath_bonus_maximum,
+                    n.breath_base_maximum,
+                    f"0x{n.breath_raw.hex()}",
+                    n.reserved_0xba_0xc3.hex(),
+                    f"{int(n.trait_flags):#010x}",
+                    n.impact_material_id,
+                    n.impact_material_name or "",
+                    n.reserved_0xcc_0xdf.hex(),
+                    n.reserved_0xe0,
+                    n.proximity_enter_radius,
+                    n.proximity_exit_radius,
+                    n.queued_routine_argument,
+                    n.route_search_counter,
+                    n.routine_end_time,
+                    n.clock_time(n.routine_end_time),
+                    n.routine_start_time,
+                    n.clock_time(n.routine_start_time),
+                    n.primary_routine_duration,
+                    n.queued_routine_id,
+                    n.secondary_routine_duration,
+                    n.reserved_0xfc_0x10f.hex(),
+                    n.routine_stack.hex(),
+                    n.spellbook_flags.hex(),
+                    " ".join(n.known_spell_names),
+                    *_npc_level_csv_values(*levels["unarmed_skill"]),
+                    *_npc_level_csv_values(*levels["one_handed_skill"]),
+                    *_npc_level_csv_values(*levels["two_handed_skill"]),
+                    *_npc_level_csv_values(*levels["blunt_skill"]),
+                    *_npc_level_csv_values(*levels["ranged_skill"]),
+                    n.reserved_0x138_0x13b.hex(),
                     n.pool_handle,
                     n.pool_index,
-                    struct.unpack_from("<H", n.raw, 0x4E)[0],
-                    struct.unpack_from("<H", n.raw, 0x56)[0],
-                    struct.unpack_from("<I", n.raw, 0xB0)[0],
-                    struct.unpack_from("<H", n.raw, 0xC4)[0],
-                    n.raw[0xC8],
                     n.raw.hex(),
                 ]
             )
@@ -2328,6 +4954,24 @@ def cmd_npc_csv(args: SimpleNamespace) -> int:
     print(
         f"  {len(header)} columns; raw_hex carries the full {len(rows[0].raw) if rows else 0}-byte record"
     )
+    out_of_range = [
+        (npc.index, name, value)
+        for npc in rows
+        for name, value, _raw in npc.level_code_items
+        if _npc_level_status(value)
+    ]
+    print(f"  Level codes outside -1..3: {len(out_of_range)}")
+    if out_of_range:
+        print(
+            f"  WARNING: {len(out_of_range)} level code(s) marked out_of_range; "
+            "see *_status columns"
+        )
+    health_flags = [npc for npc in rows if npc.health_status]
+    if health_flags:
+        print(
+            f"  WARNING: {len(health_flags)} health record(s) flagged; "
+            "see health_status"
+        )
     if not args.all:
         blank = len(npcs) - len(rows)
         if blank:
@@ -2625,13 +5269,529 @@ def cmd_text_export(args: SimpleNamespace) -> int:
     return 0
 
 
+def _read_import_csv(
+    path: str, key_column: str, value_column: str
+) -> Optional[dict[int, str]]:
+    """Read ``{key: value}`` rows from an edited export CSV.
+
+    Accepts UTF-8 with or without a byte-order mark (as spreadsheet programs
+    often add). Other columns are ignored; a repeated key is an error.
+    """
+    if not os.path.isfile(path):
+        print(f"ERROR: File not found: {path}", file=sys.stderr)
+        return None
+    try:
+        with open(path, newline="", encoding="utf-8-sig") as f:
+            reader = csv.DictReader(f)
+            missing = {key_column, value_column} - set(reader.fieldnames or ())
+            if missing:
+                print(
+                    f"ERROR: {path} lacks column(s) {', '.join(sorted(missing))}",
+                    file=sys.stderr,
+                )
+                return None
+            rows: dict[int, str] = {}
+            for line, row in enumerate(reader, start=2):
+                try:
+                    key = int(row[key_column])
+                except (TypeError, ValueError):
+                    print(
+                        f"ERROR: {path} line {line}: {key_column} "
+                        f"{row[key_column]!r} is not a number",
+                        file=sys.stderr,
+                    )
+                    return None
+                if key in rows:
+                    print(
+                        f"ERROR: {path} line {line}: {key_column} {key} repeats",
+                        file=sys.stderr,
+                    )
+                    return None
+                rows[key] = row[value_column] or ""
+    except UnicodeDecodeError as e:
+        print(f"ERROR: {path} is not UTF-8 text ({e})", file=sys.stderr)
+        return None
+    return rows
+
+
+def cmd_text_import(args: SimpleNamespace) -> int:
+    """Rebuild a text archive from an edited ``text-export`` CSV."""
+    text = _load_text(args.file)
+    if text is None:
+        return 1
+    rows = _read_import_csv(args.csv, "index", "text")
+    if rows is None:
+        return 1
+    try:
+        changes = {
+            index: value
+            for index, value in rows.items()
+            if (entry := text.entry(index)) is None or entry.text != value
+        }
+        data = text.rebuilt(changes)
+    except U9TextError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
+    rebuilt = U9TextArchive(U9FlxArchive(data))
+    for index, value in changes.items():
+        entry = rebuilt.entry(index)
+        if entry is None or entry.text != value:
+            print(f"ERROR: entry {index} did not read back as written", file=sys.stderr)
+            return 1
+    wide = sorted({ch for value in changes.values() for ch in value if ord(ch) > 0xFF})
+
+    source = Path(args.file)
+    out_path = args.output or str(
+        source.with_name(f"{source.stem}_imported{source.suffix}")
+    )
+    os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+    with open(out_path, "wb") as f:
+        f.write(data)
+    print(
+        f"{args.file} -- {len(rows)} row(s) read, {len(changes)} entr"
+        f"{'y' if len(changes) == 1 else 'ies'} changed"
+    )
+    print(
+        f"  Written : {out_path} ({len(data)} bytes, slot count {rebuilt.num_entries})"
+    )
+    if wide:
+        print(
+            f"  Warning : {len(wide)} character(s) beyond Latin-1 "
+            f"({''.join(wide[:20])}); the game's fonts may not draw them"
+        )
+    return 0
+
+
+# ============================================================================
+# CLI COMMANDS — TEXT KEY TABLE (static/text.dat)
+# ============================================================================
+
+
+def _load_text_key_table(filepath: str) -> Optional[U9TextKeyTable]:
+    """Open static/text.dat, reporting the reason on failure."""
+    if not os.path.isfile(filepath):
+        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
+        return None
+    try:
+        return U9TextKeyTable.from_file(filepath)
+    except U9TextKeyTableError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return None
+
+
+def _load_optional_text(filepath: Optional[str]) -> tuple[bool, Optional[U9TextArchive]]:
+    """Open an optional text.flx; the flag is False when one was given but failed."""
+    if filepath is None:
+        return True, None
+    text = _load_text(filepath)
+    return text is not None, text
+
+
+def _load_optional_npc_names(
+    filepath: Optional[str],
+) -> tuple[bool, Optional[list[str]]]:
+    """Read speaker names from an optional NPC.FLX; False when one failed."""
+    if filepath is None:
+        return True, None
+    if not os.path.isfile(filepath):
+        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
+        return False, None
+    try:
+        return True, [npc.name for npc in U9Npcs.from_file(filepath) if npc.name]
+    except U9NpcError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return False, None
+
+
+def _counts_line(counts: Counter) -> str:
+    return ", ".join(f"{name}={count}" for name, count in sorted(counts.items()))
+
+
+def cmd_text_keys_info(args: SimpleNamespace) -> int:
+    """Summarize the text key table and, optionally, its joins to text.flx."""
+    table = _load_text_key_table(args.file)
+    if table is None:
+        return 1
+    ok, text = _load_optional_text(args.text)
+    if not ok:
+        return 1
+    ok, npc_names = _load_optional_npc_names(args.npcs)
+    if not ok:
+        return 1
+
+    items = table.items
+    chains = Counter(len(bucket.items) for bucket in table.buckets)
+    print(f"{args.file} -- {table.bucket_count} bucket(s), {len(items)} item(s)")
+    print(f"  empty buckets     : {chains.get(0, 0)}")
+    print(f"  longest chain     : {max(chains, default=0)}")
+    print(f"  trailing bytes    : {len(table.trailing_data)}")
+    print(f"  reachability      : {_counts_line(Counter(map(table.reachability, items)))}")
+    if text is None:
+        return 0
+    try:
+        statuses = Counter(text_reference_status(item, text) for item in items)
+        targets = table.text_index_counts()
+        unkeyed = [index for index in text.used_indices() if index not in targets]
+        keys = reconstruct_keys(table, text, args.speakers or (), npc_names)
+    except U9TextError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+    print(f"  text references   : {_counts_line(statuses)}")
+    print(f"  shared targets    : {sum(1 for count in targets.values() if count > 1)}")
+    print(f"  lines without key : {len(unkeyed)}")
+    methods = Counter(key.method for key in keys.values())
+    methods["unresolved"] = len(items) - len(keys)
+    print(f"  reconstructed keys: {_counts_line(methods)}")
+    return 0
+
+
+def cmd_text_key_lookup(args: SimpleNamespace) -> int:
+    """Look up one key the way the game does and show the selected line."""
+    table = _load_text_key_table(args.file)
+    if table is None:
+        return 1
+    ok, text = _load_optional_text(args.text)
+    if not ok:
+        return 1
+    if table.bucket_count <= 0:
+        print(f"{args.file} -- the table has no buckets, so no key can be found")
+        return 1
+    try:
+        key = args.key.encode(KEY_ENCODING)
+        bucket = key_bucket(key, table.bucket_count)
+        crc = key_crc(key)
+    except (UnicodeEncodeError, ValueError) as error:
+        print(f"ERROR: cannot use this key: {error}", file=sys.stderr)
+        return 1
+
+    print(f"{args.file} -- key {args.key!r}")
+    print(f"  bucket {bucket}  crc 0x{crc:08x}")
+    item = table.lookup_bytes(key)
+    if item is None:
+        print("  not found")
+        return 1
+    print(
+        f"  item {item.bucket}:{item.position} at 0x{item.offset:x} "
+        f"-> text index {item.text_index}"
+    )
+    if text is not None:
+        status = text_reference_status(item, text)
+        entry = text.entry(item.text_index) if status == "valid" else None
+        print(f"  text: {entry.text if entry else f'({status})'}")
+    return 0
+
+
+TEXT_KEY_CSV_COLUMNS = (
+    "bucket",
+    "position",
+    "offset",
+    "stored_hash",
+    "stored_crc_hex",
+    "text_index",
+    "reachability",
+    "text_reference_status",
+    "items_sharing_text_index",
+    "key_status",
+    "key_method",
+    "speaker",
+    "key",
+    "text",
+)
+
+
+def cmd_text_keys_export(args: SimpleNamespace) -> int:
+    """Export every stored item, with its text join and verified key, to CSV."""
+    table = _load_text_key_table(args.file)
+    if table is None:
+        return 1
+    ok, text = _load_optional_text(args.text)
+    if not ok:
+        return 1
+    ok, npc_names = _load_optional_npc_names(args.npcs)
+    if not ok:
+        return 1
+    try:
+        keys = (
+            reconstruct_keys(table, text, args.speakers or (), npc_names)
+            if text
+            else {}
+        )
+    except U9TextError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+
+    targets = table.text_index_counts()
+    out_path = args.output or f"{Path(args.file).stem}_keys.csv"
+    os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+    with open(out_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(TEXT_KEY_CSV_COLUMNS)
+        for item in table.items:
+            status = text_reference_status(item, text) if text else "not_checked"
+            entry = text.entry(item.text_index) if status == "valid" else None
+            key = keys.get((item.bucket, item.position))
+            if text is None:
+                key_status = "not_checked"
+            else:
+                key_status = "verified" if key else "unresolved"
+            writer.writerow(
+                [
+                    item.bucket,
+                    item.position,
+                    item.offset,
+                    item.stored_hash,
+                    f"0x{item.stored_crc:08x}",
+                    item.text_index,
+                    table.reachability(item),
+                    status,
+                    targets[item.text_index],
+                    key_status,
+                    key.method if key else "",
+                    (key.speaker or "") if key else "",
+                    key.text if key else "",
+                    entry.text if entry else "",
+                ]
+            )
+    print(f"{args.file} -- wrote {len(table.items)} row(s) -> {out_path}")
+    if text is not None:
+        print(f"  verified keys: {len(keys)}, unresolved: {len(table.items) - len(keys)}")
+    return 0
+
+
+# ============================================================================
+# CLI COMMANDS — AUTHORING-TOOL COLOUR TABLES (not loaded by the game)
+# static/shade.tbl, static/shadegry.tbl, static/rgbccube.dat, static/yiqccube.dat
+# ============================================================================
+
+_NOT_LOADED_NOTE = "authoring-tool file; the retail game never loads it"
+
+
+def _load_optional_palette_colors(
+    filepath: Optional[str],
+) -> tuple[bool, Optional[tuple[tuple[int, int, int], ...]]]:
+    """Read colours from an optional ankh.pal; False when one was given but failed."""
+    if filepath is None:
+        return True, None
+    if not os.path.isfile(filepath):
+        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
+        return False, None
+    try:
+        return True, U9Palette.from_file(filepath).colors
+    except (OSError, U9PaletteError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return False, None
+
+
+def _load_shade_file(
+    filepath: str,
+) -> U9ShadeTable | U9EditorColorTable | None:
+    """Open shade.tbl or shadegry.tbl, told apart by their fixed sizes."""
+    if not os.path.isfile(filepath):
+        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
+        return None
+    size = os.path.getsize(filepath)
+    try:
+        if size == SHADE_TABLE_SIZE:
+            return U9ShadeTable.from_file(filepath)
+        if size == EDITOR_COLOR_TABLE_SIZE:
+            return U9EditorColorTable.from_file(filepath)
+    except U9ShadeTableError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return None
+    print(
+        f"ERROR: {filepath} is {size} bytes; expected {SHADE_TABLE_SIZE} (shade.tbl) "
+        f"or {EDITOR_COLOR_TABLE_SIZE} (shadegry.tbl)",
+        file=sys.stderr,
+    )
+    return None
+
+
+def _rgb_text(colors, index: int) -> str:
+    return "" if colors is None else "%d,%d,%d" % colors[index]
+
+
+def cmd_shade_info(args: SimpleNamespace) -> int:
+    """Summarize shade.tbl or shadegry.tbl."""
+    table = _load_shade_file(args.file)
+    if table is None:
+        return 1
+    ok, colors = _load_optional_palette_colors(args.palette)
+    if not ok:
+        return 1
+    print(f"{args.file} -- {_NOT_LOADED_NOTE}")
+    if isinstance(table, U9ShadeTable):
+        anomalies = table.filler_anomalies()
+        filler = table.filler_index
+        print(f"  layout            : {SHADE_LEVEL_COUNT} light levels x 256 palette indices")
+        print(f"  filler index      : {filler} {_rgb_text(colors, filler)}".rstrip())
+        print(f"  shaded levels     : {SHADE_LIT_LEVELS.start}..{SHADE_LIT_LEVELS.stop - 1}")
+        print(f"  filler anomalies  : {len(anomalies)}")
+        return 0
+    print(f"  layout            : {len(RAMP_NAMES)} ramps x {RAMP_LENGTH}, then a 256-entry red tint")
+    for name in RAMP_NAMES:
+        print(f"  ramp {name:<6}       : {' '.join(str(i) for i in table.ramp(name))}")
+    changed = sum(1 for index, value in enumerate(table.red_tint) if index != value)
+    print(f"  red tint changes  : {changed} of 256 indices")
+    return 0
+
+
+def cmd_shade_csv(args: SimpleNamespace) -> int:
+    """Export every cell of shade.tbl or shadegry.tbl to CSV."""
+    table = _load_shade_file(args.file)
+    if table is None:
+        return 1
+    ok, colors = _load_optional_palette_colors(args.palette)
+    if not ok:
+        return 1
+    out_path = args.output or f"{Path(args.file).stem}_shade.csv"
+    os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+    rows = 0
+    with open(out_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(
+            ["section", "position", "source_index", "output_index", "cell_kind",
+             "source_rgb", "output_rgb"]
+        )
+        if isinstance(table, U9ShadeTable):
+            for level in range(SHADE_LEVEL_COUNT):
+                for index, value in enumerate(table.level(level)):
+                    writer.writerow(
+                        [f"level_{level}", level, index, value,
+                         "filler" if table.is_filler_cell(level, index) else "shaded",
+                         _rgb_text(colors, index), _rgb_text(colors, value)]
+                    )
+                    rows += 1
+        else:
+            for name in RAMP_NAMES:
+                for position, value in enumerate(table.ramp(name)):
+                    writer.writerow(
+                        [f"ramp_{name}", position, "", value, "ramp_step", "",
+                         _rgb_text(colors, value)]
+                    )
+                    rows += 1
+            for index, value in enumerate(table.red_tint):
+                writer.writerow(
+                    ["red_tint", index, index, value, "translation",
+                     _rgb_text(colors, index), _rgb_text(colors, value)]
+                )
+                rows += 1
+    print(f"{args.file} -- wrote {rows} row(s) -> {out_path}")
+    return 0
+
+
+def _load_color_cube(filepath: str) -> Optional[U9ColorCube]:
+    if not os.path.isfile(filepath):
+        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
+        return None
+    try:
+        return U9ColorCube.from_file(filepath)
+    except U9ColorCubeError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return None
+
+
+def cmd_color_cube_info(args: SimpleNamespace) -> int:
+    """Summarize a colour-cube cache and compare its palette with ankh.pal."""
+    cube = _load_color_cube(args.file)
+    if cube is None:
+        return 1
+    ok, colors = _load_optional_palette_colors(args.palette)
+    if not ok:
+        return 1
+    leaves = cube.leaves
+    candidates = [index for leaf in leaves for index in leaf.candidates]
+    sizes = Counter(leaf.count for leaf in leaves)
+    print(f"{args.file} -- {_NOT_LOADED_NOTE}")
+    print(f"  nodes             : {len(cube.nodes)} ({len(leaves)} leaves)")
+    print(f"  deepest leaf      : {cube.max_depth}")
+    print(f"  candidates        : {len(candidates)}, indices {min(candidates)}..{max(candidates)}")
+    print(f"  largest leaf      : {max(sizes)}")
+    print(f"  metric (by name)  : {metric_for_filename(args.file)}")
+    if colors is not None:
+        differing = [i for i, color in enumerate(cube.palette_colors) if color != colors[i]]
+        print(
+            "  palette prefix    : "
+            + ("matches the palette" if not differing else f"{len(differing)} colour(s) differ")
+        )
+    return 0
+
+
+def cmd_color_cube_lookup(args: SimpleNamespace) -> int:
+    """Show which palette index the authoring tool's colour match picks."""
+    cube = _load_color_cube(args.file)
+    if cube is None:
+        return 1
+    metric = args.metric or metric_for_filename(args.file)
+    color = (args.red, args.green, args.blue)
+    try:
+        leaf = cube.leaf_for(color)
+        index = cube.closest_index(color, metric)
+    except ValueError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+    print(f"{args.file} -- colour {color}, metric {metric}")
+    print(
+        f"  leaf at 0x{leaf.offset:x}, depth {leaf.depth}, cube "
+        f"{leaf.cube_origin} size {leaf.cube_size}"
+    )
+    print(f"  candidates: {' '.join(str(i) for i in leaf.candidates)}")
+    print(f"  chosen index {index} = {cube.palette_colors[index]}")
+    return 0
+
+
+def cmd_color_cube_csv(args: SimpleNamespace) -> int:
+    """Export every colour-cube tree node, in stored order, to CSV."""
+    cube = _load_color_cube(args.file)
+    if cube is None:
+        return 1
+    out_path = args.output or f"{Path(args.file).stem}_nodes.csv"
+    os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+    with open(out_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(
+            ["order", "offset", "depth", "path", "kind", "cube_red", "cube_green",
+             "cube_blue", "cube_size", "count", "candidates"]
+        )
+        for order, node in enumerate(cube.nodes):
+            red, green, blue = node.cube_origin
+            writer.writerow(
+                [order, node.offset, node.depth, "/".join(map(str, node.path)),
+                 "leaf" if node.is_leaf else "internal", red, green, blue,
+                 node.cube_size, node.count, " ".join(map(str, node.candidates))]
+            )
+    print(f"{args.file} -- wrote {len(cube.nodes)} node row(s) -> {out_path}")
+    return 0
+
+
+# ============================================================================
+# CLI COMMANDS — SAVE INTEGRITY
+# ============================================================================
+
+
+def cmd_save_check(args: SimpleNamespace) -> int:
+    """Check custody, structure, and fixed-layout compatibility for one save."""
+    report = check_save(
+        args.target,
+        slot=args.slot,
+        static_directory=args.static,
+        fixed_reference_directory=args.fixed_reference,
+        allow_partial=args.partial,
+    )
+    print(render_integrity_report(report))
+    if args.json_output:
+        report.write_json(args.json_output)
+        print(f"\nJSON: {args.json_output}")
+    return {"PASS": 0, "WARN": 1, "ERROR": 2, "FATAL": 3}[report.overall]
+
+
 # ============================================================================
 # CLI COMMANDS — STATIC WORLD GEOMETRY (static/fixed.%d)
 # ============================================================================
 
 
 def _load_fixed(filepath: str) -> Optional[U9Fixed]:
-    """Open a static/fixed.<region> file, reporting the reason on failure."""
+    """Open a static/fixed.<map> file, reporting the reason on failure."""
     if not os.path.isfile(filepath):
         print(f"ERROR: File not found: {filepath}", file=sys.stderr)
         return None
@@ -2643,7 +5803,7 @@ def _load_fixed(filepath: str) -> Optional[U9Fixed]:
 
 
 def cmd_fixed_info(args: SimpleNamespace) -> int:
-    """Summarize one static region: chunk grid, pages and object totals."""
+    """Summarize one static map: region grid, pages and object totals."""
     region = _load_fixed(args.file)
     if region is None:
         return 1
@@ -2653,16 +5813,16 @@ def cmd_fixed_info(args: SimpleNamespace) -> int:
     objects = sum(len(c.objects) for c in chunks)
     chained = sum(1 for c in chunks if len(c.pages) > 1)
 
-    print(f"{args.file} -- {region.width}x{region.height} chunk region")
+    print(f"{args.file} -- {region.width}x{region.height} region map")
     print(f"  Header          : {region.header_size} bytes (0x20 + 4*w*h)")
     print(
-        f"  Payload         : {region.payload_size} bytes "
-        f"(watermark {region.declared_payload_size})"
+        f"  Heap            : {region.heap_size} bytes "
+        f"({region.trailing_size} trailing)"
     )
-    print(f"  Populated chunks: {len(chunks)} of {region.num_chunks}")
-    print(f"  Pages           : {pages} ({chained} chunk(s) span more than one)")
+    print(f"  Populated regions: {len(chunks)} of {region.num_chunks}")
+    print(f"  Pages           : {pages} ({chained} region(s) span more than one)")
     print(f"  Objects         : {objects}")
-    print("  Chunk positions come from each page's base, not the table order.")
+    print("  Region table    : row-major at +0x1C")
     return 0
 
 
@@ -4222,8 +7382,186 @@ def flx_extract_all_cmd(
 def typename_dump_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/TYPENAME.FLX")],
 ) -> None:
-    """Dump type-ID -> display-name pairs from TYPENAME.FLX."""
+    """List named U9 object types with readable-text and icon references."""
     raise SystemExit(cmd_typename_dump(SimpleNamespace(file=file)))
+
+
+@u9_app.command("typename-csv")
+def typename_csv_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/TYPENAME.FLX")],
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="CSV output path"),
+    ] = None,
+) -> None:
+    """Export complete U9 object-type display metadata to CSV."""
+    raise SystemExit(cmd_typename_csv(SimpleNamespace(file=file, output=output)))
+
+
+@u9_app.command("typename-import")
+def typename_import_cmd(
+    file: Annotated[
+        str, typer.Argument(help="Original type-name archive (TYPENAME.FLX, Tnbrk.*)")
+    ],
+    csv_path: Annotated[
+        str,
+        typer.Argument(
+            metavar="CSV", help="Edited typename-csv CSV (type_id, display_name)"
+        ),
+    ],
+    output: Annotated[
+        Optional[str],
+        typer.Option(
+            "-o", "--output", help="Output archive (default: <stem>_imported<ext>)"
+        ),
+    ] = None,
+) -> None:
+    """Rebuild a U9 type-name archive with the labels from an edited CSV."""
+    raise SystemExit(
+        cmd_typename_import(SimpleNamespace(file=file, csv=csv_path, output=output))
+    )
+
+
+@u9_app.command("types-csv")
+def types_csv_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/TYPES.DAT")],
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="CSV output path"),
+    ] = None,
+    typenames: Annotated[
+        Optional[str],
+        typer.Option("--typenames", help="Optional static/TYPENAME.FLX labels"),
+    ] = None,
+    all_slots: Annotated[
+        bool,
+        typer.Option("--all-slots", help="Include inactive physical capacity slots"),
+    ] = False,
+) -> None:
+    """Export the lossless U9 object-type table to CSV."""
+    raise SystemExit(
+        cmd_types_csv(
+            SimpleNamespace(
+                file=file,
+                output=output,
+                typenames=typenames,
+                all_slots=all_slots,
+            )
+        )
+    )
+
+
+@u9_app.command("sound-category-list")
+def sound_category_list_cmd(
+    file: Annotated[str, typer.Argument(help="Path to sound/sfxcat.flx")],
+) -> None:
+    """List U9 master sound categories."""
+    raise SystemExit(cmd_sound_category_list(SimpleNamespace(file=file)))
+
+
+@u9_app.command("sound-category-csv")
+def sound_category_csv_cmd(
+    file: Annotated[str, typer.Argument(help="Path to sound/sfxcat.flx")],
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="CSV output path"),
+    ] = None,
+) -> None:
+    """Export complete U9 master sound-category records to CSV."""
+    raise SystemExit(cmd_sound_category_csv(SimpleNamespace(file=file, output=output)))
+
+
+@u9_app.command("sound-environment-list")
+def sound_environment_list_cmd(
+    file: Annotated[str, typer.Argument(help="Path to sound/sfxenv.flx")],
+) -> None:
+    """List U9 acoustic environment presets."""
+    raise SystemExit(cmd_sound_environment_list(SimpleNamespace(file=file)))
+
+
+@u9_app.command("sound-environment-csv")
+def sound_environment_csv_cmd(
+    file: Annotated[str, typer.Argument(help="Path to sound/sfxenv.flx")],
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="CSV output path"),
+    ] = None,
+) -> None:
+    """Export complete U9 acoustic environment records to CSV."""
+    raise SystemExit(
+        cmd_sound_environment_csv(SimpleNamespace(file=file, output=output))
+    )
+
+
+@u9_app.command("sound-template-csv")
+def sound_template_csv_cmd(
+    file: Annotated[str, typer.Argument(help="Path to sound/SFXTMPL.FLX")],
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="CSV output path"),
+    ] = None,
+    categories: Annotated[
+        Optional[str],
+        typer.Option("--categories", help="Optional sound/sfxcat.flx join"),
+    ] = None,
+    sounds: Annotated[
+        Optional[str],
+        typer.Option("--sounds", help="Optional sound/sfx.flx join"),
+    ] = None,
+) -> None:
+    """Export complete U9 sound templates, actions, and weighted choices."""
+    raise SystemExit(
+        cmd_sound_template_csv(
+            SimpleNamespace(
+                file=file,
+                output=output,
+                categories=categories,
+                sounds=sounds,
+            )
+        )
+    )
+
+
+@u9_app.command("sound-association-csv")
+def sound_association_csv_cmd(
+    file: Annotated[str, typer.Argument(help="Path to sound/sfxassoc.flx")],
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="CSV output path"),
+    ] = None,
+    templates: Annotated[
+        Optional[str],
+        typer.Option("--templates", help="Optional sound/SFXTMPL.FLX join"),
+    ] = None,
+    types: Annotated[
+        Optional[str],
+        typer.Option("--types", help="Optional static/TYPES.DAT join"),
+    ] = None,
+    typenames: Annotated[
+        Optional[str],
+        typer.Option("--typenames", help="Optional static/TYPENAME.FLX labels"),
+    ] = None,
+    effective: Annotated[
+        bool,
+        typer.Option(
+            "--effective",
+            help="Include direct and base-type fallback links; requires --types",
+        ),
+    ] = False,
+) -> None:
+    """Export direct or runtime-effective object sound-template links."""
+    raise SystemExit(
+        cmd_sound_association_csv(
+            SimpleNamespace(
+                file=file,
+                output=output,
+                templates=templates,
+                types=types,
+                typenames=typenames,
+                effective=effective,
+            )
+        )
+    )
 
 
 @u9_app.command("palette-info")
@@ -4924,7 +8262,7 @@ def highway_points_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/highway.dat")],
     id: Annotated[
         Optional[int],
-        typer.Option("-i", "--id", help="Show only the point with this trigger ID"),
+        typer.Option("-i", "--id", help="Show only the point with this link"),
     ] = None,
     limit: Annotated[
         Optional[int],
@@ -4940,7 +8278,7 @@ def highway_routes_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/highway.dat")],
     id: Annotated[
         Optional[int],
-        typer.Option("-i", "--id", help="Only routes visiting this trigger ID"),
+        typer.Option("-i", "--id", help="Only routes visiting this link"),
     ] = None,
     paths: Annotated[
         bool,
@@ -4965,8 +8303,12 @@ def animation_list_cmd(
         typer.Option("-n", "--limit", help="Maximum rows to print"),
     ] = None,
 ) -> None:
-    """List U9 animation clips, source paths, frame counts and animated parts."""
-    raise SystemExit(cmd_animation_list(SimpleNamespace(file=file, limit=limit)))
+    """List U9 animation clips, authoring paths, frame counts and animated parts."""
+    raise SystemExit(
+        cmd_animation_list(
+            SimpleNamespace(file=file, limit=limit)
+        )
+    )
 
 
 @u9_app.command("animation-show")
@@ -4984,11 +8326,157 @@ def animation_show_cmd(
 ) -> None:
     """Show one U9 animation's structure or one part's transform frames."""
     raise SystemExit(
-        cmd_animation_show(SimpleNamespace(file=file, id=id, part=part, limit=limit))
+        cmd_animation_show(
+            SimpleNamespace(
+                file=file,
+                id=id,
+                part=part,
+                limit=limit,
+            )
+        )
     )
 
 
-@u9_app.command("animation-model-report")
+@u9_app.command("animation-library-plan")
+def animation_library_plan_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
+    output: Annotated[
+        str,
+        typer.Option("-o", "--output", help="Compact JSON library plan path"),
+    ],
+    sappear: Annotated[
+        Optional[str],
+        typer.Option(
+            "--sappear",
+            help="sappear.flx path (default: beside anim.flx)",
+        ),
+    ] = None,
+    registry: Annotated[
+        Optional[str],
+        typer.Option(
+            "--registry",
+            help="registry.txt path (default: beside anim.flx)",
+        ),
+    ] = None,
+    types: Annotated[
+        Optional[str],
+        typer.Option("--types", help="TYPES.DAT path (default: beside anim.flx)"),
+    ] = None,
+    typenames: Annotated[
+        Optional[str],
+        typer.Option(
+            "--typenames",
+            help="TYPENAME.FLX path (default: beside anim.flx)",
+        ),
+    ] = None,
+    diagnostics: Annotated[
+        Optional[str],
+        typer.Option(
+            "--diagnostics",
+            help="Optional detailed animation/model diagnostics path",
+        ),
+    ] = None,
+    diagnostics_format: Annotated[
+        str,
+        typer.Option(
+            "--diagnostics-format",
+            help="Detailed diagnostics format: csv or json",
+        ),
+    ] = "csv",
+) -> None:
+    """Plan actor animation libraries; emit detailed diagnostics only on request."""
+    raise SystemExit(
+        cmd_animation_library_plan(
+            SimpleNamespace(
+                file=file,
+                output=output,
+                sappear=sappear,
+                registry=registry,
+                types=types,
+                typenames=typenames,
+                diagnostics=diagnostics,
+                diagnostics_format=diagnostics_format,
+            )
+        )
+    )
+
+
+@u9_app.command("animation-library-export")
+def animation_library_export_cmd(
+    plan: Annotated[str, typer.Argument(help="Animation library plan JSON path")],
+    animations: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
+    sappear: Annotated[str, typer.Argument(help="Path to static/sappear.flx")],
+    registry: Annotated[
+        Optional[str],
+        typer.Option(
+            "--registry",
+            help="registry.txt path (default: beside the animation archive)",
+        ),
+    ] = None,
+    library_ids: Annotated[
+        Optional[list[str]],
+        typer.Option(
+            "--library",
+            help="Optional approved plan library ID; repeat to limit the export",
+        ),
+    ] = None,
+    actor_models: Annotated[
+        Optional[list[str]],
+        typer.Option(
+            "--actor-model",
+            help=(
+                "Explicit actor library as "
+                "ACTOR=MODEL_ID:PLAN_LIBRARY[,PLAN_LIBRARY...]; repeatable"
+            ),
+        ),
+    ] = None,
+    textures: Annotated[
+        Optional[str],
+        typer.Option("-t", "--textures", help="Optional U9 bitmap texture FLX"),
+    ] = None,
+    palette: Annotated[
+        Optional[str],
+        typer.Option("-p", "--palette", help="Optional static/ankh.pal"),
+    ] = None,
+    lod: Annotated[int, typer.Option("--lod", help="LOD level to export")] = 0,
+    coordinate_scale: Annotated[
+        float,
+        typer.Option(
+            "--coordinate-scale",
+            help="GLB units per native U9 model unit",
+        ),
+    ] = DEFAULT_ANIMATED_MODEL_SCALE,
+    glb: Annotated[
+        bool,
+        typer.Option("--glb/--no-glb", help="Write one multi-action GLB per skeleton"),
+    ] = True,
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Output animation-library directory"),
+    ] = None,
+) -> None:
+    """Export every approved plan entry as deduplicated actor/skeleton libraries."""
+    raise SystemExit(
+        cmd_animation_library_export(
+            SimpleNamespace(
+                plan=plan,
+                animations=animations,
+                sappear=sappear,
+                registry=registry,
+                library_ids=library_ids,
+                actor_models=actor_models,
+                textures=textures,
+                palette=palette,
+                lod=lod,
+                coordinate_scale=coordinate_scale,
+                glb=glb,
+                output=output,
+            )
+        )
+    )
+
+
+@u9_app.command("animation-model-report", deprecated=True)
 def animation_model_report_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
     output: Annotated[
@@ -5029,7 +8517,7 @@ def animation_model_report_cmd(
         typer.Option("-f", "--format", help="Report format: csv or json"),
     ] = "csv",
 ) -> None:
-    """Export named animation clips and compatible model/type candidates."""
+    """Deprecated: write detailed diagnostics; use animation-library-plan."""
     raise SystemExit(
         cmd_animation_model_report(
             SimpleNamespace(
@@ -5044,6 +8532,397 @@ def animation_model_report_cmd(
             )
         )
     )
+
+
+@u9_app.command("animation-pose-export")
+def animation_pose_export_cmd(
+    animations: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
+    animation_id: Annotated[int, typer.Argument(help="Animation/FLX entry ID")],
+    sappear: Annotated[str, typer.Argument(help="Path to static/sappear.flx")],
+    model_id: Annotated[int, typer.Argument(help="Hierarchical model ID")],
+    time_ms: Annotated[
+        int,
+        typer.Option("--time-ms", help="Clip time to sample in milliseconds"),
+    ] = 0,
+    textures: Annotated[
+        Optional[str],
+        typer.Option("-t", "--textures", help="Optional U9 bitmap texture FLX"),
+    ] = None,
+    palette: Annotated[
+        Optional[str],
+        typer.Option("-p", "--palette", help="Optional static/ankh.pal"),
+    ] = None,
+    lod: Annotated[int, typer.Option("--lod", help="LOD level to export")] = 0,
+    fmt: Annotated[
+        str,
+        typer.Option("-f", "--format", help="obj, stl, or both"),
+    ] = "obj",
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Output directory"),
+    ] = None,
+    preview: Annotated[
+        bool,
+        typer.Option("--preview/--no-preview", help="Also render preview.png"),
+    ] = True,
+) -> None:
+    """Export one runtime-compatible rigid-limb animation pose."""
+    raise SystemExit(
+        cmd_animation_pose_export(
+            SimpleNamespace(
+                animations=animations,
+                animation_id=animation_id,
+                sappear=sappear,
+                model_id=model_id,
+                time_ms=time_ms,
+                textures=textures,
+                palette=palette,
+                lod=lod,
+                format=fmt,
+                output=output,
+                preview=preview,
+            )
+        )
+    )
+
+
+@u9_app.command("animation-bundle-export")
+def animation_bundle_export_cmd(
+    animations: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
+    animation_id: Annotated[int, typer.Argument(help="Animation/FLX entry ID")],
+    sappear: Annotated[str, typer.Argument(help="Path to static/sappear.flx")],
+    model_id: Annotated[int, typer.Argument(help="Hierarchical model ID")],
+    registry: Annotated[
+        Optional[str],
+        typer.Option(
+            "--registry",
+            help="registry.txt path (default: beside the animation archive)",
+        ),
+    ] = None,
+    textures: Annotated[
+        Optional[str],
+        typer.Option("-t", "--textures", help="Optional U9 bitmap texture FLX"),
+    ] = None,
+    palette: Annotated[
+        Optional[str],
+        typer.Option("-p", "--palette", help="Optional static/ankh.pal"),
+    ] = None,
+    lod: Annotated[int, typer.Option("--lod", help="LOD level to export")] = 0,
+    coordinate_scale: Annotated[
+        float,
+        typer.Option(
+            "--coordinate-scale",
+            help="GLB units per native U9 model unit",
+        ),
+    ] = DEFAULT_ANIMATED_MODEL_SCALE,
+    glb: Annotated[
+        bool,
+        typer.Option("--glb/--no-glb", help="Also write the animated GLB"),
+    ] = True,
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Output bundle directory"),
+    ] = None,
+) -> None:
+    """Export local limb meshes, exact U9 tracks, and an animated GLB."""
+    raise SystemExit(
+        cmd_animation_bundle_export(
+            SimpleNamespace(
+                animations=animations,
+                animation_id=animation_id,
+                sappear=sappear,
+                model_id=model_id,
+                registry=registry,
+                textures=textures,
+                palette=palette,
+                lod=lod,
+                coordinate_scale=coordinate_scale,
+                glb=glb,
+                output=output,
+            )
+        )
+    )
+
+
+@u9_app.command("animation-set-export")
+def animation_set_export_cmd(
+    animations: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
+    sappear: Annotated[str, typer.Argument(help="Path to static/sappear.flx")],
+    model_id: Annotated[int, typer.Argument(help="Explicit hierarchical model ID")],
+    clips: Annotated[
+        Optional[list[str]],
+        typer.Option(
+            "--clip",
+            help=(
+                "Clip selector; repeat for IDs, clip labels such as "
+                "humanoid/idle/breathe_avatar, or aliases such as avatar:walk"
+            ),
+        ),
+    ] = None,
+    registry: Annotated[
+        Optional[str],
+        typer.Option(
+            "--registry",
+            help="registry.txt path (default: beside the animation archive)",
+        ),
+    ] = None,
+    textures: Annotated[
+        Optional[str],
+        typer.Option("-t", "--textures", help="Optional U9 bitmap texture FLX"),
+    ] = None,
+    palette: Annotated[
+        Optional[str],
+        typer.Option("-p", "--palette", help="Optional static/ankh.pal"),
+    ] = None,
+    lod: Annotated[int, typer.Option("--lod", help="LOD level to export")] = 0,
+    coordinate_scale: Annotated[
+        float,
+        typer.Option(
+            "--coordinate-scale",
+            help="GLB units per native U9 model unit",
+        ),
+    ] = DEFAULT_ANIMATED_MODEL_SCALE,
+    glb: Annotated[
+        bool,
+        typer.Option("--glb/--no-glb", help="Write one animated GLB per clip"),
+    ] = True,
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Output animation-set directory"),
+    ] = None,
+) -> None:
+    """Export named clips and a neutral actor animation-set manifest."""
+    raise SystemExit(
+        cmd_animation_set_export(
+            SimpleNamespace(
+                animations=animations,
+                sappear=sappear,
+                model_id=model_id,
+                clips=clips,
+                registry=registry,
+                textures=textures,
+                palette=palette,
+                lod=lod,
+                coordinate_scale=coordinate_scale,
+                glb=glb,
+                output=output,
+            )
+        )
+    )
+
+
+@u9_app.command("avatar-animation-library-export")
+def avatar_animation_library_export_cmd(
+    animations: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
+    sappear: Annotated[str, typer.Argument(help="Path to static/sappear.flx")],
+    model_id: Annotated[int, typer.Argument(help="Explicit Avatar model ID")],
+    registry: Annotated[
+        Optional[str],
+        typer.Option(
+            "--registry",
+            help="registry.txt path (default: beside the animation archive)",
+        ),
+    ] = None,
+    categories: Annotated[
+        Optional[list[str]],
+        typer.Option(
+            "--category",
+            help="Optional category filter; repeat for movement, idle, combat, etc.",
+        ),
+    ] = None,
+    textures: Annotated[
+        Optional[str],
+        typer.Option("-t", "--textures", help="Optional U9 bitmap texture FLX"),
+    ] = None,
+    palette: Annotated[
+        Optional[str],
+        typer.Option("-p", "--palette", help="Optional static/ankh.pal"),
+    ] = None,
+    lod: Annotated[int, typer.Option("--lod", help="LOD level to export")] = 0,
+    coordinate_scale: Annotated[
+        float,
+        typer.Option(
+            "--coordinate-scale",
+            help="GLB units per native U9 model unit",
+        ),
+    ] = DEFAULT_ANIMATED_MODEL_SCALE,
+    glb: Annotated[
+        bool,
+        typer.Option("--glb/--no-glb", help="Write one GLB containing every clip"),
+    ] = True,
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Output Avatar library directory"),
+    ] = None,
+) -> None:
+    """Export shared Avatar assets and every compatible named animation clip."""
+    raise SystemExit(
+        cmd_avatar_animation_library_export(
+            SimpleNamespace(
+                animations=animations,
+                sappear=sappear,
+                model_id=model_id,
+                registry=registry,
+                categories=categories,
+                textures=textures,
+                palette=palette,
+                lod=lod,
+                coordinate_scale=coordinate_scale,
+                glb=glb,
+                output=output,
+            )
+        )
+    )
+
+
+@u9_app.command("dimension-info")
+def dimension_info_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/dimension.dat")],
+    models: Annotated[
+        Optional[str],
+        typer.Option("--models", help="Optional static/sappear.flx comparison"),
+    ] = None,
+) -> None:
+    """Summarize U9 model culling geometry and stored bound coverage."""
+    raise SystemExit(cmd_dimension_info(SimpleNamespace(file=file, models=models)))
+
+
+@u9_app.command("dimension-show")
+def dimension_show_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/dimension.dat")],
+    id: Annotated[int, typer.Argument(help="Model ID")],
+    models: Annotated[
+        Optional[str],
+        typer.Option("--models", help="Optional static/sappear.flx comparison"),
+    ] = None,
+) -> None:
+    """Show one U9 model's cached culling geometry and raw fragments."""
+    raise SystemExit(
+        cmd_dimension_show(SimpleNamespace(file=file, id=id, models=models))
+    )
+
+
+@u9_app.command("dimension-csv")
+def dimension_csv_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/dimension.dat")],
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Output directory for the CSV file"),
+    ] = None,
+    models: Annotated[
+        Optional[str],
+        typer.Option("--models", help="Optional static/sappear.flx comparison"),
+    ] = None,
+) -> None:
+    """Export lossless U9 model geometry and optional model comparisons."""
+    raise SystemExit(
+        cmd_dimension_csv(SimpleNamespace(file=file, output=output, models=models))
+    )
+
+
+@u9_app.command("spaces-info")
+def spaces_info_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/spaces.flx")],
+) -> None:
+    """Summarize U9 enclosed spaces and their nested geometry."""
+    raise SystemExit(cmd_spaces_info(SimpleNamespace(file=file)))
+
+
+@u9_app.command("spaces-show")
+def spaces_show_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/spaces.flx")],
+    id: Annotated[int, typer.Argument(help="Space ID (the FLX entry index)")],
+) -> None:
+    """Show one enclosed space, its boundary planes, and its portals."""
+    raise SystemExit(cmd_spaces_show(SimpleNamespace(file=file, id=id)))
+
+
+@u9_app.command("spaces-csv")
+def spaces_csv_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/spaces.flx")],
+    output: Annotated[
+        Optional[str],
+        typer.Option(
+            "-o",
+            "--output",
+            help="Output directory for space, plane, and portal CSV files",
+        ),
+    ] = None,
+) -> None:
+    """Export lossless U9 space, boundary-plane, and portal tables."""
+    raise SystemExit(cmd_spaces_csv(SimpleNamespace(file=file, output=output)))
+
+
+@u9_app.command("treedat-info")
+def treedat_info_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/treedat.flx")],
+    spaces: Annotated[
+        Optional[str],
+        typer.Option("--spaces", help="Optional static/spaces.flx validation join"),
+    ] = None,
+) -> None:
+    """Summarize the derived U9 volume lookup cache."""
+    raise SystemExit(cmd_treedat_info(SimpleNamespace(file=file, spaces=spaces)))
+
+
+@u9_app.command("treedat-show")
+def treedat_show_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/treedat.flx")],
+    id: Annotated[int, typer.Argument(help="Map ID (the FLX entry index)")],
+) -> None:
+    """Show one map's cached volume list and partition nodes."""
+    raise SystemExit(cmd_treedat_show(SimpleNamespace(file=file, id=id)))
+
+
+@u9_app.command("treedat-csv")
+def treedat_csv_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/treedat.flx")],
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Output directory for cache CSV files"),
+    ] = None,
+    spaces: Annotated[
+        Optional[str],
+        typer.Option("--spaces", help="Optional static/spaces.flx validation join"),
+    ] = None,
+) -> None:
+    """Export map, partition, and node-volume cache tables."""
+    raise SystemExit(
+        cmd_treedat_csv(SimpleNamespace(file=file, output=output, spaces=spaces))
+    )
+
+
+@u9_app.command("areas-info")
+def areas_info_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/areas.flx")],
+) -> None:
+    """Summarize U9 gameplay zones, boxes, and encounter tables."""
+    raise SystemExit(cmd_areas_info(SimpleNamespace(file=file)))
+
+
+@u9_app.command("areas-show")
+def areas_show_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/areas.flx")],
+    id: Annotated[int, typer.Argument(help="Gameplay-zone ID (FLX entry index)")],
+) -> None:
+    """Show one U9 gameplay-zone record and its nested data."""
+    raise SystemExit(cmd_areas_show(SimpleNamespace(file=file, id=id)))
+
+
+@u9_app.command("areas-csv")
+def areas_csv_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/areas.flx")],
+    output: Annotated[
+        Optional[str],
+        typer.Option(
+            "-o",
+            "--output",
+            help="Output directory for zone, box, and encounter CSV files",
+        ),
+    ] = None,
+) -> None:
+    """Export lossless U9 gameplay-zone, box, and encounter tables."""
+    raise SystemExit(cmd_areas_csv(SimpleNamespace(file=file, output=output)))
 
 
 @u9_app.command("trigger-list")
@@ -5129,7 +9008,7 @@ def script_research_export_cmd(
         ),
     ] = "u9-script-research",
 ) -> None:
-    """Export lossless trigger/activity evidence tables for Ghidra research."""
+    """Export lossless trigger/activity evidence tables for external analysis."""
     raise SystemExit(
         cmd_script_research_export(
             SimpleNamespace(
@@ -5161,7 +9040,12 @@ def npc_list_cmd(
     ] = None,
     npc_class: Annotated[
         Optional[int],
-        typer.Option("-c", "--class", help="Only NPCs with this class_id"),
+        typer.Option(
+            "-b",
+            "--behavior-profile",
+            "--class",
+            help="Only NPCs with this combat behavior profile",
+        ),
     ] = None,
     all: Annotated[
         bool, typer.Option("-a", "--all", help="Include unnamed/empty slots")
@@ -5221,10 +9105,10 @@ def npc_classes_cmd(
     ] = False,
     members: Annotated[
         int,
-        typer.Option("-m", "--members", help="Member names to preview per class"),
+        typer.Option("-m", "--members", help="Member names to preview per profile"),
     ] = 8,
 ) -> None:
-    """Group U9 NPCs by class_id and preview each group's members."""
+    """Group U9 NPCs by combat behavior profile (legacy command name)."""
     raise SystemExit(
         cmd_npc_classes(SimpleNamespace(file=file, save=save, members=members))
     )
@@ -5398,6 +9282,257 @@ def text_export_cmd(
 ) -> None:
     """Export a U9 text archive to CSV."""
     raise SystemExit(cmd_text_export(SimpleNamespace(file=file, output=output)))
+
+
+@u9_app.command("text-import")
+def text_import_cmd(
+    file: Annotated[
+        str,
+        typer.Argument(
+            help="Original text archive (text.flx, misctext.flx, Tbrk.*, Mbrk.*)"
+        ),
+    ],
+    csv_path: Annotated[
+        str, typer.Argument(metavar="CSV", help="Edited text-export CSV (index, text)")
+    ],
+    output: Annotated[
+        Optional[str],
+        typer.Option(
+            "-o", "--output", help="Output archive (default: <stem>_imported<ext>)"
+        ),
+    ] = None,
+) -> None:
+    """Rebuild a U9 text archive with the texts from an edited CSV."""
+    raise SystemExit(
+        cmd_text_import(SimpleNamespace(file=file, csv=csv_path, output=output))
+    )
+
+
+@u9_app.command("text-keys-info")
+def text_keys_info_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/text.dat")],
+    text: Annotated[
+        Optional[str],
+        typer.Option(
+            "-t", "--text", help="Path to static/text.flx, to check targets and recover keys"
+        ),
+    ] = None,
+    speakers: Annotated[
+        Optional[list[str]],
+        typer.Option(
+            "-s", "--speaker", help="Extra speaker name to try when recovering keys (repeatable)"
+        ),
+    ] = None,
+    npcs: Annotated[
+        Optional[str],
+        typer.Option(
+            "--npcs", help="Path to runtime/NPC.FLX; its record names are the speakers the game uses"
+        ),
+    ] = None,
+) -> None:
+    """Summarize the U9 text key table and its links to text.flx."""
+    raise SystemExit(
+        cmd_text_keys_info(
+            SimpleNamespace(file=file, text=text, speakers=speakers, npcs=npcs)
+        )
+    )
+
+
+@u9_app.command("text-key-lookup")
+def text_key_lookup_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/text.dat")],
+    key: Annotated[
+        str, typer.Argument(help="Full key, e.g. 'Avatar : Farewell.'")
+    ],
+    text: Annotated[
+        Optional[str],
+        typer.Option(
+            "-t", "--text", help="Path to static/text.flx, to check targets and recover keys"
+        ),
+    ] = None,
+) -> None:
+    """Look up one text key the way the game does."""
+    raise SystemExit(
+        cmd_text_key_lookup(SimpleNamespace(file=file, key=key, text=text))
+    )
+
+
+@u9_app.command("text-keys-export")
+def text_keys_export_cmd(
+    file: Annotated[str, typer.Argument(help="Path to static/text.dat")],
+    text: Annotated[
+        Optional[str],
+        typer.Option(
+            "-t", "--text", help="Path to static/text.flx, to check targets and recover keys"
+        ),
+    ] = None,
+    speakers: Annotated[
+        Optional[list[str]],
+        typer.Option(
+            "-s", "--speaker", help="Extra speaker name to try when recovering keys (repeatable)"
+        ),
+    ] = None,
+    npcs: Annotated[
+        Optional[str],
+        typer.Option(
+            "--npcs", help="Path to runtime/NPC.FLX; its record names are the speakers the game uses"
+        ),
+    ] = None,
+    output: Annotated[
+        Optional[str],
+        typer.Option(
+            "-o", "--output", help="Output CSV path (default: <file>_keys.csv)"
+        ),
+    ] = None,
+) -> None:
+    """Export every U9 text key item, its target line and recovered key, to CSV."""
+    raise SystemExit(
+        cmd_text_keys_export(
+            SimpleNamespace(
+                file=file, text=text, speakers=speakers, npcs=npcs, output=output
+            )
+        )
+    )
+
+
+@u9_app.command("shade-info")
+def shade_info_cmd(
+    file: Annotated[
+        str, typer.Argument(help="Path to static/shade.tbl or static/shadegry.tbl")
+    ],
+    palette: Annotated[
+        Optional[str],
+        typer.Option("-p", "--palette", help="Path to static/ankh.pal, to show colours"),
+    ] = None,
+) -> None:
+    """Summarize a U9 shade table (authoring-tool file; the game never loads it)."""
+    raise SystemExit(cmd_shade_info(SimpleNamespace(file=file, palette=palette)))
+
+
+@u9_app.command("shade-csv")
+def shade_csv_cmd(
+    file: Annotated[
+        str, typer.Argument(help="Path to static/shade.tbl or static/shadegry.tbl")
+    ],
+    palette: Annotated[
+        Optional[str],
+        typer.Option("-p", "--palette", help="Path to static/ankh.pal, to add RGB columns"),
+    ] = None,
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Output CSV path (default: <file>_shade.csv)"),
+    ] = None,
+) -> None:
+    """Export every cell of a U9 shade table to CSV (authoring-tool file; the game never loads it)."""
+    raise SystemExit(
+        cmd_shade_csv(SimpleNamespace(file=file, palette=palette, output=output))
+    )
+
+
+@u9_app.command("color-cube-info")
+def color_cube_info_cmd(
+    file: Annotated[
+        str, typer.Argument(help="Path to static/rgbccube.dat or static/yiqccube.dat")
+    ],
+    palette: Annotated[
+        Optional[str],
+        typer.Option(
+            "-p", "--palette", help="Path to static/ankh.pal, to compare the stored palette"
+        ),
+    ] = None,
+) -> None:
+    """Summarize a U9 colour-cube cache (authoring-tool file; the game never loads it)."""
+    raise SystemExit(cmd_color_cube_info(SimpleNamespace(file=file, palette=palette)))
+
+
+@u9_app.command("color-cube-lookup")
+def color_cube_lookup_cmd(
+    file: Annotated[
+        str, typer.Argument(help="Path to static/rgbccube.dat or static/yiqccube.dat")
+    ],
+    red: Annotated[int, typer.Argument(help="Red, 0-255")],
+    green: Annotated[int, typer.Argument(help="Green, 0-255")],
+    blue: Annotated[int, typer.Argument(help="Blue, 0-255")],
+    metric: Annotated[
+        Optional[str],
+        typer.Option(
+            "-m",
+            "--metric",
+            help=f"Distance metric, one of {', '.join(COLOR_CUBE_METRICS)} "
+            "(default: yiq when the file name contains 'yiq', else rgb)",
+        ),
+    ] = None,
+) -> None:
+    """Show the palette index a U9 colour cube picks for a colour (authoring-tool file; the game never loads it)."""
+    raise SystemExit(
+        cmd_color_cube_lookup(
+            SimpleNamespace(file=file, red=red, green=green, blue=blue, metric=metric)
+        )
+    )
+
+
+@u9_app.command("color-cube-csv")
+def color_cube_csv_cmd(
+    file: Annotated[
+        str, typer.Argument(help="Path to static/rgbccube.dat or static/yiqccube.dat")
+    ],
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Output CSV path (default: <file>_nodes.csv)"),
+    ] = None,
+) -> None:
+    """Export every U9 colour-cube tree node to CSV (authoring-tool file; the game never loads it)."""
+    raise SystemExit(cmd_color_cube_csv(SimpleNamespace(file=file, output=output)))
+
+
+@u9_app.command("save-check")
+def save_check_cmd(
+    target: Annotated[
+        str,
+        typer.Argument(help="Ultima IX install root or savegame directory"),
+    ],
+    slot: Annotated[
+        Optional[int],
+        typer.Option("--slot", help="Check this slot instead of start.dat's selection"),
+    ] = None,
+    static: Annotated[
+        Optional[str],
+        typer.Option(
+            "--static", help="Directory containing installed fixed.<map> files"
+        ),
+    ] = None,
+    fixed_reference: Annotated[
+        Optional[str],
+        typer.Option(
+            "--fixed-reference",
+            help="Trusted creation-time fixed.<map> directory for identity comparison",
+        ),
+    ] = None,
+    json_output: Annotated[
+        Optional[str],
+        typer.Option("--json", help="Also write the complete report as JSON"),
+    ] = None,
+    partial: Annotated[
+        bool,
+        typer.Option(
+            "--partial",
+            help="Treat omitted archive/fixed files as an intentional forensic subset",
+        ),
+    ] = False,
+) -> None:
+    """Check a selected U9 save's custody, heap structure, and compatibility."""
+    raise SystemExit(
+        cmd_save_check(
+            SimpleNamespace(
+                target=target,
+                slot=slot,
+                static=static,
+                fixed_reference=fixed_reference,
+                json_output=json_output,
+                partial=partial,
+            )
+        )
+    )
 
 
 @u9_app.command("fixed-info")

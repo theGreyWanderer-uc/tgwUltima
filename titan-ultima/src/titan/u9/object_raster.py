@@ -85,8 +85,8 @@ def _model_geometry(
 def _material_alpha(material: U9Material | None) -> int:
     if material is None:
         return 255
-    if material.modified_alpha != MATERIAL_ALPHA_NONE:
-        return material.modified_alpha
+    if material.active_alpha != MATERIAL_ALPHA_NONE:
+        return material.active_alpha
     return material.default_alpha
 
 

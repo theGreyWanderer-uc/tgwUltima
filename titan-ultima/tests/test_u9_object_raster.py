@@ -32,7 +32,7 @@ def _placement() -> U9ObjectPlacementResolution:
         scale_xyz=(4.0, 4.0, 4.0),
         footprint_xy=((128.0, 128.0),),
         flags=0,
-        trigger_id=None,
+        link=None,
     )
 
 

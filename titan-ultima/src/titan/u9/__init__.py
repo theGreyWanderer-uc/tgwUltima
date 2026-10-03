@@ -3,7 +3,7 @@ Ultima 9 subpackage.
 
 Modules for Ultima 9: Ascension file formats.
 
-Canonical imports::
+Common imports::
 
     from titan.u9.activity import U9Activities
     from titan.u9.animation import U9Animations
@@ -12,21 +12,18 @@ Canonical imports::
     from titan.u9.flx_archive import U9FlxArchive
     from titan.u9.flx_writer import build_flx
     from titan.u9.highway import U9Highway
+    from titan.u9.gameplay_zones import U9Areas
     from titan.u9.npc import U9Npcs
     from titan.u9.sdinfo import U9SdInfo
+    from titan.u9.space_tree import U9VolumeLookupCache
+    from titan.u9.spaces import U9Spaces
     from titan.u9.text import U9TextArchive
+    from titan.u9.text_keys import U9TextKeyTable
     from titan.u9.terrain import U9Terrain
     from titan.u9.triggers import U9Triggers
     from titan.u9.typename import U9TypeNames
     from titan.u9.sound import U9SoundRecord
-    from titan.u9.activity import (
-    U9Activities,
-    U9Activity,
-    U9ActivityError,
-    U9ActivityRecord,
-    U9ActivityStep,
-)
-from titan.u9.adpcm import decode_stereo, decode_mono as decode_adpcm_mono
+    from titan.u9.adpcm import decode_stereo, decode_mono as decode_adpcm_mono
     from titan.u9.microtalk import decode_mono as decode_microtalk_mono
     from titan.u9.model import U9Model
     from titan.u9.texture import decode_frame
@@ -44,6 +41,22 @@ from titan.u9.adpcm import decode_stereo, decode_mono as decode_adpcm_mono
 
 from __future__ import annotations
 
+from titan.u9.activity import (
+    ACTION_KIND_CATALOGUE,
+    ACTIVITY_OPCODE_CATALOGUE,
+    GESTURE_ANIMATION_IDS,
+    U9Activities,
+    U9Activity,
+    U9ActivityActionKind,
+    U9ActivityActionArgument,
+    U9ActivityError,
+    U9ActivityOpcodeInfo,
+    U9ActivityRecord,
+    U9ActivityStep,
+    activity_action_kind,
+    activity_action_argument,
+    activity_opcode_info,
+)
 from titan.u9.adpcm import (
     AdpcmDecodeError,
     decode_mono as decode_adpcm_mono,
@@ -52,10 +65,64 @@ from titan.u9.adpcm import (
 from titan.u9.animation import (
     U9Animation,
     U9AnimationError,
+    U9AnimationEvent,
     U9AnimationFrame,
     U9AnimationPart,
     U9Animations,
     U9AnimationSuffix,
+)
+from titan.u9.animation_library_plan import (
+    ANIMATION_LIBRARY_PLAN_SCHEMA,
+    ANIMATION_LIBRARY_PLAN_SCHEMA_VERSION,
+    U9AnimationLibraryPlan,
+    U9AnimationLibraryPlanError,
+    build_animation_library_plan,
+    write_animation_library_plan,
+)
+from titan.u9.animation_pose import (
+    U9AnimationPoseError,
+    U9AnimationPoseResult,
+    pose_model,
+)
+from titan.u9.animation_labels import (
+    U9AnimationLabels,
+    U9AnimationSourceHints,
+    parse_animation_source_hints,
+)
+from titan.u9.animation_selection import (
+    DEFAULT_AVATAR_ANIMATION_SELECTIONS,
+    U9AnimationSelectionError,
+    U9AnimationSelectionRule,
+    U9ResolvedAnimationSelection,
+    resolve_animation_selector,
+)
+from titan.u9.animated_model_bundle import (
+    ANIMATED_MODEL_BUNDLE_SCHEMA,
+    ANIMATED_MODEL_BUNDLE_SCHEMA_VERSION,
+    ANIMATED_MODEL_SHARED_LIBRARY_SCHEMA,
+    ANIMATED_MODEL_SHARED_LIBRARY_SCHEMA_VERSION,
+    DEFAULT_ANIMATED_MODEL_SCALE,
+    U9AnimatedModelBundleError,
+    U9AnimatedModelBundleResult,
+    U9AnimatedModelLibraryResult,
+    build_animation_catalogue_record,
+    build_hashed_input_record,
+    export_animated_model_bundle,
+    export_animated_model_library,
+)
+from titan.u9.animated_model_set import (
+    ANIMATED_MODEL_SET_SCHEMA,
+    ANIMATED_MODEL_SET_SCHEMA_VERSION,
+    U9AnimatedModelSetError,
+    U9AnimatedModelSetResult,
+    export_animated_model_set,
+)
+from titan.u9.avatar_animation_library import (
+    AVATAR_ANIMATION_LIBRARY_SCHEMA,
+    AVATAR_ANIMATION_LIBRARY_SCHEMA_VERSION,
+    U9AvatarAnimationLibraryError,
+    U9AvatarAnimationLibraryResult,
+    export_avatar_animation_library,
 )
 from titan.u9.books import U9Book, U9Books, U9BooksError
 from titan.u9.fixed import (
@@ -64,6 +131,19 @@ from titan.u9.fixed import (
     U9FixedError,
     U9FixedObject,
     U9FixedPage,
+)
+from titan.u9.planned_animation_library_export import (
+    ANIMATION_LIBRARY_CATALOGUE_SCHEMA,
+    ANIMATION_LIBRARY_CATALOGUE_SCHEMA_VERSION,
+    ANIMATION_LIBRARY_EXPORT_SCHEMA,
+    ANIMATION_LIBRARY_EXPORT_SCHEMA_VERSION,
+    U9ActorModelLibrarySpec,
+    U9ExportedAnimationSkeletonLibrary,
+    U9PlannedAnimationLibraryExportError,
+    U9PlannedAnimationLibraryExportResult,
+    export_planned_animation_libraries,
+    parse_actor_model_library_spec,
+    read_animation_library_plan,
 )
 from titan.u9.flx_archive import U9FlxArchive, U9FlxArchiveError, U9FlxDirEntry
 from titan.u9.flx_writer import (
@@ -74,14 +154,28 @@ from titan.u9.flx_writer import (
     write_flx,
 )
 from titan.u9.highway import U9Highway, U9HighwayError, U9HighwayPoint, U9HighwayRoute
+from titan.u9.gameplay_zones import (
+    BOX_ZONE_KIND,
+    ENCOUNTER_SLOT_COUNT,
+    U9Areas,
+    U9AreasError,
+    U9EncounterChoice,
+    U9EncounterTable,
+    U9GameplayZone,
+    U9StoredPosition,
+    U9UnknownZone,
+    U9ZoneBox,
+)
 from titan.u9.icon import icon_entry_indices, used_texture_ids
 from titan.u9.mesh_export import (
     MeshExportError,
     U9ModelMeshTriangle,
     U9ModelMeshVertex,
+    export_limb_obj,
     export_obj,
     export_stl,
     flatten_model_triangles,
+    limb_local_triangles,
     model_limb_world_matrices,
 )
 from titan.u9.microtalk import (
@@ -97,6 +191,16 @@ from titan.u9.model import (
     U9SubmeshLod,
     U9Triangle,
     U9TriangleCorner,
+)
+from titan.u9.model_geometry import (
+    BOUND_PREFIX_SIZE,
+    COMPLETE_STORED_BOUND_COUNT,
+    EXPECTED_SIZE as DIMENSION_DAT_EXPECTED_SIZE,
+    MODEL_SLOT_COUNT,
+    PARTIAL_STORED_BOUND_ID,
+    U9ModelGeometryRecord,
+    U9ModelGeometryTable,
+    U9ModelGeometryTableError,
 )
 from titan.u9.model_naming import label_for_model, names_for_model, slugify
 from titan.u9.map_atlas import (
@@ -123,6 +227,7 @@ from titan.u9.map_render import (
 from titan.u9.nonfixed import (
     U9Chunk,
     U9Entity,
+    U9EntityTriggers,
     U9ExtraData,
     U9Nonfixed,
     U9NonfixedError,
@@ -150,7 +255,16 @@ from titan.u9.object_raster import (
     U9ObjectRasterError,
     rasterize_object_meshes,
 )
-from titan.u9.npc import U9Npc, U9NpcError, U9Npcs
+from titan.u9.npc import (
+    AUTHORED_RECORD_COUNT,
+    LIVE_RECORD_COUNT,
+    NO_COMBAT_BEHAVIOR,
+    U9Npc,
+    U9NpcError,
+    U9NpcState,
+    U9NpcTrait,
+    U9Npcs,
+)
 from titan.u9.palette import PALETTE_TRANSPARENCY_INDEX, U9Palette, U9PaletteError
 from titan.u9.region_scene import (
     FIXED_CHUNK_TERRAIN_POINTS,
@@ -194,13 +308,67 @@ from titan.u9.preview import PreviewError, PreviewUnavailableError, render_previ
 from titan.u9.sdinfo import U9SdInfo, U9SdInfoError, U9SdInfoRecord
 from titan.u9.script_research import export_script_research_bundle
 from titan.u9.sound import U9SoundRecord, U9SoundRecordError
+from titan.u9.sound_category import (
+    CATEGORY_RECORD_SIZE,
+    U9SoundCategories,
+    U9SoundCategory,
+    U9SoundCategoryError,
+)
+from titan.u9.sound_environment import (
+    ENVIRONMENT_ARCHIVE_SLOT_COUNT,
+    ENVIRONMENT_RECORD_SIZE,
+    STANDARD_ACOUSTIC_PRESETS,
+    U9AcousticPreset,
+    U9AcousticPresetError,
+    U9AcousticPresets,
+)
+from titan.u9.sound_control import (
+    SFX_TEMPLATE_RECORD_REPRESENTATION,
+    SFX_TEMPLATE_SLOT_COUNT,
+    U9SfxAction,
+    U9SfxAssociation,
+    U9SfxAssociationResolution,
+    U9SfxAssociations,
+    U9SfxSoundReference,
+    U9SfxTemplate,
+    U9SfxTemplates,
+    U9SoundControlError,
+)
+from titan.u9.space_tree import (
+    TREE_CACHE_FORMAT_VERSION,
+    U9MapVolumeIndex,
+    U9VolumeLookupCache,
+    U9VolumeLookupError,
+    U9VolumePartition,
+)
+from titan.u9.spaces import (
+    U9VisibilityOpening,
+    U9VisibilityVolume,
+    U9VolumeBoundary,
+    U9Spaces,
+    U9SpacesError,
+)
 from titan.u9.terrain import (
     U9Terrain,
     U9TerrainChunk,
     U9TerrainError,
     U9TerrainPoint,
 )
+from titan.u9.shade_tables import (
+    U9EditorColorTable,
+    U9ShadeTable,
+    U9ShadeTableError,
+)
+from titan.u9.color_cube import U9ColorCube, U9ColorCubeError, U9ColorCubeNode
 from titan.u9.text import U9TextArchive, U9TextBlock, U9TextEntry, U9TextError
+from titan.u9.text_keys import (
+    U9TextKey,
+    U9TextKeyBucket,
+    U9TextKeyItem,
+    U9TextKeyTable,
+    U9TextKeyTableError,
+    reconstruct_keys as reconstruct_text_keys,
+)
 from titan.u9.texture import (
     U9TextureError,
     U9TextureFrame,
@@ -218,9 +386,24 @@ from titan.u9.texture_writer import (
     frame_encoding,
     replace_frame,
 )
+from titan.u9.trigger_operands import (
+    U9TriggerBranch,
+    U9TriggerParameters,
+    U9TriggerTarget,
+)
 from titan.u9.triggers import U9Trigger, U9TriggerRecord, U9Triggers, U9TriggersError
-from titan.u9.typename import U9TypeNameEntry, U9TypeNames
-from titan.u9.types_dat import U9TypeRecord, U9TypesDat, U9TypesDatError
+from titan.u9.typename import (
+    DEFAULT_OBJECT_ICON_ID,
+    U9TypeNameEntry,
+    U9TypeNameError,
+    U9TypeNames,
+)
+from titan.u9.types_dat import (
+    U9TypeRecord,
+    U9TypesDat,
+    U9TypesDatError,
+    U9TypesHeader,
+)
 
 __all__ = [
     "U9FlxArchive",
@@ -233,21 +416,122 @@ __all__ = [
     "U9FlxDirEntry",
     "U9TypeNames",
     "U9TypeNameEntry",
+    "U9TypeNameError",
+    "DEFAULT_OBJECT_ICON_ID",
     "U9SoundRecord",
     "U9SoundRecordError",
+    "U9SoundCategories",
+    "U9SoundCategory",
+    "U9SoundCategoryError",
+    "CATEGORY_RECORD_SIZE",
+    "U9AcousticPreset",
+    "U9AcousticPresets",
+    "U9AcousticPresetError",
+    "ENVIRONMENT_RECORD_SIZE",
+    "ENVIRONMENT_ARCHIVE_SLOT_COUNT",
+    "STANDARD_ACOUSTIC_PRESETS",
+    "U9SfxAssociation",
+    "U9SfxAssociationResolution",
+    "U9SfxAssociations",
+    "U9SfxSoundReference",
+    "U9SfxAction",
+    "U9SfxTemplate",
+    "U9SfxTemplates",
+    "SFX_TEMPLATE_SLOT_COUNT",
+    "SFX_TEMPLATE_RECORD_REPRESENTATION",
+    "U9SoundControlError",
+    "BOX_ZONE_KIND",
+    "ENCOUNTER_SLOT_COUNT",
+    "U9Areas",
+    "U9AreasError",
+    "U9EncounterChoice",
+    "U9EncounterTable",
+    "U9GameplayZone",
+    "U9StoredPosition",
+    "U9UnknownZone",
+    "U9ZoneBox",
+    "TREE_CACHE_FORMAT_VERSION",
+    "U9MapVolumeIndex",
+    "U9VolumeLookupCache",
+    "U9VolumeLookupError",
+    "U9VolumePartition",
+    "U9Spaces",
+    "U9SpacesError",
+    "U9VisibilityOpening",
+    "U9VisibilityVolume",
+    "U9VolumeBoundary",
     "decode_stereo",
     "decode_adpcm_mono",
     "AdpcmDecodeError",
     "U9Animation",
     "U9AnimationError",
+    "U9AnimationEvent",
     "U9AnimationFrame",
     "U9AnimationPart",
     "U9Animations",
     "U9AnimationSuffix",
+    "ANIMATION_LIBRARY_PLAN_SCHEMA",
+    "ANIMATION_LIBRARY_PLAN_SCHEMA_VERSION",
+    "U9AnimationLibraryPlan",
+    "U9AnimationLibraryPlanError",
+    "build_animation_library_plan",
+    "write_animation_library_plan",
+    "U9AnimationPoseError",
+    "U9AnimationPoseResult",
+    "pose_model",
+    "U9AnimationLabels",
+    "U9AnimationSourceHints",
+    "parse_animation_source_hints",
+    "DEFAULT_AVATAR_ANIMATION_SELECTIONS",
+    "U9AnimationSelectionError",
+    "U9AnimationSelectionRule",
+    "U9ResolvedAnimationSelection",
+    "resolve_animation_selector",
+    "ANIMATED_MODEL_BUNDLE_SCHEMA",
+    "ANIMATED_MODEL_BUNDLE_SCHEMA_VERSION",
+    "ANIMATED_MODEL_SHARED_LIBRARY_SCHEMA",
+    "ANIMATED_MODEL_SHARED_LIBRARY_SCHEMA_VERSION",
+    "DEFAULT_ANIMATED_MODEL_SCALE",
+    "U9AnimatedModelBundleError",
+    "U9AnimatedModelBundleResult",
+    "U9AnimatedModelLibraryResult",
+    "build_animation_catalogue_record",
+    "build_hashed_input_record",
+    "export_animated_model_bundle",
+    "export_animated_model_library",
+    "ANIMATED_MODEL_SET_SCHEMA",
+    "ANIMATED_MODEL_SET_SCHEMA_VERSION",
+    "U9AnimatedModelSetError",
+    "U9AnimatedModelSetResult",
+    "export_animated_model_set",
+    "AVATAR_ANIMATION_LIBRARY_SCHEMA",
+    "AVATAR_ANIMATION_LIBRARY_SCHEMA_VERSION",
+    "U9AvatarAnimationLibraryError",
+    "U9AvatarAnimationLibraryResult",
+    "export_avatar_animation_library",
+    "ANIMATION_LIBRARY_CATALOGUE_SCHEMA",
+    "ANIMATION_LIBRARY_CATALOGUE_SCHEMA_VERSION",
+    "ANIMATION_LIBRARY_EXPORT_SCHEMA",
+    "ANIMATION_LIBRARY_EXPORT_SCHEMA_VERSION",
+    "U9ActorModelLibrarySpec",
+    "U9ExportedAnimationSkeletonLibrary",
+    "U9PlannedAnimationLibraryExportError",
+    "U9PlannedAnimationLibraryExportResult",
+    "export_planned_animation_libraries",
+    "parse_actor_model_library_spec",
+    "read_animation_library_plan",
     "decode_microtalk_mono",
     "MicroTalkDecodeError",
     "U9Model",
     "U9ModelError",
+    "U9ModelGeometryRecord",
+    "U9ModelGeometryTable",
+    "U9ModelGeometryTableError",
+    "MODEL_SLOT_COUNT",
+    "BOUND_PREFIX_SIZE",
+    "COMPLETE_STORED_BOUND_COUNT",
+    "PARTIAL_STORED_BOUND_ID",
+    "DIMENSION_DAT_EXPECTED_SIZE",
     "U9Limb",
     "U9IndexedFace",
     "U9SubmeshLod",
@@ -269,14 +553,17 @@ __all__ = [
     "frame_encoding",
     "replace_frame",
     "export_obj",
+    "export_limb_obj",
     "export_stl",
     "MeshExportError",
     "U9ModelMeshTriangle",
     "U9ModelMeshVertex",
     "flatten_model_triangles",
+    "limb_local_triangles",
     "model_limb_world_matrices",
     "U9TypesDat",
     "U9TypesDatError",
+    "U9TypesHeader",
     "U9TypeRecord",
     "label_for_model",
     "names_for_model",
@@ -293,13 +580,25 @@ __all__ = [
     "U9Activities",
     "U9Activity",
     "U9ActivityError",
+    "U9ActivityOpcodeInfo",
     "U9ActivityRecord",
     "U9ActivityStep",
+    "U9ActivityActionKind",
+    "ACTION_KIND_CATALOGUE",
+    "GESTURE_ANIMATION_IDS",
+    "U9ActivityActionArgument",
+    "activity_action_argument",
+    "activity_action_kind",
+    "ACTIVITY_OPCODE_CATALOGUE",
+    "activity_opcode_info",
     "export_script_research_bundle",
     "U9Triggers",
     "U9TriggersError",
     "U9Trigger",
     "U9TriggerRecord",
+    "U9TriggerBranch",
+    "U9TriggerParameters",
+    "U9TriggerTarget",
     "U9HighwayError",
     "U9HighwayPoint",
     "U9HighwayRoute",
@@ -311,17 +610,34 @@ __all__ = [
     "U9TextBlock",
     "U9TextEntry",
     "U9TextError",
+    "U9ColorCube",
+    "U9ColorCubeError",
+    "U9ColorCubeNode",
+    "U9EditorColorTable",
+    "U9ShadeTable",
+    "U9ShadeTableError",
+    "U9TextKey",
+    "U9TextKeyBucket",
+    "U9TextKeyItem",
+    "U9TextKeyTable",
+    "U9TextKeyTableError",
     "U9SdInfo",
     "U9SdInfoError",
     "U9SdInfoRecord",
     "U9Npcs",
     "U9Npc",
     "U9NpcError",
+    "U9NpcState",
+    "U9NpcTrait",
+    "AUTHORED_RECORD_COUNT",
+    "LIVE_RECORD_COUNT",
+    "NO_COMBAT_BEHAVIOR",
     "U9Nonfixed",
     "U9NonfixedError",
     "U9Chunk",
     "U9Page",
     "U9Entity",
+    "U9EntityTriggers",
     "U9ExtraData",
     "U9ModelBounds",
     "U9ModelBoundsLookup",
@@ -337,6 +653,7 @@ __all__ = [
     "U9SappearModelSource",
     "object_scale_from_extra_data",
     "project_model_bounds_footprint",
+    "reconstruct_text_keys",
     "resolve_region_object_placements",
     "U9Palette",
     "U9PaletteError",

@@ -1,25 +1,17 @@
 """
 3D model (mesh) reader for Ultima 9: Ascension's ``static/sappear.flx``.
 
-Each used entry in ``sappear.flx`` (3,764 of 8,000 directory slots in
-this project's test copy of the game) is one **model**. Most use a hierarchy
+Each runtime model entry in ``sappear.flx`` uses a hierarchy
 of rigid **limbs** (body parts/pieces, not a modern vertex-skinned skeleton --
-see below), each with its own mesh at up to 4 levels of detail (LOD). Sixteen
-use the alternate indexed-polygon record described below.
+see below), each with its own mesh at up to 4 levels of detail (LOD).
 
-Ported and reverse-engineered from the real, open-source Blender
-importer ``Chevluh/Ultima-9-Blender-Importer``'s
-``ultimaModelImporter.py`` (found locally at
-``D:\\_Repos\\_UltimaIX\\Ultima-9-Blender-Importer``) -- **not** from a
-prior ChatGPT-generated research summary the user also supplied, which
-claimed several byte offsets that turned out to be wrong when checked
-against the real importer source (e.g. it placed the limb quaternion
-at +0x18, but the real importer places it at +0x20, after a full
-12-byte ``Position`` vec3 the summary's offsets didn't leave room for).
-Every offset below was additionally cross-checked field-by-field
-against real game data (model ID 0, a simple debug cube: 1 limb, 1 LOD,
-8 vertices, 12 faces, 1 material) before being trusted -- see each
-dataclass's docstring for the specific real values that confirmed it.
+The layout was checked against runtime analysis and the game corpus rather than a
+prior generated research summary whose offsets proved incorrect. For example,
+the summary placed the limb quaternion at +0x18, while the verified layout puts
+it at +0x20 after the complete 12-byte ``Position`` vector. Every offset below
+was additionally cross-checked field-by-field against real game data (model ID
+0, a simple debug cube: 1 limb, 1 LOD, 8 vertices, 12 faces, 1 material) before
+being trusted. Each dataclass documents the real values that confirmed it.
 
 Model record layout (all offsets relative to the start of the FLX
 entry's own bytes, i.e. ``U9FlxArchive.read_entry(model_id)``)::
@@ -31,14 +23,15 @@ entry's own bytes, i.e. ``U9FlxArchive.read_entry(model_id)``)::
     0x18  cylinder_base_radius   f32
     0x1C  sphere_center          vec3  -- bounding sphere
     0x28  sphere_radius          f32
-    0x2C  (unknown)              f32
+    0x2C  collision_shape_code   s16
+    0x2E  collision_shape_padding  2 bytes
     0x30  min_bounds             vec3  -- bounding box
     0x3C  max_bounds             vec3
-    0x48  lod_thresholds         u32[4]
+    0x48  lod_thresholds         s32[4]
     0x58  center_of_mass         vec3
-    0x64  (mass/volume, unused here)  f32
-    0x68  (inertia matrix, unused here)  36 bytes
-    0x8C  (unknown)              f32
+    0x64  volume                 f32
+    0x68  inverse_inertia_matrix f32[9]
+    0x8C  inertia_diagonal_only_code  s32
     0x90  limb offset table      -- see below
 
 The limb offset table has one entry per limb: a single u32 "header
@@ -55,13 +48,12 @@ table itself ends at byte 152, and its one limb's header offset is
 throughout development here as a cross-check that each field was being
 read at the right size/position.
 
-Validated against all 3,764 used entries in this project's test copy of
-``sappear.flx``.  Most entries use the hierarchical format above.  Sixteen
-start with a 169-byte (``0xA9``) header and use an alternate indexed-polygon
-layout; :meth:`U9Model.parse` recognises both.  The alternate face records can
-hold triangles or quads.  Quads are triangulated for the normal ``limbs`` API,
-while their original four-corner form remains available in
-``U9Model.indexed_faces``.
+Validated against all 3,764 used entries in six byte-identical retail archive
+copies.  The shipped runtime loader has only the hierarchical path above.
+Sixteen entries instead contain a coherent indexed-polygon representation
+that the runtime loader does not dispatch to; normal parsing rejects those
+records. :meth:`U9Model.parse_forensic` retains the earlier Titan decoder for
+explicit inspection of that non-runtime data.
 """
 
 from __future__ import annotations
@@ -88,7 +80,8 @@ Quat = tuple[float, float, float, float]  # (w, x, y, z)
 
 MODEL_HEADER_SIZE = 0x90
 LIMB_HEADER_SIZE = 0x30
-LOD_HEADER_SIZE = 0x7C
+MESH_HEADER_SIZE = 0x7C
+LOD_HEADER_SIZE = 4 + MESH_HEADER_SIZE
 FACE_RECORD_SIZE = 0x7C
 CORNER_RECORD_SIZE = 0x1C
 MATERIAL_RECORD_SIZE = 0x18
@@ -143,10 +136,28 @@ class U9Triangle:
     color: tuple[int, int, int, int]
     """RGBA, each 0-255. Real data: model 0's faces are all (200, 200, 200, 255)."""
     flags: int = 0
-    flags2: int = 0
+    secondary_flags: int = 0
     plane_w: float = 0.0
     raw_material: int = 0
-    collision: bytes = b"\x00" * 8
+    boundary_vertex_indices: tuple[int, int, int, int, int, int] = (0, 0, 0, 0, 0, 0)
+    surface_size_code: int = 0
+
+    @property
+    def attachment_kind(self) -> int:
+        """Connection-face marker kind stored in the low byte of the size cell."""
+        return self.surface_size_code & 0xFF
+
+    @property
+    def attachment_scale(self) -> int:
+        """Connection-face marker scale stored in the high byte of the size cell."""
+        return self.surface_size_code >> 8
+
+    @property
+    def collision(self) -> bytes:
+        """Compatibility view of the former opaque eight-byte tail."""
+        return bytes(self.boundary_vertex_indices) + struct.pack(
+            "<H", self.surface_size_code
+        )
 
 
 @dataclass(frozen=True)
@@ -170,10 +181,9 @@ class U9IndexedFace:
         return len(self.corners) == 4
 
 
-#: Bits of :attr:`U9Material.render_flags` (the u16 at material +0x04).
-#: Meanings come from u9.exe ``Renderer_SetMaterial`` (``0x00586550``), which
-#: bit-tests this field to build the runtime material, and by ``0x00585C90``,
-#: the pooled/deferred setter, which decodes two bits the first one ignores.
+#: Bits of :attr:`U9Material.render_flags` (the meaningful low half of the
+#: 32-bit storage cell at material +0x04). Retail material-building paths
+#: bit-test these values when constructing renderer state.
 #: Bits 1 and 12-15 are neither set in shipped data nor read by either.
 MATERIAL_FLAG_CHROMAKEY = 0x0001
 MATERIAL_FLAG_MODE_MASK = 0x000C
@@ -191,7 +201,7 @@ MATERIAL_FLAG_TRANSLUCENT = 0x0400
 #: sparklers, moongates and flame scrolls - emissive effects.
 MATERIAL_FLAG_ADDITIVE = 0x0800
 
-#: ``modified_alpha`` uses this as "no override"; any other value is a
+#: ``active_alpha`` uses this as "no override"; any other value is a
 #: per-material constant alpha, which the engine copies to the runtime
 #: material and applies to vertex colours before the backend sees them.
 MATERIAL_ALPHA_NONE = 0xFF
@@ -207,9 +217,9 @@ class U9Material:
     ``render_flags`` is the u16 at +0x04, previously read as
     ``subtexture_count``. It is a bit field, not a count: across all 3,748
     sappear entries (24,476 materials) it takes only 12 distinct values, the
-    largest is 2076, and 48% of the non-zero values exceed 16. The engine
-    confirms it - ``Renderer_SetMaterial`` at u9.exe ``0x00586550`` reads a u32
-    at +0x04 and bit-tests it to build the runtime material's flag word.
+    largest is 2076, and 48% of the non-zero values exceed 16. Retail code at
+    ``0x00586550`` confirms it by reading the storage cell at +0x04 and
+    bit-testing it to build the runtime material's flag word.
 
     Bits observed in shipped data, and what the engine does with each:
 
@@ -228,31 +238,14 @@ class U9Material:
     ==== ======== ==================================================
 
     Bit 10 never appears in sappear data, so model translucency comes only
-    from ``modified_alpha != 0xFF``, which the engine stores as a per-material
+    from ``active_alpha != 0xFF``, which the engine stores as a per-material
     constant alpha.
 
-    ``flags_02`` and ``flags_06`` are the u16 fields at +0x02 and +0x06,
-    exposed raw and **not safe to branch on**. Roughly 17.5% of each field
-    holds MSVC debug-heap fill - ``0xCDCD`` (uninitialised heap) and ``0xBAAD``
-    (``BAADF00D``) - so the tool that built ``sappear.flx`` wrote these structs
-    without clearing them, and much of what is stored is uninitialised memory
-    rather than data.
-
-    * ``flags_02``: 36.7% zero, 17.5% debug fill, 43.6% large arbitrary values,
-      and only 2.2% small values with no repeating family. Treat as noise
-      unless proven otherwise.
-    * ``flags_06``: carries a real signal under the noise. 26.1% of materials
-      hold a value below ``0x100``, dominated by a tight family - ``0x82``
-      (3557), ``0x8B`` (1431), ``0x84`` (514), ``0x83`` (136), plus ``0x9F``,
-      ``0x9C``, ``0x80``. That ``0x80``-``0x9F`` clustering is structured and
-      worth decoding.
-
-    ``render_flags`` by contrast shows no fill patterns at all and takes just
-    12 values, which is independent evidence that +0x04 is a field the writer
-    initialises and +0x02 / +0x06 partly are not.
-
-    ``Renderer_SetMaterial`` reads none of these two, consistent with them
-    being ignored by the renderer.
+    The u16 cells at +0x02 and +0x06 are alignment/storage padding, not flag
+    fields. They contain uninitialised allocator fill and other stale build-
+    process bytes in the shipped archive. They are retained losslessly through
+    the complete source record, exposed with explicit padding names, and must
+    never drive model or animation behavior.
     """
 
     texture_id: int
@@ -270,6 +263,26 @@ class U9Material:
     animation_type: int = 0
     playback_direction: int = 0
     animation_timer: int = 0
+
+    @property
+    def alignment_padding_02(self) -> int:
+        """Uninitialised alignment storage between the ID and flag cell."""
+        return self.flags_02
+
+    @property
+    def alignment_padding_06(self) -> int:
+        """Uninitialised upper half of the four-byte flag storage cell."""
+        return self.flags_06
+
+    @property
+    def render_flags_storage(self) -> int:
+        """Complete four-byte cell, including the uninitialised upper half."""
+        return self.render_flags | (self.flags_06 << 16)
+
+    @property
+    def active_alpha(self) -> int:
+        """Stored current alpha; ``0xFF`` means no per-material override."""
+        return self.modified_alpha
 
     @property
     def is_invisible(self) -> bool:
@@ -308,21 +321,57 @@ class U9SubmeshLod:
     sphere_radius: float
     min_bounds: Vec3
     max_bounds: Vec3
-    mount_vertices: tuple[Vec3, ...] = ()
-    mount_triangles: tuple[U9Triangle, ...] = ()
+    connection_vertices: tuple[Vec3, ...] = ()
+    connection_triangles: tuple[U9Triangle, ...] = ()
     mesh_size: int = 0
     flags: int = 0
-    unknown_08: int = 0
-    unknown_34: int = 0
-    unknown_38: int = 0
+    secondary_flags: int = 0
+    build_higher_detail_pointer: int = 0
+    build_lower_detail_pointer: int = 0
     max_face_count: int = 0
     face_offset: int = 0
-    mount_face_offset: int = 0
+    connection_face_offset: int = 0
     vertex_offset: int = 0
-    mount_vertex_offset: int = 0
+    connection_vertex_offset: int = 0
     material_offset: int = 0
     sorted_face_offsets: tuple[int, int, int, int] = (0, 0, 0, 0)
-    unknown_78: int = 0
+    sorted_face_indices: tuple[
+        tuple[int, ...], tuple[int, ...], tuple[int, ...], tuple[int, ...]
+    ] = ((), (), (), ())
+    reserved_words: tuple[int, int] = (0, 0)
+
+    # Compatibility aliases for Titan's earlier observational names.
+    @property
+    def mount_vertices(self) -> tuple[Vec3, ...]:
+        return self.connection_vertices
+
+    @property
+    def mount_triangles(self) -> tuple[U9Triangle, ...]:
+        return self.connection_triangles
+
+    @property
+    def unknown_08(self) -> int:
+        return self.secondary_flags
+
+    @property
+    def unknown_34(self) -> int:
+        return self.build_higher_detail_pointer
+
+    @property
+    def unknown_38(self) -> int:
+        return self.build_lower_detail_pointer
+
+    @property
+    def mount_face_offset(self) -> int:
+        return self.connection_face_offset
+
+    @property
+    def mount_vertex_offset(self) -> int:
+        return self.connection_vertex_offset
+
+    @property
+    def unknown_78(self) -> int:
+        return self.reserved_words[0]
 
 
 @dataclass(frozen=True)
@@ -341,10 +390,13 @@ class U9Limb:
     ``position``/``rotation``/``scale`` are this model's only stored
     transform for the limb -- a static "bind pose", not necessarily the
     pose the creature is meant to be seen in during real gameplay.
-    Real animation (``static/anim.flx``) would apply its own per-frame
-    transform on top of/instead of this one. :mod:`titan.u9.animation`
-    parses those tracks, but model-to-clip selection and animated export
-    are not implemented. Even when applied, animation only repositions
+    Real animation (``static/anim.flx``) applies runtime-selected per-frame
+    transforms. :mod:`titan.u9.animation_pose` can sample and apply an
+    explicitly selected clip, but automatic model/state-to-clip selection and
+    layered controller composition are not implemented.
+    :mod:`titan.u9.animated_model_bundle` exports the complete rigid hierarchy,
+    exact clip tracks, and a generated animated GLB. Even when applied,
+    animation only repositions
     limbs rigidly -- it can't change a triangle's UV mapping, so it's
     irrelevant to texture-placement oddities on a given sub-mesh, only
     to pose/motion.
@@ -381,8 +433,9 @@ class U9Model:
     lod_thresholds: tuple[int, int, int, int]
     center_of_mass: Vec3
     limbs: tuple[U9Limb, ...]
-    unknown_2c: float = 0.0
-    mass_or_volume: float = 0.0
+    collision_shape_code: int = 0
+    collision_shape_padding: bytes = b"\x00\x00"
+    volume: float = 0.0
     inertia_matrix: tuple[
         float, float, float, float, float, float, float, float, float
     ] = (
@@ -396,12 +449,47 @@ class U9Model:
         0.0,
         0.0,
     )
-    unknown_8c: float = 0.0
+    inertia_diagonal_only_code: int = 0
     record_format: str = "hierarchical"
+    runtime_compatible: bool = True
     indexed_faces: tuple[U9IndexedFace, ...] = ()
     alternate_header: bytes = b""
     trailing_data: bytes = b""
     _raw_data: bytes = field(default=b"", repr=False, compare=False)
+
+    @property
+    def collision_shape(self) -> str:
+        """Titan label for the stored collision-shape selector."""
+        return {0: "box", 1: "sphere", 2: "cylinder"}.get(
+            self.collision_shape_code, "unknown"
+        )
+
+    @property
+    def inertia_diagonal_only(self) -> bool | None:
+        """Decoded optimization hint, or ``None`` for a non-boolean stored code."""
+        if self.inertia_diagonal_only_code in (0, 1):
+            return bool(self.inertia_diagonal_only_code)
+        return None
+
+    # Compatibility views for names used by Titan's earlier partial decoder.
+    @property
+    def unknown_2c(self) -> float:
+        return struct.unpack(
+            "<f",
+            struct.pack(
+                "<h2s", self.collision_shape_code, self.collision_shape_padding
+            ),
+        )[0]
+
+    @property
+    def mass_or_volume(self) -> float:
+        return self.volume
+
+    @property
+    def unknown_8c(self) -> float:
+        return struct.unpack("<f", struct.pack("<i", self.inertia_diagonal_only_code))[
+            0
+        ]
 
     @classmethod
     def parse(cls, data: bytes, model_id: int = 0) -> U9Model:
@@ -409,7 +497,11 @@ class U9Model:
             len(data) >= 4
             and struct.unpack_from("<I", data, 0)[0] == INDEXED_HEADER_SIZE
         ):
-            return _parse_indexed_model(data, model_id)
+            raise U9ModelError(
+                "record uses the orphaned indexed-geometry layout; the retail "
+                "model loader has no dispatch for it (use parse_forensic for "
+                "explicit non-runtime inspection)"
+            )
         if len(data) < MODEL_HEADER_SIZE:
             raise U9ModelError(
                 f"data too small for a model header: {len(data)} bytes (need {MODEL_HEADER_SIZE})"
@@ -424,14 +516,15 @@ class U9Model:
         )
         sphere_center = struct.unpack_from("<3f", data, 0x1C)
         sphere_radius = struct.unpack_from("<f", data, 0x28)[0]
-        unknown_2c = struct.unpack_from("<f", data, 0x2C)[0]
+        collision_shape_code = struct.unpack_from("<h", data, 0x2C)[0]
+        collision_shape_padding = data[0x2E:0x30]
         min_bounds = struct.unpack_from("<3f", data, 0x30)
         max_bounds = struct.unpack_from("<3f", data, 0x3C)
-        lod_thresholds = struct.unpack_from("<4I", data, 0x48)
+        lod_thresholds = struct.unpack_from("<4i", data, 0x48)
         center_of_mass = struct.unpack_from("<3f", data, 0x58)
-        mass_or_volume = struct.unpack_from("<f", data, 0x64)[0]
+        volume = struct.unpack_from("<f", data, 0x64)[0]
         inertia_matrix = struct.unpack_from("<9f", data, 0x68)
-        unknown_8c = struct.unpack_from("<f", data, 0x8C)[0]
+        inertia_diagonal_only_code = struct.unpack_from("<i", data, 0x8C)[0]
 
         try:
             offset = MODEL_HEADER_SIZE
@@ -481,12 +574,28 @@ class U9Model:
             lod_thresholds=lod_thresholds,
             center_of_mass=center_of_mass,
             limbs=tuple(limbs),
-            unknown_2c=unknown_2c,
-            mass_or_volume=mass_or_volume,
+            collision_shape_code=collision_shape_code,
+            collision_shape_padding=collision_shape_padding,
+            volume=volume,
             inertia_matrix=inertia_matrix,
-            unknown_8c=unknown_8c,
+            inertia_diagonal_only_code=inertia_diagonal_only_code,
             _raw_data=data,
         )
+
+    @classmethod
+    def parse_forensic(cls, data: bytes, model_id: int = 0) -> U9Model:
+        """Parse runtime models plus Titan's non-runtime indexed recovery.
+
+        This entry point is deliberately explicit: the retail model loader has
+        no branch for the indexed representation, so callers must not treat
+        the recovered geometry as game-recognized model data.
+        """
+        if (
+            len(data) >= 4
+            and struct.unpack_from("<I", data, 0)[0] == INDEXED_HEADER_SIZE
+        ):
+            return _parse_indexed_model(data, model_id)
+        return cls.parse(data, model_id)
 
     def to_bytes(self) -> bytes:
         """Return the exact source record bytes, including fields not decoded yet."""
@@ -504,69 +613,90 @@ def _parse_lod(data: bytes, start: int, lod_index: int) -> U9SubmeshLod | None:
         return None
     _require_range(data, start, LOD_HEADER_SIZE, f"LOD {lod_index} header")
     _require_range(data, start, mesh_size + 4, f"LOD {lod_index} declared mesh")
+    record_end = start + mesh_size + 4
 
-    flags, unknown_08 = struct.unpack_from("<2I", data, start + 0x04)
+    flags, secondary_flags = struct.unpack_from("<2I", data, start + 0x04)
     sphere_center = struct.unpack_from("<3f", data, start + 0x0C)
     sphere_radius = struct.unpack_from("<f", data, start + 0x18)[0]
     min_bounds = struct.unpack_from("<3f", data, start + 0x1C)
     max_bounds = struct.unpack_from("<3f", data, start + 0x28)
-    unknown_34, unknown_38 = struct.unpack_from("<2I", data, start + 0x34)
+    build_higher_detail_pointer, build_lower_detail_pointer = struct.unpack_from(
+        "<2I", data, start + 0x34
+    )
     (
         face_count,
-        mount_face_count,
+        connection_face_count,
         vertex_count,
-        mount_vertex_count,
+        connection_vertex_count,
         max_face_count,
         material_count,
     ) = struct.unpack_from("<6I", data, start + 0x3C)
-    face_off, mount_face_off, vertex_off, mount_vertex_off, material_off = (
-        struct.unpack_from("<5I", data, start + 0x54)
-    )
+    (
+        face_off,
+        connection_face_off,
+        vertex_off,
+        connection_vertex_off,
+        material_off,
+    ) = struct.unpack_from("<5I", data, start + 0x54)
     sorted_face_offsets = struct.unpack_from("<4I", data, start + 0x68)
-    unknown_78 = struct.unpack_from("<I", data, start + 0x78)[0]
+    reserved_words = struct.unpack_from("<2I", data, start + 0x78)
 
     faces_start = _array_start(
-        data, start, face_off, face_count, FACE_RECORD_SIZE, "faces"
+        data, start, face_off, face_count, FACE_RECORD_SIZE, "faces", record_end
     )
     raw_faces = tuple(
         _parse_face(data, faces_start + i * FACE_RECORD_SIZE) for i in range(face_count)
     )
 
     verts_start = _array_start(
-        data, start, vertex_off, vertex_count, VERTEX_RECORD_SIZE, "vertices"
+        data,
+        start,
+        vertex_off,
+        vertex_count,
+        VERTEX_RECORD_SIZE,
+        "vertices",
+        record_end,
     )
     vertices = tuple(
         struct.unpack_from("<3f", data, verts_start + i * VERTEX_RECORD_SIZE)
         for i in range(vertex_count)
     )
 
-    mount_faces_start = _array_start(
+    connection_faces_start = _array_start(
         data,
         start,
-        mount_face_off,
-        mount_face_count,
+        connection_face_off,
+        connection_face_count,
         FACE_RECORD_SIZE,
-        "mount faces",
+        "connection faces",
+        record_end,
     )
-    mount_faces = tuple(
-        _parse_face(data, mount_faces_start + i * FACE_RECORD_SIZE)
-        for i in range(mount_face_count)
+    connection_faces = tuple(
+        _parse_face(data, connection_faces_start + i * FACE_RECORD_SIZE)
+        for i in range(connection_face_count)
     )
-    mount_verts_start = _array_start(
+    connection_verts_start = _array_start(
         data,
         start,
-        mount_vertex_off,
-        mount_vertex_count,
+        connection_vertex_off,
+        connection_vertex_count,
         VERTEX_RECORD_SIZE,
-        "mount vertices",
+        "connection vertices",
+        record_end,
     )
-    mount_vertices = tuple(
-        struct.unpack_from("<3f", data, mount_verts_start + i * VERTEX_RECORD_SIZE)
-        for i in range(mount_vertex_count)
+    connection_vertices = tuple(
+        struct.unpack_from("<3f", data, connection_verts_start + i * VERTEX_RECORD_SIZE)
+        for i in range(connection_vertex_count)
     )
 
     mats_start = _array_start(
-        data, start, material_off, material_count, MATERIAL_RECORD_SIZE, "materials"
+        data,
+        start,
+        material_off,
+        material_count,
+        MATERIAL_RECORD_SIZE,
+        "materials",
+        record_end,
     )
     materials = tuple(
         _parse_material(data, mats_start + i * MATERIAL_RECORD_SIZE)
@@ -597,11 +727,19 @@ def _parse_lod(data: bytes, start: int, lod_index: int) -> U9SubmeshLod | None:
         raise U9ModelError(f"face {missing} is not covered by any material")
 
     _validate_face_indices(raw_faces, len(vertices), "face")
-    _validate_face_indices(mount_faces, len(mount_vertices), "mount face")
+    _validate_face_indices(
+        connection_faces, len(connection_vertices), "connection face"
+    )
 
     triangles = tuple(
         _with_material(raw_face, face_material_index[i])
         for i, raw_face in enumerate(raw_faces)
+    )
+    sorted_face_indices = tuple(
+        _parse_sorted_face_indices(
+            data, start, relative_offset, face_count, direction, record_end
+        )
+        for direction, relative_offset in enumerate(sorted_face_offsets)
     )
 
     return U9SubmeshLod(
@@ -613,43 +751,46 @@ def _parse_lod(data: bytes, start: int, lod_index: int) -> U9SubmeshLod | None:
         sphere_radius=sphere_radius,
         min_bounds=min_bounds,
         max_bounds=max_bounds,
-        mount_vertices=mount_vertices,
-        mount_triangles=mount_faces,
+        connection_vertices=connection_vertices,
+        connection_triangles=connection_faces,
         mesh_size=mesh_size,
         flags=flags,
-        unknown_08=unknown_08,
-        unknown_34=unknown_34,
-        unknown_38=unknown_38,
+        secondary_flags=secondary_flags,
+        build_higher_detail_pointer=build_higher_detail_pointer,
+        build_lower_detail_pointer=build_lower_detail_pointer,
         max_face_count=max_face_count,
         face_offset=face_off,
-        mount_face_offset=mount_face_off,
+        connection_face_offset=connection_face_off,
         vertex_offset=vertex_off,
-        mount_vertex_offset=mount_vertex_off,
+        connection_vertex_offset=connection_vertex_off,
         material_offset=material_off,
         sorted_face_offsets=sorted_face_offsets,
-        unknown_78=unknown_78,
+        sorted_face_indices=sorted_face_indices,  # type: ignore[arg-type]
+        reserved_words=reserved_words,
     )
 
 
 def _parse_face(data: bytes, pos: int) -> U9Triangle:
     _require_range(data, pos, FACE_RECORD_SIZE, "face record")
     corners = tuple(_parse_corner(data, pos + i * CORNER_RECORD_SIZE) for i in range(3))
-    flags, flags2 = struct.unpack_from("<2I", data, pos + 0x54)
+    flags, secondary_flags = struct.unpack_from("<2I", data, pos + 0x54)
     normal = struct.unpack_from("<3f", data, pos + 0x5C)
     plane_w = struct.unpack_from("<f", data, pos + 0x68)[0]
     raw_material = struct.unpack_from("<I", data, pos + 0x6C)[0]
     color = struct.unpack_from("<4B", data, pos + 0x70)
-    collision = data[pos + 0x74 : pos + 0x7C]
+    boundary_vertex_indices = struct.unpack_from("<6B", data, pos + 0x74)
+    surface_size_code = struct.unpack_from("<H", data, pos + 0x7A)[0]
     return U9Triangle(
         corners=corners,  # type: ignore[arg-type]
         material_index=-1,
         face_normal=normal,
         color=color,
         flags=flags,
-        flags2=flags2,
+        secondary_flags=secondary_flags,
         plane_w=plane_w,
         raw_material=raw_material,
-        collision=collision,
+        boundary_vertex_indices=boundary_vertex_indices,
+        surface_size_code=surface_size_code,
     )
 
 
@@ -710,16 +851,48 @@ def _array_start(
     count: int,
     item_size: int,
     label: str,
+    record_end: int | None = None,
 ) -> int:
     if count == 0:
         return record_start
-    if relative_offset < LOD_HEADER_SIZE:
+    if relative_offset < MESH_HEADER_SIZE:
         raise U9ModelError(
             f"{label} offset {relative_offset:#x} points inside the LOD header"
         )
     result = record_start + relative_offset + 4
     _require_range(data, result, count * item_size, label)
+    if record_end is not None and result + count * item_size > record_end:
+        raise U9ModelError(f"{label} extends beyond its declared mesh record")
     return result
+
+
+def _parse_sorted_face_indices(
+    data: bytes,
+    record_start: int,
+    relative_offset: int,
+    face_count: int,
+    direction: int,
+    record_end: int,
+) -> tuple[int, ...]:
+    if face_count == 0:
+        return ()
+    label = f"sorted face list {direction}"
+    pos = _array_start(
+        data,
+        record_start,
+        relative_offset,
+        face_count + 2,
+        2,
+        label,
+        record_end,
+    )
+    stored = struct.unpack_from(f"<{face_count + 2}h", data, pos)
+    if stored[0] != -1 or stored[-1] != -1:
+        raise U9ModelError(f"{label} is not bounded by -1 sentinels")
+    indices = stored[1:-1]
+    if sorted(indices) != list(range(face_count)):
+        raise U9ModelError(f"{label} does not contain each render face exactly once")
+    return indices
 
 
 def _with_material(triangle: U9Triangle, material_index: int) -> U9Triangle:
@@ -729,10 +902,11 @@ def _with_material(triangle: U9Triangle, material_index: int) -> U9Triangle:
         face_normal=triangle.face_normal,
         color=triangle.color,
         flags=triangle.flags,
-        flags2=triangle.flags2,
+        secondary_flags=triangle.secondary_flags,
         plane_w=triangle.plane_w,
         raw_material=triangle.raw_material,
-        collision=triangle.collision,
+        boundary_vertex_indices=triangle.boundary_vertex_indices,
+        surface_size_code=triangle.surface_size_code,
     )
 
 
@@ -878,7 +1052,8 @@ def _parse_indexed_model(data: bytes, model_id: int) -> U9Model:
         lod_thresholds=(0, 0, 0, 0),
         center_of_mass=(0.0, 0.0, 0.0),
         limbs=(limb,),
-        record_format="indexed",
+        record_format="forensic_indexed",
+        runtime_compatible=False,
         indexed_faces=indexed_faces,
         alternate_header=data[:INDEXED_HEADER_SIZE],
         trailing_data=data[trailing_start:],
@@ -974,7 +1149,8 @@ def _triangulate_indexed_face(
             flags=face.flags,
             plane_w=face.plane_w,
             raw_material=face.raw_material,
-            collision=face.collision,
+            boundary_vertex_indices=tuple(face.collision[:6]),  # type: ignore[arg-type]
+            surface_size_code=struct.unpack("<H", face.collision[6:])[0],
         )
         for corners in corner_sets
     )

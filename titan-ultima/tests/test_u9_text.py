@@ -161,5 +161,44 @@ class TextSearchTests(unittest.TestCase):
         self.assertEqual(self.text.search("ConvoLib"), [])
 
 
+class TextRebuildTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.text = U9TextArchive(
+            _archive(
+                {
+                    0: _marker(CONVO),
+                    1: _string("Hello."),
+                    2: _string("Farewell."),
+                    5: _string("Unused gap before me."),
+                },
+                count=8,
+            )
+        )
+
+    def test_replaces_text_and_keeps_layout(self) -> None:
+        data = self.text.rebuilt({1: "Bonjour, ça va ?", 5: "Déjà vu."})
+        rebuilt = U9TextArchive(U9FlxArchive(data))
+        self.assertEqual(rebuilt.num_entries, 8)
+        self.assertEqual(rebuilt.used_indices(), [0, 1, 2, 5])
+        texts = [entry.text for entry in rebuilt.entries()]
+        self.assertEqual(
+            texts, [CONVO + MARKER_SUFFIX, "Bonjour, ça va ?", "Farewell.", "Déjà vu."]
+        )
+        self.assertEqual(U9FlxArchive(data).read_entry(1), _string("Bonjour, ça va ?"))
+
+    def test_rejects_changes_that_break_structure(self) -> None:
+        for replacements, message in (
+            ({0: "not a marker"}, "source-file marker"),
+            ({1: "fake" + MARKER_SUFFIX}, "may not end with"),
+            ({3: "x"}, "not a used entry"),
+            ({1: "a\x00b"}, "NUL"),
+        ):
+            with (
+                self.subTest(message=message),
+                self.assertRaisesRegex(U9TextError, message),
+            ):
+                self.text.rebuilt(replacements)
+
+
 if __name__ == "__main__":
     unittest.main()

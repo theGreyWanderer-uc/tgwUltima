@@ -1,8 +1,8 @@
-"""Canonical Ultima IX region coordinates shared by map renderers.
+"""Shared Ultima IX region coordinates used by map renderers.
 
 Ultima IX stores terrain, fixed objects, and runtime objects in related files,
-but their coordinate units are not presented the same way.  The legacy
-Forgotten World editor establishes the bridge used here:
+but their coordinate units are not presented the same way. Cross-format
+validation establishes the conversion used here:
 
 * one terrain point/cell spans 128 raw X/Y world units;
 * one terrain height unit spans 4 raw Z world units;
@@ -44,7 +44,7 @@ FIXED_CHUNK_TERRAIN_POINTS = REGION_CHUNK_TERRAIN_POINTS
 
 
 class U9RegionSceneError(Exception):
-    """Raised when region files cannot share one canonical U9 world space."""
+    """Raised when region files cannot share one consistent U9 world space."""
 
 
 @dataclass(frozen=True)
@@ -140,7 +140,7 @@ class U9RegionSceneDiagnostics:
 
 @dataclass(frozen=True)
 class U9RegionScene:
-    """Terrain plus optional fixed and nonfixed data in canonical U9 space."""
+    """Terrain plus optional fixed and nonfixed data in shared U9 space."""
 
     terrain: U9Terrain
     fixed: U9Fixed | None = None
@@ -200,7 +200,7 @@ class U9RegionScene:
         )
 
     def terrain_cell(self, x: int, y: int) -> U9TerrainCell:
-        """Return one cell; its east/south edge wraps like the legacy editor."""
+        """Return one cell, wrapping its east and south edges at the map boundary."""
         if not (0 <= x < self.terrain.width and 0 <= y < self.terrain.height):
             raise U9RegionSceneError(
                 f"terrain cell ({x}, {y}) out of range for "
