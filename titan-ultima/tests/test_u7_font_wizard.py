@@ -2,13 +2,13 @@
 
 import struct
 import io
+import re
 from functools import partial
 from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
 import pytest
-from click.utils import strip_ansi
 from typer.testing import CliRunner
 
 from titan.fonts import wizard
@@ -579,6 +579,6 @@ def test_font_scanner_finds_uppercase_vga(tmp_path):
 def test_help_lists_new_options():
     result = CliRunner().invoke(u7_app, ["font-create", "--help"])
     assert result.exit_code == 0
-    help_text = strip_ansi(result.output)
+    help_text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", result.output)
     for option in ("--force", "--allow-cycling", "--base-archive"):
         assert option in help_text

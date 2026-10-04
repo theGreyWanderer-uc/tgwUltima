@@ -1,13 +1,13 @@
 """Exercise the PNG wizard through conversion, approval and archive insertion."""
 
 import struct
+import re
 from functools import partial
 from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
 import pytest
-from click.utils import strip_ansi
 from PIL import Image
 from typer.testing import CliRunner
 
@@ -517,7 +517,7 @@ def test_interactive_full_flat_range_allows_explicit_replacement(tmp_path, artwo
 def test_help_describes_workflow_and_recipe_options():
     result = CliRunner().invoke(u7_app, ["shape-create", "--help"])
     assert result.exit_code == 0
-    help_text = strip_ansi(result.output)
+    help_text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", result.output)
     for option in (
         "--config",
         "--preview",
