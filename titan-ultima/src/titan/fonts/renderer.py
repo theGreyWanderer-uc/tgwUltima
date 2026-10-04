@@ -49,7 +49,7 @@ def find_pixel_size_for_cap(font_path: str, target_ink_h: int) -> int:
     """
     face = freetype.Face(str(font_path))
     test_chars = ["A", "M", "H", "X"]
-    for px in range(4, 65):
+    for px in range(1, max(65, target_ink_h * 3 + 1)):
         face.set_pixel_sizes(0, px)
         for ch in test_chars:
             try:
@@ -71,6 +71,7 @@ def render_glyph_mono(
     face: freetype.Face,
     char: str,
     cell_height: int,
+    ink_height: int | None = None,
 ) -> np.ndarray | None:
     """Render a single glyph as a hinted mono bitmap placed on a canvas.
 
@@ -78,7 +79,7 @@ def render_glyph_mono(
     are 1 and empty pixels are 0, or ``None`` if the glyph is empty.
     The canvas width includes a 1-pixel right margin.
     """
-    ink_height = cell_height - 1
+    ink_height = cell_height - 1 if ink_height is None else ink_height
     try:
         face.load_char(
             char,
@@ -99,6 +100,8 @@ def render_glyph_mono(
     if y_off < 0:
         bits = bits[-y_off:]
         y_off = 0
+    if y_off >= cell_height:
+        return None
 
     x_off = max(bl, 0)
     glyph_h, glyph_w = bits.shape
@@ -108,7 +111,7 @@ def render_glyph_mono(
     x_end = min(x_off + glyph_w, canvas_w - 1)
     copy_h = y_end - y_off
     copy_w = x_end - x_off
-    canvas[y_off:y_off + copy_h, x_off:x_off + copy_w] = bits[:copy_h, :copy_w]
+    canvas[y_off : y_off + copy_h, x_off : x_off + copy_w] = bits[:copy_h, :copy_w]
 
     if not np.any(canvas):
         return None
@@ -119,13 +122,14 @@ def render_glyph_grayscale(
     face: freetype.Face,
     char: str,
     cell_height: int,
+    ink_height: int | None = None,
 ) -> np.ndarray | None:
     """Render a single glyph as an 8-bit grayscale bitmap.
 
     Returns an (cell_height, canvas_width) uint8 array where values
     range from 0 (empty) to 255 (full ink), or ``None`` if empty.
     """
-    ink_height = cell_height - 1
+    ink_height = cell_height - 1 if ink_height is None else ink_height
     try:
         face.load_char(char, freetype.FT_LOAD_RENDER)
     except Exception:
@@ -139,12 +143,17 @@ def render_glyph_grayscale(
         return None
 
     # Grayscale buffer is already a flat uint8 array
-    buf = np.array(bmp.buffer, dtype=np.uint8).reshape((bmp.rows, bmp.width))
+    buf = np.array(bmp.buffer, dtype=np.uint8).reshape((bmp.rows, abs(bmp.pitch)))
+    if bmp.pitch < 0:
+        buf = buf[::-1]
+    buf = buf[:, : bmp.width]
 
     y_off = ink_height - bt
     if y_off < 0:
         buf = buf[-y_off:]
         y_off = 0
+    if y_off >= cell_height:
+        return None
 
     x_off = max(bl, 0)
     glyph_h, glyph_w = buf.shape
@@ -154,7 +163,7 @@ def render_glyph_grayscale(
     x_end = min(x_off + glyph_w, canvas_w - 1)
     copy_h = y_end - y_off
     copy_w = x_end - x_off
-    canvas[y_off:y_off + copy_h, x_off:x_off + copy_w] = buf[:copy_h, :copy_w]
+    canvas[y_off : y_off + copy_h, x_off : x_off + copy_w] = buf[:copy_h, :copy_w]
 
     if not np.any(canvas):
         return None
@@ -165,13 +174,15 @@ def render_all_glyphs_mono(
     font_path: str,
     cell_height: int,
     code_range: range | None = None,
+    *,
+    ink_height: int | None = None,
 ) -> tuple[dict[int, np.ndarray], int]:
     """Render all glyphs from a TTF as mono bitmaps.
 
     Returns ``(glyphs, pixel_size)`` where *glyphs* maps codepoint →
     (cell_height × width) uint8 array (0/1).
     """
-    ink_h = cell_height - 1
+    ink_h = cell_height - 1 if ink_height is None else ink_height
     px_size = find_pixel_size_for_cap(font_path, ink_h)
     face = freetype.Face(str(font_path))
     face.set_pixel_sizes(0, px_size)
@@ -181,7 +192,7 @@ def render_all_glyphs_mono(
 
     glyphs: dict[int, np.ndarray] = {}
     for code in code_range:
-        bmp = render_glyph_mono(face, chr(code), cell_height)
+        bmp = render_glyph_mono(face, chr(code), cell_height, ink_h)
         if bmp is not None:
             glyphs[code] = bmp
     return glyphs, px_size
@@ -191,13 +202,15 @@ def render_all_glyphs_grayscale(
     font_path: str,
     cell_height: int,
     code_range: range | None = None,
+    *,
+    ink_height: int | None = None,
 ) -> tuple[dict[int, np.ndarray], int]:
     """Render all glyphs from a TTF as grayscale bitmaps.
 
     Returns ``(glyphs, pixel_size)`` where *glyphs* maps codepoint →
     (cell_height × width) uint8 array (0–255).
     """
-    ink_h = cell_height - 1
+    ink_h = cell_height - 1 if ink_height is None else ink_height
     px_size = find_pixel_size_for_cap(font_path, ink_h)
     face = freetype.Face(str(font_path))
     face.set_pixel_sizes(0, px_size)
@@ -207,7 +220,7 @@ def render_all_glyphs_grayscale(
 
     glyphs: dict[int, np.ndarray] = {}
     for code in code_range:
-        bmp = render_glyph_grayscale(face, chr(code), cell_height)
+        bmp = render_glyph_grayscale(face, chr(code), cell_height, ink_h)
         if bmp is not None:
             glyphs[code] = bmp
     return glyphs, px_size
@@ -217,17 +230,18 @@ def render_all_glyphs_grayscale(
 # Hollow gradient rendering (stroke outline + vertical gradient fill)
 # ---------------------------------------------------------------------------
 
+
 def _erode_binary(mask: np.ndarray, iterations: int = 1) -> np.ndarray:
     """Morphological erosion of a binary mask using a 4-connected kernel."""
     result = mask.copy()
     for _ in range(iterations):
-        padded = np.pad(result, 1, mode='constant', constant_values=0)
+        padded = np.pad(result, 1, mode="constant", constant_values=0)
         result = (
-            padded[1:-1, 1:-1] &
-            padded[0:-2, 1:-1] &
-            padded[2:,   1:-1] &
-            padded[1:-1, 0:-2] &
-            padded[1:-1, 2:]
+            padded[1:-1, 1:-1]
+            & padded[0:-2, 1:-1]
+            & padded[2:, 1:-1]
+            & padded[1:-1, 0:-2]
+            & padded[1:-1, 2:]
         )
     return result
 
@@ -261,13 +275,14 @@ def _render_hollow_gradient_glyph(
     gradient_indices: list[int],
     stroke_width: int = 1,
     stroke_index: int = 0,
+    ink_height: int | None = None,
 ) -> np.ndarray | None:
     """Render a single glyph with stroke outline and vertical gradient fill.
 
     Returns an (cell_height, width) uint8 array of palette indices
     (0xFF = transparent), or ``None`` if the glyph is empty.
     """
-    mono = render_glyph_mono(face, char, cell_height)
+    mono = render_glyph_mono(face, char, cell_height, ink_height)
     if mono is None:
         return None
 
@@ -300,6 +315,8 @@ def render_all_glyphs_hollow_gradient(
     stroke_width: int = 1,
     stroke_index: int = 0,
     code_range: range | None = None,
+    *,
+    ink_height: int | None = None,
 ) -> tuple[dict[int, np.ndarray], int]:
     """Render all glyphs with stroke outline and vertical gradient fill.
 
@@ -307,7 +324,7 @@ def render_all_glyphs_hollow_gradient(
     (cell_height × width) uint8 array of palette indices (0xFF =
     transparent).
     """
-    ink_h = cell_height - 1
+    ink_h = cell_height - 1 if ink_height is None else ink_height
     px_size = find_pixel_size_for_cap(font_path, ink_h)
     face = freetype.Face(str(font_path))
     face.set_pixel_sizes(0, px_size)
@@ -318,8 +335,13 @@ def render_all_glyphs_hollow_gradient(
     glyphs: dict[int, np.ndarray] = {}
     for code in code_range:
         bmp = _render_hollow_gradient_glyph(
-            face, chr(code), cell_height,
-            gradient_indices, stroke_width, stroke_index,
+            face,
+            chr(code),
+            cell_height,
+            gradient_indices,
+            stroke_width,
+            stroke_index,
+            ink_h,
         )
         if bmp is not None:
             glyphs[code] = bmp

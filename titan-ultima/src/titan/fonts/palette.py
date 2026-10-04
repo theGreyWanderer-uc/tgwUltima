@@ -10,14 +10,22 @@ correct ``PALETTES.FLX`` for a given target game (BG or SI).
 
 from __future__ import annotations
 
-__all__ = ["PaletteLUT", "resolve_game_palette",
-           "GRADIENT_PRESETS", "list_gradient_presets",
-           "get_gradient_preset", "resolve_gradient_to_indices"]
+__all__ = [
+    "PaletteLUT",
+    "resolve_game_palette",
+    "GRADIENT_PRESETS",
+    "list_gradient_presets",
+    "get_gradient_preset",
+    "resolve_gradient_to_indices",
+]
 
 import sys
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from titan.u7.palette import U7Palette
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -42,6 +50,13 @@ class PaletteLUT:
     _lut: list[int] = field(default_factory=list, repr=False)
 
     def __post_init__(self) -> None:
+        if type(self.transparent) is not int or self.transparent != 255:
+            raise ValueError("U7 font transparency must be palette index 255")
+        for lo, hi, idx in self.mapping:
+            if any(type(value) is not int for value in (lo, hi, idx)) or not (
+                0 <= lo <= hi <= 255 and 0 <= idx <= 255
+            ):
+                raise ValueError("LUT ranges and palette indices must be within 0-255")
         if self.mapping and not self._lut:
             self._build_lut()
 
@@ -84,8 +99,7 @@ class PaletteLUT:
 
         # Sort by range start
         mapping.sort(key=lambda t: t[0])
-        return cls(name=name, description=desc, transparent=trans,
-                   mapping=mapping)
+        return cls(name=name, description=desc, transparent=trans, mapping=mapping)
 
     @classmethod
     def mono(cls, ink_index: int = 0) -> PaletteLUT:
@@ -111,77 +125,98 @@ def _register(key: str, lut: PaletteLUT) -> None:
     _BUILTIN_LUTS[key] = lut
 
 
-_register("black_ink", PaletteLUT(
-    name="Black ink",
-    description="Black ink on transparent — Fonts 2, 4",
-    mapping=[(0, 0, 255), (1, 255, 0)],
-))
+_register(
+    "black_ink",
+    PaletteLUT(
+        name="Black ink",
+        description="Black ink on transparent — Fonts 2, 4",
+        mapping=[(0, 0, 255), (1, 255, 0)],
+    ),
+)
 
-_register("white_glow", PaletteLUT(
-    name="White/glow",
-    description="White glowing ink — Font 5",
-    mapping=[(0, 0, 255), (1, 255, 15)],
-))
+_register(
+    "white_glow",
+    PaletteLUT(
+        name="White/glow",
+        description="White glowing ink — Font 5",
+        mapping=[(0, 0, 255), (1, 255, 15)],
+    ),
+)
 
-_register("yellow_text", PaletteLUT(
-    name="Yellow text",
-    description="Yellow multi-shade — Fonts 0, 7",
-    mapping=[
-        (0, 15, 255),     # transparent
-        (16, 63, 148),    # light yellow
-        (64, 127, 146),   # medium yellow
-        (128, 191, 144),  # dark yellow
-        (192, 255, 142),  # full yellow
-    ],
-))
+_register(
+    "yellow_text",
+    PaletteLUT(
+        name="Yellow text",
+        description="Yellow multi-shade — Fonts 0, 7",
+        mapping=[
+            (0, 15, 255),  # transparent
+            (16, 63, 148),  # light yellow
+            (64, 127, 146),  # medium yellow
+            (128, 191, 144),  # dark yellow
+            (192, 255, 142),  # full yellow
+        ],
+    ),
+)
 
-_register("red_text", PaletteLUT(
-    name="Red text",
-    description="Red multi-shade — Font 7 variant",
-    mapping=[
-        (0, 15, 255),
-        (16, 63, 56),     # light red
-        (64, 127, 54),    # medium red
-        (128, 191, 52),   # dark red
-        (192, 255, 50),   # full red
-    ],
-))
+_register(
+    "red_text",
+    PaletteLUT(
+        name="Red text",
+        description="Red multi-shade — Font 7 variant",
+        mapping=[
+            (0, 15, 255),
+            (16, 63, 56),  # light red
+            (64, 127, 54),  # medium red
+            (128, 191, 52),  # dark red
+            (192, 255, 50),  # full red
+        ],
+    ),
+)
 
-_register("runic_multicolor", PaletteLUT(
-    name="Runic multi-color",
-    description="Multi-shade runic — Fonts 1, 3, 6",
-    mapping=[
-        (0, 15, 255),
-        (16, 63, 148),
-        (64, 127, 146),
-        (128, 191, 144),
-        (192, 255, 142),
-    ],
-))
+_register(
+    "runic_multicolor",
+    PaletteLUT(
+        name="Runic multi-color",
+        description="Multi-shade runic — Fonts 1, 3, 6",
+        mapping=[
+            (0, 15, 255),
+            (16, 63, 148),
+            (64, 127, 146),
+            (128, 191, 144),
+            (192, 255, 142),
+        ],
+    ),
+)
 
-_register("serpentine_metal", PaletteLUT(
-    name="Serpentine metal",
-    description="Metal-toned Ophidean — Fonts 8, 9",
-    mapping=[
-        (0, 15, 255),
-        (16, 63, 248),    # light silver
-        (64, 127, 246),   # medium silver
-        (128, 191, 244),  # dark silver
-        (192, 255, 242),  # full silver
-    ],
-))
+_register(
+    "serpentine_metal",
+    PaletteLUT(
+        name="Serpentine metal",
+        description="Metal-toned Ophidean — Fonts 8, 9",
+        mapping=[
+            (0, 15, 255),
+            (16, 63, 248),  # light silver
+            (64, 127, 246),  # medium silver
+            (128, 191, 244),  # dark silver
+            (192, 255, 242),  # full silver
+        ],
+    ),
+)
 
-_register("serpentine_gold", PaletteLUT(
-    name="Serpentine gold",
-    description="Gold-toned Ophidean — Font 10",
-    mapping=[
-        (0, 15, 255),
-        (16, 63, 148),    # light gold
-        (64, 127, 146),   # medium gold
-        (128, 191, 144),  # dark gold
-        (192, 255, 142),  # full gold
-    ],
-))
+_register(
+    "serpentine_gold",
+    PaletteLUT(
+        name="Serpentine gold",
+        description="Gold-toned Ophidean — Font 10",
+        mapping=[
+            (0, 15, 255),
+            (16, 63, 148),  # light gold
+            (64, 127, 146),  # medium gold
+            (128, 191, 144),  # dark gold
+            (192, 255, 142),  # full gold
+        ],
+    ),
+)
 
 
 def get_builtin_lut(key: str) -> PaletteLUT:
@@ -213,15 +248,16 @@ def list_builtin_luts() -> list[str]:
 # Presets are intentionally defined as hex colours (not palette indices)
 # so they work with any game palette.
 
+
 @dataclass
 class GradientPreset:
     """A named colour gradient for hollow font fill."""
 
-    key: str                  # lookup key (e.g. "warm_flame")
-    name: str                 # display name
-    colors: list[str]         # hex CSS colours, top→bottom
-    stroke: str = "#000000"   # hex stroke colour
-    source: str = ""          # credit / origin
+    key: str  # lookup key (e.g. "warm_flame")
+    name: str  # display name
+    colors: list[str]  # hex CSS colours, top→bottom
+    stroke: str = "#000000"  # hex stroke colour
+    source: str = ""  # credit / origin
 
     @property
     def description(self) -> str:
@@ -243,138 +279,160 @@ class GradientPreset:
 GRADIENT_PRESETS: dict[str, GradientPreset] = {}
 
 
-def _gp(key: str, name: str, colors: list[str], *,
-        stroke: str = "#000000", source: str = "") -> None:
+def _gp(
+    key: str, name: str, colors: list[str], *, stroke: str = "#000000", source: str = ""
+) -> None:
     GRADIENT_PRESETS[key] = GradientPreset(
-        key=key, name=name, colors=colors, stroke=stroke, source=source)
+        key=key, name=name, colors=colors, stroke=stroke, source=source
+    )
 
 
 # -- Warm / classic --
-_gp("warm_flame", "Warm Flame",
+_gp(
+    "warm_flame",
+    "Warm Flame",
     ["#ff9d3c", "#7d2c00"],
-    source="U7 SI palette (original Pagan font)")
+    source="U7 SI palette (original Pagan font)",
+)
 
-_gp("sunrise", "Sunrise",
-    ["#FF512F", "#F09819"],
-    source="uiGradients — Sunrise")
+_gp("sunrise", "Sunrise", ["#FF512F", "#F09819"], source="uiGradients — Sunrise")
 
-_gp("juicy_orange", "Juicy Orange",
+_gp(
+    "juicy_orange",
+    "Juicy Orange",
     ["#FF8008", "#FFC837"],
-    source="uiGradients — Juicy Orange")
+    source="uiGradients — Juicy Orange",
+)
 
-_gp("citrus_peel", "Citrus Peel",
+_gp(
+    "citrus_peel",
+    "Citrus Peel",
     ["#FDC830", "#F37335"],
-    source="uiGradients — Citrus Peel")
+    source="uiGradients — Citrus Peel",
+)
 
-_gp("koko_caramel", "Koko Caramel",
+_gp(
+    "koko_caramel",
+    "Koko Caramel",
     ["#D1913C", "#FFD194"],
-    source="uiGradients — Koko Caramel")
+    source="uiGradients — Koko Caramel",
+)
 
 # -- Red / blood --
-_gp("blood_red", "Blood Red",
-    ["#f85032", "#e73827"],
-    source="uiGradients — Blood Red")
+_gp("blood_red", "Blood Red", ["#f85032", "#e73827"], source="uiGradients — Blood Red")
 
-_gp("sin_city_red", "Sin City Red",
+_gp(
+    "sin_city_red",
+    "Sin City Red",
     ["#ED213A", "#93291E"],
-    source="uiGradients — Sin City Red")
+    source="uiGradients — Sin City Red",
+)
 
-_gp("firewatch", "Firewatch",
-    ["#cb2d3e", "#ef473a"],
-    source="uiGradients — Firewatch")
+_gp("firewatch", "Firewatch", ["#cb2d3e", "#ef473a"], source="uiGradients — Firewatch")
 
 # -- Gold / yellow --
-_gp("master_card", "Master Card",
+_gp(
+    "master_card",
+    "Master Card",
     ["#f46b45", "#eea849"],
-    source="uiGradients — Master Card")
+    source="uiGradients — Master Card",
+)
 
-_gp("sun_horizon", "Sun on the Horizon",
+_gp(
+    "sun_horizon",
+    "Sun on the Horizon",
     ["#fceabb", "#f8b500"],
-    source="uiGradients — Sun on the Horizon")
+    source="uiGradients — Sun on the Horizon",
+)
 
-_gp("learning_leading", "Learning and Leading",
+_gp(
+    "learning_leading",
+    "Learning and Leading",
     ["#F7971E", "#FFD200"],
-    source="uiGradients — Learning and Leading")
+    source="uiGradients — Learning and Leading",
+)
 
 # -- Purple / violet --
-_gp("electric_violet", "Electric Violet",
+_gp(
+    "electric_violet",
+    "Electric Violet",
     ["#4776E6", "#8E54E9"],
-    source="uiGradients — Electric Violet")
+    source="uiGradients — Electric Violet",
+)
 
-_gp("purple_love", "Purple Love",
+_gp(
+    "purple_love",
+    "Purple Love",
     ["#cc2b5e", "#753a88"],
-    source="uiGradients — Purple Love")
+    source="uiGradients — Purple Love",
+)
 
-_gp("deep_purple", "Deep Purple",
+_gp(
+    "deep_purple",
+    "Deep Purple",
     ["#673AB7", "#512DA8"],
-    source="uiGradients — Deep Purple")
+    source="uiGradients — Deep Purple",
+)
 
 # -- Blue / cool --
-_gp("reef", "Reef",
-    ["#00d2ff", "#3a7bd5"],
-    source="uiGradients — Reef")
+_gp("reef", "Reef", ["#00d2ff", "#3a7bd5"], source="uiGradients — Reef")
 
-_gp("royal", "Royal",
-    ["#141E30", "#243B55"],
-    source="uiGradients — Royal")
+_gp("royal", "Royal", ["#141E30", "#243B55"], source="uiGradients — Royal")
 
-_gp("midnight_city", "Midnight City",
+_gp(
+    "midnight_city",
+    "Midnight City",
     ["#232526", "#414345"],
-    source="uiGradients — Midnight City")
+    source="uiGradients — Midnight City",
+)
 
-_gp("frost", "Frost",
-    ["#000428", "#004e92"],
-    source="uiGradients — Frost")
+_gp("frost", "Frost", ["#000428", "#004e92"], source="uiGradients — Frost")
 
-_gp("cool_sky", "Cool Sky",
-    ["#2980B9", "#6DD5FA"],
-    source="uiGradients — Cool Sky")
+_gp("cool_sky", "Cool Sky", ["#2980B9", "#6DD5FA"], source="uiGradients — Cool Sky")
 
-_gp("sexy_blue", "Sexy Blue",
-    ["#2193b0", "#6dd5ed"],
-    source="uiGradients — Sexy Blue")
+_gp("sexy_blue", "Sexy Blue", ["#2193b0", "#6dd5ed"], source="uiGradients — Sexy Blue")
 
-_gp("cold_shivers", "Cold Shivers",
+_gp(
+    "cold_shivers",
+    "Cold Shivers",
     ["#83a4d4", "#b6fbff"],
-    source="uiGradients — Friday")
+    source="uiGradients — Friday",
+)
 
 # -- Green / nature --
-_gp("lush", "Lush",
-    ["#56ab2f", "#a8e063"],
-    source="uiGradients — Lush")
+_gp("lush", "Lush", ["#56ab2f", "#a8e063"], source="uiGradients — Lush")
 
-_gp("mojito", "Mojito",
-    ["#1D976C", "#93F9B9"],
-    source="uiGradients — Mojito")
+_gp("mojito", "Mojito", ["#1D976C", "#93F9B9"], source="uiGradients — Mojito")
 
-_gp("quepal", "Quepal",
-    ["#11998e", "#38ef7d"],
-    source="uiGradients — Quepal")
+_gp("quepal", "Quepal", ["#11998e", "#38ef7d"], source="uiGradients — Quepal")
 
 # -- Interesting / fantasy --
-_gp("kyoto", "Kyoto",
-    ["#c21500", "#ffc500"],
-    source="uiGradients — Kyoto")
+_gp("kyoto", "Kyoto", ["#c21500", "#ffc500"], source="uiGradients — Kyoto")
 
-_gp("witching_hour", "Witching Hour",
+_gp(
+    "witching_hour",
+    "Witching Hour",
     ["#c31432", "#240b36"],
-    source="uiGradients — Witching Hour")
+    source="uiGradients — Witching Hour",
+)
 
-_gp("stellar", "Stellar",
-    ["#7474BF", "#348AC7"],
-    source="uiGradients — Stellar")
+_gp("stellar", "Stellar", ["#7474BF", "#348AC7"], source="uiGradients — Stellar")
 
-_gp("flare", "Flare",
-    ["#f12711", "#f5af19"],
-    source="uiGradients — Flare")
+_gp("flare", "Flare", ["#f12711", "#f5af19"], source="uiGradients — Flare")
 
-_gp("crimson_tide", "Crimson Tide",
+_gp(
+    "crimson_tide",
+    "Crimson Tide",
     ["#642B73", "#C6426E"],
-    source="uiGradients — Crimson Tide")
+    source="uiGradients — Crimson Tide",
+)
 
-_gp("steel_gray", "Steel Gray",
+_gp(
+    "steel_gray",
+    "Steel Gray",
     ["#1F1C2C", "#928DAB"],
-    source="uiGradients — Steel Gray")
+    source="uiGradients — Steel Gray",
+)
 
 
 def list_gradient_presets() -> list[str]:
@@ -398,7 +456,9 @@ def _hex_to_rgb(h: str) -> tuple[int, int, int]:
 
 
 def _nearest_palette_index(
-    r: int, g: int, b: int,
+    r: int,
+    g: int,
+    b: int,
     colors: list[tuple[int, int, int]],
     exclude: set[int] | None = None,
 ) -> int:
@@ -420,6 +480,8 @@ def resolve_gradient_to_indices(
     preset: GradientPreset | list[str],
     palette: "U7Palette",
     steps: int = 6,
+    *,
+    allow_cycling: bool = False,
 ) -> tuple[list[int], int]:
     """Resolve gradient hex colours to palette indices.
 
@@ -428,6 +490,9 @@ def resolve_gradient_to_indices(
 
     Returns ``(gradient_indices, stroke_index)``.
     """
+    if type(steps) is not int or not 1 <= steps <= 256:
+        raise ValueError("Gradient steps must be within 1-256")
+    excluded = {255} if allow_cycling else set(range(224, 256))
     if isinstance(preset, GradientPreset):
         hex_colors = preset.colors
         stroke_hex = preset.stroke
@@ -455,12 +520,12 @@ def resolve_gradient_to_indices(
 
     # Map stroke
     sr, sg, sb = _hex_to_rgb(stroke_hex)
-    stroke_idx = _nearest_palette_index(sr, sg, sb, palette.colors, exclude={255})
+    stroke_idx = _nearest_palette_index(sr, sg, sb, palette.colors, exclude=excluded)
 
     # Map each gradient step to nearest palette colour
     gradient_indices = []
     for r, g, b in interpolated:
-        idx = _nearest_palette_index(r, g, b, palette.colors, exclude={255})
+        idx = _nearest_palette_index(r, g, b, palette.colors, exclude=excluded)
         gradient_indices.append(idx)
 
     return gradient_indices, stroke_idx
@@ -500,29 +565,33 @@ def resolve_game_palette(
 
     # 1. Explicit file
     if palette_file:
-        p = Path(palette_file)
-        if p.is_file():
-            return U7Palette.from_file(str(p), palette_index=palette_index)
+        p = Path(palette_file).expanduser()
+        if not p.is_file():
+            raise FileNotFoundError(f"Palette file not found: {p}")
+        return U7Palette.from_file(str(p), palette_index=palette_index)
 
     # 2. titan.toml config
     try:
         from titan._config import get_config
-        cfg = get_config()
+
+        cfg = get_config() or {}
         section_key = "u7bg" if game == "BG" else "u7si"
         section = cfg.get(section_key, {})
         paths = section.get("paths", {})
         pal_path = paths.get("palette")
         if pal_path:
-            p = Path(pal_path)
-            if p.is_file():
-                return U7Palette.from_file(str(p), palette_index=palette_index)
-            # Try relative to game base
+            p = Path(pal_path).expanduser()
             base = section.get("game", {}).get("base")
-            if base:
-                bp = Path(base) / "STATIC" / pal_path
-                if bp.is_file():
-                    return U7Palette.from_file(str(bp), palette_index=palette_index)
-    except Exception:
+            candidates = [p] if p.is_absolute() else []
+            if base and not p.is_absolute():
+                candidates += [Path(base) / p, Path(base) / "STATIC" / p.name]
+            candidates.append(p)
+            for candidate in candidates:
+                if candidate.is_file():
+                    return U7Palette.from_file(
+                        str(candidate), palette_index=palette_index
+                    )
+    except ImportError:
         pass
 
     # 3. Bundled u7data

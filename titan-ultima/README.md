@@ -139,7 +139,7 @@ place for command options, longer examples, and format notes.
 | Type data | Decode U8 `TYPEFLAG.DAT` | Decode U7 `TFA.DAT`, `SHPDIMS.DAT`, `WGTVOL.DAT`, `OCCLUDE.DAT` | `titan u7 typeflag-dump STATIC/ -f csv -o tfa_data.csv` | [U8 data commands](cli_reference.md#u8-data-inspection-commands), [U7 type flag commands](cli_reference.md#u7-type-flag-commands) |
 | Saves and runtime data | List/extract U8 save archives | Read Exult `.sav`; inspect loose `gamedat/`; dump NPCs, schedules, flags | `titan u7 save-info exult00bg.sav` | [U8 save commands](cli_reference.md#u8-save-archive-commands), [U7 save commands](cli_reference.md#u7-save-commands) |
 | Fonts | U8 font archives can be extracted as Flex data | U7 `font-create` wizard for Exult-compatible font shapes | `titan u7 font-create` | [U7 font-create](cli_reference.md#u7-font-create) |
-| World query | Not applicable | Interactive wizard to filter IFIX/IREG object placements by shape class, number, TFA flags, and area | `titan u7 world-query --game bg` | [U7 world-query](cli_reference.md#u7-world-query) |
+| World query | Not applicable | Repeatable IFIX/IREG searches with shape/frame, name, class, flags, area, mod inheritance, refinement and TOML recipes | `titan u7 world-query --game bg` | [U7 world-query](cli_reference.md#u7-world-query) |
 | Container data | Not applicable | Browse IREG container contents with full nesting; filter by container name, item name, or tile area; optional per-frame item names via Exult FLX | `titan u7 container-browse --game bg --container-name chest` | [U7 container-browse](cli_reference.md#u7-container-browse) |
 | Egg data | Not applicable | Query IREG egg trigger objects — type, usecode function, probability, location | `titan u7 egg-query --game bg --type usecode` | [U7 egg-query](cli_reference.md#u7-egg-query) |
 | Text and misc data | Gump layout, XOR credits, quotes, transform palettes | Global flags and selected runtime metadata | `titan u8 credits-decrypt ECREDITS.DAT` | [U8 data commands](cli_reference.md#u8-data-inspection-commands) |
@@ -320,6 +320,20 @@ reflections. Shapes with more than 32 real archive frames keep their stored
 dimensions. This matches current Exult behavior and fixes extended mod doors
 and other multi-frame objects without changing door-state or open-frame
 rules.
+
+U7 shape export, batch export, animation, cycle scans, frame reports and shape
+insertion share the same base-plus-patch resolution. Archives inside an Exult
+`mods/` or `patch/` tree discover their matching base VGA in the nearest game
+`STATIC/` directory, then fall back to the selected `--game` configuration.
+For copied or renamed patches, provide `--base-archive path/to/SHAPES.VGA`.
+Imports check occupancy in both archives and preserve the sparse patch on disk;
+overriding an inherited shape requires `--index N --replace`. A recognized patch
+whose base cannot be found fails with instructions to provide `--base-archive`.
+
+Root Flex updates preserve the detected U7/Exult or U8 format. Extraction
+manifests also preserve the format and header for reconstruction; fresh root
+`flex-create` outputs use U7 for `.VGA`, otherwise U8 unless
+`--archive-format u7` is supplied.
 
 ### U3 NES Sosaria Map Creation
 
@@ -564,7 +578,14 @@ base    = "<Ultima Online Classic Client install>"
 
 Notes:
 
-- `titan setup` writes this file for you.
+- `titan setup` writes this file for you. Use `titan --config <file> setup`
+  to write a different config file, including one in a new directory.
+- Rerunning setup keeps existing values and adds missing entries. Before
+  updating an existing file, it saves the original (including comments) as
+  `<file>.bak`, or `<file>.bak.1`, etc. if a backup already exists. The updated
+  TOML is reformatted; use `titan config --edit` to change existing settings.
+- Setup detects both language-folder and flat U8 layouts, and recognizes
+  Roman-numeral U7 folder names such as `Ultima VII - Complete`.
 - U8 relative paths expand from the configured U8 install and language folder,
   except `shapes` and `globs`, which are local working directories.
 - U7 `gamedat` should usually point at Exult's initialized runtime copy when
@@ -650,8 +671,17 @@ TITAN uses the following excellent open-source tools:
   official LUTs and NumPy implementation.
 
 The `font-create` wizard ships six TrueType fonts for Ultima script systems.
+It previews the mapped font, supports redoing font settings, and saves to a
+separate shape or Exult patch destination. TOML recipes support the same
+rendering options without prompts; see [font-create](cli_reference.md#u7-font-create).
 See [FONTS_CREDITS.md](FONTS_CREDITS.md) for full attribution and licensing
 details.
+
+For artwork, `titan u7 shape-create` guides PNG conversion through the U7 main
+palette, preview and redo, then saves a shape, a FLX/VGA archive, or both. It
+supports frame folders, optional comparison PNGs, flats, sparse mod patches,
+safe slot allocation and repeatable TOML recipes. See
+[shape-create](cli_reference.md#u7-shape-create).
 
 ---
 

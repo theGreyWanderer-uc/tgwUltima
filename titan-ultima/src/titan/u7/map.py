@@ -511,29 +511,10 @@ class U7MapRenderer:
             return selected
 
         base = U7FlexArchive.from_file(base_path)
-        record_count = max(len(selected.records), len(base.records))
-        effective_records: list[bytes] = []
-        base_fill_count = 0
-        for index in range(record_count):
-            selected_record = (
-                selected.records[index] if index < len(selected.records) else b""
-            )
-            base_record = base.records[index] if index < len(base.records) else b""
-            if selected_record:
-                effective_records.append(selected_record)
-            else:
-                effective_records.append(base_record)
-                if base_record:
-                    base_fill_count += 1
+        from titan.u7.shape_archive import overlay_shape_archives
 
-        if base_fill_count == 0:
-            return selected
-
-        effective = U7FlexArchive()
-        effective.title = selected.title
-        effective.magic2 = selected.magic2
-        effective.records = effective_records
-        self._shapes_vga_base_fill_count = base_fill_count
+        effective, filled = overlay_shape_archives(selected, base)
+        self._shapes_vga_base_fill_count = filled
         return effective
 
     # ------------------------------------------------------------------

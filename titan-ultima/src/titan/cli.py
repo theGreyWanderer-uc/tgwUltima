@@ -28,10 +28,11 @@ from __future__ import annotations
 __all__ = ["app", "main"]
 
 import os
+import re
 import sys
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Annotated, Optional
+from typing import Annotated, Literal, Optional
 
 import typer
 
@@ -211,6 +212,9 @@ def cmd_flex_extract(args: SimpleNamespace) -> int:
         mf.write(f"# Records: {len(archive.records)}\n")
         mf.write(f"# Comment: {archive.comment}\n")
         mf.write(f"# Unknown field: 0x{archive.unknown_field:08X}\n")
+        mf.write(f"# Format: {archive.archive_format}\n")
+        if archive._source_header is not None:
+            mf.write(f"# Header: {archive._source_header.hex()}\n")
         mf.write("#\n")
         mf.write("# Index | Size | Filename | Name\n")
         for i, record in enumerate(archive.records):
@@ -244,6 +248,16 @@ def cmd_flex_create(args: SimpleNamespace) -> int:
     else:
         archive = FlexArchive.from_directory(source_dir, comment)
 
+    requested_format = getattr(args, "archive_format", None)
+    if requested_format is None and not os.path.isfile(manifest_path):
+        requested_format = (
+            "u7" if output_file and Path(output_file).suffix.lower() == ".vga" else "u8"
+        )
+    if requested_format and requested_format != archive.archive_format:
+        archive.archive_format = requested_format
+        archive._source_header = None
+        archive.unknown_field = 0xCC if requested_format == "u7" else 1
+
     if output_file is None:
         # Default output name: directory name + .flx
         output_file = Path(source_dir).stem + ".flx"
@@ -260,6 +274,7 @@ def _create_from_manifest(
 
     original_comment = ""
     unknown_field = 1
+    format_recorded = False
     entries: list[tuple[int, int, str]] = []  # (index, size, filename)
 
     with open(manifest_path, "r") as mf:
@@ -272,6 +287,32 @@ def _create_from_manifest(
                     unknown_field = int(line.split(":")[-1].strip(), 0)
                 except ValueError:
                     pass
+            elif line.startswith("# Format:"):
+                format_recorded = True
+                archive_format = line.split(":", 1)[1].strip()
+                if archive_format not in {"u7", "u8"}:
+                    raise ValueError(
+                        f"Unsupported Flex manifest format: {archive_format}"
+                    )
+                archive.archive_format = "u7" if archive_format == "u7" else "u8"
+            elif line.startswith("# Header:"):
+                format_recorded = True
+                header = bytes.fromhex(line.split(":", 1)[1].strip())
+                if len(header) != FLEX_HEADER_SIZE or not FlexArchive._validate_header(
+                    header
+                ):
+                    raise ValueError("Invalid Flex manifest header")
+                archive._source_header = header
+                archive.archive_format = (
+                    "u7"
+                    if int.from_bytes(header[0x50:0x54], "little") == 0xFFFF1A00
+                    else "u8"
+                )
+            elif line.startswith("# Source:"):
+                # Legacy manifests lacked a format field. VGA is a U7 archive;
+                # new manifests also identify ambiguous .FLX inputs explicitly.
+                if Path(line.split(":", 1)[1].strip()).suffix.lower() == ".vga":
+                    archive.archive_format = "u7"
             elif line.startswith("#") or not line:
                 continue
             else:
@@ -282,8 +323,15 @@ def _create_from_manifest(
                     fname = parts[2].strip()
                     entries.append((idx, size, fname))
 
-    archive.comment = (
-        comment_override or original_comment or f"Rebuilt by TITAN v{TITAN_VERSION}"
+    if not format_recorded and (
+        unknown_field == 0xCC or (unknown_field & 0xFFFFFF00) == 0xCC00
+    ):
+        archive.archive_format = "u7"
+
+    archive.comment = comment_override or (
+        FlexArchive._decode_comment(archive._source_header)
+        if archive._source_header is not None
+        else original_comment or f"Rebuilt by TITAN v{TITAN_VERSION}"
     )
     archive.unknown_field = unknown_field
 
@@ -329,18 +377,11 @@ def cmd_flex_update(args: SimpleNamespace) -> int:
         print(f"ERROR: Invalid index: {index}", file=sys.stderr)
         return 1
 
-    # U7/Exult and U8/Pentagram Flex archives share table offsets but use
-    # different header dialects.  Parsing U7 through the generic U8 writer
-    # used to replace its required magic1 field at 0x50 with 0x00001A1A.
-    # Select the writer from the input header so updates preserve the archive
-    # dialect as well as its title/comment and version fields.
-    from titan.u7.flex import U7FlexArchive
-
-    archive: U7FlexArchive | FlexArchive
-    if U7FlexArchive.is_u7_flex(flex_path):
-        archive = U7FlexArchive.from_file(flex_path)
-    else:
-        archive = FlexArchive.from_file(flex_path)
+    try:
+        archive = FlexArchive.from_file(flex_path, strict=True)
+    except (OSError, ValueError) as error:
+        print(f"ERROR: Cannot update Flex archive: {error}", file=sys.stderr)
+        return 1
 
     if index >= len(archive.records):
         print(
@@ -453,7 +494,7 @@ def cmd_config(args: SimpleNamespace) -> int:
     import titan._config as _config_mod
 
     explicit = getattr(args, "config", None) or _config_mod.explicit_config_path
-    path = Path(explicit) if explicit else find_config()
+    path = Path(explicit).expanduser() if explicit else find_config()
 
     if getattr(args, "edit", False):
         if path is None:
@@ -484,7 +525,10 @@ def cmd_config(args: SimpleNamespace) -> int:
     config = load_config(str(path))
 
     def _print_kv_section(
-        title: str, section: dict, check_exists: bool = False
+        title: str,
+        section: dict,
+        check_exists: bool = False,
+        base: Optional[str] = None,
     ) -> None:
         if not section:
             return
@@ -492,7 +536,10 @@ def cmd_config(args: SimpleNamespace) -> int:
         print(title)
         for k, v in section.items():
             if check_exists:
-                exists = Path(str(v)).exists() if v else False
+                value_path = Path(str(v)).expanduser() if v else None
+                if value_path is not None and base and not value_path.is_absolute():
+                    value_path = Path(base).expanduser() / value_path
+                exists = value_path.exists() if value_path is not None else False
                 flag = "OK" if exists else "NOT FOUND"
                 print(f"  {k:<12} = {v!r}  [{flag}]")
             else:
@@ -511,7 +558,10 @@ def cmd_config(args: SimpleNamespace) -> int:
         _print_kv_section("[u8.paths]", u8.get("paths", {}), check_exists=True)
         _print_kv_section("[uw2.game]", uw2.get("game", {}), check_exists=True)
         _print_kv_section("[u7bg.game]", u7bg.get("game", {}))
-        _print_kv_section("[u7bg.paths]", u7bg.get("paths", {}), check_exists=True)
+        bg_base = u7bg.get("game", {}).get("base")
+        _print_kv_section(
+            "[u7bg.paths]", u7bg.get("paths", {}), check_exists=True, base=bg_base
+        )
         for mod_name, mod in u7bg.get("mods", {}).items():
             _print_kv_section(
                 f'[u7bg.mods."{mod_name}".paths]',
@@ -519,7 +569,10 @@ def cmd_config(args: SimpleNamespace) -> int:
                 check_exists=True,
             )
         _print_kv_section("[u7si.game]", u7si.get("game", {}))
-        _print_kv_section("[u7si.paths]", u7si.get("paths", {}), check_exists=True)
+        si_base = u7si.get("game", {}).get("base")
+        _print_kv_section(
+            "[u7si.paths]", u7si.get("paths", {}), check_exists=True, base=si_base
+        )
         for mod_name, mod in u7si.get("mods", {}).items():
             _print_kv_section(
                 f'[u7si.mods."{mod_name}".paths]',
@@ -538,9 +591,19 @@ def cmd_config(args: SimpleNamespace) -> int:
 
 def cmd_setup(args: SimpleNamespace) -> int:
     """Interactive first-time setup wizard \u2014 creates titan.toml."""
+    import titan._config as _config_mod
+
+    explicit = getattr(args, "config", None) or _config_mod.explicit_config_path
+    toml_path = Path(explicit).expanduser() if explicit else Path.cwd() / "titan.toml"
+    existing_config = load_config(str(toml_path)) if toml_path.is_file() else {}
+    existing_u8_game = existing_config.get("game", {})
     print("TITAN Setup Wizard")
     print("=" * 55)
     print("This will create titan.toml for Ultima 8, Ultima 7, and UO installs.\n")
+    if toml_path.exists():
+        print(f"Existing config: {toml_path}")
+        print("Existing values will be kept; setup adds missing entries.")
+        print("Use `titan config --edit` to change existing settings.\n")
 
     # -- Auto-detect standard install locations --------------------
     candidates: list[Path] = []
@@ -566,7 +629,7 @@ def cmd_setup(args: SimpleNamespace) -> int:
         lowered = name.lower()
         if "ultima" not in lowered:
             return False
-        return any(
+        return bool(re.search(r"ultima\s*vii(?!i)", lowered)) or any(
             token in lowered
             for token in ("ultima 7", "ultima7", "black gate", "serpent")
         )
@@ -699,7 +762,10 @@ def cmd_setup(args: SimpleNamespace) -> int:
 
     print("Searching for Ultima 8 installation...")
     for base in candidates:
-        if not base.exists():
+        if not base.is_dir():
+            continue
+        if (base / "FIXED.DAT").is_file():
+            detected_u8.append((base, ""))
             continue
         try:
             for item in base.iterdir():
@@ -720,11 +786,15 @@ def cmd_setup(args: SimpleNamespace) -> int:
     if not detected_base:
         print("  No standard installation found.")
 
-    default_base = str(detected_base) if detected_base else str(Path.cwd())
+    default_base = existing_u8_game.get("base") or (
+        str(detected_base) if detected_base else str(Path.cwd())
+    )
     base_input = input(f"\nGame base path [{default_base}]: ").strip()
     base = base_input or default_base
 
-    default_lang = detected_lang if detected_base else ""
+    default_lang = existing_u8_game.get(
+        "language", detected_lang if detected_base else ""
+    )
     lang_prompt = (
         f"Language folder (ENGLISH/FRENCH/GERMAN) "
         f"[{default_lang or 'leave empty for flat mode'}]: "
@@ -1187,9 +1257,18 @@ def cmd_setup(args: SimpleNamespace) -> int:
         if exult_si_flx:
             lines.append(f'si_flx   = "{exult_si_flx}"')
 
-    toml_path = Path.cwd() / "titan.toml"
-    toml_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(f"\n  Created: {toml_path.absolute()}")
+    from titan._setup_config import write_setup_config
+
+    try:
+        backup = write_setup_config(toml_path, "\n".join(lines) + "\n")
+    except (OSError, ValueError) as exc:
+        print(f"ERROR: Could not write setup config: {exc}", file=sys.stderr)
+        return 1
+    if backup is not None:
+        print(f"\n  Updated: {toml_path.absolute()} (existing values kept)")
+        print(f"  Backup:  {backup.absolute()}")
+    else:
+        print(f"\n  Created: {toml_path.absolute()}")
 
     # -- Optional extraction ---------------------------------------
     ans = input("\nExtract shapes/ and globs/ now? [Y/n] ").strip().lower()
@@ -1269,6 +1348,13 @@ def flex_create_cmd(
             "-C", "--comment", help="Comment string to embed in the Flex header"
         ),
     ] = "",
+    archive_format: Annotated[
+        Optional[Literal["u7", "u8"]],
+        typer.Option(
+            "--archive-format",
+            help="Fresh archive format (default: manifest, U7 for .VGA, otherwise U8)",
+        ),
+    ] = None,
 ) -> None:
     """Create a Flex archive from files in a directory."""
     raise SystemExit(
@@ -1277,6 +1363,7 @@ def flex_create_cmd(
                 directory=directory,
                 output=output,
                 comment=comment,
+                archive_format=archive_format,
             )
         )
     )

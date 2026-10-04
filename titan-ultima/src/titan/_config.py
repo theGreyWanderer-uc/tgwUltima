@@ -23,6 +23,7 @@ from typing import Optional
 
 try:
     import tomllib  # Python 3.11+
+
     _tomllib = tomllib
 except ImportError:
     try:
@@ -41,6 +42,7 @@ explicit_config_path: Optional[str] = None
 
 
 # --- public helpers ------------------------------------------------------
+
 
 def find_config() -> Optional[Path]:
     """Return the first titan.toml found in the standard search order."""
@@ -65,14 +67,30 @@ def _expand_u8_paths(data: dict) -> dict:
 
         paths = data.setdefault("paths", {})
 
-        for k in ("fixed", "palette", "typeflag", "gumpage", "xformpal",
-                  "ecredits", "quotes", "u8shapes", "u8fonts", "u8gumps"):
-            if (k in paths and isinstance(paths[k], str)
-                    and not Path(paths[k]).is_absolute()):
+        for k in (
+            "fixed",
+            "palette",
+            "typeflag",
+            "gumpage",
+            "xformpal",
+            "ecredits",
+            "quotes",
+            "u8shapes",
+            "u8fonts",
+            "u8gumps",
+        ):
+            if (
+                k in paths
+                and isinstance(paths[k], str)
+                and not Path(paths[k]).is_absolute()
+            ):
                 paths[k] = str(static_p / paths[k])
 
-        if ("nonfixed" in paths and isinstance(paths["nonfixed"], str)
-                and not Path(paths["nonfixed"]).is_absolute()):
+        if (
+            "nonfixed" in paths
+            and isinstance(paths["nonfixed"], str)
+            and not Path(paths["nonfixed"]).is_absolute()
+        ):
             paths["nonfixed"] = str(save_p / paths["nonfixed"])
 
     return data
@@ -92,8 +110,9 @@ def load_config(config_path: Optional[str] = None) -> dict:
         _config = {"paths": {}}
         return _config
 
+    path: Optional[Path]
     if config_path:
-        path = Path(config_path)
+        path = Path(config_path).expanduser()
     else:
         path = find_config()
 
@@ -114,12 +133,19 @@ def load_config(config_path: Optional[str] = None) -> dict:
     # [u8] → expand paths using U8 rules
     if "u8" in data:
         u8_section = data["u8"]
+        # Merge legacy fallback values before expanding the effective U8 paths.
+        for section in ("game", "paths"):
+            if section in data or section in u8_section:
+                u8_section[section] = {
+                    **data.get(section, {}),
+                    **u8_section.get(section, {}),
+                }
+        _expand_u8_paths(u8_section)
         # Promote u8.game/u8.paths to top-level game/paths for compat
         if "game" in u8_section:
-            data.setdefault("game", u8_section["game"])
+            data["game"] = u8_section["game"]
         if "paths" in u8_section:
-            data.setdefault("paths", u8_section["paths"])
-        _expand_u8_paths(data)
+            data["paths"] = u8_section["paths"]
 
     _config = data
     return _config

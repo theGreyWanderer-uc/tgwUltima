@@ -591,22 +591,26 @@ titan flex-extract E44.FLX      -o e44/         # → 0000.txt (transcript), 000
 Create a Flex archive from a directory of numbered files.
 
 ```
-titan flex-create <directory> [-o FILE] [-c COMMENT]
+titan flex-create <directory> [-o FILE] [-C COMMENT] [--archive-format u7|u8]
 ```
 
 | Argument | Description |
 |----------|-------------|
 | `directory` | Source directory containing `NNNN.*` files |
 | `-o FILE`, `--output FILE` | Output `.flx` path (default: `<dirname>.flx`) |
-| `-c TEXT`, `--comment TEXT` | Comment string to embed in the Flex header |
+| `-C TEXT`, `--comment TEXT` | Comment string to embed in the Flex header |
+| `--archive-format u7\|u8` | Explicit format for a new archive or intentional conversion |
 
 If a `_manifest.txt` is present (produced by `flex-extract`), it is used to
-reconstruct the exact original record layout including empty slots. Without a
-manifest, all files in the directory are packed in alphabetical order.
+reconstruct the original record layout including empty slots, archive format,
+version marker and reserved header fields. The original archive need not remain
+available. Without a manifest, numeric filename prefixes determine record slots;
+missing indices remain empty. New `.VGA` outputs default to U7; other fresh
+outputs default to U8 unless `--archive-format u7` is supplied.
 
 **Example**
 ```bash
-titan flex-create shapes/ -o MY_SHAPES.FLX -c "Rebuilt by TITAN"
+titan flex-create shapes/ -o MY_SHAPES.FLX -C "Rebuilt by TITAN"
 ```
 
 ---
@@ -614,6 +618,12 @@ titan flex-create shapes/ -o MY_SHAPES.FLX -c "Rebuilt by TITAN"
 #### `flex-update`
 
 Replace a single record inside an existing Flex archive.
+
+The source header determines whether Titan writes U7/Exult or U8 format.
+U7 version markers and reserved fields are preserved, including for `.FLX`
+files. Damaged tables and record bounds are rejected before writing.
+This low-level command replaces an explicit record; use `u7 flex-add-shape`
+for base-aware free-slot allocation and shape validation.
 
 ```
 titan flex-update <file> --index N --data FILE [-o FILE]
@@ -1449,6 +1459,16 @@ titan dialogue launch --host 127.0.0.1 --port 4173
 
 ### U7 Flex archive commands
 
+Shape archive commands (`shape-export`, `shape-animate`, `shape-batch`,
+`shape-cycle-scan`, `shape-frame-report`, and `flex-add-shape`) share sparse
+Exult patch resolution. They discover the matching retail VGA in the nearest
+game `STATIC/` above a `mods/` or `patch/` tree, then use `--game bg|si` config
+fallbacks. For a copied or renamed patch, pass `--base-archive FILE` explicitly.
+Empty patch entries inherit the base shape; absent records beyond the patch
+table also inherit. If a recognized patch's base is unavailable, the command
+fails rather than treating inherited shapes as empty/free.
+Custom mod libraries without a retail counterpart remain standalone.
+
 ---
 
 #### `u7 flex-create`
@@ -1457,10 +1477,10 @@ Create a new empty U7/Exult Flex archive. The result contains a valid
 128-byte U7 Flex header and zero records, ready for later population by
 shape/archive tooling.
 
-This command deliberately uses the U7 writer (`magic1 = 0xFFFF1A00`), which
-is the format used by archives such as `SHAPES.VGA`. Do not substitute the
-shared root-level `titan flex-create` command: that command writes the
-different U8/Pentagram-style Flex header.
+This command uses the U7 writer (`magic1 = 0xFFFF1A00`), which is the format
+used by archives such as `SHAPES.VGA`. The root-level `titan flex-create`
+rebuilds extracted archives in their recorded format, and can create a new
+populated U7 archive with `--archive-format u7`.
 
 ```
 titan u7 flex-create <output.VGA|output.FLX> [-t TITLE] [--force]
@@ -1486,21 +1506,32 @@ titan u7 flex-create U7O.VGA --title "U7O Dynamic Shapes" --force
 #### `u7 flex-add-shape`
 
 Add a standalone U7 `.shp` to a U7/Exult Flex archive. By default, the command
-selects the lowest zero-length record; if every existing record is occupied,
-it appends a new record. Pass `--index N` to select a specific zero-based shape
+uses SHAPES.VGA slot rules regardless of the filename: RLE objects use the
+lowest record at or above 150 that is empty in both patch and base archives,
+or append after the combined inventory if those records are occupied.
+Pass `--index N` to select a specific zero-based shape
 record instead. If `N` is beyond the current table, the archive grows and all
 intervening records are left empty. An occupied specific record is protected
-unless `--replace` is also supplied. The assigned record index is the shape
+unless `--replace` is also supplied, including records inherited from the base.
+Writes retain empty patch entries rather than copying inherited data into the
+patch. The assigned record index is the shape
 number reported after a successful write.
 
 Choose exactly one output mode. `--output` leaves the source archive unchanged;
 `--in-place` atomically replaces it only after the complete updated archive has
 been written. Existing separate output files require `--force`.
+Before writing, Titan rejects truncated archive tables, records outside the
+archive data area, and malformed input shape frames or RLE spans. Inspection
+commands can still recover readable records from damaged archives.
+Every imported shape frame must have width at most 320 and height at most 200,
+including shapes produced outside Titan.
 
 ```
 titan u7 flex-add-shape <archive.VGA|archive.FLX> <shape.shp>
                         (-o OUTPUT | --in-place) [--force]
                         [--index N [--replace]]
+                        [--archive-kind shapes|generic] [--flat]
+                        [--base-archive FILE] [--game bg|si]
 ```
 
 | Argument | Description |
@@ -1512,11 +1543,15 @@ titan u7 flex-add-shape <archive.VGA|archive.FLX> <shape.shp>
 | `--force` | Replace an existing `--output` file; not needed with explicit `--in-place` |
 | `--index N` | Write to this specific zero-based shape record; omitted means lowest permitted empty record or append |
 | `--replace` | Permit replacement when the selected `--index` is occupied; requires `--index` |
+| `--archive-kind shapes\|generic` | Default `shapes` applies terrain/object slot rules even to renamed copies. `generic` permits record 0 for other archives such as faces, gumps, or custom shape libraries |
+| `--flat` | Explicitly insert raw 8×8 flat frames into slots 0–149; requires `shapes` archive kind |
+| `--base-archive FILE` | Original archive for sparse patch inheritance; required for copied/renamed patches that cannot be discovered automatically |
+| `--game bg\|si` | BG or SI config fallback for discovering the original archive (default: BG) |
 
 **Examples**
 ```bash
-# Safest workflow: write a separate archive
-titan u7 flex-add-shape U7O.VGA ranger.shp -o U7O_updated.VGA
+# Write a separate SHAPES.VGA copy; object allocation starts at 150
+titan u7 flex-add-shape SHAPES.VGA ranger.shp -o SHAPES_updated.VGA
 
 # Explicitly update the source archive
 titan u7 flex-add-shape U7O.VGA ranger.shp --in-place
@@ -1526,12 +1561,21 @@ titan u7 flex-add-shape U7O.VGA ranger.shp --index 460 --in-place
 
 # Deliberately replace an occupied record 460
 titan u7 flex-add-shape U7O.VGA ranger.shp --index 460 --replace --in-place
+
+# Other shape libraries can use record 0
+titan u7 flex-add-shape U7O.VGA ranger.shp --archive-kind generic -o U7O_updated.VGA
+
+# Explicit flat import and insertion into terrain slot 12
+titan u7 shape-import flat_frames/ -p STATIC/PALETTES.FLX --flat -o terrain.shp
+titan u7 flex-add-shape SHAPES.VGA terrain.shp --flat --index 12 --replace -o SHAPES_updated.VGA
 ```
 
-When automatic allocation is used with a source archive named `SHAPES.VGA`
-(case-insensitive), Titan reserves shape records 0 through 149 for U7 flat
-textures and begins its search at record 150. An explicit `--index` remains
-unchanged for intentional placement at a particular shape number.
+Under the default `shapes` rules, object imports cannot use slots 0–149,
+including explicit `--index`/`--replace` requests. `--flat` requires raw 8×8
+frames and confines both automatic and explicit placement to slots 0–149.
+If that flat range has no free record, automatic insertion fails rather than
+appending an object slot. An ordinary 8×8 RLE shape remains an object and uses
+slot 150 or higher. `--flat` cannot be combined with `--archive-kind generic`.
 
 ---
 
@@ -1594,7 +1638,7 @@ titan u7 shape-export SHAPES.VGA --shape 177 -p PALETTES.FLX \
 
 #### `u7 shape-import`
 
-Create one standalone U7 RLE `.shp` file from all PNG files directly inside
+Create one standalone U7 `.shp` file from all PNG files directly inside
 a directory. This command only writes the requested `.shp`; it does not open,
 patch, or otherwise modify `SHAPES.VGA` or another Flex archive.
 
@@ -1606,6 +1650,7 @@ ignored.
 ```
 titan u7 shape-import <directory> -o OUTPUT.shp [--game bg|si]
                       [-p PALETTE] [--palette-index N]
+                      [--allow-cycling] [--flat]
 ```
 
 | Argument | Description |
@@ -1614,11 +1659,27 @@ titan u7 shape-import <directory> -o OUTPUT.shp [--game bg|si]
 | `-p FILE`, `--palette FILE` | Path to U7 `PALETTES.FLX` or a raw `.pal` file. Overrides the selected game's configured palette |
 | `-o FILE`, `--output FILE` | Required standalone output path; must end in `.shp` |
 | `--palette-index N` | Palette record to use when `--palette` is a Flex archive (default: `0`, the main daytime palette) |
-| `--game bg|si` | Select the `u7bg` or `u7si` palette configured by `titan setup` when `--palette` is omitted (default: `bg`) |
+| `--game bg\|si` | Select the `u7bg` or `u7si` palette configured by `titan setup` when `--palette` is omitted (default: `bg`) |
+| `--allow-cycling` | Let RGB conversion choose indices 224–254, which cycle in-game; default conversion uses only 0–223 |
+| `--flat` | Write raw flat frames instead of RLE objects. Every PNG must be exactly 8×8 and fully opaque |
 
-RGBA source colours are mapped to the nearest RGB entry in palette indices
-0–254. Pixels with alpha below 128 become U7 transparency index 255; opaque
-pixels are never mapped to index 255. Every frame uses origin
+Indexed PNGs preserve their original pixel indices when their used colours
+match the selected U7 palette at those indices. This preserves duplicate
+colours and cycling/translucency indices; index 255 remains RLE transparency.
+Other source colours are mapped to the nearest RGB entry in palette indices
+0–223 using bounded batches, or 0–254 with `--allow-cycling`. Matching indexed
+PNGs retain their explicit indices independently of this conversion flag.
+Pixels with alpha below 128 become U7 transparency index 255; opaque pixels
+undergoing RGB conversion are never mapped to index 255.
+With `--flat`, frames are raw 64-byte tiles; transparent or partially transparent
+PNGs are rejected. Index 255 in a matching opaque indexed PNG remains an opaque
+flat colour. Without `--flat`, even 8×8 frames are RLE objects.
+Frames wider or taller than 72 pixels produce a warning and are imported at
+their original size, up to a hard import cap of width 320 and height 200 per frame.
+Oversized PNGs are rejected before colour conversion and leave the output
+unchanged. The cap applies to dimensions independently; frames are not resized
+or rotated to fit. This is a Titan import policy; Exult can render larger images.
+Every RLE frame uses origin
 X/Y `(0, 0)` (`xright = 0`, `ybelow = 0`), which places the drawing anchor at
 the bottom-right pixel. This initial importer does not read frame metadata, so
 a 1×1 placeholder also receives origin `(0, 0)`. WIHH.DAT weapon
@@ -1633,6 +1694,110 @@ titan u7 shape-import actor_frames/ --game bg -o ranger_variant7.shp
 # Select another palette record from PALETTES.FLX
 titan u7 shape-import frames/ -p STATIC/PALETTES.FLX --palette-index 3 -o night_shape.shp
 ```
+
+---
+
+#### `u7 shape-create`
+
+Guided PNG → U7 shape → FLX/VGA workflow, modelled on `font-create`.
+Accepts one PNG or a folder of PNG frames. The interactive flow is game,
+source, palette and conversion settings, preview/redo, output format,
+archive and slot selection, then a final save confirmation.
+
+```text
+titan u7 shape-create [SOURCE] [--game bg|si] [-o FILE] [--preview FILE]
+titan u7 shape-create --config recipe.toml [-o FILE] [--force]
+```
+
+| Option | Purpose |
+|--------|---------|
+| `SOURCE` | One PNG or a frame directory; can also be selected in the wizard. |
+| `--config FILE`, `-c FILE` | TOML recipe; runs without prompts. |
+| `-o FILE`, `--output FILE` | Shape filename for shape/both output; archive destination for archive-only output. |
+| `--game bg\|si` | Initial interactive game selection. Recipes select their game in `[target]`. |
+| `--preview FILE` | Save a PNG contact sheet comparing source and converted frames, up to six frames. |
+| `--allow-cycling` | Allow RGB matching to select indices 224–254. |
+| `--base-archive FILE` | Explicit original archive for sparse patch inheritance. |
+| `--force` | Replace existing output files. Does not authorize replacing an occupied shape slot. |
+| `--in-place` | Allow the selected source archive to also be the destination. |
+
+Palette record **0**, the U7 main palette, is the default. Titan resolves it
+from game configuration or Exult's STATIC directory, or accepts an explicit
+palette file. RGB conversion uses indices **0–223** unless cycling colours
+are enabled. Matching indexed PNGs retain their deliberate palette indices.
+For RLE objects, alpha below 128 becomes transparency at index 255.
+Source images keep their dimensions; frames above **72×72** warn, and widths
+above **320** or heights above **200** fail.
+
+The wizard previews frame dimensions, origin, transparency and silhouettes,
+with converted colours in a terminal that supports ANSI colour. **Redo**
+returns to conversion settings without restarting game selection. The optional
+PNG contact sheet is saved with the approved outputs.
+
+Objects in a `SHAPES.VGA` library allocate from **150** upward. Explicit raw
+flats require every PNG to be **opaque 8×8** and allocate only within **0–149**.
+Other shape libraries, such as `SPRITES.VGA` and U7 shape `.FLX` files, use
+`kind = "generic"` and may start at slot 0. RLE 8×8 objects remain objects.
+
+Free-slot selection checks the source archive, its inherited base, and the
+destination patch. A new destination can be a **sparse patch** or a **copy of
+the selected archive**. Existing destinations retain their other records;
+this creation mode applies when creating a new destination. Sparse saves keep
+inherited records as holes. U7 retail and Exult Flex headers are preserved.
+Replacing an occupied slot requires an explicit slot plus `replace = true`
+or interactive approval. Updating a source archive also requires explicit
+in-place selection. Files are replaced atomically after conversion and archive
+validation; source PNGs and explicitly supplied base archives cannot be used as output targets.
+
+```bash
+# Start the guided workflow with an image or a folder
+titan u7 shape-create artwork.png
+titan u7 shape-create actor_frames/ --game si --preview actor_comparison.png
+
+# Repeat a saved recipe without prompts
+titan u7 shape-create --config actor.toml
+```
+
+**Recipe example:**
+
+```toml
+[target]
+game = "BG"
+
+[source]
+path = "./actor_frames"       # Or one PNG
+
+[palette]
+file = "./STATIC/PALETTES.FLX" # Optional if configured
+index = 0
+
+[conversion]
+allow_cycling = false
+flat = false
+origin_x = 0                 # Exult Studio right extent; 0 anchors at right edge
+origin_y = 0                 # Exult Studio bottom extent; 0 anchors at bottom edge
+
+[archive]
+source = "./STATIC/SHAPES.VGA" # Optional for a new custom library
+# base = "./STATIC/SHAPES.VGA" # Use when source is a sparse mod patch
+kind = "shapes"              # "shapes" or "generic"
+mode = "patch"               # New destination: "patch" or "copy"
+# slot = 460                 # Omit to select the first free permitted slot
+replace = false              # True requires an explicit slot
+
+[output]
+format = "both"              # "shp", "flex", or "both"
+path = "./out/actor.shp"      # For flex-only, may name the archive instead
+archive = "./patch/shapes.vga"
+preview = "./out/actor_comparison.png" # Optional
+force = false
+in_place = false
+```
+
+Recipe paths are relative to the recipe file. CLI path overrides are relative
+to the working directory. Missing palettes/bases, invalid slots and existing
+outputs fail clearly without prompting. `shape-import` and `flex-add-shape`
+remain available for individual conversion and insertion steps.
 
 ---
 
@@ -2847,12 +3012,14 @@ displays the resolved Exult font archive path from `exult.cfg` — then
 scans the game directory for all `*font*.vga` archives (including mod
 patch directories) and presents a numbered pick-list. Selecting an
 archive shows a live slot table with real frame counts and cell heights
-read from the actual Flex records. Continues through font slot selection,
-shape naming (descriptive label + `.shp` filename), TTF source (6 built-in
+from the effective base plus patch records. The selected archive is a
+template; saving uses a separately selected destination. Continues through font slot selection,
+TTF source (6 built-in
 or custom path), rendering method (mono, LUT downscale, grayscale
 threshold, hollow gradient), dimension overrides, palette / gradient
 preset selection (with ANSI colour swatches), ASCII art preview, and
-output format.
+shape naming and output format. Redo returns to the font settings while
+keeping the game, template and slot. Preview uses the final palette mapping.
 
 For fonts that map glyphs to non-standard positions (e.g. Gargish), the
 encoder automatically copies a representative glyph into frame 65 (‘A’)
@@ -2863,13 +3030,16 @@ With `--config`, reads all parameters from a TOML recipe file and generates
 the shape non-interactively.
 
 ```
-titan u7 font-create [--config FILE] [-o FILE]
+titan u7 font-create [--config FILE] [-o FILE] [--force] [--allow-cycling] [--base-archive FILE]
 ```
 
 | Argument | Description |
 |----------|-------------|
 | `--config FILE`, `-c FILE` | TOML config file (skip interactive prompts) |
-| `-o FILE`, `--output FILE` | Output file path |
+| `-o FILE`, `--output FILE` | Shape output for `shp`/`both`; archive destination for `flex`. Works in both modes. |
+| `--force` | Replace existing outputs. Interactive mode otherwise asks before replacing; recipes otherwise fail. |
+| `--allow-cycling` | Allow automatic gradient matching to use cycling colours 224–254. |
+| `--base-archive FILE` | Explicit base font VGA for a sparse template archive. |
 
 **Interactive mode** (no arguments):
 ```bash
@@ -2889,14 +3059,19 @@ game = "BG"           # "BG" or "SI"
 slot = 2              # FONTS.VGA shape index (0-7 BG, 0-10 SI)
 cell_height = 8       # Override (optional if slot pre-fills)
 ink_height = 7        # Override (optional)
-h_lead = 0            # Override (optional)
+# h_lead = 0          # Optional assertion of Exult's fixed value for this slot
+# total_frames = 127  # Optional override (33-256)
+# code_range = [33, 126] # Optional inclusive character range, within frame count
 
 [source]
 font = "dosVga437"    # Built-in key or path: "./MyFont.ttf"
+# archive = "./patch/fonts.vga"  # Optional template, separate from output
+# base_archive = "./STATIC/FONTS.VGA"  # Optional explicit template base
 
 [rendering]
 method = "mono"       # "mono", "lut", "threshold", "hollow_gradient"
 # lut = "black_ink"   # Required if method=lut
+# threshold = 128    # Grayscale cutoff, 1-255, for method=threshold
 
 # --- Hollow gradient options (method = "hollow_gradient" only) ---
 # gradient_preset = "warm_flame"   # Use a named preset (see list below)
@@ -2904,17 +3079,38 @@ method = "mono"       # "mono", "lut", "threshold", "hollow_gradient"
 # stroke_width = 1                 # Outline width in pixels
 # stroke_index = 0                 # Palette index for stroke (overridden by preset)
 # gradient_steps = 6               # Number of colour stops when resolving a preset
+# allow_cycling = false            # Automatic matching defaults to indices 0-223
 
 [palette]
 ink = 0               # Palette index for ink pixels (mono/threshold)
-transparent = 255
+transparent = 255     # U7 requires 255; other values are rejected
 # file = "PALETTES.FLX"  # Explicit palette file (auto-discovered if omitted)
 
 [output]
 format = "shp"        # "shp", "flex", "both"
 path = "./my_font.shp"
 # flex_source = "./fonts_original.vga"  # Auto-resolved from exult.cfg if omitted
+# force = false       # Set true to replace existing outputs without a prompt
 ```
+
+Recipe file paths are relative to the recipe directory. A CLI `-o` or
+`--base-archive` path is relative to the working directory. For `format = "flex"`,
+`path` can name the archive destination when `flex_source` is omitted. For
+`format = "both"`, `path` names the shape and `flex_source` names the archive.
+Recipes never prompt; unresolved destinations and invalid settings fail clearly.
+
+Ink height controls capital sizing and the font baseline, and must be between
+1 and `cell_height - 1`. Exult sets h-lead by font slot; it cannot be changed
+through a shape file. Font frames above 72×72 produce a warning, and frames
+above 320 pixels wide or 200 pixels high are rejected.
+
+Selecting a sparse `fonts.vga` template includes inherited retail slots.
+`fonts_original.vga` and `fonts_serif.vga` inherit from the corresponding font
+records in the common `exult.flx`. Titan finds that bundle through Exult's
+`disk/data_path`, `[exult.paths].flx`, or standard install locations; an
+extracted base VGA can be supplied explicitly. Saves preserve patch holes
+and the archive format. Output files are replaced atomically, and malformed
+archive tables are rejected before either output is written.
 
 **Flex output & Exult config resolution:**
 
@@ -2994,9 +3190,10 @@ a vertical colour gradient fill. You can specify colours in two ways:
 #### `u7 world-query`
 
 Search IFIX (static) and optionally IREG (runtime) world object placements
-by shape class, name, shape number, TFA flags, and area. Runs as an
+by shape class, name, shape/frame number, TFA flags, and area. Runs as an
 interactive wizard when no filter flags are supplied; runs non-interactively
-when any filter flag is present. Requires `questionary>=2.0` for wizard mode.
+when any filter flag or a TOML recipe is present. Requires `questionary>=2.0`
+for wizard mode. The wizard supports repeated refinement and recipe saving.
 
 ```
 titan u7 world-query [STATIC] [OPTIONS]
@@ -3006,38 +3203,108 @@ titan u7 world-query [STATIC] [OPTIONS]
 |-------------------|-------------|
 | `STATIC` | Path to STATIC directory. Defaults to configured path from `titan.toml`. |
 | `--game bg\|si` | Use config section for Black Gate or Serpent Isle (default: `bg`) |
+| `-c, --config FILE` | Run a world-query TOML recipe without prompts; explicit CLI options override recipe values |
+| `--base-static DIR` | Original game STATIC for a selected mod patch (otherwise inferred from the game layout or Titan config) |
+| `--patch DIR` | Mod patch overriding files in the base STATIC |
+| `--mod-data DIR` | Additional mod `textmsg.txt` and `shape_info.txt` for shape/frame names |
 | `--gamedat DIR` | Path to GAMEDAT directory for IREG dynamic objects |
 | `--text FILE` | Path to `TEXT.FLX` for shape name lookup (auto-discovered from STATIC if omitted) |
 | `--class NAME` | Shape class filter, repeatable (e.g. `container`, `human`, `monster`) |
 | `--shape N` | Shape number filter, hex or decimal, repeatable (e.g. `522`, `0x20A`) |
+| `--frame N` | Frame number filter, hex or decimal, repeatable (0–255; matches the stored frame including any reflection bit) |
 | `--name TEXT` | Shape name substring filter, case-insensitive (e.g. `"locked chest"`) |
 | `--flag NAME` | TFA flag filter, repeatable (e.g. `solid`, `animated`, `door`) |
 | `--tile-rect tx0,ty0,tx1,ty1` | Restrict search to a tile rectangle (0–3071 per axis) |
 | `--sc N` | Superchunk number filter, hex or decimal, repeatable (e.g. `0x55`) |
 | `--ireg / --no-ireg` | Force-include or force-exclude IREG objects |
+| `--ifix / --no-ifix` | Include/exclude fixed objects (default: included) |
 | `--map-num N` | Map number: `0` = default world (root `STATIC/` and root `gamedat/`, default), `1`+ = `mapNN/` subdirectory inside `STATIC` for IFIX and inside `gamedat` for IREG |
 | `-f, --format TEXT` | Output format: `summary` (default), `full_text`, `csv` |
 | `-o, --output FILE` | Write output to a file instead of stdout |
+| `--force` | Replace an existing results file; exports must be outside game data directories |
 
 **Notes:**
 - Containers, NPCs, eggs, and monsters live in IREG only. The wizard auto-defaults
   `--ireg` to Yes when those classes are selected.
 - `--tile-rect` coordinates are normalised (top-left is always the smaller value).
 - `--name` and `--shape` can be combined; both filters must match.
+- Frame, class, name, shape, flag and area filters combine with AND. Multiple
+  shapes/frames/classes/superchunks are alternatives; every selected flag is required.
+- Invalid IDs, flags, formats, and coordinates are rejected. Interactive numeric
+  fields re-prompt; a malformed filter never silently broadens the search.
+- Mod IFIX files replace the corresponding base superchunk file as a whole;
+  absent files inherit from base STATIC. Property files and `TEXT.FLX` use
+  patch-first file resolution. `textmsg.txt` and `shape_info.txt` supply mod names.
+- Missing name/property data prevents searches requiring that data. Placements
+  without TFA entries are excluded from class/flag filtering with a warning.
+  Placements without names are excluded from name filtering with a warning.
+  Warnings go to stderr, keeping CSV output clean.
 - When `TEXT.FLX` is available, shape names appear in all output as `522 (locked chest)`.
 - If `titan setup` has been run, `TEXT.FLX` is recorded in `titan.toml` and resolved automatically.
 - `--map-num` applies to both IFIX and IREG lookups simultaneously. For mod maps, pass the mod patch dir as `STATIC` — the patch dir contains the `mapNN/` subdirectory with IFIX files for that map. The `gamedat` path should point to the mod's live gamedat, which also has `mapNN/` subdirs for each additional map.
 
-**Interactive wizard steps** (no filter flags supplied):
+**Interactive wizard steps** (no filter flags supplied; context options such as
+`--map-num` still apply):
 
 1. Shape class checkbox — leave blank for no filter.
 2. Include IREG? — auto-defaults to Yes for IREG-only classes.
 3. Name search — substring; matching shape numbers shown as hints.
-4. Shape number — comma-separated, hex or decimal; leave blank for all.
+4. Shape and frame numbers — comma-separated, hex or decimal; leave blank for all.
 5. TFA flag checkbox — leave blank for no filter.
-6. Area — entire world, superchunk list, or tile rectangle (top-left XY + bottom-right XY).
-7. Output format — `summary`, `full_text`, or `csv`.
-8. Save to file? — optional output path.
+6. Area — entire world, superchunk list, or tile rectangle (`x0,y0,x1,y1`).
+7. Review the game, mod, map number, sources and filters; confirm the search.
+8. Review grouped counts, then choose **Refine filters**, **Change area**,
+   **Show placements** for one shape, **Export results**, **Save recipe**,
+   **New search**, or **Finish**. Refinement preserves the preceding choices;
+   changing only the area does not re-ask the filters. New search clears the
+   filters while keeping the world context. Cancellation exits cleanly.
+
+**Repeatable TOML searches:**
+
+Save a recipe from the wizard, or create one using this schema. Paths inside
+recipes are relative to the recipe file; explicit CLI paths are relative to
+the current directory. Omitted filters match everything. IFIX defaults to
+included, IREG to excluded, and output to a grouped summary on stdout.
+
+```toml
+[world]
+game = "si"
+static = "game/STATIC"
+# patch = "mods/MyMod/patch"
+# base_static = "game/STATIC"  # useful for an external patch directory
+# mod_data = "mods/MyMod/data"
+gamedat = "mods/MyMod/gamedat"
+map_num = 1
+# text = "game/STATIC/TEXT.FLX"  # explicit name-table override
+
+[filters]
+classes = ["container"]
+shapes = [522]
+frames = [0]
+name = "chest"
+flags = []
+superchunks = [85, 86]
+# tile_rect = [512, 512, 2048, 2048]
+
+[sources]
+ifix = true
+ireg = true
+
+[output]
+format = "csv"
+path = "results/chests.csv"  # omit to write to stdout; parent must exist
+```
+
+```bash
+titan u7 world-query --config chest-search.toml
+titan u7 world-query --config chest-search.toml --frame 1 -o frame-one.csv
+```
+
+Recipe sections and keys are checked: misspellings and values of the wrong
+type fail with an error. When both superchunks and a tile rectangle are set,
+only those superchunks are scanned and placements must also lie in the rectangle.
+Recipes are saved to new files; result-file replacement requires `--force`
+or an explicit confirmation in the wizard. Game files are read-only throughout.
 
 **Non-interactive examples:**
 ```bash
@@ -3075,7 +3342,7 @@ titan u7 world-query "mods/MyMod/patch" --gamedat "mods/MyMod/gamedat" \
 
 - `summary` — total match count + unique shape count + per-shape count table with names.
 - `full_text` — one line per placement: source, shape name, hex, tile coords, lift, class, flags.
-- `csv` — columns: `source, shape, shape_hex, shape_name, frame, quality, tx, ty, tz, shape_class, shape_class_name, flags`.
+- `csv` — columns: `source, shape, shape_hex, shape_name, frame, quality, quality_raw, object_flags, tx, ty, tz, shape_class, shape_class_name, flags`.
 
 ---
 
@@ -3270,11 +3537,13 @@ titan u7 egg-query --game bg
 
 Interactive first-time setup wizard. Detects your Ultima 8 (and optionally
 Ultima 7) installation, detects third-party engine saves, and writes
-`titan.toml` in the current directory. Optionally extracts `shapes/` and
+`titan.toml` in the current directory, or the file selected by the global
+`--config` option. Missing parent directories are created. Optionally extracts `shapes/` and
 `globs/` immediately.
 
 ```
 titan setup
+titan --config path/to/config.toml setup
 ```
 
 No arguments. Prompts:
@@ -3288,6 +3557,18 @@ No arguments. Prompts:
 
 The wizard writes multi-game sections by default: `[u8.*]`, `[u7bg.*]`, and
 `[u7si.*]` (when U7 paths are provided).
+
+Rerunning setup retains existing values, including custom paths, mod settings,
+and sections for other games, and fills in missing entries. Legacy U8 configs
+are retained without introducing a new `[u8]` section. To change existing values,
+use `titan config --edit` (with the same global `--config` option when needed).
+Before updating an existing config, setup saves its original contents, including
+comments, to `<file>.bak`; subsequent backups use `.bak.1`, `.bak.2`, etc.
+The updated TOML is reformatted.
+
+U8 discovery supports language-folder layouts and flat layouts with `FIXED.DAT`
+directly in the game base. U7 launcher-root scans also recognize Roman-numeral
+folder names such as `Ultima VII - Complete`.
 
 After setup, U8 map commands require no path flags:
 ```bash
@@ -7470,6 +7751,7 @@ A value on the command line always wins.
 | `u7 schedule-dump` | Dump schedules from loose Exult `schedule.dat` / `GAMEDAT` |
 | `u7 save-schedules` | Dump NPC schedules from an Exult U7 savegame |
 | `u7 font-create` | Interactive wizard for creating U7 font shapes from TTF |
+| `u7 shape-create` | Guided PNG conversion, shape preview and safe FLX/VGA insertion |
 | `u7 world-query` | Interactive wizard to filter IFIX/IREG world object placements |
 | `u7 container-browse` | Browse container contents from IREG with full nesting support |
 | `u7 egg-query` | Query egg trigger objects from IREG — type, usecode function, location |

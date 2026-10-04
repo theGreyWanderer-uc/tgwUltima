@@ -294,7 +294,9 @@ class U7Shape:
     # ------------------------------------------------------------------
 
     @classmethod
-    def from_data(cls, data: bytes, *, is_tile: bool = False) -> U7Shape:
+    def from_data(
+        cls, data: bytes, *, is_tile: bool = False, strict: bool = False
+    ) -> U7Shape:
         """Parse a U7 shape from raw bytes.
 
         Parameters
@@ -304,7 +306,13 @@ class U7Shape:
         is_tile:
             If ``True``, treat the data as raw 8×8 ground-tile frames
             (no size/offset header, just N*64 bytes of pixel data).
+        strict:
+            Reject incomplete or malformed shapes before decoding, for archive edits.
         """
+        if strict:
+            from titan.u7.shape_validation import validate_u7_shape_data
+
+            validate_u7_shape_data(data, is_tile=is_tile or cls._looks_like_tile(data))
         shape = cls()
         if not data:
             return shape
@@ -368,11 +376,11 @@ class U7Shape:
         n = len(data)
         if n == 0 or n % NUM_TILE_BYTES != 0:
             return False
-        # If first uint32 equals the total data length, it is an RLE shape
-        # (the "size" header of the shape).
+        # RLE's size header equals the record length, excluding an optional
+        # word-alignment byte (also accepted by Exult's Shape_frame::read).
         if n >= 4:
             first = struct.unpack_from("<I", data, 0)[0]
-            if first == n:
+            if first == n or first == n - 1:
                 return False
             # A valid RLE shape has first_offset in [8, len) and
             # (first_offset - 4) % 4 == 0.
