@@ -178,3 +178,21 @@ def exult_cfg(key: str) -> Optional[str]:
 def get_config() -> dict:
     """Return the full loaded config dict (read-only reference)."""
     return _config
+
+
+def resolve_config_path(value: object, base: object = None) -> Optional[Path]:
+    """Resolve a configured path against its game base, preserving absolute paths."""
+    if not value:
+        return None
+    path = Path(str(value)).expanduser()
+    if base and not path.is_absolute():
+        path = Path(str(base)).expanduser() / path
+    return path
+
+
+def game_config_path(game: str, key: str) -> Optional[Path]:
+    """Resolve a U7 setting using the same rules as the config inspector."""
+    section = get_config().get("u7bg" if game.upper() == "BG" else "u7si", {})
+    return resolve_config_path(
+        section.get("paths", {}).get(key), section.get("game", {}).get("base")
+    )

@@ -319,7 +319,7 @@ def test_cli_bad_filters_report_errors(world, flags):
 def scripted_questions(monkeypatch, answers):
     import questionary
 
-    queue = iter(answers)
+    queue = iter(["bg", "current", 0, *answers])
     prompts = []
 
     class Prompt:
@@ -410,6 +410,71 @@ def test_cancel_at_each_initial_stage_is_clean(world, monkeypatch, stage):
     answers = [[], False, "", "", "", [], "Entire world", True, "Finish"]
     scripted_questions(monkeypatch, answers[:stage] + [None])
     assert workflow.run_wizard(world) == 0
+
+
+def test_explicit_custom_static_inside_mods_does_not_inherit_outer_world(
+    world, tmp_path
+):
+    own = Path(world.static_dir).parent / "mods/custom/STATIC"
+    own.mkdir(parents=True)
+    write_ifix(own, 0, [(151, 0, 8, 9)])
+    result = run_query(replace(world, static_dir=str(own), base_static=str(own)))
+    assert [(record.shape, record.tx, record.ty) for record in result.records] == [
+        (151, 8, 9)
+    ]
+
+
+def test_world_query_can_change_world_and_map_between_searches(
+    world, monkeypatch, tmp_path
+):
+    from titan.u7 import target_picker as picker
+    from titan.u7.archive_targets import ArchiveTarget
+
+    own = tmp_path / "new/STATIC"
+    own.mkdir(parents=True)
+    (own / "MAP01").mkdir()
+    write_ifix(own / "MAP01", 0, [(151, 0, 10, 11)])
+    base = ArchiveTarget("Base SI", Path(world.static_dir), tmp_path / "patch")
+    target = ArchiveTarget("Custom world", own, tmp_path / "new/patch", True)
+    monkeypatch.setattr(picker, "game_targets", lambda game: (base, [target]))
+    seen = []
+    original = workflow.run_query
+
+    def query(params):
+        seen.append(replace(params))
+        return original(params)
+
+    monkeypatch.setattr(workflow, "run_query", query)
+    scripted_questions(
+        monkeypatch,
+        [
+            [],
+            False,
+            "",
+            "",
+            "",
+            [],
+            "Entire world",
+            True,
+            "Change world/map",
+            "si",
+            target,
+            1,
+            [],
+            False,
+            "",
+            "",
+            "",
+            [],
+            "Entire world",
+            True,
+            "Finish",
+        ],
+    )
+    assert workflow.run_wizard(world) == 0
+    assert len(seen) == 2
+    assert seen[-1].game == "si" and seen[-1].map_num == 1
+    assert seen[-1].static_dir == seen[-1].base_static == str(own)
 
 
 def test_export_guards_overwrites_and_game_data(world, tmp_path):

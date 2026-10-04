@@ -20,6 +20,7 @@ __all__ = [
 ]
 
 import sys
+import numpy as np
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional, TYPE_CHECKING
@@ -242,8 +243,8 @@ def list_builtin_luts() -> list[str]:
 # Gradient presets for hollow gradient rendering
 # ---------------------------------------------------------------------------
 # Each preset defines a source→dest colour ramp using hex RGB values.
-# At generation time these are resolved to the nearest U7 palette
-# indices via resolve_gradient_to_indices().
+# At generation time these are fitted to the available U7 palette as a whole
+# ramp via resolve_gradient_to_indices().
 #
 # Presets are intentionally defined as hex colours (not palette indices)
 # so they work with any game palette.
@@ -476,6 +477,126 @@ def _nearest_palette_index(
     return best_idx
 
 
+def _srgb_to_oklab(colours: np.ndarray) -> np.ndarray:
+    """Perceptual coordinates from sRGB bytes, using the published Oklab matrices.
+
+    Reference: https://bottosson.github.io/posts/oklab/#converting-from-linear-srgb-to-oklab
+    """
+    rgb = np.asarray(colours, dtype=np.float64) / 255.0
+    linear = np.where(rgb <= 0.04045, rgb / 12.92, ((rgb + 0.055) / 1.055) ** 2.4)
+    lms = (
+        linear
+        @ np.array(
+            [
+                [0.4122214708, 0.5363325363, 0.0514459929],
+                [0.2119034982, 0.6806995451, 0.1073969566],
+                [0.0883024619, 0.2817188376, 0.6299787005],
+            ]
+        ).T
+    )
+    return (
+        np.cbrt(lms)
+        @ np.array(
+            [
+                [0.2104542553, 0.7936177850, -0.0040720468],
+                [1.9779984951, -2.4285922050, 0.4505937099],
+                [0.0259040371, 0.7827717662, -0.8086757660],
+            ]
+        ).T
+    )
+
+
+def _select_palette_ramp(
+    targets: list[tuple[int, int, int]],
+    colours: list[tuple[int, int, int]],
+    excluded: set[int],
+    stops: list[tuple[int, int, int]],
+) -> list[int]:
+    """Fit an entire ramp, retaining similar colours and smooth progression."""
+    # Duplicate RGB entries do not provide additional shades. Prefer their
+    # first eligible index, so duplicates cannot satisfy the diversity cost.
+    unique: dict[tuple[int, int, int], int] = {}
+    for index, colour in enumerate(colours):
+        if index not in excluded:
+            unique.setdefault(colour, index)
+    if not unique:
+        raise ValueError("No eligible palette colours for the gradient")
+    indices = list(unique.values())
+    palette_rgb = np.array(list(unique))
+    target_rgb = np.array(targets)
+    # Emphasise hue/chroma without abandoning RGB fidelity to the preset.
+    # Perceptual progression alone can favour grey for missing cyan shades.
+    weights = np.array([1.0, 2.0, 2.0])
+    palette_lab = _srgb_to_oklab(palette_rgb) * weights
+    target_lab = _srgb_to_oklab(target_rgb) * weights
+    stop_lab = _srgb_to_oklab(np.array(stops)) * weights
+    errors = np.sum((target_lab[:, None, :] - palette_lab[None, :, :]) ** 2, axis=2)
+    errors += 0.5 * np.sum(
+        ((target_rgb[:, None, :] - palette_rgb[None, :, :]) / 255.0) ** 2, axis=2
+    )
+    if len(targets) == 1 or np.all(target_lab == target_lab[0]):
+        return [indices[int(np.argmin(errors[0]))]] * len(targets)
+
+    # Limit colour drift to a small perceptual allowance beyond the closest
+    # available match. A sparse palette must repeat rather than select unrelated
+    # colours simply to reach the requested number of steps.
+    related = np.ones(len(indices), dtype=bool)
+    target_chroma = np.linalg.norm(target_lab[:, 1:], axis=1)
+    palette_chroma = np.linalg.norm(palette_lab[:, 1:], axis=1)
+    if np.min(target_chroma) > 0.08:
+        hue_similarity = np.sum(
+            target_lab[:, None, 1:] * palette_lab[None, :, 1:], axis=2
+        ) / np.maximum(target_chroma[:, None] * palette_chroma[None, :], 1e-12)
+        family = (palette_chroma >= np.min(target_chroma) * 0.2) & (
+            np.max(hue_similarity, axis=0) >= 0.2
+        )
+        # A monochrome palette must remain usable, even for colourful presets.
+        if np.any(family):
+            related = family
+    best_error = np.min(np.where(related, errors, np.inf), axis=1)
+    allowed = related & (errors <= (np.sqrt(best_error)[:, None] + 0.08) ** 2)
+    deltas = palette_lab[None, :, :] - palette_lab[:, None, :]
+    # Usually every shade stays within its local colour allowance. If a sparse
+    # palette makes those bounds incompatible with forward progression, relax
+    # them to their union; a constant path then always remains available.
+    for candidates_allowed in (
+        allowed,
+        np.broadcast_to(np.any(allowed, axis=0), allowed.shape),
+    ):
+        scores = np.where(candidates_allowed[0], 4.0 * errors[0], np.inf)
+        backlinks = []
+        for step in range(1, len(targets)):
+            desired = target_lab[step] - target_lab[step - 1]
+            # Use the source leg's direction, so rounding individual samples
+            # cannot make a short ramp oscillate. Multi-stop presets can turn.
+            leg = min(
+                int((step - 0.5) * (len(stops) - 1) / (len(targets) - 1)),
+                len(stops) - 2,
+            )
+            direction = stop_lab[leg + 1] - stop_lab[leg]
+            transition = 0.5 * np.sum((deltas - desired) ** 2, axis=2)
+            if np.linalg.norm(direction) > 1e-9:
+                backwards = np.sum(deltas * direction, axis=2) < -1e-10
+                transition = np.where(backwards, np.inf, transition)
+                transition += np.eye(len(indices)) * 0.03
+            candidates = scores[:, None] + transition
+            previous = np.argmin(candidates, axis=0)
+            weight = 4.0 if step == len(targets) - 1 else 1.0
+            scores = (
+                candidates[previous, np.arange(len(indices))] + weight * errors[step]
+            )
+            scores = np.where(candidates_allowed[step], scores, np.inf)
+            backlinks.append(previous)
+        if np.any(np.isfinite(scores)):
+            break
+    selected = int(np.argmin(scores))
+    ramp = [selected]
+    for previous in reversed(backlinks):
+        selected = int(previous[selected])
+        ramp.append(selected)
+    return [indices[index] for index in reversed(ramp)]
+
+
 def resolve_gradient_to_indices(
     preset: GradientPreset | list[str],
     palette: "U7Palette",
@@ -486,7 +607,9 @@ def resolve_gradient_to_indices(
     """Resolve gradient hex colours to palette indices.
 
     Interpolates the gradient *colors* into *steps* evenly-spaced
-    colours, then maps each to the nearest palette colour.
+    colours, then jointly selects a palette ramp using perceptual colour
+    similarity, smooth transitions, and a preference for distinct shades.
+    Repeated shades remain possible when the palette's suitable colours run out.
 
     Returns ``(gradient_indices, stroke_index)``.
     """
@@ -502,6 +625,8 @@ def resolve_gradient_to_indices(
 
     # Interpolate to *steps* evenly-spaced colours
     rgb_stops = [_hex_to_rgb(c) for c in hex_colors]
+    if not rgb_stops:
+        raise ValueError("A gradient requires at least one colour stop")
     if len(rgb_stops) == 1:
         interpolated = [rgb_stops[0]] * steps
     else:
@@ -522,11 +647,9 @@ def resolve_gradient_to_indices(
     sr, sg, sb = _hex_to_rgb(stroke_hex)
     stroke_idx = _nearest_palette_index(sr, sg, sb, palette.colors, exclude=excluded)
 
-    # Map each gradient step to nearest palette colour
-    gradient_indices = []
-    for r, g, b in interpolated:
-        idx = _nearest_palette_index(r, g, b, palette.colors, exclude=excluded)
-        gradient_indices.append(idx)
+    gradient_indices = _select_palette_ramp(
+        interpolated, palette.colors, excluded, rgb_stops
+    )
 
     return gradient_indices, stroke_idx
 
@@ -555,7 +678,8 @@ def resolve_game_palette(
     1. *palette_file* — explicit path to a ``PALETTES.FLX`` or ``.pal``.
     2. ``titan.toml`` — look for ``[u7bg.paths].palette`` or
        ``[u7si.paths].palette``.
-    3. Bundled ``u7data/`` directory in the titan-ultima repo.
+    3. Discovered game STATIC or the game's Exult configuration.
+    4. Bundled ``u7data/`` directory in the titan-ultima repo.
 
     Returns ``None`` if no palette can be found.
     """
@@ -570,29 +694,12 @@ def resolve_game_palette(
             raise FileNotFoundError(f"Palette file not found: {p}")
         return U7Palette.from_file(str(p), palette_index=palette_index)
 
-    # 2. titan.toml config
-    try:
-        from titan._config import get_config
+    # 2/3. Shared Titan + nested-install + Exult resolution.
+    from titan.u7.install import resolve_u7_path
 
-        cfg = get_config() or {}
-        section_key = "u7bg" if game == "BG" else "u7si"
-        section = cfg.get(section_key, {})
-        paths = section.get("paths", {})
-        pal_path = paths.get("palette")
-        if pal_path:
-            p = Path(pal_path).expanduser()
-            base = section.get("game", {}).get("base")
-            candidates = [p] if p.is_absolute() else []
-            if base and not p.is_absolute():
-                candidates += [Path(base) / p, Path(base) / "STATIC" / p.name]
-            candidates.append(p)
-            for candidate in candidates:
-                if candidate.is_file():
-                    return U7Palette.from_file(
-                        str(candidate), palette_index=palette_index
-                    )
-    except ImportError:
-        pass
+    palette = resolve_u7_path(game, "palette")
+    if palette is not None:
+        return U7Palette.from_file(str(palette), palette_index=palette_index)
 
     # 3. Bundled u7data
     rel = _BUNDLED_PAL_DIRS.get(game)

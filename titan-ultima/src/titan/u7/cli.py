@@ -19,8 +19,9 @@ from types import SimpleNamespace
 from typing import Annotated, Literal, Optional
 
 import typer
-from titan._config import get_config
+from titan._config import get_config, resolve_config_path
 from titan.u7.shape_archive import U7ShapeArchive
+from titan.u7.install import resolve_u7_path
 
 u7_app = typer.Typer(
     name="u7",
@@ -31,34 +32,10 @@ u7_app = typer.Typer(
 
 
 def _resolve_u7_paths(game: str) -> tuple[Optional[str], Optional[str]]:
-    """Resolve STATIC and palette paths from multi-game config for BG/SI."""
-    cfg = get_config() or {}
-    section_key = "u7bg" if game.lower() == "bg" else "u7si"
-    section = cfg.get(section_key, {}) if isinstance(cfg, dict) else {}
-    game_cfg = section.get("game", {}) if isinstance(section, dict) else {}
-    paths_cfg = section.get("paths", {}) if isinstance(section, dict) else {}
-
-    base = game_cfg.get("base") if isinstance(game_cfg, dict) else None
-    base_path = Path(str(base)).expanduser() if base else None
-
-    def _abs_from_cfg(value: object) -> Optional[str]:
-        if not value:
-            return None
-        p = Path(str(value)).expanduser()
-        if p.is_absolute() or base_path is None:
-            return str(p)
-        return str(base_path / p)
-
-    static = _abs_from_cfg(paths_cfg.get("static"))
-    palette = _abs_from_cfg(paths_cfg.get("palette"))
-
-    # Reasonable fallback if only base was configured.
-    if static is None and base_path is not None:
-        static = str(base_path / "STATIC")
-    if palette is None and static is not None:
-        palette = str(Path(static) / "PALETTES.FLX")
-
-    return static, palette
+    """Share verified config/nested-install/Exult paths with the shape wizard."""
+    static = resolve_u7_path(game, "static")
+    palette = resolve_u7_path(game, "palette")
+    return str(static) if static else None, str(palette) if palette else None
 
 
 def _resolve_u7_patch_base_static(
@@ -118,37 +95,18 @@ def _load_u7_shape_archive(
 
 def _resolve_u7_text_flx(game: str, static_dir: Optional[str] = None) -> Optional[str]:
     """Resolve TEXT.FLX path from config, with fallback to STATIC dir."""
-    cfg = get_config() or {}
-    section_key = "u7bg" if game.lower() == "bg" else "u7si"
-    section = cfg.get(section_key, {}) if isinstance(cfg, dict) else {}
-    game_cfg = section.get("game", {}) if isinstance(section, dict) else {}
-    paths_cfg = section.get("paths", {}) if isinstance(section, dict) else {}
+    from titan._config import game_config_path
+    from titan.u7.install import existing_path
 
-    base = game_cfg.get("base") if isinstance(game_cfg, dict) else None
-    base_path = Path(str(base)).expanduser() if base else None
-
-    configured = paths_cfg.get("text") if isinstance(paths_cfg, dict) else None
-    if configured:
-        p = Path(str(configured)).expanduser()
-        if p.is_absolute() or base_path is None:
-            candidate = p
-        else:
-            candidate = base_path / p
-        if candidate.exists():
-            return str(candidate)
-
-    # Fall back to STATIC directory discovery
-    search_dirs: list[Path] = []
+    configured = game_config_path(game, "text")
+    if configured and existing_path(configured).is_file():
+        return str(existing_path(configured))
     if static_dir:
-        search_dirs.append(Path(static_dir))
-    if base_path:
-        search_dirs.append(base_path / "STATIC")
-    for d in search_dirs:
-        for name in ("TEXT.FLX", "text.flx"):
-            p = d / name
-            if p.exists():
-                return str(p)
-    return None
+        selected = existing_path(Path(static_dir) / "TEXT.FLX")
+        if selected.is_file():
+            return str(selected)
+    path = resolve_u7_path(game, "text")
+    return str(path) if path else None
 
 
 def _resolve_u7_gamedat(game: str) -> Optional[str]:
@@ -260,8 +218,8 @@ def _resolve_u7_mod_gamedat(game: str, mod: Optional[str]) -> Optional[str]:
             if isinstance(paths_cfg, dict):
                 configured = paths_cfg.get("gamedat")
                 if configured:
-                    path = Path(str(configured)).expanduser()
-                    if (path / "npc.dat").is_file():
+                    path = resolve_config_path(configured, game_cfg.get("base"))
+                    if path and (path / "npc.dat").is_file():
                         return str(path)
 
     root = _exult_profile_root()
@@ -293,8 +251,8 @@ def _resolve_u7_mod_archive(game: str, mod: Optional[str]) -> Optional[str]:
     paths_cfg = mod_cfg.get("paths", {}) if isinstance(mod_cfg, dict) else {}
     archive = paths_cfg.get("archive") if isinstance(paths_cfg, dict) else None
     if archive:
-        path = Path(str(archive)).expanduser()
-        if path.is_file():
+        path = resolve_config_path(archive, game_cfg.get("base"))
+        if path and path.is_file():
             return str(path)
     base_path = game_cfg.get("base") if isinstance(game_cfg, dict) else None
     if base_path:
@@ -6002,6 +5960,7 @@ def container_browse_cmd(
                 exult_flx_path=_exult_flx,
                 mod_data_dir=mod_data,
                 map_num=map_num,
+                game=game,
             )
         )
 
@@ -6195,6 +6154,7 @@ def egg_query_cmd(
             _egg_wizard(
                 static_dir=static_dir,
                 gamedat_dir=gamedat_dir,
+                game=game,
             )
         )
 

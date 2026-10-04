@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 import tomli_w
+from titan import _wizard_ui as ui
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -16,6 +17,7 @@ else:
     import tomli as tomllib
 
 from titan.u7.typeflag import U7TypeFlags
+from titan.u7.target_picker import SelectionCancelled, select_world
 from titan.u7.world import (
     ALL_FLAG_NAMES,
     TILE_MAX,
@@ -353,8 +355,9 @@ def _area(q: Any, params: WorldQueryParams) -> WorldQueryParams:
         else "Entire world"
     )
     kind = _ask(
-        q.select(
+        ui.select(
             "Search area:",
+            q=q,
             choices=["Entire world", "Superchunks", "Tile rectangle"],
             default=default,
         )
@@ -389,9 +392,9 @@ def run_wizard(initial: WorldQueryParams) -> int:
     import questionary as q
 
     print("U7 World Query")
-    validate_params(initial)
+    validate_params(initial, require_gamedat=False)
     try:
-        params = replace(initial)
+        params = select_world(q, replace(initial))
         if not params.static_dir or not Path(params.static_dir).expanduser().is_dir():
             params.static_dir = _validated_text(
                 q, "STATIC or mod patch directory:", params.static_dir, _directory
@@ -444,8 +447,9 @@ def run_wizard(initial: WorldQueryParams) -> int:
             )
             while True:
                 action = _ask(
-                    q.select(
+                    ui.select(
                         "Next action:",
+                        q=q,
                         choices=[
                             "Refine filters",
                             "Change area",
@@ -453,6 +457,7 @@ def run_wizard(initial: WorldQueryParams) -> int:
                             "Export results",
                             "Save recipe",
                             "New search",
+                            "Change world/map",
                             "Finish",
                         ],
                         default="Finish",
@@ -460,6 +465,10 @@ def run_wizard(initial: WorldQueryParams) -> int:
                 )
                 if action == "Finish":
                     return 0
+                if action == "Change world/map":
+                    params = select_world(q, params)
+                    mode = "filters"
+                    break
                 if action in ("Refine filters", "Change area", "New search"):
                     mode = {
                         "Refine filters": "filters",
@@ -480,7 +489,7 @@ def run_wizard(initial: WorldQueryParams) -> int:
                     if not choices:
                         print("No placements to show.")
                         continue
-                    shape = _ask(q.select("Choose a shape:", choices=choices))
+                    shape = _ask(ui.select("Choose a shape:", q=q, choices=choices))
                     subset = WorldResult(
                         replace(params, output_format="full_text"),
                         [r for r in result.records if r.shape == shape],
@@ -488,14 +497,17 @@ def run_wizard(initial: WorldQueryParams) -> int:
                     print(format_result(subset))
                 elif action == "Export results":
                     fmt = _ask(
-                        q.select(
+                        ui.select(
                             "Export format:",
+                            q=q,
                             choices=["summary", "full_text", "csv"],
                             default=params.output_format,
                         )
                     )
                     path = _ask(
-                        q.path("Output file:", default=params.output_path or "")
+                        ui.path_prompt(
+                            "Output file:", q=q, default=params.output_path or ""
+                        )
                     )
                     if not path.strip():
                         print("Enter an output path.")
@@ -521,7 +533,7 @@ def run_wizard(initial: WorldQueryParams) -> int:
                     result.params = params
                     print(f"Wrote {result.count} placements to {path}")
                 elif action == "Save recipe":
-                    path = _ask(q.path("New TOML recipe file:"))
+                    path = _ask(ui.path_prompt("New TOML recipe file:", q=q))
                     if not path.strip():
                         print("Enter a recipe path.")
                         continue
@@ -531,6 +543,6 @@ def run_wizard(initial: WorldQueryParams) -> int:
                         print(f"Recipe could not be saved: {error}")
                         continue
                     print(f"Saved recipe to {path}")
-    except _Cancelled:
+    except (_Cancelled, SelectionCancelled):
         print("Search cancelled.")
         return 0

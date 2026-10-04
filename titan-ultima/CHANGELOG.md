@@ -285,6 +285,25 @@ This project uses [Semantic Versioning](https://semver.org/):
   through the U7 writer, retaining their title, magic/version, reserved header
   bytes, record indices, and compatibility with U7 palette inspection.
 
+## [0.7.7]
+
+### Changed
+
+- Improved U7 game, mod, world, map, and archive selection in interactive workflows.
+- Updated interactive menus with moving highlights, Tab hints, and path completion.
+- Improved PNG shape previews and palette selection for Exult games.
+- Added colour font previews, custom preview text, and swatches beside gradient presets.
+- Added palette-aware ramp selection for all font gradient presets.
+- Simplified setup by removing the extraction prompt and closing command suggestions.
+
+### Fixed
+
+- Corrected nested U7 install detection and config path reporting.
+- Kept font and world workflows within the selected game's base, patch, and save data.
+- Preserved archive formats and allocated shape slots against combined base and patch data.
+
+---
+
 ## [0.7.6]
 
 ### Added

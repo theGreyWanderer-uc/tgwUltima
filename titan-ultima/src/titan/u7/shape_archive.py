@@ -97,12 +97,15 @@ class U7ShapeArchive:
         configured_static: str | None = None,
         strict: bool = False,
         require_patch_base: bool = False,
+        infer_base: bool = True,
     ) -> U7ShapeArchive:
         path = Path(filepath).expanduser()
         base_path = (
             Path(base_archive).expanduser()
             if base_archive
             else discover_base_archive(path, configured_static)
+            if infer_base
+            else None
         )
         if base_path is not None and base_path.resolve() == path.resolve():
             raise ValueError("The base archive must be distinct from the patch archive")

@@ -1145,10 +1145,7 @@ def _ensure_asset_dir(
             f"\n[EMPTY] {label} directory exists but contains no "
             f"{ext} files: {dir_path}"
         )
-    print(
-        f"  Map rendering needs individual {ext} files extracted from "
-        f"{flx_hint}."
-    )
+    print(f"  Map rendering needs individual {ext} files extracted from {flx_hint}.")
     clean_dir = dir_path.rstrip("/\\")
     print(
         f"  You can do this manually with: "
@@ -1156,11 +1153,16 @@ def _ensure_asset_dir(
     )
     print()
 
-    answer = ""
-    while answer not in ("y", "yes", "n", "no", ""):
-        answer = input(
-            f"  Extract {flx_hint} into '{dir_path}' now? [y/N] "
-        ).strip().lower()
+    from titan import _wizard_ui as ui
+
+    try:
+        answer = ui.choice(
+            f"  Extract {flx_hint} into '{dir_path}' now? [y/N] ",
+            ["y", "Y", "n", "N"],
+            "N",
+        ).lower()
+    except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
+        return False
 
     if answer not in ("y", "yes"):
         print(f"  Aborting.  Re-run after extracting {flx_hint} manually.")
@@ -1168,7 +1170,10 @@ def _ensure_asset_dir(
 
     flx_path = ""
     while not flx_path or not os.path.isfile(flx_path):
-        flx_path = input(f"  Enter path to {flx_hint}: ").strip()
+        try:
+            flx_path = ui.path(f"  Enter path to {flx_hint}: ").strip()
+        except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
+            return False
         if not flx_path:
             continue
         if not os.path.isfile(flx_path):
@@ -1191,8 +1196,7 @@ def _ensure_asset_dir(
     new_manifest = _dir_manifest(dir_path, ext)
     total_bytes = sum(new_manifest.values())
     print(
-        f"  Extracted {extracted} files -> {dir_path}/  "
-        f"({total_bytes:,} bytes total)"
+        f"  Extracted {extracted} files -> {dir_path}/  ({total_bytes:,} bytes total)"
     )
 
     if missing_idx:

@@ -15,9 +15,9 @@ __all__ = ["run_wizard", "run_from_config", "WizardConfig"]
 import sys
 import os
 import tempfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Optional
+from typing import Mapping, Optional
 
 import numpy as np
 import freetype
@@ -61,6 +61,11 @@ from titan.fonts.encoder import (
 )
 from titan.fonts.encoder import GlyphBitmap
 from titan.fonts.archive import read_font_archive, game_paths
+from titan.u7.target_picker import game_targets, select_target
+from titan import _wizard_ui as ui
+from titan._image_preview import open_preview
+from titan.fonts.preview import preview_items, preview_sheet, validate_preview_text
+from titan.u7.palette import U7Palette
 
 
 @dataclass
@@ -115,6 +120,7 @@ class WizardConfig:
     template_archive: Optional[str] = None
     base_archive: Optional[str] = None
     force: bool = False
+    standalone: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -148,12 +154,12 @@ def _show_preview(
     is_mono: bool = True,
     *,
     is_indexed: bool = False,
+    palette: U7Palette | None = None,
+    preview_text: str | None = None,
+    h_lead: int = 0,
 ) -> None:
-    """Print ASCII art preview of representative glyphs."""
-    preview_codes = [65, 103, 87, 63, 52]  # A g W ? 4
-    available = [c for c in preview_codes if c in glyphs]
-    if not available:
-        available = list(glyphs.keys())[:5]
+    """Print representative glyphs, coloured when mapped palette data is available."""
+    available = preview_items(glyphs, preview_text, h_lead)
 
     if not available:
         print("  (no glyphs to preview)")
@@ -161,10 +167,8 @@ def _show_preview(
 
     # Render each glyph as ASCII art
     rendered: list[tuple[str, list[str]]] = []
-    for code in available:
-        bmp = glyphs[code]
+    for label, bmp in available:
         art = _preview_glyph(bmp, is_mono, is_indexed=is_indexed)
-        label = f"'{chr(code)}' ({code})"
         rendered.append((label, art))
 
     # Find max height for alignment
@@ -176,6 +180,23 @@ def _show_preview(
 
     # Print rows
     for row_idx in range(max_h):
+        if palette is not None and is_indexed:
+            fragments = []
+            for _, bitmap in available:
+                fragments.append(("", "  "))
+                if row_idx >= bitmap.shape[0]:
+                    fragments.append(("", " " * bitmap.shape[1]))
+                    continue
+                for px in bitmap[row_idx]:
+                    if px == 255:
+                        fragments.append(("fg:#a0a0a0 bg:#505050", _EMPTY))
+                    else:
+                        r, g, b = palette.colors[px]
+                        fragments.append(
+                            (f"fg:#{r:02x}{g:02x}{b:02x} bg:#505050", _INK)
+                        )
+            ui.print_coloured(fragments)
+            continue
         parts: list[str] = []
         for _, art in rendered:
             if row_idx < len(art):
@@ -186,9 +207,26 @@ def _show_preview(
     print()
 
 
+def _swatch_fragments(
+    label: str, colours: list[str], *, label_style: str = ""
+) -> list[tuple[str, str]]:
+    fragments = [(label_style, label)]
+    for colour in colours:
+        fragments.extend([(f"bg:{colour}", "  "), ("", " ")])
+    return fragments
+
+
+def _print_swatches(label: str, colours: list[str]) -> None:
+    ui.print_coloured(_swatch_fragments(label, colours))
+
+
 def _show_palette_info(config: "WizardConfig") -> None:
     """Show palette color info for the indices used by the current LUT."""
-    pal = resolve_game_palette(config.game, config.palette_file)
+    pal = (
+        resolve_game_palette(config.game, config.palette_file)
+        if config.palette_file or not config.standalone
+        else None
+    )
     if pal is None:
         print("  (no game palette found — skipping colour preview)")
         return
@@ -212,7 +250,10 @@ def _show_palette_info(config: "WizardConfig") -> None:
 
     for idx in sorted(indices):
         r, g, b = pal.colors[idx]
-        print(f"    index {idx:>3d}: #{r:02x}{g:02x}{b:02x}  ({r}, {g}, {b})")
+        _print_swatches(
+            f"    index {idx:>3d}: #{r:02x}{g:02x}{b:02x}  ({r}, {g}, {b})  ",
+            [f"#{r:02x}{g:02x}{b:02x}"],
+        )
     print()
 
 
@@ -221,21 +262,22 @@ def _show_palette_info(config: "WizardConfig") -> None:
 # ---------------------------------------------------------------------------
 
 
-def _prompt_choice(prompt: str, choices: list[str], default: str = "") -> str:
+def _prompt_choice(
+    prompt: str,
+    choices: list[str],
+    default: str = "",
+    *,
+    labels: Mapping[str, str | list[tuple[str, str]]] | None = None,
+    message: str | None = None,
+) -> str:
     """Simple numbered-choice prompt."""
-    while True:
-        resp = input(prompt).strip()
-        if not resp and default:
-            return default
-        if resp in choices:
-            return resp
-        print(f"  Please enter one of: {', '.join(choices)}")
+    return ui.choice(prompt, choices, default, labels=labels, message=message)
 
 
 def _prompt_int(prompt: str, default: int, minimum: int = 0, maximum: int = 255) -> int:
     """Prompt for an integer with a default."""
     while True:
-        resp = input(prompt).strip()
+        resp = ui.text(prompt, str(default)).strip()
         try:
             value = int(resp) if resp else default
             if minimum <= value <= maximum:
@@ -247,7 +289,7 @@ def _prompt_int(prompt: str, default: int, minimum: int = 0, maximum: int = 255)
 
 def _prompt_file(prompt: str, *, optional: bool = False) -> str:
     while True:
-        value = input(prompt).strip().strip('"').strip("'")
+        value = ui.path(prompt).strip().strip('"').strip("'")
         if not value and optional:
             return ""
         path = Path(value).expanduser()
@@ -261,15 +303,23 @@ def _step_game() -> str:
     print("\n" + "=" * 50)
     print("  Titan Font Shape Wizard")
     print("=" * 50)
-    print("\nWhich game?")
-    print("  [1] Black Gate")
-    print("  [2] Serpent Isle")
-    resp = _prompt_choice("> ", ["1", "2"])
+    ui.legacy_menu("\nWhich game?", "  [1] Black Gate", "  [2] Serpent Isle")
+    resp = _prompt_choice(
+        "> ",
+        ["1", "2"],
+        message="Game flavour:",
+        labels={"1": "Black Gate", "2": "Serpent Isle"},
+    )
     return "BG" if resp == "1" else "SI"
 
 
 def _read_archive_slots(
-    archive_path: Path, game: str = "BG", base_archive: str | None = None
+    archive_path: Path,
+    game: str = "BG",
+    base_archive: str | None = None,
+    *,
+    paths: ExultGamePaths | None = None,
+    infer_base: bool = True,
 ) -> dict[int, dict]:
     """Read a font Flex archive and extract live slot data.
 
@@ -279,7 +329,13 @@ def _read_archive_slots(
     """
     from titan.u7.shape import U7Shape
 
-    archive = read_font_archive(archive_path, game=game, base_archive=base_archive)
+    archive = read_font_archive(
+        archive_path,
+        game=game,
+        base_archive=base_archive,
+        paths=paths,
+        infer_base=infer_base,
+    )
     presets = {**FONT_SHAPES}  # for name/h_lead lookups
 
     slots: dict[int, dict] = {}
@@ -325,7 +381,12 @@ def _read_archive_slots(
 
 
 def _step_slot(
-    game: str, source_archive: Path | None = None, base_archive: str | None = None
+    game: str,
+    source_archive: Path | None = None,
+    base_archive: str | None = None,
+    *,
+    paths: ExultGamePaths | None = None,
+    infer_base: bool = True,
 ) -> tuple[int | None, dict | None]:
     """Step 2: Choose font slot.
 
@@ -335,7 +396,9 @@ def _step_slot(
     """
     # Use live data from archive if available, else static presets
     if source_archive and source_archive.is_file():
-        live_slots = _read_archive_slots(source_archive, game, base_archive)
+        live_slots = _read_archive_slots(
+            source_archive, game, base_archive, paths=paths, infer_base=infer_base
+        )
     else:
         live_slots = None
 
@@ -351,19 +414,33 @@ def _step_slot(
     print(f"\nUse an existing {game} font slot as a template?")
     print("  Selecting a slot pre-fills cell height, h-lead,")
     print(f"  and frame count from the {source_label}.")
-    print("  " + "-" * 60)
-    print(f"  {'Slot':>4}  {'Name':<30}  {'Cell H':>6}  {'Frames':>6}  {'H-lead':>6}")
-    print("  " + "-" * 60)
+    ui.legacy_menu(
+        "  " + "-" * 60,
+        f"  {'Slot':>4}  {'Name':<30}  {'Cell H':>6}  {'Frames':>6}  {'H-lead':>6}",
+        "  " + "-" * 60,
+    )
     for slot in sorted(slots):
         p = slots[slot]
-        print(
+        ui.legacy_menu(
             f"  {slot:>4}  {p['name']:<30}  {p['cell_height']:>4} px  {p['total_frames']:>6}  {p['h_lead']:>6}"
         )
-    print("  " + "-" * 60)
-    print("  [C] Custom (set all dimensions manually)")
+    ui.legacy_menu("  " + "-" * 60, "  [C] Custom (set all dimensions manually)")
 
     valid = [str(s) for s in sorted(slots)] + ["c", "C"]
-    resp = _prompt_choice("> ", valid)
+    resp = _prompt_choice(
+        "> ",
+        valid,
+        message="Font slot to use as a template:",
+        labels={
+            **{
+                str(
+                    slot
+                ): f"{slot}: {p['name']} — {p['cell_height']}px, {p['total_frames']} frames"
+                for slot, p in slots.items()
+            },
+            "C": "Custom (set dimensions manually)",
+        },
+    )
     if resp.upper() == "C":
         return None, None
     chosen = int(resp)
@@ -373,16 +450,23 @@ def _step_slot(
 def _step_ttf_source() -> tuple[str | None, str | None]:
     """Step 3: Choose source font. Returns (ttf_key, custom_path)."""
     print("\nSource TrueType font:")
-    print("  Built-in:")
+    ui.legacy_menu("  Built-in:")
     keys = list(BUNDLED_TTFS.keys())
     for i, key in enumerate(keys, 1):
         entry = BUNDLED_TTFS[key]
-        print(f"  [{i}] {entry['label']}")
-    print("\n  Custom:")
-    print("  [P] Path to a TTF file")
+        ui.legacy_menu(f"  [{i}] {entry['label']}")
+    ui.legacy_menu("\n  Custom:", "  [P] Path to a TTF file")
 
     valid = [str(i) for i in range(1, len(keys) + 1)] + ["p", "P"]
-    resp = _prompt_choice("> ", valid)
+    resp = _prompt_choice(
+        "> ",
+        valid,
+        message="Source TrueType font:",
+        labels={
+            **{str(i): BUNDLED_TTFS[key]["label"] for i, key in enumerate(keys, 1)},
+            "P": "Custom TTF file",
+        },
+    )
 
     if resp.upper() == "P":
         path = _prompt_file("  TTF file path: ")
@@ -396,11 +480,16 @@ def _step_ttf_source() -> tuple[str | None, str | None]:
 def _step_render_method() -> tuple[str, str | None]:
     """Step 4: Choose rendering method. Returns (method, lut_key)."""
     print("\nRendering method:")
-    print("  [1] Hinted mono (1-bit, crisp single-color pixels)")
-    print("  [2] LUT downscale (multi-shade via palette lookup table)")
-    print("  [3] Grayscale threshold (1-bit with configurable cutoff)")
-    print("  [4] Hollow gradient (stroke outline + vertical gradient fill)")
-    resp = _prompt_choice("> ", ["1", "2", "3", "4"])
+    methods = {
+        "1": "Hinted mono (crisp single-colour pixels)",
+        "2": "LUT downscale (multiple palette shades)",
+        "3": "Grayscale threshold (configurable cutoff)",
+        "4": "Hollow gradient (outline and gradient fill)",
+    }
+    ui.legacy_menu(*(f"  [{key}] {value}" for key, value in methods.items()))
+    resp = _prompt_choice(
+        "> ", ["1", "2", "3", "4"], message="Rendering method:", labels=methods
+    )
 
     if resp == "1":
         return "mono", None
@@ -414,11 +503,19 @@ def _step_render_method() -> tuple[str, str | None]:
     lut_keys = list_builtin_luts()
     for i, key in enumerate(lut_keys, 1):
         lut = get_builtin_lut(key)
-        print(f"  [{i}] {lut.name}")
-    print("  [F] Custom LUT file (TOML)")
+        ui.legacy_menu(f"  [{i}] {lut.name}")
+    ui.legacy_menu("  [F] Custom LUT file (TOML)")
 
     valid = [str(i) for i in range(1, len(lut_keys) + 1)] + ["f", "F"]
-    resp2 = _prompt_choice("> ", valid)
+    resp2 = _prompt_choice(
+        "> ",
+        valid,
+        message="Palette lookup table:",
+        labels={
+            **{str(i): get_builtin_lut(key).name for i, key in enumerate(lut_keys, 1)},
+            "F": "Custom LUT file (TOML)",
+        },
+    )
     if resp2.upper() == "F":
         path = _prompt_file("  LUT TOML path: ")
         PaletteLUT.from_toml(path)
@@ -443,7 +540,9 @@ def _step_dimensions(preset: dict | None) -> tuple[int, int, int]:
     print(f"  Ink height:   [{ih}]")
     print(f"  Exult h-lead: [{hl}] (fixed by font slot; not stored in the shape)")
 
-    resp = input("\nOverride any values? [y/N] ").strip().lower()
+    resp = _prompt_choice(
+        "\nOverride any values? [y/N] ", ["y", "Y", "n", "N"], "N"
+    ).lower()
     if resp == "y":
         ch = _prompt_int(f"  Cell height [{ch}]: ", ch, 2, 200)
         ih = _prompt_int(
@@ -468,11 +567,27 @@ def _step_hollow_gradient(config: WizardConfig) -> None:
     print("\nGradient preset:")
     for i, key in enumerate(keys, 1):
         p = get_gradient_preset(key)
-        print(f"  [{i:2d}] {p.name:24s} {p.description}  {p.swatches}")
-    print("  [M]  Manual (enter palette indices directly)")
+        if not ui.menus_enabled():
+            _print_swatches(f"  [{i:2d}] {p.name:24s} {p.description}  ", p.colors)
+    ui.legacy_menu("  [M]  Manual (enter palette indices directly)")
 
     valid = [str(i) for i in range(1, len(keys) + 1)] + ["m", "M"]
-    resp = _prompt_choice("> ", valid)
+    resp = _prompt_choice(
+        "> ",
+        valid,
+        message="Gradient preset:",
+        labels={
+            **{
+                str(i): _swatch_fragments(
+                    f"{get_gradient_preset(key).name:24s} ",
+                    get_gradient_preset(key).colors,
+                    label_style="class:choice-label",
+                )
+                for i, key in enumerate(keys, 1)
+            },
+            "M": "Manual palette indices",
+        },
+    )
 
     if resp.upper() == "M":
         config.gradient_preset = None
@@ -481,7 +596,7 @@ def _step_hollow_gradient(config: WizardConfig) -> None:
             f"  Stroke index [{config.stroke_index}]: ", config.stroke_index, 0, 254
         )
         while True:
-            raw = input(
+            raw = ui.text(
                 f"  Gradient indices (comma-separated) [{','.join(str(i) for i in config.gradient_indices)}]: "
             ).strip()
             if not raw:
@@ -498,7 +613,9 @@ def _step_hollow_gradient(config: WizardConfig) -> None:
         idx = int(resp) - 1
         config.gradient_preset = keys[idx]
         preset = get_gradient_preset(config.gradient_preset or "")
-        print(f"  Selected: {preset.name} ({preset.description})  {preset.swatches}")
+        _print_swatches(
+            f"  Selected: {preset.name} ({preset.description})  ", preset.colors
+        )
         print("  (Indices will be resolved from game palette at render time)")
         default = "Y" if config.allow_cycling else "N"
         config.allow_cycling = (
@@ -529,10 +646,16 @@ def _step_naming(config: WizardConfig) -> None:
     default_label = existing["name"] if existing else ""
     if default_label:
         print(f"\nShape name (descriptive label for slot {config.slot}):")
-        name = input(f"  [{default_label}]: ").strip() or default_label
+        name = (
+            ui.text(
+                "Shape name:" if ui.menus_enabled() else f"  [{default_label}]: ",
+                default_label,
+            ).strip()
+            or default_label
+        )
     else:
         print(f"\nShape name (descriptive label for slot {config.slot}):")
-        name = input("  > ").strip()
+        name = ui.text("Shape name:" if ui.menus_enabled() else "  > ").strip()
     config.shape_name = name or f"Font slot {config.slot}"
     print(f"  Name: {config.shape_name}")
 
@@ -543,7 +666,10 @@ def _step_shape_path(config: WizardConfig) -> None:
     safe = "".join(c for c in safe if c.isalnum() or c == "_")
     ttf_label = config.ttf_key or Path(config.ttf_path or "custom").stem
     default_shp = f"font{config.slot}_{safe}_{ttf_label}.shp"
-    path = input(f"  Output .shp filename [{default_shp}]: ").strip() or default_shp
+    path = (
+        ui.path(f"  Output .shp filename [{default_shp}]: ", default_shp).strip()
+        or default_shp
+    )
     config.output_path = path
     print(f"  File: {config.output_path}")
 
@@ -555,10 +681,21 @@ def _step_output(
 ) -> tuple[str, str | None]:
     """Step 8: Choose output format and path."""
     print("\nOutput:")
-    print("  [1] Single shape file (.shp)")
-    print("  [2] Patch into Exult font archive")
-    print("  [3] Both")
-    resp = _prompt_choice("> ", ["1", "2", "3"])
+    ui.legacy_menu(
+        "  [1] Single shape file (.shp)",
+        "  [2] Patch into Exult font archive",
+        "  [3] Both",
+    )
+    resp = _prompt_choice(
+        "> ",
+        ["1", "2", "3"],
+        message="Output format:",
+        labels={
+            "1": "Single shape file (.shp)",
+            "2": "Patch into Exult font archive",
+            "3": "Both",
+        },
+    )
 
     fmt_map = {"1": "shp", "2": "flex", "3": "both"}
     fmt = fmt_map[resp]
@@ -595,12 +732,19 @@ def _step_resolve_flex_target(
         exists = Path(config.flex_source).is_file()
         status = "EXISTS" if exists else "WILL BE CREATED"
         print(f"\n  Font archive target: {config.flex_source}  [{status}]")
-        print("\n  [A] Accept")
-        print("  [P] Enter a different path")
-        resp = _prompt_choice("> ", ["a", "A", "p", "P"])
+        ui.legacy_menu("\n  [A] Accept", "  [P] Enter a different path")
+        resp = _prompt_choice(
+            "> ",
+            ["a", "A", "p", "P"],
+            message="Font archive destination:",
+            labels={
+                "A": f"Accept: {config.flex_source}",
+                "P": "Enter a different path",
+            },
+        )
         if resp.upper() == "P":
             config.flex_source = (
-                input("  Full path to font VGA file: ").strip().strip('"').strip("'")
+                ui.path("  Full path to font VGA file: ").strip().strip('"').strip("'")
                 or None
             )
         return
@@ -618,7 +762,7 @@ def _step_resolve_flex_target(
         else:
             print("  exult.cfg not found in default locations.")
             manual = (
-                input("  Path to exult.cfg (or Enter to skip): ")
+                ui.path("  Path to exult.cfg (or Enter to skip): ")
                 .strip()
                 .strip('"')
                 .strip("'")
@@ -646,13 +790,24 @@ def _step_resolve_flex_target(
         resolved_path = exult_paths.font_vga_path
 
         # Offer to accept, override, or enter mod path
-        print(f"\n  [A] Accept: {resolved_path}")
-        print("  [M] Use a mod's patch directory instead")
-        print("  [P] Enter a custom path to the font archive")
-        resp = _prompt_choice("> ", ["a", "A", "m", "M", "p", "P"])
+        ui.legacy_menu(
+            f"\n  [A] Accept: {resolved_path}",
+            "  [M] Use a mod's patch directory instead",
+            "  [P] Enter a custom path to the font archive",
+        )
+        resp = _prompt_choice(
+            "> ",
+            ["a", "A", "m", "M", "p", "P"],
+            message="Font archive destination:",
+            labels={
+                "A": f"Accept: {resolved_path}",
+                "M": "Use a different mod patch directory",
+                "P": "Enter a custom archive path",
+            },
+        )
 
         if resp.upper() == "M":
-            mod_patch = input("  Mod patch directory: ").strip().strip('"').strip("'")
+            mod_patch = ui.path("  Mod patch directory: ").strip().strip('"').strip("'")
             if mod_patch:
                 resolved_path = str(Path(mod_patch) / exult_paths.font_filename)
                 exists = Path(resolved_path).is_file()
@@ -660,14 +815,14 @@ def _step_resolve_flex_target(
                 print(f"  Resolved: {resolved_path}  [{status}]")
         elif resp.upper() == "P":
             resolved_path = (
-                input("  Full path to font VGA file: ").strip().strip('"').strip("'")
+                ui.path("  Full path to font VGA file: ").strip().strip('"').strip("'")
             )
 
         config.flex_source = resolved_path
     else:
         # No config — manual entry
         print("  Could not resolve font path from exult.cfg.")
-        manual = input("  Full path to font VGA file: ").strip().strip('"').strip("'")
+        manual = ui.path("  Full path to font VGA file: ").strip().strip('"').strip("'")
         config.flex_source = manual if manual else None
 
 
@@ -704,6 +859,7 @@ def _show_exult_info(game: str) -> ExultGamePaths | None:
 
 def _step_select_archive(
     exult_paths: ExultGamePaths | None,
+    directories: list[Path] | None = None,
 ) -> Path | None:
     """Scan the game directory for font VGA archives and let user pick one.
 
@@ -718,7 +874,17 @@ def _step_select_archive(
             return Path(manual)
         return None
 
-    archives = scan_font_archives(exult_paths.game_path)
+    archives = (
+        sorted(
+            set(
+                path
+                for directory in directories
+                for path in scan_font_archives(str(directory))
+            )
+        )
+        if directories
+        else scan_font_archives(exult_paths.game_path)
+    )
 
     if not archives:
         print(f"\n  No *font*.vga files found under {exult_paths.game_path}")
@@ -737,12 +903,20 @@ def _step_select_archive(
         except ValueError:
             rel = path
         exists_tag = "" if path.is_file() else "  [MISSING]"
-        print(f"    [{i}] {rel}{exists_tag}")
-    print("    [P] Enter a custom path")
-    print("    [S] Skip — no source archive")
+        ui.legacy_menu(f"    [{i}] {rel}{exists_tag}")
+    ui.legacy_menu("    [P] Enter a custom path", "    [S] Skip — no source archive")
 
     valid = [str(i) for i in range(1, len(archives) + 1)] + ["p", "P", "s", "S"]
-    resp = _prompt_choice("  Select font archive> ", valid)
+    resp = _prompt_choice(
+        "  Select font archive> ",
+        valid,
+        message="Source font archive:",
+        labels={
+            **{str(i): str(path) for i, path in enumerate(archives, 1)},
+            "P": "Enter a custom archive path",
+            "S": "Skip (no source archive)",
+        },
+    )
 
     if resp.upper() == "S":
         return None
@@ -871,8 +1045,13 @@ def _render(config: WizardConfig) -> tuple[dict[int, np.ndarray], bool, bool]:
 
 
 def _mapped_preview(
-    config: WizardConfig, glyphs: dict[int, np.ndarray], is_mono: bool, is_indexed: bool
-) -> None:
+    config: WizardConfig,
+    glyphs: dict[int, np.ndarray],
+    is_mono: bool,
+    is_indexed: bool,
+    *,
+    preview_text: str | None = None,
+) -> Path | None:
     lut = _resolve_lut(config)
     mapped = (
         glyphs
@@ -884,9 +1063,50 @@ def _mapped_preview(
             for code, bitmap in glyphs.items()
         }
     )
+    palette = (
+        resolve_game_palette(config.game, config.palette_file)
+        if config.palette_file or not config.standalone
+        else None
+    )
     print("\nPreview — representative glyphs (after palette mapping):")
-    _show_preview(mapped, is_mono=False, is_indexed=True)
+    _show_preview(
+        mapped,
+        is_mono=False,
+        is_indexed=True,
+        palette=palette,
+        preview_text=preview_text,
+        h_lead=config.h_lead,
+    )
     _show_palette_info(config)
+    if palette is None or not ui.menus_enabled():
+        return None
+    # Keep the PNG available while the desktop viewer opens asynchronously.
+    with tempfile.NamedTemporaryFile(
+        prefix="titan-u7-font-preview-", suffix=".png", delete=False
+    ) as stream:
+        preview_sheet(mapped, palette, text=preview_text, h_lead=config.h_lead).save(
+            stream, format="PNG"
+        )
+        path = Path(stream.name)
+    print(f"  Colour image preview (mapped U7 palette): {path}")
+    if not open_preview(path):
+        print(
+            "  Could not open the image viewer automatically; open the PNG above to inspect it."
+        )
+    return path
+
+
+def _prompt_preview_text(glyphs: dict[int, np.ndarray], default: str = "") -> str:
+    while True:
+        text = (
+            ui.text("Custom preview text (1-8 characters): ", default).strip()
+            or default
+        )
+        try:
+            validate_preview_text(text, glyphs)
+            return text
+        except ValueError as error:
+            print(f"  {error}")
 
 
 def _apply_output_override(config: WizardConfig, output_override: str | None) -> None:
@@ -908,16 +1128,50 @@ def run_wizard(
     try:
         game = _step_game()
         exult_paths = _show_exult_info(game)
-        source_archive = _step_select_archive(exult_paths)
-        slot, slot_data = _step_slot(game, source_archive, base_archive)
+        base, targets = game_targets(game)
+        target = select_target(base, targets)
+        if target is not base:
+            exult_paths = replace(
+                exult_paths or ExultGamePaths(game),
+                game_path=str(target.root or target.patch.parent),
+                static_path=str(target.static) if target.static else None,
+                patch_path=str(target.patch),
+                mods_path=None,
+            )
+            print(f"  Selected target: {target.name}")
+        directories = (
+            [path for path in (target.static, target.patch) if path and path.is_dir()]
+            if target is not base
+            else None
+        )
+        source_archive = _step_select_archive(exult_paths, directories)
+        slot, slot_data = _step_slot(
+            game,
+            source_archive,
+            base_archive,
+            paths=exult_paths,
+            infer_base=not target.standalone,
+        )
         config = WizardConfig(
             game=game,
             force=force,
             allow_cycling=allow_cycling,
             base_archive=base_archive,
+            standalone=target.standalone,
         )
         if source_archive:
             config.template_archive = str(source_archive)
+        if target is not base:
+            config.flex_source = str(
+                target.patch
+                / (
+                    source_archive.name
+                    if source_archive
+                    else exult_paths.font_filename
+                    if exult_paths
+                    else "fonts.vga"
+                )
+            )
         if slot is not None and slot_data:
             config.slot = slot
             config.cell_height = slot_data["cell_height"]
@@ -933,6 +1187,7 @@ def run_wizard(
             config.code_range = (32, min(126, config.total_frames - 1))
         config.h_lead = _engine_h_lead(config.slot)
         _use_exult_palette(config, exult_paths)
+        preview_text = ""
         while True:
             try:
                 config.ttf_key, config.ttf_path = _step_ttf_source()
@@ -968,16 +1223,33 @@ def run_wizard(
                 print(f"  ERROR: {error}", file=sys.stderr)
                 if (
                     _prompt_choice(
-                        "  [R] Retry font settings  [Q] Quit\n> ", ["R", "r", "Q", "q"]
+                        "  [R] Retry font settings  [Q] Quit\n> ",
+                        ["R", "r", "Q", "q"],
+                        message="Font settings failed:",
+                        labels={"R": "Retry font settings", "Q": "Quit"},
                     ).upper()
                     == "Q"
                 ):
                     return 1
                 continue
-            answer = _prompt_choice(
-                "  [Y] Looks good — generate  [R] Redo  [Q] Quit\n> ",
-                ["Y", "y", "R", "r", "Q", "q"],
-            )
+            while True:
+                answer = _prompt_choice(
+                    "  [Y] Looks good — generate  [C] Custom text  [R] Redo  [Q] Quit\n> ",
+                    ["Y", "y", "C", "c", "R", "r", "Q", "q"],
+                    message="Review the font preview:",
+                    labels={
+                        "Y": "Looks good — generate",
+                        "C": "Custom text (up to 8 characters)",
+                        "R": "Redo font settings",
+                        "Q": "Quit",
+                    },
+                )
+                if answer.upper() != "C":
+                    break
+                preview_text = _prompt_preview_text(glyphs, preview_text)
+                _mapped_preview(
+                    config, glyphs, is_mono, is_indexed, preview_text=preview_text
+                )
             if answer.upper() == "Q":
                 print("Cancelled.")
                 return 0
@@ -999,7 +1271,7 @@ def run_wizard(
                         return 0
             config.force = True
         return _generate(config, glyphs, is_mono, is_indexed=is_indexed)
-    except (KeyboardInterrupt, EOFError):
+    except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
         print("\nCancelled.")
         return 0
     except (ValueError, OSError, KeyError, TypeError, freetype.FT_Exception) as error:
@@ -1008,13 +1280,21 @@ def run_wizard(
 
 
 def _use_exult_palette(config: WizardConfig, paths: ExultGamePaths | None) -> None:
-    if config.palette_file or not paths or not paths.static_path:
+    if config.palette_file or not paths:
         return
     from titan.u7.shape_archive import find_archive
 
-    palette = find_archive(Path(paths.static_path), "palettes.flx")
-    if palette:
-        config.palette_file = str(palette)
+    for directory in (paths.patch_path, paths.static_path):
+        palette = find_archive(Path(directory), "palettes.flx") if directory else None
+        if palette:
+            from titan.u7.palette import U7Palette, PaletteRecordEmptyError
+
+            try:
+                U7Palette.from_file(str(palette))
+            except PaletteRecordEmptyError:
+                continue
+            config.palette_file = str(palette)
+            break
 
 
 def _resolve_ttf(config: WizardConfig) -> Path | None:
@@ -1046,11 +1326,15 @@ def _resolve_gradient_config(config: WizardConfig, steps: int = 6) -> None:
     """Resolve a gradient preset to palette indices on *config*.
 
     Loads the game palette, interpolates the preset hex colours into
-    *steps* stops, and maps each to the nearest palette entry.  Updates
+    *steps* stops, and fits a ramp to the available palette colours. Updates
     ``config.gradient_indices`` and ``config.stroke_index`` in place.
     """
     preset = get_gradient_preset(config.gradient_preset or "")
-    pal = resolve_game_palette(config.game, palette_file=config.palette_file)
+    pal = (
+        resolve_game_palette(config.game, palette_file=config.palette_file)
+        if config.palette_file or not config.standalone
+        else None
+    )
     if pal is None:
         raise ValueError(
             f"No {config.game} palette found; supply palette.file to match gradient colours"
@@ -1063,19 +1347,25 @@ def _resolve_gradient_config(config: WizardConfig, steps: int = 6) -> None:
     config.stroke_index = stroke
 
     # Show what was resolved
-    print(f"  Gradient preset: {preset.name} ({preset.description})  {preset.swatches}")
+    _print_swatches(
+        f"  Gradient preset: {preset.name} ({preset.description})  ", preset.colors
+    )
     hex_colors = [
         f"#{pal.colors[i][0]:02x}{pal.colors[i][1]:02x}{pal.colors[i][2]:02x}"
         for i in indices
     ]
-    resolved_swatches = []
-    for i in indices:
-        r, g, b = pal.colors[i]
-        resolved_swatches.append(f"\033[38;2;{r};{g};{b}m\u2588\u2588\033[0m")
     print(f"  Resolved indices: {indices}")
-    print(
-        f"  Resolved colours: {' → '.join(hex_colors)}  {' '.join(resolved_swatches)}"
-    )
+    _print_swatches(f"  Resolved colours: {' → '.join(hex_colors)}  ", hex_colors)
+    distinct = len({pal.colors[index] for index in indices})
+    if distinct < steps and len(set(preset.colors)) > 1:
+        print(
+            f"  Palette ramp: {distinct} distinct colours across {steps} steps; some steps repeat to stay close to the preset."
+        )
+        if distinct == 1:
+            print(
+                "  WARNING: This preset resolves to a single colour in this palette; "
+                "try another preset or manual palette indices."
+            )
     print(
         f"  Stroke index: {stroke} "
         f"(#{pal.colors[stroke][0]:02x}{pal.colors[stroke][1]:02x}{pal.colors[stroke][2]:02x})"
@@ -1188,6 +1478,10 @@ def _write_outputs(config: WizardConfig, data: bytes) -> None:
             else U7FlexArchive()
         )
         if not target.is_file():
+            if config.template_archive:
+                template = U7FlexArchive.from_file(config.template_archive, strict=True)
+                archive.magic2 = template.magic2
+                archive.reserved_header = template.reserved_header
             archive.title = config.shape_name or f"Font slot {config.slot}"
         archive.records.extend([b""] * max(0, config.slot + 1 - len(archive.records)))
         archive.records[config.slot] = data

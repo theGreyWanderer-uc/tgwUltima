@@ -14,6 +14,12 @@ from titan.u7.shape import U7Shape
 from titan.u7.shape_archive import U7ShapeArchive
 
 
+@pytest.fixture(autouse=True)
+def isolate_install_config(monkeypatch):
+    monkeypatch.setattr("titan._config._config", {})
+    monkeypatch.setattr("titan.u7.install.exult_game_paths", lambda game: {})
+
+
 def shape_bytes(index: int) -> bytes:
     shape = U7Shape()
     frame = U7Shape.Frame()
@@ -182,6 +188,27 @@ def test_cannot_allocate_in_unresolved_patch(tmp_path):
     assert result.exit_code == 1
     assert "--base-archive" in result.output
     assert not output.exists()
+
+
+def test_exult_base_is_included_when_allocating_sparse_archive(
+    archives, tmp_path, monkeypatch
+):
+    base, _ = archives
+    monkeypatch.setattr(
+        "titan.u7.install.exult_game_paths", lambda game: {"static": base.parent}
+    )
+    patch = tmp_path / "elsewhere" / "patch" / "shapes.vga"
+    write_archive(patch, [])
+    shape = tmp_path / "new.shp"
+    shape.write_bytes(shape_bytes(7))
+    output = tmp_path / "new.vga"
+    result = CliRunner().invoke(
+        u7_app, ["flex-add-shape", str(patch), str(shape), "-o", str(output)]
+    )
+    assert result.exit_code == 0, result.output
+    archive = U7FlexArchive.from_file(str(output), strict=True)
+    assert archive.records[150:153] == [b"", b"", b""]
+    assert archive.records[153] == shape_bytes(7)
 
 
 def test_custom_mod_library_can_be_used_without_a_retail_base(tmp_path):

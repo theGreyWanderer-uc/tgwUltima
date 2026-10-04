@@ -1700,9 +1700,16 @@ titan u7 shape-import frames/ -p STATIC/PALETTES.FLX --palette-index 3 -o night_
 #### `u7 shape-create`
 
 Guided PNG → U7 shape → FLX/VGA workflow, modelled on `font-create`.
-Accepts one PNG or a folder of PNG frames. The interactive flow is game,
-source, palette and conversion settings, preview/redo, output format,
+Desktop terminals use the same Questionary menus as `container-browse`: arrow
+keys and Enter for selections and confirmations. The highlight follows the
+arrow; file and folder prompts show a **Tab** hint for completion choices. Ctrl+C
+cancels. Redirected input uses line prompts; TOML recipes remain non-interactive.
+Accepts one PNG or a folder of PNG frames. The interactive flow is game flavour,
+mod or Exult game target, source, palette and conversion settings, preview/redo, output format,
 archive and slot selection, then a final save confirmation.
+At **Palette file**, press Enter to use automatic selection from the chosen
+target, or enter an existing palette file path. The wizard shows the detected
+palette path. Enter the record number (normally **0**) at **Palette record**.
 
 ```text
 titan u7 shape-create [SOURCE] [--game bg|si] [-o FILE] [--preview FILE]
@@ -1721,18 +1728,39 @@ titan u7 shape-create --config recipe.toml [-o FILE] [--force]
 | `--force` | Replace existing output files. Does not authorize replacing an occupied shape slot. |
 | `--in-place` | Allow the selected source archive to also be the destination. |
 
-Palette record **0**, the U7 main palette, is the default. Titan resolves it
-from game configuration or Exult's STATIC directory, or accepts an explicit
+After choosing BG/SI flavour, select the base game, an installed mod, or a custom
+game registered in `exult.cfg`. Titan also discovers mods from its configuration
+and Exult's mods folder. **Other mod or Exult game folder** accepts a game/mod
+root or its patch folder. The selected target supplies the archive source and
+patch destination; both paths remain editable before saving.
+
+Ordinary mods inherit the selected retail game's STATIC archives. A standalone
+Exult game uses its own STATIC and patch archives, including Exult Flex files;
+choosing SI flavour does not add retail SI shapes to its slot inventory.
+
+Palette record **0**, the U7 main palette, is the default. Titan first checks
+the selected target's patch and STATIC directories, or accepts an explicit
 palette file. RGB conversion uses indices **0–223** unless cycling colours
 are enabled. Matching indexed PNGs retain their deliberate palette indices.
 For RLE objects, alpha below 128 becomes transparency at index 255.
 Source images keep their dimensions; frames above **72×72** warn, and widths
 above **320** or heights above **200** fail.
 
-The wizard previews frame dimensions, origin, transparency and silhouettes,
-with converted colours in a terminal that supports ANSI colour. **Redo**
+The wizard opens a PNG comparison in the image viewer on Windows, or a browser
+on other platforms: source on the left, U7 conversion on the right, with a
+checkerboard behind transparent pixels. Images use nearest-neighbour enlargement
+and retain their detail. The terminal lists dimensions, origin and transparency;
+it also prints the temporary PNG path if the viewer cannot open automatically. **Redo**
 returns to conversion settings without restarting game selection. The optional
-PNG contact sheet is saved with the approved outputs.
+`--preview` PNG contact sheet is saved with the approved outputs. Recipes never
+launch an image viewer.
+
+Archive selection offers **SHAPES.VGA**, **GUMPS.VGA** (inventory/interface),
+**FACES.VGA** (portraits), **SPRITES.VGA** (effects), another existing archive,
+or a new library. Selecting GUMPS.VGA finds the selected target's archive and defaults the
+destination to its `patch/GUMPS.VGA`. The source path can also select an existing mod
+patch. Slot rules are selected automatically, followed by sparse patch or copy
+output, destination, free-slot selection, and final save confirmation.
 
 Objects in a `SHAPES.VGA` library allocate from **150** upward. Explicit raw
 flats require every PNG to be **opaque 8×8** and allocate only within **0–149**.
@@ -1763,6 +1791,9 @@ titan u7 shape-create --config actor.toml
 ```toml
 [target]
 game = "BG"
+# static = "./my_game/STATIC" # Override the base archive directory
+# patch = "./my_game/patch"   # Default destination directory
+# standalone = true          # Own archives; do not inherit retail BG/SI
 
 [source]
 path = "./actor_frames"       # Or one PNG
@@ -3007,19 +3038,28 @@ titan u7 save-schedules exult00bg.sav -f csv -o schedules.csv
 #### `u7 font-create`
 
 Interactive wizard for creating U7 FONTS.VGA-compatible shape files from
-TrueType font sources. Walks through game selection (BG/SI) — immediately
-displays the resolved Exult font archive path from `exult.cfg` — then
-scans the game directory for all `*font*.vga` archives (including mod
-patch directories) and presents a numbered pick-list. Selecting an
+TrueType font sources. Uses arrow-key menus, confirmations, and path completion
+in desktop terminals, matching `container-browse`; redirected input retains
+line prompts. Choose BG/SI flavour, then the base game, a mod, or a custom Exult
+game. The selected target supplies the palette, template archives, and patch
+destination. For mods, template selection is scoped to the target's patch and
+base STATIC directories. Standalone games use their own archives.
+Selecting an
 archive shows a live slot table with real frame counts and cell heights
 from the effective base plus patch records. The selected archive is a
 template; saving uses a separately selected destination. Continues through font slot selection,
 TTF source (6 built-in
 or custom path), rendering method (mono, LUT downscale, grayscale
 threshold, hollow gradient), dimension overrides, palette / gradient
-preset selection (with ANSI colour swatches), ASCII art preview, and
+preset selection (with terminal colour swatches), colour glyph preview, and
 shape naming and output format. Redo returns to the font settings while
 keeping the game, template and slot. Preview uses the final palette mapping.
+Desktop terminals also open a PNG preview using the selected game's colours,
+with a checkerboard behind transparent pixels. If the viewer cannot open, the
+wizard prints the preview file path. Redirected output remains plain text.
+Gradient menus show colour swatches beside every preset. At the preview review
+menu, **Custom text** previews 1-8 characters using the current font settings,
+then returns to the review menu. Characters missing from the font are rejected.
 
 For fonts that map glyphs to non-standard positions (e.g. Gargish), the
 encoder automatically copies a representative glyph into frame 65 (‘A’)
@@ -3139,8 +3179,11 @@ count, so new slots (11+) work without manual scripting.
 a vertical colour gradient fill. You can specify colours in two ways:
 
 1. **Preset name** (`gradient_preset`) — hex CSS colours from the preset
-   are interpolated into `gradient_steps` stops and matched to the nearest
-   game palette entries at generation time.
+   are interpolated into `gradient_steps` stops, then fitted together as a
+   palette-aware ramp at generation time. All presets use this selection,
+   balancing colour similarity, smooth progression, and distinct shades.
+   The preview reports when suitable palette colours require repeated steps.
+   Cycling colours 224–254 remain opt-in; index 255 stays transparent.
 2. **Manual indices** (`gradient_indices`) — raw palette index array used
    as-is. Overrides any preset.
 
@@ -3246,6 +3289,12 @@ titan u7 world-query [STATIC] [OPTIONS]
 **Interactive wizard steps** (no filter flags supplied; context options such as
 `--map-num` still apply):
 
+First choose BG/SI flavour, then a base game, installed mod, registered custom
+Exult world, or manual folder. **Current supplied world** preserves explicitly
+provided paths. Selecting another target replaces its STATIC, patch, names,
+and GAMEDAT context; a mod never defaults to the retail game's GAMEDAT. The map
+picker lists discovered `mapNN` folders and accepts another map number.
+
 1. Shape class checkbox — leave blank for no filter.
 2. Include IREG? — auto-defaults to Yes for IREG-only classes.
 3. Name search — substring; matching shape numbers shown as hints.
@@ -3255,7 +3304,7 @@ titan u7 world-query [STATIC] [OPTIONS]
 7. Review the game, mod, map number, sources and filters; confirm the search.
 8. Review grouped counts, then choose **Refine filters**, **Change area**,
    **Show placements** for one shape, **Export results**, **Save recipe**,
-   **New search**, or **Finish**. Refinement preserves the preceding choices;
+   **New search**, **Change world/map**, or **Finish**. Refinement preserves the preceding choices;
    changing only the area does not re-ask the filters. New search clears the
    filters while keeping the world context. Cancellation exits cleanly.
 
@@ -3383,8 +3432,8 @@ titan u7 container-browse [STATIC] [OPTIONS]
 - `--map-num` selects which set of IREG files to query. Mods with multiple maps store each map's IREG in a `mapNN/` subdirectory inside gamedat (e.g. `gamedat/map01/u7ireg*`). Map 0 uses the root gamedat directory. Only the IREG for the selected map is scanned; `--contains-*` filters operate within that map's data.
 
 **Wizard steps (interactive):**
-1. STATIC directory path (if not supplied)
-2. Gamedat directory path (if not supplied)
+1. BG/SI flavour, then a base game, installed mod, custom Exult game, or manual folder
+2. The target's GAMEDAT directory and map (including discovered `mapNN` folders)
 3. Container name substring filter (leave blank for all containers)
 4. Container shape number filter (comma-separated, leave blank for all)
 5. Contains-item name filter (leave blank to skip)
@@ -3496,8 +3545,8 @@ titan u7 egg-query [STATIC] [OPTIONS]
 | `-o / --output FILE` | Write output to file instead of stdout |
 
 **Wizard steps (interactive):**
-1. STATIC directory path (if not supplied)
-2. Gamedat directory path (if not supplied)
+1. BG/SI flavour, then a base game, installed mod, custom Exult game, or manual folder
+2. The target's GAMEDAT directory and map (including discovered `mapNN` folders)
 3. Egg type checkbox (leave blank for all types)
 4. Usecode function number filter (shown only when usecode type is selected or no type filter)
 5. Area: entire world, specific superchunks, or tile rectangle
@@ -3538,8 +3587,11 @@ titan u7 egg-query --game bg
 Interactive first-time setup wizard. Detects your Ultima 8 (and optionally
 Ultima 7) installation, detects third-party engine saves, and writes
 `titan.toml` in the current directory, or the file selected by the global
-`--config` option. Missing parent directories are created. Optionally extracts `shapes/` and
-`globs/` immediately.
+`--config` option. Missing parent directories are created.
+
+Desktop terminals use path completion and Questionary confirmations, matching
+the U7 interactive workflows. Ctrl+C cancels the current prompt; redirected
+input retains the line prompts.
 
 ```
 titan setup
@@ -3552,14 +3604,15 @@ No arguments. Prompts:
 3. **Ultima 7 Black Gate base** — auto-detected when possible; optional.
 4. **Ultima 7 Serpent Isle base** — auto-detected when possible; optional.
 5. **Third-party engine save** — if found, can be used as U8 `nonfixed`.
-6. **Extract now?** — runs `titan flex-extract` for `U8SHAPES.FLX` and
-   `GLOB.FLX` if `Y`.
 
 The wizard writes multi-game sections by default: `[u8.*]`, `[u7bg.*]`, and
 `[u7si.*]` (when U7 paths are provided).
 
 Rerunning setup retains existing values, including custom paths, mod settings,
-and sections for other games, and fills in missing entries. Legacy U8 configs
+and sections for other games, and fills in missing entries. U7 base corrections
+and explicitly selected manual STATIC paths are shown for confirmation and
+applied when saving. Custom relative paths retain their original locations when
+a base changes. Legacy U8 configs
 are retained without introducing a new `[u8]` section. To change existing values,
 use `titan config --edit` (with the same global `--config` option when needed).
 Before updating an existing config, setup saves its original contents, including
@@ -3569,6 +3622,21 @@ The updated TOML is reformatted.
 U8 discovery supports language-folder layouts and flat layouts with `FIXED.DAT`
 directly in the game base. U7 launcher-root scans also recognize Roman-numeral
 folder names such as `Ultima VII - Complete`.
+
+U7 discovery searches candidate folders to a maximum depth of two, visiting
+at most 128 directories per candidate and skipping mods, patches, saves, and
+symlinked child directories. It recognizes nested `ULTIMA7/STATIC` and
+`SERPENT/STATIC` layouts, including both games in a complete collection, and
+also consults Exult's configuration. A verified installation requires readable
+`SHAPES.VGA`, `PALETTES.FLX`, and `TEXT.FLX` archives; setup checks record bounds
+and decodes palette record 0. Incomplete or damaged installs are reported and
+can still be entered manually. The actual folder containing `STATIC` becomes
+`game.base`, and generated resource paths use the discovered filename casing.
+
+U7 CLI commands and the font/shape workflows share path resolution: configured
+resources, discovered files below the game base, then the game's Exult settings.
+A missing configured resource cannot prevent a valid automatic fallback.
+Explicit command-line or recipe palette selections remain authoritative.
 
 After setup, U8 map commands require no path flags:
 ```bash
@@ -3595,6 +3663,12 @@ Without `--edit`, prints:
 - Config file path
 - Multi-game sections when present: `[u8.*]`, `[u7bg.*]`, `[u7si.*]`
 - Legacy `[game]`/`[paths]` only when using legacy config format
+- File status and the full resolved path. U7 relative paths are checked against
+  their game's `base`; absolute paths retain their own location. U7 shapes,
+  palette, and text entries report damaged archives as `INVALID`.
+
+The inspector reports the configured locations, so a broken setting remains
+visible even when a workflow can find a fallback through Exult.
 
 **Examples**
 ```bash

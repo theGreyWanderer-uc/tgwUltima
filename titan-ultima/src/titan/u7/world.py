@@ -242,8 +242,10 @@ def resolve_world_sources(params: WorldQueryParams) -> tuple[Path, Optional[Path
         and selected.resolve() != Path(params.base_static).expanduser().resolve()
     ):
         patch = selected
-    if patch is None and any(
-        part.lower() in {"patch", "mods"} for part in selected.parts
+    if (
+        patch is None
+        and not params.base_static
+        and any(part.lower() in {"patch", "mods"} for part in selected.parts)
     ):
         patch = selected
     base = Path(params.base_static).expanduser() if params.base_static else selected

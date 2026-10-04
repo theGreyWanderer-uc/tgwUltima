@@ -1,6 +1,7 @@
 """Exercise the PNG wizard through conversion, approval and archive insertion."""
 
 import struct
+from functools import partial
 from dataclasses import replace
 from pathlib import Path
 
@@ -14,12 +15,22 @@ from titan.u7.cli import u7_app
 from titan.u7.flex import U7FlexArchive
 from titan.u7.shape import U7Shape
 
+_original_open_preview = wizard._open_preview
+
 
 @pytest.fixture(autouse=True)
-def isolate_profile(monkeypatch):
-    monkeypatch.setattr(wizard, "get_config", lambda: {})
+def isolate_profile(monkeypatch, tmp_path):
+    monkeypatch.setattr("titan.u7.install.exult_game_paths", lambda game: {})
     monkeypatch.setattr(wizard, "_exult_paths", lambda game: None)
     monkeypatch.setattr("titan._config.get_config", lambda: {})
+    monkeypatch.setattr(wizard, "get_config", lambda: {})
+    monkeypatch.setattr(wizard, "find_exult_cfg", lambda: None)
+    monkeypatch.setattr(wizard, "_open_preview", lambda path: True)
+    monkeypatch.setattr(
+        wizard.tempfile,
+        "NamedTemporaryFile",
+        partial(wizard.tempfile.NamedTemporaryFile, dir=tmp_path),
+    )
 
 
 @pytest.fixture
@@ -50,6 +61,11 @@ def shape_data(ink=1):
     frame.pixels = np.full((2, 2), ink, dtype=np.uint8)
     shape.frames.append(frame)
     return shape.to_bytes()
+
+
+def wizard_input(answers):
+    """Select the base game target for existing retail wizard scenarios."""
+    return "\n".join([answers[0], "1", *answers[1:]]) + "\n"
 
 
 def write_archive(path, records):
@@ -366,6 +382,9 @@ def test_recipe_paths_and_archive_override_are_noninteractive(
     )
     output = tmp_path / "destination.vga"
     monkeypatch.setattr("builtins.input", lambda prompt: pytest.fail("recipe prompted"))
+    monkeypatch.setattr(
+        wizard, "_open_preview", lambda path: pytest.fail("recipe opened viewer")
+    )
     result = CliRunner().invoke(
         u7_app, ["shape-create", "--config", str(path), "-o", str(output)]
     )
@@ -409,11 +428,11 @@ def test_interactive_redo_invalid_answer_and_output_override(tmp_path, artwork):
     result = CliRunner().invoke(
         u7_app,
         ["shape-create", artwork.source, "-o", str(output)],
-        input="\n".join(answers) + "\n",
+        input=wizard_input(answers),
     )
     assert result.exit_code == 0, result.output
     assert result.output.count("Converted 1 frame(s)") == 2
-    assert "Choose one of: Y R Q" in result.output
+    assert "Please enter one of: Y, R, Q" in result.output
     assert "Shape filename" not in result.output
     assert output.is_file()
 
@@ -425,7 +444,7 @@ def test_interactive_cancel_never_writes(tmp_path, artwork, answer):
     result = CliRunner().invoke(
         u7_app,
         ["shape-create", artwork.source, "-o", str(output)],
-        input="\n".join(answers) + "\n",
+        input=wizard_input(answers),
     )
     assert result.exit_code == 0, result.output
     assert not output.exists()
@@ -446,8 +465,8 @@ def test_interactive_archive_selects_combined_free_slot(tmp_path, artwork):
         "",
         "y",
         "2",
-        str(source),
         "1",
+        str(source),
         "1",
         "a",
         "y",
@@ -455,7 +474,7 @@ def test_interactive_archive_selects_combined_free_slot(tmp_path, artwork):
     result = CliRunner().invoke(
         u7_app,
         ["shape-create", artwork.source, "-o", str(target)],
-        input="\n".join(answers) + "\n",
+        input=wizard_input(answers),
     )
     assert result.exit_code == 0, result.output
     assert "First free permitted slot in base + patch: 151" in result.output
@@ -484,7 +503,7 @@ def test_interactive_full_flat_range_allows_explicit_replacement(tmp_path, artwo
     result = CliRunner().invoke(
         u7_app,
         ["shape-create", artwork.source, "-o", str(target)],
-        input="\n".join(answers) + "\n",
+        input=wizard_input(answers),
     )
     assert result.exit_code == 0, result.output
     assert "No free U7 Flex shape record" in result.output
@@ -505,3 +524,320 @@ def test_help_describes_workflow_and_recipe_options():
         "--in-place",
     ):
         assert option in result.output
+
+
+def test_image_preview_shows_large_source_and_quantized_pixels(
+    artwork, monkeypatch, capsys
+):
+    image = Image.new("RGBA", (192, 192), (220, 20, 10, 255))
+    image.putpixel((0, 0), (0, 0, 0, 0))
+    image.save(artwork.source)
+    before = Path(artwork.source).read_bytes()
+    opened = []
+    monkeypatch.setattr(
+        wizard, "_open_preview", lambda path: opened.append(path) or True
+    )
+    converted = wizard.convert(artwork)
+    path = wizard.show_preview(converted, open_image=True)
+    assert opened == [path]
+    with Image.open(path) as preview:
+        assert preview.size == (800, 408)
+        assert preview.getpixel((208, 220)) == (220, 20, 10)
+        assert preview.getpixel((608, 220)) == (255, 0, 0)
+        assert (
+            preview.getpixel((8, 20)) == preview.getpixel((408, 20)) == (160, 160, 160)
+        )
+    assert Path(artwork.source).read_bytes() == before
+    output = capsys.readouterr().out
+    assert "Image preview" in output
+    assert "\x1b[" not in output
+    assert "██" not in output
+    assert not Path(artwork.output_path).exists()
+
+
+def test_preview_remains_available_when_viewer_cannot_open(
+    artwork, monkeypatch, capsys
+):
+    monkeypatch.setattr(wizard, "_open_preview", lambda path: False)
+    path = wizard.show_preview(wizard.convert(artwork), open_image=True)
+    assert path.is_file()
+    assert "Could not open the image viewer" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("fails", [False, True])
+def test_windows_preview_opens_only_the_generated_png(tmp_path, monkeypatch, fails):
+    preview = tmp_path / "preview.png"
+    opened = []
+
+    def startfile(path):
+        if fails:
+            raise OSError("no viewer")
+        opened.append(path)
+
+    monkeypatch.setattr(wizard.sys, "platform", "win32")
+    monkeypatch.setattr(wizard.os, "startfile", startfile, raising=False)
+    # The fixture isolates real viewer launches; exercise the actual launcher here.
+    assert _original_open_preview(preview) is (not fails)
+    assert opened == ([] if fails else [str(preview)])
+
+
+@pytest.mark.parametrize("existing_patch", [False, True])
+def test_interactive_gumps_selection_uses_gumps_base_and_patch_slots(
+    tmp_path, artwork, monkeypatch, existing_patch
+):
+    static = tmp_path / "STATIC"
+    base = static / "GUMPS.VGA"
+    target = tmp_path / "patch/GUMPS.VGA"
+    write_archive(base, [shape_data(2), b"", shape_data(3)])
+    if existing_patch:
+        write_archive(target, [b"", shape_data(4)])
+    before = base.read_bytes()
+    monkeypatch.setattr(wizard, "_static_path", lambda game: str(static))
+    paths = wizard.ExultGamePaths(
+        game="SI", static_path=str(static), patch_path=str(target.parent)
+    )
+    monkeypatch.setattr(wizard, "_exult_paths", lambda game: paths)
+    answers = [
+        "2",
+        "",
+        artwork.palette_file,
+        "",
+        "n",
+        "1",
+        "",
+        "",
+        "y",
+        "2",
+        "2",
+        "",
+        "1",
+        "",
+        "a",
+    ]
+    if existing_patch:
+        answers.append("y")
+    answers.append("y")
+    result = CliRunner().invoke(
+        u7_app, ["shape-create", artwork.source], input=wizard_input(answers)
+    )
+    assert result.exit_code == 0, result.output
+    assert "GUMPS.VGA — inventory" in result.output
+    assert f"Destination archive [{target}]" in result.output
+    assert "Permitted shape slots: 0+" in result.output
+    slot = 3 if existing_patch else 1
+    assert f"Shape slot: {slot}" in result.output
+    archive = U7FlexArchive.from_file(str(target), strict=True)
+    assert archive.records[slot] == wizard.convert(artwork).data
+    if existing_patch:
+        assert archive.records[1] == shape_data(4)
+    assert archive.records[0] == b""
+    assert base.read_bytes() == before
+
+
+def test_interactive_new_library_needs_no_source_archive(tmp_path, artwork):
+    target = tmp_path / "new.vga"
+    answers = [
+        "1",
+        "",
+        artwork.palette_file,
+        "",
+        "n",
+        "1",
+        "",
+        "",
+        "y",
+        "2",
+        "6",
+        str(target),
+        "a",
+        "y",
+    ]
+    result = CliRunner().invoke(
+        u7_app, ["shape-create", artwork.source], input=wizard_input(answers)
+    )
+    assert result.exit_code == 0, result.output
+    assert "Base/source" not in result.output
+    assert (
+        U7FlexArchive.from_file(str(target), strict=True).records[0]
+        == wizard.convert(artwork).data
+    )
+
+
+@pytest.mark.parametrize("standalone", [False, True])
+def test_interactive_mod_target_uses_own_patch_and_correct_base(
+    tmp_path, artwork, monkeypatch, standalone
+):
+    retail = tmp_path / "retail/STATIC"
+    mod = tmp_path / "retail/mods/custom"
+    own_static = mod / "STATIC"
+    patch = mod / "patch/GUMPS.VGA"
+    write_archive(retail / "GUMPS.VGA", [shape_data(2)] * 5)
+    if standalone:
+        write_archive(own_static / "GUMPS.VGA", [b"", shape_data(3)])
+    write_archive(patch, [shape_data(4)])
+    before = patch.read_bytes()
+    monkeypatch.setattr(wizard, "_static_path", lambda game: str(retail))
+    # Select the manual folder; discovery is isolated from the machine profile.
+    answers = [
+        "2",
+        "2",
+        str(mod),
+        "",
+        artwork.palette_file,
+        "",
+        "n",
+        "1",
+        "",
+        "",
+        "y",
+        "2",
+        "2",
+        "",
+        "1",
+        "",
+        "a",
+        "y",
+        "y",
+    ]
+    result = CliRunner().invoke(
+        u7_app, ["shape-create", artwork.source], input="\n".join(answers) + "\n"
+    )
+    assert result.exit_code == 0, result.output
+    slot = 2 if standalone else 5
+    assert f"Shape slot: {slot}" in result.output
+    assert f"Destination archive [{patch}]" in result.output
+    saved = U7FlexArchive.from_file(str(patch), strict=True)
+    assert saved.records[0] == shape_data(4)
+    assert saved.records[slot] == wizard.convert(artwork).data
+    assert patch.read_bytes()[0x58:0x80] == before[0x58:0x80]
+    assert "Target: custom (SI flavour)" in result.output
+
+
+def test_standalone_patch_without_matching_static_does_not_inherit_retail(
+    tmp_path, artwork, monkeypatch
+):
+    retail = tmp_path / "retail/STATIC"
+    own_static = tmp_path / "retail/mods/custom/STATIC"
+    own_static.mkdir(parents=True)
+    patch = own_static.parent / "patch/GUMPS.VGA"
+    write_archive(retail / "GUMPS.VGA", [shape_data(2)] * 5)
+    write_archive(patch, [b"", shape_data(3)])
+    monkeypatch.setattr(wizard, "_static_path", lambda game: str(retail))
+    config = replace(
+        artwork,
+        output_format="flex",
+        archive_kind="generic",
+        archive_source=str(patch),
+        archive_output=str(patch),
+        in_place=True,
+        target_static=str(own_static),
+        standalone=True,
+    )
+    plan = wizard.prepare_archive(config, wizard.convert(config).data)
+    assert plan.slot == 0
+    assert len(plan.archive.records) == 2
+
+
+def test_mod_source_in_custom_patch_folder_inherits_selected_retail_base(
+    tmp_path, artwork
+):
+    static = tmp_path / "retail/STATIC"
+    source = tmp_path / "elsewhere/data/GUMPS.VGA"
+    write_archive(static / "GUMPS.VGA", [shape_data(2)] * 5)
+    write_archive(source, [b"", shape_data(3)])
+    config = replace(
+        artwork,
+        output_format="flex",
+        archive_kind="generic",
+        archive_source=str(source),
+        archive_output=str(source),
+        in_place=True,
+        target_static=str(static),
+        target_patch=str(source.parent),
+    )
+    before = source.read_bytes()
+    plan = wizard.prepare_archive(config, wizard.convert(config).data)
+    assert plan.slot == 5
+    assert plan.archive.records[0] == b""
+    assert plan.archive.records[1] == shape_data(3)
+    assert source.read_bytes() == before
+
+
+@pytest.mark.parametrize("patch_record", [False, True])
+def test_selected_target_palette_uses_patch_then_own_static(
+    tmp_path, artwork, monkeypatch, patch_record
+):
+    static, patch = tmp_path / "custom/STATIC", tmp_path / "custom/patch"
+    write_archive(static / "PALETTES.FLX", [bytes([10]) * 768])
+    write_archive(patch / "PALETTES.FLX", [bytes([20]) * 768 if patch_record else b""])
+    monkeypatch.setattr(
+        wizard,
+        "resolve_game_palette",
+        lambda *args: pytest.fail("retail palette selected"),
+    )
+    config = replace(
+        artwork,
+        palette_file=None,
+        target_static=str(static),
+        target_patch=str(patch),
+        standalone=True,
+    )
+    assert wizard._palette(config).colors[1] == tuple([80 if patch_record else 40] * 3)
+
+
+def test_standalone_missing_palette_requires_explicit_selection(artwork, tmp_path):
+    config = replace(
+        artwork,
+        palette_file=None,
+        target_static=str(tmp_path / "missing"),
+        standalone=True,
+    )
+    with pytest.raises(ValueError, match="selected Exult game"):
+        wizard.convert(config)
+
+
+def test_recipe_custom_target_resolves_paths_and_preserves_exult_header(
+    tmp_path, artwork
+):
+    source = tmp_path / "custom/STATIC/GUMPS.VGA"
+    target = tmp_path / "custom/patch/GUMPS.VGA"
+    write_archive(source, [b"", shape_data(2)])
+    before = source.read_bytes()
+    recipe = tmp_path / "custom.toml"
+    recipe.write_text("""[target]
+game = "SI"
+static = "custom/STATIC"
+patch = "custom/patch"
+standalone = true
+[source]
+path = "art.png"
+[palette]
+file = "palette.pal"
+[archive]
+source = "custom/STATIC/GUMPS.VGA"
+kind = "generic"
+[output]
+format = "flex"
+""")
+    result = CliRunner().invoke(u7_app, ["shape-create", "--config", str(recipe)])
+    assert result.exit_code == 0, result.output
+    assert "Shape inserted at slot 0" in result.output
+    assert target.read_bytes()[0x58:0x80] == before[0x58:0x80]
+    assert source.read_bytes() == before
+
+
+def test_picker_discovers_registered_exult_game(tmp_path, monkeypatch, capsys):
+    custom = tmp_path / "my-game"
+    custom.mkdir()
+    cfg = tmp_path / "exult.cfg"
+    cfg.write_text(
+        f"<config><disk><game><custom><path>{custom}</path><title>My Game</title></custom></game></disk></config>"
+    )
+    monkeypatch.setattr(wizard, "find_exult_cfg", lambda: cfg)
+    monkeypatch.setattr("builtins.input", lambda prompt: "2")
+    config = wizard.ShapeWizardConfig(game="SI")
+    wizard._select_target(config)
+    assert config.target_static == str(custom / "static")
+    assert config.target_patch == str(custom / "patch")
+    assert config.standalone
+    assert "My Game (Exult game)" in capsys.readouterr().out

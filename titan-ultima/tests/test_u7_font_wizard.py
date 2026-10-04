@@ -1,6 +1,8 @@
 """Font rendering, interactive retries and safe archive output regressions."""
 
 import struct
+import io
+from functools import partial
 from dataclasses import replace
 from pathlib import Path
 
@@ -24,12 +26,20 @@ from titan.u7.shape import U7Shape
 
 
 @pytest.fixture(autouse=True)
-def isolate_profile(monkeypatch):
+def isolate_profile(monkeypatch, tmp_path):
     monkeypatch.setattr(wizard, "game_paths", lambda game: None)
     monkeypatch.setattr(wizard, "_show_exult_info", lambda game: None)
     monkeypatch.setattr("titan.fonts.archive.game_paths", lambda game: None)
     monkeypatch.setattr("titan._config.get_config", lambda: {})
     monkeypatch.setattr("titan._config.exult_cfg", lambda key: None)
+    monkeypatch.setattr("titan.u7.target_picker.find_exult_cfg", lambda: None)
+    monkeypatch.setattr("titan.u7.install.exult_game_paths", lambda game: {})
+    monkeypatch.setattr(wizard, "open_preview", lambda path: True)
+    monkeypatch.setattr(
+        wizard.tempfile,
+        "NamedTemporaryFile",
+        partial(wizard.tempfile.NamedTemporaryFile, dir=tmp_path),
+    )
 
 
 def write_archive(path, records, magic2=0xCC01):
@@ -177,11 +187,137 @@ def test_preview_maps_black_ink_and_transparency():
     ) == ["·██"]
 
 
+def test_redirected_swatches_contain_no_escape_codes(capsys):
+    wizard._print_swatches("Selected: red (#ff0000) ", ["#ff0000", "#93291e"])
+    output = capsys.readouterr().out
+    assert "Selected: red (#ff0000)" in output
+    assert "\x1b" not in output
+    assert "38;2" not in output
+
+
+def test_terminal_colours_use_formatted_output(monkeypatch):
+    from titan import _wizard_ui as ui
+    from prompt_toolkit.output import ColorDepth
+
+    class Terminal(io.StringIO):
+        def isatty(self):
+            return True
+
+    monkeypatch.setattr(ui.sys, "stdout", Terminal())
+    printed = []
+    monkeypatch.setattr(
+        "prompt_toolkit.print_formatted_text",
+        lambda text, **kwargs: printed.append((list(text), kwargs)),
+    )
+    wizard._print_swatches("Selected: ", ["#ff0000", "#93291e"])
+    fragments, options = printed[0]
+    assert ("bg:#ff0000", "  ") in fragments
+    assert ("bg:#93291e", "  ") in fragments
+    assert all("\x1b" not in text for _, text in fragments)
+    assert options["color_depth"] == ColorDepth.TRUE_COLOR
+
+
+def test_colour_glyph_preview_keeps_black_ink_gradient_and_transparency(monkeypatch):
+    from titan.fonts.preview import glyph_image, preview_sheet
+    from titan import _wizard_ui as ui
+
+    palette = U7Palette()
+    palette.colors[10] = (255, 52, 52)
+    palette.colors[20] = (147, 41, 30)
+    bitmap = np.array([[255, 0, 10], [255, 20, 0]], dtype=np.uint8)
+    image = glyph_image(bitmap, palette)
+    assert image.getpixel((0, 0))[3] == 0
+    assert image.getpixel((1, 0)) == (0, 0, 0, 255)
+    assert image.getpixel((2, 0)) == (255, 52, 52, 255)
+    assert image.getpixel((1, 1)) == (147, 41, 30, 255)
+    sheet = preview_sheet({65: bitmap}, palette)
+    assert sheet.getpixel((12, 48)) == (160, 160, 160)
+    assert sheet.getpixel((16, 48)) == (0, 0, 0)
+    assert sheet.getpixel((20, 48)) == (255, 52, 52)
+    rows = []
+    monkeypatch.setattr(ui, "print_coloured", lambda fragments: rows.append(fragments))
+    wizard._show_preview({65: bitmap}, is_indexed=True, palette=palette)
+    assert ("fg:#ff3434 bg:#505050", "█") in rows[0]
+    assert ("fg:#000000 bg:#505050", "█") in rows[0]
+    assert ("fg:#a0a0a0 bg:#505050", "·") in rows[0]
+
+
+def test_mapped_colour_preview_uses_final_palette_and_survives_viewer_failure(
+    tmp_path, monkeypatch, capsys
+):
+    from PIL import Image
+    from titan import _wizard_ui as ui
+
+    colours = np.zeros((256, 3), dtype=np.uint8)
+    colours[10] = (255, 52, 52)
+    palette_path = tmp_path / "palette.pal"
+    palette_path.write_bytes(colours.tobytes())
+    cfg = config(palette_file=str(palette_path), ink_index=10)
+    monkeypatch.setattr(ui, "menus_enabled", lambda: True)
+    opened = []
+    monkeypatch.setattr(
+        wizard, "open_preview", lambda path: opened.append(path) or False
+    )
+    path = wizard._mapped_preview(
+        cfg, {65: np.array([[0, 1]], dtype=np.uint8)}, True, False
+    )
+    assert opened == [path]
+    assert path.is_file()
+    with Image.open(path) as preview:
+        assert preview.getpixel((12, 48)) == (160, 160, 160)
+        assert preview.getpixel((16, 48)) == (255, 52, 52)
+    output = capsys.readouterr().out
+    assert "Could not open the image viewer" in output
+    assert "\x1b" not in output
+    assert not (tmp_path / "font.shp").exists()
+
+
+def test_custom_text_composes_repeated_glyphs_spacing_and_transparent_overlap():
+    from titan.fonts.preview import compose_text, validate_preview_text
+
+    glyphs = {
+        65: np.array([[1, 255, 2]], dtype=np.uint8),
+        66: np.array([[255, 3, 255]], dtype=np.uint8),
+    }
+    assert compose_text(glyphs, "ABA", -1).tolist() == [[1, 255, 2, 3, 1, 255, 2]]
+    assert compose_text(glyphs, "A B").tolist() == [[1, 255, 2, 255, 255, 255, 3, 255]]
+    validate_preview_text("ABABABAB", glyphs)
+    for text in ("", "ABABABABA", "A\nB", "C", "        "):
+        with pytest.raises(ValueError):
+            validate_preview_text(text, glyphs)
+
+
+def test_custom_text_png_uses_mapped_glyph_pixels_in_word_order(tmp_path, monkeypatch):
+    from PIL import Image
+    from titan import _wizard_ui as ui
+
+    colours = np.zeros((256, 3), dtype=np.uint8)
+    colours[10] = (255, 52, 52)
+    palette_path = tmp_path / "palette.pal"
+    palette_path.write_bytes(colours.tobytes())
+    cfg = config(palette_file=str(palette_path), ink_index=10)
+    monkeypatch.setattr(ui, "menus_enabled", lambda: True)
+    glyphs = {
+        65: np.array([[0, 1]], dtype=np.uint8),
+        66: np.array([[1, 0]], dtype=np.uint8),
+    }
+    before = {code: bitmap.copy() for code, bitmap in glyphs.items()}
+    path = wizard._mapped_preview(cfg, glyphs, True, False, preview_text="ABBA")
+    with Image.open(path) as preview:
+        assert preview.getpixel((12, 48)) == (160, 160, 160)
+        assert preview.getpixel((16, 48)) == (255, 52, 52)
+        assert preview.getpixel((20, 48)) == (255, 52, 52)
+        assert preview.getpixel((28, 48)) == (255, 52, 52)
+        assert preview.getpixel((40, 48)) == (255, 52, 52)
+    assert all(np.array_equal(bitmap, before[code]) for code, bitmap in glyphs.items())
+
+
 def test_interactive_redo_invalid_preview_and_output_override(tmp_path):
     output = tmp_path / "font.shp"
     answers = (
         "\n".join(
             [
+                "1",
                 "1",
                 "",
                 "2",
@@ -217,7 +353,7 @@ def test_interactive_redo_invalid_preview_and_output_override(tmp_path):
 def test_quit_preview_writes_nothing(tmp_path):
     output = tmp_path / "font.shp"
     result = CliRunner().invoke(
-        u7_app, ["font-create", "-o", str(output)], input="1\n\n2\n1\n1\nn\n0\nq\n"
+        u7_app, ["font-create", "-o", str(output)], input="1\n1\n\n2\n1\n1\nn\n0\nq\n"
     )
     assert result.exit_code == 0, result.output
     assert not output.exists()
@@ -234,6 +370,40 @@ def test_template_is_not_default_destination(tmp_path, monkeypatch):
     wizard._step_resolve_flex_target(cfg, paths)
     assert Path(cfg.flex_source) == tmp_path / "patch/fonts_original.vga"
     assert cfg.template_archive == str(source)
+
+
+def test_standalone_font_template_inside_mods_does_not_inherit_retail(tmp_path):
+    retail = tmp_path / "retail/STATIC/FONTS.VGA"
+    own = tmp_path / "retail/mods/custom/STATIC/FONTS.VGA"
+    patch = own.parent.parent / "patch/FONTS.VGA"
+    write_archive(retail, [font_record(1), font_record(2), font_record(3)])
+    write_archive(own, [b"", font_record(4)])
+    write_archive(patch, [font_record(5)])
+    paths = ExultGamePaths("SI", static_path=str(own.parent))
+    assert read_font_archive(own, paths=paths, infer_base=False).records == [
+        b"",
+        font_record(4),
+    ]
+    assert read_font_archive(patch, paths=paths, infer_base=False).records == [
+        font_record(5),
+        font_record(4),
+    ]
+
+
+def test_new_font_patch_preserves_exult_template_format_and_holes(tmp_path):
+    source, target = tmp_path / "STATIC/FONTS.VGA", tmp_path / "patch/FONTS.VGA"
+    write_archive(source, [font_record(1), font_record(2), font_record(3)])
+    header = bytearray(source.read_bytes())
+    header[0x60:0x68] = b"reserved"
+    source.write_bytes(header)
+    cfg = config(
+        template_archive=str(source), output_format="flex", flex_source=str(target)
+    )
+    data = font_record(4)
+    wizard._write_outputs(cfg, data)
+    archive = U7FlexArchive.from_file(str(target), strict=True)
+    assert archive.records == [b"", b"", data]
+    assert target.read_bytes()[0x58:0x80] == source.read_bytes()[0x58:0x80]
 
 
 def test_sparse_template_inherits_retail_slots_without_mutation(tmp_path):

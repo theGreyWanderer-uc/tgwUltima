@@ -24,15 +24,14 @@ __all__ = [
 
 import csv
 import io
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
+from titan import _wizard_ui as ui
 
 from titan.u7.map import (
     U7MapRenderer,
     U7MapObject,
-    EggMeta,
     C_NUM_SCHUNKS,
     C_CHUNKS_PER_SCHUNK,
     C_TILES_PER_CHUNK,
@@ -46,6 +45,7 @@ from titan.u7.ireg import object_flag_names
 # ---------------------------------------------------------------------------
 # Query parameters
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class ContainerQueryParams:
@@ -74,13 +74,16 @@ class ContainerQueryParams:
     map_num: int = 0
 
     # Output
-    output_format: str = "tree"    # "tree", "csv"
+    output_format: str = "tree"  # "tree", "csv"
     output_path: Optional[str] = None
+    patch_dir: Optional[str] = None
+    mod_data_dir: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
 # Result type
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class ContainerResult:
@@ -93,6 +96,7 @@ class ContainerResult:
     ``parent_path`` is the ordered list of shape labels from root down to
     ``obj``'s immediate parent (e.g. ``["275 (Egg)"]``).
     """
+
     obj: U7MapObject
     superchunk: int
     shape_name: str = ""
@@ -133,6 +137,7 @@ class ContainerResult:
 # Tree helpers
 # ---------------------------------------------------------------------------
 
+
 def _count_recursive(obj: U7MapObject) -> int:
     """Total items inside obj at all nesting levels."""
     total = len(obj.children)
@@ -156,8 +161,9 @@ def _contains_any(
     """Return True if any descendant (at any depth) matches the contains filter."""
     for child in obj.children:
         child_name = names.get(child.shape).lower() if names else ""
-        if (shape_nums and child.shape in shape_nums) or \
-                (name_lower and name_lower in child_name):
+        if (shape_nums and child.shape in shape_nums) or (
+            name_lower and name_lower in child_name
+        ):
             return True
         if _contains_any(child, shape_nums, name_lower, names):
             return True
@@ -186,8 +192,9 @@ def _find_direct_holders(
     # Does obj directly hold a matching item?
     for child in obj.children:
         child_name = names.get(child.shape).lower() if names else ""
-        if (contains_shapes and child.shape in contains_shapes) or \
-                (contains_name and contains_name in child_name):
+        if (contains_shapes and child.shape in contains_shapes) or (
+            contains_name and contains_name in child_name
+        ):
             yield obj, root, path
             break  # one match is enough; don't yield obj multiple times
 
@@ -196,14 +203,19 @@ def _find_direct_holders(
     for child in obj.children:
         if child.children:
             yield from _find_direct_holders(
-                child, root, path + [obj_lbl],
-                contains_shapes, contains_name, names,
+                child,
+                root,
+                path + [obj_lbl],
+                contains_shapes,
+                contains_name,
+                names,
             )
 
 
 # ---------------------------------------------------------------------------
 # Core scanner
 # ---------------------------------------------------------------------------
+
 
 def browse_containers(params: ContainerQueryParams) -> list[ContainerResult]:
     """Scan IREG and return matching containers with full content trees."""
@@ -223,6 +235,19 @@ def browse_containers(params: ContainerQueryParams) -> list[ContainerResult]:
     if names is None:
         names = U7ShapeNames.from_static_dir(params.static_dir)
 
+    if params.patch_dir or params.mod_data_dir:
+        from titan.u7.world import WorldQueryParams, load_query_metadata
+
+        tfa, names, _, _ = load_query_metadata(
+            WorldQueryParams(
+                static_dir=params.static_dir,
+                base_static=params.static_dir,
+                patch_dir=params.patch_dir,
+                mod_data_dir=params.mod_data_dir,
+                text_flx_path=params.text_flx_path,
+            )
+        )
+
     gamedat = Path(params.gamedat_dir)
 
     total_sc = C_NUM_SCHUNKS * C_NUM_SCHUNKS
@@ -235,27 +260,21 @@ def browse_containers(params: ContainerQueryParams) -> list[ContainerResult]:
 
     # Build filter sets
     container_shapes = set(params.container_shape_nums)
-    container_name   = params.container_name_filter.lower()
-    contains_shapes  = set(params.contains_shape_nums)
-    contains_name    = params.contains_name_filter.lower()
+    container_name = params.container_name_filter.lower()
+    contains_shapes = set(params.contains_shape_nums)
+    contains_name = params.contains_name_filter.lower()
 
     results: list[ContainerResult] = []
 
-    # Resolve IREG subdirectory: map 0 uses root (or map00/), maps 1+ use mapNN/
-    if params.map_num > 0:
-        ireg_subdir: Optional[Path] = gamedat / f"map{params.map_num:02x}"
-    else:
-        ireg_subdir = None  # resolved per-superchunk below
+    from titan.u7.world import _world_file
+    from titan.u7.shape_archive import find_archive
 
     for sc in sc_list:
         ireg_name = f"u7ireg{sc:02X}"
-        if ireg_subdir is not None:
-            ireg_path = ireg_subdir / ireg_name
-        else:
-            ireg_path = gamedat / ireg_name
-            if not ireg_path.exists():
-                ireg_path = gamedat / "map00" / ireg_name
-        if not ireg_path.exists():
+        ireg_path = _world_file(gamedat, ireg_name, params.map_num)
+        if ireg_path is None and params.map_num == 0:
+            ireg_path = find_archive(gamedat / "map00", ireg_name)
+        if ireg_path is None:
             continue
 
         objects = U7MapRenderer.parse_ireg_deep(str(ireg_path), sc, tfa)
@@ -263,7 +282,9 @@ def browse_containers(params: ContainerQueryParams) -> list[ContainerResult]:
         for root_obj in objects:
             if not root_obj.children and tfa:
                 entry = tfa.get(root_obj.shape)
-                if not (entry and entry.shape_class == U7TypeFlags.SHAPE_CLASS_CONTAINER):
+                if not (
+                    entry and entry.shape_class == U7TypeFlags.SHAPE_CLASS_CONTAINER
+                ):
                     continue
             elif not root_obj.children:
                 continue
@@ -282,31 +303,40 @@ def browse_containers(params: ContainerQueryParams) -> list[ContainerResult]:
                 # a matching item. Nested containers are annotated with the root's
                 # world position via parent_path.
                 for container, root, parent_path in _find_direct_holders(
-                    root_obj, root_obj, [], contains_shapes, contains_name, names,
+                    root_obj,
+                    root_obj,
+                    [],
+                    contains_shapes,
+                    contains_name,
+                    names,
                 ):
                     shape_name = names.get(container.shape) if names else ""
                     if container_shapes and container.shape not in container_shapes:
                         continue
                     if container_name and container_name not in shape_name.lower():
                         continue
-                    results.append(ContainerResult(
-                        obj=container,
-                        superchunk=sc,
-                        shape_name=shape_name,
-                        root_obj=root,
-                        parent_path=parent_path,
-                    ))
+                    results.append(
+                        ContainerResult(
+                            obj=container,
+                            superchunk=sc,
+                            shape_name=shape_name,
+                            root_obj=root,
+                            parent_path=parent_path,
+                        )
+                    )
             else:
                 shape_name = names.get(root_obj.shape) if names else ""
                 if container_shapes and root_obj.shape not in container_shapes:
                     continue
                 if container_name and container_name not in shape_name.lower():
                     continue
-                results.append(ContainerResult(
-                    obj=root_obj,
-                    superchunk=sc,
-                    shape_name=shape_name,
-                ))
+                results.append(
+                    ContainerResult(
+                        obj=root_obj,
+                        superchunk=sc,
+                        shape_name=shape_name,
+                    )
+                )
 
     return results
 
@@ -314,6 +344,7 @@ def browse_containers(params: ContainerQueryParams) -> list[ContainerResult]:
 # ---------------------------------------------------------------------------
 # Formatters
 # ---------------------------------------------------------------------------
+
 
 def _item_label(
     obj: U7MapObject,
@@ -364,7 +395,9 @@ def format_tree(
         obj_flag_names = object_flag_names(res.obj.object_flags)
         if obj_flag_names:
             lines.append(f"    flags: {', '.join(obj_flag_names)}")
-        _append_children(lines, res.obj.children, names, frame_names, tfa, indent="    ")
+        _append_children(
+            lines, res.obj.children, names, frame_names, tfa, indent="    "
+        )
         lines.append("")
 
     return "\n".join(lines)
@@ -391,7 +424,7 @@ def _append_children(
     indent: str,
 ) -> None:
     for i, child in enumerate(children):
-        is_last = (i == len(children) - 1)
+        is_last = i == len(children) - 1
         branch = "└─ " if is_last else "├─ "
         label = _item_label(child, names, frame_names)
         suffix = _child_suffix(child, tfa)
@@ -402,7 +435,9 @@ def _append_children(
 
         if child.children:
             child_indent = indent + ("    " if is_last else "│   ")
-            _append_children(lines, child.children, names, frame_names, tfa, child_indent)
+            _append_children(
+                lines, child.children, names, frame_names, tfa, child_indent
+            )
 
 
 def format_csv(
@@ -411,27 +446,47 @@ def format_csv(
     frame_names: Optional[U7FrameNames] = None,
 ) -> str:
     buf = io.StringIO()
-    writer = csv.writer(buf, lineterminator='\n')
-    writer.writerow([
-        "sc", "container_shape", "container_hex", "container_name",
-        "tx", "ty", "tz",
-        "depth", "item_shape", "item_hex", "item_name", "item_frame", "item_quality",
-        "item_quality_raw", "item_object_flags",
-        "path",
-    ])
+    writer = csv.writer(buf, lineterminator="\n")
+    writer.writerow(
+        [
+            "sc",
+            "container_shape",
+            "container_hex",
+            "container_name",
+            "tx",
+            "ty",
+            "tz",
+            "depth",
+            "item_shape",
+            "item_hex",
+            "item_name",
+            "item_frame",
+            "item_quality",
+            "item_quality_raw",
+            "item_object_flags",
+            "path",
+        ]
+    )
 
     for res in results:
         display_obj = res.obj
         if res.is_nested:
             from copy import copy as _copy
+
             display_obj = _copy(res.obj)
             display_obj.tx = res.world_tx
             display_obj.ty = res.world_ty
             display_obj.tz = res.world_tz
         _write_children_csv(
-            writer, res.obj.children, names, frame_names,
-            res.superchunk, display_obj, names.get(res.obj.shape) if names else "",
-            depth=1, path_parts=[res.label()],
+            writer,
+            res.obj.children,
+            names,
+            frame_names,
+            res.superchunk,
+            display_obj,
+            names.get(res.obj.shape) if names else "",
+            depth=1,
+            path_parts=[res.label()],
         )
 
     return buf.getvalue()
@@ -452,35 +507,45 @@ def _write_children_csv(
         child_label = _item_label(child, names, frame_names)
         # item_name column: prefer frame name, fall back to shape name
         if frame_names:
-            child_name = frame_names.get(child.shape, child.frame) or (names.get(child.shape) if names else "")
+            child_name = frame_names.get(child.shape, child.frame) or (
+                names.get(child.shape) if names else ""
+            )
         else:
             child_name = names.get(child.shape) if names else ""
         path = " > ".join(path_parts + [child_label])
 
-        writer.writerow([
-            f"0x{sc:02X}",
-            container.shape,
-            f"0x{container.shape:04X}",
-            container_name,
-            container.tx,
-            container.ty,
-            container.tz,
-            depth,
-            child.shape,
-            f"0x{child.shape:04X}",
-            child_name,
-            child.frame,
-            child.quality,
-            f"0x{child.raw_quality:02X}",
-            "|".join(object_flag_names(child.object_flags)),
-            path,
-        ])
+        writer.writerow(
+            [
+                f"0x{sc:02X}",
+                container.shape,
+                f"0x{container.shape:04X}",
+                container_name,
+                container.tx,
+                container.ty,
+                container.tz,
+                depth,
+                child.shape,
+                f"0x{child.shape:04X}",
+                child_name,
+                child.frame,
+                child.quality,
+                f"0x{child.raw_quality:02X}",
+                "|".join(object_flag_names(child.object_flags)),
+                path,
+            ]
+        )
 
         if child.children:
             _write_children_csv(
-                writer, child.children, names, frame_names,
-                sc, child, child_name,
-                depth + 1, path_parts + [child_label],
+                writer,
+                child.children,
+                names,
+                frame_names,
+                sc,
+                child,
+                child_name,
+                depth + 1,
+                path_parts + [child_label],
             )
 
 
@@ -500,6 +565,7 @@ def format_results(
 # Interactive wizard
 # ---------------------------------------------------------------------------
 
+
 def run_wizard(
     static_dir: Optional[str] = None,
     gamedat_dir: Optional[str] = None,
@@ -507,6 +573,7 @@ def run_wizard(
     exult_flx_path: Optional[str] = None,
     mod_data_dir: Optional[str] = None,
     map_num: int = 0,
+    game: str = "bg",
 ) -> int:
     """Interactive questionary container-browse wizard. Returns exit code."""
     try:
@@ -521,14 +588,47 @@ def run_wizard(
     print("  U7 Container Browse")
     print(f"  {_SEP}")
 
+    from titan.u7.target_picker import SelectionCancelled, select_world
+    from titan.u7.world import WorldQueryParams, load_query_metadata
+
+    try:
+        world = select_world(
+            questionary,
+            WorldQueryParams(
+                static_dir=static_dir or "",
+                gamedat_dir=gamedat_dir,
+                text_flx_path=text_flx,
+                mod_data_dir=mod_data_dir,
+                game=game,
+                map_num=map_num,
+            ),
+            require_gamedat=True,
+        )
+    except (SelectionCancelled, KeyboardInterrupt, EOFError):
+        return 0
+    static_dir, gamedat_dir = world.static_dir, world.gamedat_dir
+    text_flx, mod_data_dir, map_num = (
+        world.text_flx_path,
+        world.mod_data_dir,
+        world.map_num,
+    )
+    if world.game != game:
+        from titan._config import exult_cfg
+
+        exult_flx_path = exult_cfg(f"{world.game}_flx")
+
     # ── 1. Paths ─────────────────────────────────────────────────────────
     if not static_dir:
-        static_dir = questionary.path("STATIC directory:", only_directories=True).ask()
+        static_dir = ui.path_prompt(
+            "STATIC directory:", q=questionary, only_directories=True
+        ).ask()
         if static_dir is None:
             return 0
 
     if not gamedat_dir:
-        gamedat_dir = questionary.path("GAMEDAT directory:", only_directories=True).ask()
+        gamedat_dir = ui.path_prompt(
+            "GAMEDAT directory:", q=questionary, only_directories=True
+        ).ask()
         if not gamedat_dir:
             return 0
 
@@ -545,8 +645,11 @@ def run_wizard(
     _frame_names: Optional[U7FrameNames] = None
     if static_dir and exult_flx_path and Path(exult_flx_path).exists():
         _text_flx = text_flx or next(
-            (str(Path(static_dir) / n) for n in ("TEXT.FLX", "text.flx")
-             if (Path(static_dir) / n).exists()),
+            (
+                str(Path(static_dir) / n)
+                for n in ("TEXT.FLX", "text.flx")
+                if (Path(static_dir) / n).exists()
+            ),
             None,
         )
         if _text_flx:
@@ -558,16 +661,28 @@ def run_wizard(
     if mod_data_dir and Path(mod_data_dir).is_dir():
         _text_flx_for_mod = text_flx or (
             next(
-                (str(Path(static_dir) / n) for n in ("TEXT.FLX", "text.flx")
-                 if (Path(static_dir) / n).exists()),
+                (
+                    str(Path(static_dir) / n)
+                    for n in ("TEXT.FLX", "text.flx")
+                    if (Path(static_dir) / n).exists()
+                ),
                 None,
-            ) if static_dir else None
+            )
+            if static_dir
+            else None
         )
         _names = U7ShapeNames.from_mod_dir(mod_data_dir, base=_names) or _names
         if _text_flx_for_mod:
-            _frame_names = U7FrameNames.from_mod_dir(mod_data_dir, _text_flx_for_mod, base=_frame_names) or _frame_names
+            _frame_names = (
+                U7FrameNames.from_mod_dir(
+                    mod_data_dir, _text_flx_for_mod, base=_frame_names
+                )
+                or _frame_names
+            )
 
     # ── 2. Container filter ───────────────────────────────────────────────
+    if world.patch_dir or world.mod_data_dir:
+        _, _names, _frame_names, _ = load_query_metadata(world)
     print()
     print(f"  {_SEP}")
     container_name = questionary.text(
@@ -582,7 +697,7 @@ def run_wizard(
         matches = _names.find_shapes(container_name)
         if matches:
             hint = ", ".join(f"{n} ({_names.get(n)})" for n in matches[:6])
-            suffix = f"  …+{len(matches)-6} more" if len(matches) > 6 else ""
+            suffix = f"  …+{len(matches) - 6} more" if len(matches) > 6 else ""
             print(f"  Matching shapes: {hint}{suffix}")
 
     container_shape_input = questionary.text(
@@ -616,7 +731,7 @@ def run_wizard(
         matches = _names.find_shapes(contains_name)
         if matches:
             hint = ", ".join(f"{n} ({_names.get(n)})" for n in matches[:6])
-            suffix = f"  …+{len(matches)-6} more" if len(matches) > 6 else ""
+            suffix = f"  …+{len(matches) - 6} more" if len(matches) > 6 else ""
             print(f"  Matching item shapes: {hint}{suffix}")
 
     contains_shape_input = questionary.text(
@@ -646,8 +761,9 @@ def run_wizard(
     tile_rect: Optional[tuple[int, int, int, int]] = None
 
     if not area_all:
-        area_type = questionary.select(
+        area_type = ui.select(
             "Area filter type:",
+            q=questionary,
             choices=["Superchunks", "Tile rectangle"],
         ).ask()
         if area_type is None:
@@ -687,8 +803,9 @@ def run_wizard(
     # ── 5. Output ─────────────────────────────────────────────────────────
     print()
     print(f"  {_SEP}")
-    fmt = questionary.select(
+    fmt = ui.select(
         "Output format:",
+        q=questionary,
         choices=["tree", "csv"],
         default="tree",
     ).ask()
@@ -697,7 +814,7 @@ def run_wizard(
 
     output_path: Optional[str] = None
     if questionary.confirm("Save output to a file?", default=False).ask():
-        output_path = questionary.path("Output file path:").ask()
+        output_path = ui.path_prompt("Output file path:", q=questionary).ask()
 
     # ── Run ───────────────────────────────────────────────────────────────
     print()
@@ -717,6 +834,8 @@ def run_wizard(
         map_num=map_num,
         output_format=fmt,
         output_path=output_path,
+        patch_dir=world.patch_dir,
+        mod_data_dir=world.mod_data_dir,
     )
 
     results = browse_containers(params)

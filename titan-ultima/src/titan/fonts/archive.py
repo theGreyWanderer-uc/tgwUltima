@@ -74,6 +74,7 @@ def read_font_archive(
     game: str = "BG",
     base_archive: str | None = None,
     paths: ExultGamePaths | None = None,
+    infer_base: bool = True,
 ) -> U7FlexArchive:
     """Inspect effective slots without changing the sparse archive on disk."""
     selected_path = Path(path).expanduser()
@@ -85,7 +86,14 @@ def read_font_archive(
         if base_path.resolve() == selected_path.resolve():
             raise ValueError("The base archive must be distinct from the patch archive")
         base = U7FlexArchive.from_file(str(base_path), strict=True)
-    elif is_patch_archive(selected_path):
+    elif (
+        paths
+        and paths.static_path
+        and (candidate := find_archive(Path(paths.static_path), selected_path.name))
+        and candidate.resolve() != selected_path.resolve()
+    ):
+        base = U7FlexArchive.from_file(str(candidate), strict=True)
+    elif infer_base and is_patch_archive(selected_path):
         paths = paths or game_paths(game)
         static = paths.static_path if paths else None
         if not static:
