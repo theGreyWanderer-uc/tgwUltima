@@ -60,10 +60,10 @@ from titan._version import TITAN_VERSION
 #   0x80+N*8 ...    record data
 #
 
-U7_FLEX_HEADER_LEN: int = 128      # 0x80
-U7_FLEX_TITLE_LEN: int = 80        # 0x50
-U7_FLEX_MAGIC1: int = 0xFFFF1A00   # Required at offset 0x50
-U7_FLEX_MAGIC2: int = 0x000000CC   # Original version marker at 0x58
+U7_FLEX_HEADER_LEN: int = 128  # 0x80
+U7_FLEX_TITLE_LEN: int = 80  # 0x50
+U7_FLEX_MAGIC1: int = 0xFFFF1A00  # Required at offset 0x50
+U7_FLEX_MAGIC2: int = 0x000000CC  # Original version marker at 0x58
 U7_FLEX_EXULT_MAGIC2: int = 0x0000CC00  # Exult v2 base (+ version byte)
 U7_FLEX_RESERVED_OFFSET: int = 0x5C
 U7_FLEX_RESERVED_SIZE: int = 0x24
@@ -124,8 +124,8 @@ class U7FlexArchive:
     # ------------------------------------------------------------------
 
     @classmethod
-    def from_file(cls, filepath: str) -> U7FlexArchive:
-        """Load a U7 Flex archive from disk."""
+    def from_file(cls, filepath: str, *, strict: bool = False) -> U7FlexArchive:
+        """Load a U7 Flex archive; strict mode rejects damaged records before editing."""
         archive = cls()
         archive._source_path = filepath
 
@@ -133,9 +133,7 @@ class U7FlexArchive:
             data = f.read()
 
         if len(data) < U7_FLEX_HEADER_LEN:
-            raise ValueError(
-                f"File too small for a U7 Flex archive: {filepath}"
-            )
+            raise ValueError(f"File too small for a U7 Flex archive: {filepath}")
 
         if not cls._validate_header(data[:U7_FLEX_HEADER_LEN]):
             magic = struct.unpack_from("<I", data, U7_FLEX_TITLE_LEN)[0]
@@ -153,6 +151,12 @@ class U7FlexArchive:
 
         # Record count at 0x54
         count = struct.unpack_from("<I", data, 0x54)[0]
+        table_end = U7_FLEX_TABLE_OFFSET + count * U7_FLEX_RECORD_ENTRY_SIZE
+        if strict and table_end > len(data):
+            raise ValueError(
+                f"U7 Flex record table truncated: needs {table_end} bytes, "
+                f"archive has {len(data)}"
+            )
 
         # Magic2 / version at 0x58
         archive.magic2 = struct.unpack_from("<I", data, 0x58)[0]
@@ -175,6 +179,15 @@ class U7FlexArchive:
                 )
                 break
             offset, size = struct.unpack_from("<II", data, table_pos)
+            if (
+                strict
+                and size > 0
+                and (offset < table_end or offset + size > len(data))
+            ):
+                raise ValueError(
+                    f"U7 Flex record {i} has invalid bounds: offset {offset}, "
+                    f"size {size}, data starts at {table_end}, archive has {len(data)} bytes"
+                )
             if size > 0 and offset > 0:
                 record_data = data[offset : offset + size]
                 if len(record_data) != size:
@@ -244,9 +257,7 @@ class U7FlexArchive:
         header = bytearray(U7_FLEX_HEADER_LEN)
 
         # Title: 80 bytes null-padded (matches Exult's Flex_header::write)
-        title_bytes = self.title.encode("ascii", errors="replace")[
-            :U7_FLEX_TITLE_LEN
-        ]
+        title_bytes = self.title.encode("ascii", errors="replace")[:U7_FLEX_TITLE_LEN]
         header[: len(title_bytes)] = title_bytes
         # Remaining title bytes stay 0x00 (already zeroed)
 
@@ -363,7 +374,9 @@ class U7FlexArchive:
         """Return a human-readable summary of the archive."""
         non_empty = sum(1 for r in self.records if r)
         total_data = sum(len(r) for r in self.records)
-        vers = "exult_v2" if (self.magic2 & 0xFFFFFF00) == U7_FLEX_EXULT_MAGIC2 else "orig"
+        vers = (
+            "exult_v2" if (self.magic2 & 0xFFFFFF00) == U7_FLEX_EXULT_MAGIC2 else "orig"
+        )
         lines = [
             "U7 Flex Archive Summary",
             f"  Source:       {self._source_path or '(in-memory)'}",

@@ -30,6 +30,7 @@ import io
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
+from titan import _wizard_ui as ui
 
 from titan.u7.map import (
     U7MapRenderer,
@@ -67,6 +68,8 @@ class EggQueryParams:
     # Output
     output_format: str = "table"  # "table" or "csv"
     output_path: Optional[str] = None
+    patch_dir: Optional[str] = None
+    map_num: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -101,6 +104,16 @@ def query_eggs(params: EggQueryParams) -> list[EggResult]:
         pass
 
     gamedat = Path(params.gamedat_dir)
+    if params.patch_dir:
+        from titan.u7.world import WorldQueryParams, load_query_metadata
+
+        tfa, _, _, _ = load_query_metadata(
+            WorldQueryParams(
+                static_dir=params.static_dir,
+                base_static=params.static_dir,
+                patch_dir=params.patch_dir,
+            )
+        )
 
     if params.superchunks:
         sc_list = params.superchunks
@@ -119,10 +132,13 @@ def query_eggs(params: EggQueryParams) -> list[EggResult]:
 
     for sc in sc_list:
         ireg_name = f"u7ireg{sc:02X}"
-        ireg_path = gamedat / ireg_name
-        if not ireg_path.exists():
-            ireg_path = gamedat / "map00" / ireg_name
-        if not ireg_path.exists():
+        from titan.u7.world import _world_file
+        from titan.u7.shape_archive import find_archive
+
+        ireg_path = _world_file(gamedat, ireg_name, params.map_num)
+        if ireg_path is None and params.map_num == 0:
+            ireg_path = find_archive(gamedat / "map00", ireg_name)
+        if ireg_path is None:
             continue
 
         objects = U7MapRenderer.parse_ireg_deep(str(ireg_path), sc, tfa)
@@ -288,6 +304,8 @@ def format_results(results: list[EggResult], params: EggQueryParams) -> str:
 def run_wizard(
     static_dir: Optional[str] = None,
     gamedat_dir: Optional[str] = None,
+    *,
+    game: str = "bg",
 ) -> int:
     """Interactive questionary egg-query wizard. Returns exit code."""
     try:
@@ -302,15 +320,32 @@ def run_wizard(
     print("  U7 Egg Query")
     print(f"  {_SEP}")
 
+    from titan.u7.target_picker import SelectionCancelled, select_world
+    from titan.u7.world import WorldQueryParams
+
+    try:
+        world = select_world(
+            questionary,
+            WorldQueryParams(
+                static_dir=static_dir or "", gamedat_dir=gamedat_dir, game=game
+            ),
+            require_gamedat=True,
+        )
+    except (SelectionCancelled, KeyboardInterrupt, EOFError):
+        return 0
+    static_dir, gamedat_dir = world.static_dir, world.gamedat_dir
+
     # ── 1. Paths ─────────────────────────────────────────────────────────────
     if not static_dir:
-        static_dir = questionary.path("STATIC directory:", only_directories=True).ask()
+        static_dir = ui.path_prompt(
+            "STATIC directory:", q=questionary, only_directories=True
+        ).ask()
         if static_dir is None:
             return 0
 
     if not gamedat_dir:
-        gamedat_dir = questionary.path(
-            "GAMEDAT directory:", only_directories=True
+        gamedat_dir = ui.path_prompt(
+            "GAMEDAT directory:", q=questionary, only_directories=True
         ).ask()
         if not gamedat_dir:
             return 0
@@ -358,8 +393,9 @@ def run_wizard(
     tile_rect: Optional[tuple[int, int, int, int]] = None
 
     if not area_all:
-        area_type = questionary.select(
+        area_type = ui.select(
             "Area filter type:",
+            q=questionary,
             choices=["Superchunks", "Tile rectangle"],
         ).ask()
         if area_type is None:
@@ -399,8 +435,9 @@ def run_wizard(
     # ── 5. Output ─────────────────────────────────────────────────────────────
     print()
     print(f"  {_SEP}")
-    fmt = questionary.select(
+    fmt = ui.select(
         "Output format:",
+        q=questionary,
         choices=["table", "csv"],
         default="table",
     ).ask()
@@ -409,7 +446,7 @@ def run_wizard(
 
     output_path: Optional[str] = None
     if questionary.confirm("Save output to a file?", default=False).ask():
-        output_path = questionary.path("Output file path:").ask()
+        output_path = ui.path_prompt("Output file path:", q=questionary).ask()
 
     # ── Run ───────────────────────────────────────────────────────────────────
     print()
@@ -425,6 +462,8 @@ def run_wizard(
         tile_rect=tile_rect,
         output_format=fmt,
         output_path=output_path,
+        patch_dir=world.patch_dir,
+        map_num=world.map_num,
     )
 
     results = query_eggs(params)

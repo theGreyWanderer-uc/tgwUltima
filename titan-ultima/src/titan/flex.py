@@ -1,5 +1,5 @@
 """
-Flex archive format handler for Ultima 8.
+Flex archive format handler for Ultima 7/Exult and Ultima 8.
 
 Provides :class:`FlexArchive` for reading, writing, and manipulating the
 Flex (.flx) indexed archive format, plus helpers for content-type detection.
@@ -47,7 +47,7 @@ import re
 import struct
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 from titan._version import TITAN_VERSION
 
@@ -64,39 +64,35 @@ from titan._version import TITAN_VERSION
 #   0x80+                   Record table: count * 8 bytes (offset:u32, size:u32)
 #   After table              Raw record data
 
-FLEX_HEADER_SIZE: int = 0x80          # 128 bytes total header before record table
-FLEX_COMMENT_LEN: int = 0x52         # 82 bytes for the comment block
-FLEX_MAGIC_OFFSET: int = 0x52        # Where 0x1A padding must exist
-FLEX_COUNT_OFFSET: int = 0x54        # uint32 record count
-FLEX_UNK_OFFSET: int = 0x58          # uint32 unknown (usually 1)
-FLEX_FILESIZE_OFFSET: int = 0x5C     # uint32 total file size
-FLEX_TABLE_OFFSET: int = 0x80        # Start of the offset/size table
-FLEX_RECORD_ENTRY_SIZE: int = 8      # Each record entry: 4 bytes offset + 4 bytes size
-FLEX_FILL_BYTE: int = 0x1A           # Sentinel/fill byte used in header
-FLEX_NAME_MAX_LEN: int = 32          # Max characters used from name table for filenames
+FLEX_HEADER_SIZE: int = 0x80  # 128 bytes total header before record table
+FLEX_COMMENT_LEN: int = 0x52  # 82 bytes for the comment block
+FLEX_MAGIC_OFFSET: int = 0x52  # Where 0x1A padding must exist
+FLEX_COUNT_OFFSET: int = 0x54  # uint32 record count
+FLEX_UNK_OFFSET: int = 0x58  # uint32 unknown (usually 1)
+FLEX_FILESIZE_OFFSET: int = 0x5C  # uint32 total file size
+FLEX_TABLE_OFFSET: int = 0x80  # Start of the offset/size table
+FLEX_RECORD_ENTRY_SIZE: int = 8  # Each record entry: 4 bytes offset + 4 bytes size
+FLEX_FILL_BYTE: int = 0x1A  # Sentinel/fill byte used in header
+FLEX_NAME_MAX_LEN: int = 32  # Max characters used from name table for filenames
 
 # Known Flex file names and their typical content descriptions.
 KNOWN_FLEX_FILES: dict[str, dict] = {
-    "U8SHAPES.FLX":  {"desc": "World object shapes (RLE compressed sprites)",
-                       "content": "shape"},
-    "U8GUMPS.FLX":   {"desc": "GUI/menu graphics (gump shapes)",
-                       "content": "shape"},
-    "U8FONTS.FLX":   {"desc": "Bitmap fonts (shape-based glyphs)",
-                       "content": "shape"},
-    "GLOB.FLX":      {"desc": "Global object definitions",
-                       "content": "data"},
-    "SOUND.FLX":     {"desc": "Sound effects (Sonarc compressed audio)",
-                       "content": "audio"},
-    "MUSIC.FLX":     {"desc": "Music tracks (XMIDI format)",
-                       "content": "xmidi"},
-    "EUSECODE.FLX":  {"desc": "Usecode bytecode (game scripts)",
-                       "content": "usecode"},
-    "SPEECH.FLX":    {"desc": "Speech audio samples",
-                       "content": "audio"},
-    "DTABLE.FLX":    {"desc": "Data tables",
-                       "content": "data"},
-    "GUMPAGE.FLX":   {"desc": "Gump page graphics",
-                       "content": "shape"},
+    "U8SHAPES.FLX": {
+        "desc": "World object shapes (RLE compressed sprites)",
+        "content": "shape",
+    },
+    "U8GUMPS.FLX": {"desc": "GUI/menu graphics (gump shapes)", "content": "shape"},
+    "U8FONTS.FLX": {"desc": "Bitmap fonts (shape-based glyphs)", "content": "shape"},
+    "GLOB.FLX": {"desc": "Global object definitions", "content": "data"},
+    "SOUND.FLX": {
+        "desc": "Sound effects (Sonarc compressed audio)",
+        "content": "audio",
+    },
+    "MUSIC.FLX": {"desc": "Music tracks (XMIDI format)", "content": "xmidi"},
+    "EUSECODE.FLX": {"desc": "Usecode bytecode (game scripts)", "content": "usecode"},
+    "SPEECH.FLX": {"desc": "Speech audio samples", "content": "audio"},
+    "DTABLE.FLX": {"desc": "Data tables", "content": "data"},
+    "GUMPAGE.FLX": {"desc": "Gump page graphics", "content": "shape"},
 }
 
 # Regex matching speech FLX filenames: single letter + NPC id, e.g. E44.FLX, G289.FLX
@@ -104,12 +100,12 @@ _SPEECH_FLEX_RE = re.compile(r"^[A-Z]\d+\.FLX$", re.IGNORECASE)
 
 # Extension mapping for extracted records based on content type
 CONTENT_EXT_MAP: dict[str, str] = {
-    "shape":   ".shp",
-    "audio":   ".raw",
-    "xmidi":   ".xmi",
+    "shape": ".shp",
+    "audio": ".raw",
+    "xmidi": ".xmi",
     "usecode": ".uc",
-    "text":    ".txt",
-    "data":    ".dat",
+    "text": ".txt",
+    "data": ".dat",
     "unknown": ".bin",
 }
 
@@ -118,9 +114,10 @@ CONTENT_EXT_MAP: dict[str, str] = {
 # FLEX FILE FORMAT HANDLER
 # ============================================================================
 
+
 class FlexArchive:
     """
-    Reader/writer for the Flex (.flx) archive format used by Ultima 8.
+    Reader/writer preserving the source U7/Exult or U8 Flex header format.
 
     Flex is an indexed container: a fixed-size header followed by a table of
     (offset, size) pairs pointing to raw record blobs packed sequentially.
@@ -144,6 +141,17 @@ class FlexArchive:
         self.record_names: list[str] = []
         self.unknown_field: int = 1
         self._source_path: Optional[str] = None
+        self.archive_format: Literal["u7", "u8"] = "u8"
+        self._source_header: bytes | None = None
+
+    @staticmethod
+    def _decode_comment(header: bytes | bytearray) -> str:
+        """Read the title/comment without interpreting header fields as text."""
+        if struct.unpack_from("<I", header, 0x50)[0] == 0xFFFF1A00:
+            raw = header[:80].split(b"\x00", 1)[0]
+        else:
+            raw = header[:FLEX_COMMENT_LEN]
+        return raw.split(b"\x1a", 1)[0].decode("ascii", errors="replace").rstrip("\x00")
 
     # ------------------------------------------------------------------
     # Validation
@@ -169,6 +177,10 @@ class FlexArchive:
         Scan bytes 0x00..0x51 to find the first 0x1A. From that point
         through 0x51, every byte must be 0x1A.
         """
+        if len(header) < FLEX_HEADER_SIZE:
+            return False
+        if struct.unpack_from("<I", header, 0x50)[0] == 0xFFFF1A00:
+            return True
         comment_region = header[:FLEX_COMMENT_LEN]
         first_1a = -1
         for i, b in enumerate(comment_region):
@@ -191,7 +203,7 @@ class FlexArchive:
     # ------------------------------------------------------------------
 
     @classmethod
-    def from_file(cls, filepath: str) -> FlexArchive:
+    def from_file(cls, filepath: str, *, strict: bool = False) -> FlexArchive:
         """Load a Flex archive from disk."""
         archive = cls()
         archive._source_path = filepath
@@ -205,15 +217,17 @@ class FlexArchive:
         if not cls._validate_header(data[:FLEX_HEADER_SIZE]):
             raise ValueError(f"Invalid Flex header in: {filepath}")
 
-        # Extract comment (everything before first 0x1A)
-        comment_bytes = data[:FLEX_COMMENT_LEN]
-        end = comment_bytes.find(FLEX_FILL_BYTE)
-        if end < 0:
-            end = FLEX_COMMENT_LEN
-        archive.comment = comment_bytes[:end].decode("ascii", errors="replace").rstrip("\x00")
+        archive._source_header = data[:FLEX_HEADER_SIZE]
+        archive.archive_format = (
+            "u7" if struct.unpack_from("<I", data, 0x50)[0] == 0xFFFF1A00 else "u8"
+        )
+        archive.comment = cls._decode_comment(data[:FLEX_HEADER_SIZE])
 
         # Read record count
         count = struct.unpack_from("<I", data, FLEX_COUNT_OFFSET)[0]
+        table_end = FLEX_TABLE_OFFSET + count * FLEX_RECORD_ENTRY_SIZE
+        if strict and table_end > len(data):
+            raise ValueError("Flex record table is truncated")
 
         # Read unknown field
         archive.unknown_field = struct.unpack_from("<I", data, FLEX_UNK_OFFSET)[0]
@@ -223,12 +237,16 @@ class FlexArchive:
         for i in range(count):
             table_pos = FLEX_TABLE_OFFSET + i * FLEX_RECORD_ENTRY_SIZE
             offset, size = struct.unpack_from("<II", data, table_pos)
+            if strict and size and (offset < table_end or offset + size > len(data)):
+                raise ValueError(f"Flex record {i} has invalid bounds")
             if size > 0 and offset > 0:
-                record_data = data[offset:offset + size]
+                record_data = data[offset : offset + size]
                 if len(record_data) != size:
-                    print(f"  WARNING: Record {i} truncated "
-                          f"(expected {size}, got {len(record_data)})",
-                          file=sys.stderr)
+                    print(
+                        f"  WARNING: Record {i} truncated "
+                        f"(expected {size}, got {len(record_data)})",
+                        file=sys.stderr,
+                    )
                 archive.records.append(record_data)
             else:
                 # Empty/null record — preserve index position
@@ -245,11 +263,11 @@ class FlexArchive:
             raise ValueError("Data too small to be a Flex archive")
         if not cls._validate_header(data[:FLEX_HEADER_SIZE]):
             raise ValueError("Invalid Flex header in data")
-        comment_bytes = data[:FLEX_COMMENT_LEN]
-        end = comment_bytes.find(FLEX_FILL_BYTE)
-        if end < 0:
-            end = FLEX_COMMENT_LEN
-        archive.comment = comment_bytes[:end].decode("ascii", errors="replace").rstrip("\x00")
+        archive._source_header = data[:FLEX_HEADER_SIZE]
+        archive.archive_format = (
+            "u7" if struct.unpack_from("<I", data, 0x50)[0] == 0xFFFF1A00 else "u8"
+        )
+        archive.comment = cls._decode_comment(data[:FLEX_HEADER_SIZE])
         count = struct.unpack_from("<I", data, FLEX_COUNT_OFFSET)[0]
         archive.unknown_field = struct.unpack_from("<I", data, FLEX_UNK_OFFSET)[0]
         archive.records = []
@@ -257,7 +275,7 @@ class FlexArchive:
             table_pos = FLEX_TABLE_OFFSET + i * FLEX_RECORD_ENTRY_SIZE
             offset, size = struct.unpack_from("<II", data, table_pos)
             if size > 0 and offset > 0:
-                record_data = data[offset:offset + size]
+                record_data = data[offset : offset + size]
                 archive.records.append(record_data)
             else:
                 archive.records.append(b"")
@@ -268,7 +286,9 @@ class FlexArchive:
         """Return raw bytes for a record by index."""
         if 0 <= index < len(self.records):
             return self.records[index]
-        raise IndexError(f"Record index {index} out of range (0..{len(self.records) - 1})")
+        raise IndexError(
+            f"Record index {index} out of range (0..{len(self.records) - 1})"
+        )
 
     # ------------------------------------------------------------------
     # Name-table parsing
@@ -302,8 +322,7 @@ class FlexArchive:
         # Guard: name-table entries are identifiers (no spaces).
         # Speech FLX files store dialogue text in record 0 which is also
         # ASCII+NUL and divisible by 8, but contains spaces/punctuation.
-        if (self._is_name_table_data(rec0)
-                and len(rec0) >= 8 and len(rec0) % 8 == 0):
+        if self._is_name_table_data(rec0) and len(rec0) >= 8 and len(rec0) % 8 == 0:
             self._parse_fixed_name_table(rec0, entry_size=8)
             return
 
@@ -332,7 +351,7 @@ class FlexArchive:
         """
         num_entries = len(rec0) // entry_size
         for i in range(num_entries):
-            raw = rec0[i * entry_size:(i + 1) * entry_size]
+            raw = rec0[i * entry_size : (i + 1) * entry_size]
             name = raw.rstrip(b"\x00").decode("ascii", errors="replace")
             rec_idx = i + 1
             if rec_idx < len(self.record_names):
@@ -408,17 +427,15 @@ class FlexArchive:
                 f.write(record)
 
             # Write companion metadata file
-            self._write_record_metadata(
-                outdir, stem, i, name, record, flex_name
-            )
+            self._write_record_metadata(outdir, stem, i, name, record, flex_name)
 
             extracted += 1
         return extracted
 
     @staticmethod
-    def _write_record_metadata(outdir: str, stem: str,
-                                index: int, name: str,
-                                record: bytes, flex_name: str) -> None:
+    def _write_record_metadata(
+        outdir: str, stem: str, index: int, name: str, record: bytes, flex_name: str
+    ) -> None:
         """Write a ``.meta.txt`` sidecar with record metadata."""
         meta_path = os.path.join(outdir, f"{stem}.meta.txt")
         content_type = detect_record_type(record)
@@ -458,17 +475,16 @@ class FlexArchive:
         # --- Build header ---
         header = bytearray(FLEX_HEADER_SIZE)
 
-        # Comment (ASCII, padded with 0x1A to fill 0x52 bytes).
-        # Keep the text when rewriting an existing archive: the previous
-        # implementation populated it here and then immediately replaced the
-        # entire region with fill bytes below.
-        comment_encoded = self.comment.encode("ascii", errors="replace")[:FLEX_COMMENT_LEN]
-        header[:len(comment_encoded)] = comment_encoded
+        # Comment (ASCII, padded with 0x1A to fill 0x52 bytes)
+        comment_encoded = self.comment.encode("ascii", errors="replace")[
+            : FLEX_COMMENT_LEN - 1
+        ]
+        header[: len(comment_encoded)] = comment_encoded
         # Fill remainder of comment region with 0x1A
         for i in range(len(comment_encoded), FLEX_COMMENT_LEN):
             header[i] = FLEX_FILL_BYTE
 
-        # 0x52 and 0x53 are the two zero bytes following the comment region.
+        # 0x52 and 0x53 = 0x00 (from the 0x00001A1A dword at 0x50)
         header[0x52] = 0x00
         header[0x53] = 0x00
 
@@ -491,14 +507,42 @@ class FlexArchive:
         data_blobs = bytearray()
         for i, record in enumerate(self.records):
             if record and len(record) > 0:
-                struct.pack_into("<I", table, i * FLEX_RECORD_ENTRY_SIZE, current_offset)
-                struct.pack_into("<I", table, i * FLEX_RECORD_ENTRY_SIZE + 4, len(record))
+                struct.pack_into(
+                    "<I", table, i * FLEX_RECORD_ENTRY_SIZE, current_offset
+                )
+                struct.pack_into(
+                    "<I", table, i * FLEX_RECORD_ENTRY_SIZE + 4, len(record)
+                )
                 data_blobs.extend(record)
                 current_offset += len(record)
             else:
                 # Empty record: offset=0, size=0
                 struct.pack_into("<I", table, i * FLEX_RECORD_ENTRY_SIZE, 0)
                 struct.pack_into("<I", table, i * FLEX_RECORD_ENTRY_SIZE + 4, 0)
+
+        if self.archive_format == "u7":
+            # Preserve the U7/Exult version and reserved header fields. The
+            # record table layout is shared; the U8 header above is not.
+            header = bytearray(self._source_header or bytes(FLEX_HEADER_SIZE))
+            struct.pack_into("<I", header, 0x50, 0xFFFF1A00)
+            original_title = self._decode_comment(header)
+            if self._source_header is None or self.comment != original_title:
+                header[:80] = self.comment.encode("ascii", errors="replace")[:80].ljust(
+                    80, b"\x00"
+                )
+            struct.pack_into(
+                "<III", header, 0x50, 0xFFFF1A00, count, self.unknown_field
+            )
+            return bytes(header) + bytes(table) + bytes(data_blobs)
+
+        if self._source_header is not None:
+            header = bytearray(self._source_header)
+            if self.comment != self._decode_comment(header):
+                header[:FLEX_COMMENT_LEN] = comment_encoded.ljust(
+                    FLEX_COMMENT_LEN, b"\x1a"
+                )
+            struct.pack_into("<I", header, FLEX_COUNT_OFFSET, count)
+            struct.pack_into("<I", header, FLEX_UNK_OFFSET, self.unknown_field)
 
         # Total file size
         total_size = FLEX_HEADER_SIZE + table_size + len(data_blobs)
@@ -511,9 +555,11 @@ class FlexArchive:
         os.makedirs(os.path.dirname(filepath) or ".", exist_ok=True)
         with open(filepath, "wb") as f:
             f.write(self.to_bytes())
-        print(f"Wrote Flex archive: {filepath} "
-              f"({len(self.records)} records, "
-              f"{os.path.getsize(filepath):,} bytes)")
+        print(
+            f"Wrote Flex archive: {filepath} "
+            f"({len(self.records)} records, "
+            f"{os.path.getsize(filepath):,} bytes)"
+        )
 
     @classmethod
     def from_directory(cls, dirpath: str, comment: str = "") -> FlexArchive:
@@ -550,8 +596,10 @@ class FlexArchive:
                 continue
 
         if not indexed_files:
-            print(f"WARNING: No numerically named files found in {dirpath_p}",
-                  file=sys.stderr)
+            print(
+                f"WARNING: No numerically named files found in {dirpath_p}",
+                file=sys.stderr,
+            )
             return archive
 
         max_index = max(indexed_files.keys())
@@ -575,6 +623,7 @@ class FlexArchive:
         named = sum(1 for n in self.record_names if n)
         lines = [
             "Flex Archive Summary",
+            f"  Format:        {self.archive_format.upper()}",
             f"  Source:        {self._source_path or '(in-memory)'}",
             f"  Comment:       {self.comment!r}",
             f"  Record count:  {len(self.records)}",
@@ -605,6 +654,7 @@ class FlexArchive:
 # ============================================================================
 # CONTENT-TYPE DETECTION HELPERS
 # ============================================================================
+
 
 def _is_plain_text(data: bytes) -> bool:
     """Return True if *data* is plausible plain ASCII text.

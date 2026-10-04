@@ -35,7 +35,7 @@ from typing import Optional
 FONT_FILE_MAP: dict[str, str] = {
     "disabled": "fonts.vga",
     "original": "fonts_original.vga",
-    "serif":    "fonts_serif.vga",
+    "serif": "fonts_serif.vga",
 }
 
 DEFAULT_FONT_CONFIG = "original"
@@ -50,16 +50,18 @@ _GAME_CFG_NAMES: dict[str, str] = {
 
 # -- Data classes ----------------------------------------------------------
 
+
 @dataclass
 class ExultGamePaths:
     """Resolved paths for a single Exult game installation."""
 
-    game: str                        # "BG" or "SI"
+    game: str  # "BG" or "SI"
     game_path: Optional[str] = None  # Base game directory
     static_path: Optional[str] = None
     patch_path: Optional[str] = None
     mods_path: Optional[str] = None
     font_config: str = DEFAULT_FONT_CONFIG  # "disabled" / "original" / "serif"
+    data_path: Optional[str] = None
 
     @property
     def font_filename(self) -> str:
@@ -75,6 +77,7 @@ class ExultGamePaths:
 
 
 # -- Config file discovery -------------------------------------------------
+
 
 def find_exult_cfg() -> Optional[Path]:
     """Locate ``exult.cfg`` in standard locations.
@@ -99,6 +102,7 @@ def find_exult_cfg() -> Optional[Path]:
 
 # -- XML helpers -----------------------------------------------------------
 
+
 def _xml_text(root: ET.Element, dotpath: str) -> Optional[str]:
     """Traverse *root* using a dotted path (``gameplay.fonts``) and
     return the stripped text content, or ``None`` if missing.
@@ -116,6 +120,7 @@ def _xml_text(root: ET.Element, dotpath: str) -> Optional[str]:
 
 
 # -- Main parser -----------------------------------------------------------
+
 
 def parse_exult_cfg(
     cfg_path: str | Path,
@@ -135,13 +140,17 @@ def parse_exult_cfg(
     ExultGamePaths
         Resolved paths and font config for the game.
     """
-    tree = ET.parse(str(cfg_path))
+    try:
+        tree = ET.parse(str(cfg_path))
+    except ET.ParseError as error:
+        raise ValueError(f"Invalid Exult configuration {cfg_path}: {error}") from error
     root = tree.getroot()  # <config>
 
     cfg_name = _GAME_CFG_NAMES.get(game.upper(), "serpentisle")
     prefix = f"disk.game.{cfg_name}"
 
     result = ExultGamePaths(game=game.upper())
+    result.data_path = _xml_text(root, "disk.data_path")
 
     # Game base path: <config><disk><game><serpentisle><path>
     game_path = _xml_text(root, f"{prefix}.path")
@@ -232,6 +241,7 @@ def resolve_font_vga_path(
 
 # -- Font archive scanner --------------------------------------------------
 
+
 def scan_font_archives(game_path: str | Path) -> list[Path]:
     """Recursively find all font VGA archives under *game_path*.
 
@@ -243,7 +253,11 @@ def scan_font_archives(game_path: str | Path) -> list[Path]:
         return []
 
     results: list[Path] = []
-    for vga in root.rglob("*.vga"):
-        if "font" in vga.name.lower():
+    for vga in root.rglob("*"):
+        if (
+            vga.is_file()
+            and vga.suffix.lower() == ".vga"
+            and "font" in vga.name.lower()
+        ):
             results.append(vga)
     return sorted(results)

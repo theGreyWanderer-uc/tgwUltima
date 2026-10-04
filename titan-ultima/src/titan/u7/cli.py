@@ -19,7 +19,9 @@ from types import SimpleNamespace
 from typing import Annotated, Literal, Optional
 
 import typer
-from titan._config import get_config
+from titan._config import get_config, resolve_config_path
+from titan.u7.shape_archive import U7ShapeArchive
+from titan.u7.install import resolve_u7_path
 
 u7_app = typer.Typer(
     name="u7",
@@ -30,34 +32,10 @@ u7_app = typer.Typer(
 
 
 def _resolve_u7_paths(game: str) -> tuple[Optional[str], Optional[str]]:
-    """Resolve STATIC and palette paths from multi-game config for BG/SI."""
-    cfg = get_config() or {}
-    section_key = "u7bg" if game.lower() == "bg" else "u7si"
-    section = cfg.get(section_key, {}) if isinstance(cfg, dict) else {}
-    game_cfg = section.get("game", {}) if isinstance(section, dict) else {}
-    paths_cfg = section.get("paths", {}) if isinstance(section, dict) else {}
-
-    base = game_cfg.get("base") if isinstance(game_cfg, dict) else None
-    base_path = Path(str(base)).expanduser() if base else None
-
-    def _abs_from_cfg(value: object) -> Optional[str]:
-        if not value:
-            return None
-        p = Path(str(value)).expanduser()
-        if p.is_absolute() or base_path is None:
-            return str(p)
-        return str(base_path / p)
-
-    static = _abs_from_cfg(paths_cfg.get("static"))
-    palette = _abs_from_cfg(paths_cfg.get("palette"))
-
-    # Reasonable fallback if only base was configured.
-    if static is None and base_path is not None:
-        static = str(base_path / "STATIC")
-    if palette is None and static is not None:
-        palette = str(Path(static) / "PALETTES.FLX")
-
-    return static, palette
+    """Share verified config/nested-install/Exult paths with the shape wizard."""
+    static = resolve_u7_path(game, "static")
+    palette = resolve_u7_path(game, "palette")
+    return str(static) if static else None, str(palette) if palette else None
 
 
 def _resolve_u7_patch_base_static(
@@ -92,39 +70,43 @@ def _resolve_u7_patch_base_static(
     return None
 
 
+def _load_u7_shape_archive(
+    filepath: str, args: SimpleNamespace, *, strict: bool = False
+) -> U7ShapeArchive | None:
+    """Use the same patch inheritance for reading and allocating shapes."""
+    configured_static, _ = _resolve_u7_paths(getattr(args, "game", "bg"))
+    try:
+        resolved = U7ShapeArchive.from_file(
+            filepath,
+            base_archive=getattr(args, "base_archive", None),
+            configured_static=getattr(args, "static", None) or configured_static,
+            strict=strict,
+            require_patch_base=True,
+        )
+    except (OSError, ValueError) as error:
+        print(f"ERROR: Could not resolve U7 shape archive: {error}", file=sys.stderr)
+        return None
+    if resolved.base_fill_count:
+        print(
+            f"Sparse shape overlay: inherited {resolved.base_fill_count} base records"
+        )
+    return resolved
+
+
 def _resolve_u7_text_flx(game: str, static_dir: Optional[str] = None) -> Optional[str]:
     """Resolve TEXT.FLX path from config, with fallback to STATIC dir."""
-    cfg = get_config() or {}
-    section_key = "u7bg" if game.lower() == "bg" else "u7si"
-    section = cfg.get(section_key, {}) if isinstance(cfg, dict) else {}
-    game_cfg = section.get("game", {}) if isinstance(section, dict) else {}
-    paths_cfg = section.get("paths", {}) if isinstance(section, dict) else {}
+    from titan._config import game_config_path
+    from titan.u7.install import existing_path
 
-    base = game_cfg.get("base") if isinstance(game_cfg, dict) else None
-    base_path = Path(str(base)).expanduser() if base else None
-
-    configured = paths_cfg.get("text") if isinstance(paths_cfg, dict) else None
-    if configured:
-        p = Path(str(configured)).expanduser()
-        if p.is_absolute() or base_path is None:
-            candidate = p
-        else:
-            candidate = base_path / p
-        if candidate.exists():
-            return str(candidate)
-
-    # Fall back to STATIC directory discovery
-    search_dirs: list[Path] = []
+    configured = game_config_path(game, "text")
+    if configured and existing_path(configured).is_file():
+        return str(existing_path(configured))
     if static_dir:
-        search_dirs.append(Path(static_dir))
-    if base_path:
-        search_dirs.append(base_path / "STATIC")
-    for d in search_dirs:
-        for name in ("TEXT.FLX", "text.flx"):
-            p = d / name
-            if p.exists():
-                return str(p)
-    return None
+        selected = existing_path(Path(static_dir) / "TEXT.FLX")
+        if selected.is_file():
+            return str(selected)
+    path = resolve_u7_path(game, "text")
+    return str(path) if path else None
 
 
 def _resolve_u7_gamedat(game: str) -> Optional[str]:
@@ -236,8 +218,8 @@ def _resolve_u7_mod_gamedat(game: str, mod: Optional[str]) -> Optional[str]:
             if isinstance(paths_cfg, dict):
                 configured = paths_cfg.get("gamedat")
                 if configured:
-                    path = Path(str(configured)).expanduser()
-                    if (path / "npc.dat").is_file():
+                    path = resolve_config_path(configured, game_cfg.get("base"))
+                    if path and (path / "npc.dat").is_file():
                         return str(path)
 
     root = _exult_profile_root()
@@ -269,8 +251,8 @@ def _resolve_u7_mod_archive(game: str, mod: Optional[str]) -> Optional[str]:
     paths_cfg = mod_cfg.get("paths", {}) if isinstance(mod_cfg, dict) else {}
     archive = paths_cfg.get("archive") if isinstance(paths_cfg, dict) else None
     if archive:
-        path = Path(str(archive)).expanduser()
-        if path.is_file():
+        path = resolve_config_path(archive, game_cfg.get("base"))
+        if path and path.is_file():
             return str(path)
     base_path = game_cfg.get("base") if isinstance(game_cfg, dict) else None
     if base_path:
@@ -577,7 +559,12 @@ def cmd_shape_import(args: SimpleNamespace) -> int:
             str(palette_path),
             palette_index=args.palette_index,
         )
-        shape = create_u7_shape_from_pngs(png_paths, palette)
+        shape = create_u7_shape_from_pngs(
+            png_paths,
+            palette,
+            allow_cycling=getattr(args, "allow_cycling", False),
+            flat=getattr(args, "flat", False),
+        )
         output_path.parent.mkdir(parents=True, exist_ok=True)
         shape.save(str(output_path))
     except (OSError, ValueError) as error:
@@ -639,7 +626,10 @@ def cmd_shape_export(args: SimpleNamespace) -> int:
                 file=sys.stderr,
             )
             return 1
-        archive = U7FlexArchive.from_file(filepath)
+        resolved = _load_u7_shape_archive(filepath, args)
+        if resolved is None:
+            return 1
+        archive = resolved.effective
         shape_idx = args.shape
         num_records = len(archive.records)
         if shape_idx < 0 or shape_idx >= num_records:
@@ -799,7 +789,10 @@ def cmd_shape_animate(args: SimpleNamespace) -> int:
                 file=sys.stderr,
             )
             return 1
-        archive = U7FlexArchive.from_file(filepath)
+        resolved = _load_u7_shape_archive(filepath, args)
+        if resolved is None:
+            return 1
+        archive = resolved.effective
         rec = archive.get_record(args.shape)
         if not rec:
             print(f"ERROR: Shape {args.shape} is empty", file=sys.stderr)
@@ -979,7 +972,6 @@ def cmd_shape_batch(args: SimpleNamespace) -> int:
     """Batch-export shapes from a VGA Flex archive, or standalone .shp files from a directory, to PNG."""
     from titan.u7.shape import U7Shape, FIRST_OBJ_SHAPE
     from titan.u7.palette import U7Palette
-    from titan.u7.flex import U7FlexArchive
 
     filepath = args.file
     if os.path.isdir(filepath):
@@ -994,7 +986,10 @@ def cmd_shape_batch(args: SimpleNamespace) -> int:
     else:
         pal = U7Palette.default_palette()
 
-    archive = U7FlexArchive.from_file(filepath)
+    resolved = _load_u7_shape_archive(filepath, args)
+    if resolved is None:
+        return 1
+    archive = resolved.effective
     base = Path(filepath).stem
 
     outdir = args.output or f"{base}_png"
@@ -1067,7 +1062,6 @@ def cmd_shape_cycle_scan(args: SimpleNamespace) -> int:
     """Scan a VGA archive for colour-cycling/translucency/frame-animation
     content; export indexed frames and a descriptor for every affected
     shape."""
-    from titan.u7.flex import U7FlexArchive
     from titan.u7.names import U7ShapeNames
     from titan.u7.palette import U7Palette
     from titan.u7.shape import U7Shape, FIRST_OBJ_SHAPE
@@ -1087,7 +1081,10 @@ def cmd_shape_cycle_scan(args: SimpleNamespace) -> int:
         )
         return 1
 
-    archive = U7FlexArchive.from_file(filepath)
+    resolved = _load_u7_shape_archive(filepath, args)
+    if resolved is None:
+        return 1
+    archive = resolved.effective
     tfa = U7TypeFlags.from_dir(args.static)
     translucency = U7Translucency.from_dir(args.static)
     xfstart = translucency.xfstart if translucency.num_slots else 238
@@ -1348,13 +1345,13 @@ def cmd_u7_flex_create(args: SimpleNamespace) -> int:
 
 def cmd_u7_flex_add_shape(args: SimpleNamespace) -> int:
     """Add a standalone U7 shape to the first permitted free Flex record."""
-    from titan.u7.flex import U7FlexArchive
     from titan.u7.flex_shape_add import (
         add_shape_at_record_index,
         add_shape_to_first_available_record,
         save_u7_flex_atomically,
     )
     from titan.u7.shape import FIRST_OBJ_SHAPE, U7Shape
+    from titan.u7.shape_import import validate_u7_import_frame_size
 
     archive_path = Path(args.archive)
     shape_path = Path(args.shape)
@@ -1378,6 +1375,14 @@ def cmd_u7_flex_add_shape(args: SimpleNamespace) -> int:
 
     requested_index = getattr(args, "index", None)
     replace_record = getattr(args, "replace", False)
+    archive_kind = getattr(args, "archive_kind", "shapes")
+    flat = getattr(args, "flat", False)
+    if archive_kind not in {"shapes", "generic"}:
+        print("ERROR: U7 Flex archive kind must be shapes or generic", file=sys.stderr)
+        return 1
+    if flat and archive_kind != "shapes":
+        print("ERROR: U7 Flex --flat requires --archive-kind shapes", file=sys.stderr)
+        return 1
     if requested_index is not None and requested_index < 0:
         print(
             f"ERROR: U7 Flex add-shape record index must be non-negative: {requested_index}",
@@ -1412,23 +1417,56 @@ def cmd_u7_flex_add_shape(args: SimpleNamespace) -> int:
         return 1
 
     try:
-        archive = U7FlexArchive.from_file(str(archive_path))
+        resolved = _load_u7_shape_archive(str(archive_path), args, strict=True)
+        if resolved is None:
+            return 1
+        archive = resolved.selected
         shape_data = shape_path.read_bytes()
-        shape = U7Shape.from_data(shape_data)
+        shape = U7Shape.from_data(shape_data, strict=True)
         if not shape.frames:
             print(
                 f"ERROR: U7 Flex add-shape input contains no valid frames: {shape_path}",
                 file=sys.stderr,
             )
             return 1
+        for frame_index, frame in enumerate(shape.frames):
+            validate_u7_import_frame_size(
+                frame.width, frame.height, f"{shape_path.name}, frame {frame_index}"
+            )
+        if archive_kind == "shapes":
+            if flat:
+                if any(
+                    not frame.is_tile or (frame.width, frame.height) != (8, 8)
+                    for frame in shape.frames
+                ):
+                    raise ValueError(
+                        "U7 flat insertion requires raw 8x8 frames; "
+                        "create the shape with shape-import --flat"
+                    )
+                if requested_index is not None and requested_index >= FIRST_OBJ_SHAPE:
+                    raise ValueError(
+                        "U7 flat insertion must use a slot from 0 through 149"
+                    )
+            else:
+                if any(frame.is_tile for frame in shape.frames):
+                    raise ValueError(
+                        "U7 raw flat shapes require --flat; object shapes must be RLE"
+                    )
+                if requested_index is not None and requested_index < FIRST_OBJ_SHAPE:
+                    raise ValueError(
+                        "U7 object insertion must use slot 150 or higher; "
+                        "slots 0 through 149 require --flat and raw 8x8 frames"
+                    )
         if requested_index is None:
             minimum_record_index = (
-                FIRST_OBJ_SHAPE if archive_path.name.casefold() == "shapes.vga" else 0
+                FIRST_OBJ_SHAPE if archive_kind == "shapes" and not flat else 0
             )
             record_index = add_shape_to_first_available_record(
                 archive,
                 shape_data,
                 minimum_record_index=minimum_record_index,
+                maximum_record_index=FIRST_OBJ_SHAPE - 1 if flat else None,
+                base_archive=resolved.base,
             )
         else:
             record_index = add_shape_at_record_index(
@@ -1436,6 +1474,7 @@ def cmd_u7_flex_add_shape(args: SimpleNamespace) -> int:
                 shape_data,
                 requested_index,
                 replace=replace_record,
+                base_archive=resolved.base,
             )
         save_u7_flex_atomically(archive, output_path)
     except (OSError, ValueError) as error:
@@ -1515,14 +1554,38 @@ def u7_flex_add_shape_cmd(
         bool,
         typer.Option("--replace", help="Replace an occupied --index record"),
     ] = False,
+    archive_kind: Annotated[
+        Literal["shapes", "generic"],
+        typer.Option(
+            "--archive-kind",
+            help="shapes: reserve slots 0-149 for flats; generic: other Flex archives",
+        ),
+    ] = "shapes",
+    flat: Annotated[
+        bool,
+        typer.Option("--flat", help="Insert raw 8x8 flat frames into slots 0-149"),
+    ] = False,
+    base_archive: Annotated[
+        Optional[str],
+        typer.Option(
+            "--base-archive",
+            help="Original VGA/Flex archive for sparse patch inheritance",
+        ),
+    ] = None,
+    game: Annotated[
+        Literal["bg", "si"],
+        typer.Option("--game", help="BG or SI config fallback for the patch base"),
+    ] = "bg",
 ) -> None:
     """Add a U7 shape to a specific or the lowest permitted empty record.
 
-    Automatic SHAPES.VGA allocation starts at shape 150, after the flat shapes.
+    Object allocation starts at shape 150 regardless of the archive filename.
     """
     raise SystemExit(
         cmd_u7_flex_add_shape(
             SimpleNamespace(
+                base_archive=base_archive,
+                game=game,
                 archive=archive,
                 shape=shape,
                 output=output,
@@ -1530,12 +1593,102 @@ def u7_flex_add_shape_cmd(
                 force=force,
                 index=index,
                 replace=replace,
+                archive_kind=archive_kind,
+                flat=flat,
             )
         )
     )
 
 
 # ---- palette ---------------------------------------------------------------
+
+
+@u7_app.command("shape-create")
+def shape_create_cmd(
+    source: Annotated[
+        Optional[str],
+        typer.Argument(help="PNG file or folder of PNG frames (interactive mode)"),
+    ] = None,
+    config: Annotated[
+        Optional[str],
+        typer.Option("--config", "-c", help="TOML recipe; generate without prompts"),
+    ] = None,
+    output: Annotated[
+        Optional[str],
+        typer.Option(
+            "--output",
+            "-o",
+            help="Shape output, or archive destination for archive-only output",
+        ),
+    ] = None,
+    game: Annotated[
+        Literal["bg", "si"],
+        typer.Option("--game", help="Initial game selection in interactive mode"),
+    ] = "bg",
+    force: Annotated[
+        bool, typer.Option("--force", help="Replace existing output files")
+    ] = False,
+    allow_cycling: Annotated[
+        bool,
+        typer.Option(
+            "--allow-cycling", help="Allow RGB matching to use cycling indices 224-254"
+        ),
+    ] = False,
+    base_archive: Annotated[
+        Optional[str],
+        typer.Option(
+            "--base-archive", help="Original VGA/Flex base for sparse patch inheritance"
+        ),
+    ] = None,
+    preview: Annotated[
+        Optional[str],
+        typer.Option(
+            "--preview", help="Save a source-versus-converted PNG contact sheet"
+        ),
+    ] = None,
+    in_place: Annotated[
+        bool,
+        typer.Option(
+            "--in-place",
+            help="Allow the archive destination to be the selected source archive",
+        ),
+    ] = False,
+) -> None:
+    """Guide PNG conversion through palette, preview, shape and archive output.
+
+    Accepts a PNG or naturally sorted frame folder. Defaults to the U7 main
+    palette, static colours and RLE objects. Supports preview redo, safe free
+    slot allocation, explicit flats, sparse patches, archive copies and TOML
+    recipes. Existing shape-import and flex-add-shape remain available.
+    """
+    from titan.u7.shape_wizard import run_from_config, run_wizard
+
+    if config and source:
+        raise typer.BadParameter("Use either a source argument or --config")
+    if config:
+        raise SystemExit(
+            run_from_config(
+                config,
+                output_override=output,
+                force=force,
+                allow_cycling=allow_cycling,
+                base_archive=base_archive,
+                preview_path=preview,
+                in_place=in_place,
+            )
+        )
+    raise SystemExit(
+        run_wizard(
+            source,
+            game=game,
+            output_override=output,
+            force=force,
+            allow_cycling=allow_cycling,
+            base_archive=base_archive,
+            preview_path=preview,
+            in_place=in_place,
+        )
+    )
 
 
 @u7_app.command("palette-export")
@@ -1668,11 +1821,24 @@ def shape_export_cmd(
             "(VGA archive input only)",
         ),
     ] = None,
+    base_archive: Annotated[
+        Optional[str],
+        typer.Option(
+            "--base-archive",
+            help="Original VGA/Flex archive for sparse patch inheritance",
+        ),
+    ] = None,
+    game: Annotated[
+        Literal["bg", "si"],
+        typer.Option("--game", help="BG or SI config fallback for the patch base"),
+    ] = "bg",
 ) -> None:
     """Export frames from a U7 shape file to PNG."""
     raise SystemExit(
         cmd_shape_export(
             SimpleNamespace(
+                base_archive=base_archive,
+                game=game,
                 file=file,
                 palette=palette,
                 output=output,
@@ -1714,6 +1880,19 @@ def shape_import_cmd(
         Literal["bg", "si"],
         typer.Option("--game", help="Use BG or SI titan.toml palette defaults"),
     ] = "bg",
+    allow_cycling: Annotated[
+        bool,
+        typer.Option(
+            "--allow-cycling",
+            help="Allow RGB conversion to choose cycling indices 224-254",
+        ),
+    ] = False,
+    flat: Annotated[
+        bool,
+        typer.Option(
+            "--flat", help="Create raw flat frames; all PNGs must be opaque 8x8"
+        ),
+    ] = False,
 ) -> None:
     """Create a standalone U7 SHP from PNG frames in Windows A-Z name order."""
     raise SystemExit(
@@ -1724,6 +1903,8 @@ def shape_import_cmd(
                 output=output,
                 palette_index=palette_index,
                 game=game,
+                allow_cycling=allow_cycling,
+                flat=flat,
             )
         )
     )
@@ -1750,11 +1931,24 @@ def shape_frame_report_cmd(
         Literal["csv", "json"],
         typer.Option("-f", "--format", help="Report format: csv (default) or json"),
     ] = "csv",
+    base_archive: Annotated[
+        Optional[str],
+        typer.Option(
+            "--base-archive",
+            help="Original VGA/Flex archive for sparse patch inheritance",
+        ),
+    ] = None,
+    game: Annotated[
+        Literal["bg", "si"],
+        typer.Option("--game", help="BG or SI config fallback for the patch base"),
+    ] = "bg",
 ) -> None:
     """Export every shape/frame origin, drawing hotspot, and WIHH attachment."""
     raise SystemExit(
         cmd_shape_frame_report(
             SimpleNamespace(
+                base_archive=base_archive,
+                game=game,
                 file=file,
                 output=output,
                 wihh=wihh,
@@ -1825,12 +2019,25 @@ def shape_animate_cmd(
             "--hour-start", help="Starting in-game hour for HOURLY-type animations"
         ),
     ] = None,
+    base_archive: Annotated[
+        Optional[str],
+        typer.Option(
+            "--base-archive",
+            help="Original VGA/Flex archive for sparse patch inheritance",
+        ),
+    ] = None,
+    game: Annotated[
+        Literal["bg", "si"],
+        typer.Option("--game", help="BG or SI config fallback for the patch base"),
+    ] = "bg",
 ) -> None:
     """Render a shape's frame-sequence or palette-cycle animation to an
     animated GIF."""
     raise SystemExit(
         cmd_shape_animate(
             SimpleNamespace(
+                base_archive=base_archive,
+                game=game,
                 file=file,
                 palette=palette,
                 output=output,
@@ -1891,11 +2098,24 @@ def shape_batch_cmd(
             help="Preview the palette rotated to this elapsed time in milliseconds",
         ),
     ] = 0,
+    base_archive: Annotated[
+        Optional[str],
+        typer.Option(
+            "--base-archive",
+            help="Original VGA/Flex archive for sparse patch inheritance",
+        ),
+    ] = None,
+    game: Annotated[
+        Literal["bg", "si"],
+        typer.Option("--game", help="BG or SI config fallback for the patch base"),
+    ] = "bg",
 ) -> None:
     """Batch-export shapes from a VGA Flex archive, or standalone .shp files from a directory, to PNG."""
     raise SystemExit(
         cmd_shape_batch(
             SimpleNamespace(
+                base_archive=base_archive,
+                game=game,
                 file=file,
                 palette=palette,
                 output=output,
@@ -1944,6 +2164,17 @@ def shape_cycle_scan_cmd(
         Literal["json", "csv"],
         typer.Option("-f", "--format", help="Descriptor format: json (default) or csv"),
     ] = "json",
+    base_archive: Annotated[
+        Optional[str],
+        typer.Option(
+            "--base-archive",
+            help="Original VGA/Flex archive for sparse patch inheritance",
+        ),
+    ] = None,
+    game: Annotated[
+        Literal["bg", "si"],
+        typer.Option("--game", help="BG or SI config fallback for the patch base"),
+    ] = "bg",
 ) -> None:
     """Scan a VGA archive for colour-cycling, translucency, and TFA
     frame-animation content, exporting indexed frames plus a descriptor
@@ -1951,6 +2182,8 @@ def shape_cycle_scan_cmd(
     raise SystemExit(
         cmd_shape_cycle_scan(
             SimpleNamespace(
+                base_archive=base_archive,
+                game=game,
                 file=file,
                 static=static,
                 palette=palette,
@@ -2620,7 +2853,6 @@ def cmd_wihh_dump(args: SimpleNamespace) -> int:
 
 def cmd_shape_frame_report(args: SimpleNamespace) -> int:
     """Export all shape frames, drawing anchors, and WIHH attachments."""
-    from titan.u7.flex import U7FlexArchive
     from titan.u7.shape_frame_report import build_u7_shape_frame_report
     from titan.u7.wihh import U7WeaponInHandOffsets
 
@@ -2647,7 +2879,10 @@ def cmd_shape_frame_report(args: SimpleNamespace) -> int:
                 break
 
     try:
-        archive = U7FlexArchive.from_file(str(archive_path))
+        resolved = _load_u7_shape_archive(str(archive_path), args)
+        if resolved is None:
+            return 1
+        archive = resolved.effective
         wihh = (
             U7WeaponInHandOffsets.from_file(
                 str(wihh_path),
@@ -5252,9 +5487,15 @@ def cmd_font_create(args: SimpleNamespace) -> int:
     """Create a U7 font shape from a TrueType font."""
     from titan.fonts.wizard import run_wizard, run_from_config
 
+    options = dict(
+        output_override=args.output,
+        force=getattr(args, "force", False),
+        allow_cycling=getattr(args, "allow_cycling", False),
+        base_archive=getattr(args, "base_archive", None),
+    )
     if args.config:
-        return run_from_config(args.config, output_override=args.output)
-    return run_wizard()
+        return run_from_config(args.config, **options)
+    return run_wizard(**options)
 
 
 @u7_app.command("font-create")
@@ -5268,6 +5509,22 @@ def font_create_cmd(
     output: Annotated[
         Optional[str],
         typer.Option("-o", "--output", help="Output file path"),
+    ] = None,
+    force: Annotated[
+        bool, typer.Option("--force", help="Replace existing output files")
+    ] = False,
+    allow_cycling: Annotated[
+        bool,
+        typer.Option(
+            "--allow-cycling",
+            help="Allow gradient colour matching to use cycling indices 224-254",
+        ),
+    ] = False,
+    base_archive: Annotated[
+        Optional[str],
+        typer.Option(
+            "--base-archive", help="Base font VGA for a sparse template archive"
+        ),
     ] = None,
 ) -> None:
     """Interactive wizard for creating U7 font shapes from TrueType fonts.
@@ -5284,6 +5541,9 @@ def font_create_cmd(
             SimpleNamespace(
                 config=config,
                 output=output,
+                force=force,
+                allow_cycling=allow_cycling,
+                base_archive=base_archive,
             )
         )
     )
@@ -5303,9 +5563,27 @@ def world_query_cmd(
         ),
     ] = None,
     game: Annotated[
-        Literal["bg", "si"],
-        typer.Option("--game", help="Use config section for BG or SI"),
-    ] = "bg",
+        Optional[Literal["bg", "si"]],
+        typer.Option("--game", help="Use config section for BG or SI (default: bg)"),
+    ] = None,
+    config: Annotated[
+        Optional[str],
+        typer.Option(
+            "-c", "--config", help="Run a world-query TOML recipe without prompts"
+        ),
+    ] = None,
+    base_static: Annotated[
+        Optional[str],
+        typer.Option("--base-static", help="Original STATIC for a mod patch"),
+    ] = None,
+    patch: Annotated[
+        Optional[str],
+        typer.Option("--patch", help="Mod patch overriding the base STATIC"),
+    ] = None,
+    mod_data: Annotated[
+        Optional[str],
+        typer.Option("--mod-data", help="Mod textmsg.txt and shape_info.txt directory"),
+    ] = None,
     gamedat: Annotated[
         Optional[str],
         typer.Option(
@@ -5331,6 +5609,10 @@ def world_query_cmd(
             help="Shape number filter, hex or decimal (repeatable): 522, 0x20A",
         ),
     ] = None,
+    frame: Annotated[
+        Optional[list[str]],
+        typer.Option("--frame", help="Frame filter, decimal or hex (repeatable)"),
+    ] = None,
     name: Annotated[
         Optional[str],
         typer.Option("--name", help="Shape name substring filter (case-insensitive)"),
@@ -5352,18 +5634,22 @@ def world_query_cmd(
         ),
     ] = None,
     ireg: Annotated[
-        bool,
+        Optional[bool],
         typer.Option(
             "--ireg/--no-ireg", help="Include IREG dynamic objects (default: auto)"
         ),
-    ] = False,
+    ] = None,
+    ifix: Annotated[
+        Optional[bool],
+        typer.Option("--ifix/--no-ifix", help="Include fixed objects (default: yes)"),
+    ] = None,
     map_num: Annotated[
-        int,
+        Optional[int],
         typer.Option(
             "--map-num",
             help="Map number: 0 = default world map, 1+ = mapNN/ subdirectory inside STATIC and gamedat (default: 0)",
         ),
-    ] = 0,
+    ] = None,
     format: Annotated[
         Optional[str],
         typer.Option(
@@ -5374,6 +5660,10 @@ def world_query_cmd(
         Optional[str],
         typer.Option("-o", "--output", help="Write output to this file"),
     ] = None,
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Replace an existing results file"),
+    ] = False,
 ) -> None:
     """Query world object placements from IFIX and IREG.
 
@@ -5391,111 +5681,131 @@ def world_query_cmd(
         WorldQueryParams,
         run_query,
         format_result,
+        parse_numbers,
+        parse_rectangle,
+        validate_params,
     )
+    from titan.u7.world_workflow import load_recipe, report_warnings, write_results
     from titan.u7.typeflag import U7TypeFlags
 
-    static_dir = static
-    if not static_dir:
-        resolved, _ = _resolve_u7_paths(game)
-        static_dir = resolved
-
-    gamedat_dir = gamedat
-    if not gamedat_dir:
-        gamedat_dir = _resolve_u7_gamedat(game)
-
-    text_flx = text or _resolve_u7_text_flx(game, static_dir)
-
-    # Non-interactive mode when any filter flag is supplied
-    _non_interactive = any(
-        [shape_class, shape_num, name, flag, tile_rect, sc, format, output, ireg]
-    )
-
-    if not _non_interactive:
-        raise SystemExit(
-            _world_wizard(
-                static_dir=static_dir,
-                gamedat_dir=gamedat_dir,
-                text_flx=text_flx,
-            )
+    try:
+        params = load_recipe(config) if config else WorldQueryParams(static_dir="")
+        params.game = game or params.game
+        configured_static, _ = _resolve_u7_paths(params.game)
+        params.static_dir = (
+            static or params.static_dir or base_static or configured_static or ""
         )
-
-    # ── Parse CLI filters ────────────────────────────────────────────────────
-    shape_class_ids: list[int] = []
-    if shape_class:
-        _class_map = {v: k for k, v in U7TypeFlags.SHAPE_CLASS_NAMES.items()}
-        for cls_name in shape_class:
-            cid = _class_map.get(cls_name.lower())
-            if cid is not None:
-                shape_class_ids.append(cid)
-            else:
-                typer.echo(
-                    f"Unknown shape class: {cls_name!r}. Valid: {', '.join(_class_map)}",
-                    err=True,
+        params.base_static = base_static or params.base_static
+        params.patch_dir = patch or params.patch_dir
+        params.mod_data_dir = mod_data or params.mod_data_dir
+        params.gamedat_dir = (
+            gamedat or params.gamedat_dir or _resolve_u7_gamedat(params.game)
+        )
+        params.text_flx_path = text or params.text_flx_path
+        if (
+            not config
+            and not static
+            and not params.patch_dir
+            and not params.text_flx_path
+            and not any(
+                part.lower() in {"patch", "mods"}
+                for part in Path(params.static_dir).parts
+            )
+        ):
+            params.text_flx_path = _resolve_u7_text_flx(params.game, params.static_dir)
+        if not params.base_static and params.static_dir and not params.patch_dir:
+            selected_path = Path(params.static_dir)
+            if any(part.lower() in {"patch", "mods"} for part in selected_path.parts):
+                params.base_static = _resolve_u7_patch_base_static(
+                    params.static_dir, configured_static
                 )
-                raise SystemExit(1)
+        if map_num is not None:
+            params.map_num = map_num
+        non_interactive = (
+            config is not None
+            or any(
+                value is not None
+                for value in (
+                    shape_class,
+                    shape_num,
+                    frame,
+                    name,
+                    flag,
+                    tile_rect,
+                    sc,
+                    format,
+                    output,
+                    ireg,
+                    ifix,
+                )
+            )
+            or force
+        )
+        if not non_interactive:
+            raise SystemExit(
+                _world_wizard(
+                    static_dir=params.static_dir,
+                    gamedat_dir=params.gamedat_dir,
+                    text_flx=params.text_flx_path,
+                    game=params.game,
+                    map_num=params.map_num,
+                    base_static=params.base_static,
+                    patch_dir=params.patch_dir,
+                    mod_data_dir=params.mod_data_dir,
+                )
+            )
 
-    shape_nums: list[int] = []
-    if shape_num:
-        for token in shape_num:
-            try:
-                shape_nums.append(int(token, 0))
-            except ValueError:
-                typer.echo(f"Invalid shape number: {token!r}", err=True)
-                raise SystemExit(1)
-
-    superchunks: list[int] = []
-    if sc:
-        for token in sc:
-            try:
-                superchunks.append(int(token, 0))
-            except ValueError:
-                typer.echo(f"Invalid superchunk number: {token!r}", err=True)
-                raise SystemExit(1)
-
-    parsed_rect: Optional[tuple[int, int, int, int]] = None
-    if tile_rect:
-        parts = tile_rect.split(",")
-        if len(parts) != 4:
-            typer.echo("--tile-rect must be tx0,ty0,tx1,ty1", err=True)
-            raise SystemExit(1)
-        try:
-            tx0, ty0, tx1, ty1 = (int(p.strip(), 0) for p in parts)
-            parsed_rect = (min(tx0, tx1), min(ty0, ty1), max(tx0, tx1), max(ty0, ty1))
-        except ValueError:
-            typer.echo("--tile-rect values must be integers", err=True)
-            raise SystemExit(1)
-
-    use_ireg = ireg or bool(
-        gamedat_dir and any([cls in (6, 7, 12, 13) for cls in shape_class_ids])
-    )
-
-    params = WorldQueryParams(
-        static_dir=static_dir or "",
-        gamedat_dir=gamedat_dir if use_ireg else None,
-        shape_classes=shape_class_ids,
-        shape_nums=shape_nums,
-        name_filter=name or "",
-        text_flx_path=text_flx,
-        tfa_flags=list(flag) if flag else [],
-        superchunks=superchunks,
-        tile_rect=parsed_rect,
-        include_ifix=True,
-        include_ireg=use_ireg,
-        map_num=map_num,
-        output_format=format or "summary",
-        output_path=output,
-    )
-
-    result = run_query(params)
-    out = format_result(result)
-
-    if output:
-        from pathlib import Path as _Path
-
-        _Path(output).write_text(out, encoding="utf-8")
-        typer.echo(f"Wrote {result.count} result(s) to {output}")
-    else:
-        typer.echo(out)
+        if shape_class is not None:
+            class_map = {v: k for k, v in U7TypeFlags.SHAPE_CLASS_NAMES.items()}
+            params.shape_classes = []
+            for cls_name in shape_class:
+                cid = class_map.get(cls_name.lower())
+                if cid is None:
+                    raise ValueError(
+                        f"Unknown shape class: {cls_name!r}. Valid: {', '.join(class_map)}"
+                    )
+                params.shape_classes.append(cid)
+        for tokens, field_name, maximum, label in (
+            (shape_num, "shape_nums", 65535, "Shape number"),
+            (frame, "frames", 255, "Frame number"),
+            (sc, "superchunks", 143, "Superchunk"),
+        ):
+            if tokens is not None:
+                if any(not token.strip() for token in tokens):
+                    raise ValueError(f"{label} must not be blank")
+                setattr(
+                    params, field_name, parse_numbers(",".join(tokens), maximum, label)
+                )
+        if name is not None:
+            params.name_filter = name
+        if flag is not None:
+            params.tfa_flags = list(flag)
+        if tile_rect is not None:
+            params.tile_rect = parse_rectangle(tile_rect)
+        if ireg is not None:
+            params.include_ireg = ireg
+        elif not config:
+            params.include_ireg = bool(
+                params.gamedat_dir
+                and any(c in (6, 7, 12, 13) for c in params.shape_classes)
+            )
+        if ifix is not None:
+            params.include_ifix = ifix
+        if format is not None:
+            params.output_format = format
+        if output is not None:
+            params.output_path = output
+        validate_params(params)
+        result = run_query(params)
+        report_warnings(result)
+        if params.output_path:
+            write_results(result, params.output_path, overwrite=force)
+            typer.echo(f"Wrote {result.count} result(s) to {params.output_path}")
+        else:
+            typer.echo(format_result(result))
+    except (OSError, ValueError) as error:
+        typer.echo(f"World query failed: {error}", err=True)
+        raise SystemExit(1) from error
 
 
 @u7_app.command("container-browse")
@@ -5650,6 +5960,7 @@ def container_browse_cmd(
                 exult_flx_path=_exult_flx,
                 mod_data_dir=mod_data,
                 map_num=map_num,
+                game=game,
             )
         )
 
@@ -5843,6 +6154,7 @@ def egg_query_cmd(
             _egg_wizard(
                 static_dir=static_dir,
                 gamedat_dir=gamedat_dir,
+                game=game,
             )
         )
 

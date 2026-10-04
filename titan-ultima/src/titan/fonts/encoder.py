@@ -7,8 +7,7 @@ ready for writing as ``.shp`` files or patching into FONTS.VGA.
 
 from __future__ import annotations
 
-__all__ = ["GlyphBitmap", "FontFrame", "glyphs_to_shape",
-           "EXULT_STUDIO_PREVIEW_FRAME"]
+__all__ = ["GlyphBitmap", "FontFrame", "glyphs_to_shape", "EXULT_STUDIO_PREVIEW_FRAME"]
 
 from dataclasses import dataclass
 
@@ -25,17 +24,17 @@ EXULT_STUDIO_PREVIEW_FRAME = 65
 class GlyphBitmap:
     """Raw rendered glyph before palette mapping."""
 
-    code: int               # ASCII/Unicode codepoint
-    pixels: np.ndarray      # H×W uint8 — mono (0/1) or grayscale (0–255)
-    is_mono: bool = True    # True if pixels are 0/1, False if 0–255
+    code: int  # ASCII/Unicode codepoint
+    pixels: np.ndarray  # H×W uint8 — mono (0/1) or grayscale (0–255)
+    is_mono: bool = True  # True if pixels are 0/1, False if 0–255
 
 
 @dataclass
 class FontFrame:
     """Palette-mapped glyph ready for shape encoding."""
 
-    index: int              # Frame index (= ASCII code in FONTS.VGA)
-    pixels: np.ndarray      # H×W uint8 (palette indices, 0xFF=transparent)
+    index: int  # Frame index (= ASCII code in FONTS.VGA)
+    pixels: np.ndarray  # H×W uint8 (palette indices, 0xFF=transparent)
     xoff: int = 0
     yoff: int = 0
 
@@ -105,6 +104,7 @@ def glyphs_to_shape(
     cell_height: int = 0,
     space_width: int = 0,
     preview_preferred: tuple[int, ...] = (),
+    ink_height: int | None = None,
 ) -> tuple[U7Shape, int | None]:
     """Convert a dict of rendered glyph bitmaps into a U7Shape.
 
@@ -128,10 +128,11 @@ def glyphs_to_shape(
         transparent).  Bypass LUT/ink mapping and use values as-is.
     cell_height:
         Total cell height of the font.  When non-zero, every frame
-        (including stubs) gets ``yoff = cell_height - 2`` so that
+        (including stubs) gets ``yoff = ink_height - 1`` so that
         Exult's ``Font::calc_highlow()`` computes the correct
-        baseline.  Original U7 fonts always set ``yabove`` uniformly
-        to ``ink_height`` (= ``cell_height - 1``) for every frame.
+        baseline. Ink height defaults to ``cell_height - 1``.
+    ink_height:
+        Capital height and baseline used while rendering the glyphs.
     space_width:
         Width of the space character (codepoint 32).  When non-zero,
         the space frame is an all-transparent bitmap of this width
@@ -151,7 +152,7 @@ def glyphs_to_shape(
     # Derive baseline offset.  Original fonts use yabove = ink_height
     # = cell_height - 1 for *every* frame (ink + stubs).
     if cell_height > 1:
-        yoff = cell_height - 2   # yabove = ink_height = cell_height - 1
+        yoff = (cell_height - 1 if ink_height is None else ink_height) - 1
     else:
         yoff = 0
 
@@ -180,18 +181,14 @@ def glyphs_to_shape(
             frame.width = space_width
             frame.height = cell_height
             frame.set_hotspot_from_top_left(0, yoff)
-            frame.pixels = np.full(
-                (cell_height, space_width), 0xFF, dtype=np.uint8
-            )
+            frame.pixels = np.full((cell_height, space_width), 0xFF, dtype=np.uint8)
         else:
             # Empty stub — 1 pixel wide at full cell height
             stub_h = cell_height if cell_height > 0 else 1
             frame.width = 1
             frame.height = stub_h
             frame.set_hotspot_from_top_left(0, yoff)
-            frame.pixels = np.full(
-                (stub_h, 1), 0xFF, dtype=np.uint8
-            )
+            frame.pixels = np.full((stub_h, 1), 0xFF, dtype=np.uint8)
 
         shape.frames.append(frame)
 
@@ -205,7 +202,7 @@ def glyphs_to_shape(
         donor_cp = _pick_preview_glyph(glyphs, preferred=preview_preferred)
         if donor_cp is not None and donor_cp < len(shape.frames):
             src = shape.frames[donor_cp]
-            if src.width > 1:
+            if src.width > 1 and src.pixels is not None:
                 dst = shape.frames[pf]
                 dst.width = src.width
                 dst.height = src.height

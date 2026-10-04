@@ -27,8 +27,8 @@ __all__ = [
 
 import csv
 import io
-import os
-from dataclasses import dataclass, field
+from collections import Counter
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Optional
 
@@ -40,7 +40,8 @@ from titan.u7.map import (
     C_TILES_PER_CHUNK,
 )
 from titan.u7.typeflag import U7TypeFlags
-from titan.u7.names import U7ShapeNames
+from titan.u7.names import U7ShapeNames, U7FrameNames
+from titan.u7.shape_archive import find_archive
 from titan.u7.ireg import object_flag_names
 
 
@@ -49,35 +50,26 @@ from titan.u7.ireg import object_flag_names
 # ---------------------------------------------------------------------------
 
 _FLAG_ACCESSORS: dict[str, str] = {
-    "animated":         "is_animated",
-    "barge_part":       "is_barge_part",
-    "building":         "is_building",
-    "door":             "is_door",
-    "has_sfx":          "has_sfx",
-    "light_source":     "is_light_source",
-    "poisonous":        "is_poisonous",
-    "solid":            "is_solid",
+    "animated": "is_animated",
+    "barge_part": "is_barge_part",
+    "building": "is_building",
+    "door": "is_door",
+    "has_sfx": "has_sfx",
+    "light_source": "is_light_source",
+    "poisonous": "is_poisonous",
+    "solid": "is_solid",
     "strange_movement": "has_strange_movement",
-    "translucency":     "has_translucency",
-    "transparent":      "is_transparent",
-    "water":            "is_water",
+    "translucency": "has_translucency",
+    "transparent": "is_transparent",
+    "water": "is_water",
 }
 
 ALL_FLAG_NAMES: list[str] = sorted(_FLAG_ACCESSORS.keys())
 
 # ---------------------------------------------------------------------------
-# Shape class options (matches U7TypeFlags.SHAPE_CLASS_NAMES)
-# ---------------------------------------------------------------------------
-
-_SHAPE_CLASS_OPTIONS: dict[str, int] = {
-    name: code
-    for code, name in U7TypeFlags.SHAPE_CLASS_NAMES.items()
-}
-
-
-# ---------------------------------------------------------------------------
 # Data types
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class WorldQueryParams:
@@ -87,11 +79,16 @@ class WorldQueryParams:
     gamedat_dir: Optional[str] = None
 
     # Shape filtering
-    shape_classes: list[int] = field(default_factory=list)   # empty = all
-    shape_nums: list[int] = field(default_factory=list)       # empty = all
+    shape_classes: list[int] = field(default_factory=list)  # empty = all
+    shape_nums: list[int] = field(default_factory=list)  # empty = all
+    frames: list[int] = field(default_factory=list)
+    game: str = "bg"
+    base_static: Optional[str] = None
+    patch_dir: Optional[str] = None
+    mod_data_dir: Optional[str] = None
 
     # TFA flag filtering (all must be true if multi-selected)
-    tfa_flags: list[str] = field(default_factory=list)        # empty = all
+    tfa_flags: list[str] = field(default_factory=list)  # empty = all
 
     # Name filter — case-insensitive substring match; empty = all
     name_filter: str = ""
@@ -106,7 +103,7 @@ class WorldQueryParams:
 
     # Sources to scan
     include_ifix: bool = True
-    include_ireg: bool = True
+    include_ireg: bool = False
 
     # Map number: 0 = default world map, 1+ = mapNN/ subdirectory
     map_num: int = 0
@@ -121,6 +118,7 @@ class WorldQueryParams:
 @dataclass
 class PlacementRecord:
     """A single matching object placement."""
+
     tx: int
     ty: int
     tz: int
@@ -150,8 +148,10 @@ class PlacementRecord:
 @dataclass
 class WorldResult:
     """Collected results from a world-query run."""
+
     params: WorldQueryParams
     records: list[PlacementRecord] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
     @property
     def count(self) -> int:
@@ -162,26 +162,217 @@ class WorldResult:
 # Core query engine
 # ---------------------------------------------------------------------------
 
+TILE_MAX = C_NUM_SCHUNKS * C_CHUNKS_PER_SCHUNK * C_TILES_PER_CHUNK - 1
+
+
+def parse_numbers(value: str, maximum: int, label: str) -> list[int]:
+    """Parse a complete list, rejecting malformed tokens instead of dropping them."""
+    if not value.strip():
+        return []
+    values = []
+    for token in value.split(","):
+        token = token.strip()
+        try:
+            number = (
+                int(token, 16) if token.lower().startswith("0x") else int(token, 10)
+            )
+        except ValueError as error:
+            raise ValueError(f"Invalid {label}: {token!r}") from error
+        if not 0 <= number <= maximum:
+            raise ValueError(f"{label} must be between 0 and {maximum}")
+        if number not in values:
+            values.append(number)
+    return values
+
+
+def parse_rectangle(value: str) -> tuple[int, int, int, int]:
+    parts = value.split(",")
+    if len(parts) != 4:
+        raise ValueError("Tile rectangle must contain tx0,ty0,tx1,ty1")
+    coords = [parse_numbers(part, TILE_MAX, "Tile coordinate") for part in parts]
+    if any(len(part) != 1 for part in coords):
+        raise ValueError("Each tile coordinate must be an integer")
+    x0, y0, x1, y1 = (part[0] for part in coords)
+    return min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1)
+
+
+def validate_params(params: WorldQueryParams, *, require_gamedat: bool = True) -> None:
+    if params.game not in ("bg", "si"):
+        raise ValueError("Game must be bg or si")
+    for values, maximum, label in (
+        (params.shape_nums, 65535, "Shape number"),
+        (params.frames, 255, "Frame number"),
+        (params.superchunks, C_NUM_SCHUNKS**2 - 1, "Superchunk"),
+        ([params.map_num], 255, "Map number"),
+    ):
+        if any(type(n) is not int or not 0 <= n <= maximum for n in values):
+            raise ValueError(f"{label} must be between 0 and {maximum}")
+    if any(
+        type(c) is not int or c not in U7TypeFlags.SHAPE_CLASS_NAMES
+        for c in params.shape_classes
+    ):
+        raise ValueError("Unknown shape class")
+    if any(f not in ALL_FLAG_NAMES for f in params.tfa_flags):
+        raise ValueError("Unknown TFA flag; valid flags: " + ", ".join(ALL_FLAG_NAMES))
+    if params.tile_rect is not None:
+        if len(params.tile_rect) != 4 or any(
+            type(n) is not int or not 0 <= n <= TILE_MAX for n in params.tile_rect
+        ):
+            raise ValueError(f"Tile coordinates must be between 0 and {TILE_MAX}")
+        x0, y0, x1, y1 = params.tile_rect
+        if x0 > x1 or y0 > y1:
+            raise ValueError("Tile rectangle corners must be ordered")
+    if params.output_format not in ("summary", "full_text", "csv"):
+        raise ValueError("Output format must be summary, full_text, or csv")
+    if not params.include_ifix and not params.include_ireg:
+        raise ValueError("Select at least one source: IFIX or IREG")
+    if require_gamedat and params.include_ireg and not params.gamedat_dir:
+        raise ValueError("IREG search requires a GAMEDAT directory")
+
+
+def resolve_world_sources(params: WorldQueryParams) -> tuple[Path, Optional[Path]]:
+    """Resolve a base world and optional mod patch without modifying either."""
+    if not params.static_dir and not params.base_static:
+        raise ValueError("Provide a STATIC directory or configure one in titan.toml")
+    selected = Path(params.static_dir or params.base_static or "").expanduser()
+    patch = Path(params.patch_dir).expanduser() if params.patch_dir else None
+    if (
+        patch is None
+        and params.base_static
+        and selected.resolve() != Path(params.base_static).expanduser().resolve()
+    ):
+        patch = selected
+    if (
+        patch is None
+        and not params.base_static
+        and any(part.lower() in {"patch", "mods"} for part in selected.parts)
+    ):
+        patch = selected
+    base = Path(params.base_static).expanduser() if params.base_static else selected
+    if patch is not None and base.resolve() == patch.resolve():
+        candidates = [
+            ancestor / name
+            for ancestor in patch.resolve().parents
+            for name in ("STATIC", "static")
+        ]
+        inferred = next(
+            (p for p in candidates if p.is_dir() and p.resolve() != patch.resolve()),
+            None,
+        )
+        if inferred is None:
+            raise ValueError(
+                "Cannot resolve the mod's base STATIC; supply --base-static"
+            )
+        base = inferred
+    for label, directory in (
+        ("STATIC", selected),
+        ("Base STATIC", base),
+        ("Patch", patch),
+        (
+            "Mod data",
+            Path(params.mod_data_dir).expanduser() if params.mod_data_dir else None,
+        ),
+        (
+            "GAMEDAT",
+            Path(params.gamedat_dir).expanduser()
+            if params.include_ireg and params.gamedat_dir
+            else None,
+        ),
+    ):
+        if directory is not None and not directory.is_dir():
+            raise ValueError(f"{label} directory does not exist: {directory}")
+    return base, patch
+
+
+def _world_file(directory: Path, filename: str, map_num: int) -> Optional[Path]:
+    if map_num:
+        name = f"map{map_num:02x}"
+        directory = next(
+            (p for p in directory.iterdir() if p.is_dir() and p.name.lower() == name),
+            directory / name,
+        )
+    return find_archive(directory, filename)
+
+
+def load_query_metadata(
+    params: WorldQueryParams,
+) -> tuple[U7TypeFlags, Optional[U7ShapeNames], Optional[U7FrameNames], int]:
+    base, patch = resolve_world_sources(params)
+
+    def effective_file(name: str) -> Optional[Path]:
+        return (find_archive(patch, name) if patch else None) or find_archive(
+            base, name
+        )
+
+    blobs = []
+    for name in ("TFA.DAT", "SHPDIMS.DAT", "WGTVOL.DAT", "OCCLUDE.DAT"):
+        path = effective_file(name)
+        blobs.append(path.read_bytes() if path else b"")
+    tfa = U7TypeFlags.parse(*blobs)
+    raw_tfa = blobs[0]
+    # Retail TFA has an animation tail. Exult patch TFA can have >1024 records.
+    patch_tfa = find_archive(patch, "TFA.DAT") if patch else None
+    count = (
+        len(raw_tfa) // 3
+        if patch_tfa and len(raw_tfa) != 3584
+        else min(len(raw_tfa), 3072) // 3
+    )
+    if patch_tfa and len(raw_tfa) != 3584 and len(raw_tfa) % 3:
+        raise ValueError(f"Incomplete TFA shape record: {patch_tfa}")
+    for index in range(1024, count):
+        entry = U7TypeFlags.parse(raw_tfa[index * 3 : index * 3 + 3]).get(0)
+        if entry is not None:
+            entry.shape_num = index
+            if index < len(tfa.entries):
+                tfa.entries[index] = entry
+            else:
+                tfa.entries.append(entry)
+            tfa._by_num[index] = entry
+    # Auxiliary files may create entries without TFA: these are not known classes.
+    for entry in tfa.entries[count:]:
+        tfa._by_num.pop(entry.shape_num, None)
+
+    text = (
+        Path(params.text_flx_path).expanduser()
+        if params.text_flx_path
+        else effective_file("TEXT.FLX")
+    )
+    if text is not None and not text.is_file():
+        raise ValueError(f"TEXT.FLX does not exist: {text}")
+    names = U7ShapeNames.from_file(str(text)) if text else None
+    frames = None
+    mod_dirs = list(
+        dict.fromkeys(
+            str(p)
+            for p in (
+                patch,
+                Path(params.mod_data_dir).expanduser() if params.mod_data_dir else None,
+            )
+            if p
+        )
+    )
+    for mod_dir in mod_dirs:
+        names = U7ShapeNames.from_mod_dir(mod_dir, base=names)
+        if text:
+            frames = U7FrameNames.from_mod_dir(mod_dir, str(text), base=frames)
+    return tfa, names, frames, count
+
+
 def run_query(params: WorldQueryParams) -> WorldResult:
     """Scan IFIX/IREG across the requested superchunks and return matches."""
 
-    tfa: Optional[U7TypeFlags] = None
-    try:
-        tfa = U7TypeFlags.from_dir(params.static_dir)
-    except (FileNotFoundError, OSError):
-        pass
-
-    shape_names: Optional[U7ShapeNames] = None
-    if params.text_flx_path:
-        try:
-            shape_names = U7ShapeNames.from_file(params.text_flx_path)
-        except (FileNotFoundError, OSError):
-            pass
-    if shape_names is None:
-        shape_names = U7ShapeNames.from_static_dir(params.static_dir)
-
-    static = Path(params.static_dir)
-    gamedat = Path(params.gamedat_dir) if params.gamedat_dir else None
+    validate_params(params)
+    static, patch = resolve_world_sources(params)
+    tfa, shape_names, frame_names, tfa_count = load_query_metadata(params)
+    if (params.shape_classes or params.tfa_flags) and not tfa_count:
+        raise ValueError(
+            "Cannot evaluate class/flag filters: TFA.DAT is missing or empty"
+        )
+    if params.name_filter and shape_names is None and frame_names is None:
+        raise ValueError(
+            "Cannot evaluate name filter: TEXT.FLX or mod names are required"
+        )
+    gamedat = Path(params.gamedat_dir).expanduser() if params.gamedat_dir else None
 
     # Which superchunks to scan
     total_sc = C_NUM_SCHUNKS * C_NUM_SCHUNKS
@@ -193,64 +384,109 @@ def run_query(params: WorldQueryParams) -> WorldResult:
         sc_list = list(range(total_sc))
 
     result = WorldResult(params=params)
+    if not tfa_count:
+        result.warnings.append(
+            "TFA.DAT is missing or empty; classes, flags and class-dependent IREG decoding are unavailable."
+        )
+    if shape_names is None:
+        result.warnings.append(
+            "Shape names are unavailable; numeric shape IDs are shown."
+        )
+    source_counts: Counter[str] = Counter()
+    unknown_properties = 0
+    unknown_names = 0
+    without_properties = replace(params, shape_classes=[], tfa_flags=[])
+    without_name = replace(params, name_filter="")
 
     for sc in sc_list:
         objects: list[U7MapObject] = []
 
         if params.include_ifix:
             ifix_name = f"U7IFIX{sc:02X}"
-            if params.map_num > 0:
-                ifix_dir = static / f"map{params.map_num:02x}"
-                ifix_path = ifix_dir / ifix_name
-                if not ifix_path.exists():
-                    ifix_path = ifix_dir / ifix_name.lower()
-            else:
-                ifix_path = static / ifix_name
-                if not ifix_path.exists():
-                    ifix_path = static / ifix_name.lower()
-            if ifix_path.exists():
+            ifix_path = (
+                _world_file(patch, ifix_name, params.map_num) if patch else None
+            ) or _world_file(static, ifix_name, params.map_num)
+            if ifix_path is not None:
+                source_counts["IFIX"] += 1
                 for obj in U7MapRenderer.parse_ifix(str(ifix_path), sc):
                     obj.source = "ifix"
                     objects.append(obj)
 
         if params.include_ireg and gamedat:
             ireg_name = f"u7ireg{sc:02X}"
-            if params.map_num > 0:
-                ireg_path = gamedat / f"map{params.map_num:02x}" / ireg_name
-            else:
-                ireg_path = gamedat / ireg_name
-                if not ireg_path.exists():
-                    ireg_path = gamedat / "map00" / ireg_name
-            if ireg_path.exists():
+            ireg_path = _world_file(gamedat, ireg_name, params.map_num)
+            if ireg_path is None and params.map_num == 0:
+                ireg_path = find_archive(gamedat / "map00", ireg_name)
+            if ireg_path is not None:
+                source_counts["IREG"] += 1
                 for obj in U7MapRenderer.parse_ireg(str(ireg_path), sc, tfa):
                     obj.source = "ireg"
                     objects.append(obj)
 
         for obj in objects:
-            if not _matches(obj, params, tfa, shape_names):
+            name = (
+                frame_names.label(obj.shape, obj.frame, shape_names)
+                if frame_names
+                else shape_names.get(obj.shape)
+                if shape_names
+                else ""
+            )
+            if (
+                params.name_filter
+                and not name
+                and _matches(obj, without_name, tfa, shape_names, frame_names)
+            ):
+                unknown_names += 1
+            if (params.shape_classes or params.tfa_flags) and tfa.get(
+                obj.shape
+            ) is None:
+                if _matches(obj, without_properties, tfa, shape_names, frame_names):
+                    unknown_properties += 1
+            if not _matches(obj, params, tfa, shape_names, frame_names):
                 continue
 
             entry = tfa.get(obj.shape) if tfa else None
             sc_num = entry.shape_class if entry else 0
             sc_name_str = (
                 U7TypeFlags.SHAPE_CLASS_NAMES.get(sc_num, f"unknown({sc_num})")
-                if entry else "unknown"
+                if entry
+                else "unknown"
             )
             flags = entry.flag_names() if entry else []
-            name = shape_names.get(obj.shape) if shape_names else ""
+            result.records.append(
+                PlacementRecord(
+                    tx=obj.tx,
+                    ty=obj.ty,
+                    tz=obj.tz,
+                    shape=obj.shape,
+                    frame=obj.frame,
+                    quality=obj.quality,
+                    source=obj.source,
+                    shape_class=sc_num,
+                    shape_class_name=sc_name_str,
+                    flags=flags,
+                    shape_name=name,
+                    quality_raw=obj.raw_quality,
+                    object_flags=object_flag_names(obj.object_flags),
+                )
+            )
 
-            result.records.append(PlacementRecord(
-                tx=obj.tx, ty=obj.ty, tz=obj.tz,
-                shape=obj.shape, frame=obj.frame, quality=obj.quality,
-                source=obj.source,
-                shape_class=sc_num,
-                shape_class_name=sc_name_str,
-                flags=flags,
-                shape_name=name,
-                quality_raw=obj.raw_quality,
-                object_flags=object_flag_names(obj.object_flags),
-            ))
-
+    for enabled, source in (
+        (params.include_ifix, "IFIX"),
+        (params.include_ireg, "IREG"),
+    ):
+        if enabled and not source_counts[source]:
+            result.warnings.append(
+                f"No {source} files found for map {params.map_num} in the selected area."
+            )
+    if unknown_properties:
+        result.warnings.append(
+            f"Excluded {unknown_properties} placement(s) with unavailable TFA properties from class/flag filtering."
+        )
+    if unknown_names:
+        result.warnings.append(
+            f"Excluded {unknown_names} placement(s) with unavailable names from name filtering."
+        )
     return result
 
 
@@ -273,6 +509,7 @@ def _matches(
     params: WorldQueryParams,
     tfa: Optional[U7TypeFlags],
     shape_names: Optional[U7ShapeNames] = None,
+    frame_names: Optional[U7FrameNames] = None,
 ) -> bool:
     """Return True if obj passes all active filters."""
 
@@ -283,20 +520,32 @@ def _matches(
 
     if params.shape_nums and obj.shape not in params.shape_nums:
         return False
+    if params.frames and obj.frame not in params.frames:
+        return False
 
     if params.name_filter:
-        name = shape_names.get(obj.shape) if shape_names else ""
+        name = (
+            frame_names.label(obj.shape, obj.frame, shape_names)
+            if frame_names
+            else shape_names.get(obj.shape)
+            if shape_names
+            else ""
+        )
         if params.name_filter.lower() not in name.lower():
             return False
 
     entry = tfa.get(obj.shape) if tfa else None
 
     if params.shape_classes:
+        if entry is None:
+            return False
         sc = entry.shape_class if entry else 0
         if sc not in params.shape_classes:
             return False
 
-    if params.tfa_flags and entry is not None:
+    if params.tfa_flags:
+        if entry is None:
+            return False
         for flag_name in params.tfa_flags:
             attr = _FLAG_ACCESSORS.get(flag_name)
             if attr and not getattr(entry, attr, False):
@@ -308,6 +557,7 @@ def _matches(
 # ---------------------------------------------------------------------------
 # Output formatters
 # ---------------------------------------------------------------------------
+
 
 def _format_summary(result: WorldResult) -> str:
     lines: list[str] = []
@@ -340,8 +590,8 @@ def _format_full_text(result: WorldResult) -> str:
     lines: list[str] = []
     lines.append(
         f"World query: {result.count} match(es)  "
-        f"(ifix={sum(1 for r in result.records if r.source=='ifix')}  "
-        f"ireg={sum(1 for r in result.records if r.source=='ireg')})"
+        f"(ifix={sum(1 for r in result.records if r.source == 'ifix')}  "
+        f"ireg={sum(1 for r in result.records if r.source == 'ireg')})"
     )
     lines.append("")
 
@@ -367,29 +617,44 @@ def _format_full_text(result: WorldResult) -> str:
 
 def _format_csv(result: WorldResult) -> str:
     buf = io.StringIO()
-    writer = csv.writer(buf, lineterminator='\n')
-    writer.writerow([
-        "source", "shape", "shape_hex", "shape_name", "frame", "quality",
-        "quality_raw", "object_flags",
-        "tx", "ty", "tz", "shape_class", "shape_class_name", "flags",
-    ])
+    writer = csv.writer(buf, lineterminator="\n")
+    writer.writerow(
+        [
+            "source",
+            "shape",
+            "shape_hex",
+            "shape_name",
+            "frame",
+            "quality",
+            "quality_raw",
+            "object_flags",
+            "tx",
+            "ty",
+            "tz",
+            "shape_class",
+            "shape_class_name",
+            "flags",
+        ]
+    )
     for rec in result.records:
-        writer.writerow([
-            rec.source,
-            rec.shape,
-            f"0x{rec.shape:04X}",
-            rec.shape_name,
-            rec.frame,
-            rec.quality,
-            f"0x{rec.quality_raw:02X}",
-            "|".join(rec.object_flags),
-            rec.tx,
-            rec.ty,
-            rec.tz,
-            rec.shape_class,
-            rec.shape_class_name,
-            "|".join(rec.flags),
-        ])
+        writer.writerow(
+            [
+                rec.source,
+                rec.shape,
+                f"0x{rec.shape:04X}",
+                rec.shape_name,
+                rec.frame,
+                rec.quality,
+                f"0x{rec.quality_raw:02X}",
+                "|".join(rec.object_flags),
+                rec.tx,
+                rec.ty,
+                rec.tz,
+                rec.shape_class,
+                rec.shape_class_name,
+                "|".join(rec.flags),
+            ]
+        )
     return buf.getvalue()
 
 
@@ -405,293 +670,31 @@ def format_result(result: WorldResult) -> str:
 # Interactive wizard
 # ---------------------------------------------------------------------------
 
+
 def run_wizard(
     static_dir: Optional[str] = None,
     gamedat_dir: Optional[str] = None,
     text_flx: Optional[str] = None,
+    *,
+    game: str = "bg",
+    map_num: int = 0,
+    base_static: Optional[str] = None,
+    patch_dir: Optional[str] = None,
+    mod_data_dir: Optional[str] = None,
 ) -> int:
-    """Interactive questionary-based world-query wizard. Returns exit code."""
-    try:
-        import questionary
-    except ImportError:
-        print("questionary is required for the interactive wizard.")
-        print("Install it with: pip install questionary>=2.0")
-        return 1
+    """Launch the repeatable world-query workflow using the existing CLI context."""
+    from titan.u7.world_workflow import run_wizard as workflow
 
-    _SEPARATOR = "─" * 55
-
-    print()
-    print("  U7 World Query")
-    print(f"  {_SEPARATOR}")
-
-    # ── 1. Paths ────────────────────────────────────────────────────────────
-    if not static_dir:
-        static_dir = questionary.path(
-            "STATIC directory:",
-            only_directories=True,
-        ).ask()
-        if static_dir is None:
-            return 0
-
-    # ── 2. Shape class filter ───────────────────────────────────────────────
-    print()
-    print(f"  {_SEPARATOR}")
-    class_choices = _build_checkbox_choices(
-        list(U7TypeFlags.SHAPE_CLASS_NAMES.values()),
-        all_label="(all shape classes)",
+    return workflow(
+        WorldQueryParams(
+            static_dir=static_dir or "",
+            gamedat_dir=gamedat_dir,
+            text_flx_path=text_flx,
+            game=game,
+            map_num=map_num,
+            base_static=base_static,
+            patch_dir=patch_dir,
+            mod_data_dir=mod_data_dir,
+            include_ireg=bool(gamedat_dir),
+        )
     )
-    selected_classes_raw: list[str] = questionary.checkbox(
-        "Filter by shape class? (space to toggle, leave blank for none, enter to confirm)",
-        choices=class_choices,
-    ).ask()
-    if selected_classes_raw is None:
-        return 0
-
-    if "(all shape classes)" in selected_classes_raw or not selected_classes_raw:
-        shape_classes: list[int] = []
-    else:
-        shape_classes = [
-            _SHAPE_CLASS_OPTIONS[name]
-            for name in selected_classes_raw
-            if name in _SHAPE_CLASS_OPTIONS
-        ]
-
-    # Warn if only IREG-only classes were selected without IREG
-    _IREG_ONLY_CLASSES = {
-        U7TypeFlags.SHAPE_CLASS_CONTAINER,
-        U7TypeFlags.SHAPE_CLASS_EGG,
-        U7TypeFlags.SHAPE_CLASS_MONSTER,
-        U7TypeFlags.SHAPE_CLASS_HUMAN,
-    }
-    _ireg_only_selected = (
-        shape_classes
-        and all(c in _IREG_ONLY_CLASSES for c in shape_classes)
-    )
-
-    ireg_default = bool(gamedat_dir) or _ireg_only_selected
-    ireg_prompt = "Include IREG (dynamic / runtime objects)?"
-    if _ireg_only_selected:
-        print()
-        print("  Note: containers, NPCs, eggs, and monsters are IREG-only.")
-
-    use_ireg = questionary.confirm(
-        ireg_prompt,
-        default=ireg_default,
-    ).ask()
-    if use_ireg is None:
-        return 0
-
-    if use_ireg and not gamedat_dir:
-        gamedat_dir = questionary.path(
-            "GAMEDAT directory (or leave blank to skip):",
-            only_directories=True,
-        ).ask()
-        if gamedat_dir == "":
-            gamedat_dir = None
-            use_ireg = False
-
-    # ── 3. Shape filter (number or name) ───────────────────────────────────
-    print()
-    print(f"  {_SEPARATOR}")
-
-    # Try to load names now so we can offer name search and show hints
-    _names: Optional[U7ShapeNames] = None
-    if text_flx:
-        try:
-            _names = U7ShapeNames.from_file(text_flx)
-        except (FileNotFoundError, OSError):
-            pass
-    if _names is None and static_dir:
-        _names = U7ShapeNames.from_static_dir(static_dir)
-
-    name_filter = ""
-    shape_nums: list[int] = []
-
-    name_input = questionary.text(
-        "Search by name? (substring, leave blank to skip)",
-        default="",
-    ).ask()
-    if name_input is None:
-        return 0
-    name_filter = name_input.strip()
-
-    # Show matching shape numbers as a hint when TEXT.FLX is available
-    if name_filter and _names:
-        matches = _names.find_shapes(name_filter)
-        if matches:
-            hint = ", ".join(
-                f"{n} ({_names.get(n)})" for n in matches[:8]
-            )
-            suffix = f"  …+{len(matches)-8} more" if len(matches) > 8 else ""
-            print(f"  Matching shapes: {hint}{suffix}")
-        else:
-            print("  No shapes found with that name.")
-
-    shape_input = questionary.text(
-        "Filter by shape number(s)? (comma-separated, or leave blank for all)",
-        default="",
-    ).ask()
-    if shape_input is None:
-        return 0
-
-    if shape_input.strip():
-        for token in shape_input.split(","):
-            token = token.strip()
-            try:
-                shape_nums.append(int(token, 0))
-            except ValueError:
-                pass
-
-    # ── 4. TFA flag filter ──────────────────────────────────────────────────
-    print()
-    print(f"  {_SEPARATOR}")
-    flag_choices = _build_checkbox_choices(
-        ALL_FLAG_NAMES,
-        all_label="(all TFA flags)",
-    )
-    selected_flags_raw: list[str] = questionary.checkbox(
-        "Filter by TFA flag? (space to toggle, leave blank for none, enter to confirm)",
-        choices=flag_choices,
-    ).ask()
-    if selected_flags_raw is None:
-        return 0
-
-    if "(all TFA flags)" in selected_flags_raw or not selected_flags_raw:
-        tfa_flags: list[str] = []
-    else:
-        tfa_flags = [f for f in selected_flags_raw if f in _FLAG_ACCESSORS]
-
-    # ── 5. Area filter ──────────────────────────────────────────────────────
-    print()
-    print(f"  {_SEPARATOR}")
-    area_all = questionary.confirm(
-        "Search the entire world? (no = specify area)",
-        default=True,
-    ).ask()
-    if area_all is None:
-        return 0
-
-    superchunks: list[int] = []
-    tile_rect: Optional[tuple[int, int, int, int]] = None
-
-    if not area_all:
-        area_type = questionary.select(
-            "Area filter type:",
-            choices=["Superchunks", "Tile rectangle"],
-        ).ask()
-        if area_type is None:
-            return 0
-
-        if area_type == "Superchunks":
-            sc_input = questionary.text(
-                "Superchunk numbers (hex or decimal, comma-separated, e.g. 0x55,0x56):",
-                default="",
-            ).ask()
-            if sc_input is None:
-                return 0
-            for token in sc_input.split(","):
-                token = token.strip()
-                try:
-                    superchunks.append(int(token, 0))
-                except ValueError:
-                    pass
-
-        else:
-            _TILE_MAX = C_NUM_SCHUNKS * C_CHUNKS_PER_SCHUNK * C_TILES_PER_CHUNK - 1
-            print(f"  Tile coordinates are 0–{_TILE_MAX} on each axis.")
-            tx0_raw = questionary.text("Top-left tile X:").ask()
-            if tx0_raw is None:
-                return 0
-            ty0_raw = questionary.text("Top-left tile Y:").ask()
-            if ty0_raw is None:
-                return 0
-            tx1_raw = questionary.text("Bottom-right tile X:").ask()
-            if tx1_raw is None:
-                return 0
-            ty1_raw = questionary.text("Bottom-right tile Y:").ask()
-            if ty1_raw is None:
-                return 0
-            try:
-                tx0 = max(0, int(tx0_raw.strip(), 0))
-                ty0 = max(0, int(ty0_raw.strip(), 0))
-                tx1 = min(_TILE_MAX, int(tx1_raw.strip(), 0))
-                ty1 = min(_TILE_MAX, int(ty1_raw.strip(), 0))
-                # Normalise so top-left is always the smaller coordinate
-                tile_rect = (min(tx0, tx1), min(ty0, ty1), max(tx0, tx1), max(ty0, ty1))
-            except ValueError:
-                print("  Invalid tile coordinates — searching entire world.")
-                tile_rect = None
-
-    # ── 6. Output format ────────────────────────────────────────────────────
-    print()
-    print(f"  {_SEPARATOR}")
-    fmt_choice = questionary.select(
-        "Output format:",
-        choices=["summary", "full_text", "csv"],
-        default="summary",
-    ).ask()
-    if fmt_choice is None:
-        return 0
-
-    output_path: Optional[str] = None
-    save_to_file = questionary.confirm(
-        "Save output to a file?",
-        default=False,
-    ).ask()
-    if save_to_file is None:
-        return 0
-    if save_to_file:
-        output_path = questionary.path(
-            "Output file path:",
-        ).ask()
-        if output_path is None:
-            return 0
-
-    # ── Run ──────────────────────────────────────────────────────────────────
-    print()
-    print(f"  {_SEPARATOR}")
-    print("  Running query…")
-
-    params = WorldQueryParams(
-        static_dir=static_dir,
-        gamedat_dir=gamedat_dir if use_ireg else None,
-        shape_classes=shape_classes,
-        shape_nums=shape_nums,
-        name_filter=name_filter,
-        text_flx_path=text_flx,
-        tfa_flags=tfa_flags,
-        superchunks=superchunks,
-        tile_rect=tile_rect,
-        include_ifix=True,
-        include_ireg=use_ireg,
-        output_format=fmt_choice,
-        output_path=output_path,
-    )
-
-    result = run_query(params)
-    output = format_result(result)
-
-    if output_path:
-        Path(output_path).write_text(output, encoding="utf-8")
-        print(f"  Wrote {result.count} result(s) to {output_path}")
-    else:
-        print()
-        print(output)
-
-    return 0
-
-
-def _build_checkbox_choices(
-    names: list[str],
-    all_label: str,
-) -> list:
-    """Build a questionary choices list with an 'all' option at the bottom."""
-    try:
-        from questionary import Choice, Separator
-    except ImportError:
-        return names + [all_label]
-
-    items: list = [Choice(name) for name in names]
-    items.append(Separator())
-    items.append(Choice(all_label))
-    return items

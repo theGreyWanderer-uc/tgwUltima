@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+import re
 
 from typer.testing import CliRunner
 
@@ -38,15 +39,17 @@ class U9CliHelpContractTests(unittest.TestCase):
             with self.subTest(command=command):
                 result = self.runner.invoke(u9_app, [command, "--help"])
                 self.assertEqual(result.exit_code, 0, result.output)
-                self.assertNotIn("--motion-ids", result.output)
+                help_text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", result.output)
+                self.assertNotIn("--motion-ids", help_text)
 
     def test_script_research_command_remains_available(self) -> None:
         result = self.runner.invoke(u9_app, ["script-research-export", "--help"])
 
         self.assertEqual(result.exit_code, 0, result.output)
-        self.assertIn("--output", result.output)
-        self.assertIn("TRIGGERS", result.output.upper())
-        self.assertIn("ACTIVITIES", result.output.upper())
+        help_text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", result.output)
+        self.assertIn("--output", help_text)
+        self.assertIn("TRIGGERS", help_text.upper())
+        self.assertIn("ACTIVITIES", help_text.upper())
 
 
 if __name__ == "__main__":
