@@ -7,6 +7,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from click.utils import strip_ansi
 from PIL import Image
 from typer.testing import CliRunner
 
@@ -516,6 +517,7 @@ def test_interactive_full_flat_range_allows_explicit_replacement(tmp_path, artwo
 def test_help_describes_workflow_and_recipe_options():
     result = CliRunner().invoke(u7_app, ["shape-create", "--help"])
     assert result.exit_code == 0
+    help_text = strip_ansi(result.output)
     for option in (
         "--config",
         "--preview",
@@ -523,7 +525,7 @@ def test_help_describes_workflow_and_recipe_options():
         "--allow-cycling",
         "--in-place",
     ):
-        assert option in result.output
+        assert option in help_text
 
 
 def test_image_preview_shows_large_source_and_quantized_pixels(
