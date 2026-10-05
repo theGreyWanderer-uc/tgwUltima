@@ -1,0 +1,4 @@
+# Packaging tools CI installs in addition to pyproject.toml's dependencies.
+# Input for constraints/ci.txt; see the regenerate command at the top of it.
+build
+hatchling

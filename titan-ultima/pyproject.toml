@@ -43,8 +43,9 @@ dependencies = [
     "pillow>=10.0",
     "typer>=0.15",
     "freetype-py>=2.5",
-    "ziafont>=0.11",
     "questionary>=2.0",
+    "prompt_toolkit>=3.0",
+    "rich>=13.0",
     'tomli>=2.0; python_version < "3.11"',
     "tomli-w>=1.0",
 ]
@@ -52,6 +53,9 @@ dependencies = [
 [project.optional-dependencies]
 glb = [
     "trimesh>=4.0",
+]
+test = [
+    "pytest>=8.0",
 ]
 
 [project.urls]
