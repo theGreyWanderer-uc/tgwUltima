@@ -1,6 +1,7 @@
 """Exercise the actual font and shape workflows through Questionary prompts."""
 
 from functools import partial
+from pathlib import Path
 
 import pytest
 from PIL import Image
@@ -81,8 +82,8 @@ def test_font_wizard_uses_named_menus_and_can_cancel_preview(tmp_path, monkeypat
     assert result.exit_code == 0, result.output
     choices = {message: options for message, options in prompts}
     assert [c.title for c in choices["Game flavour:"]["choices"]] == [
-        "Black Gate",
-        "Serpent Isle",
+        "[1] Black Gate",
+        "[2] Serpent Isle",
     ]
     assert "Hinted mono" in choices["Rendering method:"]["choices"][0].title
     assert "Looks good" in choices["Review the font preview:"]["choices"][0].title
@@ -107,7 +108,7 @@ def test_gradient_menu_displays_swatches_for_every_preset(monkeypatch):
             if style.startswith("bg:")
         ] == preset.colors
         assert all("\x1b" not in text for _, text in choice.title)
-    assert choices[-1].title == "Manual palette indices"
+    assert choices[-1].title == "[M] Manual palette indices"
 
 
 def test_custom_font_preview_reprompts_and_returns_to_review_without_rerendering(
@@ -295,13 +296,16 @@ def test_real_menu_arrow_moves_highlight_and_preserves_initial_default(default, 
             if isinstance(item, InquirerControl)
         )
         assert control.get_pointed_at().value == default
-        assert ("class:highlighted", titles[default]) in control._get_choice_tokens()
+        assert (
+            "class:highlighted",
+            f"[{default[0].upper()}] {titles[default]}",
+        ) in control._get_choice_tokens()
         pipe.send_text("\x1b[B\r")
         assert prompt.unsafe_ask() == moved
         tokens = control._get_choice_tokens()
-        assert ("class:highlighted", titles[moved]) in tokens
-        assert ("class:text", titles[default]) in tokens
-        assert ("class:selected", titles[default]) not in tokens
+        assert ("class:highlighted", f"[{moved[0].upper()}] {titles[moved]}") in tokens
+        assert ("class:text", f"[{default[0].upper()}] {titles[default]}") in tokens
+        assert not any(style == "class:selected" for style, _ in tokens)
 
 
 def test_path_prompts_show_tab_hint_and_keep_default(monkeypatch, tmp_path):
@@ -316,6 +320,193 @@ def test_path_prompts_show_tab_hint_and_keep_default(monkeypatch, tmp_path):
     assert prompts[0][1]["default"] == str(tmp_path)
     assert "Tab: show folders" in prompts[1][0]
     assert prompts[1][1]["only_directories"] is True
+
+
+@pytest.mark.parametrize(
+    "key,expected", [("f", "F"), ("F", "F"), ("s", "S"), ("j", "J"), ("k", "K")]
+)
+def test_real_menu_hotkeys_act_without_enter_and_display_selected_action(key, expected):
+    import questionary
+    from prompt_toolkit.input import create_pipe_input
+    from prompt_toolkit.output import DummyOutput
+    from questionary.prompts.common import InquirerControl
+
+    with create_pipe_input() as pipe:
+        prompt = ui.select(
+            "Browse shape:",
+            choices=[
+                questionary.Choice(f"[{value}] {title}", value=value)
+                for value, title in {
+                    "F": "Next frame",
+                    "S": "Different shape",
+                    "J": "Next shape",
+                    "K": "Previous shape",
+                }.items()
+            ],
+            default="S",
+            hotkeys={value: value for value in "FSJK"},
+            input=pipe,
+            output=DummyOutput(),
+        )
+        control = next(
+            item
+            for item in prompt.application.layout.find_all_controls()
+            if isinstance(item, InquirerControl)
+        )
+        pipe.send_text(key)
+        assert prompt.unsafe_ask() == expected
+        assert control.get_pointed_at().value == expected
+        assert control.is_answered
+
+
+@pytest.mark.parametrize(
+    "key,expected", [("n", "N"), ("N", "N"), ("b", "B"), ("s", "S")]
+)
+def test_paged_choice_actions_work_without_enter_with_long_numeric_ids(
+    monkeypatch, key, expected
+):
+    import questionary
+    from prompt_toolkit.input import create_pipe_input
+    from prompt_toolkit.output import DummyOutput
+
+    original_select = questionary.select
+    monkeypatch.setattr(ui, "menus_enabled", lambda: True)
+    with create_pipe_input() as pipe:
+        monkeypatch.setattr(
+            questionary,
+            "select",
+            lambda *args, **kwargs: original_select(
+                *args, input=pipe, output=DummyOutput(), **kwargs
+            ),
+        )
+        pipe.send_text(key)
+        assert (
+            ui.choice(
+                "Choose NPC:",
+                ["234", "235", "N", "B", "S"],
+                "234",
+                labels={
+                    "234": "Devon",
+                    "235": "Malchir",
+                    "N": "Next page",
+                    "B": "Previous page",
+                    "S": "Search",
+                },
+            )
+            == expected
+        )
+
+
+def test_long_numeric_ids_do_not_bind_the_first_digit_or_break_arrows(monkeypatch):
+    import questionary
+    from prompt_toolkit.input import create_pipe_input
+    from prompt_toolkit.output import DummyOutput
+
+    original_select = questionary.select
+    monkeypatch.setattr(ui, "menus_enabled", lambda: True)
+    with create_pipe_input() as pipe:
+        monkeypatch.setattr(
+            questionary,
+            "select",
+            lambda *args, **kwargs: original_select(
+                *args, input=pipe, output=DummyOutput(), **kwargs
+            ),
+        )
+        # '1' must not select ID 1 before someone finishes typing 15.
+        pipe.send_text("1\x1b[B\r")
+        assert ui.choice("Choose NPC:", ["1", "15", "N"], "1") == "15"
+
+
+def test_short_numeric_menu_has_visible_immediate_keys(monkeypatch):
+    import questionary
+    from prompt_toolkit.input import create_pipe_input
+    from prompt_toolkit.output import DummyOutput
+    from questionary.prompts.common import InquirerControl
+
+    original_select = questionary.select
+    captured = []
+    monkeypatch.setattr(ui, "menus_enabled", lambda: True)
+    with create_pipe_input() as pipe:
+
+        def select(*args, **kwargs):
+            prompt = original_select(*args, input=pipe, output=DummyOutput(), **kwargs)
+            captured.append(prompt)
+            return prompt
+
+        monkeypatch.setattr(questionary, "select", select)
+        pipe.send_text("2")
+        assert (
+            ui.choice(
+                "Game:",
+                ["1", "2"],
+                "1",
+                labels={"1": "Black Gate", "2": "Serpent Isle"},
+            )
+            == "2"
+        )
+    control = next(
+        c
+        for c in captured[0].application.layout.find_all_controls()
+        if isinstance(c, InquirerControl)
+    )
+    assert control.get_pointed_at().title == "[2] Serpent Isle"
+
+
+def test_shape_tokens_do_not_become_invalid_multicharacter_keys(monkeypatch):
+    import questionary
+    from prompt_toolkit.input import create_pipe_input
+    from prompt_toolkit.output import DummyOutput
+
+    original_select = questionary.select
+    monkeypatch.setattr(ui, "menus_enabled", lambda: True)
+    with create_pipe_input() as pipe:
+        monkeypatch.setattr(
+            questionary,
+            "select",
+            lambda *args, **kwargs: original_select(
+                *args, input=pipe, output=DummyOutput(), **kwargs
+            ),
+        )
+        pipe.send_text("n")
+        assert ui.choice("Shapes:", ["S150", "S151", "N"], "S150") == "N"
+
+
+def test_owner_selector_assigns_keys_without_mutating_choices():
+    import questionary
+    from prompt_toolkit.input import create_pipe_input
+    from prompt_toolkit.output import DummyOutput
+
+    owner = ArchiveTarget("Mod", None, Path("patch"))
+    choices = [
+        questionary.Choice("Mod", value=owner),
+        questionary.Choice("Other world", value="manual"),
+    ]
+    with create_pipe_input() as pipe:
+        prompt = ui.select("World:", choices=choices, input=pipe, output=DummyOutput())
+        pipe.send_text("m")
+        assert prompt.unsafe_ask() == "manual"
+    assert choices[0].title == "Mod" and choices[1].title == "Other world"
+
+
+def test_hotkey_menu_preserves_arrow_keys_and_enter():
+    import questionary
+    from prompt_toolkit.input import create_pipe_input
+    from prompt_toolkit.output import DummyOutput
+
+    with create_pipe_input() as pipe:
+        prompt = ui.select(
+            "Browse shape:",
+            choices=[
+                questionary.Choice("Next frame", value="F"),
+                questionary.Choice("Different shape", value="S"),
+            ],
+            default="F",
+            hotkeys={"F": "F", "S": "S"},
+            input=pipe,
+            output=DummyOutput(),
+        )
+        pipe.send_text("\x1b[B\r")
+        assert prompt.unsafe_ask() == "S"
 
 
 def test_formatted_menu_keeps_swatches_and_moves_name_highlight():

@@ -1691,6 +1691,78 @@ def shape_create_cmd(
     )
 
 
+@u7_app.command("shape-browse")
+def shape_browse_cmd(
+    archive: Annotated[
+        Optional[str],
+        typer.Argument(help="Initial VGA/Flex library; otherwise choose interactively"),
+    ] = None,
+    game: Annotated[
+        Literal["bg", "si"], typer.Option("--game", help="Initial game flavour")
+    ] = "bg",
+    shape: Annotated[
+        Optional[int], typer.Option("--shape", help="Initial shape number", min=0)
+    ] = None,
+    palette: Annotated[
+        Optional[str],
+        typer.Option(
+            "--palette", "-p", help="Palette file; default: selected world's palette"
+        ),
+    ] = None,
+    palette_index: Annotated[
+        int,
+        typer.Option(
+            "--palette-index",
+            help="Palette record (0 = U7 main palette)",
+            min=0,
+            max=255,
+        ),
+    ] = 0,
+    base_archive: Annotated[
+        Optional[str],
+        typer.Option(
+            "--base-archive", help="Explicit base for the initial sparse patch archive"
+        ),
+    ] = None,
+) -> None:
+    """Browse shapes and frames in colour, then export PNGs or preview a GIF."""
+    from titan.u7.shape_browser import run_browser
+
+    raise SystemExit(
+        run_browser(
+            game=game,
+            archive=archive,
+            shape=shape,
+            palette=palette,
+            palette_index=palette_index,
+            base_archive=base_archive,
+        )
+    )
+
+
+@u7_app.command("palette-browse")
+def palette_browse_cmd(
+    file: Annotated[
+        Optional[str],
+        typer.Argument(help="Initial PALETTES.FLX or standalone .pal file"),
+    ] = None,
+    game: Annotated[
+        Literal["bg", "si"], typer.Option("--game", help="Initial game flavour")
+    ] = "bg",
+    index: Annotated[
+        int, typer.Option("--index", help="Initial palette record", min=0)
+    ] = 0,
+    encoding: Annotated[
+        Literal["auto", "6bit", "8bit"],
+        typer.Option("--encoding", help="Initial component encoding"),
+    ] = "auto",
+) -> None:
+    """Browse game/mod palettes, indexed colours, cycling and gradient ramps."""
+    from titan.u7.palette_browser import run_browser
+
+    raise SystemExit(run_browser(game=game, file=file, index=index, encoding=encoding))
+
+
 @u7_app.command("palette-export")
 def palette_export_cmd(
     file: Annotated[
@@ -2334,13 +2406,14 @@ def cmd_map_render(args: SimpleNamespace) -> int:
     """Render a U7 map region (superchunk, chunk range, or full world) to PNG."""
     from titan.u7.map import U7MapRenderer, U7TileRectOverlay
     from titan.u7.palette import U7Palette
+    from titan.u7.shape_archive import find_archive
 
     game = getattr(args, "game", "bg")
     configured_static, configured_palette = _resolve_u7_paths(game)
     static_dir = args.static
     if not static_dir:
         static_dir = configured_static
-    if not os.path.isdir(static_dir):
+    if not static_dir or not os.path.isdir(static_dir):
         print(f"ERROR: STATIC directory not found: {static_dir}", file=sys.stderr)
         return 1
 
@@ -2349,15 +2422,22 @@ def cmd_map_render(args: SimpleNamespace) -> int:
         print(f"ERROR: Map root directory not found: {map_root}", file=sys.stderr)
         return 1
 
-    shapes_path = os.path.join(static_dir, "SHAPES.VGA")
-    if not os.path.isfile(shapes_path):
+    patch_dir = getattr(args, "patch_dir", None)
+    shapes_path = (
+        find_archive(Path(patch_dir), "SHAPES.VGA") if patch_dir else None
+    ) or find_archive(Path(static_dir), "SHAPES.VGA")
+    if shapes_path is None:
         print(f"ERROR: SHAPES.VGA not found in {static_dir}", file=sys.stderr)
         return 1
 
     base_static_dir = (
-        _resolve_u7_patch_base_static(static_dir, configured_static)
-        if args.static
-        else None
+        getattr(args, "base_static", None)
+        if hasattr(args, "base_static")
+        else (
+            _resolve_u7_patch_base_static(static_dir, configured_static)
+            if args.static
+            else None
+        )
     )
     palette_path = args.palette
     if not palette_path:
@@ -2370,14 +2450,21 @@ def cmd_map_render(args: SimpleNamespace) -> int:
         print(f"ERROR: Palette not found: {palette_path}", file=sys.stderr)
         return 1
 
-    pal = U7Palette.from_file(palette_path)
+    palette_index = getattr(args, "palette_index", 0)
+    pal = (
+        U7Palette.from_file(palette_path, palette_index=palette_index)
+        if palette_index
+        else U7Palette.from_file(palette_path)
+    )
     map_num = int(getattr(args, "map_num", 0) or 0)
+    patch_options = {"patch_dir": patch_dir} if patch_dir else {}
     renderer = U7MapRenderer(
         static_dir,
         map_num=map_num,
         map_root=map_root,
         base_static_dir=base_static_dir,
         game=game,
+        **patch_options,
     )
 
     view = args.view or "classic"
@@ -2434,6 +2521,12 @@ def cmd_map_render(args: SimpleNamespace) -> int:
     )
     highlight_labels = bool(getattr(args, "highlight_labels", True))
     ml = getattr(args, "max_lift", None)
+    render_options = {}
+    if hasattr(args, "resolution"):
+        render_options["resolution"] = args.resolution
+    progress = getattr(args, "progress", None)
+    if progress is not None:
+        render_options["progress"] = progress
 
     if args.superchunk is not None:
         sc = args.superchunk
@@ -2490,12 +2583,17 @@ def cmd_map_render(args: SimpleNamespace) -> int:
             highlight_lift=highlight_lift,
             highlight_fill_alpha=highlight_fill_alpha,
             highlight_labels=highlight_labels,
+            **render_options,
         )
 
         out_path = args.output or f"u7_c{cx0}-{cy0}_c{cx1}-{cy1}_{view}.png"
 
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    if progress:
+        progress(99, "Writing PNG")
     img.save(out_path)
+    if progress:
+        progress(100, "PNG saved")
     print(f"Output: {img.width}×{img.height} -> {out_path}")
     return 0
 
@@ -4397,6 +4495,7 @@ def map_render_json_cmd(
 
 @u7_app.command("map-render")
 def map_render_cmd(
+    ctx: typer.Context,
     static: Annotated[
         Optional[str],
         typer.Argument(
@@ -4588,11 +4687,25 @@ def map_render_cmd(
             ),
         ),
     ] = 0,
+    interactive: Annotated[
+        bool,
+        typer.Option(
+            "--interactive",
+            "-i",
+            help="Open the map-render wizard using supplied options as defaults",
+        ),
+    ] = False,
 ) -> None:
-    """Render a U7 map region (superchunk, chunk range, or full world) to PNG."""
+    """Render a U7 map to PNG. With no render options, open the guided wizard."""
+    wizard_mode = interactive or not any(
+        source is not None and source.name == "COMMANDLINE"
+        for name in ctx.params
+        if name not in {"game", "interactive"}
+        for source in [ctx.get_parameter_source(name)]
+    )
     if full:
         chunk_x0, chunk_y0, chunk_x1, chunk_y1 = 0, 0, 191, 191
-    if superchunk is None and chunk_x0 is None:
+    if not wizard_mode and superchunk is None and chunk_x0 is None:
         print(
             "ERROR: Specify --superchunk N, --full, or --cx0/--cy0 chunk range.",
             file=sys.stderr,
@@ -4644,34 +4757,42 @@ def map_render_cmd(
         parsed_highlights.extend(profile_rects)
         print(f"Zone profile '{zone_profile}' -> {len(profile_rects)} rectangle(s)")
 
-    raise SystemExit(
-        cmd_map_render(
-            SimpleNamespace(
-                game=game,
-                static=static,
-                map_root=map_root,
-                superchunk=sc_int,
-                chunk_x0=chunk_x0 or 0,
-                chunk_y0=chunk_y0 or 0,
-                chunk_x1=chunk_x1,
-                chunk_y1=chunk_y1,
-                palette=palette,
-                output=output,
-                view=view,
-                gamedat=gamedat,
-                grid=grid,
-                grid_size=grid_size,
-                exclude_flags=exclude,
-                max_lift=max_lift,
-                map_num=map_num,
-                highlight_rects=parsed_highlights,
-                highlight_width=highlight_width,
-                highlight_lift=highlight_lift,
-                highlight_fill_alpha=highlight_fill_alpha,
-                highlight_labels=highlight_labels,
-            )
-        )
+    render_args = SimpleNamespace(
+        wizard_scope="3"
+        if full
+        else "1"
+        if sc_int is not None
+        else "2"
+        if chunk_x0 is not None
+        else None,
+        game=game,
+        static=static,
+        map_root=map_root,
+        superchunk=sc_int,
+        chunk_x0=chunk_x0 or 0,
+        chunk_y0=chunk_y0 or 0,
+        chunk_x1=chunk_x1,
+        chunk_y1=chunk_y1,
+        palette=palette,
+        output=output,
+        view=view,
+        gamedat=gamedat,
+        grid=grid,
+        grid_size=grid_size,
+        exclude_flags=exclude,
+        max_lift=max_lift,
+        map_num=map_num,
+        highlight_rects=parsed_highlights,
+        highlight_width=highlight_width,
+        highlight_lift=highlight_lift,
+        highlight_fill_alpha=highlight_fill_alpha,
+        highlight_labels=highlight_labels,
     )
+    if wizard_mode:
+        from titan.u7.map_wizard import run_wizard
+
+        raise SystemExit(run_wizard(render_args))
+    raise SystemExit(cmd_map_render(render_args))
 
 
 @u7_app.command("map-sample")
@@ -4952,6 +5073,62 @@ def usecode_disasm_cmd(
 # ============================================================================
 # TYPER COMMAND WRAPPERS — SAVE
 # ============================================================================
+
+
+@u7_app.command("monster-browse")
+def monster_browse_cmd(
+    source: Annotated[
+        Optional[str],
+        typer.Argument(
+            help="Initial MONSTERS.DAT, save, GAMEDAT folder, or monsnpcs.dat"
+        ),
+    ] = None,
+    game: Annotated[
+        Literal["bg", "si"], typer.Option("--game", help="Initial game flavour")
+    ] = "bg",
+    shape: Annotated[
+        Optional[int],
+        typer.Option("--shape", help="Initial monster shape number", min=0),
+    ] = None,
+) -> None:
+    """Browse a world's monster definitions, saved actors, equipment and spawns."""
+    from titan.u7.monster_browser import run_browser
+
+    raise SystemExit(run_browser(game=game, source=source, shape=shape))
+
+
+@u7_app.command("npc-browse")
+def npc_browse_cmd(
+    source: Annotated[
+        Optional[str],
+        typer.Argument(help="Initial save, INITGAME.DAT, GAMEDAT folder, or npc.dat"),
+    ] = None,
+    game: Annotated[
+        Literal["bg", "si"], typer.Option("--game", help="Initial game flavour")
+    ] = "bg",
+    npc: Annotated[
+        Optional[int], typer.Option("--npc", help="Initial NPC number", min=0)
+    ] = None,
+) -> None:
+    """Browse a world's NPC stats, schedules and nested inventory interactively."""
+    from titan.u7.npc_browser import run_browser
+
+    raise SystemExit(run_browser(game=game, source=source, npc=npc))
+
+
+@u7_app.command("save-browse")
+def save_browse_cmd(
+    source: Annotated[
+        Optional[str], typer.Argument(help="Initial save file or GAMEDAT folder")
+    ] = None,
+    game: Annotated[
+        Literal["bg", "si"], typer.Option("--game", help="Initial game flavour")
+    ] = "bg",
+) -> None:
+    """Choose a world's save and browse metadata, party, files and NPCs."""
+    from titan.u7.npc_browser import run_browser
+
+    raise SystemExit(run_browser(game=game, source=source, saves=True))
 
 
 @u7_app.command("npc-dump")

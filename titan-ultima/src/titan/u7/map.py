@@ -51,6 +51,7 @@ __all__ = ["U7MapObject", "U7TileRectOverlay", "U7MapRenderer", "U7MapSampler"]
 import os
 import struct
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Callable
 
 import numpy as np
@@ -203,6 +204,7 @@ class EggMeta:
     auto_reset: bool
     data1: int
     data2: int  # usecode function number when egg_type == 5
+    data3: int = 0  # Exult monster shape extension in 14-byte egg records
 
     @property
     def type_name(self) -> str:
@@ -226,11 +228,13 @@ class EggMeta:
 
     @property
     def monster_shape(self) -> int | None:
-        return self.data2 & 0x3FF if self.egg_type == 1 else None
+        return (self.data3 or (self.data2 & 0x3FF)) if self.egg_type == 1 else None
 
     @property
     def monster_frame(self) -> int | None:
-        return (self.data2 >> 10) & 0x3F if self.egg_type == 1 else None
+        if self.egg_type != 1:
+            return None
+        return self.data2 & 0xFF if self.data3 else (self.data2 >> 10) & 0x3F
 
     def summary(self) -> str:
         """Short human-readable string for display."""
@@ -336,6 +340,10 @@ class U7MapRenderer:
     archives and renderers that omit this option retain the original loading
     path.
 
+    ``patch_dir`` explicitly overlays a selected world's base assets and map
+    files, including sparse shape records. A separate ``map_root`` supplies
+    its own map files while keeping that world's graphics.
+
     Supports configurable view projections and typeflag-based filtering.
     """
 
@@ -372,12 +380,14 @@ class U7MapRenderer:
         *,
         map_root: str | None = None,
         base_static_dir: str | None = None,
+        patch_dir: str | None = None,
         game: str = "bg",
         exult_flx_path: str | None = None,
     ) -> None:
         self.static_dir = static_dir
         self.map_root = map_root or static_dir
         self.base_static_dir = base_static_dir
+        self.patch_dir = patch_dir
         self.map_num = map_num
         self.game = game
         self.exult_flx_path = exult_flx_path
@@ -432,8 +442,34 @@ class U7MapRenderer:
         if self._fixed_objects_by_superchunk is not None:
             return list(self._fixed_objects_by_superchunk.get(schunk, []))
         ifix_name = f"U7IFIX{schunk:02X}"
-        ifix_path = _find_case_insensitive_file(self._map_data_dir, ifix_name)
+        ifix_path = self._map_file(ifix_name)
         return self.parse_ifix(ifix_path, schunk)
+
+    def _asset_file(self, filename: str) -> str:
+        """Resolve whole-file overrides against this world's own base assets."""
+        for directory in (self.patch_dir, self.static_dir, self.base_static_dir):
+            if directory:
+                path = _find_case_insensitive_file(directory, filename)
+                if os.path.isfile(path):
+                    return path
+        return os.path.join(self.static_dir, filename)
+
+    def _map_file(self, filename: str, *, shared: bool = False) -> str:
+        from titan.u7.install import existing_path
+
+        # An explicit separate map root supplies its own layout, while graphics
+        # still come from the selected world's base and patch.
+        roots = [self.map_root]
+        if self.patch_dir and self.map_root == self.static_dir:
+            roots.insert(0, self.patch_dir)
+        for root in roots:
+            directory = root
+            if self.map_num and not shared:
+                directory = str(existing_path(Path(root) / f"map{self.map_num:02x}"))
+            path = _find_case_insensitive_file(directory, filename)
+            if os.path.isfile(path):
+                return path
+        return os.path.join(self._map_data_dir, filename)
 
     # ------------------------------------------------------------------
     # Lazy loaders
@@ -457,7 +493,26 @@ class U7MapRenderer:
     def tfa(self) -> U7TypeFlags:
         """Type Flag Array data."""
         if self._tfa is None:
-            self._tfa = U7TypeFlags.from_dir(self.static_dir)
+            blobs = []
+            for name in ("TFA.DAT", "SHPDIMS.DAT", "WGTVOL.DAT", "OCCLUDE.DAT"):
+                path = self._asset_file(name)
+                blobs.append(Path(path).read_bytes() if os.path.isfile(path) else b"")
+            raw = blobs[0]
+            # Retail's 512-byte animation tail is not extra TFA records.
+            # Extended Exult records must not be interpreted as that tail.
+            self._tfa = U7TypeFlags.parse(
+                raw if len(raw) == 3584 else raw[:3072], *blobs[1:]
+            )
+            if len(raw) != 3584:
+                for number in range(1024, len(raw) // 3):
+                    entry = U7TypeFlags.parse(raw[number * 3 : number * 3 + 3]).get(0)
+                    if entry is not None:
+                        entry.shape_num = number
+                        self._tfa._by_num[number] = entry
+                        if number < len(self._tfa.entries):
+                            self._tfa.entries[number] = entry
+                        else:
+                            self._tfa.entries.append(entry)
             frame_counts = {
                 shape_num: U7Shape.count_frames_from_data(
                     record,
@@ -473,16 +528,34 @@ class U7MapRenderer:
         """Real per-game translucency data (XFORM.TBL/BLENDS.DAT, with
         Exult-bundle/hardcoded fallback)."""
         if self._translucency is None:
-            self._translucency = U7Translucency.from_dir(
-                self.static_dir, game=self.game, exult_flx_path=self.exult_flx_path
-            )
+            if self.patch_dir:
+                from titan.u7.shapeinfo import U7Xforms, U7Blends
+
+                xform = self._asset_file("XFORM.TBL")
+                blends = self._asset_file("BLENDS.DAT")
+                self._translucency = U7Translucency(
+                    U7Xforms.from_file(xform)
+                    if os.path.isfile(xform)
+                    else U7Xforms([]),
+                    U7Blends.from_file(blends)
+                    if os.path.isfile(blends)
+                    else U7Blends.from_dir(
+                        self.static_dir,
+                        game=self.game,
+                        exult_flx_path=self.exult_flx_path,
+                    ),
+                )
+            else:
+                self._translucency = U7Translucency.from_dir(
+                    self.static_dir, game=self.game, exult_flx_path=self.exult_flx_path
+                )
         return self._translucency
 
     @property
     def shapes_vga(self) -> U7FlexArchive:
         """Effective SHAPES.VGA, with sparse patch holes filled if requested."""
         if self._shapes_vga is None:
-            path = _find_case_insensitive_file(self.static_dir, "SHAPES.VGA")
+            path = self._asset_file("SHAPES.VGA")
             selected = U7FlexArchive.from_file(path)
             self._shapes_vga = self._overlay_base_shapes_if_sparse(selected, path)
         return self._shapes_vga
@@ -499,10 +572,13 @@ class U7MapRenderer:
         selected_path: str,
     ) -> U7FlexArchive:
         """Return an in-memory base-plus-patch archive when records are missing."""
-        if not self.base_static_dir:
+        base_directory = self.base_static_dir or (
+            self.static_dir if self.patch_dir else None
+        )
+        if not base_directory:
             return selected
 
-        base_path = _find_case_insensitive_file(self.base_static_dir, "SHAPES.VGA")
+        base_path = _find_case_insensitive_file(base_directory, "SHAPES.VGA")
         if not os.path.isfile(base_path):
             return selected
         if os.path.normcase(os.path.abspath(selected_path)) == os.path.normcase(
@@ -527,8 +603,8 @@ class U7MapRenderer:
 
         Returns ``grid[cx][cy]`` = terrain index into U7CHUNKS.
         """
-        path = _find_case_insensitive_file(self._map_data_dir, "U7MAP")
-        if not os.path.isfile(path) and self.map_num > 0:
+        path = self._map_file("U7MAP")
+        if not os.path.isfile(path) and self.map_num > 0 and not self.patch_dir:
             path = _find_case_insensitive_file(self.map_root, "U7MAP")
         with open(path, "rb") as f:
             data = f.read()
@@ -565,7 +641,7 @@ class U7MapRenderer:
         Returns a list of terrains, each being 256 ``(shape, frame)``
         tuples for the 16×16 tiles (row-major: ``[tiley * 16 + tilex]``).
         """
-        path = _find_case_insensitive_file(self.map_root, "U7CHUNKS")
+        path = self._map_file("U7CHUNKS", shared=True)
         with open(path, "rb") as f:
             data = f.read()
 
@@ -917,6 +993,11 @@ class U7MapRenderer:
                         auto_reset=bool((tword >> 15) & 1),
                         data1=d1,
                         data2=d2,
+                        data3=(
+                            payload[12 + adj] + payload[13 + adj] * 256
+                            if testlen == 14 and len(payload) > 13 + adj
+                            else 0
+                        ),
                     )
 
                 objects.append(obj)
@@ -1256,6 +1337,7 @@ class U7MapRenderer:
         objects: list[U7MapObject],
         tfa: U7TypeFlags,
         sboxes: list[tuple[int, int, int, int]] | None = None,
+        progress: Callable[[float], None] | None = None,
     ) -> list[U7MapObject]:
         """
         Depth-sort objects using an Exult-style sweep-line DAG.
@@ -1293,7 +1375,9 @@ class U7MapRenderer:
 
         sweep = sorted(range(n), key=lambda i: sboxes[i][0])
         active: list[int] = []
-        for idx in sweep:
+        for position, idx in enumerate(sweep):
+            if progress:
+                progress(0.8 * position / n)
             sxl_cur = sboxes[idx][0]
             active = [a for a in active if sboxes[a][1] > sxl_cur]
             for other in active:
@@ -1310,6 +1394,8 @@ class U7MapRenderer:
         order: list[int] = []
         state = bytearray(n)
         for start in range(n):
+            if progress:
+                progress(0.8 + 0.2 * start / n)
             if state[start] != 0:
                 continue
             stack = [(start, 0)]
@@ -1669,9 +1755,15 @@ class U7MapRenderer:
         highlight_lift: int = 0,
         highlight_fill_alpha: int = 128,
         highlight_labels: bool = True,
+        resolution: float = 1.0,
+        progress: Callable[[float, str], None] | None = None,
     ) -> Image.Image:
         """
         Render a rectangular region of chunks to an RGBA image.
+
+        ``resolution`` scales the drawing canvas before painting; 0.2 produces
+        a 20% preview without allocating the full-size image. ``progress``
+        receives a percentage and stage; percentages track work, not elapsed time.
 
         Parameters
         ----------
@@ -1711,6 +1803,10 @@ class U7MapRenderer:
         -------
         PIL RGBA Image.
         """
+        if not 0 < resolution <= 1:
+            raise ValueError("Resolution must be greater than zero and at most 1")
+        report = progress or (lambda percent, stage: None)
+        report(0, "Loading map assets")
         exclude = exclude_shapes or set()
         proj = self.PROJECTIONS.get(view, self.PROJECTIONS[self.DEFAULT_VIEW])
         sx_fn = proj["sx"]
@@ -1731,10 +1827,31 @@ class U7MapRenderer:
         canvas_w = w_tiles * C_TILE_SIZE + pad * 2
         canvas_h = h_tiles * C_TILE_SIZE + pad * 2
 
-        canvas = Image.new("RGBA", (canvas_w, canvas_h), background)
+        canvas = Image.new(
+            "RGBA",
+            (
+                max(1, round(canvas_w * resolution)),
+                max(1, round(canvas_h * resolution)),
+            ),
+            background,
+        )
         flat_rgb = palette.to_flat_rgb()
 
         _get_frame = self._make_frame_getter(flat_rgb)
+
+        resized: dict[tuple[int, int, int], Image.Image] = {}
+
+        def paint(image: Image.Image, px: int, py: int) -> None:
+            if resolution == 1:
+                canvas.alpha_composite(image, dest=(px, py))
+                return
+            x, y = round(px * resolution), round(py * resolution)
+            width = max(1, round((px + image.width) * resolution) - x)
+            height = max(1, round((py + image.height) * resolution) - y)
+            key = (id(image), width, height)
+            if key not in resized:
+                resized[key] = image.resize((width, height), Image.Resampling.BOX)
+            canvas.alpha_composite(resized[key], dest=(x, y))
 
         origin_sx = sx_fn(base_tx, base_ty, 0)
         origin_sy = sy_fn(base_tx, base_ty, 0)
@@ -1750,12 +1867,67 @@ class U7MapRenderer:
         # --- 1. Paint ground tiles ---
         # RLE terrain shapes are promoted to objects (same as render_superchunk).
         rle_terrain_objs: list[U7MapObject] = []
+        terrain_previews: dict[
+            int, tuple[Image.Image, list[tuple[int, int, int, int]]]
+        ] = {}
+        chunk_count = (chunk_x1 - chunk_x0 + 1) * (chunk_y1 - chunk_y0 + 1)
+        chunks_done = 0
         for cy in range(chunk_y0, chunk_y1 + 1):
             for cx in range(chunk_x0, chunk_x1 + 1):
+                chunks_done += 1
+                report(55 * chunks_done / chunk_count, "Painting terrain")
                 terrain_idx = self.terrain_map[cx][cy]
                 if terrain_idx >= len(self.terrains):
                     continue
                 terrain = self.terrains[terrain_idx]
+                if resolution < 1:
+                    # Reuse reduced terrain chunks instead of compositing every
+                    # ground tile again at every world placement.
+                    if terrain_idx not in terrain_previews:
+                        tile_canvas = Image.new("RGBA", (128, 128), background)
+                        rle_tiles = []
+                        for tiley in range(C_TILES_PER_CHUNK):
+                            for tilex in range(C_TILES_PER_CHUNK):
+                                shnum, frnum = terrain[
+                                    tiley * C_TILES_PER_CHUNK + tilex
+                                ]
+                                if shnum in exclude:
+                                    continue
+                                entry = _get_frame(shnum, frnum)
+                                if entry is None:
+                                    continue
+                                image = entry[0]
+                                if image.size != (8, 8):
+                                    rle_tiles.append((tilex, tiley, shnum, frnum))
+                                    flat = self._find_nearby_flat(terrain, tilex, tiley)
+                                    flat_entry = _get_frame(*flat) if flat else None
+                                    if flat_entry is None or flat_entry[0].size != (
+                                        8,
+                                        8,
+                                    ):
+                                        continue
+                                    image = flat_entry[0]
+                                tile_canvas.alpha_composite(
+                                    image, dest=(tilex * 8, tiley * 8)
+                                )
+                        terrain_previews[terrain_idx] = (tile_canvas, rle_tiles)
+                    tile_canvas, rle_tiles = terrain_previews[terrain_idx]
+                    paint(
+                        tile_canvas,
+                        (cx - chunk_x0) * 128 + pad,
+                        (cy - chunk_y0) * 128 + pad,
+                    )
+                    for tilex, tiley, shnum, frnum in rle_tiles:
+                        rle_terrain_objs.append(
+                            U7MapObject(
+                                tx=cx * 16 + tilex,
+                                ty=cy * 16 + tiley,
+                                tz=0,
+                                shape=shnum,
+                                frame=frnum,
+                            )
+                        )
+                    continue
                 for tiley in range(C_TILES_PER_CHUNK):
                     for tilex in range(C_TILES_PER_CHUNK):
                         shnum, frnum = terrain[tiley * C_TILES_PER_CHUNK + tilex]
@@ -1770,7 +1942,7 @@ class U7MapRenderer:
                         px = sx_fn(abs_tx, abs_ty, 0) - origin_sx + pad
                         py = sy_fn(abs_tx, abs_ty, 0) - origin_sy + pad
                         if img.width == C_TILE_SIZE and img.height == C_TILE_SIZE:
-                            canvas.alpha_composite(img, dest=(px, py))
+                            paint(img, px, py)
                         else:
                             # RLE terrain: fill gap with nearby flat, queue as object
                             flat = self._find_nearby_flat(terrain, tilex, tiley)
@@ -1781,7 +1953,7 @@ class U7MapRenderer:
                                     and flat_entry[0].width == C_TILE_SIZE
                                     and flat_entry[0].height == C_TILE_SIZE
                                 ):
-                                    canvas.alpha_composite(flat_entry[0], dest=(px, py))
+                                    paint(flat_entry[0], px, py)
                             rle_terrain_objs.append(
                                 U7MapObject(
                                     tx=abs_tx, ty=abs_ty, tz=0, shape=shnum, frame=frnum
@@ -1803,7 +1975,8 @@ class U7MapRenderer:
             (lambda tz: True) if max_lift is None else (lambda tz: tz <= max_lift)
         )
 
-        for sc in sorted(needed_schunks):
+        for sc_index, sc in enumerate(sorted(needed_schunks)):
+            report(55 + 10 * sc_index / len(needed_schunks), "Loading objects")
             ifix_objs = self._fixed_objects_for_superchunk(sc)
             for obj in ifix_objs:
                 obj_cx = obj.tx // C_TILES_PER_CHUNK
@@ -1834,9 +2007,14 @@ class U7MapRenderer:
                         all_objects.append(obj)
 
         if all_objects:
+            report(65, "Preparing object depth order")
             # Build sboxes from actual sprite pixel bounds
             sprite_sboxes: list[tuple[int, int, int, int]] = []
-            for obj in all_objects:
+            for object_index, obj in enumerate(all_objects):
+                report(
+                    65 + 10 * object_index / len(all_objects),
+                    "Preparing object depth order",
+                )
                 entry = _get_frame(obj.shape, obj.frame)
                 if entry:
                     img, xoff, yoff = entry
@@ -1855,10 +2033,17 @@ class U7MapRenderer:
                         )
                     )
 
-            sorted_objects = self._dag_sort(all_objects, tfa, sboxes=sprite_sboxes)
+            report(75, "Sorting objects")
+            sorted_objects = self._dag_sort(
+                all_objects,
+                tfa,
+                sboxes=sprite_sboxes,
+                progress=lambda fraction: report(75 + 5 * fraction, "Sorting objects"),
+            )
 
             # Paint objects with +7 SE anchor offset
-            for obj in sorted_objects:
+            for index, obj in enumerate(sorted_objects):
+                report(80 + 15 * index / len(sorted_objects), "Painting objects")
                 entry = _get_frame(obj.shape, obj.frame)
                 if entry is None:
                     continue
@@ -1872,9 +2057,29 @@ class U7MapRenderer:
                     or py >= canvas_h
                 ):
                     continue
-                canvas.alpha_composite(img, dest=(px, py))
+                paint(img, px, py)
 
         # --- 3. Grid ---
+        report(95, "Drawing grid and overlays")
+        # Sorting and culling use original coordinates. Only the final grid and
+        # overlay drawing use the reduced canvas's coordinates.
+        full_sx, full_sy = sx_fn, sy_fn
+
+        def scaled_sx(tx, ty, tz):
+            return round(full_sx(tx, ty, tz) * resolution)
+
+        def scaled_sy(tx, ty, tz):
+            return round(full_sy(tx, ty, tz) * resolution)
+
+        sx_fn, sy_fn = scaled_sx, scaled_sy
+
+        origin_sx, origin_sy = (
+            round(origin_sx * resolution),
+            round(origin_sy * resolution),
+        )
+        pad = round(pad * resolution)
+        canvas_w, canvas_h = canvas.size
+        grid_size = max(1, round(grid_size * resolution))
         if grid:
             draw = ImageDraw.Draw(canvas)
             chunk_rgba = (0, 120, 255, 100)
@@ -1884,34 +2089,36 @@ class U7MapRenderer:
             except OSError:
                 font = ImageFont.load_default()
 
-            chunk_px = C_TILES_PER_CHUNK * C_TILE_SIZE  # 128
+            chunk_px = C_TILES_PER_CHUNK * C_TILE_SIZE * resolution
 
             # Chunk grid lines (blue)
             for i in range(chunk_x1 - chunk_x0 + 2):
                 x = i * chunk_px + pad
                 draw.line(
-                    [(x, pad), (x, h_tiles * C_TILE_SIZE + pad)],
+                    [(x, pad), (x, round(h_tiles * C_TILE_SIZE * resolution) + pad)],
                     fill=chunk_rgba,
                     width=grid_size,
                 )
             for i in range(chunk_y1 - chunk_y0 + 2):
                 y = i * chunk_px + pad
                 draw.line(
-                    [(pad, y), (w_tiles * C_TILE_SIZE + pad, y)],
+                    [(pad, y), (round(w_tiles * C_TILE_SIZE * resolution) + pad, y)],
                     fill=chunk_rgba,
                     width=grid_size,
                 )
 
             # Chunk coordinate labels (blue)
-            for cy_i in range(chunk_y1 - chunk_y0 + 1):
-                for cx_i in range(chunk_x1 - chunk_x0 + 1):
-                    abs_cx = chunk_x0 + cx_i
-                    abs_cy = chunk_y0 + cy_i
-                    lx = cx_i * chunk_px + pad + 2
-                    ly = cy_i * chunk_px + pad + 1
-                    draw.text(
-                        (lx, ly), f"{abs_cx},{abs_cy}", fill=chunk_rgba, font=font
-                    )
+            # Keep the overview readable: tiny chunk cells cannot fit labels.
+            if chunk_px >= 64:
+                for cy_i in range(chunk_y1 - chunk_y0 + 1):
+                    for cx_i in range(chunk_x1 - chunk_x0 + 1):
+                        abs_cx = chunk_x0 + cx_i
+                        abs_cy = chunk_y0 + cy_i
+                        lx = cx_i * chunk_px + pad + 2
+                        ly = cy_i * chunk_px + pad + 1
+                        draw.text(
+                            (lx, ly), f"{abs_cx},{abs_cy}", fill=chunk_rgba, font=font
+                        )
 
             # Superchunk grid lines (red) with labels
             try:
@@ -1933,7 +2140,7 @@ class U7MapRenderer:
                     continue
                 x = (cx - chunk_x0) * chunk_px + pad
                 draw.line(
-                    [(x, pad), (x, h_tiles * C_TILE_SIZE + pad)],
+                    [(x, pad), (x, round(h_tiles * C_TILE_SIZE * resolution) + pad)],
                     fill=sc_rgba,
                     width=sc_line_w,
                 )
@@ -1944,7 +2151,7 @@ class U7MapRenderer:
                     continue
                 y = (cy - chunk_y0) * chunk_px + pad
                 draw.line(
-                    [(pad, y), (w_tiles * C_TILE_SIZE + pad, y)],
+                    [(pad, y), (round(w_tiles * C_TILE_SIZE * resolution) + pad, y)],
                     fill=sc_rgba,
                     width=sc_line_w,
                 )
@@ -1972,12 +2179,13 @@ class U7MapRenderer:
                 pad=pad,
                 canvas_w=canvas_w,
                 canvas_h=canvas_h,
-                width=highlight_width,
+                width=max(1, round(highlight_width * resolution)),
                 lift=highlight_lift,
                 fill_alpha=highlight_fill_alpha,
                 show_labels=highlight_labels,
             )
 
+        report(98, "Image rendered")
         return canvas
 
     # ------------------------------------------------------------------

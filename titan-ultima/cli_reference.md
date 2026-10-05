@@ -1457,6 +1457,1078 @@ titan dialogue launch --host 127.0.0.1 --port 4173
 > files and for Exult-generated saves, but are not intended as generic parsers
 > for every untouched commercial archive/container layout.
 
+### U7 interactive wizards and browsers
+
+**Start here for guided U7 workflows.** Run any command below to open its
+interactive menus. Creation, browsing, and searching tools let you select the
+game or world, including installed Exult mods and custom games.
+
+| Workflow | Start command | What it does |
+|---|---|---|
+| [Create a font](#u7-font-create) | `titan u7 font-create` | Turn a TrueType font into U7 font shapes, with colour and custom-text previews. |
+| [PNG to shape/archive](#u7-shape-create) | `titan u7 shape-create` | Convert a PNG or frame directory and save a shape or patch a VGA/Flex archive. |
+| [Render a map](#u7-map-render) | `titan u7 map-render` | Review a 20% preview, then render the full PNG with percentage progress. |
+| [Browse shapes and properties](#u7-shape-browse) | `titan u7 shape-browse` | Browse graphics and frames; **T** opens properties and **O** filters them. |
+| [Browse palettes](#u7-palette-browse) | `titan u7 palette-browse` | Inspect colour swatches, palette records, cycling colours, and gradient ramps. |
+| [Browse NPCs](#u7-npc-save-browsers) | `titan u7 npc-browse` | Inspect NPC images, stats, schedules, and inventory. |
+| [Browse saves](#u7-npc-save-browsers) | `titan u7 save-browse` | Choose a save and browse its NPCs and their state. |
+| [Browse monsters](#u7-monster-browse) | `titan u7 monster-browse` | Inspect monster definitions, saved actors, equipment, and spawn eggs. |
+| [Search the world](#u7-world-query) | `titan u7 world-query` | Choose a map, object filters, search area, and output. |
+| [Browse containers](#u7-container-browse) | `titan u7 container-browse` | Find containers and inspect their nested contents. |
+| [Search eggs](#u7-egg-query) | `titan u7 egg-query` | Find trigger eggs by type, usecode function, or area. |
+
+Use arrow keys and Enter to select menu options; displayed hotkeys provide
+shortcuts. Path prompts show a **Tab** completion hint. `--game si` selects
+Serpent Isle as the initial flavour, for example `titan u7 shape-browse --game si`.
+
+The sections below include each workflow's options and examples. Commands that
+also support batch use keep those details alongside their wizard instructions.
+[Archive](#u7-flex-archive-commands), [shape](#u7-shape-commands),
+[palette](#u7-palette-commands), [map](#u7-map-commands), and
+[save](#u7-save-commands) utility commands follow the interactive workflows.
+
+---
+
+#### `u7 font-create`
+
+Interactive wizard for creating U7 FONTS.VGA-compatible shape files from
+TrueType font sources. Uses arrow-key menus, confirmations, and path completion
+in desktop terminals, matching `container-browse`; redirected input retains
+line prompts. Choose BG/SI flavour, then the base game, a mod, or a custom Exult
+game. The selected target supplies the palette, template archives, and patch
+destination. For mods, template selection is scoped to the target's patch and
+base STATIC directories. Standalone games use their own archives.
+Selecting an
+archive shows a live slot table with real frame counts and cell heights
+from the effective base plus patch records. The selected archive is a
+template; saving uses a separately selected destination. Continues through font slot selection,
+TTF source (6 built-in
+or custom path), rendering method (mono, LUT downscale, grayscale
+threshold, hollow gradient), dimension overrides, palette / gradient
+preset selection (with terminal colour swatches), colour glyph preview, and
+shape naming and output format. Redo returns to the font settings while
+keeping the game, template and slot. Preview uses the final palette mapping.
+Desktop terminals also open a PNG preview using the selected game's colours,
+with a checkerboard behind transparent pixels. If the viewer cannot open, the
+wizard prints the preview file path. Redirected output remains plain text.
+Gradient menus show colour swatches beside every preset. At the preview review
+menu, **Custom text** previews 1-8 characters using the current font settings,
+then returns to the review menu. Characters missing from the font are rejected.
+
+For fonts that map glyphs to non-standard positions (e.g. Gargish), the
+encoder automatically copies a representative glyph into frame 65 (‘A’)
+as an Exult Studio preview placeholder, since Exult Studio hardcodes
+frame 65 as the font thumbnail.
+
+With `--config`, reads all parameters from a TOML recipe file and generates
+the shape non-interactively.
+
+```
+titan u7 font-create [--config FILE] [-o FILE] [--force] [--allow-cycling] [--base-archive FILE]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `--config FILE`, `-c FILE` | TOML config file (skip interactive prompts) |
+| `-o FILE`, `--output FILE` | Shape output for `shp`/`both`; archive destination for `flex`. Works in both modes. |
+| `--force` | Replace existing outputs. Interactive mode otherwise asks before replacing; recipes otherwise fail. |
+| `--allow-cycling` | Allow automatic gradient matching to use cycling colours 224–254. |
+| `--base-archive FILE` | Explicit base font VGA for a sparse template archive. |
+
+**Interactive mode** (no arguments):
+```bash
+titan u7 font-create
+```
+
+**Non-interactive mode** (TOML recipe):
+```bash
+titan u7 font-create --config recipe.toml
+titan u7 font-create --config recipe.toml -o my_font.shp
+```
+
+**Recipe TOML schema:**
+```toml
+[target]
+game = "BG"           # "BG" or "SI"
+slot = 2              # FONTS.VGA shape index (0-7 BG, 0-10 SI)
+cell_height = 8       # Override (optional if slot pre-fills)
+ink_height = 7        # Override (optional)
+# h_lead = 0          # Optional assertion of Exult's fixed value for this slot
+# total_frames = 127  # Optional override (33-256)
+# code_range = [33, 126] # Optional inclusive character range, within frame count
+
+[source]
+font = "dosVga437"    # Built-in key or path: "./MyFont.ttf"
+# archive = "./patch/fonts.vga"  # Optional template, separate from output
+# base_archive = "./STATIC/FONTS.VGA"  # Optional explicit template base
+
+[rendering]
+method = "mono"       # "mono", "lut", "threshold", "hollow_gradient"
+# lut = "black_ink"   # Required if method=lut
+# threshold = 128    # Grayscale cutoff, 1-255, for method=threshold
+
+# --- Hollow gradient options (method = "hollow_gradient" only) ---
+# gradient_preset = "warm_flame"   # Use a named preset (see list below)
+# gradient_indices = [36, 181, 182, 183, 184, 185]  # OR manual palette indices
+# stroke_width = 1                 # Outline width in pixels
+# stroke_index = 0                 # Palette index for stroke (overridden by preset)
+# gradient_steps = 6               # Number of colour stops when resolving a preset
+# allow_cycling = false            # Automatic matching defaults to indices 0-223
+
+[palette]
+ink = 0               # Palette index for ink pixels (mono/threshold)
+transparent = 255     # U7 requires 255; other values are rejected
+# file = "PALETTES.FLX"  # Explicit palette file (auto-discovered if omitted)
+
+[output]
+format = "shp"        # "shp", "flex", "both"
+path = "./my_font.shp"
+# flex_source = "./fonts_original.vga"  # Auto-resolved from exult.cfg if omitted
+# force = false       # Set true to replace existing outputs without a prompt
+```
+
+Recipe file paths are relative to the recipe directory. A CLI `-o` or
+`--base-archive` path is relative to the working directory. For `format = "flex"`,
+`path` can name the archive destination when `flex_source` is omitted. For
+`format = "both"`, `path` names the shape and `flex_source` names the archive.
+Recipes never prompt; unresolved destinations and invalid settings fail clearly.
+
+Ink height controls capital sizing and the font baseline, and must be between
+1 and `cell_height - 1`. Exult sets h-lead by font slot; it cannot be changed
+through a shape file. Font frames above 72×72 produce a warning, and frames
+above 320 pixels wide or 200 pixels high are rejected.
+
+Selecting a sparse `fonts.vga` template includes inherited retail slots.
+`fonts_original.vga` and `fonts_serif.vga` inherit from the corresponding font
+records in the common `exult.flx`. Titan finds that bundle through Exult's
+`disk/data_path`, `[exult.paths].flx`, or standard install locations; an
+extracted base VGA can be supplied explicitly. Saves preserve patch holes
+and the archive format. Output files are replaced atomically, and malformed
+archive tables are rejected before either output is written.
+
+**Flex output & Exult config resolution:**
+
+When `format = "flex"` or `"both"`, the wizard resolves the target font
+archive by parsing Exult's `exult.cfg`:
+
+1. Auto-discovers `exult.cfg` in the user profile Exult folder (Windows)
+   or `~/.exult.cfg` (Linux/macOS)
+2. Reads the game base path (`config/disk/game/{blackgate,serpentisle}/path`)
+3. Reads the font config (`config/gameplay/fonts`) — defaults to `"original"`
+4. Maps to the correct filename:
+   - `"disabled"` → `<PATCH>/fonts.vga`
+   - `"original"` → `<PATCH>/fonts_original.vga`
+   - `"serif"` → `<PATCH>/fonts_serif.vga`
+5. Displays the resolved path and offers to accept, use a mod's patch
+   directory instead, or enter a custom path
+
+For mods, enter the mod's patch directory (e.g.
+`<Serpent Isle install>/SERPENT/mods/<mod-name>/patch`) and the wizard
+appends the correct font filename automatically.
+
+The archive is auto-extended if the target slot exceeds the current record
+count, so new slots (11+) work without manual scripting.
+
+**Hollow gradient** renders each glyph with a black stroke outline and
+a vertical colour gradient fill. You can specify colours in two ways:
+
+1. **Preset name** (`gradient_preset`) — hex CSS colours from the preset
+   are interpolated into `gradient_steps` stops, then fitted together as a
+   palette-aware ramp at generation time. All presets use this selection,
+   balancing colour similarity, smooth progression, and distinct shades.
+   The preview reports when suitable palette colours require repeated steps.
+   Cycling colours 224–254 remain opt-in; index 255 stays transparent.
+2. **Manual indices** (`gradient_indices`) — raw palette index array used
+   as-is. Overrides any preset.
+
+**Built-in gradient presets:**
+
+| Key | Name | Colours | Source |
+|-----|------|---------|--------|
+| `warm_flame` | Warm Flame | `#ff9d3c` → `#7d2c00` | U7 SI palette |
+| `sunrise` | Sunrise | `#FF512F` → `#F09819` | uiGradients |
+| `juicy_orange` | Juicy Orange | `#FF8008` → `#FFC837` | uiGradients |
+| `citrus_peel` | Citrus Peel | `#FDC830` → `#F37335` | uiGradients |
+| `koko_caramel` | Koko Caramel | `#D1913C` → `#FFD194` | uiGradients |
+| `blood_red` | Blood Red | `#f85032` → `#e73827` | uiGradients |
+| `sin_city_red` | Sin City Red | `#ED213A` → `#93291E` | uiGradients |
+| `firewatch` | Firewatch | `#cb2d3e` → `#ef473a` | uiGradients |
+| `master_card` | Master Card | `#f46b45` → `#eea849` | uiGradients |
+| `sun_horizon` | Sun on the Horizon | `#fceabb` → `#f8b500` | uiGradients |
+| `learning_leading` | Learning and Leading | `#F7971E` → `#FFD200` | uiGradients |
+| `electric_violet` | Electric Violet | `#4776E6` → `#8E54E9` | uiGradients |
+| `purple_love` | Purple Love | `#cc2b5e` → `#753a88` | uiGradients |
+| `deep_purple` | Deep Purple | `#673AB7` → `#512DA8` | uiGradients |
+| `reef` | Reef | `#00d2ff` → `#3a7bd5` | uiGradients |
+| `royal` | Royal | `#141E30` → `#243B55` | uiGradients |
+| `midnight_city` | Midnight City | `#232526` → `#414345` | uiGradients |
+| `frost` | Frost | `#000428` → `#004e92` | uiGradients |
+| `cool_sky` | Cool Sky | `#2980B9` → `#6DD5FA` | uiGradients |
+| `sexy_blue` | Sexy Blue | `#2193b0` → `#6dd5ed` | uiGradients |
+| `cold_shivers` | Cold Shivers | `#83a4d4` → `#b6fbff` | uiGradients |
+| `lush` | Lush | `#56ab2f` → `#a8e063` | uiGradients |
+| `mojito` | Mojito | `#1D976C` → `#93F9B9` | uiGradients |
+| `quepal` | Quepal | `#11998e` → `#38ef7d` | uiGradients |
+| `kyoto` | Kyoto | `#c21500` → `#ffc500` | uiGradients |
+| `witching_hour` | Witching Hour | `#c31432` → `#240b36` | uiGradients |
+| `stellar` | Stellar | `#7474BF` → `#348AC7` | uiGradients |
+| `flare` | Flare | `#f12711` → `#f5af19` | uiGradients |
+| `crimson_tide` | Crimson Tide | `#642B73` → `#C6426E` | uiGradients |
+| `steel_gray` | Steel Gray | `#1F1C2C` → `#928DAB` | uiGradients |
+
+**Built-in TTF keys:** `dosVga437`, `ophidean`, `brit_plaques`,
+`brit_plaquesSmall`, `brit_signs`, `gargish`
+
+**Built-in LUT keys:** `black_ink`, `white_glow`, `yellow_text`,
+`red_text`, `runic_multicolor`, `serpentine_metal`, `serpentine_gold`
+
+---
+
+#### `u7 shape-create`
+
+Guided PNG → U7 shape → FLX/VGA workflow, modelled on `font-create`.
+Desktop terminals use the same Questionary menus as `container-browse`: arrow
+keys and Enter for selections and confirmations. The highlight follows the
+arrow; file and folder prompts show a **Tab** hint for completion choices. Ctrl+C
+cancels. Redirected input uses line prompts; TOML recipes remain non-interactive.
+Accepts one PNG or a folder of PNG frames. The interactive flow is game flavour,
+mod or Exult game target, source, palette and conversion settings, preview/redo, output format,
+archive and slot selection, then a final save confirmation.
+At **Palette file**, press Enter to use automatic selection from the chosen
+target, or enter an existing palette file path. The wizard shows the detected
+palette path. Enter the record number (normally **0**) at **Palette record**.
+
+```text
+titan u7 shape-create [SOURCE] [--game bg|si] [-o FILE] [--preview FILE]
+titan u7 shape-create --config recipe.toml [-o FILE] [--force]
+```
+
+| Option | Purpose |
+|--------|---------|
+| `SOURCE` | One PNG or a frame directory; can also be selected in the wizard. |
+| `--config FILE`, `-c FILE` | TOML recipe; runs without prompts. |
+| `-o FILE`, `--output FILE` | Shape filename for shape/both output; archive destination for archive-only output. |
+| `--game bg\|si` | Initial interactive game selection. Recipes select their game in `[target]`. |
+| `--preview FILE` | Save a PNG contact sheet comparing source and converted frames, up to six frames. |
+| `--allow-cycling` | Allow RGB matching to select indices 224–254. |
+| `--base-archive FILE` | Explicit original archive for sparse patch inheritance. |
+| `--force` | Replace existing output files. Does not authorize replacing an occupied shape slot. |
+| `--in-place` | Allow the selected source archive to also be the destination. |
+
+After choosing BG/SI flavour, select the base game, an installed mod, or a custom
+game registered in `exult.cfg`. Titan also discovers mods from its configuration
+and Exult's mods folder. **Other mod or Exult game folder** accepts a game/mod
+root or its patch folder. The selected target supplies the archive source and
+patch destination; both paths remain editable before saving.
+
+Ordinary mods inherit the selected retail game's STATIC archives. A standalone
+Exult game uses its own STATIC and patch archives, including Exult Flex files;
+choosing SI flavour does not add retail SI shapes to its slot inventory.
+
+Palette record **0**, the U7 main palette, is the default. Titan first checks
+the selected target's patch and STATIC directories, or accepts an explicit
+palette file. RGB conversion uses indices **0–223** unless cycling colours
+are enabled. Matching indexed PNGs retain their deliberate palette indices.
+For RLE objects, alpha below 128 becomes transparency at index 255.
+Source images keep their dimensions; frames above **72×72** warn, and widths
+above **320** or heights above **200** fail.
+
+The wizard opens a PNG comparison in the image viewer on Windows, or a browser
+on other platforms: source on the left, U7 conversion on the right, with a
+checkerboard behind transparent pixels. Images use nearest-neighbour enlargement
+and retain their detail. The terminal lists dimensions, origin and transparency;
+it also prints the temporary PNG path if the viewer cannot open automatically. **Redo**
+returns to conversion settings without restarting game selection. The optional
+`--preview` PNG contact sheet is saved with the approved outputs. Recipes never
+launch an image viewer.
+
+Archive selection offers **SHAPES.VGA**, **GUMPS.VGA** (inventory/interface),
+**FACES.VGA** (portraits), **SPRITES.VGA** (effects), another existing archive,
+or a new library. Selecting GUMPS.VGA finds the selected target's archive and defaults the
+destination to its `patch/GUMPS.VGA`. The source path can also select an existing mod
+patch. Slot rules are selected automatically, followed by sparse patch or copy
+output, destination, free-slot selection, and final save confirmation.
+
+Objects in a `SHAPES.VGA` library allocate from **150** upward. Explicit raw
+flats require every PNG to be **opaque 8×8** and allocate only within **0–149**.
+Other shape libraries, such as `SPRITES.VGA` and U7 shape `.FLX` files, use
+`kind = "generic"` and may start at slot 0. RLE 8×8 objects remain objects.
+
+Free-slot selection checks the source archive, its inherited base, and the
+destination patch. A new destination can be a **sparse patch** or a **copy of
+the selected archive**. Existing destinations retain their other records;
+this creation mode applies when creating a new destination. Sparse saves keep
+inherited records as holes. U7 retail and Exult Flex headers are preserved.
+Replacing an occupied slot requires an explicit slot plus `replace = true`
+or interactive approval. Updating a source archive also requires explicit
+in-place selection. Files are replaced atomically after conversion and archive
+validation; source PNGs and explicitly supplied base archives cannot be used as output targets.
+
+```bash
+# Start the guided workflow with an image or a folder
+titan u7 shape-create artwork.png
+titan u7 shape-create actor_frames/ --game si --preview actor_comparison.png
+
+# Repeat a saved recipe without prompts
+titan u7 shape-create --config actor.toml
+```
+
+**Recipe example:**
+
+```toml
+[target]
+game = "BG"
+# static = "./my_game/STATIC" # Override the base archive directory
+# patch = "./my_game/patch"   # Default destination directory
+# standalone = true          # Own archives; do not inherit retail BG/SI
+
+[source]
+path = "./actor_frames"       # Or one PNG
+
+[palette]
+file = "./STATIC/PALETTES.FLX" # Optional if configured
+index = 0
+
+[conversion]
+allow_cycling = false
+flat = false
+origin_x = 0                 # Exult Studio right extent; 0 anchors at right edge
+origin_y = 0                 # Exult Studio bottom extent; 0 anchors at bottom edge
+
+[archive]
+source = "./STATIC/SHAPES.VGA" # Optional for a new custom library
+# base = "./STATIC/SHAPES.VGA" # Use when source is a sparse mod patch
+kind = "shapes"              # "shapes" or "generic"
+mode = "patch"               # New destination: "patch" or "copy"
+# slot = 460                 # Omit to select the first free permitted slot
+replace = false              # True requires an explicit slot
+
+[output]
+format = "both"              # "shp", "flex", or "both"
+path = "./out/actor.shp"      # For flex-only, may name the archive instead
+archive = "./patch/shapes.vga"
+preview = "./out/actor_comparison.png" # Optional
+force = false
+in_place = false
+```
+
+Recipe paths are relative to the recipe file. CLI path overrides are relative
+to the working directory. Missing palettes/bases, invalid slots and existing
+outputs fail clearly without prompting. `shape-import` and `flex-add-shape`
+remain available for individual conversion and insertion steps.
+
+---
+
+#### `u7 map-render`
+
+Render a U7 map region (single superchunk, arbitrary chunk range, or
+the entire world) to PNG. Uses game-accurate parallel oblique projection
+(not isometric — X/Y axes are screen-aligned, lift shifts diagonally at
+45°). IFIX fixed objects are depth-sorted using an Exult-style
+dependency DAG with sprite-accurate overlap detection.  RLE terrain
+tiles (mountains, etc.) are promoted to depth-sorted objects with a
+nearby-flat fill for seamless ground coverage.
+
+Run `titan u7 map-render` to open the guided wizard. It uses the same arrow-key
+menus and Tab-completed paths as the shape and font wizards. Choose BG/SI,
+the retail game, an Exult mod or standalone world, and a map number; then
+select a superchunk, custom chunk rectangle, or full world. Projection,
+saved-game objects, lift limits, grids, palette records, and shape filters
+can be adjusted before rendering. Map and graphics overrides resolve against
+the selected world's own base and patch.
+
+The wizard first renders a PNG at **20% of full width and height** on a reduced
+canvas. It opens the image in the system viewer and asks **“Is this the correct
+map?”**. Accept it, choose a PNG filename, and confirm to start the full render.
+Both passes show percentage progress and the current stage; percentages track
+rendering work, not a time estimate. Existing output files require confirmation.
+Save failures can be retried without repeating a completed full render.
+
+Explicit region options keep the existing batch behavior. Add `--interactive`
+(`-i`) to enter the wizard with supplied options as defaults, for example
+`titan u7 map-render --game si --sc 0x55 --grid --interactive`.
+
+```
+titan u7 map-render [static] [--game bg|si]
+                    [--interactive]
+                    [--map-root DIR]
+                    [--map-num N]
+                    [--superchunk N | --cx0 X0 --cy0 Y0 --cx1 X1 --cy1 Y1 | --full]
+                    [-p PAL] [-o FILE] [--view VIEW]
+                    [--gamedat DIR] [--grid] [--exclude FLAG ...]
+                    [--zone-profile NAME] [--zone-id ID ...] [--all-zones]
+                    [--highlight-tile-rect TX0,TY0,TX1,TY1,#RRGGBB[,LABEL] ...]
+                    [--highlight-width N] [--highlight-lift N]
+                    [--highlight-fill-alpha N] [--highlight-labels]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `static` | Optional path to a base `STATIC/` or Exult mod `patch/` containing `SHAPES.VGA`, `TFA.DAT`, and related rendering assets. It also supplies map data unless `--map-root` is used. If omitted, resolved from `titan.toml` (`[u7bg.paths]` / `[u7si.paths]`) |
+| `--game bg|si` | Select which config section supplies defaults and the base graphics for sparse mod patches (`bg` = `[u7bg.*]`, `si` = `[u7si.*]`) |
+| `--map-root DIR` | Optional separate map-data root containing shared `U7CHUNKS` and root `U7MAP`/`U7IFIX*` or secondary `mapNN/` data. Rendering assets still come from `static`. When omitted, map data continues to come from `static` |
+| `--superchunk N`, `--sc N` | Superchunk number 0–143 (hex ok, e.g. `0x55`). Renders a 16×16 chunk region |
+| `--cx0`, `--cy0`, `--cx1`, `--cy1` | Chunk-level bounding box (0–191). Alternative to `--superchunk` |
+| `--full` | Render the entire world map (shorthand for `--cx0 0 --cy0 0 --cx1 191 --cy1 191`) |
+| `-p FILE`, `--palette FILE` | Path to `PALETTES.FLX`. Default resolution order: configured game palette, inferred mod base `STATIC/PALETTES.FLX`, then selected `static/PALETTES.FLX` |
+| `-o FILE`, `--output FILE` | Output PNG path (default: auto-named) |
+| `--view VIEW` | Projection view: `classic` (45° lift, default), `flat` (no lift), `steep` (exaggerated lift) |
+| `--gamedat DIR` | Path to `gamedat/` directory to include IREG dynamic objects |
+| `--grid / --no-grid` | Overlay grid lines (default: off). Blue lines for chunk boundaries (16×16 tiles each, coords e.g. `80,96`) with coordinate labels; red lines for superchunk boundaries (16×16 chunks each) with SC number labels |
+| `--grid-size N` | Grid line width in pixels (default: 1) |
+| `--exclude FLAG` | Exclude shapes by TFA flag. Repeatable. Choices: `no_solid`, `no_water`, `no_animated`, `no_sfx`, `no_transparent`, `no_translucent`, `no_door`, `no_barge`, `no_light`, `no_poisonous`, `no_strange_movement`, `no_building` |
+| `--zone-profile NAME` | Load built-in zone data and convert it to highlight rectangles. Current profiles: `si_zones`, `bg_zones` |
+| `--zone-id ID` | Include only selected zone IDs from `--zone-profile`. Repeatable. Accepts numeric IDs (e.g. `3`, `13`) and symbolic IDs where applicable (e.g. `A`) |
+| `--all-zones` | Include every zone from `--zone-profile`. Also the default when `--zone-profile` is set and no `--zone-id` is provided |
+| `--highlight-tile-rect TX0,TY0,TX1,TY1,#RRGGBB[,LABEL]` | Outline a world-tile rectangle (inclusive bounds). Repeatable; each rectangle can use its own colour and optional custom label text. Also accepts `#RRGGBBAA` |
+| `--highlight-width N` | Highlight rectangle outline width in pixels (default: 3) |
+| `--highlight-lift N` | Projection lift for highlight rectangles (default: 0). Useful in `classic`/`steep` views when you want overlays shifted with lift |
+| `--highlight-fill-alpha N` | Highlight fill alpha (0–255, default: 128 = 50%). Set `0` for outline-only |
+| `--highlight-labels / --no-highlight-labels` | Draw labels on highlighted rectangles (default: on). Uses custom `LABEL` when provided, else `tx0,ty0,tx1,ty1` |
+| `--map-num N` | Map number to render: `0` = default world at the map-data root; `1`+ = its `mapNN/` subdirectory for IFIX and U7MAP. The map-data root is `static` by default or `--map-root` when supplied |
+
+> **U7 and roof tiles:** U7's `TFA.DAT` does not have a dedicated roof flag
+> (unlike U8's `TYPEFLAG.DAT`).  Use `--exclude no_building` to remove all
+> shapes with shape class 14 (roofs, windows, mountain tops).  For a
+> narrower filter, `--exclude no_transparent` removes only the 8 shapes
+> marked as transparent (mostly interior rooftops and windows).  Extended
+> roof metadata is only present in Exult's supplementary `shapeinf.dat`.
+
+> **Frame bit 5 and object footprints:** Titan derives map-object footprint
+> orientation from both `TFA.DAT` and the effective `SHAPES.VGA` archive.
+> For shapes with 32 or fewer real frames, frame bit 5 (`0x20`, frames 32+)
+> denotes a generated reflection and swaps the stored X/Y tile dimensions.
+> For shapes containing more than 32 real frames, bit 5 belongs to the real
+> archive frame number, so Titan does not swap X/Y. This matches Exult commit
+> [`ac51a798`](https://github.com/exult/exult/commit/ac51a7985f3a9ed65006f230fbd41e30d7176046)
+> and fixes extended mod shapes such as SI door shape 376. This rule affects
+> footprint/depth interpretation only; it does not change door state or the
+> separate `frame % 4 < 2` open-door classification.
+
+> **Sparse mod graphics:** Exult mod `patch/SHAPES.VGA` files may contain only
+> changed records, leaving the remaining Flex slots empty. When `static` points
+> to such a patch, Titan overlays its populated records on the base archive
+> configured for `--game bg|si`, entirely in memory. If the game is not
+> configured, Titan looks upward from the patch for the nearest base
+> `STATIC/` directory. A complete archive, a render using configured base
+> defaults, or a renderer without a separate base directory keeps the existing
+> direct-load behavior. An explicit `--palette` is never replaced.
+
+**Examples**
+```bash
+# Use config defaults for Black Gate (no STATIC path required)
+titan u7 map-render --game bg --sc 85 -o britain_bg.png
+
+# Use config defaults for Serpent Isle
+titan u7 map-render --game si --superchunk 0x55 -o moonshade_si.png
+
+# Render superchunk 85 / 0x55 (Britain area) — decimal and hex both work
+titan u7 map-render STATIC/ --superchunk 0x55 -o britain.png
+titan u7 map-render STATIC/ --sc 85 -o britain.png
+
+# Override config with explicit STATIC + palette
+titan u7 map-render STATIC/ --game si --palette STATIC/PALETTES.FLX --sc 85
+
+# Render a chunk range with grid overlay
+titan u7 map-render STATIC/ --cx0 56 --cy0 80 --cx1 63 --cy1 87 --grid
+
+# Flat (pure top-down) view, excluding water shapes
+titan u7 map-render STATIC/ --sc 85 --view flat --exclude no_water
+
+# Remove building-class shapes (roofs, windows, mountain tops)
+titan u7 map-render STATIC/ --sc 85 --exclude no_building -o britain_no_roofs.png
+
+# Remove only transparent shapes (narrower than no_building)
+titan u7 map-render STATIC/ --sc 85 --exclude no_transparent
+
+# Include dynamic objects from a savegame's gamedat/
+titan u7 map-render STATIC/ --sc 85 --gamedat gamedat/ --view classic
+
+# Render the entire world map
+titan u7 map-render STATIC/ --full -o u7_world.png
+
+# Highlight three world-tile regions with per-rectangle colour
+titan u7 map-render STATIC/ --full \
+   --highlight-tile-rect "2054,1698,2589,2386,#00BFFF,Moonshade" \
+   --highlight-tile-rect "895,1604,1172,1959,#FF6B35,Fawn" \
+   --highlight-tile-rect "670,2430,1134,2799,#7CFC00,Monitor" \
+   --highlight-width 4 \
+   --highlight-fill-alpha 128 \
+   --highlight-lift 8 \
+   --highlight-labels \
+   -o u7_world_highlighted.png
+
+# Load SI zone profile and render only selected IDs
+titan u7 map-render STATIC/ --full \
+   --zone-profile si_zones \
+   --zone-id 3 --zone-id 13 --zone-id 14 \
+   -o u7_si_zone_ids_03_13_14.png
+
+# Load all BG guard-region zones from profile
+titan u7 map-render STATIC/ --full \
+   --zone-profile bg_zones --all-zones \
+   -o u7_bg_guard_regions.png
+
+# Render a BG mod's alternate map. Sparse patch SHAPES.VGA records inherit
+# from the configured BG base archive.
+titan u7 map-render "mods/MyMod/patch" --game bg \
+  --map-num 1 --sc 0x08 -o mod_map1_sc08.png
+
+# Render scratch map04 while reusing Serpent Isle graphics and type metadata
+titan u7 map-render "C:/Ultima/ultima7si/SERPENT/STATIC" \
+  --map-root "D:/_Repos/tgwUltima/u7data/maps/u3map" \
+  --game si --map-num 4 --full --view classic -o u3map_full_classic.png
+
+# Mod map with IREG dynamic objects (gamedat must contain map01/ subdir)
+titan u7 map-render "mods/MyMod/patch" --map-num 1 --sc 0x08 \
+  --gamedat "mods/MyMod/gamedat" -o mod_map1_sc08_ireg.png
+```
+
+---
+
+#### `u7 shape-browse`
+
+Browse the selected game's or Exult mod's graphics without changing its archives.
+Uses the same game/world picker and arrow-key menus as the other U7 wizards.
+
+```bash
+titan u7 shape-browse
+titan u7 shape-browse --game si
+titan u7 shape-browse GUMPS.VGA --game si --shape 0
+```
+
+**T** opens a paged shape-properties view with frame geometry, tile dimensions,
+class/flags, weight and volume (stored game units), obstacle dimensions,
+weapon/ammo/armour records, ready-slot preferences, container gump mappings,
+and supported Exult field/barge/mountain properties. Source paths identify
+where each record came from. **E** in that view exports a new JSON report
+outside the game/mod folders.
+
+**O** in the shape list or frame actions filters by class, physical flag,
+weapon/ammo/armour data, ready slots, container mappings, or unknown TFA data.
+Search and next/previous shape navigation follow the active filter. Choose
+All populated shapes to clear it. Sparse combat patch records inherit the
+base, including explicit deletions. Generic and unowned archives show frame
+properties; world physics/combat metadata applies to the owner's SHAPES.VGA.
+
+Choose SHAPES, GUMPS, FACES, SPRITES, FONTS, PAPERDOL, or another VGA/Flex
+library. The browser combines the selected owner's base and sparse patch;
+custom archives outside that patch use only the selected file unless you supply
+`--base-archive`. Search by decimal/hex shape number or, for SHAPES.VGA, item
+name. Empty slots are omitted and lists are paged. **N/B** move between pages,
+**F** searches, and **Q** returns to archive selection. These keys act immediately;
+choose individual shapes with the arrow keys and Enter.
+
+The current frame appears in colour in Windows and Linux terminals using solid
+background-colour cells to avoid font seams. Frames are reduced to fit when
+needed. A checkerboard shows transparency; ground tiles keep index 255 opaque.
+Redirected output
+contains metadata without terminal artwork. Open the current frame at full
+detail in the image viewer, or a colour sheet of up to twelve frames on the
+current frame page. You can also navigate individual frames.
+Dimensions, Exult origins, palette source, cycling colours and available SHAPES
+type flags accompany the preview.
+
+While a shape is open, the menu displays hotkeys. Press a key to act immediately,
+or use the arrow keys and Enter. **F/B** move to the next/previous frame,
+**N** chooses a frame number, **S** chooses another shape, and **J/K** move to
+the next/previous shape. **P** plays frames directly in the terminal; **C** cycles
+the current frame's palette colours when it has cycling pixels. **L** changes
+the palette, **E** exports PNGs, and **G** opens GIF preview/export options.
+**I/V** open the current frame/frame sheet; **A/W** change archive/world;
+**Q** quits. Redirected input accepts the same keys followed by Enter.
+
+Live playback repaints in place and preserves frame drawing anchors.
+**Space** pauses/resumes, **+/-** changes playback speed, and **Q**, **Esc**,
+**Enter**, or **Ctrl+C** returns to browsing. Palette cycling advances independently
+of frame loops, and pausing freezes both. Large artwork is reduced to fit the
+terminal; GIF/image-viewer previews remain available.
+
+Export the current frame or every frame as PNGs. Indexed PNGs preserve original
+indices and object transparency; RGBA PNGs contain rendered colours. Filenames
+`shape_NNNN_fNNNN.png` sort in frame order and can be used as a frame directory
+in `shape-create`. Use a separate directory for each shape. Exports require save
+confirmation and explicit approval before replacing existing files.
+
+Preview a GIF of all frames, available TFA animation, or the current frame's
+palette cycling before saving. Frames align at their Exult drawing anchors.
+TFA previews start at frame 0, advance random/freeze animations deterministically,
+and simulate one game hour per step for hourly animations. Translucency previews
+use approximate RGBA blending; GIFs flatten partial alpha onto grey.
+
+`--palette` / `-p` and `--palette-index` override the selected world's palette.
+Palette 0 is the main palette; absent/empty automatic patch records inherit the same
+owner's base record. Changing worlds resets palette overrides.
+
+---
+
+#### `u7 palette-browse`
+
+Browse a selected game's or mod's palettes with the same menus and hotkeys as
+the shape and NPC browsers.
+
+```bash
+titan u7 palette-browse
+titan u7 palette-browse --game si
+titan u7 palette-browse PALETTES.FLX --game si --index 2
+titan u7 palette-browse custom.pal --encoding 8bit
+```
+
+The selected world combines base and patch palette records, inheriting empty
+patch slots. Record numbers stay unchanged; empty and invalid records appear in
+the record selector. A supplied file is browsed on its own.
+
+Colour pages show readable indices and native terminal swatches. **N/B** change
+colour page, **I** inspects RGB/hex and stored components, **L** chooses a record,
+**J/K** browse populated records, and **V** shows all 256 colours. **R** switches
+primary/secondary components when a record contains an Exult double palette.
+**U** changes component encoding for ambiguous dark standalone palettes.
+
+**C** previews Exult's six cycling ranges, with live terminal playback or manual
+steps. Playback uses Space to pause, +/- to change speed, and Q/Esc to return.
+**G** tests the font gradient presets or custom RGB hex stops (for example,
+`6F263D, 236192`). Matching uses palette-aware ramp selection, excludes indices
+224–255 by default, and prints resolved indices for the font wizard. Cycling
+colours 224–254 can be enabled; 255 remains excluded.
+
+**E** exports a PNG swatch sheet, CSV/JSON colour table, or exact original record
+bytes. Exports create new files outside game/mod folders. Raw exports preserve
+the complete original record, including both components of a double palette.
+**A/W/Q** change source, change world, or quit. Browsing never changes palettes.
+
+---
+
+<a id="u7-npc-save-browsers"></a>
+
+#### `u7 npc-browse` / `u7 save-browse`
+
+Browse NPCs and saves interactively using the same game/world selector and menus
+as shape browsing. The selected world's Exult configuration supplies its live
+GAMEDAT and save folder, including a mod's separate `savegame_path`.
+Titan mod settings can override the save folder with `paths.savegame`.
+
+```bash
+titan u7 npc-browse
+titan u7 npc-browse --game si
+titan u7 npc-browse gamedat/ --game si --npc 1
+titan u7 save-browse
+titan u7 save-browse exult00si.sav --game si
+```
+
+Choose new-game `INITGAME.DAT`, current GAMEDAT, a save from the selected world's
+folder, or another source path. Retail Flex and Exult ZIP saves are supported;
+retail new-game NPC fields are interpreted separately from Exult runtime fields.
+Initial schedules can come from the selected world's STATIC/patch files; missing
+saved/live schedules never inherit new-game data. Incomplete records are reported.
+
+NPC lists support number/name search, paging, and party/alive/dead/unused filters.
+Selection menus show hotkeys, including **N/B** for next/previous pages,
+**S** for NPC search, and **F** for filters. Long record IDs use arrows and Enter
+or the search prompt; short numbered menus accept their displayed digit immediately.
+In a detail view, **N/B** move between NPCs in the current filter; a text/number
+search only limits the selection list. The menu identifies the next and previous
+NPCs by name and ID. **S** returns to selection,
+**I** shows nested inventory, **T** shows daily schedules, and **E** exports reports.
+Opening an NPC shows its corresponding `SHAPES.VGA` artwork at **frame 16**,
+using the same colour terminal preview and transparency checkerboard as the shape
+browser. Artwork and palette record 0 come from the selected world's base/patch
+archives. Missing artwork or frame 16 leaves the details usable and displays a
+short message. Redirected output skips image loading and terminal artwork.
+**O** opens the source overview, **D** chooses another source, **W** changes world,
+and **Q** quits. These action keys work immediately in interactive terminals;
+arrow keys and Enter also work. Plain-input fallback requires Enter. In inventory,
+select an item to inspect it, **C** opens its contents, and **U** returns to its parent.
+
+Save overviews show available identity, timestamp, game clock, party roster,
+world state, and stored files. Report exports include NPC CSVs, inventory/schedule
+CSVs, individual NPC JSON, and overview text. Inventory ready slots are shape
+preferences, not proof of equipped positions. Sources are read-only; exports
+cannot replace existing files or write into STATIC, patch, or GAMEDAT folders.
+
+---
+
+#### `u7 monster-browse`
+
+Browse monster definitions or saved/live monster instances using the same
+game/mod selector, hotkeys and colour previews as NPC and shape browsing.
+
+```bash
+titan u7 monster-browse
+titan u7 monster-browse --game si
+titan u7 monster-browse gamedat/ --game si
+titan u7 monster-browse exult00si.sav --game si
+```
+
+An optional source argument selects `MONSTERS.DAT`, a save, GAMEDAT directory,
+or loose `monsnpcs.dat`; `--shape N` opens the first matching monster shape.
+The source menu also offers the selected world's save folder. Definition records
+combine the owner's base and sparse patch, including explicit deletions.
+An external definition file is read on its own. Missing saved monster data
+does not inherit from another source.
+
+Search by name, decimal/hex shape number, or `#number` for a saved/live instance.
+**N/B** navigate pages or monsters; **S** searches; list **F** filters by alignment
+or alive/dead status. After opening a monster, **F** advances preview frames and
+**P** plays the shape. Preview frame 16 is used when available, otherwise frame 0.
+Search narrows the selection list; next/previous navigation follows the filter.
+
+**T** shows possible spawn equipment, including item chances, quantity ranges
+and generated ammunition. **I** browses an instance's actual nested inventory.
+Base definition stats and current actor stats are displayed separately.
+**G** lists related spawn eggs on a selected map, using the selected save's
+IREG files or live GAMEDAT, including Exult spawn shapes above 1023.
+**E** exports CSV, JSON or a source overview;
+reports use new files outside game data folders. **D/W** change source/world;
+**Q** quits. Known BG/SI identity mismatches disable foreign world metadata.
+
+---
+
+#### `u7 world-query`
+
+Search IFIX (static) and optionally IREG (runtime) world object placements
+by shape class, name, shape/frame number, TFA flags, and area. Runs as an
+interactive wizard when no filter flags are supplied; runs non-interactively
+when any filter flag or a TOML recipe is present. Requires `questionary>=2.0`
+for wizard mode. The wizard supports repeated refinement and recipe saving.
+
+```
+titan u7 world-query [STATIC] [OPTIONS]
+```
+
+| Argument / Option | Description |
+|-------------------|-------------|
+| `STATIC` | Path to STATIC directory. Defaults to configured path from `titan.toml`. |
+| `--game bg\|si` | Use config section for Black Gate or Serpent Isle (default: `bg`) |
+| `-c, --config FILE` | Run a world-query TOML recipe without prompts; explicit CLI options override recipe values |
+| `--base-static DIR` | Original game STATIC for a selected mod patch (otherwise inferred from the game layout or Titan config) |
+| `--patch DIR` | Mod patch overriding files in the base STATIC |
+| `--mod-data DIR` | Additional mod `textmsg.txt` and `shape_info.txt` for shape/frame names |
+| `--gamedat DIR` | Path to GAMEDAT directory for IREG dynamic objects |
+| `--text FILE` | Path to `TEXT.FLX` for shape name lookup (auto-discovered from STATIC if omitted) |
+| `--class NAME` | Shape class filter, repeatable (e.g. `container`, `human`, `monster`) |
+| `--shape N` | Shape number filter, hex or decimal, repeatable (e.g. `522`, `0x20A`) |
+| `--frame N` | Frame number filter, hex or decimal, repeatable (0–255; matches the stored frame including any reflection bit) |
+| `--name TEXT` | Shape name substring filter, case-insensitive (e.g. `"locked chest"`) |
+| `--flag NAME` | TFA flag filter, repeatable (e.g. `solid`, `animated`, `door`) |
+| `--tile-rect tx0,ty0,tx1,ty1` | Restrict search to a tile rectangle (0–3071 per axis) |
+| `--sc N` | Superchunk number filter, hex or decimal, repeatable (e.g. `0x55`) |
+| `--ireg / --no-ireg` | Force-include or force-exclude IREG objects |
+| `--ifix / --no-ifix` | Include/exclude fixed objects (default: included) |
+| `--map-num N` | Map number: `0` = default world (root `STATIC/` and root `gamedat/`, default), `1`+ = `mapNN/` subdirectory inside `STATIC` for IFIX and inside `gamedat` for IREG |
+| `-f, --format TEXT` | Output format: `summary` (default), `full_text`, `csv` |
+| `-o, --output FILE` | Write output to a file instead of stdout |
+| `--force` | Replace an existing results file; exports must be outside game data directories |
+
+**Notes:**
+- Containers, NPCs, eggs, and monsters live in IREG only. The wizard auto-defaults
+  `--ireg` to Yes when those classes are selected.
+- `--tile-rect` coordinates are normalised (top-left is always the smaller value).
+- `--name` and `--shape` can be combined; both filters must match.
+- Frame, class, name, shape, flag and area filters combine with AND. Multiple
+  shapes/frames/classes/superchunks are alternatives; every selected flag is required.
+- Invalid IDs, flags, formats, and coordinates are rejected. Interactive numeric
+  fields re-prompt; a malformed filter never silently broadens the search.
+- Mod IFIX files replace the corresponding base superchunk file as a whole;
+  absent files inherit from base STATIC. Property files and `TEXT.FLX` use
+  patch-first file resolution. `textmsg.txt` and `shape_info.txt` supply mod names.
+- Missing name/property data prevents searches requiring that data. Placements
+  without TFA entries are excluded from class/flag filtering with a warning.
+  Placements without names are excluded from name filtering with a warning.
+  Warnings go to stderr, keeping CSV output clean.
+- When `TEXT.FLX` is available, shape names appear in all output as `522 (locked chest)`.
+- If `titan setup` has been run, `TEXT.FLX` is recorded in `titan.toml` and resolved automatically.
+- `--map-num` applies to both IFIX and IREG lookups simultaneously. For mod maps, pass the mod patch dir as `STATIC` — the patch dir contains the `mapNN/` subdirectory with IFIX files for that map. The `gamedat` path should point to the mod's live gamedat, which also has `mapNN/` subdirs for each additional map.
+
+**Interactive wizard steps** (no filter flags supplied; context options such as
+`--map-num` still apply):
+
+First choose BG/SI flavour, then a base game, installed mod, registered custom
+Exult world, or manual folder. **Current supplied world** preserves explicitly
+provided paths. Selecting another target replaces its STATIC, patch, names,
+and GAMEDAT context; a mod never defaults to the retail game's GAMEDAT. The map
+picker lists discovered `mapNN` folders and accepts another map number.
+
+1. Shape class checkbox — leave blank for no filter.
+2. Include IREG? — auto-defaults to Yes for IREG-only classes.
+3. Name search — substring; matching shape numbers shown as hints.
+4. Shape and frame numbers — comma-separated, hex or decimal; leave blank for all.
+5. TFA flag checkbox — leave blank for no filter.
+6. Area — entire world, superchunk list, or tile rectangle (`x0,y0,x1,y1`).
+7. Review the game, mod, map number, sources and filters; confirm the search.
+8. Review grouped counts, then choose **Refine filters**, **Change area**,
+   **Show placements** for one shape, **Export results**, **Save recipe**,
+   **New search**, **Change world/map**, or **Finish**. Refinement preserves the preceding choices;
+   changing only the area does not re-ask the filters. New search clears the
+   filters while keeping the world context. Cancellation exits cleanly.
+
+**Repeatable TOML searches:**
+
+Save a recipe from the wizard, or create one using this schema. Paths inside
+recipes are relative to the recipe file; explicit CLI paths are relative to
+the current directory. Omitted filters match everything. IFIX defaults to
+included, IREG to excluded, and output to a grouped summary on stdout.
+
+```toml
+[world]
+game = "si"
+static = "game/STATIC"
+# patch = "mods/MyMod/patch"
+# base_static = "game/STATIC"  # useful for an external patch directory
+# mod_data = "mods/MyMod/data"
+gamedat = "mods/MyMod/gamedat"
+map_num = 1
+# text = "game/STATIC/TEXT.FLX"  # explicit name-table override
+
+[filters]
+classes = ["container"]
+shapes = [522]
+frames = [0]
+name = "chest"
+flags = []
+superchunks = [85, 86]
+# tile_rect = [512, 512, 2048, 2048]
+
+[sources]
+ifix = true
+ireg = true
+
+[output]
+format = "csv"
+path = "results/chests.csv"  # omit to write to stdout; parent must exist
+```
+
+```bash
+titan u7 world-query --config chest-search.toml
+titan u7 world-query --config chest-search.toml --frame 1 -o frame-one.csv
+```
+
+Recipe sections and keys are checked: misspellings and values of the wrong
+type fail with an error. When both superchunks and a tile rectangle are set,
+only those superchunks are scanned and placements must also lie in the rectangle.
+Recipes are saved to new files; result-file replacement requires `--force`
+or an explicit confirmation in the wizard. Game files are read-only throughout.
+
+**Non-interactive examples:**
+```bash
+# All containers in a tile rectangle (the large central area of the BG world).
+titan u7 world-query STATIC/ --gamedat gamedat/ --class container --tile-rect 512,512,2048,2048
+
+# All placements of shape 522 (locked chest) across the entire world, CSV output.
+titan u7 world-query STATIC/ --gamedat gamedat/ --shape 522 --ireg -f csv -o locked_chests.csv
+
+# All shapes whose name contains "chest" (any variant), full text.
+titan u7 world-query STATIC/ --gamedat gamedat/ --name chest --ireg -f full_text
+
+# All doors in superchunk 0x55 (Britain area).
+titan u7 world-query STATIC/ --flag door --sc 0x55
+
+# Containers and humans in two adjacent superchunks, saved to a file.
+titan u7 world-query STATIC/ --gamedat gamedat/ --class container --class human --sc 0x55 --sc 0x56 -o area_objects.txt
+
+# Configured BG paths — wizard mode.
+titan u7 world-query --game bg
+
+# Explicit paths — wizard mode.
+titan u7 world-query STATIC/ --gamedat gamedat/
+
+# Mod map query — IFIX from patch/map01/, IREG from gamedat/map01/.
+titan u7 world-query "mods/MyMod/patch" --gamedat "mods/MyMod/gamedat" \
+  --map-num 1 --class container --ireg
+
+# Mod map query, all objects, CSV output.
+titan u7 world-query "mods/MyMod/patch" --gamedat "mods/MyMod/gamedat" \
+  --map-num 1 --ireg -f csv -o mod_map1_objects.csv
+```
+
+**Output formats:**
+
+- `summary` — total match count + unique shape count + per-shape count table with names.
+- `full_text` — one line per placement: source, shape name, hex, tile coords, lift, class, flags.
+- `csv` — columns: `source, shape, shape_hex, shape_name, frame, quality, quality_raw, object_flags, tx, ty, tz, shape_class, shape_class_name, flags`.
+
+---
+
+#### `u7 container-browse`
+
+Browse and inspect container contents from IREG with full nesting support (e.g. Ship's Hold → Backpack → Bag → items). With no filter flags, launches an interactive wizard; supply any filter flag to run non-interactively.
+
+```
+titan u7 container-browse [STATIC] [OPTIONS]
+```
+
+| Option | Description |
+|---|---|
+| `STATIC` | Path to STATIC directory (positional, optional if configured) |
+| `--game bg\|si` | Use config section for BG or SI (default: `bg`) |
+| `--gamedat PATH` | Path to gamedat/ directory — required |
+| `--text PATH` | Explicit TEXT.FLX path for shape name lookup |
+| `--exult-flx PATH` | Path to `exult_bg.flx` or `exult_si.flx` for per-frame item names |
+| `--mod-data PATH` | Path to a mod's `patch/` or `data/` directory; overlays mod-specific shape names and per-frame names on top of the base game data |
+| `--map-num N` | Map number to query: `0` = default world map (root gamedat), `1`+ = `mapNN/` subdirectory inside gamedat (default: `0`) |
+| `--container-shape N` | Container shape filter, hex or decimal (repeatable) |
+| `--container-name STR` | Container name substring filter (case-insensitive) |
+| `--contains-shape N` | Only show containers holding item with this shape (repeatable) |
+| `--contains-name STR` | Only show containers holding item matching name substring |
+| `--tile-rect tx0,ty0,tx1,ty1` | Restrict to tile rectangle |
+| `--sc N` | Restrict to superchunk, hex or decimal (repeatable) |
+| `-f / --format` | Output format: `tree` (default) or `csv` |
+| `-o / --output FILE` | Write output to file instead of stdout |
+
+**Notes:**
+- Containers must be in IREG (runtime gamedat), not IFIX.
+- Empty containers (no items recorded at runtime) are included by default; use `--contains-*` to require specific contents.
+- Tree format shows the full nesting hierarchy with `├─`/`└─`/`│` branches, item counts, and quality multipliers.
+- CSV format emits one row per item at any nesting depth with a `path` column like `819 (barrel) > 801 (backpack) > item`.
+- Shape names come from TEXT.FLX (auto-discovered from STATIC if not given via `--text`).
+- `--exult-flx` enables per-frame item names for multi-frame shapes (e.g. shape 675 "desk item" breaks down into `675:1 (quill)`, `675:2 (inkwell)`, `675:6 (document)`, etc.). The path can also be set permanently via `titan setup`, which writes it to `[exult.paths] bg_flx` in titan.toml. Without `--exult-flx` or a configured path, items display by shape name only.
+- `--mod-data` reads `textmsg.txt` and `shape_info.txt` from the given directory. `textmsg.txt %%section shapes` overlays shape names on top of TEXT.FLX; `%%section miscnames` extends the per-frame name string table. The mod's `shape_info.txt %%section framenames` overlays frame-to-name mappings on top of the base Exult FLX data. Both files are optional — if only one is present, titan uses what it can. `--exult-flx` and `--mod-data` are independent and complement each other: `--exult-flx` provides the base framename mappings, `--mod-data` overlays the mod's additions.
+- `--map-num` selects which set of IREG files to query. Mods with multiple maps store each map's IREG in a `mapNN/` subdirectory inside gamedat (e.g. `gamedat/map01/u7ireg*`). Map 0 uses the root gamedat directory. Only the IREG for the selected map is scanned; `--contains-*` filters operate within that map's data.
+
+**Wizard steps (interactive):**
+1. BG/SI flavour, then a base game, installed mod, custom Exult game, or manual folder
+2. The target's GAMEDAT directory and map (including discovered `mapNN` folders)
+3. Container name substring filter (leave blank for all containers)
+4. Container shape number filter (comma-separated, leave blank for all)
+5. Contains-item name filter (leave blank to skip)
+6. Contains-item shape filter (comma-separated, leave blank to skip)
+7. Area: entire world, specific superchunks, or tile rectangle
+8. Output format (tree / csv) + optional file save
+
+**Non-interactive examples:**
+
+```bash
+# All containers in the entire world (wizard mode).
+titan u7 container-browse STATIC/ --gamedat gamedat/
+
+# All containers in a tile rectangle.
+titan u7 container-browse STATIC/ --gamedat gamedat/ --tile-rect 512,512,2048,2048
+
+# Show only locked chests (shape 522).
+titan u7 container-browse STATIC/ --gamedat gamedat/ --container-shape 522
+
+# Show containers whose name includes "chest".
+titan u7 container-browse STATIC/ --gamedat gamedat/ --container-name chest
+
+# Show containers that hold at least one sword (by name).
+titan u7 container-browse STATIC/ --gamedat gamedat/ --contains-name sword
+
+# Export to CSV, only in superchunk 0x27.
+titan u7 container-browse STATIC/ --gamedat gamedat/ --sc 0x27 -f csv -o sc27_containers.csv
+
+# Configured BG paths — wizard mode.
+titan u7 container-browse --game bg
+
+# Per-frame item names from an Exult installation (base game, no mod).
+titan u7 container-browse STATIC/ --gamedat gamedat/ --container-name desk \
+  --exult-flx "<Exult install>/data/exult_bg.flx"
+
+# Mod query — map 0 (default world) with mod-specific names overlaid.
+# --exult-flx provides base frame mappings; --mod-data overlays the mod's additions.
+titan u7 container-browse STATIC/ --gamedat mods/MyMod/gamedat \
+  --exult-flx "<Exult install>/data/exult_si.flx" \
+  --mod-data "mods/MyMod/patch" --game si
+
+# Mod query — alternate map (map 1) inside the same mod gamedat.
+titan u7 container-browse STATIC/ --gamedat mods/MyMod/gamedat \
+  --exult-flx "<Exult install>/data/exult_si.flx" \
+  --mod-data "mods/MyMod/patch" --game si --map-num 1
+```
+
+**Output format (tree), shape names only:**
+
+```
+Container browse: 3 container(s) found.
+
+  522 (locked chest)              0x020A  @ (649,856)  lift=1  sc=0x26  [4 item(s), depth=1]
+    ├─ 573 (plate armour)
+    ├─ 340 (potion)
+    ├─ 340 (potion)
+    └─ 549 (lightning whip)
+
+  522 (locked chest)              0x020A  @ (2081,581)  lift=0  sc=0x20  [3 item(s), depth=1]
+    ├─ 815 (stone chips)
+    ├─ 815 (stone chips)
+    └─ 549 (lightning whip)
+
+  802 (bag)                       0x0322  @ (1204,2805)  lift=0  sc=0x7C  [7 item(s), depth=1]
+    ├─ 644 (gold coin)  ×228
+    ├─ 627 (lockpick)  ×134
+    └─ 549 (lightning whip)  ×8
+```
+
+**Output format (tree), with `--exult-flx` (per-frame names):**
+
+```
+Container browse: 1 container(s) found.
+
+  283 (desk)                      0x011B  @ (1027,1118)  lift=0  sc=0x34  [3 item(s), depth=1]
+    ├─ 675:6 (document)
+    ├─ 675:13 (document)
+    └─ 675:16 (mirror)
+```
+
+When `--contains-*` is active, each result is the container that **directly** holds
+the matching item. Without `--contains-*`, results are all root-level IREG containers
+shown with their full contents tree.
+
+**CSV columns:** `sc, container_shape, container_hex, container_name, tx, ty, tz, depth, item_shape, item_hex, item_name, item_frame, item_quality, path`
+
+---
+
+#### `u7 egg-query`
+
+Query egg trigger objects from IREG. Surfaces each egg's type, usecode function number, trigger probability, distance, criteria, and flags. With no filter flags, launches an interactive wizard; supply any filter flag to run non-interactively.
+
+```
+titan u7 egg-query [STATIC] [OPTIONS]
+```
+
+| Option | Description |
+|---|---|
+| `STATIC` | Path to STATIC directory (positional, optional if configured) |
+| `--game bg\|si` | Use config section for BG or SI (default: `bg`) |
+| `--gamedat PATH` | Path to gamedat/ directory — required |
+| `--type NAME` | Egg type filter (repeatable): `monster`, `usecode`, `teleport`, `jukebox`, `soundsfx`, `voice`, `missile`, `weather`, `path`, `button`, `intermap` |
+| `--fn N` | Usecode function number filter, hex or decimal (only matches type=usecode) |
+| `--tile-rect tx0,ty0,tx1,ty1` | Restrict to tile rectangle |
+| `--sc N` | Restrict to superchunk, hex or decimal (repeatable) |
+| `-f / --format` | Output format: `table` (default) or `csv` |
+| `-o / --output FILE` | Write output to file instead of stdout |
+
+**Wizard steps (interactive):**
+1. BG/SI flavour, then a base game, installed mod, custom Exult game, or manual folder
+2. The target's GAMEDAT directory and map (including discovered `mapNN` folders)
+3. Egg type checkbox (leave blank for all types)
+4. Usecode function number filter (shown only when usecode type is selected or no type filter)
+5. Area: entire world, specific superchunks, or tile rectangle
+6. Output format + optional file save
+
+**Non-interactive examples:**
+
+```bash
+# All eggs in the world.
+titan u7 egg-query STATIC/ --gamedat gamedat/
+
+# All usecode eggs.
+titan u7 egg-query STATIC/ --gamedat gamedat/ --type usecode
+
+# Find every placement of a specific function.
+titan u7 egg-query STATIC/ --gamedat gamedat/ --fn 0x06BC
+
+# Monster eggs in a tile region.
+titan u7 egg-query STATIC/ --gamedat gamedat/ --type monster --tile-rect 512,512,2048,2048
+
+# Export all usecode eggs to CSV.
+titan u7 egg-query STATIC/ --gamedat gamedat/ --type usecode -f csv -o usecode_eggs.csv
+
+# Configured BG paths — wizard mode.
+titan u7 egg-query --game bg
+```
+
+**CSV columns:** `sc, tx, ty, tz, egg_type, egg_type_name, fn, probability, distance, criteria, criteria_name, once, nocturnal, auto_reset, hatched, data1, data2`
+
+---
+
 ### U7 Flex archive commands
 
 Shape archive commands (`shape-export`, `shape-animate`, `shape-batch`,
@@ -1694,141 +2766,6 @@ titan u7 shape-import actor_frames/ --game bg -o ranger_variant7.shp
 # Select another palette record from PALETTES.FLX
 titan u7 shape-import frames/ -p STATIC/PALETTES.FLX --palette-index 3 -o night_shape.shp
 ```
-
----
-
-#### `u7 shape-create`
-
-Guided PNG → U7 shape → FLX/VGA workflow, modelled on `font-create`.
-Desktop terminals use the same Questionary menus as `container-browse`: arrow
-keys and Enter for selections and confirmations. The highlight follows the
-arrow; file and folder prompts show a **Tab** hint for completion choices. Ctrl+C
-cancels. Redirected input uses line prompts; TOML recipes remain non-interactive.
-Accepts one PNG or a folder of PNG frames. The interactive flow is game flavour,
-mod or Exult game target, source, palette and conversion settings, preview/redo, output format,
-archive and slot selection, then a final save confirmation.
-At **Palette file**, press Enter to use automatic selection from the chosen
-target, or enter an existing palette file path. The wizard shows the detected
-palette path. Enter the record number (normally **0**) at **Palette record**.
-
-```text
-titan u7 shape-create [SOURCE] [--game bg|si] [-o FILE] [--preview FILE]
-titan u7 shape-create --config recipe.toml [-o FILE] [--force]
-```
-
-| Option | Purpose |
-|--------|---------|
-| `SOURCE` | One PNG or a frame directory; can also be selected in the wizard. |
-| `--config FILE`, `-c FILE` | TOML recipe; runs without prompts. |
-| `-o FILE`, `--output FILE` | Shape filename for shape/both output; archive destination for archive-only output. |
-| `--game bg\|si` | Initial interactive game selection. Recipes select their game in `[target]`. |
-| `--preview FILE` | Save a PNG contact sheet comparing source and converted frames, up to six frames. |
-| `--allow-cycling` | Allow RGB matching to select indices 224–254. |
-| `--base-archive FILE` | Explicit original archive for sparse patch inheritance. |
-| `--force` | Replace existing output files. Does not authorize replacing an occupied shape slot. |
-| `--in-place` | Allow the selected source archive to also be the destination. |
-
-After choosing BG/SI flavour, select the base game, an installed mod, or a custom
-game registered in `exult.cfg`. Titan also discovers mods from its configuration
-and Exult's mods folder. **Other mod or Exult game folder** accepts a game/mod
-root or its patch folder. The selected target supplies the archive source and
-patch destination; both paths remain editable before saving.
-
-Ordinary mods inherit the selected retail game's STATIC archives. A standalone
-Exult game uses its own STATIC and patch archives, including Exult Flex files;
-choosing SI flavour does not add retail SI shapes to its slot inventory.
-
-Palette record **0**, the U7 main palette, is the default. Titan first checks
-the selected target's patch and STATIC directories, or accepts an explicit
-palette file. RGB conversion uses indices **0–223** unless cycling colours
-are enabled. Matching indexed PNGs retain their deliberate palette indices.
-For RLE objects, alpha below 128 becomes transparency at index 255.
-Source images keep their dimensions; frames above **72×72** warn, and widths
-above **320** or heights above **200** fail.
-
-The wizard opens a PNG comparison in the image viewer on Windows, or a browser
-on other platforms: source on the left, U7 conversion on the right, with a
-checkerboard behind transparent pixels. Images use nearest-neighbour enlargement
-and retain their detail. The terminal lists dimensions, origin and transparency;
-it also prints the temporary PNG path if the viewer cannot open automatically. **Redo**
-returns to conversion settings without restarting game selection. The optional
-`--preview` PNG contact sheet is saved with the approved outputs. Recipes never
-launch an image viewer.
-
-Archive selection offers **SHAPES.VGA**, **GUMPS.VGA** (inventory/interface),
-**FACES.VGA** (portraits), **SPRITES.VGA** (effects), another existing archive,
-or a new library. Selecting GUMPS.VGA finds the selected target's archive and defaults the
-destination to its `patch/GUMPS.VGA`. The source path can also select an existing mod
-patch. Slot rules are selected automatically, followed by sparse patch or copy
-output, destination, free-slot selection, and final save confirmation.
-
-Objects in a `SHAPES.VGA` library allocate from **150** upward. Explicit raw
-flats require every PNG to be **opaque 8×8** and allocate only within **0–149**.
-Other shape libraries, such as `SPRITES.VGA` and U7 shape `.FLX` files, use
-`kind = "generic"` and may start at slot 0. RLE 8×8 objects remain objects.
-
-Free-slot selection checks the source archive, its inherited base, and the
-destination patch. A new destination can be a **sparse patch** or a **copy of
-the selected archive**. Existing destinations retain their other records;
-this creation mode applies when creating a new destination. Sparse saves keep
-inherited records as holes. U7 retail and Exult Flex headers are preserved.
-Replacing an occupied slot requires an explicit slot plus `replace = true`
-or interactive approval. Updating a source archive also requires explicit
-in-place selection. Files are replaced atomically after conversion and archive
-validation; source PNGs and explicitly supplied base archives cannot be used as output targets.
-
-```bash
-# Start the guided workflow with an image or a folder
-titan u7 shape-create artwork.png
-titan u7 shape-create actor_frames/ --game si --preview actor_comparison.png
-
-# Repeat a saved recipe without prompts
-titan u7 shape-create --config actor.toml
-```
-
-**Recipe example:**
-
-```toml
-[target]
-game = "BG"
-# static = "./my_game/STATIC" # Override the base archive directory
-# patch = "./my_game/patch"   # Default destination directory
-# standalone = true          # Own archives; do not inherit retail BG/SI
-
-[source]
-path = "./actor_frames"       # Or one PNG
-
-[palette]
-file = "./STATIC/PALETTES.FLX" # Optional if configured
-index = 0
-
-[conversion]
-allow_cycling = false
-flat = false
-origin_x = 0                 # Exult Studio right extent; 0 anchors at right edge
-origin_y = 0                 # Exult Studio bottom extent; 0 anchors at bottom edge
-
-[archive]
-source = "./STATIC/SHAPES.VGA" # Optional for a new custom library
-# base = "./STATIC/SHAPES.VGA" # Use when source is a sparse mod patch
-kind = "shapes"              # "shapes" or "generic"
-mode = "patch"               # New destination: "patch" or "copy"
-# slot = 460                 # Omit to select the first free permitted slot
-replace = false              # True requires an explicit slot
-
-[output]
-format = "both"              # "shp", "flex", or "both"
-path = "./out/actor.shp"      # For flex-only, may name the archive instead
-archive = "./patch/shapes.vga"
-preview = "./out/actor_comparison.png" # Optional
-force = false
-in_place = false
-```
-
-Recipe paths are relative to the recipe file. CLI path overrides are relative
-to the working directory. Missing palettes/bases, invalid slots and existing
-outputs fail clearly without prompting. `shape-import` and `flex-add-shape`
-remain available for individual conversion and insertion steps.
 
 ---
 
@@ -2433,153 +3370,6 @@ requires actual native creation and therefore cannot be combined with
 
 ### U7 map commands (continued)
 
-#### `u7 map-render`
-
-Render a U7 map region (single superchunk, arbitrary chunk range, or
-the entire world) to PNG. Uses game-accurate parallel oblique projection
-(not isometric — X/Y axes are screen-aligned, lift shifts diagonally at
-45°). IFIX fixed objects are depth-sorted using an Exult-style
-dependency DAG with sprite-accurate overlap detection.  RLE terrain
-tiles (mountains, etc.) are promoted to depth-sorted objects with a
-nearby-flat fill for seamless ground coverage.
-
-```
-titan u7 map-render [static] [--game bg|si]
-                    [--map-root DIR]
-                    [--map-num N]
-                    [--superchunk N | --cx0 X0 --cy0 Y0 --cx1 X1 --cy1 Y1 | --full]
-                    [-p PAL] [-o FILE] [--view VIEW]
-                    [--gamedat DIR] [--grid] [--exclude FLAG ...]
-                    [--zone-profile NAME] [--zone-id ID ...] [--all-zones]
-                    [--highlight-tile-rect TX0,TY0,TX1,TY1,#RRGGBB[,LABEL] ...]
-                    [--highlight-width N] [--highlight-lift N]
-                    [--highlight-fill-alpha N] [--highlight-labels]
-```
-
-| Argument | Description |
-|----------|-------------|
-| `static` | Optional path to a base `STATIC/` or Exult mod `patch/` containing `SHAPES.VGA`, `TFA.DAT`, and related rendering assets. It also supplies map data unless `--map-root` is used. If omitted, resolved from `titan.toml` (`[u7bg.paths]` / `[u7si.paths]`) |
-| `--game bg|si` | Select which config section supplies defaults and the base graphics for sparse mod patches (`bg` = `[u7bg.*]`, `si` = `[u7si.*]`) |
-| `--map-root DIR` | Optional separate map-data root containing shared `U7CHUNKS` and root `U7MAP`/`U7IFIX*` or secondary `mapNN/` data. Rendering assets still come from `static`. When omitted, map data continues to come from `static` |
-| `--superchunk N`, `--sc N` | Superchunk number 0–143 (hex ok, e.g. `0x55`). Renders a 16×16 chunk region |
-| `--cx0`, `--cy0`, `--cx1`, `--cy1` | Chunk-level bounding box (0–191). Alternative to `--superchunk` |
-| `--full` | Render the entire world map (shorthand for `--cx0 0 --cy0 0 --cx1 191 --cy1 191`) |
-| `-p FILE`, `--palette FILE` | Path to `PALETTES.FLX`. Default resolution order: configured game palette, inferred mod base `STATIC/PALETTES.FLX`, then selected `static/PALETTES.FLX` |
-| `-o FILE`, `--output FILE` | Output PNG path (default: auto-named) |
-| `--view VIEW` | Projection view: `classic` (45° lift, default), `flat` (no lift), `steep` (exaggerated lift) |
-| `--gamedat DIR` | Path to `gamedat/` directory to include IREG dynamic objects |
-| `--grid / --no-grid` | Overlay grid lines (default: off). Blue lines for chunk boundaries (16×16 tiles each, coords e.g. `80,96`) with coordinate labels; red lines for superchunk boundaries (16×16 chunks each) with SC number labels |
-| `--grid-size N` | Grid line width in pixels (default: 1) |
-| `--exclude FLAG` | Exclude shapes by TFA flag. Repeatable. Choices: `no_solid`, `no_water`, `no_animated`, `no_sfx`, `no_transparent`, `no_translucent`, `no_door`, `no_barge`, `no_light`, `no_poisonous`, `no_strange_movement`, `no_building` |
-| `--zone-profile NAME` | Load built-in zone data and convert it to highlight rectangles. Current profiles: `si_zones`, `bg_zones` |
-| `--zone-id ID` | Include only selected zone IDs from `--zone-profile`. Repeatable. Accepts numeric IDs (e.g. `3`, `13`) and symbolic IDs where applicable (e.g. `A`) |
-| `--all-zones` | Include every zone from `--zone-profile`. Also the default when `--zone-profile` is set and no `--zone-id` is provided |
-| `--highlight-tile-rect TX0,TY0,TX1,TY1,#RRGGBB[,LABEL]` | Outline a world-tile rectangle (inclusive bounds). Repeatable; each rectangle can use its own colour and optional custom label text. Also accepts `#RRGGBBAA` |
-| `--highlight-width N` | Highlight rectangle outline width in pixels (default: 3) |
-| `--highlight-lift N` | Projection lift for highlight rectangles (default: 0). Useful in `classic`/`steep` views when you want overlays shifted with lift |
-| `--highlight-fill-alpha N` | Highlight fill alpha (0–255, default: 128 = 50%). Set `0` for outline-only |
-| `--highlight-labels / --no-highlight-labels` | Draw labels on highlighted rectangles (default: on). Uses custom `LABEL` when provided, else `tx0,ty0,tx1,ty1` |
-| `--map-num N` | Map number to render: `0` = default world at the map-data root; `1`+ = its `mapNN/` subdirectory for IFIX and U7MAP. The map-data root is `static` by default or `--map-root` when supplied |
-
-> **U7 and roof tiles:** U7's `TFA.DAT` does not have a dedicated roof flag
-> (unlike U8's `TYPEFLAG.DAT`).  Use `--exclude no_building` to remove all
-> shapes with shape class 14 (roofs, windows, mountain tops).  For a
-> narrower filter, `--exclude no_transparent` removes only the 8 shapes
-> marked as transparent (mostly interior rooftops and windows).  Extended
-> roof metadata is only present in Exult's supplementary `shapeinf.dat`.
-
-> **Frame bit 5 and object footprints:** Titan derives map-object footprint
-> orientation from both `TFA.DAT` and the effective `SHAPES.VGA` archive.
-> For shapes with 32 or fewer real frames, frame bit 5 (`0x20`, frames 32+)
-> denotes a generated reflection and swaps the stored X/Y tile dimensions.
-> For shapes containing more than 32 real frames, bit 5 belongs to the real
-> archive frame number, so Titan does not swap X/Y. This matches Exult commit
-> [`ac51a798`](https://github.com/exult/exult/commit/ac51a7985f3a9ed65006f230fbd41e30d7176046)
-> and fixes extended mod shapes such as SI door shape 376. This rule affects
-> footprint/depth interpretation only; it does not change door state or the
-> separate `frame % 4 < 2` open-door classification.
-
-> **Sparse mod graphics:** Exult mod `patch/SHAPES.VGA` files may contain only
-> changed records, leaving the remaining Flex slots empty. When `static` points
-> to such a patch, Titan overlays its populated records on the base archive
-> configured for `--game bg|si`, entirely in memory. If the game is not
-> configured, Titan looks upward from the patch for the nearest base
-> `STATIC/` directory. A complete archive, a render using configured base
-> defaults, or a renderer without a separate base directory keeps the existing
-> direct-load behavior. An explicit `--palette` is never replaced.
-
-**Examples**
-```bash
-# Use config defaults for Black Gate (no STATIC path required)
-titan u7 map-render --game bg --sc 85 -o britain_bg.png
-
-# Use config defaults for Serpent Isle
-titan u7 map-render --game si --superchunk 0x55 -o moonshade_si.png
-
-# Render superchunk 85 / 0x55 (Britain area) — decimal and hex both work
-titan u7 map-render STATIC/ --superchunk 0x55 -o britain.png
-titan u7 map-render STATIC/ --sc 85 -o britain.png
-
-# Override config with explicit STATIC + palette
-titan u7 map-render STATIC/ --game si --palette STATIC/PALETTES.FLX --sc 85
-
-# Render a chunk range with grid overlay
-titan u7 map-render STATIC/ --cx0 56 --cy0 80 --cx1 63 --cy1 87 --grid
-
-# Flat (pure top-down) view, excluding water shapes
-titan u7 map-render STATIC/ --sc 85 --view flat --exclude no_water
-
-# Remove building-class shapes (roofs, windows, mountain tops)
-titan u7 map-render STATIC/ --sc 85 --exclude no_building -o britain_no_roofs.png
-
-# Remove only transparent shapes (narrower than no_building)
-titan u7 map-render STATIC/ --sc 85 --exclude no_transparent
-
-# Include dynamic objects from a savegame's gamedat/
-titan u7 map-render STATIC/ --sc 85 --gamedat gamedat/ --view classic
-
-# Render the entire world map
-titan u7 map-render STATIC/ --full -o u7_world.png
-
-# Highlight three world-tile regions with per-rectangle colour
-titan u7 map-render STATIC/ --full \
-   --highlight-tile-rect "2054,1698,2589,2386,#00BFFF,Moonshade" \
-   --highlight-tile-rect "895,1604,1172,1959,#FF6B35,Fawn" \
-   --highlight-tile-rect "670,2430,1134,2799,#7CFC00,Monitor" \
-   --highlight-width 4 \
-   --highlight-fill-alpha 128 \
-   --highlight-lift 8 \
-   --highlight-labels \
-   -o u7_world_highlighted.png
-
-# Load SI zone profile and render only selected IDs
-titan u7 map-render STATIC/ --full \
-   --zone-profile si_zones \
-   --zone-id 3 --zone-id 13 --zone-id 14 \
-   -o u7_si_zone_ids_03_13_14.png
-
-# Load all BG guard-region zones from profile
-titan u7 map-render STATIC/ --full \
-   --zone-profile bg_zones --all-zones \
-   -o u7_bg_guard_regions.png
-
-# Render a BG mod's alternate map. Sparse patch SHAPES.VGA records inherit
-# from the configured BG base archive.
-titan u7 map-render "mods/MyMod/patch" --game bg \
-  --map-num 1 --sc 0x08 -o mod_map1_sc08.png
-
-# Render scratch map04 while reusing Serpent Isle graphics and type metadata
-titan u7 map-render "C:/Ultima/ultima7si/SERPENT/STATIC" \
-  --map-root "D:/_Repos/tgwUltima/u7data/maps/u3map" \
-  --game si --map-num 4 --full --view classic -o u3map_full_classic.png
-
-# Mod map with IREG dynamic objects (gamedat must contain map01/ subdir)
-titan u7 map-render "mods/MyMod/patch" --map-num 1 --sc 0x08 \
-  --gamedat "mods/MyMod/gamedat" -o mod_map1_sc08_ireg.png
-```
-
----
-
 #### `u7 map-sample`
 
 Render a colour-sampled U7 world minimap. Samples the centre pixel of
@@ -3032,549 +3822,6 @@ titan u7 save-schedules exult00bg.sav
 titan u7 save-schedules exult00bg.sav -f detail -o schedules.txt
 titan u7 save-schedules exult00bg.sav -f csv -o schedules.csv
 ```
-
----
-
-#### `u7 font-create`
-
-Interactive wizard for creating U7 FONTS.VGA-compatible shape files from
-TrueType font sources. Uses arrow-key menus, confirmations, and path completion
-in desktop terminals, matching `container-browse`; redirected input retains
-line prompts. Choose BG/SI flavour, then the base game, a mod, or a custom Exult
-game. The selected target supplies the palette, template archives, and patch
-destination. For mods, template selection is scoped to the target's patch and
-base STATIC directories. Standalone games use their own archives.
-Selecting an
-archive shows a live slot table with real frame counts and cell heights
-from the effective base plus patch records. The selected archive is a
-template; saving uses a separately selected destination. Continues through font slot selection,
-TTF source (6 built-in
-or custom path), rendering method (mono, LUT downscale, grayscale
-threshold, hollow gradient), dimension overrides, palette / gradient
-preset selection (with terminal colour swatches), colour glyph preview, and
-shape naming and output format. Redo returns to the font settings while
-keeping the game, template and slot. Preview uses the final palette mapping.
-Desktop terminals also open a PNG preview using the selected game's colours,
-with a checkerboard behind transparent pixels. If the viewer cannot open, the
-wizard prints the preview file path. Redirected output remains plain text.
-Gradient menus show colour swatches beside every preset. At the preview review
-menu, **Custom text** previews 1-8 characters using the current font settings,
-then returns to the review menu. Characters missing from the font are rejected.
-
-For fonts that map glyphs to non-standard positions (e.g. Gargish), the
-encoder automatically copies a representative glyph into frame 65 (‘A’)
-as an Exult Studio preview placeholder, since Exult Studio hardcodes
-frame 65 as the font thumbnail.
-
-With `--config`, reads all parameters from a TOML recipe file and generates
-the shape non-interactively.
-
-```
-titan u7 font-create [--config FILE] [-o FILE] [--force] [--allow-cycling] [--base-archive FILE]
-```
-
-| Argument | Description |
-|----------|-------------|
-| `--config FILE`, `-c FILE` | TOML config file (skip interactive prompts) |
-| `-o FILE`, `--output FILE` | Shape output for `shp`/`both`; archive destination for `flex`. Works in both modes. |
-| `--force` | Replace existing outputs. Interactive mode otherwise asks before replacing; recipes otherwise fail. |
-| `--allow-cycling` | Allow automatic gradient matching to use cycling colours 224–254. |
-| `--base-archive FILE` | Explicit base font VGA for a sparse template archive. |
-
-**Interactive mode** (no arguments):
-```bash
-titan u7 font-create
-```
-
-**Non-interactive mode** (TOML recipe):
-```bash
-titan u7 font-create --config recipe.toml
-titan u7 font-create --config recipe.toml -o my_font.shp
-```
-
-**Recipe TOML schema:**
-```toml
-[target]
-game = "BG"           # "BG" or "SI"
-slot = 2              # FONTS.VGA shape index (0-7 BG, 0-10 SI)
-cell_height = 8       # Override (optional if slot pre-fills)
-ink_height = 7        # Override (optional)
-# h_lead = 0          # Optional assertion of Exult's fixed value for this slot
-# total_frames = 127  # Optional override (33-256)
-# code_range = [33, 126] # Optional inclusive character range, within frame count
-
-[source]
-font = "dosVga437"    # Built-in key or path: "./MyFont.ttf"
-# archive = "./patch/fonts.vga"  # Optional template, separate from output
-# base_archive = "./STATIC/FONTS.VGA"  # Optional explicit template base
-
-[rendering]
-method = "mono"       # "mono", "lut", "threshold", "hollow_gradient"
-# lut = "black_ink"   # Required if method=lut
-# threshold = 128    # Grayscale cutoff, 1-255, for method=threshold
-
-# --- Hollow gradient options (method = "hollow_gradient" only) ---
-# gradient_preset = "warm_flame"   # Use a named preset (see list below)
-# gradient_indices = [36, 181, 182, 183, 184, 185]  # OR manual palette indices
-# stroke_width = 1                 # Outline width in pixels
-# stroke_index = 0                 # Palette index for stroke (overridden by preset)
-# gradient_steps = 6               # Number of colour stops when resolving a preset
-# allow_cycling = false            # Automatic matching defaults to indices 0-223
-
-[palette]
-ink = 0               # Palette index for ink pixels (mono/threshold)
-transparent = 255     # U7 requires 255; other values are rejected
-# file = "PALETTES.FLX"  # Explicit palette file (auto-discovered if omitted)
-
-[output]
-format = "shp"        # "shp", "flex", "both"
-path = "./my_font.shp"
-# flex_source = "./fonts_original.vga"  # Auto-resolved from exult.cfg if omitted
-# force = false       # Set true to replace existing outputs without a prompt
-```
-
-Recipe file paths are relative to the recipe directory. A CLI `-o` or
-`--base-archive` path is relative to the working directory. For `format = "flex"`,
-`path` can name the archive destination when `flex_source` is omitted. For
-`format = "both"`, `path` names the shape and `flex_source` names the archive.
-Recipes never prompt; unresolved destinations and invalid settings fail clearly.
-
-Ink height controls capital sizing and the font baseline, and must be between
-1 and `cell_height - 1`. Exult sets h-lead by font slot; it cannot be changed
-through a shape file. Font frames above 72×72 produce a warning, and frames
-above 320 pixels wide or 200 pixels high are rejected.
-
-Selecting a sparse `fonts.vga` template includes inherited retail slots.
-`fonts_original.vga` and `fonts_serif.vga` inherit from the corresponding font
-records in the common `exult.flx`. Titan finds that bundle through Exult's
-`disk/data_path`, `[exult.paths].flx`, or standard install locations; an
-extracted base VGA can be supplied explicitly. Saves preserve patch holes
-and the archive format. Output files are replaced atomically, and malformed
-archive tables are rejected before either output is written.
-
-**Flex output & Exult config resolution:**
-
-When `format = "flex"` or `"both"`, the wizard resolves the target font
-archive by parsing Exult's `exult.cfg`:
-
-1. Auto-discovers `exult.cfg` in the user profile Exult folder (Windows)
-   or `~/.exult.cfg` (Linux/macOS)
-2. Reads the game base path (`config/disk/game/{blackgate,serpentisle}/path`)
-3. Reads the font config (`config/gameplay/fonts`) — defaults to `"original"`
-4. Maps to the correct filename:
-   - `"disabled"` → `<PATCH>/fonts.vga`
-   - `"original"` → `<PATCH>/fonts_original.vga`
-   - `"serif"` → `<PATCH>/fonts_serif.vga`
-5. Displays the resolved path and offers to accept, use a mod's patch
-   directory instead, or enter a custom path
-
-For mods, enter the mod's patch directory (e.g.
-`<Serpent Isle install>/SERPENT/mods/<mod-name>/patch`) and the wizard
-appends the correct font filename automatically.
-
-The archive is auto-extended if the target slot exceeds the current record
-count, so new slots (11+) work without manual scripting.
-
-**Hollow gradient** renders each glyph with a black stroke outline and
-a vertical colour gradient fill. You can specify colours in two ways:
-
-1. **Preset name** (`gradient_preset`) — hex CSS colours from the preset
-   are interpolated into `gradient_steps` stops, then fitted together as a
-   palette-aware ramp at generation time. All presets use this selection,
-   balancing colour similarity, smooth progression, and distinct shades.
-   The preview reports when suitable palette colours require repeated steps.
-   Cycling colours 224–254 remain opt-in; index 255 stays transparent.
-2. **Manual indices** (`gradient_indices`) — raw palette index array used
-   as-is. Overrides any preset.
-
-**Built-in gradient presets:**
-
-| Key | Name | Colours | Source |
-|-----|------|---------|--------|
-| `warm_flame` | Warm Flame | `#ff9d3c` → `#7d2c00` | U7 SI palette |
-| `sunrise` | Sunrise | `#FF512F` → `#F09819` | uiGradients |
-| `juicy_orange` | Juicy Orange | `#FF8008` → `#FFC837` | uiGradients |
-| `citrus_peel` | Citrus Peel | `#FDC830` → `#F37335` | uiGradients |
-| `koko_caramel` | Koko Caramel | `#D1913C` → `#FFD194` | uiGradients |
-| `blood_red` | Blood Red | `#f85032` → `#e73827` | uiGradients |
-| `sin_city_red` | Sin City Red | `#ED213A` → `#93291E` | uiGradients |
-| `firewatch` | Firewatch | `#cb2d3e` → `#ef473a` | uiGradients |
-| `master_card` | Master Card | `#f46b45` → `#eea849` | uiGradients |
-| `sun_horizon` | Sun on the Horizon | `#fceabb` → `#f8b500` | uiGradients |
-| `learning_leading` | Learning and Leading | `#F7971E` → `#FFD200` | uiGradients |
-| `electric_violet` | Electric Violet | `#4776E6` → `#8E54E9` | uiGradients |
-| `purple_love` | Purple Love | `#cc2b5e` → `#753a88` | uiGradients |
-| `deep_purple` | Deep Purple | `#673AB7` → `#512DA8` | uiGradients |
-| `reef` | Reef | `#00d2ff` → `#3a7bd5` | uiGradients |
-| `royal` | Royal | `#141E30` → `#243B55` | uiGradients |
-| `midnight_city` | Midnight City | `#232526` → `#414345` | uiGradients |
-| `frost` | Frost | `#000428` → `#004e92` | uiGradients |
-| `cool_sky` | Cool Sky | `#2980B9` → `#6DD5FA` | uiGradients |
-| `sexy_blue` | Sexy Blue | `#2193b0` → `#6dd5ed` | uiGradients |
-| `cold_shivers` | Cold Shivers | `#83a4d4` → `#b6fbff` | uiGradients |
-| `lush` | Lush | `#56ab2f` → `#a8e063` | uiGradients |
-| `mojito` | Mojito | `#1D976C` → `#93F9B9` | uiGradients |
-| `quepal` | Quepal | `#11998e` → `#38ef7d` | uiGradients |
-| `kyoto` | Kyoto | `#c21500` → `#ffc500` | uiGradients |
-| `witching_hour` | Witching Hour | `#c31432` → `#240b36` | uiGradients |
-| `stellar` | Stellar | `#7474BF` → `#348AC7` | uiGradients |
-| `flare` | Flare | `#f12711` → `#f5af19` | uiGradients |
-| `crimson_tide` | Crimson Tide | `#642B73` → `#C6426E` | uiGradients |
-| `steel_gray` | Steel Gray | `#1F1C2C` → `#928DAB` | uiGradients |
-
-**Built-in TTF keys:** `dosVga437`, `ophidean`, `brit_plaques`,
-`brit_plaquesSmall`, `brit_signs`, `gargish`
-
-**Built-in LUT keys:** `black_ink`, `white_glow`, `yellow_text`,
-`red_text`, `runic_multicolor`, `serpentine_metal`, `serpentine_gold`
-
----
-
-#### `u7 world-query`
-
-Search IFIX (static) and optionally IREG (runtime) world object placements
-by shape class, name, shape/frame number, TFA flags, and area. Runs as an
-interactive wizard when no filter flags are supplied; runs non-interactively
-when any filter flag or a TOML recipe is present. Requires `questionary>=2.0`
-for wizard mode. The wizard supports repeated refinement and recipe saving.
-
-```
-titan u7 world-query [STATIC] [OPTIONS]
-```
-
-| Argument / Option | Description |
-|-------------------|-------------|
-| `STATIC` | Path to STATIC directory. Defaults to configured path from `titan.toml`. |
-| `--game bg\|si` | Use config section for Black Gate or Serpent Isle (default: `bg`) |
-| `-c, --config FILE` | Run a world-query TOML recipe without prompts; explicit CLI options override recipe values |
-| `--base-static DIR` | Original game STATIC for a selected mod patch (otherwise inferred from the game layout or Titan config) |
-| `--patch DIR` | Mod patch overriding files in the base STATIC |
-| `--mod-data DIR` | Additional mod `textmsg.txt` and `shape_info.txt` for shape/frame names |
-| `--gamedat DIR` | Path to GAMEDAT directory for IREG dynamic objects |
-| `--text FILE` | Path to `TEXT.FLX` for shape name lookup (auto-discovered from STATIC if omitted) |
-| `--class NAME` | Shape class filter, repeatable (e.g. `container`, `human`, `monster`) |
-| `--shape N` | Shape number filter, hex or decimal, repeatable (e.g. `522`, `0x20A`) |
-| `--frame N` | Frame number filter, hex or decimal, repeatable (0–255; matches the stored frame including any reflection bit) |
-| `--name TEXT` | Shape name substring filter, case-insensitive (e.g. `"locked chest"`) |
-| `--flag NAME` | TFA flag filter, repeatable (e.g. `solid`, `animated`, `door`) |
-| `--tile-rect tx0,ty0,tx1,ty1` | Restrict search to a tile rectangle (0–3071 per axis) |
-| `--sc N` | Superchunk number filter, hex or decimal, repeatable (e.g. `0x55`) |
-| `--ireg / --no-ireg` | Force-include or force-exclude IREG objects |
-| `--ifix / --no-ifix` | Include/exclude fixed objects (default: included) |
-| `--map-num N` | Map number: `0` = default world (root `STATIC/` and root `gamedat/`, default), `1`+ = `mapNN/` subdirectory inside `STATIC` for IFIX and inside `gamedat` for IREG |
-| `-f, --format TEXT` | Output format: `summary` (default), `full_text`, `csv` |
-| `-o, --output FILE` | Write output to a file instead of stdout |
-| `--force` | Replace an existing results file; exports must be outside game data directories |
-
-**Notes:**
-- Containers, NPCs, eggs, and monsters live in IREG only. The wizard auto-defaults
-  `--ireg` to Yes when those classes are selected.
-- `--tile-rect` coordinates are normalised (top-left is always the smaller value).
-- `--name` and `--shape` can be combined; both filters must match.
-- Frame, class, name, shape, flag and area filters combine with AND. Multiple
-  shapes/frames/classes/superchunks are alternatives; every selected flag is required.
-- Invalid IDs, flags, formats, and coordinates are rejected. Interactive numeric
-  fields re-prompt; a malformed filter never silently broadens the search.
-- Mod IFIX files replace the corresponding base superchunk file as a whole;
-  absent files inherit from base STATIC. Property files and `TEXT.FLX` use
-  patch-first file resolution. `textmsg.txt` and `shape_info.txt` supply mod names.
-- Missing name/property data prevents searches requiring that data. Placements
-  without TFA entries are excluded from class/flag filtering with a warning.
-  Placements without names are excluded from name filtering with a warning.
-  Warnings go to stderr, keeping CSV output clean.
-- When `TEXT.FLX` is available, shape names appear in all output as `522 (locked chest)`.
-- If `titan setup` has been run, `TEXT.FLX` is recorded in `titan.toml` and resolved automatically.
-- `--map-num` applies to both IFIX and IREG lookups simultaneously. For mod maps, pass the mod patch dir as `STATIC` — the patch dir contains the `mapNN/` subdirectory with IFIX files for that map. The `gamedat` path should point to the mod's live gamedat, which also has `mapNN/` subdirs for each additional map.
-
-**Interactive wizard steps** (no filter flags supplied; context options such as
-`--map-num` still apply):
-
-First choose BG/SI flavour, then a base game, installed mod, registered custom
-Exult world, or manual folder. **Current supplied world** preserves explicitly
-provided paths. Selecting another target replaces its STATIC, patch, names,
-and GAMEDAT context; a mod never defaults to the retail game's GAMEDAT. The map
-picker lists discovered `mapNN` folders and accepts another map number.
-
-1. Shape class checkbox — leave blank for no filter.
-2. Include IREG? — auto-defaults to Yes for IREG-only classes.
-3. Name search — substring; matching shape numbers shown as hints.
-4. Shape and frame numbers — comma-separated, hex or decimal; leave blank for all.
-5. TFA flag checkbox — leave blank for no filter.
-6. Area — entire world, superchunk list, or tile rectangle (`x0,y0,x1,y1`).
-7. Review the game, mod, map number, sources and filters; confirm the search.
-8. Review grouped counts, then choose **Refine filters**, **Change area**,
-   **Show placements** for one shape, **Export results**, **Save recipe**,
-   **New search**, **Change world/map**, or **Finish**. Refinement preserves the preceding choices;
-   changing only the area does not re-ask the filters. New search clears the
-   filters while keeping the world context. Cancellation exits cleanly.
-
-**Repeatable TOML searches:**
-
-Save a recipe from the wizard, or create one using this schema. Paths inside
-recipes are relative to the recipe file; explicit CLI paths are relative to
-the current directory. Omitted filters match everything. IFIX defaults to
-included, IREG to excluded, and output to a grouped summary on stdout.
-
-```toml
-[world]
-game = "si"
-static = "game/STATIC"
-# patch = "mods/MyMod/patch"
-# base_static = "game/STATIC"  # useful for an external patch directory
-# mod_data = "mods/MyMod/data"
-gamedat = "mods/MyMod/gamedat"
-map_num = 1
-# text = "game/STATIC/TEXT.FLX"  # explicit name-table override
-
-[filters]
-classes = ["container"]
-shapes = [522]
-frames = [0]
-name = "chest"
-flags = []
-superchunks = [85, 86]
-# tile_rect = [512, 512, 2048, 2048]
-
-[sources]
-ifix = true
-ireg = true
-
-[output]
-format = "csv"
-path = "results/chests.csv"  # omit to write to stdout; parent must exist
-```
-
-```bash
-titan u7 world-query --config chest-search.toml
-titan u7 world-query --config chest-search.toml --frame 1 -o frame-one.csv
-```
-
-Recipe sections and keys are checked: misspellings and values of the wrong
-type fail with an error. When both superchunks and a tile rectangle are set,
-only those superchunks are scanned and placements must also lie in the rectangle.
-Recipes are saved to new files; result-file replacement requires `--force`
-or an explicit confirmation in the wizard. Game files are read-only throughout.
-
-**Non-interactive examples:**
-```bash
-# All containers in a tile rectangle (the large central area of the BG world).
-titan u7 world-query STATIC/ --gamedat gamedat/ --class container --tile-rect 512,512,2048,2048
-
-# All placements of shape 522 (locked chest) across the entire world, CSV output.
-titan u7 world-query STATIC/ --gamedat gamedat/ --shape 522 --ireg -f csv -o locked_chests.csv
-
-# All shapes whose name contains "chest" (any variant), full text.
-titan u7 world-query STATIC/ --gamedat gamedat/ --name chest --ireg -f full_text
-
-# All doors in superchunk 0x55 (Britain area).
-titan u7 world-query STATIC/ --flag door --sc 0x55
-
-# Containers and humans in two adjacent superchunks, saved to a file.
-titan u7 world-query STATIC/ --gamedat gamedat/ --class container --class human --sc 0x55 --sc 0x56 -o area_objects.txt
-
-# Configured BG paths — wizard mode.
-titan u7 world-query --game bg
-
-# Explicit paths — wizard mode.
-titan u7 world-query STATIC/ --gamedat gamedat/
-
-# Mod map query — IFIX from patch/map01/, IREG from gamedat/map01/.
-titan u7 world-query "mods/MyMod/patch" --gamedat "mods/MyMod/gamedat" \
-  --map-num 1 --class container --ireg
-
-# Mod map query, all objects, CSV output.
-titan u7 world-query "mods/MyMod/patch" --gamedat "mods/MyMod/gamedat" \
-  --map-num 1 --ireg -f csv -o mod_map1_objects.csv
-```
-
-**Output formats:**
-
-- `summary` — total match count + unique shape count + per-shape count table with names.
-- `full_text` — one line per placement: source, shape name, hex, tile coords, lift, class, flags.
-- `csv` — columns: `source, shape, shape_hex, shape_name, frame, quality, quality_raw, object_flags, tx, ty, tz, shape_class, shape_class_name, flags`.
-
----
-
-#### `u7 container-browse`
-
-Browse and inspect container contents from IREG with full nesting support (e.g. Ship's Hold → Backpack → Bag → items). With no filter flags, launches an interactive wizard; supply any filter flag to run non-interactively.
-
-```
-titan u7 container-browse [STATIC] [OPTIONS]
-```
-
-| Option | Description |
-|---|---|
-| `STATIC` | Path to STATIC directory (positional, optional if configured) |
-| `--game bg\|si` | Use config section for BG or SI (default: `bg`) |
-| `--gamedat PATH` | Path to gamedat/ directory — required |
-| `--text PATH` | Explicit TEXT.FLX path for shape name lookup |
-| `--exult-flx PATH` | Path to `exult_bg.flx` or `exult_si.flx` for per-frame item names |
-| `--mod-data PATH` | Path to a mod's `patch/` or `data/` directory; overlays mod-specific shape names and per-frame names on top of the base game data |
-| `--map-num N` | Map number to query: `0` = default world map (root gamedat), `1`+ = `mapNN/` subdirectory inside gamedat (default: `0`) |
-| `--container-shape N` | Container shape filter, hex or decimal (repeatable) |
-| `--container-name STR` | Container name substring filter (case-insensitive) |
-| `--contains-shape N` | Only show containers holding item with this shape (repeatable) |
-| `--contains-name STR` | Only show containers holding item matching name substring |
-| `--tile-rect tx0,ty0,tx1,ty1` | Restrict to tile rectangle |
-| `--sc N` | Restrict to superchunk, hex or decimal (repeatable) |
-| `-f / --format` | Output format: `tree` (default) or `csv` |
-| `-o / --output FILE` | Write output to file instead of stdout |
-
-**Notes:**
-- Containers must be in IREG (runtime gamedat), not IFIX.
-- Empty containers (no items recorded at runtime) are included by default; use `--contains-*` to require specific contents.
-- Tree format shows the full nesting hierarchy with `├─`/`└─`/`│` branches, item counts, and quality multipliers.
-- CSV format emits one row per item at any nesting depth with a `path` column like `819 (barrel) > 801 (backpack) > item`.
-- Shape names come from TEXT.FLX (auto-discovered from STATIC if not given via `--text`).
-- `--exult-flx` enables per-frame item names for multi-frame shapes (e.g. shape 675 "desk item" breaks down into `675:1 (quill)`, `675:2 (inkwell)`, `675:6 (document)`, etc.). The path can also be set permanently via `titan setup`, which writes it to `[exult.paths] bg_flx` in titan.toml. Without `--exult-flx` or a configured path, items display by shape name only.
-- `--mod-data` reads `textmsg.txt` and `shape_info.txt` from the given directory. `textmsg.txt %%section shapes` overlays shape names on top of TEXT.FLX; `%%section miscnames` extends the per-frame name string table. The mod's `shape_info.txt %%section framenames` overlays frame-to-name mappings on top of the base Exult FLX data. Both files are optional — if only one is present, titan uses what it can. `--exult-flx` and `--mod-data` are independent and complement each other: `--exult-flx` provides the base framename mappings, `--mod-data` overlays the mod's additions.
-- `--map-num` selects which set of IREG files to query. Mods with multiple maps store each map's IREG in a `mapNN/` subdirectory inside gamedat (e.g. `gamedat/map01/u7ireg*`). Map 0 uses the root gamedat directory. Only the IREG for the selected map is scanned; `--contains-*` filters operate within that map's data.
-
-**Wizard steps (interactive):**
-1. BG/SI flavour, then a base game, installed mod, custom Exult game, or manual folder
-2. The target's GAMEDAT directory and map (including discovered `mapNN` folders)
-3. Container name substring filter (leave blank for all containers)
-4. Container shape number filter (comma-separated, leave blank for all)
-5. Contains-item name filter (leave blank to skip)
-6. Contains-item shape filter (comma-separated, leave blank to skip)
-7. Area: entire world, specific superchunks, or tile rectangle
-8. Output format (tree / csv) + optional file save
-
-**Non-interactive examples:**
-
-```bash
-# All containers in the entire world (wizard mode).
-titan u7 container-browse STATIC/ --gamedat gamedat/
-
-# All containers in a tile rectangle.
-titan u7 container-browse STATIC/ --gamedat gamedat/ --tile-rect 512,512,2048,2048
-
-# Show only locked chests (shape 522).
-titan u7 container-browse STATIC/ --gamedat gamedat/ --container-shape 522
-
-# Show containers whose name includes "chest".
-titan u7 container-browse STATIC/ --gamedat gamedat/ --container-name chest
-
-# Show containers that hold at least one sword (by name).
-titan u7 container-browse STATIC/ --gamedat gamedat/ --contains-name sword
-
-# Export to CSV, only in superchunk 0x27.
-titan u7 container-browse STATIC/ --gamedat gamedat/ --sc 0x27 -f csv -o sc27_containers.csv
-
-# Configured BG paths — wizard mode.
-titan u7 container-browse --game bg
-
-# Per-frame item names from an Exult installation (base game, no mod).
-titan u7 container-browse STATIC/ --gamedat gamedat/ --container-name desk \
-  --exult-flx "<Exult install>/data/exult_bg.flx"
-
-# Mod query — map 0 (default world) with mod-specific names overlaid.
-# --exult-flx provides base frame mappings; --mod-data overlays the mod's additions.
-titan u7 container-browse STATIC/ --gamedat mods/MyMod/gamedat \
-  --exult-flx "<Exult install>/data/exult_si.flx" \
-  --mod-data "mods/MyMod/patch" --game si
-
-# Mod query — alternate map (map 1) inside the same mod gamedat.
-titan u7 container-browse STATIC/ --gamedat mods/MyMod/gamedat \
-  --exult-flx "<Exult install>/data/exult_si.flx" \
-  --mod-data "mods/MyMod/patch" --game si --map-num 1
-```
-
-**Output format (tree), shape names only:**
-
-```
-Container browse: 3 container(s) found.
-
-  522 (locked chest)              0x020A  @ (649,856)  lift=1  sc=0x26  [4 item(s), depth=1]
-    ├─ 573 (plate armour)
-    ├─ 340 (potion)
-    ├─ 340 (potion)
-    └─ 549 (lightning whip)
-
-  522 (locked chest)              0x020A  @ (2081,581)  lift=0  sc=0x20  [3 item(s), depth=1]
-    ├─ 815 (stone chips)
-    ├─ 815 (stone chips)
-    └─ 549 (lightning whip)
-
-  802 (bag)                       0x0322  @ (1204,2805)  lift=0  sc=0x7C  [7 item(s), depth=1]
-    ├─ 644 (gold coin)  ×228
-    ├─ 627 (lockpick)  ×134
-    └─ 549 (lightning whip)  ×8
-```
-
-**Output format (tree), with `--exult-flx` (per-frame names):**
-
-```
-Container browse: 1 container(s) found.
-
-  283 (desk)                      0x011B  @ (1027,1118)  lift=0  sc=0x34  [3 item(s), depth=1]
-    ├─ 675:6 (document)
-    ├─ 675:13 (document)
-    └─ 675:16 (mirror)
-```
-
-When `--contains-*` is active, each result is the container that **directly** holds
-the matching item. Without `--contains-*`, results are all root-level IREG containers
-shown with their full contents tree.
-
-**CSV columns:** `sc, container_shape, container_hex, container_name, tx, ty, tz, depth, item_shape, item_hex, item_name, item_frame, item_quality, path`
-
----
-
----
-
-#### `u7 egg-query`
-
-Query egg trigger objects from IREG. Surfaces each egg's type, usecode function number, trigger probability, distance, criteria, and flags. With no filter flags, launches an interactive wizard; supply any filter flag to run non-interactively.
-
-```
-titan u7 egg-query [STATIC] [OPTIONS]
-```
-
-| Option | Description |
-|---|---|
-| `STATIC` | Path to STATIC directory (positional, optional if configured) |
-| `--game bg\|si` | Use config section for BG or SI (default: `bg`) |
-| `--gamedat PATH` | Path to gamedat/ directory — required |
-| `--type NAME` | Egg type filter (repeatable): `monster`, `usecode`, `teleport`, `jukebox`, `soundsfx`, `voice`, `missile`, `weather`, `path`, `button`, `intermap` |
-| `--fn N` | Usecode function number filter, hex or decimal (only matches type=usecode) |
-| `--tile-rect tx0,ty0,tx1,ty1` | Restrict to tile rectangle |
-| `--sc N` | Restrict to superchunk, hex or decimal (repeatable) |
-| `-f / --format` | Output format: `table` (default) or `csv` |
-| `-o / --output FILE` | Write output to file instead of stdout |
-
-**Wizard steps (interactive):**
-1. BG/SI flavour, then a base game, installed mod, custom Exult game, or manual folder
-2. The target's GAMEDAT directory and map (including discovered `mapNN` folders)
-3. Egg type checkbox (leave blank for all types)
-4. Usecode function number filter (shown only when usecode type is selected or no type filter)
-5. Area: entire world, specific superchunks, or tile rectangle
-6. Output format + optional file save
-
-**Non-interactive examples:**
-
-```bash
-# All eggs in the world.
-titan u7 egg-query STATIC/ --gamedat gamedat/
-
-# All usecode eggs.
-titan u7 egg-query STATIC/ --gamedat gamedat/ --type usecode
-
-# Find every placement of a specific function.
-titan u7 egg-query STATIC/ --gamedat gamedat/ --fn 0x06BC
-
-# Monster eggs in a tile region.
-titan u7 egg-query STATIC/ --gamedat gamedat/ --type monster --tile-rect 512,512,2048,2048
-
-# Export all usecode eggs to CSV.
-titan u7 egg-query STATIC/ --gamedat gamedat/ --type usecode -f csv -o usecode_eggs.csv
-
-# Configured BG paths — wizard mode.
-titan u7 egg-query --game bg
-```
-
-**CSV columns:** `sc, tx, ty, tz, egg_type, egg_type_name, fn, probability, distance, criteria, criteria_name, once, nocturnal, auto_reset, hatched, data1, data2`
 
 ---
 
@@ -7820,15 +8067,20 @@ A value on the command line always wins.
 | `u7 gflag-dump` | Dump global flags from a U7 save or `flaginit` file |
 | `u7 gamedat-info` | Inspect loose Exult `GAMEDAT/` files in one consolidated report |
 | `u7 save-info` | Show save metadata: identity, timestamp, party, game state |
+| `u7 save-browse` | Browse a game/mod's saves, party, files, and NPCs interactively |
+| `u7 npc-browse` | Browse NPC stats, schedules and nested inventory with game/mod selection |
+| `u7 monster-browse` | Browse monster definitions, saved/live actors, equipment and spawn eggs |
 | `u7 npc-dump` | Dump NPC data from loose Exult `npc.dat` / `GAMEDAT` |
 | `u7 save-npcs` | Dump NPC data from an Exult U7 savegame |
 | `u7 schedule-dump` | Dump schedules from loose Exult `schedule.dat` / `GAMEDAT` |
 | `u7 save-schedules` | Dump NPC schedules from an Exult U7 savegame |
 | `u7 font-create` | Interactive wizard for creating U7 font shapes from TTF |
 | `u7 shape-create` | Guided PNG conversion, shape preview and safe FLX/VGA insertion |
+| `u7 shape-browse` | Browse game/mod shape libraries, colour frames, PNGs and GIF previews |
 | `u7 world-query` | Interactive wizard to filter IFIX/IREG world object placements |
 | `u7 container-browse` | Browse container contents from IREG with full nesting support |
 | `u7 egg-query` | Query egg trigger objects from IREG — type, usecode function, location |
+| `u7 palette-browse` | Browse game/mod palettes, colour swatches, cycling and palette-aware gradient ramps |
 | `u7 palette-info` | Inspect `PALETTES.FLX` slot occupancy, semantic names, encoding, and colour-cycling ranges |
 | `u7 shape-animate` | Render a shape's frame-sequence or colour-cycle animation to an animated GIF |
 | `u7 shape-frame-report` | Export every shape/frame origin, top-left drawing hotspot, and WIHH weapon attachment as CSV or JSON |
