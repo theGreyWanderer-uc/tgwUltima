@@ -8,6 +8,7 @@ __all__ = [
     "U7MonsterEquipment",
     "monster_equipment_csv",
     "monster_equipment_summary",
+    "monster_equipment_rows_from_data",
     "monster_definitions_csv",
     "live_monsters_csv",
     "monster_report",
@@ -494,8 +495,11 @@ class U7WeaponInfo:
 class U7WeaponInfos:
     """Decoded `weapons.dat` ammo references by weapon shape."""
 
-    def __init__(self, records: dict[int, U7WeaponInfo]) -> None:
+    def __init__(
+        self, records: dict[int, U7WeaponInfo], deleted: set[int] | None = None
+    ) -> None:
         self.records = records
+        self.deleted = deleted or set()
 
     @classmethod
     def from_dir(cls, data_dir: str, game: str = "bg") -> "U7WeaponInfos":
@@ -523,6 +527,7 @@ class U7WeaponInfos:
             count = int.from_bytes(data[pos : pos + 2], "little")
             pos += 2
         records: dict[int, U7WeaponInfo] = {}
+        deleted: set[int] = set()
         for _ in range(count):
             if pos + 2 + _WEAPON_ENTRY_PAYLOAD_SIZE > len(data):
                 break
@@ -532,9 +537,19 @@ class U7WeaponInfos:
             pos += _WEAPON_ENTRY_PAYLOAD_SIZE
             if payload[-1] == 0xFF:
                 records.pop(shape, None)
+                deleted.add(shape)
                 continue
+            deleted.discard(shape)
             ammo = int.from_bytes(payload[0:2], "little", signed=True)
             records[shape] = U7WeaponInfo(shape=shape, ammo=ammo)
+        return cls(records, deleted)
+
+    @classmethod
+    def merge(cls, base: "U7WeaponInfos", patch: "U7WeaponInfos") -> "U7WeaponInfos":
+        """Overlay sparse patch records, including explicit deletions."""
+        records = {**base.records, **patch.records}
+        for shape in patch.deleted:
+            records.pop(shape, None)
         return cls(records)
 
     def ammo_for_weapon(self, shape: int) -> int | None:
@@ -753,6 +768,20 @@ def monster_equipment_rows(
         mod_monsters,
         equip_file,
     )
+    return monster_equipment_rows_from_data(
+        definitions, equipment, weapons, names, tfa, monster_shapes
+    )
+
+
+def monster_equipment_rows_from_data(
+    definitions: U7MonsterDefinitions,
+    equipment: U7MonsterEquipment,
+    weapons: U7WeaponInfos,
+    names: U7ShapeNames,
+    tfa: U7TypeFlags,
+    monster_shapes: set[int] | None = None,
+) -> list[dict[str, object]]:
+    """Calculate spawn equipment using the caller's resolved world metadata."""
     rows: list[dict[str, object]] = []
     for definition in definitions.active_records():
         if monster_shapes and definition.shape not in monster_shapes:

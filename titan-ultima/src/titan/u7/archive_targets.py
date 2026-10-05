@@ -20,6 +20,7 @@ class ArchiveTarget:
     standalone: bool = False
     root: Path | None = None
     gamedat: Path | None = None
+    save_root: Path | None = None
 
 
 class _ConfigTreeBuilder(ET.TreeBuilder):
@@ -55,6 +56,7 @@ def target_from_folder(folder: Path, game_static: Path | None) -> ArchiveTarget:
         existing_path(root / "gamedat")
         if existing_path(root / "gamedat").is_dir()
         else None,
+        root,
     )
 
 
@@ -82,6 +84,13 @@ def _mod_target(
     gamedat = resolve_config_path(gamedat_value, save_mod)
     if gamedat and "<" in str(gamedat):
         gamedat = None
+    save_value = (info.findtext("savegame_path") or str(save_mod)).strip()
+    save_value = save_value.replace("__MODS__", str(save_mods)).replace(
+        "__MOD_PATH__", str(save_mod)
+    )
+    saves = resolve_config_path(save_value, save_mod)
+    if saves and "<" in str(saves):
+        saves = None
     return ArchiveTarget(
         title,
         game_static,
@@ -89,6 +98,7 @@ def _mod_target(
         False,
         mod_root,
         existing_path(gamedat) if gamedat else None,
+        existing_path(saves) if saves else None,
     )
 
 
@@ -143,7 +153,15 @@ def base_target(
         else (root or Path.cwd()) / "patch"
     )
     return ArchiveTarget(
-        f"Base {game.upper()} game", static, existing_path(patch), False, root, gamedat
+        f"Base {game.upper()} game",
+        static,
+        existing_path(patch),
+        False,
+        root,
+        gamedat,
+        _game_save_root(entry, tag, cfg_path, root)
+        if cfg_path
+        else (gamedat.parent if gamedat else root),
     )
 
 
@@ -165,7 +183,18 @@ def discover_targets(
     tag = "blackgate" if game.upper() == "BG" else "serpentisle"
 
     def add(target: ArchiveTarget) -> None:
-        targets.setdefault(target.patch.resolve(), target)
+        key = target.patch.resolve()
+        previous = targets.get(key)
+        if previous is None:
+            targets[key] = target
+        else:
+            # Keep explicit Titan archive paths while filling runtime paths
+            # from the matching Exult mod description.
+            targets[key] = replace(
+                previous,
+                gamedat=previous.gamedat or target.gamedat,
+                save_root=previous.save_root or target.save_root,
+            )
 
     section = config.get("u7bg" if game.upper() == "BG" else "u7si", {})
     base = section.get("game", {}).get("base")
@@ -189,6 +218,7 @@ def discover_targets(
                     root or patch.parent,
                     resolve_config_path(paths.get("gamedat"), base)
                     or (root / "gamedat" if root else None),
+                    resolve_config_path(paths.get("savegame"), base),
                 )
             )
 
@@ -267,6 +297,9 @@ def discover_targets(
                             game_entry, game_entry.tag, exult_cfg_path, custom_root
                         )
                         / "gamedat",
+                        _game_save_root(
+                            game_entry, game_entry.tag, exult_cfg_path, custom_root
+                        ),
                     )
                 )
     return sorted(targets.values(), key=lambda target: target.name.lower())

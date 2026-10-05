@@ -10,26 +10,46 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ---
 
-## [Unreleased]
+## [0.7.8]
 
-- **Breaking -- U9 NPC state bit 22:** rename `ENGAGED_IN_COMBAT` to
-  `HAS_LIVE_ACTOR`. Retail actor creation/teardown establish actor presence,
-  rather than combat engagement. The mask `0x00400000` and saved bytes are
-  unchanged.
+- **U7 shape properties:** add detailed physics/equipment metadata, property
+  filters, and JSON reports to the shape browser.
+
+- **U7 palette browser:** add game/mod palettes, colour swatches, cycling,
+  palette-aware gradient tests, and exports.
+
+- **U7 monster browser:** add game/mod and source selection, search, colour
+  previews, equipment, spawn eggs, and report exports.
+
+- **U7 previews:** use solid colour cells to avoid terminal font seams in NPC
+  and shape previews, including playback.
+
+- **Interactive menus:** show hotkeys throughout selection/action menus and
+  paging. Fix next/previous NPC navigation after searching for one NPC.
+
+- **U7 NPC/save browsers:** add game/mod and source selection, NPC search,
+  stats, colour shape previews at frame 16, schedules, nested inventory,
+  save details, and report exports.
+
+- **U7 shape browser:** add game/mod and archive selection, colour frame previews,
+  shape search, action hotkeys, live terminal playback, PNG export, and GIF previews.
+
+- **U7 map-render wizard:** add game/world and map selection, render options,
+  a 20% preview before full rendering, percentage progress, and safe PNG saving.
+  Resolve the selected world's base and patch data together.
 
 - **U9 trigger behavior:** correct deferred movement retry/collision fields,
   name follow timing `time_per_unit`, catalogue 24 special actions and four
   phase roles, and expose action meanings in research exports. Add duration
-  and special-action record views; preserve every original byte. Binary
-  contracts and 19 isolated callback cases pass; controlled live outcomes
-  remain pending.
+  and special-action record views; preserve every original byte. Runtime
+  execution of these actions remains unverified.
 
 - **U9 short-trigger loader documentation:** retail reads 510 bytes without
   an entry-length clamp, so unterminated IDs 58/631 include commands from
   59/632. Correct the prior standalone-valid classification; retain exact
-  entry parsing and on-disk diagnostics, with neighbor-separation coverage.
+  entry parsing and on-disk diagnostics.
 
-- **U9 trigger retail contracts:** all 101 operand layouts now have confirmed
+- **U9 trigger operand decoding:** all 101 operand layouts now have confirmed
   retail masks. Correct sound/status masks, link flags, radius encodings,
   mana/no-op labels, audio-instance IDs, projectile fields and fade units.
   Target views include random collection and conditional speech; `search_radius`
@@ -43,24 +63,6 @@ This project uses [Semantic Versioning](https://semver.org/):
   assistance. Six combatant fields now use confirmed names; the Slasher's
   Avatar-tracking threshold decodes as a float and its saved NPC health words
   as unsigned integers. Raw record bytes and stream widths are preserved.
-
-### Changed
-
-- **Breaking -- U9 highway links:** the highway API now names its keys as
-  links, matching `U9Entity.link`: `U9HighwayPoint.trigger_id` is
-  `U9HighwayPoint.link`, and `U9HighwayRoute.start_trigger_id` /
-  `last_trigger_id` are `start_link` / `last_link`. The `point()`,
-  `routes_from()` and `routes_through()` parameters are named `link`.
-  `highway-info` reports a link range, and `highway-points` heads its columns
-  `Link` and `Edges` (the neighbour count, formerly `Links`). The values were
-  never `static/triggers.flx` trigger IDs. No alias is kept.
-
-- **Breaking -- U9 entity link:** `U9Entity.trigger_id` is renamed
-  `U9Entity.link`, and `U9ObjectPlacementResolution.trigger_id` is renamed
-  `link`. The word at entity `+0x1A` is not a trigger ID (an object's triggers
-  are in its extra-data tags 62 and 59); it is the object's link. The
-  `nonfixed-entities` column `Trig` is now `Link`, and `nonfixed-diff` reports
-  the field as `link`. No alias is kept.
 
 ### Added
 
@@ -89,9 +91,9 @@ This project uses [Semantic Versioning](https://semver.org/):
 - **U9 save process stream -- temporary camera and more process types:**
   when the camera manager saved a temporary camera, its 173-byte record
   (`U9TemporaryCameraState`) is now read between the camera control and the
-  targeting state, so the process list is reached in such saves too. The
-  layout comes from the game's code and no save containing one has been
-  checked yet, so the record carries `boundary_confirmed = False` and
+  targeting state, so the process list is reached in such saves too. Parsing
+  has not yet been checked against a save containing this record, so it
+  carries `boundary_confirmed = False` and
   `save-check` adds an informational finding `PRC03`. Seventeen more process
   types are read: 17, 19, 20, 21 and 69 (straight-line path, safe item
   rotation, explosion, missile launcher, delayed throw), the death, summon
@@ -203,11 +205,8 @@ This project uses [Semantic Versioning](https://semver.org/):
   types that save only scripted-object state (`U9ScriptedObjectProcessState`),
   the type-57 clock animation (`U9ClockAnimationProcessState`) and the
   type-197 automatic-door timer (`U9DoorTimerProcessState`). Both NPC records
-  expose `.action`, the matching `ACTION_KIND_CATALOGUE` entry. Across 13
-  retail saves, one save now decodes through the process-list terminator; the
-  others stop at pathfinder, path-follower, item-mover or magic-eye processes.
-  The integrity report's `decoded_following_processes` evidence includes all
-  of these records.
+  expose `.action`, the matching `ACTION_KIND_CATALOGUE` entry. The integrity
+  report includes these records under `decoded_following_processes`.
 
 - **U9 world-object triggers:** `U9Nonfixed.entity_triggers()` returns the
   four trigger IDs a world object runs, by phase, from its extra-data tags 62
@@ -251,8 +250,8 @@ This project uses [Semantic Versioning](https://semver.org/):
   original IDs, decoded descriptions, contact sheets, and CSV/JSON manifests.
 
 - **U9 animation semantics and posed export:** added clip labels read from each
-  record's authoring path, typed animation events, interpolation matching the
-  Ghidra decompile, explicit single-clip rigid-limb OBJ/STL pose export, and
+  record's authoring path, typed animation events, interpolated poses,
+  explicit single-clip rigid-limb OBJ/STL pose export, and
   versioned animated-model bundles with local limb meshes, exact tracks,
   hierarchy/material metadata, archive hashes, and generated animated GLB.
 

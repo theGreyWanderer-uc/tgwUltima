@@ -142,6 +142,31 @@ def select_map(q: Any, directories: list[str | None], default: int = 0) -> int:
                 if child.is_dir() and match:
                     maps.add(int(match[1], 16))
     maps.add(default)
+    if q is None:
+        values = {
+            str(number): f"Map {number}"
+            + (" (main world)" if number == 0 else f" (map{number:02x})")
+            for number in sorted(maps)
+        }
+        values["M"] = "Other map number"
+        ui.legacy_menu(
+            "Choose map:", *(f"  [{key}] {label}" for key, label in values.items())
+        )
+        selected = ui.choice("> ", list(values), str(default), labels=values)
+        if selected != "M":
+            return int(selected)
+        while True:
+            try:
+                number = int(
+                    ui.text(f"  Map number (0-255) [{default}]: ", str(default)).strip()
+                    or str(default),
+                    0,
+                )
+                if 0 <= number <= 255:
+                    return number
+            except ValueError:
+                pass
+            print("  Enter a map number within 0-255.")
     options = [
         q.Choice(
             f"Map {number}"
