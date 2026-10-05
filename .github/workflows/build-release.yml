@@ -119,6 +119,12 @@ jobs:
       !startsWith(github.ref, 'refs/tags/')
       || startsWith(github.ref, 'refs/tags/titan/v')
     runs-on: ubuntu-latest
+    env:
+      # Pin every Python package CI installs, including build tools and the
+      # isolated build envs, so a new upstream release cannot break a build.
+      # Regenerate with the command at the top of the file.
+      PIP_CONSTRAINT: ${{ github.workspace }}/titan-ultima/constraints/ci.txt
+      PIP_BUILD_CONSTRAINT: ${{ github.workspace }}/titan-ultima/constraints/ci.txt
     steps:
       - uses: actions/checkout@v6
 
@@ -156,7 +162,7 @@ jobs:
 
       - name: Install Titan (editable) for tests
         working-directory: titan-ultima
-        run: pip install -e ".[glb]" pytest
+        run: pip install -e ".[glb,test]"
 
       - name: Run Titan tests
         working-directory: titan-ultima
